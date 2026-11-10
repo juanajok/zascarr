@@ -355,6 +355,9 @@ class ConversionDeArchivo:
                 destino = ruta.with_suffix(".cbz")
                 if destino.exists() and destino != ruta:
                     return _conflicto(MotivoConversion.YA_EXISTE_CBZ)
+                if _sha256(ruta) != firmada.sha256:
+                    return _conflicto(MotivoConversion.PROPUESTA_DESACTUALIZADA,
+                                      "El archivo cambió mientras se preparaba la conversión.")
                 cuarentena = _cuarentena(self._settings) / str(f.id) / firmada.operacion
                 try:
                     comprobar_espacio(destino.parent, max(analisis.estimado_salida, 1), "conversión")
@@ -523,7 +526,8 @@ class ConversionDeArchivo:
         try:
             base = _diario(self._settings) / str(f.id)
             base.mkdir(parents=True, exist_ok=True)
-            (base / f"{firmada.operacion}.json").write_text(json.dumps({
+            diario = base / f"{firmada.operacion}.json"
+            diario.write_text(json.dumps({
                 "version": 1, "file_id": str(f.id), "operacion_id": firmada.operacion,
                 "estado": estado, "fecha": _ahora_iso(), "ruta": str(ruta),
                 "ruta_original": str(ruta_original) if ruta_original else None,
@@ -532,6 +536,9 @@ class ConversionDeArchivo:
                 "sha_nuevo": sha_nuevo, "tamano_nuevo": tamano_nuevo,
                 "metodo": metodo,
             }, ensure_ascii=False), encoding="utf-8")
+            with diario.open("rb") as fh:
+                os.fsync(fh.fileno())
+            _fsync_dir(base)
         except OSError:
             logger.warning("conversion.diario_no_escribible")
 
@@ -643,6 +650,12 @@ class ConversionDeArchivo:
         origen = Path(original.get("ruta", ""))
         apartado = _cuarentena(self._settings) / str(f.id) / firmada.operacion / "deshecho" / destino.name
         apartado.parent.mkdir(parents=True, exist_ok=True)
+        self._diario_escribir(
+            f, firmada, "deshaciendo", apartado, ruta_original=restaurar, destino=destino,
+            sha_original=original.get("sha256"), tamano_original=original.get("tamano"),
+            sha_nuevo=conv.get("nuevo", {}).get("sha256"),
+            tamano_nuevo=conv.get("nuevo", {}).get("tamano"),
+            metodo=conv.get("metodo"))
         try:
             if conv.get("metodo") == "renombrar_zip":
                 _publicar_sin_sobrescribir(destino, restaurar)
@@ -686,8 +699,13 @@ class ConversionDeArchivo:
             await self._db.commit()
         except Exception as exc:  # noqa: BLE001
             raise ResultadoInciertoError("El original volvió pero no se pudo confirmar la fila.") from exc
-        self._diario_escribir(f, firmada, "deshecha", restaurar,
-                              ruta_original=origen, destino=destino)
+        self._diario_escribir(
+            f, firmada, "deshecha", apartado, ruta_original=restaurar,
+            destino=destino, sha_original=original.get("sha256"),
+            tamano_original=original.get("tamano"),
+            sha_nuevo=conv.get("nuevo", {}).get("sha256"),
+            tamano_nuevo=conv.get("nuevo", {}).get("tamano"),
+            metodo=conv.get("metodo"))
         return ResultadoConversion(_VERSION, "conversion", firmada.operacion, str(f.id),
                                    "revertida", None, "Original restaurado; el CBZ queda apartado.",
                                    advertencia=aviso,
@@ -852,6 +870,19 @@ class ConversionDeArchivo:
                         original, sha_original, tamano_original):
                     # El write-ahead quedó antes de mover: nada que reparar y está verificado.
                     reparada = True
+            elif estado == "deshecha" and file_id:
+                if original.exists() and self._coincide(
+                        original, sha_original, tamano_original):
+                    try:
+                        f = await self._db.get(File, UUID(str(file_id)),
+                                               populate_existing=True)
+                    except (ValueError, TypeError):
+                        f = None
+                    reparada = bool(
+                        f and f.file_path == str(original)
+                        and f.file_format is FileFormat.CBR
+                        and f.sha256_hash == sha_original
+                        and f.file_size_bytes == tamano_original)
             elif estado == "publicado" and file_id:
                 if self._coincide(destino, sha_nuevo, tamano_nuevo):
                     await self.reconciliar(UUID(str(file_id)))
