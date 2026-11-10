@@ -154,6 +154,7 @@ def test_hrefs_de_chip_y_archivo_por_numero(monkeypatch):
     assert f'hx-get="/ui/series/{serie.id}/numero/issue-1/previa"' in r.text
     assert 'class="previa-numero"' in r.text
     assert 'id="previa-issue-1"' in r.text
+    assert 'hx-trigger="mouseenter delay:150ms, focusin"' in r.text
 
 
 def test_ficha_de_numero_ofrece_convertir_solo_para_cbr():

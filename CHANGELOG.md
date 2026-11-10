@@ -7,6 +7,9 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Los botones no se deshabilitaban durante una petición htmx.** El proyecto usa htmx 4.0.0, donde
+  el atributo es `hx-disable`; 14 plantillas seguían con `hx-disabled-elt` (htmx 2) y se ignoraba.
+  Corregido en todas (convertir, tanda, originales, rescan, comprobación de disco, desvincular…).
 - **Los CBZ convertidos se creaban con permisos 0600 y otros programas no podían abrirlos.**
   El CBZ se construía en un temporal de `mkstemp` y se publicaba tal cual; ahora se copia el modo
   del CBR original (y el dueño, si se puede), así que Kavita, SMB u otra persona lo leen. Los CBZ
@@ -38,7 +41,9 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 ### Añadido
 
 - **Vista previa de la portada de cada número (BL-INF4, #590).** Al pasar el ratón o enfocar un
-  número en la ficha se enseña su portada, sin abrirlo. La miniatura (240 px) se saca del propio
+  número en la ficha se enseña su portada, sin abrirlo: tarjeta de 220 px con «Nº N · título» y
+  «Pulsa para abrir la ficha», flecha al chip y un pequeño retardo para no dispararse al barrer. La
+  miniatura (240 px) se saca del propio
   archivo del número, se guarda por archivo en la caché de portadas y se sirve con ETag y caché
   privada de un día; no se precarga nada y solo se pide lo que se mira. En móvil, tocar el número
   sigue abriéndolo. Sin JS nuevo y sin tocar los archivos.

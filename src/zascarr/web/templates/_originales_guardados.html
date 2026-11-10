@@ -16,7 +16,7 @@
     <strong>{{ bytes|tamano }}</strong>. Si ya no necesitas deshacer esas conversiones, puedes liberar
     ese espacio; después no se podrán recuperar.</p>
   <form hx-post="/ui/auditoria/originales/vaciar" hx-target="#originales" hx-swap="outerHTML"
-        hx-disabled-elt="find button">
+        hx-disable="find button">
     <label class="legal-checkbox"><input type="checkbox" name="confirmado" value="1" required>
       Entiendo que no podré deshacer esas conversiones.</label>
     <p class="caption htmx-indicator" role="status">Liberando… puede tardar unos segundos.</p>

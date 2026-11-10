@@ -360,7 +360,7 @@ class TestCriterio7Accesibilidad:
         assert 'role="status"' in r.t or 'role="alert"' in r.t
         assert 'aria-label="Totales"' in r.t
         assert "<a class=\"btn ghost sm\"" in r.t                   # los accesos son enlaces reales
-        assert "hx-disabled-elt" in p.t                              # el botón se desactiva mientras se envía
+        assert "hx-disable" in p.t                                   # el botón se desactiva mientras se envía
 
     async def test_sin_htmx_la_confirmacion_devuelve_la_pagina_entera(self, ent):
         p = await listo(ent, UNO)
