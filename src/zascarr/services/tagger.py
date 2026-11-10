@@ -42,7 +42,16 @@ from zascarr.core.comicinfo_write import (
     parsear,
     plan,
 )
-from zascarr.models import CreatorRole, File, FileFormat, Issue, IssueCreator, Publisher, Series
+from zascarr.models import (
+    CreatorRole,
+    File,
+    FileFormat,
+    Issue,
+    IssueCreator,
+    MetadataSource,
+    Publisher,
+    Series,
+)
 from zascarr.services.compartidos import estado_de_comparticion
 from zascarr.utils import cbz as zcbz
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
@@ -243,10 +252,14 @@ async def bloqueo_de_fichero(
 class _Contexto:
     deseados: dict[str, str | None]
     bloqueados: set[str]
+    #: Procedencia de los datos del NÚMERO (`Issue.metadata_source`). No es el
+    #: `File.metadata_source`: este último describe el archivo, no la sinopsis.
+    metadata_source: str | None = None
 
     def huella(self) -> dict:
         """Lo que se guarda en la marca: con qué se comparó esta revisión."""
-        return {"deseados": self.deseados, "bloqueados": sorted(self.bloqueados)}
+        return {"deseados": self.deseados, "bloqueados": sorted(self.bloqueados),
+                "metadata_source": self.metadata_source}
 
 
 _ROLE_A_TAG = {
@@ -273,6 +286,26 @@ def _unir_lista(valores: list[str]) -> str | None:
         vistos.add(clave)
         limpios.append(valor)
     return ", ".join(limpios) if limpios else None
+
+
+#: #482/PO: Synopsis solo se propone si la ficha es manual/ComicInfo o si ZascArr ya
+#: escribió ese Summary (marcador `comicinfo_propio`). Los datos de fuentes externas no se
+#: embeben en el archivo: quedan en la caché local de ZascArr.
+_RESUMEN_PERMITIDO = frozenset({MetadataSource.MANUAL.value, MetadataSource.COMICINFO_XML.value})
+
+
+#: La fuente del `Summary` es la del NÚMERO (`Issue.metadata_source`); el
+#: `File.metadata_source` es la procedencia del archivo y NO autoriza el texto.
+def _resumen_autorizado(ctx: _Contexto, file: File) -> bool:
+    propio = (file.metadata_ or {}).get("comicinfo_propio") or {}
+    return ctx.metadata_source in _RESUMEN_PERMITIDO or "Summary" in propio
+
+
+def _filtrar_resumen(ctx: _Contexto, file: File) -> _Contexto:
+    if _resumen_autorizado(ctx, file):
+        return ctx
+    return _Contexto({**ctx.deseados, "Summary": None}, set(ctx.bloqueados),
+                     ctx.metadata_source)
 
 
 def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _Contexto:
@@ -317,7 +350,7 @@ def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _
         tag for tag, (entidad, campo) in _LOCK_DE.items()
         if campo in (entidades[entidad].locked_fields or [])
     }
-    return _Contexto(deseados, bloqueados)
+    return _Contexto(deseados, bloqueados, getattr(issue, "metadata_source", None))
 
 
 class TaggerService:
@@ -341,6 +374,7 @@ class TaggerService:
                 selectinload(Series.genres),
             )
             .where(Issue.id == file.issue_id)
+            .execution_options(populate_existing=True)
         )).first()
         if row is None:
             return _Contexto({}, set())
@@ -360,6 +394,7 @@ class TaggerService:
         xml = await asyncio.to_thread(leer_comicinfo, path)
         root = parsear(xml) if xml else None
         ctx = ctx if ctx is not None else await self._contexto(file)
+        ctx = _filtrar_resumen(ctx, file)
         propio = (file.metadata_ or {}).get("comicinfo_propio") or {}
         campos = plan(leer_campos(root), ctx.deseados, propio, solo_rellenar)
         return [
@@ -401,6 +436,7 @@ class TaggerService:
             and marca.get("size") == file.file_size_bytes
             and marca.get("deseados") == ctx.deseados
             and marca.get("bloqueados") == sorted(ctx.bloqueados)
+            and marca.get("metadata_source") == ctx.metadata_source
         )
 
     def _poner_marca(
@@ -725,6 +761,7 @@ class TaggerService:
                 selectinload(Series.genres),
             )
             .where(File.file_format == FileFormat.CBZ)
+            .execution_options(populate_existing=True)
             .where(File.is_missing.is_(False))
             # Orden GLOBAL por `File.id` (y no por imported_at): rescan ordena
             # igual sus cambios y los advisory locks se piden en el mismo orden.
