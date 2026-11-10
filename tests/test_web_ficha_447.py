@@ -150,6 +150,7 @@ def test_hrefs_de_chip_y_archivo_por_numero(monkeypatch):
     assert r.status_code == 200
     assert f'href="/ui/series/{serie.id}/numero/issue-1"' in r.text
     assert "ver información del número 01" in r.text
+    assert f'hx-get="/ui/series/{serie.id}/convertir"' in r.text
 
 
 def test_ficha_de_numero_ofrece_convertir_solo_para_cbr():

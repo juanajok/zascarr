@@ -1,0 +1,54 @@
+{#- #479/BL-CNV2: lote CBR→CBZ de la serie (reutiliza la conversión de #478 por archivo). -#}
+<div class="conversion-lote" id="conversion-lote">
+  {% if resultado %}
+  {{ ui.aviso("ok" if resultado.convertidas else "amber",
+     "Convertidos " ~ resultado.convertidas ~ " CBR" ~
+     (" y " ~ resultado.omitidas ~ " omitidos" if resultado.omitidas else "") ~ ".") }}
+  {% if resultado.detalles %}
+  <details class="ajustes-mas"><summary>Qué ha pasado con cada archivo</summary>
+    <ul class="conversion-lote-detalle">
+      {% for nombre, mensaje in resultado.detalles %}<li><strong>{{ nombre }}</strong>: {{ mensaje }}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  {% endif %}
+
+  <h3>Convertir los CBR de esta serie</h3>
+  <p class="caption">De {{ lote.limite }} en {{ lote.limite }} cada vez. Se verifica cada archivo y el original se aparta; se puede deshacer. La serie, sus números y su relación editorial no cambian.</p>
+
+  {% if lote.vistas %}
+  <ul class="conversion-lote-lista">
+    {% for v in lote.vistas %}
+    <li>{{ v.nombre_original }} · {{ (v.tamano_entrada / 1048576)|round(1) }} MB → ≈{{ (v.estimado_salida / 1048576)|round(1) }} MB</li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="/ui/series/{{ series.id }}/convertir">
+    <button class="btn primary" type="submit">Convertir {{ lote.vistas|length }} CBR a CBZ</button>
+  </form>
+  {% elif lote.compartidas or lote.bloqueadas %}
+  {{ ui.aviso("ok", "No hay ningún CBR convertible en esta tanda; los bloqueados y compartidos se quedan como están.") }}
+  {% else %}
+  {{ ui.aviso("ok", "No queda ningún CBR en esta serie.") }}
+  {% endif %}
+
+  {% if lote.compartidas %}
+  {{ ui.aviso("amber", "Compartidos por un programa de descargas: no se convierten en el lote. Ábrelos uno a uno si de verdad quieres continuar.") }}
+  <details class="ajustes-mas"><summary>Cuáles ({{ lote.compartidas|length }})</summary>
+    <ul class="conversion-lote-lista">
+      {% for v in lote.compartidas %}<li>{{ v.nombre_original }}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  {% if lote.bloqueadas %}
+  <details class="ajustes-mas"><summary>No convertibles ({{ lote.bloqueadas|length }}) y por qué</summary>
+    <ul class="conversion-lote-lista">
+      {% for v in lote.bloqueadas %}<li>{{ v.nombre_original }}: {{ v.mensaje }}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  {% if lote.vistas or lote.bloqueadas or lote.compartidas %}
+  <p class="caption">CBR en la serie: {{ lote.total_cbr }} · revisados en esta vista: {{ lote.escaneados }}.</p>
+  {% endif %}
+</div>

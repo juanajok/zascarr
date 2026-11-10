@@ -117,6 +117,34 @@ class ResultadoConversion:
     despues: dict = field(default_factory=dict)
     fecha: str | None = None
 
+#: #479: tope de archivos por tanda y de análisis al preparar la vista previa del lote.
+LOTE_MAX = 5
+LOTE_ESCANEO_MAX = 40
+
+
+@dataclass(frozen=True)
+class LoteConversion:
+    """Vista previa del lote: lo que se puede convertir ahora y lo que se omite y por qué."""
+
+    serie_id: str
+    vistas: tuple[VistaConversion, ...]
+    bloqueadas: tuple[VistaConversion, ...]
+    compartidas: tuple[VistaConversion, ...]
+    total_cbr: int
+    escaneados: int
+    limite: int
+
+
+@dataclass(frozen=True)
+class ResultadoLote:
+    """Informe de una tanda: cuadra (convertidas + omitidas = intentadas)."""
+
+    serie_id: str
+    convertidas: int
+    omitidas: int
+    detalles: tuple[tuple[str, str], ...]
+    limite: int
+
 
 def _ahora_iso() -> str:
     return datetime.now(UTC).isoformat()
@@ -1007,3 +1035,66 @@ class ConversionDeArchivo:
             await self._db.commit()
             return True
         return False
+
+    # ── #479 / BL-CNV2: lote (reutiliza la conversión de #478 por archivo) ───
+    async def _cbrs_de_serie(self, serie_id: UUID) -> list[tuple[UUID, str]]:
+        filas = (await self._db.execute(
+            select(File.id, File.file_path)
+            .join(Issue, File.issue_id == Issue.id)
+            .where(File.file_format == FileFormat.CBR,
+                   File.is_missing.is_(False),
+                   Issue.series_id == serie_id)
+            .order_by(File.file_path)
+        )).all()
+        return [(fid, ruta) for fid, ruta in filas]
+
+    async def previsualizar_lote(self, serie_id: UUID, *,
+                                 limite: int = LOTE_MAX) -> LoteConversion:
+        """Analiza solo lo necesario para llenar una tanda: `limite` convertibles como mucho
+        y `LOTE_ESCANEO_MAX` análisis (los bloqueados/compartidos no bloquean la selección)."""
+        filas = await self._cbrs_de_serie(serie_id)
+        vistas: list[VistaConversion] = []
+        bloqueadas: list[VistaConversion] = []
+        compartidas: list[VistaConversion] = []
+        escaneados = 0
+        for file_id, _ruta in filas:
+            if len(vistas) >= limite or escaneados >= LOTE_ESCANEO_MAX:
+                break
+            vista = await self.previsualizar(serie_id, file_id)
+            escaneados += 1
+            if not vista.puede_convertir:
+                bloqueadas.append(vista)
+            elif vista.advertencia:
+                # Compartido o «no se sabe»: el lote NUNCA fuerza; se omite y se informa.
+                compartidas.append(vista)
+            else:
+                vistas.append(vista)
+        return LoteConversion(str(serie_id), tuple(vistas), tuple(bloqueadas),
+                              tuple(compartidas), len(filas), escaneados, limite)
+
+    async def convertir_lote(self, serie_id: UUID, *,
+                             limite: int = LOTE_MAX) -> ResultadoLote:
+        """Convierte una tanda reutilizando #478 (vista previa + token + confirmación por archivo).
+
+        Para y no intenta el resto si una conversión acaba con resultado incierto."""
+        lote = await self.previsualizar_lote(serie_id, limite=limite)
+        convertidas = omitidas = 0
+        detalles: list[tuple[str, str]] = []
+        for vista in lote.vistas:
+            try:
+                resultado = await self.confirmar(
+                    vista.token or "", forzar_compartido=False,
+                    file_id_esperado=vista.file_id, serie_id_esperado=serie_id)
+            except (TokenCaducadoError, TokenInvalidoError):
+                omitidas += 1
+                detalles.append((vista.nombre_original,
+                                 "La vista previa caducó; vuelve a intentarlo."))
+                break
+            if resultado.resultado in ("convertida", "ya_convertida"):
+                convertidas += 1
+            else:
+                omitidas += 1
+            detalles.append((vista.nombre_original, resultado.mensaje))
+            if resultado.motivo == MotivoConversion.RESULTADO_INCIERTO.value:
+                break
+        return ResultadoLote(str(serie_id), convertidas, omitidas, tuple(detalles), limite)
