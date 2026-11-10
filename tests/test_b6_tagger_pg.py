@@ -28,7 +28,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from zascarr.models import File, FileFormat, Issue, Publisher, Series
+from zascarr.models import File, FileFormat, Issue, MetadataSource, Publisher, Series
 from zascarr.services import tagger as tagger_mod
 from zascarr.services.tagger import (
     CADUCADO,
@@ -103,6 +103,8 @@ async def _montar(
     locked_issue: list[str] | None = None,
     locked_series: list[str] | None = None,
     metadata: dict | None = None,
+    metadata_source: str | None = MetadataSource.MANUAL.value,
+    file_metadata_source: str | None = None,
 ):
     publisher = None
     if con_publisher:
@@ -123,6 +125,7 @@ async def _montar(
         id=uuid4(), series_id=serie.id, issue_number=issue_number, volume=volume,
         release_date=date(1980, 5, 1) if con_release_date else None,
         synopsis=synopsis, locked_fields=locked_issue or [],
+        metadata_source=metadata_source,
     )
     db.add(issue)
 
@@ -136,6 +139,7 @@ async def _montar(
         id=uuid4(), issue_id=issue.id, file_path=str(ruta), file_name=ruta.name,
         file_format=formato, file_size_bytes=ruta.stat().st_size,
         sha256_hash=_sha256(ruta), metadata_=metadata or {},
+        metadata_source=file_metadata_source,
     )
     db.add(archivo)
     await db.flush()
@@ -997,3 +1001,120 @@ class TestFalloDeBdEnElLote:
         assert informe.errores == 1
         assert informe.escritos == 1
         assert leer_comicinfo(ruta_sano) is not None
+
+
+class TestProcedenciaDelResumen:
+    """#482/PO: el Summary solo se propone desde ficha manual/ComicInfo o marcador propio."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fuente", [None, "comic_vine", "anilist", "tebeosfera", "gcd"])
+    async def test_fuente_externa_o_none_no_propone_summary(self, db, tmp_path, fuente):
+        archivo, _ruta = await _montar(db, tmp_path, metadata_source=fuente)
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "sin_dato"
+
+    @pytest.mark.asyncio
+    async def test_fuente_externa_conserva_el_xml(self, db, tmp_path):
+        xml = b"<ComicInfo><Summary>Resumen manual</Summary></ComicInfo>"
+        archivo, ruta = await _montar(db, tmp_path, xml=xml, metadata_source="comic_vine")
+        r = await TaggerService(db).ejecutar(archivo, dry_run=False)
+        assert _acciones(r)["Summary"] == "sin_dato"
+        assert ElementTree.fromstring(leer_comicinfo(ruta)).findtext("Summary") == "Resumen manual"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fuente", ["manual", "comicinfo_xml"])
+    async def test_fuentes_locales_si_proponen_summary(self, db, tmp_path, fuente):
+        archivo, _ruta = await _montar(db, tmp_path, metadata_source=fuente)
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "cambia"
+
+    @pytest.mark.asyncio
+    async def test_marcador_propio_permite_actualizar_con_fuente_externa(self, db, tmp_path):
+        archivo, _ruta = await _montar(
+            db, tmp_path, metadata_source="comic_vine",
+            metadata={"comicinfo_propio": {"Summary": "Resumen de ZascArr"}})
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "cambia"
+
+
+class TestResumenPorEntidad:
+    """#620: la sinopsis es del Issue; el File no autoriza ni desautoriza el texto."""
+
+    @pytest.mark.asyncio
+    async def test_issue_cv_con_file_manual_no_autoriza(self, db, tmp_path):
+        archivo, _ruta = await _montar(
+            db, tmp_path, metadata_source="comic_vine",
+            file_metadata_source="manual")
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "sin_dato"
+
+    @pytest.mark.asyncio
+    async def test_issue_none_con_file_manual_no_autoriza(self, db, tmp_path):
+        archivo, _ruta = await _montar(
+            db, tmp_path, metadata_source=None, file_metadata_source="manual")
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "sin_dato"
+
+    @pytest.mark.asyncio
+    async def test_issue_manual_con_file_cv_si_autoriza(self, db, tmp_path):
+        archivo, _ruta = await _montar(
+            db, tmp_path, metadata_source="manual", file_metadata_source="comic_vine")
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "cambia"
+
+    @pytest.mark.asyncio
+    async def test_issue_manual_sin_xml_escribe_y_luego_conserva(self, db, tmp_path):
+        archivo, ruta = await _montar(db, tmp_path, metadata_source="manual")
+        await TaggerService(db).ejecutar(archivo, dry_run=False)
+        root = ElementTree.fromstring(leer_comicinfo(ruta))
+        assert root.findtext("Summary") == "Resumen de ZascArr"
+        with zipfile.ZipFile(ruta) as zf:
+            xml = zf.read("ComicInfo.xml")
+        otra = tmp_path / "otra"
+        otra.mkdir()
+        archivo2, ruta2 = await _montar(
+            db, otra, xml=xml, metadata_source="manual")
+        r2 = await TaggerService(db).ejecutar(archivo2, dry_run=True)
+        assert _acciones(r2)["Summary"] == "ya_coincide"
+
+    @pytest.mark.asyncio
+    async def test_run_reevalua_al_pasar_issue_de_cv_a_manual(self, db, tmp_path):
+        carpeta = tmp_path / uuid4().hex
+        carpeta.mkdir()
+        archivo, _ruta = await _montar(db, carpeta, metadata_source="comic_vine")
+        servicio = TaggerService(db)
+        await servicio.ejecutar(archivo, dry_run=False)      # deja marca con CV
+        issue = await db.get(Issue, archivo.issue_id)
+        issue.metadata_source = "manual"
+        await db.commit()
+
+        informe = await servicio.run(limit=0, dry_run=True, file_ids=[str(archivo.id)])
+        assert informe.ya_revisados == 0
+        acciones = {c.tag: c.accion.value for c in informe.resultados[0].campos}
+        assert acciones["Summary"] == "cambia"
+
+    @pytest.mark.asyncio
+    async def test_run_reevalua_al_pasar_issue_de_manual_a_cv(self, db, tmp_path):
+        carpeta = tmp_path / uuid4().hex
+        carpeta.mkdir()
+        archivo, _ruta = await _montar(db, carpeta, metadata_source="manual")
+        servicio = TaggerService(db)
+        await servicio.ejecutar(archivo, dry_run=False)
+        # Simula una marca antigua sin `comicinfo_propio` para probar la
+        # procedencia del Issue, no el comodín de autoría.
+        archivo.metadata_ = {k: v for k, v in (archivo.metadata_ or {}).items()
+                             if k != "comicinfo_propio"}
+        issue = await db.get(Issue, archivo.issue_id)
+        issue.metadata_source = "comic_vine"
+        await db.commit()
+        informe = await servicio.run(limit=0, dry_run=True, file_ids=[str(archivo.id)])
+        assert informe.ya_revisados == 0
+        acciones = {c.tag: c.accion.value for c in informe.resultados[0].campos}
+        assert acciones["Summary"] == "sin_dato"
+
+    @pytest.mark.asyncio
+    async def test_locked_summary_sigue_bloqueado_con_issue_manual(self, db, tmp_path):
+        archivo, _ruta = await _montar(
+            db, tmp_path, metadata_source="manual", locked_issue=["synopsis"])
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "bloqueado"

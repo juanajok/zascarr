@@ -107,6 +107,16 @@ Algunas fuentes de metadatos usadas por ZascArr tienen licencias propias:
 
 **ZascArr no redistribuye** contenido de estas fuentes. Todo metadato o portada se cachea localmente para el uso privado del usuario final.
 
+### 7.1 Sinopsis creativa, datos factuales y `comicinfo_propio` (decisión PO 2026-11-10)
+
+ZascArr **no copia la sinopsis creativa de fuentes externas** al `ComicInfo.xml`. El etiquetador solo escribe `Summary` cuando la ficha local del número es de procedencia `manual` o `comicinfo_xml`, o cuando ZascArr ya escribió antes ese `Summary` (marcador `comicinfo_propio` en `File.metadata_`). Con Comic Vine, AniList, Tebeosfera, GCD o procedencia `None`, `Summary` queda «sin dato» y se **conserva el XML existente**. La procedencia que decide es la del número (`Issue.metadata_source`), no la del archivo (`File.metadata_source`).
+
+El resto de campos del ComicInfo (año, editorial, créditos, género, páginas) son **datos factuales de la ficha local**. Si esa ficha los obtuvo de una fuente, se escribe el dato factual, no la sinopsis creativa; ZascArr no atribuye ni garantiza que el usuario pueda redistribuir esos datos. GCD es CC BY-SA 4.0: si se usa como fuente, la atribución/enlace corresponde a quien lo configure.
+
+El marcador `comicinfo_propio` **no es una prueba de autoría jurídica**: solo indica que ZascArr escribió ese campo en una pasada anterior y puede actualizarlo sin tratar el valor actual como texto manual ajeno. Si la persona comparte el archivo, sigue siendo su decisión y su responsabilidad; ZascArr no controla los programas P2P ni la licitud de la compartición.
+
+Esta decisión sustituye a la parte de CNV5-4 que iba a aplicar datos de fuentes al archivo. No se crea una base de datos pre-poblada ni se redistribuyen metadatos de terceros; la caché local del usuario no cambia.
+
 ---
 
 ## 8. Contacto y notificaciones
