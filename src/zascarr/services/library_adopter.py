@@ -359,8 +359,8 @@ class LibraryAdopter:
     def _primer_comic(self) -> Path | None:
         for ext in COMIC_EXTS:
             try:
-                return next((f for f in self._library.rglob(f"*{ext}")
-                             if ".zascarr" not in f.parts), None)
+                return next(f for f in self._library.rglob(f"*{ext}")
+                            if ".zascarr" not in f.parts)
             except StopIteration:
                 continue
         return None

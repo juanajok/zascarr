@@ -134,6 +134,10 @@ async def test_convierte_misma_fila_cuarentena_y_undo(entorno_base, tmp_path):
         assert f.file_format is FileFormat.CBR
         assert Path(f.file_path).read_bytes() == b"RAR-falso"
         assert not Path(f.metadata_["conversion"]["nuevo"]["ruta"]).exists()
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        assert await servicio.reconciliar_diario() >= 1
+    diario = tmp_path / ".zascarr" / "diario" / str(fid)
+    assert not list(diario.glob("*.json"))
 
 
 @pytest.mark.asyncio
