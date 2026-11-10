@@ -45,6 +45,9 @@ TEXTOS = {
     "sin_archivos": "No hay ningún archivo vinculado a este número. Puedes vincularlo desde la ficha de la serie.",
     "sin_procedencia": "No consta todavía de dónde sale este dato.",
     "portada_serie": "Portada de la serie",
+    "portada_numero": "Portada del número",
+    "publicacion": "Publicación",
+    "isbn": "ISBN",
     "volver": "← Volver a la serie",
     "ir_serie": "Ir a la serie",
     "glosario": "Qué significan estos papeles",
@@ -124,6 +127,7 @@ class FichaNumero:
     procedencia: dict[str, str] = field(default_factory=dict)
     formato: str = ""
     fecha_larga: str | None = None
+    editorial: str = ""
     paginas_texto: str | None = None
     tiene_datos: bool = False
 
@@ -265,6 +269,7 @@ async def cargar_ficha_numero(db: AsyncSession, series_id: UUID,
         serie=serie, issue=issue, sinopsis=_texto_sinopsis(issue.synopsis),
         autores=autores, archivos=archivos, procedencia=procedencia, formato=formato,
         fecha_larga=fecha_larga(fecha),
+        editorial=getattr(getattr(serie, "publisher", None), "name", "") or "",
         paginas_texto=(f"{paginas} página" if paginas == 1 else f"{paginas} páginas") if paginas else None,
         tiene_datos=tiene_datos)
 
