@@ -175,3 +175,46 @@ class TestFusion:
         assert parsear(b"<ComicInfo/>").tag == "ComicInfo"
         with pytest.raises(ComicInfoInvalidoError):
             parsear(b"<comicinfo/>")  # el lector del proyecto es case-sensitive
+
+
+class TestCamposAutoresGeneroPaginas:
+    """#481: el plan único también cubre autores, género y páginas."""
+
+    def test_mapeo_de_roles_y_dedupe_casefold(self):
+        from datetime import date
+        from types import SimpleNamespace
+
+        from zascarr.models import CreatorRole
+        from zascarr.services.tagger import _LOCK_DE, _ROLE_A_TAG, _contexto_de, _unir_lista
+
+        assert _ROLE_A_TAG[CreatorRole.WRITER] == "Writer"
+        assert _ROLE_A_TAG[CreatorRole.TRANSLATOR] == "Translator"
+        assert _unir_lista(["Ana", "ana", " Bob ", "", None]) == "Ana, Bob"
+        assert _unir_lista(["Zoe", "Álex"]) == "Zoe, Álex"
+        assert _unir_lista([]) is None
+        assert _LOCK_DE["Writer"] == ("issue", "creators")
+        assert _LOCK_DE["Genre"] == ("series", "genres")
+        assert _LOCK_DE["PageCount"] == ("issue", "page_count")
+
+        issue = SimpleNamespace(
+            title=None, issue_number="1", volume=1, release_date=date(2020, 1, 1),
+            synopsis="Sinopsis", page_count=24, locked_fields=[],
+            credits=[SimpleNamespace(role=CreatorRole.WRITER,
+                                     creator=SimpleNamespace(name="Ana")),
+                     SimpleNamespace(role=CreatorRole.WRITER,
+                                     creator=SimpleNamespace(name="ana"))])
+        series = SimpleNamespace(title="Serie", publisher_id=None, locked_fields=[],
+                                 genres=[SimpleNamespace(name="Acción"),
+                                         SimpleNamespace(name="acción")])
+        ctx = _contexto_de(issue, series, None)
+        assert ctx.deseados["Writer"] == "Ana"
+        assert ctx.deseados["Genre"] == "Acción"
+        assert ctx.deseados["PageCount"] == "24"
+        assert ctx.deseados["LanguageISO"] is None
+
+    def test_plan_incluye_los_campos_nuevos_sin_inventar(self):
+        deseados = {**DESEADOS, "Writer": "Ana, Bob", "Genre": None, "PageCount": None}
+        acciones = _por_tag(plan({}, deseados))
+        assert acciones["Writer"] is Accion.CAMBIA
+        assert acciones["Genre"] is Accion.SIN_DATO
+        assert acciones["PageCount"] is Accion.SIN_DATO

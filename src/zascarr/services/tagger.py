@@ -30,6 +30,7 @@ from pathlib import Path
 import structlog
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
+from sqlalchemy.orm import selectinload
 
 from zascarr.core.comicinfo_write import (
     Accion,
@@ -41,7 +42,7 @@ from zascarr.core.comicinfo_write import (
     parsear,
     plan,
 )
-from zascarr.models import File, FileFormat, Issue, Publisher, Series
+from zascarr.models import CreatorRole, File, FileFormat, Issue, IssueCreator, Publisher, Series
 from zascarr.services.compartidos import estado_de_comparticion
 from zascarr.utils import cbz as zcbz
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
@@ -72,6 +73,17 @@ _LOCK_DE: dict[str, tuple[str, str]] = {
     "Year": ("issue", "release_date"),
     "Publisher": ("series", "publisher_id"),
     "Summary": ("issue", "synopsis"),
+    # #481: un solo `creators` bloquea los ocho tags de autoría.
+    "Writer": ("issue", "creators"),
+    "Penciller": ("issue", "creators"),
+    "Inker": ("issue", "creators"),
+    "Colorist": ("issue", "creators"),
+    "Letterer": ("issue", "creators"),
+    "CoverArtist": ("issue", "creators"),
+    "Editor": ("issue", "creators"),
+    "Translator": ("issue", "creators"),
+    "Genre": ("series", "genres"),
+    "PageCount": ("issue", "page_count"),
 }
 
 #: Acciones del informe.
@@ -236,6 +248,32 @@ class _Contexto:
         return {"deseados": self.deseados, "bloqueados": sorted(self.bloqueados)}
 
 
+_ROLE_A_TAG = {
+    CreatorRole.WRITER: "Writer",
+    CreatorRole.PENCILER: "Penciller",
+    CreatorRole.INKER: "Inker",
+    CreatorRole.COLORIST: "Colorist",
+    CreatorRole.LETTERER: "Letterer",
+    CreatorRole.COVER_ARTIST: "CoverArtist",
+    CreatorRole.EDITOR: "Editor",
+    CreatorRole.TRANSLATOR: "Translator",
+}
+
+
+def _unir_lista(valores: list[str]) -> str | None:
+    """Nombres sin vacíos ni duplicados (casefold), en orden estable."""
+    vistos: set[str] = set()
+    limpios: list[str] = []
+    for valor in sorted((v.strip() for v in valores if v and v.strip()),
+                        key=str.casefold):
+        clave = valor.casefold()
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        limpios.append(valor)
+    return ", ".join(limpios) if limpios else None
+
+
 def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _Contexto:
     """Valores deseados (mapa mínimo de la ficha) y tags bloqueados (H3).
 
@@ -253,6 +291,23 @@ def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _
         "Summary": issue.synopsis,
         "LanguageISO": None,
     }
+    # #481: autores por rol, géneros de la serie y páginas. `getattr` tolera dobles
+    # de prueba sin relaciones cargadas; en producción vienen con selectinload.
+    autores: dict[str, list[str]] = {tag: [] for tag in _ROLE_A_TAG.values()}
+    for credito in getattr(issue, "credits", None) or []:
+        rol = getattr(credito, "role", None)
+        tag = _ROLE_A_TAG.get(rol)
+        creador = getattr(credito, "creator", None)
+        nombre = getattr(creador, "name", None)
+        if tag is not None and nombre and str(nombre).strip():
+            autores[tag].append(str(nombre).strip())
+    for tag, nombres in autores.items():
+        deseados[tag] = _unir_lista(nombres)
+    generos = [str(getattr(g, "name", "") or "").strip()
+               for g in (getattr(series, "genres", None) or [])]
+    deseados["Genre"] = _unir_lista(generos)
+    deseados["PageCount"] = (str(issue.page_count)
+                             if getattr(issue, "page_count", None) is not None else None)
     entidades = {"issue": issue, "series": series}
     bloqueados = {
         tag for tag, (entidad, campo) in _LOCK_DE.items()
@@ -277,6 +332,10 @@ class TaggerService:
             select(Issue, Series, Publisher)
             .join(Series, Issue.series_id == Series.id)
             .outerjoin(Publisher, Series.publisher_id == Publisher.id)
+            .options(
+                selectinload(Issue.credits).selectinload(IssueCreator.creator),
+                selectinload(Series.genres),
+            )
             .where(Issue.id == file.issue_id)
         )).first()
         if row is None:
@@ -657,6 +716,10 @@ class TaggerService:
             .join(Issue, File.issue_id == Issue.id)
             .join(Series, Issue.series_id == Series.id)
             .outerjoin(Publisher, Series.publisher_id == Publisher.id)
+            .options(
+                selectinload(Issue.credits).selectinload(IssueCreator.creator),
+                selectinload(Series.genres),
+            )
             .where(File.file_format == FileFormat.CBZ)
             .where(File.is_missing.is_(False))
             # Orden GLOBAL por `File.id` (y no por imported_at): rescan ordena
