@@ -28,6 +28,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Los originales de las conversiones se explican y se liberan desde la interfaz (BL-CNV2b,
+  #586).** En «Duplicados» hay un bloque «Originales guardados»: dice cuántos hay, cuánto ocupan
+  y dónde están (una carpeta oculta de tu biblioteca, que no hace falta abrir), con «Liberar
+  espacio» y confirmación explícita porque después no se puede deshacer. Libera por tandas y dice
+  cuántos quedan; si una tarea usa la biblioteca, avisa y no toca. El cierre de la conversión y el
+  informe del lote lo recuerdan en una frase.
 - **Convertir los CBR de una serie en lote (BL-CNV2, #479).** En «Archivos por número» de la
   ficha, «Convertir los CBR» abre una vista previa y convierte **de 5 en 5**, reutilizando la
   conversión verificada y reversible de #478 (token, guardián de compartidos y cuarentena del

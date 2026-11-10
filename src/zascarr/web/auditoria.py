@@ -29,6 +29,7 @@ from zascarr.database import get_db
 from zascarr.models import ImportRun, Series
 from zascarr.services import registro_biblioteca, rescan_biblioteca
 from zascarr.services.aceptacion_adopcion import MAX_ILEGIBLES, aceptar, evaluar
+from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.library_adopter import EstadoAdopcion, InventarioBiblioteca, LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
 from zascarr.web.disponibilidad import registrar_filtros
@@ -274,5 +275,49 @@ async def rescanear(request: Request, db: AsyncSession = Depends(get_db)):
         return RedirectResponse("/ui/auditoria", status_code=303)
     contexto = await _contexto_rescan(db, recien_lanzada=lanzada, ya_en_curso=not lanzada)
     respuesta = templates.TemplateResponse(request, "_rescan_biblioteca.html", contexto)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+# ── BL-CNV2b: originales apartados de las conversiones ───────────────────────
+
+#: Tope de originales que se liberan por pulsación (el resto se indica y se repite).
+LOTE_LIBERAR = 500
+
+
+def _servicio_originales(db):
+    return ConversionDeArchivo(db, secret=get_settings().secret_key)
+
+
+async def _contexto_originales(db, *, borrados: int | None = None,
+                               error: str | None = None) -> dict:
+    servicio = _servicio_originales(db)
+    cuantos, bytes_ = await servicio.resumen_originales()
+    return {"originales": cuantos, "bytes": bytes_, "borrados": borrados,
+            "error": error, "lote": LOTE_LIBERAR}
+
+
+@router.get("/originales", response_class=HTMLResponse)
+async def originales(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento «Originales guardados»: dónde están, cuánto ocupan y liberar. Solo lee."""
+    respuesta = templates.TemplateResponse(
+        request, "_originales_guardados.html", await _contexto_originales(db))
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/originales/vaciar", response_class=HTMLResponse)
+async def originales_vaciar(request: Request, confirmado: str = Form(""),
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Borra originales por tandas. Sin la casilla marcada no se toca nada."""
+    if confirmado not in ("1", "true", "on"):
+        contexto = await _contexto_originales(
+            db, error="Marca la casilla para confirmar que no necesitas deshacer esas conversiones.")
+    else:
+        borrados = await _servicio_originales(db).vaciar_originales(LOTE_LIBERAR)
+        contexto = await _contexto_originales(db, borrados=borrados)
+        if borrados == 0 and contexto["originales"]:
+            contexto["error"] = ("No se ha liberado nada ahora mismo: hay otra tarea usando la "
+                                 "biblioteca. Inténtalo en un momento.")
+    respuesta = templates.TemplateResponse(request, "_originales_guardados.html", contexto)
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
