@@ -39,6 +39,7 @@ from zascarr.models import (
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.comic_vine import es_portada_de_relleno
+from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
 from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.discrepancias import (
     clave_valida,
@@ -1023,3 +1024,50 @@ async def convertir_lote_confirmar(series_id: UUID, request: Request,
 def _sin_cache_conversion(respuesta: HTMLResponse) -> HTMLResponse:
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
+
+
+# ── #480/BL-CNV3: ComicInfo desde la ficha (mismo plan de B6) ────────────────────────────────────
+
+def _servicio_comicinfo(db):
+    return ComicInfoFichaService(db)
+
+
+def _sin_cache_comicinfo(respuesta: HTMLResponse) -> HTMLResponse:
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.get("/{series_id}/archivos/{file_id}/comicinfo", response_class=HTMLResponse)
+async def comicinfo_vista_previa(series_id: UUID, file_id: UUID, request: Request,
+                                 db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    try:
+        vista = await _servicio_comicinfo(db).previsualizar(series_id, file_id)
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ == "TokenInvalidoError":
+            raise HTTPException(status_code=404, detail="Archivo no encontrado") from None
+        raise
+    return _sin_cache_comicinfo(templates.TemplateResponse(
+        request, "_comicinfo_previa.html", {"series": series, "vista": vista, "file_id": file_id}))
+
+
+@router.post("/{series_id}/archivos/{file_id}/comicinfo", response_class=HTMLResponse)
+async def comicinfo_guardar(series_id: UUID, file_id: UUID, request: Request,
+                            token: str = Form(..., max_length=MAX_TOKEN_COMICINFO),
+                            forzar_compartido: str = Form(default=""),
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    try:
+        resultado = await _servicio_comicinfo(db).aplicar(
+            token, forzar_compartido=bool(forzar_compartido),
+            file_id_esperado=file_id, serie_id_esperado=series_id)
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ == "TokenCaducadoError":
+            raise HTTPException(status_code=410, detail=str(exc),
+                                headers={"Cache-Control": "no-store"}) from None
+        if exc.__class__.__name__ == "TokenInvalidoError":
+            raise HTTPException(status_code=400, detail=str(exc),
+                                headers={"Cache-Control": "no-store"}) from None
+        raise
+    return _sin_cache_comicinfo(templates.TemplateResponse(
+        request, "comicinfo_resultado.html", {"series": series, "resultado": resultado}))

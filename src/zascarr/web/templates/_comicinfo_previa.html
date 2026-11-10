@@ -1,0 +1,32 @@
+{#- #480: vista previa del plan de ComicInfo (mismo plan de B6). -#}
+<div class="comicinfo-previa" id="comicinfo-{{ vista.file_id }}">
+  {% if vista.es_cbr %}
+  {{ ui.aviso("amber", vista.mensaje) }}
+  <p><a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ vista.file_id }}/convertir">Convertir a CBZ</a></p>
+  {% elif not vista.puede_aplicar %}
+  {{ ui.aviso("amber", vista.mensaje) }}
+  <p class="caption">No se ha tocado el archivo.</p>
+  {% else %}
+  <p class="caption">{{ vista.mensaje }}</p>
+  {% if vista.advertencia %}{{ ui.aviso("amber", vista.advertencia) }}{% endif %}
+  {% if vista.campos %}
+  <ul class="comicinfo-campos">
+    {% for c in vista.campos %}
+    <li><strong>{{ c.tag }}</strong>: {{ c.actual or "sin dato" }} → {{ c.nuevo if c.nuevo else "—" }}
+      <span class="muted">{{ c.accion.value }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo">
+    <input type="hidden" name="token" value="{{ vista.token }}">
+    {% if vista.advertencia %}
+    <label class="legal-checkbox"><input type="checkbox" name="forzar_compartido" value="1" required>
+      Entiendo el riesgo para la siembra y quiero continuar.</label>
+    {% endif %}
+    <div class="ajustes-actions">
+      <button class="btn primary" type="submit">Guardar información en el tebeo</button>
+      <a class="btn ghost" href="/ui/series/{{ series.id }}">Cancelar</a>
+    </div>
+  </form>
+  {% endif %}
+</div>
