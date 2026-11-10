@@ -2143,6 +2143,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .declaracion-chips { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
 .declaracion-card h3 { margin: 0 0 6px; }
 
+
+/* CNV5-3: propuestas de fuentes en la vista previa de ComicInfo. */
+.comicinfo-fuentes { display: grid; gap: 8px; margin-top: 8px; }
+.comicinfo-fuente-campo { border: 1px solid var(--linea); border-radius: 6px; padding: 8px; }
+.comicinfo-fuente-campo legend { font-weight: 700; padding: 0 4px; }
+.comicinfo-fuente-campo label { display: block; margin: 4px 0; }
+.comicinfo-opcion { padding-left: 8px; }
+.comicinfo-avisos { display: grid; gap: 6px; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
