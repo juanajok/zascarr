@@ -161,7 +161,14 @@
 <div class="issue-grid">
   {% for n in present %}
   {% set enlace = ficha.enlace_para_numero(n) if ficha else none %}
-  {% if enlace %}<a class="issue-chip issue-present" href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}">#{{ n }}<span class="sr"> ver información del número {{ n }}</span></a>{% else %}<span class="issue-chip issue-present">#{{ n }}</span>{% endif %}
+  {% if enlace %}
+  <span class="chip-previa">
+    <a class="issue-chip issue-present" href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}"
+       hx-get="/ui/series/{{ series.id }}/numero/{{ enlace.id }}/previa"
+       hx-trigger="mouseenter, focusin" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">#{{ n }}<span class="sr"> ver información del número {{ n }}</span></a>
+    <span class="previa-numero" id="previa-{{ enlace.id }}" aria-hidden="true"></span>
+  </span>
+  {% else %}<span class="issue-chip issue-present">#{{ n }}</span>{% endif %}
   {% endfor %}
 </div>
 {% endif %}

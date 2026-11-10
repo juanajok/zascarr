@@ -89,6 +89,7 @@ from zascarr.services.politica import (
     retirar_de_serie,
     texto_de_cota,
 )
+from zascarr.services.portada_numero import ruta_previa
 from zascarr.services.procedencia import procedencia_de_serie
 from zascarr.services.relacion_confirmada import (
     es_protegida,
@@ -790,6 +791,39 @@ async def marcar_leido(series_id: UUID, issue_id: UUID, request: Request,
         respuesta = RedirectResponse(url=destino, status_code=303)
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
+
+
+@router.get("/{series_id}/numero/{issue_id}/previa", response_class=HTMLResponse)
+async def previa_numero(series_id: UUID, issue_id: UUID, request: Request,
+                        db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """BL-INF4: fragmento con la miniatura de la portada del número (hover/foco). Sin caché: es
+    diminuto; la imagen y la miniatura en disco ya se cachean."""
+    issue = await db.get(Issue, issue_id)
+    if issue is None or issue.series_id != series_id:
+        raise HTTPException(status_code=404, detail="Número no encontrado")
+    ruta = await ruta_previa(db, series_id, issue_id)
+    if ruta is None:
+        respuesta: Response = HTMLResponse("")
+    else:
+        respuesta = templates.TemplateResponse(
+            request, "_previa_numero.html",
+            {"series_id": series_id, "issue_id": issue_id})
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.get("/{series_id}/numero/{issue_id}/previa.jpg")
+async def previa_numero_imagen(series_id: UUID, issue_id: UUID, request: Request,
+                               db: AsyncSession = Depends(get_db)) -> Response:
+    """BL-INF4: la miniatura en sí (240 px), con ETag y caché privada de un día."""
+    issue = await db.get(Issue, issue_id)
+    if issue is None or issue.series_id != series_id:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    ruta = await ruta_previa(db, series_id, issue_id)
+    if ruta is None:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    datos = await asyncio.to_thread(ruta.read_bytes)
+    return cached_image_response(request, datos, "image/jpeg", f'"{ruta.stat().st_mtime_ns}"')
 
 
 @router.get("/{series_id}/portada")

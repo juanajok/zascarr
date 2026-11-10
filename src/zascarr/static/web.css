@@ -1986,6 +1986,20 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (prefers-reduced-motion: reduce) { .conversion-espera::before { animation: none; } }
 .conversion-resultado-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
+/* BL-INF4: vista previa de la portada del número al pasar el ratón o el foco. */
+.chip-previa { position: relative; display: inline-flex; }
+.previa-numero {
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  z-index: 30; pointer-events: none;
+}
+.previa-numero:empty { display: none; }
+.previa-numero img {
+  display: block; width: 140px; height: auto;
+  border: 3px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper); box-shadow: var(--shadow-ink-sm);
+}
+@media (max-width: 860px), (pointer: coarse) { .previa-numero { display: none; } }
+
 /* BL-CNV2b: originales guardados de las conversiones (Duplicados). */
 .originales-guardados { margin: 18px 0; }
 .originales-guardados form { display: grid; gap: 8px; justify-items: start; margin-top: 4px; }

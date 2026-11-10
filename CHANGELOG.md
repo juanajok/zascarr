@@ -37,6 +37,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Vista previa de la portada de cada número (BL-INF4, #590).** Al pasar el ratón o enfocar un
+  número en la ficha se enseña su portada, sin abrirlo. La miniatura (240 px) se saca del propio
+  archivo del número, se guarda por archivo en la caché de portadas y se sirve con ETag y caché
+  privada de un día; no se precarga nada y solo se pide lo que se mira. En móvil, tocar el número
+  sigue abriéndolo. Sin JS nuevo y sin tocar los archivos.
 - **Los originales de las conversiones se explican y se liberan desde la interfaz (BL-CNV2b,
   #586).** En «Duplicados» hay un bloque «Originales guardados»: dice cuántos hay, cuánto ocupan
   y dónde están (una carpeta oculta de tu biblioteca, que no hace falta abrir), con «Liberar
