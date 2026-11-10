@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Correspondencias — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="{{ volver }}">← Volver a «Contexto declarado»</a></p>
+<h1>Correspondencias</h1>
+<p>Consulta las reglas que preparan propuestas para tus carpetas.</p>
+<p>{{ mensaje_efectos }}</p>
+{% if aviso == "creada" %}<p class="declaracion-aviso" role="status">Correspondencia creada. Solo prepara propuestas; no se ha vinculado nada.</p>{% endif %}
+{% if aviso == "actualizada" %}<p class="declaracion-aviso" role="status">Correspondencia actualizada. La versión anterior deja de aplicarse.</p>{% endif %}
+{% if aviso == "desactivada" %}<p class="declaracion-aviso" role="status">Correspondencia desactivada. Puedes reactivarla cuando quieras.</p>{% endif %}
+{% if aviso == "reactivada" %}<p class="declaracion-aviso" role="status">Correspondencia reactivada.</p>{% endif %}
+{% if aviso == "retirada" %}<p class="declaracion-aviso" role="status">Correspondencia retirada. El historial se conserva y no se ha tocado nada.</p>{% endif %}
+{% if conflicto %}<p class="declaracion-aviso" role="alert">Hay varias correspondencias activas para la misma carpeta. La evaluación mostrará un conflicto; no se elige ninguna.</p>{% endif %}
+
+{% if not todas %}
+<div class="empty-state">
+  <h2>Todavía no has creado ninguna correspondencia.</h2>
+  <p>Una correspondencia solo prepara propuestas; no vincula archivos.</p>
+  <p><a class="btn ghost" href="{{ volver }}">Ir a «Contexto declarado»</a></p>
+</div>
+{% else %}
+{% for estado, tarjetas in secciones %}
+{% if tarjetas %}
+<section aria-labelledby="corr-{{ estado }}">
+  <h2 id="corr-{{ estado }}" class="titulo-frase">{{ {"activa": "Activas", "desactivada": "Desactivadas", "retirada": "Retiradas"}[estado] }} ({{ tarjetas | length }})</h2>
+  <ul class="correspondencias-lista">
+    {% for t in tarjetas %}
+    <li class="declaracion-card">
+      <h3 class="titulo-frase declaracion-ruta">{{ t.c.contexto_raiz }}</h3>
+      <p class="declaracion-chips">
+        {{ ui.chip("info", {"activa": "Activa", "desactivada": "Desactivada", "retirada": "Retirada"}[t.c.estado.value]) }}
+        {{ ui.chip("neutro", "Local" if t.c.origen.value == "local" else "Importación") }}
+        <span class="declaracion-version">Versión {{ t.c.version }}</span>
+        {% if t.desactualizada %}{{ ui.chip("amber", "Desactualizada") }}{% endif %}
+        {% if t.sin_destino %}{{ ui.chip("warn", "Destino no disponible") }}{% endif %}
+      </p>
+      <p><strong>Destino:</strong> {{ t.destino.texto if t.destino else "Destino no disponible" }}{% if t.destino and t.destino.url %} · <a href="{{ t.destino.url }}">Ver ficha</a>{% endif %}</p>
+      <p><strong>Alcance:</strong> {{ t.alcance }}</p>
+      <p><strong>Se aplica a:</strong> {{ t.registro }}</p>
+      <p class="caption">Solo prepara propuestas: no crea series ni publicaciones, no vincula archivos, no los mueve ni aplica metadatos.</p>
+      {% if t.c.estado.value == "retirada" %}
+      <p>Retirada: no prepara propuestas. El historial se conserva.</p>
+      {% elif t.c.origen.value == "importacion" %}
+      <p>Sugerencia importada; no es una decisión local. Se muestra, no se gestiona desde aquí.</p>
+      {% elif t.desactualizada %}
+      <p>Desactualizada: la declaración cambió o dejó de estar activa. Esta regla no se aplica. Crea una correspondencia nueva desde la declaración vigente.</p>
+      <p class="acciones-declaracion">
+        <form method="post" action="/ui/pendientes/carpetas/correspondencias/desactivar/{{ t.c.correspondencia_id }}"><button class="btn ghost sm" type="submit">Desactivar</button></form>
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/correspondencias/retirar/{{ t.c.correspondencia_id }}">Retirar</a>
+      </p>
+      {% else %}
+      <p class="acciones-declaracion">
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/correspondencias/cambiar/{{ t.c.correspondencia_id }}">Cambiar</a>
+        {% if t.c.estado.value == "activa" %}
+        <form method="post" action="/ui/pendientes/carpetas/correspondencias/desactivar/{{ t.c.correspondencia_id }}"><button class="btn ghost sm" type="submit">Desactivar</button></form>
+        {% else %}
+        <form method="post" action="/ui/pendientes/carpetas/correspondencias/reactivar/{{ t.c.correspondencia_id }}"><button class="btn ghost sm" type="submit">Reactivar</button></form>
+        <p class="caption">No prepara propuestas.</p>
+        {% endif %}
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/correspondencias/retirar/{{ t.c.correspondencia_id }}">Retirar</a>
+      </p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endblock %}

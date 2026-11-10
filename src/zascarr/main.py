@@ -387,6 +387,7 @@ def create_app() -> FastAPI:
     from zascarr.web.auditoria import router as auditoria_router
     from zascarr.web.auth import router as auth_router
     from zascarr.web.contexto_declarado import router as contexto_declarado_router
+    from zascarr.web.correspondencias_contexto import router as correspondencias_contexto_router
     from zascarr.web.dashboard import router as dashboard_router
     from zascarr.web.desvinculacion import router as desvinculacion_ui_router
     from zascarr.web.discovery import router as discovery_router
@@ -428,6 +429,7 @@ def create_app() -> FastAPI:
     app.include_router(asistente_carpetas_router)
     app.include_router(asistente_vinculacion_router)
     app.include_router(pendientes_router)
+    app.include_router(correspondencias_contexto_router)
     app.include_router(contexto_declarado_router)
     app.include_router(retirada_serie_ui_router)
     app.include_router(series_ui_router)
