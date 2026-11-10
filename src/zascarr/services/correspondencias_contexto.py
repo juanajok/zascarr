@@ -404,7 +404,9 @@ async def _version_actual_declaracion(db: AsyncSession, version_id: UUID) -> Dec
 def _regla_dict(c: CorrespondenciaContexto) -> dict:
     return {"correspondencia_id": str(c.correspondencia_id), "version": c.version,
             "origen": c.origen.value, "destino_tipo": c.destino_tipo.value,
-            "destino_id": str(c.destino_id)}
+            "destino_id": str(c.destino_id), "contexto_raiz": c.contexto_raiz,
+            "incluir_descendientes": c.incluir_descendientes,
+            "tipo_registro": c.tipo_de_registro.value if c.tipo_de_registro else None}
 
 
 async def evaluar(db: AsyncSession, registro: RegistroContextual, *,

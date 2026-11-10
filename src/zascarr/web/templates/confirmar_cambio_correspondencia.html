@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Confirmar cambio de correspondencia — ZascArr{% endblock %}
+{% block content %}
+<h1 tabindex="-1" autofocus>Confirmar cambio de correspondencia</h1>
+<p>Vas a cambiar el destino; todavía no se ha guardado nada.</p>
+<div class="declaracion-resumen">
+  <p><strong>Ruta:</strong> {{ c.contexto_raiz }}</p>
+  <p><strong>Destino nuevo:</strong> {{ destino.texto }}</p>
+  <p><strong>Se aplica a:</strong> {{ tipo_registro or "Cualquier registro" }}</p>
+</div>
+<p>Se creará una versión nueva. La anterior deja de aplicarse en cuanto guardes. No se reinterpreta lo que ya está decidido.</p>
+<form method="post" action="/ui/pendientes/carpetas/correspondencias/cambiar/{{ c.correspondencia_id }}" class="declaracion-form">
+  <input type="hidden" name="destino" value="{{ tipo }}|{{ destino.id }}">
+  <input type="hidden" name="tipo_registro" value="{{ tipo_registro }}">
+  <input type="hidden" name="confirmado" value="1">
+  <button class="btn primary" type="submit">Sí, cambiar el destino</button>
+  <a class="btn ghost" href="/ui/pendientes/carpetas/correspondencias/cambiar/{{ c.correspondencia_id }}">Volver sin cambiar</a>
+</form>
+{% endblock %}
