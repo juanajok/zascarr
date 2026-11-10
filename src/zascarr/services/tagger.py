@@ -42,7 +42,16 @@ from zascarr.core.comicinfo_write import (
     parsear,
     plan,
 )
-from zascarr.models import CreatorRole, File, FileFormat, Issue, IssueCreator, Publisher, Series
+from zascarr.models import (
+    CreatorRole,
+    File,
+    FileFormat,
+    Issue,
+    IssueCreator,
+    MetadataSource,
+    Publisher,
+    Series,
+)
 from zascarr.services.compartidos import estado_de_comparticion
 from zascarr.utils import cbz as zcbz
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
@@ -275,6 +284,24 @@ def _unir_lista(valores: list[str]) -> str | None:
     return ", ".join(limpios) if limpios else None
 
 
+#: #482/PO: Synopsis solo se propone si la ficha es manual/ComicInfo o si ZascArr ya
+#: escribió ese Summary (marcador `comicinfo_propio`). Los datos de fuentes externas no se
+#: embeben en el archivo: quedan en la caché local de ZascArr.
+_RESUMEN_PERMITIDO = frozenset({MetadataSource.MANUAL.value, MetadataSource.COMICINFO_XML.value})
+
+
+def _resumen_autorizado(file: File) -> bool:
+    propio = (file.metadata_ or {}).get("comicinfo_propio") or {}
+    return (getattr(file, "metadata_source", None) in _RESUMEN_PERMITIDO
+            or "Summary" in propio)
+
+
+def _filtrar_resumen(ctx: _Contexto, file: File) -> _Contexto:
+    if _resumen_autorizado(file):
+        return ctx
+    return _Contexto({**ctx.deseados, "Summary": None}, set(ctx.bloqueados))
+
+
 def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _Contexto:
     """Valores deseados (mapa mínimo de la ficha) y tags bloqueados (H3).
 
@@ -360,6 +387,7 @@ class TaggerService:
         xml = await asyncio.to_thread(leer_comicinfo, path)
         root = parsear(xml) if xml else None
         ctx = ctx if ctx is not None else await self._contexto(file)
+        ctx = _filtrar_resumen(ctx, file)
         propio = (file.metadata_ or {}).get("comicinfo_propio") or {}
         campos = plan(leer_campos(root), ctx.deseados, propio, solo_rellenar)
         return [
