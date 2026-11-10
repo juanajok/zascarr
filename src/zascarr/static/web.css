@@ -2144,6 +2144,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .declaracion-card h3 { margin: 0 0 6px; }
 
 
+/* MIT-M7 131-b: correspondencias y propuestas. */
+.correspondencias-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
 /* CNV5-3: propuestas de fuentes en la vista previa de ComicInfo. */
 .comicinfo-fuentes { display: grid; gap: 8px; margin-top: 8px; min-width: 0; overflow-wrap: anywhere; }
 .comicinfo-fuente-campo { border: 1px solid var(--linea); border-radius: 6px; padding: 8px; min-width: 0; }

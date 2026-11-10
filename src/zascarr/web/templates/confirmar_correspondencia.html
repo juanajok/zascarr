@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Confirmar correspondencia — ZascArr{% endblock %}
+{% block content %}
+<h1 tabindex="-1" autofocus>Confirmar correspondencia</h1>
+<p>Vas a crear una correspondencia; todavía no se aplica nada.</p>
+<div class="declaracion-resumen">
+  <p><strong>Ruta:</strong> {{ decl.contexto_raiz }}</p>
+  <p><strong>Destino:</strong> {{ destino.texto }}</p>
+  <p><strong>Alcance:</strong> {{ alcance }}</p>
+  <p><strong>Se aplica a:</strong> {{ tipo_registro or "Cualquier registro" }}</p>
+  <p><strong>Declaración:</strong> versión {{ decl.version }}</p>
+</div>
+<p>{{ mensaje_efectos }}</p>
+<form method="post" action="/ui/pendientes/carpetas/correspondencias/crear" class="declaracion-form">
+  <input type="hidden" name="declaracion" value="{{ decl.id }}">
+  <input type="hidden" name="tipo" value="{{ tipo }}">
+  <input type="hidden" name="destino_id" value="{{ destino.id }}">
+  <input type="hidden" name="tipo_registro" value="{{ tipo_registro }}">
+  <input type="hidden" name="confirmado" value="1">
+  <button class="btn primary" type="submit">Sí, crear correspondencia</button>
+  <a class="btn ghost" href="{{ volver_url }}">Volver sin crear</a>
+</form>
+{% endblock %}
