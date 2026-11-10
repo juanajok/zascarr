@@ -399,3 +399,129 @@ async def test_diario_repara_fila_si_el_commit_no_llego(entorno_base, tmp_path):
         assert f.file_format is FileFormat.CBZ and Path(f.file_path) == nuevo
         assert f.sha256_hash == sha_nuevo
     assert not diario.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("metodo", ["recomprimir", "renombrar_zip"])
+async def test_reparar_desde_diario_y_deshacer(entorno_base, tmp_path, metodo):
+    sid = await serie_de_prueba(entorno_base, comic_vine_id=10 if metodo == "recomprimir" else 11)
+    if metodo == "renombrar_zip":
+        ruta = tmp_path / "Zipeado.cbr"
+        with zipfile.ZipFile(ruta, "w") as zf:
+            zf.writestr("001.jpg", b"pagina")
+        contenido = ruta.read_bytes()
+        lector = _Lector([])
+    else:
+        ruta = tmp_path / "Recomprimir.cbr"
+        ruta.write_bytes(b"RAR-falso")
+        contenido = b"RAR-falso"
+        lector = _Lector([_Entrada("001.jpg", b"pagina uno"),
+                          _Entrada("ComicInfo.xml", b"<ComicInfo/>")])
+    sha = hashlib.sha256(contenido).hexdigest()
+    async with entorno_base.banco.fabrica() as s:
+        issue = Issue(id=uuid4(), series_id=sid, issue_number="1", volume=1)
+        s.add(issue)
+        await s.flush()
+        f = File(id=uuid4(), issue_id=issue.id, file_path=str(ruta), file_name=ruta.name,
+                 file_format=FileFormat.CBR, file_size_bytes=len(contenido),
+                 file_mtime_ns=ruta.stat().st_mtime_ns, sha256_hash=sha, metadata_={})
+        s.add(f)
+        await s.commit()
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        vista = await servicio.previsualizar(sid, f.id)
+        await servicio.confirmar(vista.token)
+        # Simula que el commit de la fila no llegó: la fila vuelve a describir el CBR original.
+        otra = (await s.execute(select(File).where(File.id == f.id))).scalar_one()
+        otra.file_path, otra.file_name = str(ruta), ruta.name
+        otra.file_format, otra.file_size_bytes = FileFormat.CBR, len(contenido)
+        otra.sha256_hash, otra.metadata_ = sha, {}
+        await s.commit()
+        assert await servicio.reconciliar_diario() >= 1
+        previa = await servicio.previsualizar_deshacer(sid, f.id)
+        assert previa.token
+        assert (await servicio.deshacer(previa.token)).resultado == "revertida"
+    async with entorno_base.banco.fabrica() as s:
+        fila = (await s.execute(select(File).where(File.id == f.id))).scalar_one()
+        assert fila.file_format is FileFormat.CBR
+        assert Path(fila.file_path).read_bytes() == contenido
+
+
+@pytest.mark.asyncio
+async def test_reconciliar_deshaciendo_cierra_el_undo(entorno_base, tmp_path):
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path, comic_vine_id=12)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        vista = await servicio.previsualizar(sid, fid)
+        await servicio.confirmar(vista.token)
+        fila = (await s.execute(select(File).where(File.id == fid))).scalar_one()
+        conv = fila.metadata_["conversion"]
+        destino = Path(conv["nuevo"]["ruta"])
+        ruta.write_bytes(b"RAR-falso")               # el original vuelve a su sitio...
+        # ...pero la fila sigue en CBZ y el CBZ sigue en su sitio (crash a mitad de undo).
+        (tmp_path / ".zascarr" / "diario" / str(fid)).mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".zascarr" / "originales" / str(fid) / "op" / "deshecho").mkdir(
+            parents=True, exist_ok=True)
+        (tmp_path / ".zascarr" / "diario" / str(fid) / "op.json").write_text(__import__("json").dumps({
+            "version": 1, "file_id": str(fid), "operacion_id": conv["operacion_id"],
+            "estado": "deshaciendo", "ruta": str(tmp_path / ".zascarr" / "originales" / str(fid) / "op" / "deshecho" / destino.name),
+            "ruta_original": str(ruta), "destino": str(destino),
+            "sha_original": conv["original"]["sha256"], "tamano_original": conv["original"]["tamano"],
+            "sha_nuevo": conv["nuevo"]["sha256"], "tamano_nuevo": conv["nuevo"]["tamano"],
+            "metodo": "recomprimir",
+        }))
+        assert await servicio.reconciliar_diario() >= 1
+    async with entorno_base.banco.fabrica() as s:
+        fila = (await s.execute(select(File).where(File.id == fid))).scalar_one()
+        assert fila.file_format is FileFormat.CBR and Path(fila.file_path) == ruta
+        assert not destino.exists()
+
+
+@pytest.mark.asyncio
+async def test_undo_respeta_cerrojo_de_ciclo(entorno_base, tmp_path):
+    from sqlalchemy import text
+
+    from zascarr.services.comprobacion_disco import CLAVE_CERROJO_CICLO
+
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path, comic_vine_id=13)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        vista = await servicio.previsualizar(sid, fid)
+        await servicio.confirmar(vista.token)
+        previa = await servicio.previsualizar_deshacer(sid, fid)
+        ocupada = await entorno_base.banco.motor.connect()
+        try:
+            await ocupada.execute(text("SELECT pg_advisory_lock(:c, :o)"),
+                                  {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})
+            resultado = await servicio.deshacer(previa.token)
+            assert resultado.resultado == "omitida" and resultado.motivo == "conflicto_de_bloqueo"
+            await ocupada.execute(text("SELECT pg_advisory_unlock(:c, :o)"),
+                                  {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})
+        finally:
+            await ocupada.close()
+        assert (await servicio.deshacer(previa.token)).resultado == "revertida"
+
+
+@pytest.mark.asyncio
+async def test_hash_final_detecta_cambio_durante_extraccion(entorno_base, tmp_path, monkeypatch):
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path, comic_vine_id=14)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    real = mod.construir_cbz
+
+    def _cambia(original, temporal, **kw):
+        resultado = real(original, temporal, **kw)
+        Path(original).write_bytes(b"RAR-cambiado-durante-extraccion")
+        return resultado
+
+    monkeypatch.setattr(mod, "construir_cbz", _cambia)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        vista = await servicio.previsualizar(sid, fid)
+        resultado = await servicio.confirmar(vista.token)
+        assert resultado.resultado == "omitida"
+        assert resultado.motivo == "propuesta_desactualizada"
+    assert ruta.read_bytes() == b"RAR-cambiado-durante-extraccion"
+    assert not ruta.with_suffix(".cbz").exists()

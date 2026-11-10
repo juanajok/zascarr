@@ -229,3 +229,17 @@ def test_el_cli_queda_instalado_como_zascarr_originales():
 
     datos = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
     assert datos["project"]["scripts"]["zascarr-originales"] == "zascarr.cli.originales:main"
+
+
+def test_d5_tope_total_declarado(monkeypatch, tmp_path):
+    import zascarr.services.conversion_cbr as cc
+    from zascarr.services.conversion_cbr import EntradaManifiesto
+
+    ruta = tmp_path / "Zipeado.cbr"
+    with zipfile.ZipFile(ruta, "w") as zf:
+        zf.writestr("001.jpg", b"x")
+    monkeypatch.setattr(cc, "_manifiesto_de_zip", lambda _r: (
+        EntradaManifiesto("001.jpg", cc.MAX_CBR_BYTES + 1, 0, "a" * 64),))
+    with pytest.raises(ConversionBloqueadaError) as exc:
+        analizar(ruta, lector=_Lector([]))
+    assert exc.value.motivo is MotivoConversion.DEMASIADO_GRANDE
