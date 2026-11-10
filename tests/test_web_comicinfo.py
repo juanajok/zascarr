@@ -34,7 +34,7 @@ def test_resumen_previo_muestra_cbz_y_cbr(monkeypatch):
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert r.status_code == 200
-    assert "1 archivos CBZ" in r.text and "1 CBR" in r.text
+    assert "1 archivo vinculado" in r.text and "1 CBR" in r.text
     assert "no se ejecuta sola" in r.text
     assert r.headers["cache-control"] == "no-store"
 

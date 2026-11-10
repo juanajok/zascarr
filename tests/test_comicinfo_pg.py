@@ -118,3 +118,129 @@ async def test_manual_y_locked_no_se_pisan_pg(entorno):
         issue = await s.get(Issue, iid)
         assert issue.synopsis == "Lo escribió la persona"
         assert issue.page_count is None
+
+
+@pytest.mark.asyncio
+async def test_accion_explicita_aplica_a_vinculado_a_mano_e_idempotente_pg(entorno):
+    _, iid, _ = await _fila(entorno)
+    from zascarr.services.comicinfo import leer_archivos_vinculados
+    async with entorno.banco.fabrica() as s:
+        r1 = await leer_archivos_vinculados(s)
+        assert r1.aplicados == 1 and r1.ilegibles == 0
+    async with entorno.banco.fabrica() as s:
+        r2 = await leer_archivos_vinculados(s)
+        assert r2.aplicados == 0 and r2.omitidos == 1
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        assert issue.synopsis == "Una historia" and issue.page_count == 32
+        assert len((await s.execute(select(IssueCreator).where(
+            IssueCreator.issue_id == iid))).scalars().all()) == 4
+
+
+@pytest.mark.asyncio
+async def test_page_count_solo_con_un_archivo_y_rango_pg(entorno):
+    sid, iid, ruta = await _fila(entorno)
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        await aplicar_a_issue(s, issue, ruta)
+        await s.commit()
+        assert issue.page_count == 32 and issue.metadata_source == "comicinfo_xml"
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        issue.page_count = 32
+        issue.metadata_source = "comicinfo_xml"
+        s.add(File(issue_id=iid, file_path="/tmp/otro.cbz", file_name="otro.cbz",
+                   file_format=FileFormat.CBZ, file_size_bytes=1))
+        await s.commit()
+        r = await aplicar_a_issue(s, issue, ruta)
+        await s.commit()
+        assert r.estado == "sin_cambios" and issue.page_count == 32
+    grande = entorno.tmp / "grande.cbz"
+    with zipfile.ZipFile(grande, "w") as zf:
+        zf.writestr("ComicInfo.xml", "<ComicInfo><PageCount>999999</PageCount></ComicInfo>")
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        r = await aplicar_a_issue(s, issue, grande)
+        assert issue.page_count == 32 and r.campos == 0
+
+
+@pytest.mark.asyncio
+async def test_marca_persiste_en_sesion_nueva_y_fuente_solo_paginas_pg(entorno):
+    _, iid, ruta = await _fila(entorno)
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        issue.synopsis = None
+        issue.page_count = None
+        await s.commit()
+        await aplicar_a_issue(s, issue, ruta)
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        assert isinstance(issue.metadata_.get("comicinfo_aplicado"), dict)
+        assert issue.metadata_source == "comicinfo_xml"
+
+
+@pytest.mark.asyncio
+async def test_creditos_respetan_locked_fields_pg(entorno):
+    _, iid, ruta = await _fila(entorno)
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        issue.locked_fields = ["credits"]
+        await s.commit()
+        await aplicar_a_issue(s, issue, ruta)
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(select(IssueCreator).where(
+            IssueCreator.issue_id == iid))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_nombres_con_articulo_no_se_confunden_pg(entorno):
+    from zascarr.services.comicinfo import normalizar_nombre_autor
+    assert normalizar_nombre_autor("The  Beatles") == "the beatles"
+    assert normalizar_nombre_autor("Beatles") == "beatles"
+    iid, ruta = (await _fila(entorno, "<ComicInfo><Writer>The Beatles</Writer></ComicInfo>"))[1:]
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        await aplicar_a_issue(s, issue, ruta)
+        await s.commit()
+        norm = (await s.execute(select(Creator.name_norm).where(
+            Creator.name == "The Beatles"))).scalar_one()
+        assert norm == "the beatles"
+
+
+@pytest.mark.asyncio
+async def test_accion_55_archivos_pagina_y_sigue_pg(entorno):
+    from zascarr.services.comicinfo import leer_archivos_vinculados
+    sid, iid, _ = await _fila(entorno)
+    async with entorno.banco.fabrica() as s:
+        for n in range(55):
+            s.add(File(issue_id=iid, file_path=f"/tmp/f{n}.cbz", file_name=f"f{n}.cbz",
+                       file_format=FileFormat.CBZ, file_size_bytes=1))
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        r = await leer_archivos_vinculados(s)
+        assert r.total == 56 and r.siguiente == 50
+    async with entorno.banco.fabrica() as s:
+        r2 = await leer_archivos_vinculados(s, offset=50)
+        assert r2.total == 56 and r2.siguiente is None
+
+
+@pytest.mark.asyncio
+async def test_paginas_32_a_50_y_999999_pg(entorno):
+    _, iid, ruta = await _fila(entorno)
+    otra = entorno.tmp / "p50.cbz"
+    with zipfile.ZipFile(otra, "w") as zf:
+        zf.writestr("ComicInfo.xml", "<ComicInfo><PageCount>50</PageCount></ComicInfo>")
+    enorme = entorno.tmp / "p999999.cbz"
+    with zipfile.ZipFile(enorme, "w") as zf:
+        zf.writestr("ComicInfo.xml", "<ComicInfo><PageCount>999999</PageCount></ComicInfo>")
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        issue.page_count = 32
+        issue.metadata_source = "comicinfo_xml"
+        await s.commit()
+        await aplicar_a_issue(s, issue, otra)
+        assert issue.page_count == 50
+        await aplicar_a_issue(s, issue, enorme)
+        assert issue.page_count == 50

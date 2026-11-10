@@ -363,6 +363,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "etiquetas",
     # BL-C3 (#150): filtro de estado de lectura (estado de la vista).
     "leido",
+    # BL-INF2 (#448): desplazamiento de la acción explícita por tandas.
+    "offset",
 })
 
 

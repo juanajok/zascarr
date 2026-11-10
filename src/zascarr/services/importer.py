@@ -794,9 +794,7 @@ class Importer:
         """
         if result.series_id is None:  # `is_unsorted` ya lo garantiza; defensa
             return []
-        if tr.comic_info is None or not (
-            tr.comic_info.tags or tr.comic_info.genres or tr.comic_info.warnings
-        ):
+        if tr.comic_info is None:
             return []
         aplicado = await aplicar_comicinfo(
             self._db, result.series_id,
@@ -804,10 +802,11 @@ class Importer:
         )
         if result.issue_id is not None:
             try:
-                issue = await self._db.get(Issue, result.issue_id)
-                if issue is not None:
-                    await aplicar_a_issue(self._db, issue, ruta)
-            except Exception:  # noqa: BLE001 — un XML ajeno no tumba la importación
+                async with self._db.begin_nested():
+                    issue = await self._db.get(Issue, result.issue_id)
+                    if issue is not None:
+                        await aplicar_a_issue(self._db, issue, ruta)
+            except Exception:  # noqa: BLE001, S110 — un XML ajeno no tumba la importación
                 pass
         return [*tr.comic_info.warnings, *aplicado.avisos]
 

@@ -1041,10 +1041,11 @@ class LibraryAdopter:
         await self._db.flush()
         if result.issue_id is not None:
             try:
-                issue = await self._db.get(Issue, result.issue_id)
-                if issue is not None:
-                    await aplicar_a_issue(self._db, issue, path)
-            except Exception:  # noqa: BLE001 — no bloquea la adopción
+                async with self._db.begin_nested():
+                    issue = await self._db.get(Issue, result.issue_id)
+                    if issue is not None:
+                        await aplicar_a_issue(self._db, issue, path)
+            except Exception:  # noqa: BLE001, S110 — no bloquea la adopción
                 pass
         report.added_rows.append((file_rec.id, str(path), None, False))
 
