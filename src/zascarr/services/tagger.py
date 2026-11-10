@@ -435,6 +435,7 @@ class TaggerService:
             and marca.get("size") == file.file_size_bytes
             and marca.get("deseados") == ctx.deseados
             and marca.get("bloqueados") == sorted(ctx.bloqueados)
+            and marca.get("metadata_source") == ctx.metadata_source
         )
 
     def _poner_marca(
