@@ -83,7 +83,8 @@ GET /ui/series/{series_id}/numero/{issue_id}/previa.jpg
 > **Actualizado tras el benchmark** (`benchmark-BL-INF4-portada-numero.md`): tarjeta de 220 px
 > con pie «Nº N · título» y «Pulsa para abrir la ficha», flecha al chip, retardo de 150 ms y
 > fundido (anulado con `prefers-reduced-motion`). Va **debajo** del chip para no tapar el rótulo de
-> la sección; sin flip automático (limitación declarada).
+> la sección; sin flip automático (limitación declarada). **Solo se muestra la previa del chip con
+> ratón o foco**; al salir se oculta (nada de previas acumuladas).
 
 - Chips «En tu biblioteca» de la ficha: cada chip es un enlace al número; se le añade
   `hx-get="…/previa"`, `hx-trigger="mouseenter, focusin"`, `hx-target="#previa-<issue_id>"` y un
