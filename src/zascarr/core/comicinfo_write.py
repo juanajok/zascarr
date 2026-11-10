@@ -34,7 +34,12 @@ MAX_COMICINFO_BYTES = 1 * 1024 * 1024   # 1 MiB
 #: Campos que B6 gestiona (mapa mínimo de la ficha). El resto del XML se
 #: preserva tal cual al reescribir.
 CAMPOS_GESTIONADOS = (
-    "Series", "Number", "Volume", "Year", "Publisher", "Summary", "LanguageISO",
+    "Series", "Number", "Volume", "Year", "Publisher", "Summary",
+    # #481: autores, género y páginas desde la ficha.
+    "Writer", "Penciller", "Inker", "Colorist", "Letterer", "CoverArtist",
+    "Editor", "Translator", "Genre", "PageCount",
+    # LanguageISO sigue sin inferirse: solo se respeta lo que ya traiga el XML.
+    "LanguageISO",
 )
 
 
