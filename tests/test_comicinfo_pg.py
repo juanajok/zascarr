@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from tests._pg import bd_efimera_sync, migrar_a_head
 from tests.test_revision_carpetas_pg import Banco
@@ -48,9 +48,9 @@ async def entorno(url_bd, tmp_path):
     await banco.cerrar()
 
 
-async def _fila(entorno, xml=XML):
+async def _fila(entorno, xml=XML, nombre_archivo="Thorgal 3.cbz"):
     sid, iid = uuid4(), uuid4()
-    ruta = entorno.tmp / "Thorgal 3.cbz"
+    ruta = entorno.tmp / nombre_archivo
     with zipfile.ZipFile(ruta, "w") as zf:
         zf.writestr("ComicInfo.xml", xml)
     async with entorno.banco.fabrica() as s:
@@ -297,3 +297,90 @@ def test_migracion_0023_fusiona_creadores_duplicados():
         asyncio.run(_sembrar())
         migrar_a_head(url)
         asyncio.run(_comprobar())
+
+
+def _xml_archivo(tmp, nombre, summary, pagina):
+    ruta = tmp / nombre
+    with zipfile.ZipFile(ruta, "w") as zf:
+        zf.writestr("ComicInfo.xml", f"<ComicInfo><Summary>{summary}</Summary>"
+                                  f"<PageCount>{pagina}</PageCount></ComicInfo>")
+    return ruta
+
+
+@pytest.mark.asyncio
+async def test_fuente_externa_conserva_sus_campos_y_no_se_pisa_pg(entorno):
+    _, iid, _ = await _fila(entorno)
+    uno = _xml_archivo(entorno.tmp, "cv1.cbz", "Del CBZ 1", 40)
+    dos = _xml_archivo(entorno.tmp, "cv2.cbz", "Del CBZ 2", 50)
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        issue.metadata_source = "comic_vine"
+        issue.synopsis = "Sinopsis de CV"
+        issue.page_count = 7
+        await s.commit()
+        await aplicar_a_issue(s, issue, uno)
+        assert issue.synopsis == "Sinopsis de CV" and issue.page_count == 7
+        await aplicar_a_issue(s, issue, dos)
+        assert issue.synopsis == "Sinopsis de CV" and issue.page_count == 7
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        assert issue.metadata_source == "comic_vine"
+        assert issue.synopsis == "Sinopsis de CV" and issue.page_count == 7
+
+
+@pytest.mark.asyncio
+async def test_issue_propio_actualiza_su_propio_comicinfo_pg(entorno):
+    _, iid, _ = await _fila(entorno)
+    uno = _xml_archivo(entorno.tmp, "propio1.cbz", "Propio 1", 40)
+    dos = _xml_archivo(entorno.tmp, "propio2.cbz", "Propio 2", 50)
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        issue.synopsis = None
+        issue.page_count = None
+        await s.commit()
+        await aplicar_a_issue(s, issue, uno)
+        assert issue.synopsis == "Propio 1" and issue.page_count == 40
+        assert issue.metadata_source == "comicinfo_xml"
+        await aplicar_a_issue(s, issue, dos)
+        assert issue.synopsis == "Propio 2" and issue.page_count == 50
+
+
+@pytest.mark.asyncio
+async def test_locked_sinopsis_y_paginas_cada_uno_por_separado_pg(entorno):
+    _, iid, _ = await _fila(entorno)
+    otro = _xml_archivo(entorno.tmp, "locked.cbz", "Del CBZ", 40)
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        issue.locked_fields = ["synopsis"]
+        issue.synopsis = None
+        issue.page_count = None
+        await s.commit()
+        await aplicar_a_issue(s, issue, otro)
+        assert issue.synopsis is None and issue.page_count == 40
+    _, iid2, _ = await _fila(entorno, nombre_archivo="Thorgal 4.cbz")
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid2)
+        issue.locked_fields = ["page_count"]
+        issue.synopsis = None
+        issue.page_count = None
+        await s.commit()
+        await aplicar_a_issue(s, issue, otro)
+        assert issue.synopsis == "Del CBZ" and issue.page_count is None
+
+
+@pytest.mark.asyncio
+async def test_normalizador_nfd_y_nbsp_encuentra_creador_existente_pg(entorno):
+    _, iid, _ = await _fila(entorno, '<ComicInfo><Writer>Jose\u0301, Ana\u00a0María</Writer></ComicInfo>')
+    async with entorno.banco.fabrica() as s:
+        s.add(Creator(name="José", metadata_source="manual"))
+        s.add(Creator(name="Ana María", metadata_source="manual"))
+        await s.commit()
+        issue = await s.get(Issue, iid)
+        await aplicar_a_issue(s, issue, entorno.tmp / "Thorgal 3.cbz")
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        creds = (await s.execute(select(IssueCreator).where(
+            IssueCreator.issue_id == iid, IssueCreator.role == "writer"))).scalars().all()
+        assert len(creds) == 2
+        assert (await s.execute(select(func.count(Creator.id)))).scalar_one() == 2
