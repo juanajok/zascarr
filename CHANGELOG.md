@@ -7,6 +7,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Convertir un CBR dejaba una página en blanco con el resultado.** El botón «Convertir a CBZ»
+  de la vista previa era un envío normal del formulario, así que el navegador cargaba el fragmento
+  del resultado como página suelta (sin menú ni estilos). Ahora la confirmación va por HTMX y el
+  resultado se pinta en la ficha; el botón se desactiva mientras dura. El lote de #479 hace lo
+  mismo. Además, «otra operación coincidió» ahora explica qué pasa y qué hacer (esperar a que
+  termine la importación, el rescan u otra conversión).
 - **La ficha de serie enseñaba HTML y errores en crudo.** La tabla «De dónde sale cada dato»
   pintaba el HTML con el que Comic Vine entrega la sinopsis, y un formulario de etiquetas sin el
   campo (petición manipulada o plantilla vieja) devolvía un 422 con el JSON de validación dentro
