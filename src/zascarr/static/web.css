@@ -486,7 +486,7 @@ button,
   transition: transform .12s, box-shadow .12s;
 }
 
-/* Un botón deshabilitado (p. ej. con `hx-disabled-elt` mientras corre la petición) seguía levantándose:
+/* Un botón deshabilitado (p. ej. con `hx-disable` mientras corre la petición) seguía levantándose:
    estas reglas ganan en especificidad a la de `[disabled]`. `:where(:not([disabled]))` lo excluye SIN
    sumar especificidad, para que las variantes que anulan el levantamiento (`.btn-ignorar:hover`…) sigan
    ganando como antes. */

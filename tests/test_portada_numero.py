@@ -91,3 +91,45 @@ async def test_archivo_que_no_es_zip_no_tiene_previa(tmp_path):
     ajustes = _settings(tmp_path)
     assert await portada_numero.ruta_previa(
         _Sesion([(uuid4(), str(roto), None)]), uuid4(), uuid4(), settings=ajustes) is None
+
+
+@pytest.mark.asyncio
+async def test_la_ficha_usa_su_propia_cache_a_600(tmp_path):
+    cbz = _cbz(tmp_path / "Tebeo 01.cbz")
+    fid = uuid4()
+    sesion = _Sesion([(fid, str(cbz), None)])
+    ajustes = _settings(tmp_path)
+
+    previa = await portada_numero.ruta_previa(sesion, uuid4(), uuid4(), settings=ajustes)
+    ficha = await portada_numero.ruta_previa(sesion, uuid4(), uuid4(), ancho=600, settings=ajustes)
+
+    assert previa is not None and ficha is not None
+    assert previa.name == f"{fid}.jpg" and ficha.name == f"{fid}-600.jpg"
+    assert previa != ficha and previa.is_file() and ficha.is_file()
+
+
+@pytest.mark.asyncio
+async def test_con_el_lector_apagado_no_se_manda_el_rar(tmp_path, monkeypatch):
+    cbr = tmp_path / "Tebeo 01.cbr"
+    cbr.write_bytes(b"Rar!\x1a\x07\x00" + b"0" * 32)
+    fid = uuid4()
+    llamadas: list[int] = []
+    monkeypatch.setattr(portada_numero, "es_rar_candidato", lambda *_a, **_k: True)
+    monkeypatch.setattr(portada_numero, "lector_rar_disponible", lambda: True)
+
+    def _portada(*_a, **_k):
+        llamadas.append(1)
+        return b"\xff\xd8\xff\xd9", "image/jpeg"
+
+    monkeypatch.setattr(portada_numero, "portada_de_rar", _portada)
+    apagado = _settings(tmp_path)
+    assert apagado.lector_rar_enabled is False
+    assert await portada_numero.ruta_previa(
+        _Sesion([(fid, str(cbr), None)]), uuid4(), uuid4(), settings=apagado) is None
+    assert llamadas == []
+
+    encendido = _settings(tmp_path)
+    encendido.lector_rar_enabled = True
+    assert await portada_numero.ruta_previa(
+        _Sesion([(fid, str(cbr), None)]), uuid4(), uuid4(), settings=encendido) is not None
+    assert llamadas == [1]
