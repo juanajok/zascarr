@@ -298,13 +298,17 @@ def test_cortesia_muestra_reintento(monkeypatch, tmp_path):
 
 def test_sin_campos_no_duplica_sin_datos_y_texto_de_fuentes(monkeypatch, tmp_path):
     c, serie, file = _cliente(monkeypatch, tmp_path)
+    aviso_real = ("Las fuentes no tienen datos nuevos para este tebeo. Puedes guardar lo que "
+                  "ya tienes.")
     monkeypatch.setattr(web, "PropuestasComicInfoService", lambda _db: _ServicioPropuestas(
-        ResultadoPropuestas(str(file.id), str(serie.id), "Tebeo", "american", True, (), (), (), 0)))
+        ResultadoPropuestas(str(file.id), str(serie.id), "Tebeo", "american", True, (),
+                            (), (aviso_real,), 0)))
     try:
         r = c.get(_url(serie, file) + "/comicinfo/fuentes")
     finally:
         _cerrar()
-    assert r.text.count("Las fuentes no tienen datos nuevos para este tebeo") == 1
+    assert r.text.count(aviso_real) == 1
+    assert "Las fuentes no tienen datos nuevos para este tebeo" in r.text
     assert "Sin datos nuevos en las fuentes" not in r.text
 
 
