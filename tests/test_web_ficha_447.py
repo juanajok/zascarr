@@ -40,7 +40,7 @@ def test_ficha_de_numero_muestra_texto_plano_autores_y_archivos():
         SimpleNamespace(id=uuid4(), file_name="Thorgal 03.cbz", file_format=FileFormat.CBZ,
                         file_size_bytes=2 * 1048576, is_missing=False),
     ])
-    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie])])) as client:
+    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie]), FakeExecResult([])])) as client:
         r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
     assert r.status_code == 200
     assert "Número 3" in r.text and "El país Qâ" in r.text
@@ -59,7 +59,7 @@ def test_ficha_de_numero_sin_datos_dice_que_falta():
     serie = _serie(publisher=None, start_year=None, end_year=None)
     issue = _issue(series_id=serie.id, synopsis=None, release_date=None, page_count=None,
                    title=None, metadata_source=None)
-    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie])])) as client:
+    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie]), FakeExecResult([])])) as client:
         r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
     assert r.status_code == 200
     assert "Todavía no hay información de este número" in r.text
@@ -87,7 +87,7 @@ def test_ficha_de_numero_404_y_no_store():
     assert r.status_code == 404
     # La ruta de una ficha existente no-store se comprueba en el caso 200.
     issue = _issue(series_id=serie.id)
-    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie])])) as client:
+    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie]), FakeExecResult([])])) as client:
         ok = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
     assert ok.status_code == 200 and ok.headers["cache-control"] == "no-store"
 
@@ -95,7 +95,7 @@ def test_ficha_de_numero_404_y_no_store():
 def test_ficha_de_numero_parcial_sin_autores_ni_archivos():
     serie = _serie()
     issue = _issue(series_id=serie.id, credits=[], files=[])
-    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie])])) as client:
+    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie]), FakeExecResult([])])) as client:
         r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
     assert r.status_code == 200
     assert "No constan todavía los autores" in r.text

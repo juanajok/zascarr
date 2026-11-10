@@ -107,6 +107,7 @@ class Filtros:
     character_id: str = ""
     story_arc_id: str = ""
     etiquetas: str = ""
+    leido: str = ""
     page: int = 1
     vista: str = "tarjetas"
     avisos: tuple[str, ...] = ()
@@ -137,6 +138,7 @@ def _leer_filtros(
     story_arc_id: str,
     vista: str = "tarjetas",
     etiquetas: str = "",
+    leido: str = "",
 ) -> Filtros:
     """Normaliza y valida la entrada de la URL; nunca lanza por un valor inválido.
 
@@ -191,6 +193,10 @@ def _leer_filtros(
     texto_etiquetas = " ".join(
         ["-" + t for t in expresion.negativas] + list(expresion.positivas)
     )
+    leido = (leido or "").strip().lower()
+    if leido not in ("", "si", "no", "leyendo"):
+        avisos.append("El filtro de lectura no es válido; se ha quitado.")
+        leido = ""
     return Filtros(
         q=texto,
         tradition=tradicion,
@@ -198,6 +204,7 @@ def _leer_filtros(
         character_id=_uuid(character_id, "personaje"),
         story_arc_id=_uuid(story_arc_id, "saga"),
         etiquetas=texto_etiquetas,
+        leido=leido,
         page=pagina,
         vista="lista" if vista_limpia == "lista" else "tarjetas",
         avisos=tuple(avisos),
@@ -217,6 +224,7 @@ def _qs(filtros: Filtros, *, page: int, omitir: str | None = None) -> str:
         "character_id": filtros.character_id,
         "story_arc_id": filtros.story_arc_id,
         "etiquetas": filtros.etiquetas,
+        "leido": filtros.leido,
         "vista": "lista" if filtros.vista == "lista" else "",
     }
     if omitir:
@@ -261,6 +269,8 @@ def _filtros_activos(filtros: Filtros, nombres: dict[str, str | None]) -> list[F
         _anadir("character_id", f"Personaje: {nombres.get('character') or 'desconocido'}")
     if filtros.story_arc_id:
         _anadir("story_arc_id", f"Saga: {nombres.get('story_arc') or 'desconocida'}")
+    if filtros.leido:
+        _anadir("leido", {"si": "Leídos", "no": "Sin leer", "leyendo": "Leyendo"}[filtros.leido])
     return activos
 
 
@@ -335,6 +345,8 @@ async def _contexto(
     etiquetas_activas: list[dict] = []
     facetas: list[dict] = []
     expresion: ExpresionEtiquetas = parse_expresion(filtros.etiquetas)
+    positivas: tuple[str, ...] = ()
+    negativas: tuple[str, ...] = ()
 
     try:
         resueltas = await resolver_etiquetas(
@@ -370,6 +382,7 @@ async def _contexto(
             story_arc_id=filtros.uuid("story_arc_id"),
             etiquetas_positivas=positivas,
             etiquetas_negativas=negativas,
+            leido=filtros.leido or None,
         )
         if pagina != filtros.page and total:
             avisos.append("La página pedida no existe; se muestra la última.")
@@ -411,6 +424,29 @@ async def _contexto(
         pagina = 1
 
     paginas = (total + _PAGE_SIZE - 1) // _PAGE_SIZE if total else 0
+    recuento_lectura_texto = None
+    if filtros.leido:
+        # Denominador y numerador REALES con el resto de filtros, no la página actual.
+        base = dict(
+            page=1, page_size=1, tradition=filtros.tradition or None,
+            search=filtros.q or None, publisher_id=filtros.uuid("publisher_id"),
+            character_id=filtros.uuid("character_id"), story_arc_id=filtros.uuid("story_arc_id"),
+            etiquetas_positivas=positivas,
+            etiquetas_negativas=negativas, con_issues=True)
+        try:
+            total_sin = (await service.list_series_paginado(**base))[1]
+            if filtros.leido == "leyendo":
+                con = (await service.list_series_paginado(**base, leido="leyendo"))[1]
+                recuento_lectura_texto = f"{con} de {total_sin} series con algún número en lectura."
+            elif filtros.leido == "no":
+                con = (await service.list_series_paginado(**base, leido="si"))[1]
+                recuento_lectura_texto = (
+                    f"{total_sin - con} de {total_sin} series sin ningún número leído.")
+            else:
+                con = (await service.list_series_paginado(**base, leido="si"))[1]
+                recuento_lectura_texto = f"{con} de {total_sin} series con algún número leído."
+        except SQLAlchemyError:
+            recuento_lectura_texto = None
     filtros_finales = Filtros(
         q=filtros.q,
         tradition=filtros.tradition,
@@ -418,6 +454,7 @@ async def _contexto(
         character_id=filtros.character_id,
         story_arc_id=filtros.story_arc_id,
         etiquetas=filtros.etiquetas,
+        leido=filtros.leido,
         page=pagina,
         vista=filtros.vista,
         avisos=tuple(avisos),
@@ -443,15 +480,17 @@ async def _contexto(
         "url_serie": lambda series_id: url_de_ficha(series_id, url_canonica),
         "url_pagina": lambda p: _url_pagina(filtros_finales, page=p),
         "url_fragmento": lambda p: _url_fragmento(filtros_finales, page=p),
+        "recuento_lectura": recuento_lectura_texto,
         "url_reintento": url_canonica,
         "url_reintento_fragmento": _url_fragmento(filtros_finales, page=pagina),
         "url_vista_tarjetas": _url_pagina(replace(filtros_finales, vista="tarjetas"), page=pagina),
         "url_vista_lista": _url_pagina(replace(filtros_finales, vista="lista"), page=pagina),
-        "url_limpiar": _url_pagina(replace(filtros_finales, q="", tradition="", publisher_id="",
-                                           character_id="", story_arc_id="", etiquetas=""), page=1),
+        "url_limpiar": _url_pagina(replace(
+            filtros_finales, q="", tradition="", publisher_id="", character_id="",
+            story_arc_id="", etiquetas="", leido=""), page=1),
         "url_limpiar_fragmento": _url_fragmento(
             replace(filtros_finales, q="", tradition="", publisher_id="", character_id="",
-                    story_arc_id="", etiquetas=""), page=1) + "&quitar=todos",
+                    story_arc_id="", etiquetas="", leido=""), page=1) + "&quitar=todos",
     }
 
 
@@ -509,10 +548,10 @@ async def sugerir_etiquetas(
 async def index(
     request: Request, page: str = "1", tradition: str = "", publisher_id: str = "",
     character_id: str = "", story_arc_id: str = "", q: str = "",
-    vista: str = "", etiquetas: str = "", db: AsyncSession = Depends(get_db),
+    vista: str = "", etiquetas: str = "", leido: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
-        page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
+        page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas, leido)
     publishers: list = []
     editoriales_error = False
     try:
@@ -539,10 +578,10 @@ async def index(
 async def resultados(
     request: Request, page: str = "1", tradition: str = "", publisher_id: str = "",
     character_id: str = "", story_arc_id: str = "", q: str = "",
-    vista: str = "", etiquetas: str = "", db: AsyncSession = Depends(get_db),
+    vista: str = "", etiquetas: str = "", leido: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
-        page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
+        page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas, leido)
     return _respuesta_fragmento(request, await _contexto(db, filtros))
 
 
@@ -555,6 +594,7 @@ def _enlace_con_filtro(filtros: Filtros, clave: str, valor: str) -> str:
         "character_id": filtros.character_id,
         "story_arc_id": filtros.story_arc_id,
         "etiquetas": filtros.etiquetas,
+        "leido": filtros.leido,
         "vista": "lista" if filtros.vista == "lista" else "",
         clave: valor,
         "page": "1",
