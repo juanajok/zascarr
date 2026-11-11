@@ -1668,9 +1668,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 .quitar-filtro .ico-svg { width: 18px; height: 18px; }
 .quitar-filtro:hover { background: var(--yellow); color: var(--on-yellow); }
-.quitar-filtro:focus-visible, .limpiar-filtros:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
-.limpiar-filtros { text-decoration: none; min-height: 44px; }
-.limpiar-filtros:hover { text-decoration: none; }
+.quitar-filtro:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 /* ── Filtro de «Pendientes por carpeta» (#397, revisión UI/UX) ───────────────
    Cada campo es una celda de rejilla con su etiqueta encima; el único filtro de
