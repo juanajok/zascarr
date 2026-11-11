@@ -75,6 +75,17 @@ COMIC_CATEGORIES = [7030, 7020]
 MAX_SIZE_BYTES = 500 * 1024 * 1024
 
 
+def prowlarr_indexers_seleccionados(settings) -> list[int]:
+    """IDs elegidos en Ajustes; lista vacía = todos los indexers de Prowlarr."""
+    crudo = getattr(settings, "prowlarr_indexer_ids", "") or ""
+    ids: list[int] = []
+    for trozo in crudo.replace(";", ",").split(","):
+        trozo = trozo.strip()
+        if trozo.isdigit() and int(trozo) > 0 and int(trozo) not in ids:
+            ids.append(int(trozo))
+    return ids
+
+
 def prowlarr_configurado(settings) -> bool:
     """¿Prowlarr tiene URL y API key? Una fuente encendida pero incompleta no se consulta."""
     return bool(
@@ -311,7 +322,13 @@ class Orchestrator:
                 motivo_prowlarr = MOTIVO_PROWlARR_CONFIGURACION
             else:
                 try:
-                    results = await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
+                    seleccionados = prowlarr_indexers_seleccionados(settings)
+                    if seleccionados:
+                        results = await self._prowlarr.search(
+                            query, categories=COMIC_CATEGORIES, indexer_ids=seleccionados)
+                    else:
+                        results = await self._prowlarr.search(
+                            query, categories=COMIC_CATEGORIES)
                 except Exception:
                     logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
                     motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE

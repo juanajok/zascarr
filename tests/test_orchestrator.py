@@ -1203,3 +1203,21 @@ class TestSincronizacionD8:
         assert result is False
         assert item.last_error == MOTIVO_PROWlARR_CONFIGURACION
         orch._prowlarr.search.assert_not_called()
+
+
+    @pytest.mark.asyncio
+    async def test_los_indexers_elegidos_se_pasan_a_prowlarr(self, monkeypatch):
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave", "prowlarr_indexer_ids": "3, 7, 3",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = []
+
+        await orch._process_item(item)
+
+        orch._prowlarr.search.assert_awaited_once_with(
+            "Batman", categories=[7030, 7020], indexer_ids=[3, 7])

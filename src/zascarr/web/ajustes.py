@@ -27,6 +27,7 @@ from zascarr.services.auth import (
 )
 from zascarr.services.cortesia_estado import texto_politica_ajustes
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
+from zascarr.services.prowlarr import ProwlarrClient
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
 from zascarr.services.seguridad import (
     MENSAJE_NO_COINCIDEN,
@@ -109,6 +110,11 @@ def _sin_cache(respuesta: HTMLResponse) -> HTMLResponse:
     return respuesta
 
 
+def _ids_prowlarr(settings) -> list[int]:
+    crudo = getattr(settings, "prowlarr_indexer_ids", "") or ""
+    return [int(t) for t in crudo.replace(";", ",").split(",") if t.strip().isdigit()]
+
+
 def _contexto() -> dict:
     s = get_settings()
     return {
@@ -124,6 +130,8 @@ def _contexto() -> dict:
         "prowlarr_url": s.prowlarr_url,
         "prowlarr_api_key_configurada": bool(s.prowlarr_api_key),
         "prowlarr_enabled": s.prowlarr_enabled,
+        "prowlarr_indexer_ids": getattr(s, "prowlarr_indexer_ids", ""),
+        "prowlarr_indexers_elegidos": _ids_prowlarr(s),
         "transmission_url": s.transmission_url,
         "transmission_username": s.transmission_username,
         "transmission_password_configurada": bool(s.transmission_password),
@@ -295,6 +303,41 @@ async def guardar_prowlarr(
         "prowlarr_enabled": prowlarr_enabled,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Prowlarr"})
+
+
+@router.get("/prowlarr/indexers", response_class=HTMLResponse)
+async def elegir_indexers_prowlarr(request: Request) -> HTMLResponse:
+    """Carga los indexers de Prowlarr solo cuando la persona lo pide."""
+    settings = get_settings()
+    if not (settings.prowlarr_url.strip() and settings.prowlarr_api_key.strip()):
+        return templates.TemplateResponse(
+            request, "_ajustes_prowlarr_indexers.html",
+            {"error": "Configura primero la URL y la clave de Prowlarr."})
+    try:
+        indexers = await ProwlarrClient().list_indexers()
+    except Exception:  # noqa: BLE001 — la UI explica el fallo, no inventa lista
+        logger.warning("ajustes.prowlarr_indexers_failed")
+        return templates.TemplateResponse(
+            request, "_ajustes_prowlarr_indexers.html",
+            {"error": "No se pudo leer la lista de indexers de Prowlarr."})
+    return templates.TemplateResponse(
+        request, "_ajustes_prowlarr_indexers.html", {
+            "indexers": indexers, "seleccionados": _ids_prowlarr(settings), "error": None,
+        })
+
+
+@router.post("/guardar/prowlarr-indexers", response_class=HTMLResponse)
+async def guardar_prowlarr_indexers(
+    request: Request, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Guarda los IDs elegidos; vacío significa «todos»."""
+    form = await request.form()
+    ids = [int(v) for v in form.getlist("indexer_ids") if str(v).strip().isdigit()]
+    valor = ",".join(str(i) for i in dict.fromkeys(ids) if i > 0)
+    await RuntimeSettingsService(db).save({"prowlarr_indexer_ids": valor})
+    return templates.TemplateResponse(
+        request, "_ajustes_guardado.html",
+        {"nombre": "Indexers de Prowlarr para ZascArr"})
 
 
 @router.post("/guardar/transmission", response_class=HTMLResponse)
