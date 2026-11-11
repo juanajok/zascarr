@@ -148,7 +148,10 @@ fluctuación, cosa que con 81 no se podía.
 - `matcher.py`: equivalencia de sufijo de volumen; guarda de Issue contaminado.
 - `matcher.py`: desempate por carpeta cuando hay varios candidatos ya
   empatados por encima del umbral.
-- Tests: aniversario, volumen, contaminación y carpeta, incluidos tests PG reales.
+- `naming.py`: formato de edición (`Omnibus`, `TPB`, `Hardcover`,
+  `Graphic Novel`) y captura de `N of M`/`N de M`.
+- Tests: aniversario, volumen, contaminación, carpeta y formatos, incluidos
+  tests PG reales.
 
 ## 9. Contexto de carpeta: implementado, sin efecto todavía
 
@@ -171,3 +174,29 @@ No cambia nada en esta foto porque no hay empates con evidencia de carpeta en
 los pendientes actuales; sí queda cubierto para cuando aparezcan duplicados de
 volumen/edición. Se probó con tests de volumen, año, carpeta genérica y carpeta
 que contradice el volumen.
+
+
+## 10. Formatos de edición y cuenta de miniserie
+
+Se añadieron marcadores de formato al parser:
+
+- `Omnibus`/`Omnigold`/`Integral` → `omnibus`
+- `TPB`/`Trade Paperback` → `trade_paperback`
+- `Hardcover`/`HC` → `hardcover`
+- `Graphic Novel`/`GN` → `graphic_novel`
+
+El importador ya los convierte a `IssueFormat` y el matcher los usa como
+`formato_esperado` al buscar el Issue. No cambian el número de la grapa: un
+`Batman Omnibus 2` sigue siendo el número 2 de su edición, no una grapa suelta.
+
+También se captura `N of M`/`N de M` en `ParsedComicName.issue_count` como
+contexto para validar la miniserie; **no se usa todavía para identidad**. En la
+foto actual hay **3 archivos** con marcador de formato y **58** con cuenta
+`N of M`; son pocos, pero el coste de no detectarlos era enlazarlos como grapa
+cuando el formato no coincide.
+
+## 11. Lo que sigue del benchmark
+
+El siguiente corte es el muestreo etiquetado de 200 archivos: no se puede
+sustituir por los vínculos actuales, que ya hemos visto que incluyen
+colecciones y autores usados como serie.
