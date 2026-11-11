@@ -35,10 +35,10 @@ Reglas de convivencia con datos ya existentes (peer review, fix C3):
     acción explícita y confirmada, que no existe todavía.
 
 AC-22 (#565, decisión PO de 2026-11-11 pese a D-7): los clientes piden los
-campos que su API documenta en la MISMA petición: AniList `genres`/`characters`
-en su GraphQL y Comic Vine `character_credits`/`story_arc_credits` en la búsqueda
-de número (Comic Vine **no** expone `genres` en volumen/issue: no se pide). El
-enricher rellena
+campos que su API documenta en la MISMA petición: AniList solo `genres` en su
+GraphQL (sus personajes no se usan) y Comic Vine
+`character_credits`/`story_arc_credits` en la búsqueda de número (Comic Vine
+**no** expone `genres` en volumen/issue: no se pide). El enricher rellena
 `Series.genres` e `Issue.characters` solo si están vacíos y no bloqueados; no
 sustituye datos existentes ni toca `metadata_source` de filas manuales. Tebeosfera
 no declara género y no se inventa; GCD no tiene cliente aquí. Los
@@ -53,7 +53,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -110,6 +110,18 @@ _YEAR_TOLERANCE = 1
 # siguiente ciclo (cada pocos minutos), sino a plazo largo: una fuente puede
 # indexar una serie recién publicada con retraso.
 ENRICHMENT_RETRY_AFTER = timedelta(days=30)
+
+
+def _nombres_de_detalle(valores: object) -> list[str]:
+    """Nombres de `character_credits`/`story_arc_credits` de la respuesta de CV."""
+    salida: list[str] = []
+    for item in valores or []:
+        if not isinstance(item, dict):
+            continue
+        nombre = str(item.get("name") or "").strip()
+        if nombre:
+            salida.append(nombre)
+    return salida
 
 
 def _nombres_limpios(valores: list[str], *, maximo: int) -> list[str]:
@@ -207,7 +219,72 @@ class EnrichmentService:
                 cv_client, anilist_client, tebeosfera_client, limit, report
             )
             await self._enrich_issues_batch(cv_client, limit, report)
+            await self._backfill_generos_anilist(anilist_client, limit, report)
+            await self._backfill_personajes_cv(cv_client, limit, report)
         return report
+
+    # ── Backfill de identidad estructurada (#565 task-171) ───────────────
+
+    async def _backfill_generos_anilist(self, client: AniListClient | None, limit: int,
+                                        report: EnrichmentReport) -> None:
+        """Rellena géneros de series ya identificadas con AniList que siguen vacías.
+
+        Acotado por `limit`, idempotente y solo para filas no manuales. La marca
+        en `metadata_` evita repetir la petición cada ciclo si la fuente no
+        declara géneros; no hay migración.
+        """
+        if client is None:
+            return
+        sin_generos = ~exists().where(series_genres.c.series_id == Series.id)
+        filas = (await self.db.execute(
+            select(Series)
+            .where(Series.anilist_id.is_not(None))
+            .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
+            .where(sin_generos)
+            .where(~Series.metadata_.has_key("etq3_generos_intentado"))
+            .limit(limit)
+        )).scalars().all()
+        for series in filas:
+            if "genres" in (series.locked_fields or []):
+                continue
+            try:
+                detalle = await client.get_manga(int(series.anilist_id))
+            except Exception:
+                logger.exception("enricher.generos_backfill_failed", series=series.title)
+                report.errors.append(f"serie {series.title}: error pidiendo géneros")
+                continue
+            series.metadata_ = {**(series.metadata_ or {}), "etq3_generos_intentado": True}
+            if detalle is not None:
+                await self._aplicar_generos(series, detalle.genres)
+            await self.db.flush()
+
+    async def _backfill_personajes_cv(self, client: ComicVineClient | None, limit: int,
+                                      report: EnrichmentReport) -> None:
+        """Rellena personajes de números ya identificados con Comic Vine y vacíos."""
+        if client is None:
+            return
+        sin_personajes = ~exists().where(issue_characters.c.issue_id == Issue.id)
+        filas = (await self.db.execute(
+            select(Issue)
+            .where(Issue.comic_vine_id.is_not(None))
+            .where(Issue.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
+            .where(sin_personajes)
+            .where(~Issue.metadata_.has_key("etq3_personajes_intentado"))
+            .limit(limit)
+        )).scalars().all()
+        for issue in filas:
+            if "characters" in (issue.locked_fields or []):
+                continue
+            label = f"{issue.issue_number} (cv {issue.comic_vine_id})"
+            try:
+                detalle = await client.get_issue_detail(int(issue.comic_vine_id))
+            except Exception:
+                logger.exception("enricher.personajes_backfill_failed", issue=label)
+                report.errors.append(f"issue {label}: error pidiendo personajes")
+                continue
+            issue.metadata_ = {**(issue.metadata_ or {}), "etq3_personajes_intentado": True}
+            await self._aplicar_personajes(issue, _nombres_de_detalle(detalle.get("character_credits")))
+            await self.db.flush()
 
     # ── Series ───────────────────────────────────────────────────────────
 
