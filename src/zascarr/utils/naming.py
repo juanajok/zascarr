@@ -94,8 +94,28 @@ CREDITS_PATTERN = re.compile(
 # Aniversario"): el número es de la efeméride, no del tebeo. Sin esto,
 # "Iberia Inc. - Integral 20 aniversario" se registraba como el nº 20.
 ANIVERSARIO_PATTERN = re.compile(
-    r"\b(?:\d+|[IVXL]+)\s*(?:º|ª|°|o|mo|er|to)?\s*aniversario\b", re.IGNORECASE
+    r"\b(?P<numero>\d+|[IVXL]+)\s*(?:º|ª|°|o|mo|er|to)?\s*aniversario\b",
+    re.IGNORECASE,
 )
+
+
+def _quitar_numero_de_aniversario(texto: str) -> str:
+    """Quita «20 aniversario» sin comerse un número de grapa explícito.
+
+    Bug real de la biblioteca (2026-11-11): «Batman #400 Aniversario» se
+    quedaba sin número porque el patrón borraba «400 Aniversario» entero. Si
+    delante del número hay un marcador de grapa (#, nº, num.), el número es
+    del cómic; solo se quita la palabra «aniversario». En «Iberia Inc. -
+    Integral 20 aniversario» no hay marcador y se quita la efeméride completa,
+    que es lo que se pretendía.
+    """
+    def _repl(match: re.Match[str]) -> str:
+        antes = texto[max(0, match.start() - 8):match.start()]
+        if re.search(r"(?:#|№|\bn[ºo]|\bnum(?:ero)?\.?)\s*$", antes, re.IGNORECASE):
+            return match.group("numero") + " "
+        return " "
+
+    return ANIVERSARIO_PATTERN.sub(_repl, texto)
 
 # El punto como separador es habitual en los scans ("La.Mazmorra..
 # Integral.6.-.Sfar"). Se convierte en espacio ANTES de extraer el
@@ -370,7 +390,7 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # si hay marcador de edición: si no, "Integral 20 aniversario" hace
     # que EDITION_NUMBER_PATTERN capture el 20 de la efeméride como si
     # fuera el tomo de la recopilación.
-    working = ANIVERSARIO_PATTERN.sub(" ", working)
+    working = _quitar_numero_de_aniversario(working)
 
     # "Omnigold 5" → captura issue_number="5" + edition_kind="omnigold",
     # y el título se queda solo con "Omnigold" (el número no forma parte
