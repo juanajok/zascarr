@@ -70,6 +70,26 @@ def _parent_title(title: str) -> str:
     return re.sub(r"\s+", " ", VOLUMEN_RE.sub(" ", title)).strip(" -–—,;")
 
 
+def _norm_anual(title: str) -> str:
+    """Normaliza Anual/Annual para reconocer la misma línea anual."""
+    return _norm(ANUAL_RE.sub(" Annual ", title or ""))
+
+
+def _annual_existente(parsed_series: str, padre: dict | None,
+                      series: list[dict]) -> dict | None:
+    """Serie anual ya creada: por padre o, si no, por título Anual/Annual."""
+    anuales = [s for s in series if s.get("kind") == "annual"]
+    if padre is not None:
+        por_padre = [s for s in anuales if str(s.get("parent_series_id") or "") == str(padre["id"])]
+        if len(por_padre) == 1:
+            return por_padre[0]
+        if len(por_padre) > 1:
+            return None  # dos líneas anuales del mismo padre: ambiguo
+    buscado = _norm_anual(parsed_series)
+    por_titulo = [s for s in anuales if _norm_anual(s["title"]) == buscado]
+    return por_titulo[0] if len(por_titulo) == 1 else None
+
+
 def _seudonimo(valor: str) -> str:
     return hashlib.sha256(str(valor).encode("utf-8")).hexdigest()[:10]
 
@@ -105,7 +125,7 @@ def _candidatos_padre(parsed_series: str, series: list[dict]) -> list[tuple[dict
     base_tokens = set(base.split())
     exactos, contenedores = [], []
     for s in series:
-        if ANUAL_RE.search(s["title"]):
+        if s.get("kind") == "annual" or ANUAL_RE.search(s["title"]):
             continue  # una serie anual no es padre de otra
         variantes = {_norm(s["title"]), _base(s["title"])}
         if base in variantes:
@@ -235,7 +255,8 @@ async def _leer(url: str) -> tuple[list[dict], list[dict]]:
             ORDER BY f.file_name
         """)
         series = await conn.fetch("""
-            SELECT id, title, start_year FROM series ORDER BY title
+            SELECT id, title, start_year, kind::text AS kind, parent_series_id
+        FROM series ORDER BY title
         """)
         return [dict(f) for f in files], [dict(s) for s in series]
     finally:
