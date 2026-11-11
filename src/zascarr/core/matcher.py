@@ -91,6 +91,20 @@ _ABBREV = re.compile(r"(?<=\w)\.(?=\w)")   # punto entre letras → eliminar
 _PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
 _WS = re.compile(r"\s+")
 
+#: Sufijo de edición/volumen al final del título ya normalizado: «batman vol 1»,
+#: «batman volume 2», «batman v3», «daredevil tomo 1». El parser extrae el
+#: título limpio («Batman») porque el marcador de volumen no es parte del nombre
+#: de la obra; el catálogo, en cambio, suele distinguir tomos como «Batman Vol 1»
+#: y «Batman Vol 2». Sin esta equivalencia, «Batman #25» se quedaba en 0,54 de
+#: similitud y no enlazaba aunque la serie y el número existieran.
+_VOLUME_SUFFIX = re.compile(
+    r"\s+(?:vol(?:umen)?\.?\s*\d+|v\s*\d+|tomo\s*\d+)$", re.IGNORECASE)
+
+
+def _base_title(title: str) -> str:
+    """Título sin el sufijo de volumen/edición final, ya normalizado."""
+    return _VOLUME_SUFFIX.sub("", normalize_title(title)).strip()
+
 
 def normalize_title(title: str) -> str:
     """Normalización para matching: minúsculas, sin acentos, sin artículo
@@ -190,6 +204,8 @@ class SeriesMatcher:
                 for r in exact]
 
         # ── Fuzzy si no hay exacto ───────────────────────────────────────────
+        exacto = bool(hits)
+
         if not hits:
             fuzzy = await self.db.execute(sa.text("""
                 SELECT id, title, start_year,
@@ -204,6 +220,26 @@ class SeriesMatcher:
                 for r in fuzzy
                 if r.score >= SIMILARITY_THRESHOLD
             ]
+
+        # Un título con volumen en el catálogo («Batman Vol 1») es la misma
+        # serie que el título limpio del archivo («Batman»). No se baja el
+        # umbral fuzzy —eso cruzaría «Thor» con «Thorgal»—: se busca el sufijo
+        # de edición y se promueve a coincidencia exacta. Solo si no hay ya
+        # una coincidencia exacta de título.
+        if not exacto:
+            base = _base_title(raw_title)
+            if base:
+                por_id = {str(h.series_id): h for h in hits}
+                base_rows = await self.db.execute(sa.text("""
+                    SELECT id, title, start_year
+                    FROM series
+                    WHERE title_norm LIKE :prefijo
+                """), {"prefijo": base + " %"})
+                for r in base_rows:
+                    if _base_title(r.title) == base:
+                        por_id[str(r.id)] = SeriesHit(
+                            UUID(str(r.id)), r.title, r.start_year, 1.0)
+                hits = sorted(por_id.values(), key=lambda h: (-h.score, h.title))
 
         if len(hits) <= 1:
             return hits
@@ -414,6 +450,18 @@ class SeriesMatcher:
             clave = clave_de_coleccion(nombre)
             otras = {clave_de_coleccion(f) for f in candidata.archivos}
             otras.discard("")
+            # Un Issue con archivos de varias colecciones ya está contaminado
+            # (caso real: «Flashpoint #2» con diez tie-ins distintos). Aunque
+            # el archivo nuevo sea una copia de una de esas colecciones, no se
+            # añade: primero hay que separar el Issue. Si no, la contaminación
+            # se propaga y cada copia la hace más difícil de deshacer.
+            if len(otras) > 1:
+                return MatchResult(
+                    MatchStatus.UNSORTED,
+                    candidates=candidates,
+                    notes=[f"el número '{number}' de '{hit.title}' mezcla varias "
+                           "colecciones; no se añade nada hasta revisarlo"],
+                )
             if clave and otras and clave not in otras:
                 return MatchResult(
                     MatchStatus.UNSORTED,
