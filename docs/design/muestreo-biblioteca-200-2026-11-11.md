@@ -87,7 +87,7 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 | Medida | Resultado |
 |---|---:|
 | Serie correcta | **148 / 196 = 75,5 %** |
-| Número correcto | **183 / 196 = 93,4 %** |
+| Número correcto | **187 / 196 = 95,4 %** |
 | Ambos correctos | **147 / 196 = 75,0 %** |
 
 ### Matcher
@@ -117,7 +117,8 @@ Bullets`), series del catálogo con otro título, colecciones y huecos de Issue.
 - Año dentro del título: `American Vampire 1976 10`.
 - Prefijos de número delante de la serie (`16 Catwoman`, `51 Catwoman`): siguen
   ambiguos sin carpeta.
-- Packs `#25 - Anual` sin rango: dependen de la interpretación anterior.
+- Packs `#25 - Anual` sin rango: ya no producen número; la serie parcial
+  (`Injustice`) sigue siendo el fallo restante.
 - Alias y huecos del catálogo: limitan la cobertura del matcher, no su
   precisión de identidad.
 
@@ -136,3 +137,5 @@ Bullets`), series del catálogo con otro título, colecciones y huecos de Issue.
 - Aplicar revisión: `scripts/medicion/aplicar_revision_etiquetas.py`.
 - Evaluar: `scripts/medicion/evaluar_muestra_200.py`.
 - Resultado JSON: `/mnt/Datos/Documentos/resultados_muestra_200_humana.json`.
+- Última regla: `#N - Anual` se trata como pack y no produce número; la
+  métrica de número sube de 183 a **187**.
