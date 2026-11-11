@@ -229,3 +229,24 @@ async def test_candidata_unica_tambien_exige_eleccion(entorno):
         await db.commit()
     marcada = por_id(await previsualizar(serie, marcados=[f["Flash 1 (1987).cbz"]]))[str(f["Flash 1 (1987).cbz"])]
     assert marcada["marcable"] and marcada["incluido_en_token"]
+
+
+@pytest.mark.asyncio
+async def test_candidatas_indistinguibles_pintan_su_motivo(entorno):
+    serie = await serie_de_prueba(entorno)
+    # Dos filas con volume NULL (el único permite varios NULL): mismos discriminantes.
+    async with entorno.banco.fabrica() as s:
+        for _ in range(2):
+            await s.execute(text(
+                "INSERT INTO issues (id, series_id, issue_number, volume, format) "
+                "VALUES (:i, :s, '1', NULL, 'single_issue')"),
+                {"i": str(uuid4()), "s": str(serie)})
+        await s.commit()
+    f = await archivos(entorno, "Flash 1 (1987).cbz")
+    fila = por_id(await previsualizar(serie))[str(f["Flash 1 (1987).cbz"])]
+    assert len(fila["candidatas"]) == 2
+    assert all(not c["elegible"] for c in fila["candidatas"])
+    assert all(c["motivo"] == "No se puede distinguir de las demás con estos datos."
+               for c in fila["candidatas"])
+    html = (await previsualizar(serie)).text
+    assert "No se puede distinguir de las demás con estos datos." in html
