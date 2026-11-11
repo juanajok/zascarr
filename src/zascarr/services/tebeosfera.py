@@ -241,6 +241,8 @@ class TebeosferaColeccion:
     que la ficha lo exponga (hoy no tiene campo).
     """
     slug: str
+    #: Título de la colección leído de la ficha (sin el sufijo de año/editorial); None si no consta.
+    titulo: str | None = None
     editorial: str | None = None
     sello: str | None = None
     anio: int | None = None
@@ -563,6 +565,11 @@ def _parse_collection(html_fragment: str, slug: str) -> TebeosferaColeccion | No
         if len(textos) > 1:
             sello = textos[1]
 
+    titulo_texto_ficha = " ".join(
+        texto for texto in (ficha.xpath(".//h1//text()") or []) if texto).strip()
+    titulo_limpio = (_TITLE_SUFFIX_RE.sub("", titulo_texto_ficha).strip()
+                     if titulo_texto_ficha else None) or None
+
     pais = None
     bandera = ficha.xpath(
         './/*[@title="España" or @title="Espanya" or @title="Spain" '
@@ -580,8 +587,7 @@ def _parse_collection(html_fragment: str, slug: str) -> TebeosferaColeccion | No
                 anio_fin = años[-1]
     if anio is None:
         # La ficha a veces repite el año en el título; solo como fallback del mismo bloque.
-        titulo_texto = " ".join(t for t in (ficha.xpath('.//h1//text()') or []) if t)
-        años_titulo = [int(m.group(0)) for m in _YEAR_RE.finditer(titulo_texto)]
+        años_titulo = [int(m.group(0)) for m in _YEAR_RE.finditer(titulo_texto_ficha)]
         if años_titulo:
             anio = años_titulo[0]
 
@@ -624,6 +630,7 @@ def _parse_collection(html_fragment: str, slug: str) -> TebeosferaColeccion | No
 
     return TebeosferaColeccion(
         slug=slug,
+        titulo=titulo_limpio,
         editorial=editorial,
         sello=sello,
         anio=anio,

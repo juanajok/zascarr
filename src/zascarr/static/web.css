@@ -2167,6 +2167,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .decision-resumen { border: 2px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); padding: 10px 12px; margin: 12px 0; }
 .decision-historial { font-size: .875rem; }
 
+
+/* BL-R5 (#234): formulario de identificador en Descubrir. */
+.identificador-form { margin: 10px 0 14px; }
+.identificador-form form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.identificador-form label { display: grid; gap: 4px; font-weight: 600; }
+.identificador-form input { flex: 1 1 22rem; min-width: 0; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
