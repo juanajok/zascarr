@@ -16,6 +16,7 @@ import pytest
 
 from zascarr.models import (
     ComicTradition,
+    EstadoAlias,
     File,
     FileFormat,
     Issue,
@@ -310,6 +311,9 @@ class TestAprendeAlias:
         alias = next(o for o in session.added if isinstance(o, LocalAlias))
         assert alias.pattern_norm == "patrulla x omnigold"
         assert alias.series_id == series.id
+        # #132: nace propuesto, con versión e historial; no se aplica sin consentimiento.
+        assert alias.estado is EstadoAlias.PROPUESTO
+        assert alias.version == 1 and alias.historial
 
     @pytest.mark.asyncio
     async def test_alias_existente_se_actualiza_en_vez_de_duplicarse(self, tmp_path):
@@ -334,6 +338,7 @@ class TestAprendeAlias:
 
         assert not any(isinstance(o, LocalAlias) for o in session.added)  # no crea uno nuevo
         assert alias_previo.series_id == series_correcta.id  # corrige el existente
+        assert alias_previo.estado is EstadoAlias.PROPUESTO  # #132: sigue sin activarse
 
     @pytest.mark.asyncio
     async def test_sin_serie_detectable_en_el_nombre_no_aprende_nada(self, tmp_path):

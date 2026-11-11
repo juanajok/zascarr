@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
+    EstadoAlias,
     File,
     Issue,
     LocalAlias,
@@ -326,7 +327,8 @@ class Orchestrator:
                 # descartaría el candidato bueno.
                 alias_serie = set((await self.db.execute(
                     select(LocalAlias.pattern_norm)
-                    .where(LocalAlias.series_id == item.series_id))).scalars().all())
+                    .where(LocalAlias.series_id == item.series_id,
+                           LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
             antes = len(candidates)
             candidates = [
                 c

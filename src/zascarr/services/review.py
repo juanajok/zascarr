@@ -38,10 +38,10 @@ from zascarr.models import (
     File,
     Issue,
     IssueFormat,
-    LocalAlias,
     MetadataSource,
     Series,
 )
+from zascarr.services.alias_decisiones import aprender_alias
 from zascarr.services.importer import build_library_path
 from zascarr.utils.fs import safe_move_async
 from zascarr.utils.naming import parse_comic_filename
@@ -325,27 +325,16 @@ class ReviewService:
         return file
 
     async def _learn_alias(self, original_filename: str, series_id) -> None:
-        """B13: cada asignación manual desde Pendientes es, por definición,
-        una corrección — el matcher ya no supo resolverla solo (esa es la
-        única razón por la que el archivo llegó a esta bandeja). Se
-        aprende el patrón (título que naming.py extrae del nombre de
-        archivo, normalizado) → serie, para que SeriesMatcher.decide()
-        no vuelva a preguntar la próxima vez que aparezca. Una corrección
-        más reciente sobre el mismo patrón sustituye a la anterior."""
+        """B13 + #132: cada asignación manual desde Pendientes es una corrección.
+        Se aprende el patrón, pero SIN activarlo: nace `propuesto` y solo se
+        aplicará cuando la persona lo active en «Decisiones reutilizables»."""
         parsed = parse_comic_filename(original_filename)
         if not parsed.series:
             return
         pattern = normalize_title(parsed.series)
         if not pattern:
             return
-        existing = (await self.db.execute(
-            select(LocalAlias).where(LocalAlias.pattern_norm == pattern)
-        )).scalar_one_or_none()
-        if existing:
-            existing.series_id = series_id
-        else:
-            self.db.add(LocalAlias(pattern_norm=pattern, series_id=series_id))
-        await self.db.flush()
+        await aprender_alias(self.db, pattern, series_id)
 
     async def dismiss(self, file_id) -> None:
         file = await self.db.get(File, file_id)
