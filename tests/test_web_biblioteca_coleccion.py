@@ -51,13 +51,6 @@ class _Servicio:
 
 
 def _contexto(monkeypatch):
-    llamadas_ids: list[str] = []
-
-    async def _ids(_db, tipo):
-        llamadas_ids.append(tipo)
-        return {uuid4()}
-
-    monkeypatch.setattr(library, "ids_por_estado", _ids)
     monkeypatch.setattr(library, "SeriesService", _Servicio)
     _Servicio.llamadas = []
 
@@ -65,30 +58,47 @@ def _contexto(monkeypatch):
         yield _Sesion()
 
     app.dependency_overrides[get_db] = _db
-    return llamadas_ids
 
 
 def test_filtro_coleccion_se_combina_y_se_puede_quitar(monkeypatch):
-    llamadas_ids = _contexto(monkeypatch)
+    _contexto(monkeypatch)
     try:
         r = TestClient(app).get(
             "/ui/biblioteca?coleccion=faltan&q=Thorgal&tradition=american")
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert r.status_code == 200
-    assert llamadas_ids == ["faltan"]
+    assert r.headers.get("cache-control") == "no-store"
     kwargs = _Servicio.llamadas[0]
     assert kwargs["search"] == "Thorgal"
     assert kwargs["tradition"] == "american"
-    assert isinstance(kwargs["coleccion_ids"], set)
+    assert kwargs["coleccion"] == "faltan"
     assert 'value="faltan" selected' in r.text
-    assert "Con faltantes" in r.text
-    assert "Quitar filtro Con faltantes" in r.text
+    assert "Te faltan números" in r.text
+    assert "Quitar filtro Te faltan números" in r.text
     assert "coleccion=faltan" in r.text
+    assert '<label for="f-coleccion">Estado de colección</label>' in r.text
     # El chip de quitar conserva los demás filtros y pierde solo coleccion.
-    quitar = r.text.split("Quitar filtro Con faltantes", 1)[0].rsplit("href=\"", 1)[1]
+    quitar = r.text.split("Quitar filtro Te faltan números", 1)[0].rsplit("href=\"", 1)[1]
     assert "q=Thorgal" in quitar and "tradition=american" in quitar
     assert "coleccion=faltan" not in quitar
+
+
+def test_selector_fuera_de_rejilla_se_actualiza_por_oob(monkeypatch):
+    _contexto(monkeypatch)
+    try:
+        # La página trae el select en el formulario; el fragmento HTMX lo
+        # devuelve OOB para que no se quede con el valor anterior.
+        fragmento = TestClient(app).get(
+            "/ui/biblioteca/resultados?quitar=coleccion",
+            headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert fragmento.status_code == 200
+    assert 'hx-swap-oob="outerHTML"' in fragmento.text
+    assert '<option value="">Todo el estado</option>' in fragmento.text
+    assert 'selected' not in fragmento.text.split('hx-swap-oob="outerHTML"', 1)[1]
+    assert fragmento.headers.get("cache-control") == "no-store"
 
 
 def test_coleccion_invalida_se_descarta_con_aviso(monkeypatch):

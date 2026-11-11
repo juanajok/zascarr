@@ -39,10 +39,11 @@ from zascarr.models import (
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.coleccion import (
+    ConflictoVersionError,
+    cambiar_decision,
     conflicto_con_politica,
     estado_de_coleccion,
-    marcar_no_completar,
-    revertir_no_completar,
+    version_de_decision,
 )
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
@@ -464,6 +465,8 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "missing": huecos.faltantes, "huecos": huecos,
         "estado_coleccion": estado_coleccion,
         "aviso_coleccion": aviso_coleccion,
+        "coleccion_exito": coleccion in ("guardado", "revertido"),
+        "coleccion_version": version_de_decision(series),
         "conflicto_coleccion": conflicto_con_politica(series),
         **politica,
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
@@ -702,8 +705,9 @@ async def quitar_etiqueta_web(series_id: UUID, request: Request,
 @router.post("/{series_id}/coleccion")
 async def cambiar_coleccion(
     series_id: UUID, request: Request, accion: str = Form(...),
-    confirmar: str = Form(default=""), db: AsyncSession = Depends(get_db),
-) -> RedirectResponse:
+    version: int = Form(default=0), confirmar: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
     """BL-WK2 (#340): marcar o revertir «no la voy a completar».
 
     La decisión vive en `Series.metadata_` (JSONB), no en `Series.status` ni en
@@ -721,12 +725,19 @@ async def cambiar_coleccion(
         if conflicto_con_politica(series) and confirmar != "si":
             return RedirectResponse(
                 url=f"/ui/series/{series_id}?coleccion=conflicto", status_code=303)
-        marcar_no_completar(series)
         destino = "guardado"
     else:
-        revertir_no_completar(series)
         destino = "revertido"
-    await db.flush()
+    try:
+        await cambiar_decision(
+            db, series_id, no_completar=(accion == "no_completar"),
+            version_esperada=version)
+    except ConflictoVersionError:
+        respuesta = templates.TemplateResponse(
+            request, "_coleccion_conflicto.html", {"series": series})
+        respuesta.status_code = 409
+        respuesta.headers["Cache-Control"] = "no-store"
+        return respuesta
     return RedirectResponse(
         url=f"/ui/series/{series_id}?coleccion={destino}", status_code=303)
 

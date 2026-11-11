@@ -31,7 +31,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.database import get_db
 from zascarr.models import ComicTradition
 from zascarr.services.coleccion import TIPOS as COLECCION_TIPOS
-from zascarr.services.coleccion import ids_por_estado
 from zascarr.services.comicinfo import (
     TEXTOS_COMICINFO,
     archivos_para_leer,
@@ -296,9 +295,9 @@ def _filtros_activos(filtros: Filtros, nombres: dict[str, str | None]) -> list[F
     if filtros.coleccion:
         _anadir("coleccion", {
             "completa": "Completas",
-            "faltan": "Con faltantes",
-            "no_calculable": "Sin poder calcular",
-            "no_completar": "No se van a completar",
+            "faltan": "Te faltan números",
+            "no_calculable": "No se puede calcular",
+            "no_completar": "No la vas a completar",
         }[filtros.coleccion])
     return activos
 
@@ -373,7 +372,6 @@ async def _contexto(
     error = False
     etiquetas_activas: list[dict] = []
     facetas: list[dict] = []
-    coleccion_ids: set | None = None
     expresion: ExpresionEtiquetas = parse_expresion(filtros.etiquetas)
     positivas: tuple[str, ...] = ()
     negativas: tuple[str, ...] = ()
@@ -402,8 +400,6 @@ async def _contexto(
                     "url_quitar": _url_pagina(sin_filtros, page=1),
                     "url_quitar_fragmento": _url_fragmento(sin_filtros, page=1),
                 })
-        coleccion_ids = (await ids_por_estado(db, filtros.coleccion)
-                          if filtros.coleccion else None)
         items, total, pagina = await service.list_series_paginado(
             page=pagina,
             page_size=_PAGE_SIZE,
@@ -416,7 +412,7 @@ async def _contexto(
             etiquetas_negativas=negativas,
             leido=filtros.leido or None,
             orden=filtros.orden,
-            coleccion_ids=coleccion_ids,
+            coleccion=filtros.coleccion or None,
         )
         if pagina != filtros.page and total:
             avisos.append("La página pedida no existe; se muestra la última.")
@@ -467,7 +463,7 @@ async def _contexto(
             character_id=filtros.uuid("character_id"), story_arc_id=filtros.uuid("story_arc_id"),
             etiquetas_positivas=positivas,
             etiquetas_negativas=negativas, con_issues=True,
-            coleccion_ids=coleccion_ids)
+            coleccion=filtros.coleccion or None)
         try:
             total_sin = (await service.list_series_paginado(**base))[1]
             if filtros.leido == "leyendo":
@@ -643,7 +639,9 @@ async def index(
         "publishers": publishers,
         "tradiciones": [(t.value, _TRADICION_LABEL[t]) for t in ComicTradition],
     })
-    return templates.TemplateResponse(request, "biblioteca.html", ctx)
+    respuesta = templates.TemplateResponse(request, "biblioteca.html", ctx)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 @router.get("/resultados", response_class=HTMLResponse)

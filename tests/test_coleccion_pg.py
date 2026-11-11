@@ -24,9 +24,12 @@ from zascarr.services.coleccion import (
     FALTAN,
     NO_CALCULABLE,
     NO_COMPLETAR,
+    ConflictoVersionError,
+    cambiar_decision,
     estado_de_coleccion,
     ids_por_estado,
     marcar_no_completar,
+    version_de_decision,
 )
 from zascarr.services.resumen import resumen_biblioteca
 
@@ -59,9 +62,11 @@ async def db():
     await engine.dispose()
 
 
-async def _serie(db, tmp_path, titulo, total, fuente, numeros, *, no_completar=False):
-    pub = Publisher(id=uuid4(), name=f"Editorial {uuid4().hex}")
-    db.add(pub)
+async def _serie(db, tmp_path, titulo, total, fuente, numeros, *, no_completar=False,
+                 publisher=None):
+    pub = publisher or Publisher(id=uuid4(), name=f"Editorial {uuid4().hex}")
+    if publisher is None:
+        db.add(pub)
     serie = Series(id=uuid4(), title=titulo, tradition=ComicTradition.AMERICAN,
                    start_year=1980, publisher_id=pub.id, total_issues=total,
                    metadata_source=fuente, wishlist_policy=WishlistPolicy.NONE)
@@ -129,3 +134,41 @@ async def test_filtro_biblioteca_combinado_en_sql(db, tmp_path):
     items, total, _ = await SeriesService(db).list_series_paginado(
         page=1, page_size=10, coleccion_ids={completa.id})
     assert total == 1 and [s.id for s in items] == [completa.id]
+
+
+@pytest.mark.asyncio
+async def test_filtro_sql_paginado_misma_query(db, tmp_path):
+    pub = Publisher(id=uuid4(), name=f"Editorial paginada {uuid4().hex}")
+    db.add(pub)
+    for i in range(3):
+        await _serie(db, tmp_path, f"Paginada {i}", 2,
+                     MetadataSource.COMIC_VINE.value, [1, 2], publisher=pub)
+    decidida = await _serie(db, tmp_path, "Paginada decidida", 9,
+                            MetadataSource.COMIC_VINE.value, [1],
+                            no_completar=True, publisher=pub)
+    from zascarr.services.series import SeriesService
+    servicio = SeriesService(db)
+    p1, total, pagina = await servicio.list_series_paginado(
+        page=1, page_size=2, publisher_id=pub.id, coleccion=COMPLETA)
+    p2, total2, pagina2 = await servicio.list_series_paginado(
+        page=2, page_size=2, publisher_id=pub.id, coleccion=COMPLETA)
+    assert (total, total2, pagina, pagina2) == (3, 3, 1, 2)
+    ids1, ids2 = {s.id for s in p1}, {s.id for s in p2}
+    assert len(ids1) == 2 and len(ids2) == 1 and not (ids1 & ids2)
+    assert decidida.id not in ids1 | ids2
+
+
+@pytest.mark.asyncio
+async def test_update_jsonb_version_obsoleta_es_409(db, tmp_path):
+    serie = await _serie(db, tmp_path, "Concurrente", 3,
+                         MetadataSource.COMIC_VINE.value, [1])
+    assert version_de_decision(serie) == 0
+    v1 = await cambiar_decision(db, serie.id, no_completar=True, version_esperada=0)
+    assert v1 == 1
+    with pytest.raises(ConflictoVersionError):
+        await cambiar_decision(db, serie.id, no_completar=True, version_esperada=0)
+    await db.refresh(serie)
+    assert version_de_decision(serie) == 1
+    assert serie.metadata_["coleccion"]["no_completar"] is True
+    v2 = await cambiar_decision(db, serie.id, no_completar=False, version_esperada=1)
+    assert v2 == 2
