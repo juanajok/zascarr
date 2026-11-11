@@ -22,6 +22,14 @@ la app de la Pi aún es el `main` anterior y las ignora.
 `Batman: Shadow of the Bat Annual`), 7 Issues y 7 archivos enlazados; 0
 archivos movidos. Quedan los 25 enlaces incorrectos y 48 anuales sin Issue.
 
+**Lote 2 preparado (no aplicado):** los 25 enlaces actuales a una serie no
+anual. 22 son reasignables y 3 se excluyen (dos `Animal Man` con dos padres
+posibles y el pack `Batman #647-650 y anual 25`). Requiere tres series anuales
+nuevas (`Green Lantern Annual`, `Green Lantern Corps Annual`, `JSA Annual`) y
+usa las dos existentes (`Batman Annual`, `Batman: Shadow of the Bat Annual`).
+La propuesta está en `propuestas_anuales_lote2_2026-11-11.json`; no se ha
+escrito en la base.
+
 **Problema.** Un archivo `Batman Annual 01` se parseaba como `Batman` `#1`; el
 matcher podía enlazarlo con la grapa `Batman #1` y `numero_de_grapa` lo contaba
 como ese hueco. Además, la serie anual que sí existe en Comic Vine/GCD/Metron
