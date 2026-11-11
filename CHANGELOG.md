@@ -48,6 +48,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Decisiones reutilizables: los alias aprendidos piden consentimiento (MIT-M7-US03, #132).**
+  Nueva pantalla «Decisiones reutilizables» (declaraciones, correspondencias, alias aprendidos y
+  alias importados) con tipo, origen, estado, alcance, versión, efectos, precedencia y conflictos.
+  Los alias aprendidos nacen pendientes de activar; activar/reactivar/retirar pide confirmación
+  explícita, con versión e historial. Desactivar no borra y nada de esto mueve archivos ni cambia
+  lo ya decidido. El matcher y el orquestador solo usan alias activos.
 - **Progreso de lectura en las tarjetas y pastillas (BL-INF10, #611).** Cada tarjeta de la
   Biblioteca lleva una barra bajo la portada con el % de números leídos del total y «N de M»;
   la consulta del listado ya trae el agregado (sin consultas por tarjeta). En la ficha de serie,
