@@ -2407,6 +2407,16 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .nota-borrar { margin-top: 8px; }
 .exportar-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 
+
+/* #183 H1: candidatas locales para elegir publicación. */
+.vinc-candidatas { margin: 10px 0; padding: 10px; border: 2px solid var(--linea); border-radius: var(--radius-panel); }
+.vinc-candidatas legend { font-weight: 700; padding: 0 4px; }
+.vinc-candidatas-lista { list-style: none; padding: 0; display: grid; gap: 8px; }
+.vinc-candidata { border: 1px solid var(--linea); border-radius: 6px; padding: 8px; overflow-wrap: anywhere; }
+.vinc-candidata.elegida { border-color: var(--cyan-t); background: var(--info-bg); }
+.vinc-candidata-titulo { font-weight: 700; margin: 0 0 4px; }
+.vinc-eleccion { font-weight: 700; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

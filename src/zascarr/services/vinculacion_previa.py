@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import stat as _stat
@@ -37,6 +38,7 @@ import zlib
 from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal
 from uuid import UUID, uuid4
@@ -52,8 +54,10 @@ from zascarr.models import (
     EDITION_KIND_A_FORMAT,
     AsignacionOperacion,
     File,
+    Imprint,
     Issue,
     IssueFormat,
+    Publisher,
     Series,
 )
 from zascarr.services.descubrimiento_grupo import GrupoNoEncontradoError, SerieLocal
@@ -61,9 +65,12 @@ from zascarr.services.revision_carpetas import RevisionCarpetas, Senal, senales_
 from zascarr.services.tokens_revision import (
     MAX_NUMERO,
     ArchivoFirmado,
+    EleccionFirmada,
     VinculacionFirmada,
     clave_de_numero,
+    crear_token_eleccion,
     crear_token_vinculacion,
+    verificar_token_eleccion,
 )
 from zascarr.utils.naming import parse_comic_filename
 
@@ -133,6 +140,29 @@ class NumeroNoValidoError(ValueError):
 
 # ── Contrato de salida ───────────────────────────────────────────────────────────────────────────
 
+class CandidataPublicacion(BaseModel):
+    """H1 (#183): una publicación local con la que se puede identificar el archivo."""
+    candidate_id: str
+    issue_id: str
+    series_id: str
+    serie_titulo: str
+    serie_anio: int | None
+    numero: str
+    formato: str
+    volumen: int | None
+    editorial: str | None
+    sello: str | None
+    tradicion: str
+    source: str | None
+    external_id: str | None
+    url_ficha: str | None
+    con_archivos: int
+    snapshot: str
+    elegible: bool
+    motivo: str | None = None
+    nivel_editorial: str = "numero"
+
+
 class ArchivoVinculacion(BaseModel):
     id: str
     nombre: str
@@ -157,6 +187,14 @@ class ArchivoVinculacion(BaseModel):
     #: bloquea mientras no se marquen dos a la vez.
     repetido_con: list[str]
     conflictos: list[Senal]
+    #: H1: candidatas locales cuando el estado es `numero_ambiguo`; vacío en el resto.
+    candidatas: list[CandidataPublicacion] = []
+    #: H1: elección vigente guardada en `File.metadata_`, si la hay y sigue siendo válida.
+    eleccion: dict | None = None
+    #: H1: token firmado para elegir entre las candidatas de este archivo (no se muestra).
+    token_eleccion: str | None = None
+    #: H2: publicación que el token de vinculación debe consumir.
+    issue_id_elegida: str | None = None
 
 
 class PaginaOut(BaseModel):
@@ -384,7 +422,10 @@ class VistaPreviaDeVinculacion:
 
         # ── Lecturas de BD (constantes: no dependen del número de archivos) ──
         ids = [UUID(a.id) for a in tratados] + [UUID(i) for i in ya_vinculados]
-        rutas = {str(i): r for i, r in (await db.execute(select(File.id, File.file_path).where(File.id.in_(ids)))).all()}
+        filas_archivo = (await db.execute
+                         (select(File.id, File.file_path, File.metadata_).where(File.id.in_(ids)))).all()
+        rutas = {str(i): r for i, r, _m in filas_archivo}
+        metadatas = {str(i): (m or {}) for i, _r, m in filas_archivo}
         en_curso = {str(f) for (f,) in (await db.execute(select(AsignacionOperacion.file_id).where(
             AsignacionOperacion.file_id.in_(ids), AsignacionOperacion.estado.in_(ASIGNACION_ESTADOS_VIVOS)))).all()}
 
@@ -439,13 +480,51 @@ class VistaPreviaDeVinculacion:
         for fid, (nombre, ruta) in ya_vinculados.items():
             salida.append(self._ya_vinculado(fid, nombre, ruta, fid in marcados))
 
+        # ── H1/H2 (#183): candidatas y elección explícita ──
+        actualizadas: list[ArchivoVinculacion] = []
+        for f in salida:
+            unica = bool(f.issue_existente and not f.motivos)
+            if (f.estado != "numero_ambiguo" and not unica) or not f.numero:
+                actualizadas.append(f)
+                continue
+            candidatas = await self._candidatas(serie, f.numero)
+            eleccion = (metadatas.get(f.id) or {}).get("publicacion_identificada") or None
+            elegida = None
+            if eleccion:
+                elegida = next((c for c in candidatas
+                                if c.issue_id == eleccion.get("issue_id")
+                                and c.snapshot == eleccion.get("snapshot")
+                                and c.elegible), None)
+            token_eleccion = None
+            if candidatas:
+                token_eleccion = crear_token_eleccion(EleccionFirmada(
+                    clave, str(serie.id), f.id, f.numero,
+                    tuple((c.issue_id, c.snapshot) for c in candidatas)),
+                    self._secret, ahora=self._ahora)
+            cambios = {"candidatas": candidatas, "eleccion": eleccion if elegida else None,
+                       "token_eleccion": token_eleccion, "issue_id_elegida": elegida.issue_id if elegida else None}
+            if elegida is not None:
+                cambios.update({
+                    "estado": "se_vincularia", "motivos": [], "marcable": True,
+                    "incluido_en_token": f.marcado,
+                    "texto": "Publicación elegida: esta es la que se usará cuando confirmes la vinculación.",
+                })
+            elif unica:
+                cambios.update({
+                    "marcable": False, "incluido_en_token": False,
+                    "texto": "Confirma cuál es la publicación antes de vincularla; no se elige sola.",
+                })
+            actualizadas.append(f.model_copy(update=cambios))
+        salida = actualizadas
+
         # ── Token: solo si hay una selección ejecutable ──
         incluidos = [f for f in salida if f.incluido_en_token]
         token = None
         if incluidos:
             firmados = tuple(
                 ArchivoFirmado(f.id, f.numero or "", f.formato or "", origenes[f.id].tamano, origenes[f.id].mtime_ns,
-                               tuple(sorted({s.codigo for s in f.conflictos if s.severidad == "conflicto"})))
+                               tuple(sorted({s.codigo for s in f.conflictos if s.severidad == "conflicto"})),
+                               f.issue_id_elegida)
                 for f in incluidos)
             token = crear_token_vinculacion(
                 VinculacionFirmada(clave, str(serie.id), str(uuid4()), firmados), self._secret, ahora=self._ahora)
@@ -539,6 +618,122 @@ class VistaPreviaDeVinculacion:
                 por_numero[clave_de_numero(numero)].append(fid)
         return {fid: sorted(i for i in por_numero[clave_de_numero(numero)] if i != fid)
                 for fid, numero in pares if numero and len(por_numero[clave_de_numero(numero)]) > 1}
+
+    async def _candidatas(self, serie: Series, numero: str) -> list[CandidataPublicacion]:
+        """Candidatas locales reales para una clave de número; no inventa ni crea nada."""
+        filas = (await self._db.execute(
+            select(Issue, Publisher.name, Imprint.name)
+            .select_from(Issue)
+            .join(Series, Issue.series_id == Series.id)
+            .outerjoin(Publisher, Series.publisher_id == Publisher.id)
+            .outerjoin(Imprint, Series.imprint_id == Imprint.id)
+            .where(Issue.series_id == serie.id,
+                   func.lower(Issue.issue_number) == clave_de_numero(numero))
+            .order_by(Issue.issue_number, Issue.format, Issue.id))).all()
+        conteo = {
+            iid: n for iid, n in (await self._db.execute(
+                select(File.issue_id, func.count()).where(
+                    File.issue_id.in_([f[0].id for f in filas])).group_by(File.issue_id))).all()
+        } if filas else {}
+        candidatas: list[CandidataPublicacion] = []
+        for issue, editorial, sello in filas:
+            external = str(issue.comic_vine_id) if issue.comic_vine_id else None
+            datos = {
+                "numero": issue.issue_number or "", "formato": (issue.format or IssueFormat.SINGLE_ISSUE).value,
+                "volumen": issue.volume, "editorial": editorial, "sello": sello,
+                "tradicion": serie.tradition.value, "source": issue.metadata_source, "external_id": external,
+            }
+            snapshot = hashlib.sha256(
+                json.dumps(datos, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+            candidatas.append(CandidataPublicacion(
+                candidate_id=f"local:{issue.id}", issue_id=str(issue.id), series_id=str(serie.id),
+                serie_titulo=serie.title, serie_anio=serie.start_year, numero=datos["numero"],
+                formato=datos["formato"], volumen=issue.volume, editorial=editorial, sello=sello,
+                tradicion=datos["tradicion"], source=issue.metadata_source, external_id=external,
+                url_ficha=None, con_archivos=int(conteo.get(issue.id, 0)), snapshot=snapshot,
+                elegible=True))
+        # Indistinguibles = mismo snapshot: se muestran, pero ninguna se puede elegir.
+        vistos: dict[str, int] = Counter(c.snapshot for c in candidatas)
+        return [c.model_copy(update={
+            "elegible": vistos[c.snapshot] == 1,
+            "motivo": None if vistos[c.snapshot] == 1 else
+            "No se puede distinguir de las demás con estos datos.",
+        }) for c in candidatas]
+
+    async def elegir_publicacion(self, *, token: str, candidate_id: str) -> dict:
+        """H1: revalida y guarda SOLO `File.metadata_["publicacion_identificada"]`.
+
+        No vincula: no toca `File.issue_id`, ni `Issue`, ni `Series`. Devuelve el estado para la fila.
+        """
+        verificado = verificar_token_eleccion(token, self._secret, ahora=self._ahora)
+        if verificado is None:
+            raise ValueError("vista_caducada")
+        candidata_id = next((i for i, _s in verificado.candidatas if f"local:{i}" == candidate_id), None)
+        if candidata_id is None:
+            raise ValueError("candidata_no_ofrecida")
+        grupo = await RevisionCarpetas(self._db, self._biblioteca).archivos_del_grupo(verificado.clave)
+        if grupo is None or verificado.file_id not in {a.id for a in grupo[1]}:
+            raise ValueError("archivo_no_encontrado")
+        fila = (await self._db.execute(
+            select(File).where(File.id == UUID(verificado.file_id)).with_for_update())).scalar_one_or_none()
+        if fila is None:
+            raise ValueError("archivo_no_encontrado")
+        if fila.issue_id is not None:
+            raise ValueError("archivo_ya_vinculado")
+        issues = (await self._db.execute(
+            select(Issue).where(Issue.id == UUID(candidata_id),
+                                Issue.series_id == UUID(verificado.series_id)))).scalar_one_or_none()
+        if issues is None:
+            raise ValueError("candidata_desaparecida")
+        serie = (await self._db.execute(
+            select(Series).where(Series.id == UUID(verificado.series_id)))).scalar_one_or_none()
+        if serie is None:
+            raise ValueError("candidata_desaparecida")
+        candidatas = await self._candidatas(serie, verificado.numero)
+        actual = next((c for c in candidatas if c.issue_id == candidata_id), None)
+        if actual is None or clave_de_numero(actual.numero) != clave_de_numero(verificado.numero):
+            raise ValueError("candidata_cambiada")
+        firmada = next((s for i, s in verificado.candidatas if i == candidata_id), None)
+        if firmada != actual.snapshot:
+            raise ValueError("candidata_cambiada")
+        if not actual.elegible:
+            raise ValueError("candidata_cambiada")
+        existente = (fila.metadata_ or {}).get("publicacion_identificada") or {}
+        if existente.get("issue_id") == candidata_id and existente.get("snapshot") == actual.snapshot:
+            return {"estado": "ya_elegida", "eleccion": existente}
+        eleccion = {
+            "version": 1, "series_id": str(serie.id), "issue_id": candidata_id,
+            "candidate_id": candidate_id, "serie_titulo": serie.title,
+            "serie_anio": serie.start_year, "numero": actual.numero, "formato": actual.formato,
+            "volumen": actual.volumen, "editorial": actual.editorial, "sello": actual.sello,
+            "tradicion": actual.tradicion, "source": actual.source, "external_id": actual.external_id,
+            "elegida_en": datetime.now(UTC).isoformat(timespec="seconds"),
+            "operacion_id": verificado.file_id, "origen": "vinculacion_asistente",
+            "snapshot": actual.snapshot,
+        }
+        fila.metadata_ = {**(fila.metadata_ or {}), "publicacion_identificada": eleccion}
+        await self._db.flush()
+        return {"estado": "elegida", "eleccion": eleccion}
+
+    async def quitar_eleccion(self, *, token: str) -> dict:
+        verificado = verificar_token_eleccion(token, self._secret, ahora=self._ahora)
+        if verificado is None:
+            raise ValueError("vista_caducada")
+        grupo = await RevisionCarpetas(self._db, self._biblioteca).archivos_del_grupo(verificado.clave)
+        if grupo is None or verificado.file_id not in {a.id for a in grupo[1]}:
+            raise ValueError("archivo_no_encontrado")
+        fila = (await self._db.execute(
+            select(File).where(File.id == UUID(verificado.file_id)).with_for_update())).scalar_one_or_none()
+        if fila is None:
+            raise ValueError("archivo_no_encontrado")
+        if fila.issue_id is not None:
+            raise ValueError("archivo_ya_vinculado")
+        meta = dict(fila.metadata_ or {})
+        if meta.pop("publicacion_identificada", None) is None:
+            return {"estado": "sin_eleccion"}
+        fila.metadata_ = meta
+        await self._db.flush()
+        return {"estado": "quitada"}
 
     def _evaluar(self, fid, nombre, ruta, numero, del_nombre, formato, origen_n, origen: _Origen | None, en_curso: bool,
                  repetido_con: list[str], existentes, conflictos: list[Senal], marcado: bool,
