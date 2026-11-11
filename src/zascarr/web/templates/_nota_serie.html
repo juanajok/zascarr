@@ -5,7 +5,7 @@
   {% if nota_aviso %}{{ ui.aviso("ok" if nota_aviso in ("Nota guardada.", "Nota borrada.") else "amber", nota_aviso) }}{% endif %}
   <form method="post" action="/ui/series/{{ series.id }}/nota" class="nota-form">
     <label for="nota-serie-texto">Nota de la serie</label>
-    <textarea id="nota-serie-texto" name="texto" rows="3" maxlength="4000">{{ nota_serie.texto if nota_serie else "" }}</textarea>
+    <textarea id="nota-serie-texto" name="texto" rows="3" maxlength="4000" required>{{ nota_serie.texto if nota_serie else "" }}</textarea>
     <div class="nota-acciones">
       <button class="btn ghost sm" type="submit">Guardar nota</button>
     </div>
@@ -25,7 +25,7 @@
   <ul class="notas-numeros">
     {% for nota, issue in notas_numeros %}
     <li>
-      <a href="/ui/series/{{ series.id }}/numero/{{ issue.id }}#nota-numero">Número {{ issue.issue_number or "sin número" }}</a>
+      <a href="/ui/series/{{ series.id }}/numero/{{ issue.id }}#nota-numero">{% if issue.issue_number %}Número {{ issue.issue_number }}{% else %}Sin número{% endif %}</a>
       <span class="nota-texto">{{ nota.texto }}</span>
     </li>
     {% endfor %}
@@ -38,7 +38,7 @@
   <summary>Añadir nota</summary>
   <form method="post" action="/ui/series/{{ series.id }}/nota" class="nota-form">
     <label for="nota-serie-texto">Nota de la serie</label>
-    <textarea id="nota-serie-texto" name="texto" rows="3" maxlength="4000"></textarea>
+    <textarea id="nota-serie-texto" name="texto" rows="3" maxlength="4000" required></textarea>
     <button class="btn ghost sm" type="submit">Guardar nota</button>
   </form>
 </details>

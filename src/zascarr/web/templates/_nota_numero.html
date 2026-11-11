@@ -5,7 +5,7 @@
   {% if nota_aviso %}{{ ui.aviso("ok" if nota_aviso in ("Nota guardada.", "Nota borrada.") else "amber", nota_aviso) }}{% endif %}
   <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/nota" class="nota-form">
     <label for="nota-numero-texto">Nota del número</label>
-    <textarea id="nota-numero-texto" name="texto" rows="3" maxlength="4000">{{ nota_numero.texto }}</textarea>
+    <textarea id="nota-numero-texto" name="texto" rows="3" maxlength="4000" required>{{ nota_numero.texto }}</textarea>
     <div class="nota-acciones">
       <button class="btn ghost sm" type="submit">Guardar nota</button>
     </div>
@@ -25,7 +25,7 @@
   <summary>Añadir nota</summary>
   <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/nota" class="nota-form">
     <label for="nota-numero-texto">Nota del número</label>
-    <textarea id="nota-numero-texto" name="texto" rows="3" maxlength="4000"></textarea>
+    <textarea id="nota-numero-texto" name="texto" rows="3" maxlength="4000" required></textarea>
     <button class="btn ghost sm" type="submit">Guardar nota</button>
   </form>
 </details>
