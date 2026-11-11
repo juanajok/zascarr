@@ -355,6 +355,68 @@ def _separar_prefijo_numerico(working: str) -> tuple[str, str | None]:
     return working, None
 
 
+def _quitar_credito_con_carpeta(working: str, carpeta: str | None) -> str:
+    """Quita «Hiroaki Samura - » cuando el resto coincide con la carpeta.
+
+    Solo actúa con un separador « - », un prefijo que parece crédito (varias
+    palabras o «&») y una carpeta que contiene el título restante. Nunca
+    convierte una serie de una palabra en subtítulo.
+    """
+    if not carpeta or " - " not in working:
+        return working
+    m = re.match(r"^(.+?)\s+-\s+(.+)$", working)
+    if not m:
+        return working
+    credito, resto = m.group(1).strip(), m.group(2).strip()
+    parece_credito = (
+        "&" in credito
+        or bool(re.match(r"^[A-ZÁÉÍÓÚÑ][\wÀ-ÿ.'-]+(?:\s+[A-ZÁÉÍÓÚÑ][\wÀ-ÿ.'-]+)+$", credito))
+    )
+    if not parece_credito:
+        return working
+    sin_numero = re.sub(r"\s+\d{1,4}[a-zA-Z]?\s*$", "", resto).strip()
+    if not sin_numero:
+        return working
+    resto_norm = normalize_series_name(sin_numero)
+    carpeta_norm = normalize_series_name(carpeta)
+    if resto_norm and (resto_norm in carpeta_norm or carpeta_norm in resto_norm):
+        return resto
+    if "&" in credito:
+        return resto
+    return working
+
+
+def _prefijo_de_issue_con_carpeta(working: str, carpeta: str | None) -> tuple[str, str | None]:
+    """«16 Catwoman» + carpeta Catwoman → issue 16, serie Catwoman.
+
+    Solo si el resto coincide con la carpeta y la carpeta no empieza por ese
+    mismo número (para no romper series como «12 Monkeys»).
+    """
+    if not carpeta:
+        return working, None
+    m = re.match(r"^\s*(\d{1,3})\s+([^\W\d_].*)$", working, re.UNICODE)
+    if not m:
+        return working, None
+    numero, resto = m.group(1), m.group(2).strip()
+    if len(numero) > 2:
+        return working, None
+    resto_limpio = re.sub(r"\([^)]*\)", " ", resto).strip()
+    resto_norm = normalize_series_name(resto_limpio)
+    carpeta_norm = normalize_series_name(carpeta)
+    if not resto_norm or resto_norm not in carpeta_norm:
+        return working, None
+    if carpeta_norm.startswith(numero + " "):
+        return working, None
+    return resto, numero.lstrip("0") or "0"
+
+
+YEAR_IN_TITLE_NUMBER_PATTERN = re.compile(
+    r"^\s*(?P<title>.+?)\s+(?P<year>(?:19|20)\d{2})\s+"
+    r"(?P<num>\d{1,3}[a-zA-Z]?)\s*$",
+    re.IGNORECASE,
+)
+
+
 def _abre_el_titulo(working: str, m: re.Match) -> bool:
     """¿El número encontrado es en realidad el principio del título?
 
@@ -392,7 +454,7 @@ def _limpiar_titulo_serie(texto: str) -> str:
     return series.strip(" -\u2013\u2014(),;:#")
 
 
-def parse_comic_filename(filename: str) -> ParsedComicName:
+def parse_comic_filename(filename: str, carpeta: str | None = None) -> ParsedComicName:
     """Parsea un nombre de archivo de cómic y extrae metadatos."""
     result = ParsedComicName(original_filename=filename)
 
@@ -451,12 +513,15 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     working = SORT_PREFIX_PATTERN.sub("", working, count=1)
     working = CROSSOVER_PREFIX_PATTERN.sub("", working, count=1)
 
-    working, numero_de_prefijo = _separar_prefijo_numerico(working)
+    working, numero_de_prefijo = _prefijo_de_issue_con_carpeta(working, carpeta)
+    if numero_de_prefijo is None:
+        working, numero_de_prefijo = _separar_prefijo_numerico(working)
     if numero_de_prefijo is not None:
         result.issue_number = numero_de_prefijo
 
     working = DOT_SEPARATOR_PATTERN.sub(" ", working)
     working = CREDITS_PATTERN.sub("", working, count=1)
+    working = _quitar_credito_con_carpeta(working, carpeta)
 
     # Formato de edición: Omnibus/TPB/HC/GN. Primero la variante con número
     # inmediato («Omnibus 1»), que además resuelve el número; si no, solo se
@@ -493,6 +558,13 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         year = int(year_match.group(1))
         if 1900 <= year <= 2099:
             result.year = year
+
+    # «American Vampire 1976 10»: el año forma parte del título de la serie,
+    # no es el número. Solo si queda un número corto al final.
+    anio_titulo = YEAR_IN_TITLE_NUMBER_PATTERN.match(working)
+    if anio_titulo and not result.issue_number:
+        result.issue_number = anio_titulo.group("num").lstrip("0") or "0"
+        working = f"{anio_titulo.group('title')} {anio_titulo.group('year')}"
 
     # Rangos ("144-158", y su forma en palabra "170 al 173"): un pack no
     # tiene UN número. Se quitan antes de extraer el número para no

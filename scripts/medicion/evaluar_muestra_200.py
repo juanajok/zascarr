@@ -40,7 +40,7 @@ def _leer(path: Path) -> list[dict]:
 def _parser(rows: list[dict]) -> dict:
     c = Counter()
     for r in rows:
-        p = parse_comic_filename(r["archivo"])
+        p = parse_comic_filename(r["archivo"], carpeta=Path(r["ruta"]).parent.name)
         serie = _canon_serie(p.series) == _canon_serie(r["serie_real"])
         numero = _norm_num(p.issue_number) == _norm_num(r["numero_real"])
         c["serie"] += serie
@@ -62,7 +62,7 @@ async def _matcher(rows: list[dict], db_url: str) -> dict:
         async with session_factory() as session:
             matcher = SeriesMatcher(session)
             for r in rows:
-                p = parse_comic_filename(r["archivo"])
+                p = parse_comic_filename(r["archivo"], carpeta=Path(r["ruta"]).parent.name)
                 tr = TriageResult(path=Path(r["ruta"]))
                 res = await matcher.decide(
                     tr, extractor=lambda _n, p=p: (p.series, p.issue_number, p.year),
