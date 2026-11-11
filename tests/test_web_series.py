@@ -939,9 +939,11 @@ class TestProcedenciaCamposC6:
     def test_la_ficha_muestra_procedencia_y_bloqueo(self):
         series = make_series(total_issues=3)
         series.metadata_source = "comic_vine"
+        # 987654, no 777: un UUID aleatorio puede contener «777» y hacía
+        # fallar la aserción de que el id externo no se pinta.
         series.metadata_ = {"alta": {"origen": "descubrir", "fuente": "comic_vine",
-                                     "id_externo": "777", "fecha": "2026-11-06T10:00:00+00:00"}}
-        series.comic_vine_id = 777
+                                     "id_externo": "987654", "fecha": "2026-11-06T10:00:00+00:00"}}
+        series.comic_vine_id = 987654
         series.locked_fields = ["comic_vine_id"]
         session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
                                retirados(), FakeExecResult([])])
@@ -953,7 +955,7 @@ class TestProcedenciaCamposC6:
         assert "Protegido: el enriquecimiento no lo sobrescribe." in r.text
         assert "Protegido</strong> significa que el enriquecimiento no lo sobrescribe." in r.text
         assert "Identificador de la fuente" in r.text
-        assert "777" not in r.text   # el id externo no se pinta
+        assert "987654" not in r.text   # el id externo no se pinta
 
     def test_sin_procedencia_lo_dice_en_vez_de_atribuir(self):
         series = make_series(total_issues=3)

@@ -38,6 +38,7 @@ CLAVE_SIN_GRUPO = "\x00sin-grupo"
 PROPOSITO_CANDIDATA = "candidata"
 PROPOSITO_ALTA = "alta"
 PROPOSITO_VINCULAR = "vincular"
+PROPOSITO_ELEGIR_PUBLICACION = "elegir_publicacion"
 PROPOSITO_DESVINCULAR = "desvincular"
 #: #129: propuesta de asociación de otra fuente (A no escribe; B la consumirá).
 PROPOSITO_ASOCIAR = "asociar_fuente"
@@ -382,6 +383,8 @@ class ArchivoFirmado:
     mtime_ns: int
     #: Códigos de las señales de severidad «conflicto» que la persona VIO al marcar este archivo. `()` = ninguno.
     conflictos: tuple[str, ...] = ()
+    #: H2 (#183): publicación elegida por la persona para este archivo, ya revalidada en la vista previa.
+    issue_id_elegida: str | None = None
 
 
 @dataclass(frozen=True)
@@ -395,9 +398,9 @@ class VinculacionFirmada:
     caduca: int = 0
 
 
-#: Versión del esquema del token de vinculación. La 2 añade `conflictos` OBLIGATORIO por archivo: la ausencia del
-#: campo no significa «ninguno», así que los tokens anteriores (2c) se rechazan y exigen una vista previa nueva.
-VERSION_TOKEN_VINCULAR = 2
+#: Versión del esquema del token de vinculación. La 3 añade `issue_id_elegida` opcional (#183 H2); la 2 añadía
+#: `conflictos` OBLIGATORIO por archivo. Las versiones anteriores se rechazan y exigen una vista previa nueva.
+VERSION_TOKEN_VINCULAR = 3
 MAX_CONFLICTOS = 20
 MAX_CODIGO = 60
 
@@ -412,7 +415,8 @@ def crear_token_vinculacion(v: VinculacionFirmada, secret: str, *, ahora: float 
     return crear_token(PROPOSITO_VINCULAR, v.clave, {
         "version": VERSION_TOKEN_VINCULAR, "serie_id": v.series_id, "operacion": v.operacion,
         "archivos": [{"id": a.id, "numero": a.numero, "formato": a.formato, "tamano": a.tamano,
-                      "mtime_ns": a.mtime_ns, "conflictos": sorted(a.conflictos)}
+                      "mtime_ns": a.mtime_ns, "conflictos": sorted(a.conflictos),
+                      **({"issue_id_elegida": a.issue_id_elegida} if a.issue_id_elegida else {})}
                      for a in sorted(v.archivos, key=lambda a: a.id)],
     }, secret, ahora=ahora)
 
@@ -455,12 +459,61 @@ def verificar_token_vinculacion(token: str, secret: str, *, ahora: float | None 
                 or not all(isinstance(c, str) and c.strip() and c == c.strip() and len(c) <= MAX_CODIGO
                            for c in conflictos) or len(set(conflictos)) != len(conflictos)):
             return None
-        archivos.append(ArchivoFirmado(a["id"], numero, formato, tamano, mtime, tuple(conflictos)))
+        elegida = a.get("issue_id_elegida")
+        if elegida is not None and not _uuid_texto(elegida):
+            return None
+        archivos.append(ArchivoFirmado(a["id"], numero, formato, tamano, mtime,
+                                       tuple(conflictos), elegida))
     if len({a.id for a in archivos}) != len(archivos):
         return None
     if len({clave_de_numero(a.numero) for a in archivos}) != len(archivos):      # dos archivos, un mismo número
         return None
     return VinculacionFirmada(clave, d["serie_id"], d["operacion"], tuple(archivos), caduca)
+
+
+# ── Token de elección de publicación (#183, H1) ───────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class EleccionFirmada:
+    clave: str
+    series_id: str
+    file_id: str
+    numero: str
+    #: (issue_id, snapshot) de las candidatas que se mostraron; nadie puede elegir una que no estaba.
+    candidatas: tuple[tuple[str, str], ...]
+    caduca: int = 0
+
+
+def crear_token_eleccion(e: EleccionFirmada, secret: str, *, ahora: float | None = None) -> str:
+    return crear_token(PROPOSITO_ELEGIR_PUBLICACION, e.clave, {
+        "version": 1, "series_id": e.series_id, "file_id": e.file_id, "numero": e.numero,
+        "candidatas": [[i, s] for i, s in e.candidatas],
+    }, secret, ahora=ahora)
+
+
+def verificar_token_eleccion(token: str, secret: str, *, ahora: float | None = None) -> EleccionFirmada | None:
+    clave = _contexto_del_token(token, secret)
+    if clave is None:
+        return None
+    verificado = _verificar(token, PROPOSITO_ELEGIR_PUBLICACION, clave, secret, ahora=ahora)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    if d.get("version") != 1 or not all(_uuid_texto(d.get(k)) for k in ("series_id", "file_id")):
+        return None
+    numero = d.get("numero")
+    if not (isinstance(numero, str) and numero.strip() and numero == numero.strip() and len(numero) <= MAX_NUMERO):
+        return None
+    crudas = d.get("candidatas")
+    if not isinstance(crudas, list) or not crudas or len(crudas) > MAX_ARCHIVOS_FIRMADOS:
+        return None
+    candidatas: list[tuple[str, str]] = []
+    for c in crudas:
+        if (not isinstance(c, list) or len(c) != 2 or not _uuid_texto(c[0])
+                or not isinstance(c[1], str) or not c[1]):
+            return None
+        candidatas.append((c[0], c[1]))
+    return EleccionFirmada(clave, d["series_id"], d["file_id"], numero, tuple(candidatas), caduca)
 
 
 # ── Referencia a un resultado de vinculación (U19, ficha §7.2) ───────────────────────────────────

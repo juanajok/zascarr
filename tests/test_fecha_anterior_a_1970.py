@@ -103,7 +103,7 @@ class TestTextoYEsquema:
 class TestElVerificadorYElFormatoNoCambian:
     def test_el_formato_y_el_limite_del_token_siguen_como_estaban(self):
         from zascarr.services.tokens_revision import MAX_TOKEN_VINCULACION, VERSION_TOKEN_VINCULAR
-        assert (VERSION_TOKEN_VINCULAR, MAX_TOKEN_VINCULACION) == (2, 73229)
+        assert (VERSION_TOKEN_VINCULAR, MAX_TOKEN_VINCULACION) == (3, 73229)
 
     def test_un_token_real_con_fecha_cero_se_verifica(self, tmp_path):
         f = tmp_path / "a.cbz"
