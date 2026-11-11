@@ -76,6 +76,9 @@
                  hx-target="#sugerencias-etiquetas" hx-swap="innerHTML" hx-include="#filtros">
           <div id="sugerencias-etiquetas" class="series-results" aria-live="polite"></div>
         </div>
+        <div class="filtro-campo">
+          {% include "_selector_coleccion.html" %}
+        </div>
         <input type="hidden" name="character_id" value="{{ filtros.character_id }}">
         <input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
         <input type="hidden" name="page" value="1">
@@ -90,12 +93,11 @@
       <option value="{{ value }}" {% if filtros.orden == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
-
     <a class="barra-vista" href="{{ url_vista_tarjetas if filtros.vista == 'lista' else url_vista_lista }}"
        hx-get="{{ url_vista_tarjetas_fragmento if filtros.vista == 'lista' else url_vista_lista_fragmento }}"
        hx-target="#rejilla" hx-swap="innerHTML"
        title="{{ 'Ver como tarjetas' if filtros.vista == 'lista' else 'Ver como lista' }}">
-      {{ "Tarjetas" if filtros.vista == "lista" else "Lista" }}
+      {{ "Tarjetas" if filtros.vista == 'lista' else "Lista" }}
     </a>
   </div>
 </form>

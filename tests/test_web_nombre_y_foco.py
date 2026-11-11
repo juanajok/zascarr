@@ -313,7 +313,7 @@ class TestTrasIntercambiosHtmx:
         assert not controles_sin_nombre(dom)
         assert [n for _, _, n in _leer(dom).nombres()] == [
             "Buscar por título", "Tradición", "Editorial", "Lectura", "Personaje", "Saga",
-            "Etiquetas", "Ordenar por"]
+            "Etiquetas", "Estado de la colección", "Ordenar por"]
 
     def test_deseados_tras_buscar_serie(self):
         """`wishlist.html`: hx-target="#resultados-wishlist" innerHTML."""
