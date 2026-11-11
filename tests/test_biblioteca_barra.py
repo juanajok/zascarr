@@ -89,7 +89,7 @@ def test_css_de_barra_compacta_y_44_px():
     assert ".barra-acciones { display: flex; flex-wrap: nowrap;" in css
     assert "min-height: 44px" in css
     assert ".barra-panel-campos" in css
-    assert "max-height: calc(100dvh - 8rem)" in css
+    assert "max-height: calc(100dvh - 6rem)" in css
 
 
 def test_panel_conserva_los_tres_buscadores_y_sus_endpoints():
@@ -141,7 +141,9 @@ def test_css_objetivos_tactiles_y_panel_ancho_completo():
     assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px;" in css
     assert "min-height: 44px" in css.split(".quitar-filtro,", 1)[1][:160]
     assert ".barra-panel-campos { position: absolute; z-index: 50;" in css
-    assert "max-height: calc(100dvh - 8rem)" in css
+    assert "max-height: calc(100dvh - 6rem)" in css
+    assert ".barra-biblioteca .barra-panel-campos select" in css
+    assert "max-width: none; width: 100%;" in css
 
 
 def test_flujo_vista_lista_cambiar_orden_conserva_vista():
@@ -158,7 +160,8 @@ def test_css_panel_absoluto_tambien_en_movil_y_tactil_ancho():
     from pathlib import Path
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     bloque = css.split("@media (max-width: 640px)", 1)[1].split("@media (max-width: 360px)", 1)[0]
-    assert "position: absolute" in bloque and "left: 0" in bloque and "right: 0" in bloque
+    assert "position: fixed" in bloque and "bottom: 64px" in bloque
+    assert "left: 0" in bloque and "right: 0" in bloque
     assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px; min-width: 44px;" in css
     assert "min-width: 44px" in css.split(".quitar-filtro,", 1)[1][:200]
 
