@@ -403,6 +403,7 @@ def create_app() -> FastAPI:
     from zascarr.web.retirada_serie import router as retirada_serie_ui_router
     from zascarr.web.routes import router as ui_router
     from zascarr.web.series import router as series_ui_router
+    from zascarr.web.vistas_trabajo import router as vistas_router
     from zascarr.web.wishlist import router as wishlist_ui_router
 
     # A6: no-op mientras auth_mode="none" (por defecto) — se registra
@@ -435,6 +436,7 @@ def create_app() -> FastAPI:
     app.include_router(correspondencias_contexto_router)
     app.include_router(contexto_declarado_router)
     app.include_router(decisiones_router)
+    app.include_router(vistas_router)
     app.include_router(retirada_serie_ui_router)
     app.include_router(series_ui_router)
     app.include_router(asociar_fuente_ui_router)

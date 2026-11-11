@@ -48,6 +48,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Vistas de trabajo predefinidas (BL-R7, #236).** Nueva pantalla «Vistas de trabajo» con cinco
+  consultas vivas y su recuento: **sin identificar**, **identificación dudosa**, **con
+  discrepancias**, **no disponibles** y **con varias variantes** (publicaciones con más de un
+  contenido distinto). Cada una es una consulta: un archivo entra o sale por su estado, no se
+  guarda pertenencia, no hay listas personales ni colecciones y abrirla no escribe nada. Las
+  listas se recortan en SQL (50 por página) y los recuentos no materializan filas. Enlaces
+  desde «Por revisar» y «No disponibles».
 - **Copia, variante o edición distinta en la ficha del número (BL-R6, #235).** Si un número tiene
   varios archivos, la ficha dice cuáles son **copia exacta** (mismo SHA-256), **variante** (otra
   digitalización del mismo número) o **contenido sin comprobar** (no se ha hasheado), con formato y

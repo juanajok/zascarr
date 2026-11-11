@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Vistas de trabajo — ZascArr{% endblock %}
+{% block content %}
+<h1>Vistas de trabajo</h1>
+<p>Lo que necesita tu atención, en consultas vivas: no son listas personales ni colecciones.</p>
+<p class="caption">{{ efectos }}</p>
+{% if error %}
+  {{ ui.aviso("amber", "No se han podido leer los recuentos. Vuelve a intentarlo; no se muestra un recuento parcial.") }}
+{% else %}
+<div class="vistas-grid">
+  {% for v in vistas %}
+  <article class="vista-card">
+    <h2 class="titulo-frase">{{ v.titulo }}</h2>
+    <p class="vista-recuento">{{ v.recuento }}</p>
+    <p>{{ v.descripcion }}</p>
+    <p><a class="btn ghost" href="{{ v.url }}">Abrir{{ " " ~ v.titulo|lower }}</a></p>
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+<p class="caption">Si un archivo deja de cumplir la condición, sale de la vista en la siguiente consulta.</p>
+{% endblock %}
