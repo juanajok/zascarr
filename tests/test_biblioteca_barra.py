@@ -144,7 +144,8 @@ def test_css_objetivos_tactiles_y_panel_ancho_completo():
     assert ".barra-busqueda input[type=\"search\"] { width: 100%; min-height: 44px; }" in css
     assert ".barra-panel-campos .series-results a { min-height: 44px;" in css
     assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px;" in css
-    assert "min-height: 44px" in css.split(".quitar-filtro,", 1)[1][:160]
+    bloque_quitar = css.split(".quitar-filtro {", 1)[1].split("}", 1)[0]
+    assert "min-height: 44px" in bloque_quitar and "min-width: 44px" in bloque_quitar
     assert ".barra-panel { min-width: 0; position: relative; }" in css
     assert ".barra-panel-campos {" in css
     assert "top: calc(100% + 8px);" in css and "right: 0;" in css
@@ -170,7 +171,7 @@ def test_css_panel_absoluto_tambien_en_movil_y_tactil_ancho():
     assert "position: fixed" in bloque and "bottom: 64px" in bloque
     assert "left: 0" in bloque and "right: 0" in bloque
     assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px; min-width: 44px;" in css
-    assert "min-width: 44px" in css.split(".quitar-filtro,", 1)[1][:200]
+    assert "min-width: 44px" in css.split(".quitar-filtro {", 1)[1][:200]
 
 
 def test_flujo_htmx_vista_y_luego_orden_usa_el_hidden_actualizado():
@@ -280,3 +281,25 @@ def test_contador_es_dato_no_boton():
     assert "font-weight: 700;" in bloque
     assert "min-height: 44px;" in bloque
     assert "font-variant-numeric: tabular-nums;" in bloque
+
+
+def test_chips_son_texto_sin_flecha_y_quitar_es_icono_accesible():
+    html = _index(path="/ui/biblioteca?tradition=tebeo")
+    assert '<span class="chip filtro-chip">Tradición: Tebeo español</span>' in html
+    assert "↑" not in html
+    assert 'class="quitar-filtro"' in html
+    assert 'aria-label="Quitar filtro: Tradición: Tebeo español"' in html
+    assert 'title="Quitar filtro: Tradición: Tebeo español"' in html
+    quitar = html[html.index('class="quitar-filtro"'):]
+    quitar = quitar[:quitar.index("</a>")]
+    assert 'M18 6 6 18' in quitar and ">Quitar<" not in quitar
+
+
+def test_limpiar_es_boton_pildora_no_texto_subrayado():
+    html = _index(path="/ui/biblioteca?tradition=tebeo")
+    assert 'class="btn ghost sm limpiar-filtros"' in html
+    assert ">Limpiar filtros</a>" in html
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert ".limpiar-filtros { text-decoration: none; min-height: 44px; }" in css
+    assert "width: 44px; min-width: 44px; min-height: 44px;" in css.split(".quitar-filtro {", 1)[1][:160]
