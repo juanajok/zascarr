@@ -195,3 +195,20 @@ async def test_formato_distinto_mantiene_colision(entorno):
     async with entorno.banco.fabrica() as db:
         guardado = await db.get(File, f["Flash 1 (1987).cbz"])
         assert guardado.issue_id is None
+
+
+@pytest.mark.asyncio
+async def test_candidata_unica_tambien_exige_eleccion(entorno):
+    serie = await serie_de_prueba(entorno)
+    await _issues(entorno, serie, IssueFormat.SINGLE_ISSUE, volumenes=[1])
+    f = await archivos(entorno, "Flash 1 (1987).cbz")
+    fila = por_id(await previsualizar(serie))[str(f["Flash 1 (1987).cbz"])]
+    assert fila["estado"] == "se_vincularia" and not fila["marcable"]
+    assert len(fila["candidatas"]) == 1 and fila["candidatas"][0]["elegible"]
+    async with entorno.banco.fabrica() as db:
+        await VistaPreviaDeVinculacion(db, secret=SECRETO).elegir_publicacion(
+            token=fila["token_eleccion"],
+            candidate_id=fila["candidatas"][0]["candidate_id"])
+        await db.commit()
+    marcada = por_id(await previsualizar(serie, marcados=[f["Flash 1 (1987).cbz"]]))[str(f["Flash 1 (1987).cbz"])]
+    assert marcada["marcable"] and marcada["incluido_en_token"]

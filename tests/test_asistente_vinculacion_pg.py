@@ -374,7 +374,19 @@ class TestCriterio6Existentes:
         await sembrar_issue(entorno.banco, serie, "3", formato=IssueFormat.SINGLE_ISSUE)       # edición distinta (omnigold)
         p = await abrir(serie)
         uno, dos, tres = (p.fila(n) for n in ("Flash 01 (1987).cbz", "Flash 02 (1987).cbz", "Flash Omnigold 03.cbz"))
-        assert uno.marcable and "La serie ya tiene esta publicación sin archivos" in uno.cuerpo
+        # #183: una única candidata también exige elección antes de marcarla.
+        assert not uno.marcable and "Confirma cuál es la publicación" in uno.cuerpo
+        token_eleccion = re.search(rf'name="token_eleccion:{uno.id}" value="([^"]+)"', p.t)
+        candidata = re.search(rf'name="candidata:{uno.id}"[^>]*value="([^"]+)"', p.t)
+        assert token_eleccion and candidata
+        from zascarr.services.vinculacion_previa import VistaPreviaDeVinculacion
+        async with entorno.banco.fabrica() as db:
+            await VistaPreviaDeVinculacion(db, secret=SECRETO).elegir_publicacion(
+                token=html.unescape(token_eleccion.group(1)), candidate_id=candidata.group(1))
+            await db.commit()
+        p = await abrir(serie)
+        uno = p.fila("Flash 01 (1987).cbz")
+        assert uno.marcable and "Publicación elegida" in uno.cuerpo
         assert dos.estado == "numero_ya_existe" and not dos.marcable and "ya tiene 1 archivo" in html.unescape(dos.cuerpo)
         assert tres.estado == "colision_de_edicion" and not tres.marcable
         q = await p.reenviar(marcar=["Flash 01 (1987).cbz", "Flash 02 (1987).cbz", "Flash Omnigold 03.cbz"])
