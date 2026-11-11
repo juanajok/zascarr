@@ -1,0 +1,4 @@
+<div id="contador-biblioteca" class="barra-contador" role="status" aria-live="polite" aria-atomic="true"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <span aria-hidden="true">{{ contador_corto }}</span>
+  <span class="sr">{{ contador_largo }}</span>
+</div>

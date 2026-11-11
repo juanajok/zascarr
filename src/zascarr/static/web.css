@@ -2188,6 +2188,40 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vista-fila { border-bottom: 2px solid var(--paper-2); padding: 8px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
 .vista-detalle { color: var(--ink-soft); }
 
+/* Rediseño Biblioteca: barra única con filtros plegables (#628). */
+.biblioteca-cabecera { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: flex-start; }
+.barra-biblioteca { display: grid; gap: 8px; margin: 10px 0 14px; }
+.barra-busqueda { min-width: 0; }
+.barra-busqueda input[type="search"] { width: 100%; }
+.barra-acciones { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; min-width: 0; }
+.barra-acciones > * { min-height: 44px; }
+.barra-contador { font-size: .875rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.barra-panel { min-width: 0; }
+.barra-panel > summary { min-height: 44px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-weight: 800; list-style-position: inside; }
+.barra-panel > summary:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.barra-panel-campos { position: absolute; z-index: 20; left: 0; right: 0; margin-top: 6px; padding: 12px; background: var(--paper); border: 2px solid var(--ink); border-radius: var(--radius-panel); box-shadow: var(--shadow-ink-sm); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; max-height: min(70vh, 34rem); overflow: auto; }
+.barra-panel-campos .filtro-campo { min-width: 0; }
+.barra-panel-campos label { display: block; font-size: .875rem; font-weight: 800; margin-bottom: 4px; }
+.barra-panel-campos input[type="search"], .barra-panel-campos select { width: 100%; min-height: 44px; }
+.barra-panel-ayuda { grid-column: 1 / -1; margin: 0; }
+.barra-panel-campos .series-results { position: static; max-height: 14rem; overflow: auto; }
+.barra-vista { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 10px; border: 2px solid var(--ink); border-radius: var(--radius-pill); font-size: .875rem; font-weight: 800; white-space: nowrap; }
+.barra-vista:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.barra-acciones select { min-width: 0; max-width: 9.5rem; min-height: 44px; font-size: .875rem; }
+@media (max-width: 640px) {
+  .biblioteca-cabecera { display: block; }
+  .barra-acciones { gap: 4px; }
+  .barra-contador { font-size: .875rem; }
+  .barra-panel-campos { position: static; grid-template-columns: 1fr; max-height: 70vh; box-shadow: none; }
+  .barra-vista { padding: 0 8px; }
+  .barra-acciones select { max-width: 7.5rem; }
+}
+@media (max-width: 360px) {
+  .barra-acciones { gap: 3px; }
+  .barra-acciones select { max-width: 6.6rem; }
+  .barra-vista { padding: 0 6px; }
+}
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
