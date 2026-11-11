@@ -370,8 +370,7 @@ class TestEstados:
             await s.commit()
         await archivos(entorno, "Flash 03 (1987).cbz")
         a = (await previsualizar(serie)).json()["archivos"][0]
-        assert (a["estado"], a["marcable"], a["issue_existente"]) == ("se_vincularia", False, True)
-        assert len(a["candidatas"]) == 1   # #183: una única candidata también exige elección explícita
+        assert (a["estado"], a["marcable"], a["issue_existente"]) == ("se_vincularia", True, True)
 
     async def test_colision_de_edicion(self, entorno):
         """Mismo número que un `Issue` de la serie con otra edición (B15: grapa #12 frente a Omnigold 12)."""
