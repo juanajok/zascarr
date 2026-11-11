@@ -212,6 +212,13 @@ SORT_PREFIX_PATTERN = re.compile(r"^\s*\d{1,3}[a-zA-Z]?\s*\.?\s*-\s*")
 # por ahora, sigue colgando de la serie madre. Mezclarlos fue lo que convirtió
 # «Batman Annual 01» en el nº 1 de «Batman».
 ANNUAL_PATTERN = re.compile(r"\b(?:Annual|Anual)\b", re.IGNORECASE)
+# El número del anual va inmediatamente detrás de la marca. Si se deja al
+# buscador genérico, un año suelto del nombre ("Shadow_..._Annual_01_..._1993")
+# gana por ser de 4 cifras y el anual acaba con el número 1993. Se prueba
+# antes que `_buscar_numero`, solo cuando el nombre ya se marcó como anual.
+ANNUAL_NUMBER_PATTERN = re.compile(
+    r"\b(?:Annual|Anual)\b\s*#?\s*(\d{1,4}[a-zA-Z]?)\b", re.IGNORECASE
+)
 SPECIAL_PATTERN = re.compile(r"\bEspecial\b", re.IGNORECASE)
 FILE_EXT_PATTERN = re.compile(r"\.(cbz|cbr|cb7|pdf|epub)$", re.IGNORECASE)
 
@@ -419,7 +426,14 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # (RF-12 / Omnigold-Integral), no se vuelve a buscar — el resto del
     # nombre es solo metadata de release que la limpieza de más abajo
     # ya se encarga de quitar.
-    encontrado = None if result.issue_number else _buscar_numero(working)
+    encontrado = None
+    if not result.issue_number:
+        if result.is_annual:
+            annual_match = ANNUAL_NUMBER_PATTERN.search(working)
+            if annual_match:
+                encontrado = (annual_match, True)
+        if encontrado is None:
+            encontrado = _buscar_numero(working)
     if encontrado:
         issue_match, cortar_en_numero = encontrado
         raw = issue_match.group(1)
@@ -477,7 +491,7 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # de haber cortado por el n\u00famero ("Patrulla-X, n\u00ba 03" \u2192 "Patrulla X,").
     # El matcher los ignora al normalizar, pero este texto es el que ve el
     # coleccionista en Pendientes y el que aprende el alias local (B13).
-    series = series.strip(" -\u2013\u2014(),;:")
+    series = series.strip(" -\u2013\u2014(),;:#")
     result.series = series
     result.confidence = _confidence(result)
     return result
