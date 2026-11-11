@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Decisiones reutilizables — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/pendientes/carpetas/contexto">← Volver a «Contexto declarado»</a></p>
+<h1>Decisiones reutilizables</h1>
+<p>Consulta y administra lo que ZascArr reutiliza en nuevas interpretaciones.</p>
+<p class="caption">Desactivar o retirar no deshace nada ya decidido; no mueve archivos.</p>
+{% if aviso == "activada" %}<p role="status">Alias activado. Se aplicará a nuevas interpretaciones, no a lo ya decidido.</p>{% endif %}
+{% if aviso == "desactivada" %}<p role="status">Alias desactivado. Puedes reactivarlo cuando quieras.</p>{% endif %}
+{% if aviso == "reactivada" %}<p role="status">Alias reactivado.</p>{% endif %}
+{% if aviso == "retirada" %}<p role="status">Decisión retirada. El historial se conserva y no se ha tocado ningún archivo.</p>{% endif %}
+{% if error %}{{ ui.aviso("amber", error) }}{% endif %}
+
+<form method="get" action="{{ url_lista }}" class="decisiones-filtros">
+  <label>Tipo
+    <select name="tipo">
+      <option value="">Todas</option>
+      {% for clave, etiqueta in tipos %}<option value="{{ clave }}"{% if filtros.tipo == clave %} selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Estado
+    <select name="estado">
+      <option value="">Todos</option>
+      {% for clave, etiqueta in estados %}<option value="{{ clave }}"{% if filtros.estado == clave %} selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Origen
+    <select name="origen">
+      <option value="">Todos</option>
+      {% for clave, etiqueta in origenes %}<option value="{{ clave }}"{% if filtros.origen == clave %} selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Carpeta
+    <input type="text" name="carpeta" value="{{ filtros.carpeta }}" placeholder="contiene…">
+  </label>
+  <label class="decisiones-check"><input type="checkbox" name="historial" value="1"{% if filtros.historial %} checked{% endif %}> Incluir historial</label>
+  <button class="btn ghost sm" type="submit">Filtrar</button>
+  <a class="btn ghost sm" href="{{ url_lista }}">Limpiar</a>
+</form>
+
+<p class="caption">{{ total }} decisiones.</p>
+
+{% if not filas %}
+<div class="empty-state">
+  <h2>No hay decisiones que mostrar.</h2>
+  <p>Aquí aparecen las declaraciones, correspondencias y alias que ZascArr puede reutilizar. Desactivar o retirar no toca archivos ni cambia lo ya confirmado.</p>
+</div>
+{% else %}
+{% set LABELS = {"activar": "Activar", "desactivar": "Desactivar", "reactivar": "Reactivar", "retirar": "Retirar", "cambiar": "Cambiar"} %}
+<ul class="decisiones-lista">
+  {% for d in filas %}
+  <li class="decision-card decision-{{ d.tipo }}">
+    <h2 class="titulo-frase">{{ d.tipo_es }}</h2>
+    <p class="decision-chips">
+      {{ ui.chip("info", d.origen_es) }}
+      {{ ui.chip("ok" if d.estado in ("activa", "activo") else "amber" if d.estado in ("desactivada", "desactivado", "propuesto") else "warn", d.estado_es) }}
+      <span class="decision-version">Versión {{ d.version }}</span>
+    </p>
+    <p><strong>Alcance:</strong> {{ d.alcance }}</p>
+    {% if d.destino != "—" %}<p><strong>Destino:</strong> {{ d.destino }}</p>{% endif %}
+    <p class="caption">{{ d.efectos }}</p>
+    <p class="caption"><strong>Precedencia:</strong> {{ d.precedencia }}</p>
+    {% for conflicto in d.conflictos %}
+    <p>{{ ui.chip("amber", "Conflicto visible") }} {{ conflicto }}</p>
+    {% endfor %}
+    {% if d.historial %}
+    <details>
+      <summary>Historial ({{ d.historial | length }})</summary>
+      <ul class="decision-historial">
+        {% for ev in d.historial %}
+        <li>{{ ev.fecha }} · {{ ev.motivo }} · {{ ev.estado }}{% if ev.series_propuesta %} · serie propuesta: {{ ev.series_propuesta }}{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+    {% if d.acciones %}
+    <p class="decision-acciones">
+      {% for a in d.acciones %}
+        {% if a == "cambiar" %}
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/cambiar/{{ d.id }}">{{ LABELS[a] }}</a>
+        {% elif a in ("activar", "reactivar", "retirar") %}
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/decisiones/confirmar/{{ d.tipo }}/{{ d.id }}/{{ a }}">{{ LABELS[a] }}</a>
+        {% else %}
+        <form method="post" action="/ui/pendientes/carpetas/decisiones/accion/{{ d.tipo }}/{{ d.id }}/{{ a }}">
+          <button class="btn ghost sm" type="submit">{{ LABELS[a] }}</button>
+        </form>
+        {% endif %}
+      {% endfor %}
+    </p>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

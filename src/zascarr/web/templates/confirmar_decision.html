@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }} — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="{{ url_lista }}">← Volver a «Decisiones reutilizables»</a></p>
+<h1>{{ titulo }}</h1>
+<p>Este alias se usará en nuevas interpretaciones; no cambia lo ya decidido.</p>
+<div class="decision-resumen">
+  <p class="decision-chips">
+    {{ ui.chip("info", decision.tipo_es) }}
+    {{ ui.chip("info", decision.origen_es) }}
+    {{ ui.chip("amber", decision.estado_es) }}
+  </p>
+  <p><strong>Alcance:</strong> {{ decision.alcance }}</p>
+  {% if decision.destino != "—" %}<p><strong>Destino:</strong> {{ decision.destino }}</p>{% endif %}
+  <p class="caption">{{ decision.efectos }}</p>
+</div>
+<form method="post" action="{{ url_accion }}">
+  <input type="hidden" name="confirmado" value="1">
+  <button class="btn primary" type="submit">{{ boton }}</button>
+  <a class="btn ghost" href="{{ url_lista }}">Cancelar</a>
+</form>
+{% endblock %}
