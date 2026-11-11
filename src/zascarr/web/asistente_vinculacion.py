@@ -54,6 +54,7 @@ from zascarr.services.tokens_revision import (
     TTL_SEGUNDOS,
     crear_referencia_de_resultado,
     verificar_referencia_de_resultado,
+    verificar_token_eleccion,
     verificar_token_vinculacion,
 )
 from zascarr.services.vinculacion import (
@@ -419,6 +420,49 @@ async def revisar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
     # Sin htmx (un envío normal del formulario) se devuelve la página entera, no un fragmento suelto.
     return await _revisar(request, db, clave, series_id, estado=estado, cursor=destino, otros=otros, avisos=[],
                           pagina_completa="hx-request" not in request.headers, accion=accion)
+
+
+@router.post("/elegir", response_class=HTMLResponse)
+async def elegir_publicacion(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """H1 (#183): elección explícita de una publicación local. No vincula ni crea nada."""
+    f = await request.form()
+    crudo = str(f.get("eleccion", ""))
+    token, _, candidate_id = crudo.rpartition("|")
+    secreto = get_settings().secret_key
+    error = None
+    aviso = None
+    contexto = verificar_token_eleccion(token, secreto) if token and secreto else None
+    if contexto is None:
+        error = "La vista previa ha caducado. Vuelve a abrirla; no se ha cambiado nada."
+    elif not candidate_id:
+        error = "No se ha indicado qué publicación elegir."
+    else:
+        servicio = VistaPreviaDeVinculacion(db, secret=secreto)
+        try:
+            if candidate_id == "__quitar__":
+                resultado = await servicio.quitar_eleccion(token=token)
+                aviso = "Se ha quitado la elección; la fila vuelve a estar como antes."
+            else:
+                resultado = await servicio.elegir_publicacion(token=token, candidate_id=candidate_id)
+                aviso = ("Esa publicación ya estaba elegida." if resultado["estado"] == "ya_elegida"
+                         else "Publicación elegida. La vinculación sigue siendo un paso aparte.")
+        except ValueError as exc:
+            motivos = {
+                "vista_caducada": "La vista previa ha caducado. Vuelve a abrirla; no se ha cambiado nada.",
+                "candidata_desaparecida": "La publicación ya no existe. Vuelve a abrir la vista previa y elige otra vez. No se ha cambiado nada.",
+                "candidata_cambiada": "La publicación cambió desde que viste la vista previa. No se ha cambiado nada.",
+                "candidata_no_ofrecida": "Esa publicación no estaba entre las que viste. No se ha cambiado nada.",
+                "archivo_ya_vinculado": "Ese archivo ya se vinculó. La elección no se ha guardado; recarga la vista previa.",
+                "archivo_no_encontrado": "El archivo ya no está. No se ha cambiado nada.",
+            }
+            error = motivos.get(str(exc), "No se pudo guardar la elección. No se ha cambiado nada; vuelve a intentarlo.")
+    if contexto is not None:
+        return await _revisar(request, db, contexto.clave, contexto.series_id, estado=Borrador(),
+                              cursor="", otros={}, avisos=[x for x in (aviso, error) if x], pagina_completa=False)
+    plantilla = "_vinculacion_revision.html"
+    respuesta = templates.TemplateResponse(request, plantilla, {"r": None, "error": error})
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 def _entero(valor: object) -> int:
