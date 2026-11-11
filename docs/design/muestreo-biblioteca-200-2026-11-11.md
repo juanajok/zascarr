@@ -93,20 +93,20 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
 | Medida | Resultado |
 |---|---:|
-| Serie correcta | **171 / 200 = 85,5 %** |
-| Número correcto | **196 / 200 = 98,0 %** |
-| Ambos correctos | **170 / 200 = 85,0 %** |
+| Serie correcta | **182 / 200 = 91,0 %** |
+| Número correcto | **197 / 200 = 98,5 %** |
+| Ambos correctos | **181 / 200 = 90,5 %** |
 
 ### Matcher
 
 | Medida | Resultado |
 |---|---:|
-| `direct` | 89 |
-| `fuzzy` | 10 |
-| `unsorted` | 101 |
-| Enlaces con Issue | 94 |
-| Enlaces con serie+número correctos | **94 / 94** |
-| Cobertura | **94 / 200 = 47,0 %** |
+| `direct` | 90 |
+| `fuzzy` | 14 |
+| `unsorted` | 96 |
+| Enlaces con Issue | 95 |
+| Enlaces con serie+número correctos | **95 / 95** |
+| Cobertura | **95 / 200 = 47,5 %** |
 | Desajustes de formato/tipo | **2** (La Espada del Inmortal y XIII, tomos enlazados a `single_issue`) |
 
 Los 64 enlaces aciertan serie y número según las etiquetas. El único problema
