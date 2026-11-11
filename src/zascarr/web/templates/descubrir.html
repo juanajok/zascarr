@@ -4,6 +4,18 @@
 <h1>Descubrir</h1>
 <p class="subtitle">Busca un título en Comic Vine, AniList, Tebeosfera y GCD, y dalo de alta en tu biblioteca — sin esto, Deseados y la clasificación automática no tienen con qué comparar.</p>
 
+<details class="identificador-form">
+  <summary>¿Conoces el identificador o el enlace de la ficha?</summary>
+  <form method="get" action="/ui/descubrir/identificador">
+    <label for="identificador">Identificador o enlace</label>
+    <input id="identificador" type="text" name="identificador" maxlength="500"
+           value="{{ identificador or '' }}"
+           placeholder="4050-12345 · https://comicvine.gamespot.com/… · gcd:123 · tb:slug">
+    <button class="btn ghost" type="submit">Buscar por identificador</button>
+  </form>
+  <p class="caption">Se consulta solo la fuente de ese identificador y solo al pulsar. La forma se valida antes de llamar: si está mal, no se hace ninguna petición. Un error de la fuente no significa que el identificador no exista. El ISBN no es un identificador de serie.</p>
+</details>
+
 <input type="search" class="series-search" placeholder="Título de la serie…"
        name="q" aria-label="Título de la serie"{% if q %} value="{{ q }}"{% endif %}
        hx-get="/ui/descubrir/buscar"{% if buscando_en %}
@@ -21,7 +33,17 @@
 <p class="caption">No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar.</p>
 {% endif %}
 <div id="descubrir-estado" class="sr" aria-live="polite" aria-atomic="true"></div>
+{% if camino %}
+<p class="caption" role="status">{{ camino_texto }}</p>
+{% if serie_local %}
+{{ ui.aviso("ok", "Esa serie ya está en tu biblioteca.") }}
+<p><a class="btn ghost" href="/ui/series/{{ serie_local.id }}">Abrir la serie</a></p>
+{% else %}
+<div id="resultados-descubrir" class="series-results">{% include "_resultados_descubrir.html" %}</div>
+{% endif %}
+{% else %}
 <div id="resultados-descubrir" class="series-results"></div>
+{% endif %}
 
 {#- #133: qué significa el estado de cada fuente. Va plegado para no gastar el presupuesto de texto de la pantalla y
     porque solo hace falta cuando algo no ha ido bien; la lista de estados de la búsqueda ya lo dice fuente a fuente. -#}

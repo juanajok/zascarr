@@ -371,6 +371,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "declaracion", "tipo_registro",
     # MIT-M7-US03 (#132-b): filtros del inventario de decisiones reutilizables.
     "carpeta", "historial", "origen",
+    # BL-R5 (#234): identificador o enlace pegado en Descubrir.
+    "identificador",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
     "desde",
 })

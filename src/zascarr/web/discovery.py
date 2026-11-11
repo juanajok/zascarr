@@ -36,6 +36,7 @@ from zascarr.services.alta_serie import (
 from zascarr.services.descubrimiento_grupo import GrupoNoEncontradoError
 from zascarr.services.descubrimiento_libre import firmar_resultados
 from zascarr.services.discovery import DiscoveryService
+from zascarr.services.identificadores import ResolucionIdentificador
 from zascarr.services.tokens_revision import (
     MAX_CLAVE_GRUPO,
     MAX_TITULO,
@@ -107,6 +108,70 @@ async def index(request: Request, q: str = Query(default="", max_length=200)) ->
 
 def _tradiciones() -> list[tuple[str, str]]:
     return [(t.value, _TRADICION_LABEL[t]) for t in ComicTradition]
+
+
+def _contexto_identificador(resolucion: ResolucionIdentificador,
+                            identificador: str) -> dict:
+    """Contexto de la página de Descubrir para una resolución por identificador."""
+    base = {
+        "q": "", "clave": None, "titulo": "", "anio": "", "error": None,
+        "tradicion_elegida": "", "tradiciones": _tradiciones(), "pista": None,
+        "buscando_en": None, "identificador": identificador,
+        "camino": resolucion.camino, "serie_local": resolucion.ya_local,
+        "camino_texto": resolucion.motivo or "",
+        "pagina_completa": True,
+    }
+    if resolucion.camino == "identificador" and resolucion.resultado is not None:
+        secreto = get_settings().secret_key
+        if not secreto:
+            base.update({"resultados": [], "hay_resultados": False, "avisos": [
+                "ZascArr no puede firmar el resultado: reinícialo e inténtalo de nuevo."],
+                "anuncio": "No se puede firmar el resultado.", "clase_aviso": tipo_aviso("amber").clase,
+                "detalles": [], "consultadas": "", "hay_consultadas": False})
+            return base
+        firmados, omitidas = firmar_resultados([resolucion.resultado], secreto)
+        avisos = [] if not omitidas else [
+            "El resultado no se puede guardar: falta un identificador o título válido."]
+        if resolucion.motivo:
+            avisos.insert(0, resolucion.motivo)
+        detalles = detalles_visibles(
+            {resolucion.identificador.fuente.value: resolucion.estado}) if resolucion.estado else []
+        fuente = etiqueta_fuente(resolucion.identificador.fuente.value)
+        base.update({
+            "resultados": firmados, "hay_resultados": True, "avisos": avisos,
+            "anuncio": f"Encontrada por identificador en {fuente}. Confírmala tú.",
+            "clase_aviso": tipo_aviso("amber").clase, "detalles": detalles,
+            "consultadas": fuente, "hay_consultadas": True,
+            "camino_texto": (f"Encontrada por identificador en {fuente}, sin buscar por título. "
+                            "Confírmala tú: un resultado no es certeza."),
+        })
+        return base
+    detalles = []
+    if resolucion.estado is not None:
+        detalles = detalles_visibles({resolucion.estado.fuente: resolucion.estado})
+    base.update({
+        "resultados": [], "hay_resultados": False,
+        "avisos": [resolucion.motivo] if resolucion.motivo else [],
+        "anuncio": resolucion.motivo or "", "clase_aviso": tipo_aviso("amber").clase,
+        "detalles": detalles, "consultadas": "",
+        "hay_consultadas": resolucion.camino == "sin_resultado",
+    })
+    return base
+
+
+@router.get("/identificador", response_class=HTMLResponse)
+async def por_identificador(request: Request,
+                            identificador: str = Query(default="", max_length=500),
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """BL-R5 (#234): resolver por identificador exacto antes que por título.
+
+    Solo se consulta la fuente al enviar el formulario; la forma se valida antes.
+    """
+    resolucion = await DiscoveryService(db).resolver_identificador(identificador)
+    respuesta = templates.TemplateResponse(
+        request, "descubrir.html", _contexto_identificador(resolucion, identificador))
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 def _fragmento_sin_clave(request: Request) -> HTMLResponse:
