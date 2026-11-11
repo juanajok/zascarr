@@ -57,11 +57,17 @@
 <section aria-labelledby="issue-archivos-titulo">
   <h2 id="issue-archivos-titulo">{{ textos.archivos }}</h2>
   {% if ficha.archivos %}
+  {% if ficha.archivos | length > 1 %}
+  <p class="caption">Este número tiene varios archivos. <strong>Copia exacta</strong> es el mismo contenido; <strong>variante</strong> es otra digitalización del mismo número. La ficha enseña formato y tamaño; la calidad solo si consta. «Separar del número» lo devuelve a «Por revisar» sin borrar ni mover nada.</p>
+  {% endif %}
   <ul class="archivos-lista issue-archivos">
     {% for a in ficha.archivos %}
     <li class="archivo-fila">
       <span class="nombre-archivo">{{ a.nombre }}</span>
-      <span class="muted">{{ a.formato|upper }}</span>
+      <span class="muted">{{ a.formato|upper }}{% if a.tamano %} · {{ (a.tamano / 1048576)|round(1) }} MB{% endif %}</span>
+      {% if a.clasificacion == "copia" %}{{ ui.chip("ok", "Copia exacta") }}
+      {% elif a.clasificacion == "variante" %}{{ ui.chip("info", "Variante del mismo número") }}
+      {% elif a.clasificacion == "sin_comprobar" %}{{ ui.chip("neutro", "Contenido sin comprobar") }}{% endif %}
       {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}
       {% if a.formato == "cbr" %}
       <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/convertir"
@@ -75,9 +81,25 @@
          hx-target="#resultado-comicinfo-{{ a.id }}" hx-swap="innerHTML">Actualizar ComicInfo<span class="sr"> {{ a.nombre }}</span></a>
       <div id="resultado-comicinfo-{{ a.id }}"></div>
       {% endif %}
+      {% if ficha.archivos | length > 1 %}
+      <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/deshacer">Separar del número<span class="sr"> {{ a.nombre }}</span></a>
+      {% endif %}
     </li>
     {% endfor %}
   </ul>
+  {% if ficha.otras_ediciones %}
+  <details class="otras-ediciones">
+    <summary>Otras publicaciones con este número ({{ ficha.otras_ediciones | length }})</summary>
+    <p class="caption">Son <strong>ediciones distintas</strong>, no variantes del mismo número: se muestran aparte y no se agrupan solo por título y número.</p>
+    <ul>
+      {% for o in ficha.otras_ediciones %}
+      <li>{{ ui.chip("info", "Edición distinta") }}
+        <a href="/ui/series/{{ series.id }}/numero/{{ o.issue_id }}">#{{ o.numero }}</a>
+        · volumen {{ o.volumen }} · {{ o.formato }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
   {% else %}
   <p class="muted">{{ textos.sin_archivos }}</p>
   <p><a class="btn ghost" href="/ui/series/{{ series.id }}">{{ textos.ir_serie }}</a></p>

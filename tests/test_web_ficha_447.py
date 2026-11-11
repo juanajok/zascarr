@@ -165,14 +165,19 @@ def test_hrefs_de_chip_y_archivo_por_numero(monkeypatch):
 def test_ficha_de_numero_ofrece_convertir_solo_para_cbr():
     serie = _serie()
     cbr = SimpleNamespace(id=uuid4(), file_name="Thorgal 03.cbr", file_format=FileFormat.CBR,
-                          file_size_bytes=2 * 1048576, is_missing=False)
+                          file_size_bytes=2 * 1048576, is_missing=False,
+                          sha256_hash="a" * 64)
     cbz = SimpleNamespace(id=uuid4(), file_name="Thorgal 04.cbz", file_format=FileFormat.CBZ,
-                          file_size_bytes=1, is_missing=False)
+                          file_size_bytes=1, is_missing=False, sha256_hash="a" * 64)
     issue = _issue(series_id=serie.id, files=[cbr, cbz])
     with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie]),
-                                       FakeExecResult([])])) as client:
+                                       FakeExecResult([]), FakeExecResult([])])) as client:
         r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
     assert r.status_code == 200
     assert f"/ui/series/{serie.id}/archivos/{cbr.id}/convertir" in r.text
     assert f'hx-target="#resultado-conversion-{cbr.id}"' in r.text
     assert f"/archivos/{cbz.id}/convertir" not in r.text
+    # BL-R6: mismo SHA-256 → copia exacta; se puede separar sin borrar.
+    assert "Copia exacta" in r.text
+    assert f"/ui/series/{serie.id}/archivos/{cbr.id}/deshacer" in r.text
+    assert "Separar del número" in r.text

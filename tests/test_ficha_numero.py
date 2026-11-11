@@ -11,10 +11,12 @@ import pytest
 from zascarr.models import CreatorRole, FileFormat, IssueFormat
 from zascarr.services.ficha_numero import (
     TEXTOS,
+    ArchivoDeNumero,
     FichaSerie,
     NumeroEnlace,
     cargar_ficha_numero,
     cargar_ficha_serie,
+    clasificar_archivos,
     partir_sinopsis,
 )
 
@@ -213,6 +215,40 @@ def test_archivos_del_numero_en_orden_natural_unitario():
         SimpleNamespace(id=uuid4(), file_name="1.cbz", file_format=FileFormat.CBZ,
                         file_size_bytes=1, is_missing=False),
     ])
-    db = _DB([_Res([issue]), _Res([serie])])
+    db = _DB([_Res([issue]), _Res([serie]), _Res([])])
     ficha = __import__("asyncio").run(cargar_ficha_numero(db, serie.id, issue.id))
     assert [a.nombre for a in ficha.archivos] == ["1.cbz", "2.cbz", "10.cbz"]
+
+
+def _archivo(nombre, sha, formato="cbz"):
+    return ArchivoDeNumero(id=str(uuid4()), nombre=nombre, formato=formato,
+                           tamano=1024, falta_en_disco=False, sha256=sha)
+
+
+def test_bl_r6_copia_variante_y_sin_comprobar():
+    copia = clasificar_archivos([_archivo("a.cbz", "x" * 64), _archivo("b.cbz", "x" * 64)])
+    assert [a.clasificacion for a in copia] == ["copia", "copia"]
+    variante = clasificar_archivos([_archivo("a.cbz", "x" * 64), _archivo("b.cbz", "y" * 64)])
+    assert [a.clasificacion for a in variante] == ["variante", "variante"]
+    sin_comprobar = clasificar_archivos([_archivo("a.cbz", None), _archivo("b.cbz", None)])
+    assert [a.clasificacion for a in sin_comprobar] == ["sin_comprobar", "sin_comprobar"]
+    assert clasificar_archivos([_archivo("solo.cbz", "x" * 64)])[0].clasificacion == ""
+
+
+@pytest.mark.asyncio
+async def test_bl_r6_otras_publicaciones_con_el_mismo_numero_son_ediciones():
+    serie = _serie()
+    issue = _issue(files=[
+        SimpleNamespace(id=uuid4(), file_name="a.cbz", file_format=FileFormat.CBZ,
+                        file_size_bytes=1, is_missing=False, sha256_hash="a" * 64),
+        SimpleNamespace(id=uuid4(), file_name="b.cbz", file_format=FileFormat.CBZ,
+                        file_size_bytes=2, is_missing=False, sha256_hash="b" * 64),
+    ], volume=1, format=IssueFormat.SINGLE_ISSUE)
+    otra = _issue(issue_number="3", volume=2, format=IssueFormat.HARDCOVER,
+                  files=[SimpleNamespace(id=uuid4(), file_name="tomo.cbz")])
+    db = _DB([_Res([issue]), _Res([serie]), _Res([issue, otra])])
+    ficha = await cargar_ficha_numero(db, serie.id, issue.id)
+    assert [a.clasificacion for a in ficha.archivos] == ["variante", "variante"]
+    assert len(ficha.otras_ediciones) == 1
+    assert ficha.otras_ediciones[0].volumen == 2
+    assert ficha.otras_ediciones[0].formato == "tomo en tapa dura"
