@@ -116,7 +116,7 @@ tiene como `single_issue`; es una discrepancia de **edición**, no de identidad.
 La cobertura sigue siendo el problema, pero los alias seguros recuperan
 `100 Balas`, `Shadow of the Bat`, `Smallville` y `WildCATS`. Además se aplicó
 el lote 1 de series ausentes (5 series, 211 Issues, 222 archivos), que añade
-6 enlaces nuevos en esta muestra. Ver
+5 enlaces nuevos en esta muestra. Ver
 [`alias-catalogo-2026-11-11.md`](alias-catalogo-2026-11-11.md) y
 [`lote1-series-ausentes-2026-11-11.md`](lote1-series-ausentes-2026-11-11.md).
 
