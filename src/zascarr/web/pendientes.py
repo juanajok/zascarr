@@ -32,6 +32,7 @@ from zascarr.services.asignacion import (
     previsualizar_asignacion,
     servicio_por_defecto,
 )
+from zascarr.services.especiales import EspecialesService, EspecialSinNumeroError
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ClavePendiente, ReviewService
 from zascarr.services.revision_carpetas import (
     LIMITE_MAXIMO,
@@ -663,6 +664,36 @@ async def asignar(request: Request, file_id: UUID, series_id: UUID = Form(...),
     return templates.TemplateResponse(
         request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
         status_code=resp.status)
+
+
+@router.post("/{file_id}/especial", response_class=HTMLResponse)
+async def vincular_especial(
+    request: Request, file_id: UUID,
+    series_id: UUID = Form(...),
+    titulo: str = Form(...),
+    formato: str = Form("graphic_novel"),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Vincula un archivo como publicación sin número (especial/tomo).
+
+    No mueve el archivo: solo crea el Issue sin número y lo enlaza. La
+    operación es manual y no pasa por el matcher.
+    """
+    try:
+        await EspecialesService(db).vincular_especial(file_id, series_id, titulo, formato)
+        await db.commit()
+    except EspecialSinNumeroError as exc:
+        aviso = {"tipo": "warn", "texto": str(exc)}
+        if not _es_htmx(request):
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        file = await db.get(File, file_id)
+        if file is None:
+            return templates.TemplateResponse(
+                request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=400)
+        return templates.TemplateResponse(
+            request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
+            status_code=400)
+    return HTMLResponse(RECONTAR_MENU)
 
 
 @router.post("/{file_id}/ignorar", response_class=HTMLResponse)

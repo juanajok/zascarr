@@ -3,7 +3,8 @@
 ## Estado
 
 **Propuesto** — 2026-11-11. Prototipo backend en `services/especiales.py`
-(3 tests PG); **sin UI, sin migración y sin cambios en producción**.
+(3 tests PG) y acción HTMX en Pendientes; **sin migración y sin cambios en
+producción**. La acción solo aparece en los resultados de búsqueda de serie.
 
 ## Contexto
 
