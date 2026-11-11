@@ -18,8 +18,9 @@
 | **ComicTagger** | etiquetador y parser de referencia | <https://github.com/comictagger/comictagger> | 844 | 2026-11-02 | Apache-2.0 | `fa11a34` (`develop`) |
 | **ComiXed** | servidor/biblioteca de cómic | <https://github.com/comixed/comixed> | 297 | 2026-11-10 | GPL-3.0 | `dd2fef9` (`main`) |
 
-Mylar3 es el menos activo (último commit de 2025-08), pero se mantiene por
-estrellas/uso y su parser es la referencia histórica que heredó ComicTagger.
+Mylar3 es el menos activo (último commit en `master` de 2025-08; el push más
+reciente es de 2026-03), pero se mantiene por estrellas/uso y su parser es la
+referencia histórica que heredó ComicTagger.
 
 ## 2. Qué hace cada uno
 
