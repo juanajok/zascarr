@@ -326,7 +326,8 @@ class Orchestrator:
                 # descartaría el candidato bueno.
                 alias_serie = set((await self.db.execute(
                     select(LocalAlias.pattern_norm)
-                    .where(LocalAlias.series_id == item.series_id))).scalars().all())
+                    .where(LocalAlias.series_id == item.series_id,
+                           LocalAlias.estado == "activo"))).scalars().all())
             antes = len(candidates)
             candidates = [
                 c
