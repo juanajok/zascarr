@@ -2174,6 +2174,11 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .identificador-form label { display: grid; gap: 4px; font-weight: 600; }
 .identificador-form input { flex: 1 1 22rem; min-width: 0; }
 
+
+/* BL-R6 (#235): varias copias/variantes y otras ediciones en la ficha del número. */
+.otras-ediciones { margin-top: 10px; }
+.otras-ediciones ul { font-size: .875rem; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
