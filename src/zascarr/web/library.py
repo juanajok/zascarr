@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
 from zascarr.models import ComicTradition
+from zascarr.services.coleccion import TIPOS as COLECCION_TIPOS
 from zascarr.services.comicinfo import (
     TEXTOS_COMICINFO,
     archivos_para_leer,
@@ -114,6 +115,7 @@ class Filtros:
     etiquetas: str = ""
     leido: str = ""
     orden: str = "titulo"
+    coleccion: str = ""
     page: int = 1
     vista: str = "tarjetas"
     avisos: tuple[str, ...] = ()
@@ -146,6 +148,7 @@ def _leer_filtros(
     etiquetas: str = "",
     leido: str = "",
     orden: str = "",
+    coleccion: str = "",
 ) -> Filtros:
     """Normaliza y valida la entrada de la URL; nunca lanza por un valor inválido.
 
@@ -207,6 +210,10 @@ def _leer_filtros(
     orden = (orden or "").strip().lower()
     if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente"):
         orden = "titulo"
+    coleccion = (coleccion or "").strip().lower()
+    if coleccion and coleccion not in COLECCION_TIPOS:
+        avisos.append("El filtro de estado de colección no es válido; se ha quitado.")
+        coleccion = ""
     return Filtros(
         q=texto,
         tradition=tradicion,
@@ -216,6 +223,7 @@ def _leer_filtros(
         etiquetas=texto_etiquetas,
         leido=leido,
         orden=orden,
+        coleccion=coleccion,
         page=pagina,
         vista="lista" if vista_limpia == "lista" else "tarjetas",
         avisos=tuple(avisos),
@@ -237,6 +245,7 @@ def _qs(filtros: Filtros, *, page: int, omitir: str | None = None) -> str:
         "etiquetas": filtros.etiquetas,
         "leido": filtros.leido,
         "orden": "" if filtros.orden == "titulo" else filtros.orden,
+        "coleccion": filtros.coleccion,
         "vista": "lista" if filtros.vista == "lista" else "",
     }
     if omitir:
@@ -283,6 +292,13 @@ def _filtros_activos(filtros: Filtros, nombres: dict[str, str | None]) -> list[F
         _anadir("story_arc_id", f"Saga: {nombres.get('story_arc') or 'desconocida'}")
     if filtros.leido:
         _anadir("leido", {"si": "Leídos", "no": "Sin leer", "leyendo": "Leyendo"}[filtros.leido])
+    if filtros.coleccion:
+        _anadir("coleccion", {
+            "completa": "Completas",
+            "faltan": "Te faltan números",
+            "no_calculable": "No se puede calcular",
+            "no_completar": "No la vas a completar",
+        }[filtros.coleccion])
     return activos
 
 
@@ -396,6 +412,7 @@ async def _contexto(
             etiquetas_negativas=negativas,
             leido=filtros.leido or None,
             orden=filtros.orden,
+            coleccion=filtros.coleccion or None,
         )
         if pagina != filtros.page and total:
             avisos.append("La página pedida no existe; se muestra la última.")
@@ -445,7 +462,8 @@ async def _contexto(
             search=filtros.q or None, publisher_id=filtros.uuid("publisher_id"),
             character_id=filtros.uuid("character_id"), story_arc_id=filtros.uuid("story_arc_id"),
             etiquetas_positivas=positivas,
-            etiquetas_negativas=negativas, con_issues=True)
+            etiquetas_negativas=negativas, con_issues=True,
+            coleccion=filtros.coleccion or None)
         try:
             total_sin = (await service.list_series_paginado(**base))[1]
             if filtros.leido == "leyendo":
@@ -469,6 +487,7 @@ async def _contexto(
         etiquetas=filtros.etiquetas,
         leido=filtros.leido,
         orden=filtros.orden,
+        coleccion=filtros.coleccion,
         page=pagina,
         vista=filtros.vista,
         avisos=tuple(avisos),
@@ -507,6 +526,7 @@ async def _contexto(
         "etiquetas_activas": etiquetas_activas,
         "facetas": facetas,
         "hay_filtros": bool(activos) or bool(etiquetas_activas),
+        "coleccion": filtros.coleccion,
         "recuento": recuento,
         "num_filtros": num_filtros,
         "contador_corto": contador_corto,
@@ -526,10 +546,11 @@ async def _contexto(
             replace(filtros_finales, vista="lista"), page=pagina),
         "url_limpiar": _url_pagina(replace(
             filtros_finales, q="", tradition="", publisher_id="", character_id="",
-            story_arc_id="", etiquetas="", leido=""), page=1),
+            story_arc_id="", etiquetas="", leido="", coleccion=""), page=1),
         "url_limpiar_fragmento": _url_fragmento(
             replace(filtros_finales, q="", tradition="", publisher_id="", character_id="",
-                    story_arc_id="", etiquetas="", leido=""), page=1) + "&quitar=todos",
+                    story_arc_id="", etiquetas="", leido="", coleccion=""), page=1)
+            + "&quitar=todos",
     }
 
 
@@ -557,10 +578,11 @@ def _respuesta_auxiliar(request: Request, plantilla: str, ctx: dict) -> Response
 async def sugerir_etiquetas(
     request: Request, etiquetas: str = "", q: str = "", tradition: str = "",
     publisher_id: str = "", character_id: str = "", story_arc_id: str = "",
-    vista: str = "", db: AsyncSession = Depends(get_db),
+    vista: str = "", coleccion: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
-        1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
+        1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
+        coleccion=coleccion)
     tokens = etiquetas.strip().split()
     prefijo = tokens[-1].lstrip("-") if tokens else ""
     sin_prefijo = replace(filtros, etiquetas=" ".join(tokens[:-1]))
@@ -613,11 +635,11 @@ async def index(
     request: Request, page: str = "1", tradition: str = "", publisher_id: str = "",
     character_id: str = "", story_arc_id: str = "", q: str = "",
     vista: str = "", etiquetas: str = "", leido: str = "", orden: str = "",
-    db: AsyncSession = Depends(get_db),
+    coleccion: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
-        leido, orden)
+        leido, orden, coleccion)
     publishers: list = []
     editoriales_error = False
     try:
@@ -637,7 +659,9 @@ async def index(
         "publishers": publishers,
         "tradiciones": [(t.value, _TRADICION_LABEL[t]) for t in ComicTradition],
     })
-    return templates.TemplateResponse(request, "biblioteca.html", ctx)
+    respuesta = templates.TemplateResponse(request, "biblioteca.html", ctx)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 @router.get("/resultados", response_class=HTMLResponse)
@@ -645,11 +669,11 @@ async def resultados(
     request: Request, page: str = "1", tradition: str = "", publisher_id: str = "",
     character_id: str = "", story_arc_id: str = "", q: str = "",
     vista: str = "", etiquetas: str = "", leido: str = "", orden: str = "",
-    db: AsyncSession = Depends(get_db),
+    coleccion: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
-        leido, orden)
+        leido, orden, coleccion)
     return _respuesta_fragmento(request, await _contexto(db, filtros))
 
 
@@ -664,6 +688,7 @@ def _enlace_con_filtro(filtros: Filtros, clave: str, valor: str) -> str:
         "etiquetas": filtros.etiquetas,
         "leido": filtros.leido,
         "orden": "" if filtros.orden == "titulo" else filtros.orden,
+        "coleccion": filtros.coleccion,
         "vista": "lista" if filtros.vista == "lista" else "",
         clave: valor,
         "page": "1",
@@ -683,14 +708,16 @@ async def _buscar(filtros: Filtros, clave: str, encontrados: list) -> list[tuple
 async def buscar_personaje(
     request: Request, personaje: str = "", q: str = "", tradition: str = "",
     publisher_id: str = "", character_id: str = "", story_arc_id: str = "",
-    vista: str = "", etiquetas: str = "", db: AsyncSession = Depends(get_db),
+    vista: str = "", etiquetas: str = "", coleccion: str = "",
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(personaje)
     if not texto and q:
         # Compatibilidad con el contrato anterior (`?q=` era el texto del buscador).
         texto, q = _texto_buscador(q), ""
     filtros = _leer_filtros(
-        1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
+        1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
+        coleccion=coleccion)
     service = SeriesService(db)
     encontrados: list = []
     try:
@@ -709,13 +736,15 @@ async def buscar_personaje(
 async def buscar_saga(
     request: Request, saga: str = "", q: str = "", tradition: str = "",
     publisher_id: str = "", character_id: str = "", story_arc_id: str = "",
-    vista: str = "", etiquetas: str = "", db: AsyncSession = Depends(get_db),
+    vista: str = "", etiquetas: str = "", coleccion: str = "",
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(saga)
     if not texto and q:
         texto, q = _texto_buscador(q), ""
     filtros = _leer_filtros(
-        1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
+        1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
+        coleccion=coleccion)
     service = SeriesService(db)
     encontrados: list = []
     try:
