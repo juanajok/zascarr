@@ -1654,19 +1654,23 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .resumen-biblioteca { margin-bottom: 14px; }
 .recuento-biblioteca { margin: 0 0 8px; }
 .filtros-activos {
-  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
   margin: 0 0 8px; padding: 0; list-style: none;
 }
-.filtro-activo { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
-.filtro-activo .chip { white-space: normal; text-align: left; }
-.quitar-filtro,
-.limpiar-filtros {
-  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px;
-  font-size: .875rem; font-weight: 700; color: var(--ink);
-  text-decoration: underline; text-underline-offset: 3px;
+.filtro-activo { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.filtro-chip { background: var(--paper); color: var(--ink); font-weight: 400; white-space: normal; text-align: left; }
+.filtro-chip-neg { border-style: dashed; }
+.quitar-filtro {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; min-width: 44px; min-height: 44px;
+  border: 2px solid var(--ink); border-radius: var(--radius-pill);
+  background: var(--paper); color: var(--ink); text-decoration: none;
 }
-.quitar-filtro:hover,
-.limpiar-filtros:hover { background: var(--yellow); color: var(--on-yellow); }
+.quitar-filtro .ico-svg { width: 18px; height: 18px; }
+.quitar-filtro:hover { background: var(--yellow); color: var(--on-yellow); }
+.quitar-filtro:focus-visible, .limpiar-filtros:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.limpiar-filtros { text-decoration: none; min-height: 44px; }
+.limpiar-filtros:hover { text-decoration: none; }
 
 /* ── Filtro de «Pendientes por carpeta» (#397, revisión UI/UX) ───────────────
    Cada campo es una celda de rejilla con su etiqueta encima; el único filtro de

@@ -226,7 +226,7 @@ class TestFiltrosActivosYRecuento:
         assert "2 series coinciden con estos filtros." in r.text
         assert "Tradición: Tebeo español" in r.text
         assert "Búsqueda: «thorgal»" in r.text
-        assert 'aria-label="Quitar filtro Tradición: Tebeo español"' in r.text
+        assert 'aria-label="Quitar filtro: Tradición: Tebeo español"' in r.text
         assert "Limpiar filtros" in r.text
 
     def test_quitar_un_filtro_conserva_los_demas(self):

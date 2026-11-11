@@ -41,24 +41,26 @@
       {% if request.headers.get("HX-Request") == "true" and quitar_valido %}tabindex="-1" autofocus{% endif %}>
     {% for f in filtros_activos %}
     <li class="filtro-activo">
-      {{ ui.chip("info", f.etiqueta) }}
+      <span class="chip filtro-chip">{{ f.etiqueta }}</span>
       <a class="quitar-filtro" href="{{ f.url_quitar }}"
          hx-get="{{ f.url_quitar_fragmento }}" hx-target="#rejilla"
          hx-swap="innerHTML"
-         aria-label="Quitar filtro {{ f.etiqueta }}">Quitar</a>
+         aria-label="Quitar filtro: {{ f.etiqueta }}"
+         title="Quitar filtro: {{ f.etiqueta }}">{{ icono("x") }}</a>
     </li>
     {% endfor %}
     {% for e in etiquetas_activas %}
     <li class="filtro-activo filtro-etiqueta">
-      {{ ui.chip("warn" if e.negativa else "info", ("Sin " if e.negativa else "") ~ e.nombre) }}
+      <span class="chip filtro-chip{% if e.negativa %} filtro-chip-neg{% endif %}">{{ ("Sin " if e.negativa else "") ~ e.nombre }}</span>
       <a class="quitar-filtro" href="{{ e.url_quitar }}"
          hx-get="{{ e.url_quitar_fragmento }}" hx-target="#rejilla"
          hx-swap="innerHTML"
-         aria-label="Quitar etiqueta {{ e.nombre }}">Quitar</a>
+         aria-label="Quitar filtro: {{ 'Sin ' if e.negativa else '' }}{{ e.nombre }}"
+         title="Quitar filtro: {{ 'Sin ' if e.negativa else '' }}{{ e.nombre }}">{{ icono("x") }}</a>
     </li>
     {% endfor %}
     <li>
-      <a class="limpiar-filtros" href="{{ url_limpiar }}"
+      <a class="btn ghost sm limpiar-filtros" href="{{ url_limpiar }}"
          hx-get="{{ url_limpiar_fragmento }}" hx-target="#rejilla"
          hx-swap="innerHTML">Limpiar filtros</a>
     </li>
