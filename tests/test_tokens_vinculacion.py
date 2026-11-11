@@ -40,7 +40,7 @@ def vinc(*archivos: ArchivoFirmado, clave=CLAVE) -> VinculacionFirmada:
 
 
 def datos(**cambios) -> dict:
-    base = {"version": 2, "serie_id": SERIE, "operacion": OP, "archivos": [
+    base = {"version": 3, "serie_id": SERIE, "operacion": OP, "archivos": [
         {"id": str(uuid4()), "numero": "3", "formato": "single_issue", "tamano": 10, "mtime_ns": 5, "conflictos": []}]}
     return {**base, **cambios}
 
@@ -160,8 +160,8 @@ class TestEsquemaConFirmaValida:
 class TestVersionYConflictos:
     """Ausencia de `conflictos` NO significa «ninguno»: el token es versionado y los tokens de 2c se rechazan."""
 
-    @pytest.mark.parametrize("version", [None, 1, 3, 0, "2", True, 2.0, [], {}])
-    def test_solo_la_version_2(self, version):
+    @pytest.mark.parametrize("version", [None, 1, 2, 0, "3", True, 3.0, [], {}])
+    def test_solo_la_version_3(self, version):
         assert verificar_token_vinculacion(firmado(datos(version=version)), SECRETO) is None
 
     def test_un_token_de_2c_sin_version_ni_conflictos_se_rechaza(self):

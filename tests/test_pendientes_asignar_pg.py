@@ -282,3 +282,60 @@ class TestRespuestasExhaustivas:
         from types import SimpleNamespace
         resp = interpretar(SimpleNamespace(estado="inventado", motivo="x", destino=None))
         assert resp.status == 500 and "no se ha tocado" not in resp.texto
+
+
+class TestEspecialSinNumero:
+    """ADR 0016: vía manual para un especial/tomo sin número, sin mover el archivo."""
+
+    async def test_crea_issue_null_y_no_mueve_el_archivo(self, mundo, cliente_de):
+        before = str(mundo.origen)
+        async with cliente_de() as c:
+            r = await c.post(
+                f"/ui/pendientes/{mundo.file_id}/especial",
+                data={"series_id": str(mundo.serie_id), "titulo": "Bad Weekend",
+                      "formato": "graphic_novel"},
+                headers=HTMX,
+            )
+        assert r.status_code == 200 and r.text == RECONTAR_MENU
+        async with mundo.fabrica() as s:
+            issue = (await s.execute(text(
+                "SELECT issue_number, title, format::text FROM issues "
+                "WHERE id = (SELECT issue_id FROM files WHERE id = :f)"
+            ), {"f": mundo.file_id})).one()
+            path = (await s.execute(text("SELECT file_path FROM files WHERE id = :f"),
+                                    {"f": mundo.file_id})).scalar_one()
+        assert issue.issue_number is None
+        assert issue.title == "Bad Weekend"
+        assert issue.format == "graphic_novel"
+        assert path == before
+
+    async def test_single_issue_se_rechaza_y_el_archivo_sigue_pendiente(self, mundo, cliente_de):
+        async with cliente_de() as c:
+            r = await c.post(
+                f"/ui/pendientes/{mundo.file_id}/especial",
+                data={"series_id": str(mundo.serie_id), "titulo": "Bad Weekend",
+                      "formato": "single_issue"},
+                headers=HTMX,
+            )
+        assert r.status_code == 400
+        assert 'id="card-' in r.text and "single_issue" in r.text
+        async with mundo.fabrica() as s:
+            issue_id = (await s.execute(text("SELECT issue_id FROM files WHERE id = :f"),
+                                        {"f": mundo.file_id})).scalar_one()
+        assert issue_id is None
+
+    async def test_titulo_vacio_se_rechaza(self, mundo, cliente_de):
+        async with cliente_de() as c:
+            r = await c.post(
+                f"/ui/pendientes/{mundo.file_id}/especial",
+                data={"series_id": str(mundo.serie_id), "titulo": "   ", "formato": "graphic_novel"},
+                headers=HTMX,
+            )
+        assert r.status_code == 400 and 'id="card-' in r.text
+
+    async def test_la_busqueda_muestra_la_accion_de_especial(self, mundo, cliente_de):
+        async with cliente_de() as c:
+            r = await c.get(f"/ui/pendientes/{mundo.file_id}/buscar-serie", params={"q": "Saga"})
+        assert r.status_code == 200
+        assert "Vincular como especial sin número" in r.text
+        assert f'hx-post="/ui/pendientes/{mundo.file_id}/especial"' in r.text

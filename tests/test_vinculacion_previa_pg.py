@@ -255,7 +255,7 @@ class TestSeleccionYToken:
         c = (await previsualizar(serie, marcados=list(ids.values()))).json()
         from zascarr.services.tokens_revision import verificar_token
         datos = verificar_token(c["token"], "vincular", CLAVE, SECRETO)
-        assert datos["version"] == 2 and all("conflictos" in a for a in datos["archivos"])
+        assert datos["version"] == 3 and all("conflictos" in a for a in datos["archivos"])
         firmados = {a.id: a.conflictos for a in verificar_token_vinculacion(c["token"], SECRETO).archivos}
         assert firmados[str(ids["Flash 01 (1987).cbz"])] == () and firmados[str(ids["Flash 10 (1999).cbz"])]
         vistos = {s["codigo"] for a in c["archivos"] if a["nombre"] == "Flash 10 (1999).cbz" for s in a["conflictos"] if s["severidad"] == "conflicto"}
@@ -370,7 +370,8 @@ class TestEstados:
             await s.commit()
         await archivos(entorno, "Flash 03 (1987).cbz")
         a = (await previsualizar(serie)).json()["archivos"][0]
-        assert (a["estado"], a["marcable"], a["issue_existente"]) == ("se_vincularia", True, True)
+        assert (a["estado"], a["marcable"], a["issue_existente"]) == ("se_vincularia", False, True)
+        assert len(a["candidatas"]) == 1
 
     async def test_colision_de_edicion(self, entorno):
         """Mismo número que un `Issue` de la serie con otra edición (B15: grapa #12 frente a Omnigold 12)."""

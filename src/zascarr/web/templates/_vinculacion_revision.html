@@ -2,7 +2,8 @@
     estado «pendiente» de la revisión anterior desaparecen con él. -#}
 <div id="revision" class="vinculacion">
 {% if error %}
-{{ ui.aviso("warn", error) }}
+{{ ui.aviso("warn", error, foco=true) }}
+<p><a class="btn ghost sm" href="{{ url_reabrir or url_reabrir_vista }}">Volver a abrir la vista previa</a></p>
 {% else %}
 {% set s = r.serie %}
 <form id="vinculacion-form" method="post" action="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/revisar') }}"
@@ -28,7 +29,7 @@
     <p class="vinc-contexto">Vas a preparar los archivos de esta carpeta para «{{ s.titulo }}{% if s.anio %} ({{ s.anio }}){% endif %}», una serie que ya está en tu biblioteca. Esta pantalla no vincula nada hasta que lo confirmes.</p>
     <p class="vinc-alcance">Lo que marques y escribas vale <strong>solo para los archivos de esta página</strong>.</p>
     {% if texto_de_la_pagina %}<details class="vinc-detalle"><summary>Más detalle de las páginas</summary><p>{{ texto_de_la_pagina }}</p></details>{% endif %}
-    {% for a in avisos %}{{ ui.aviso("amber", a) }}{% endfor %}
+    {% for a in avisos %}{{ ui.aviso("amber", a, foco=loop.first) }}{% endfor %}
     {% for av in r.avisos_de_grupo %}{{ ui.aviso("amber", av.texto) }}{% endfor %}
   </section>
 
@@ -94,6 +95,50 @@
       {% endif %}
 
       <p class="vinc-texto">{{ texto_legible(a.texto) }}</p>
+
+      {% if a.candidatas %}
+      <fieldset class="vinc-candidatas">
+        <legend>¿Cuál de estas publicaciones es?</legend>
+        {% if a.candidatas | length == 1 %}
+        <p class="caption">Esta es la única publicación con ese número. Confírmala si es la correcta; no se elige sola.</p>
+        {% else %}
+        <p class="caption">Hay varias publicaciones con este número. Elige la que corresponda; no se elige sola.</p>
+        {% endif %}
+        <input type="hidden" name="token_eleccion:{{ a.id }}" value="{{ a.token_eleccion }}">
+        {% if a.eleccion %}
+        <p class="vinc-eleccion" role="status">Elegida: Publicación {{ a.eleccion.numero }} · {{ formatos.get(a.eleccion.formato, a.eleccion.formato) }}. La vinculación sigue pendiente hasta que la confirmes.</p>
+        <button type="button" class="btn ghost sm"
+                hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/elegir') }}"
+                hx-vals='{{ {"accion_eleccion": "quitar:" ~ a.id}|tojson }}'
+                hx-include="closest form" hx-target="#revision" hx-swap="outerHTML">Quitar la elección</button>
+        {% endif %}
+        <ul class="vinc-candidatas-lista">
+          {% for c in a.candidatas %}
+          <li class="vinc-candidata{% if a.eleccion and a.eleccion.issue_id == c.issue_id %} elegida{% endif %}">
+            <input type="radio" name="candidata:{{ a.id }}" id="cand-{{ a.id }}-{{ c.issue_id }}"
+                   value="{{ c.candidate_id }}"{% if a.eleccion and a.eleccion.issue_id == c.issue_id %} checked{% endif %}
+                   {% if not c.elegible %}disabled{% endif %}
+                   required>
+            <label for="cand-{{ a.id }}-{{ c.issue_id }}">
+              Publicación {{ c.numero }} · {{ formatos.get(c.formato, c.formato) }}{% if c.volumen is not none %} · volumen {{ c.volumen }} (registrado){% endif %}.
+              Serie: {{ s.titulo }}{% if s.anio %} ({{ s.anio }}){% endif %} · Editorial: {{ c.editorial or "No consta" }} · Sello: {{ c.sello or "No consta" }} · Tradición: {{ tradiciones.get(c.tradicion, c.tradicion) }} · Fuente: {{ fuentes.get(c.source, c.source or "No consta") }}{% if c.external_id %} · ID de fuente: {{ c.external_id }}{% else %} · ID de fuente: no consta{% endif %}{% if c.con_archivos %} · ya tiene {{ c.con_archivos }} archivo{{ "s" if c.con_archivos != 1 }}{% endif %}
+            </label>
+            {% if not c.elegible %}<p class="caption vinc-motivo">{{ c.motivo or "No se puede elegir esta publicación con los datos disponibles." }}</p>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% if a.candidatas | selectattr("elegible") | list %}
+        <button type="button" class="btn ghost sm"
+                hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/elegir') }}"
+                hx-vals='{{ {"accion_eleccion": a.id}|tojson }}'
+                hx-include="closest form" hx-target="#revision" hx-swap="outerHTML">Elegir publicación seleccionada</button>
+        {% else %}
+        <p class="caption">No puedo distinguir estas publicaciones con los datos que tengo. No elijo por ti: déjalo para después o revísalo a mano.</p>
+        <p><a class="btn ghost sm" href="/ui/pendientes/carpetas">Dejarlo para después</a>
+           <a class="btn ghost sm" href="/ui/pendientes">Volver a Pendientes</a></p>
+        {% endif %}
+      </fieldset>
+      {% endif %}
 
       {% if a.motivos and a.motivos | length > 1 %}
       {% set otros_motivos = motivos_legibles(a.motivos[1:]) %}

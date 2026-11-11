@@ -333,7 +333,20 @@ class VinculacionDeArchivos:
                        resultados: dict[str, dict]) -> None:
         db = self._db
         f = filas[a.id]
-        issues = await self._issues_de(serie_id, clave)
+        if a.issue_id_elegida:
+            # H2 (#183): la persona eligió esta publicación. Se revalida aquí, con el archivo bloqueado.
+            elegida = (await db.execute(
+                select(Issue.id, Issue.issue_number, Issue.format)
+                .where(Issue.id == UUID(a.issue_id_elegida),
+                       Issue.series_id == serie_id,
+                       func.lower(Issue.issue_number) == clave)
+                .with_for_update())).first()
+            if elegida is None:
+                resultados[a.id] = self._fila(a, "omitido", "candidata_desaparecida")
+                return
+            issues = [elegida]
+        else:
+            issues = await self._issues_de(serie_id, clave)
         if len(issues) > 1:
             resultados[a.id] = self._fila(a, "omitido", "numero_ambiguo")       # no se adivina cuál; no se toca ninguno
             return
@@ -394,7 +407,8 @@ class VinculacionDeArchivos:
         }
         r = await self._db.execute(text(
             "UPDATE files SET issue_id = :i, metadata_source = 'manual', "
-            "metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('vinculo', CAST(:v AS jsonb)) "
+            "metadata = (coalesce(metadata, '{}'::jsonb) || jsonb_build_object('vinculo', CAST(:v AS jsonb)))"
+            " - 'publicacion_identificada' "
             "WHERE id = :f AND issue_id IS NULL"),
             {"i": issue_id, "v": json.dumps(vinculo, ensure_ascii=False), "f": a.id})
         if r.rowcount != 1:
