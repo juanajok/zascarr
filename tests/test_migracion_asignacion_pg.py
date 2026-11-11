@@ -12,7 +12,7 @@ import re
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import insert, select, text
+from sqlalchemy import insert, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -26,7 +26,6 @@ from zascarr.models import (
     File,
     FileFormat,
     Issue,
-    LocalAlias,
     MetadataSource,
     Series,
 )
@@ -416,7 +415,6 @@ async def sembrar_a_0016(url: str) -> dict:
         f_ignorado = File(id=uuid4(), file_path="/lib/_Unsorted/suelto.cbz", file_name="suelto.cbz",
                           file_format=FileFormat.CBZ, sha256_hash="b" * 64, review_dismissed=True,
                           metadata_={"match_status": "unsorted", "review_motivo": "colision"})
-        alias = LocalAlias(pattern_norm="saga del faro", series_id=serie.id)
         deseo = Wishlist(id=uuid4(), series_id=serie.id, status=WishlistStatus.WANTED)
         s.add(serie)
         await s.flush()
@@ -432,7 +430,13 @@ async def sembrar_a_0016(url: str) -> dict:
             id=f_ignorado.id, file_path=f_ignorado.file_path, file_name=f_ignorado.file_name,
             file_format=FileFormat.CBZ, sha256_hash="b" * 64, review_dismissed=True,
             metadata={"match_status": "unsorted", "review_motivo": "colision"}))
-        s.add_all([alias, deseo])
+        # LocalAlias también tiene columnas posteriores a 0016 (0026): INSERT Core
+        # solo con las columnas que existen en esa revisión.
+        await s.execute(text(
+            "INSERT INTO local_aliases (id, pattern_norm, series_id) "
+            "VALUES (:id, :patron, :serie)"),
+            {"id": uuid4(), "patron": "saga del faro", "serie": serie.id})
+        s.add(deseo)
         await s.commit()
         ids = {"serie": serie.id, "manual": manual.id, "f_manual": f_manual.id, "f_ignorado": f_ignorado.id}
     await motor.dispose()
@@ -456,7 +460,8 @@ async def foto(url: str, ids: dict) -> dict:
             series=(await s.execute(text("SELECT count(*) FROM series"))).scalar(),
             issues=(await s.execute(text("SELECT count(*) FROM issues"))).scalar(),
             files=(await s.execute(text("SELECT count(*) FROM files"))).scalar(),
-            alias=[a.pattern_norm for a in (await s.execute(select(LocalAlias))).scalars()],
+            alias=[r[0] for r in (await s.execute(text(
+                "SELECT pattern_norm FROM local_aliases"))).all()],
             wishlist=(await s.execute(text("SELECT count(*) FROM wishlist"))).scalar(),
             f_manual=(f_m.file_path, f_m.issue_id, f_m.metadata_source, f_m.sha256_hash),
             f_ignorado=(f_i.review_dismissed, dict(f_i.metadata)),
