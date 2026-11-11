@@ -250,3 +250,22 @@ async def test_candidatas_indistinguibles_pintan_su_motivo(entorno):
                for c in fila["candidatas"])
     html = (await previsualizar(serie)).text
     assert "No se puede distinguir de las demás con estos datos." in html
+
+
+@pytest.mark.asyncio
+async def test_el_motivo_de_la_candidata_no_elegible_se_pinta_en_la_tarjeta(entorno):
+    serie = await serie_de_prueba(entorno)
+    async with entorno.banco.fabrica() as s:
+        for _ in range(2):
+            await s.execute(text(
+                "INSERT INTO issues (id, series_id, issue_number, volume, format) "
+                "VALUES (:i, :s, '1', NULL, 'single_issue')"),
+                {"i": str(uuid4()), "s": str(serie)})
+        await s.commit()
+    await archivos(entorno, "Flash 1 (1987).cbz")
+    async with cliente() as c:
+        r = await c.get(
+            "/ui/pendientes/carpetas/asistente/vinculacion",
+            params={"clave": "Comics/Flash (1987)", "series_id": str(serie)})
+    assert r.status_code == 200
+    assert "No se puede distinguir de las demás con estos datos." in r.text
