@@ -1038,3 +1038,89 @@ class TestEnriquecimientoEnFicha:
         assert "Revisar cambios de datos" in r.text
         assert f'action="/ui/series/{series.id}/enriquecimiento/previsualizar"' in r.text
         assert "No se aplica nada hasta que lo confirmes" in r.text
+
+
+class TestEstadoColeccionWK2:
+    """#340/BL-WK2: decisión reversible y exclusión de faltas en la ficha."""
+
+    def test_marcar_no_completar_guarda_jsonb_sin_tocar_politica(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.NONE
+        session = FakeSession([FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/coleccion",
+                            data={"accion": "no_completar"}, follow_redirects=False)
+        assert r.status_code == 303
+        assert series.metadata_["coleccion"]["no_completar"] is True
+        assert series.metadata_["coleccion"]["version"] == 1
+        assert series.wishlist_policy == WishlistPolicy.NONE
+
+    def test_conflicto_d8_no_escribe_y_pide_confirmacion(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/coleccion",
+                            data={"accion": "no_completar"}, follow_redirects=False)
+        assert r.status_code == 303
+        assert "coleccion=conflicto" in r.headers["location"]
+        assert not (series.metadata_ or {}).get("coleccion")
+        assert series.wishlist_policy == WishlistPolicy.MISSING
+
+    def test_confirmar_conflicto_guarda_sin_cambiar_politica(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.ALL
+        session = FakeSession([FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/coleccion",
+                            data={"accion": "no_completar", "confirmar": "si"},
+                            follow_redirects=False)
+        assert r.status_code == 303
+        assert series.metadata_["coleccion"]["no_completar"] is True
+        assert series.wishlist_policy == WishlistPolicy.ALL
+
+    def test_revertir_deshace_la_decision_sin_tocar_politica(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        series.metadata_ = {"coleccion": {"no_completar": True, "version": 1}}
+        session = FakeSession([FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/coleccion",
+                            data={"accion": "revertir"}, follow_redirects=False)
+        assert r.status_code == 303
+        assert series.metadata_["coleccion"]["no_completar"] is False
+        assert series.wishlist_policy == WishlistPolicy.MISSING
+
+    def test_conflicto_d8_se_explica_y_ofrece_confirmacion(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([]),
+            FakeExecResult([]),
+            FakeExecResult([]),
+            acuse(), *sin_otras(), retirados(), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}?coleccion=conflicto")
+        assert r.status_code == 200
+        assert "la política no se cambia sola" in r.text
+        assert "Sí, no la voy a completar" in r.text
+        assert 'name="confirmar" value="si"' in r.text
+
+    def test_ficha_no_los_muestra_como_faltas(self):
+        from zascarr.services.coleccion import marcar_no_completar
+        series = make_series(total_issues=3)
+        marcar_no_completar(series)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([]),
+            acuse(), retirados(), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert "No la vas a completar" in r.text
+        assert "Volver a completarla" in r.text
+        assert "<h2>Te faltan</h2>" not in r.text
+        assert "No la vas a completar. Sus huecos no cuentan como faltas" in r.text

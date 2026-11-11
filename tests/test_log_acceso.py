@@ -367,6 +367,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "offset",
     # BL-INF11 (#628): criterio de orden de la biblioteca.
     "orden",
+    # BL-WK2 (#340): estado derivado de la colección (estado de la vista).
+    "coleccion",
     # MIT-M7 (#130-b): contexto declarado (ruta, aviso y valores del formulario).
     "aviso", "incluir", "tipo", "error",
     # MIT-M7 (#131-b): declaración de origen y filtro del buscador de correspondencias.
