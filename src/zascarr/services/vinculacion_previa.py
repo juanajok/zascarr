@@ -482,7 +482,8 @@ class VistaPreviaDeVinculacion:
         # ── H1/H2 (#183): candidatas y elección explícita ──
         actualizadas: list[ArchivoVinculacion] = []
         for f in salida:
-            if f.estado != "numero_ambiguo" or not f.numero:
+            unica = bool(f.issue_existente and not f.motivos)
+            if (f.estado != "numero_ambiguo" and not unica) or not f.numero:
                 actualizadas.append(f)
                 continue
             candidatas = await self._candidatas(serie, f.numero)
@@ -506,6 +507,12 @@ class VistaPreviaDeVinculacion:
                     "estado": "se_vincularia", "motivos": [], "marcable": True,
                     "incluido_en_token": f.marcado,
                     "texto": "Publicación elegida: esta es la que se usará cuando confirmes la vinculación.",
+                })
+            elif unica:
+                # Una sola candidata tampoco se aplica sola: primero se confirma cuál es.
+                cambios.update({
+                    "marcable": False, "incluido_en_token": False,
+                    "texto": "Confirma cuál es la publicación antes de vincularla; no se elige sola.",
                 })
             actualizadas.append(f.model_copy(update=cambios))
         salida = actualizadas

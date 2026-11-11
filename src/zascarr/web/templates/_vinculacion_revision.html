@@ -98,7 +98,11 @@
       {% if a.candidatas %}
       <fieldset class="vinc-candidatas"{% if a.eleccion %} tabindex="-1" autofocus{% endif %}>
         <legend>¿Cuál de estas publicaciones es?</legend>
+        {% if a.candidatas | length == 1 %}
+        <p class="caption">Esta es la única publicación con ese número. Confírmala si es la correcta; no se elige sola.</p>
+        {% else %}
         <p class="caption">Hay varias publicaciones con este número. Elige la que corresponda; no se elige sola.</p>
+        {% endif %}
         <input type="hidden" name="token_eleccion:{{ a.id }}" value="{{ a.token_eleccion }}">
         {% if a.eleccion %}
         <p class="vinc-eleccion" role="status">Elegida: Publicación {{ a.eleccion.numero }} · {{ formatos.get(a.eleccion.formato, a.eleccion.formato) }}. La vinculación sigue pendiente hasta que la confirmes.</p>
