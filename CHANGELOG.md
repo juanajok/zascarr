@@ -61,6 +61,8 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   y se atribuye CC BY-SA 4.0; Open Library enlaza su ficha. Por ahora ambas son **solo Descubrir**:
   no se integran en el enricher. La decisión previa que descartaba Metron como fuente queda reabierta
   y registrada en `docs/design/benchmark-metron-openlibrary-2026-11-11.md`.
+- **Metron tiene «Probar conexión» en Ajustes.** Prueba el token del formulario o el guardado con
+  una búsqueda de una página, sin guardar ni tocar la biblioteca; el token no se registra.
 - **Vistas de trabajo predefinidas (BL-R7, #236).** Nueva pantalla «Vistas de trabajo» con cinco
   consultas vivas y su recuento: **sin identificar**, **identificación dudosa**, **con
   discrepancias**, **no disponibles** y **con varias variantes** (publicaciones con más de un
