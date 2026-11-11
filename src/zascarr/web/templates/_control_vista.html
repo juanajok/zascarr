@@ -1,0 +1,7 @@
+<a id="control-vista" class="barra-vista" href="{{ url_vista_tarjetas if filtros.vista == 'lista' else url_vista_lista }}"
+   hx-get="{{ url_vista_tarjetas_fragmento if filtros.vista == 'lista' else url_vista_lista_fragmento }}"
+   hx-target="#rejilla" hx-swap="innerHTML"
+   title="{{ 'Ver como tarjetas' if filtros.vista == 'lista' else 'Ver como lista' }}"
+   {% if oob %}hx-swap-oob="true"{% endif %}>
+  {{ "Tarjetas" if filtros.vista == "lista" else "Lista" }}
+</a>

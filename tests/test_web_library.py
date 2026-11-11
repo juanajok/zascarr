@@ -227,7 +227,7 @@ class TestFiltrosActivosYRecuento:
         assert "Tradición: Tebeo español" in r.text
         assert "Búsqueda: «thorgal»" in r.text
         assert 'aria-label="Quitar filtro Tradición: Tebeo español"' in r.text
-        assert "Limpiar todos" in r.text
+        assert "Limpiar filtros" in r.text
 
     def test_quitar_un_filtro_conserva_los_demas(self):
         publisher_id = uuid4()
@@ -257,7 +257,7 @@ class TestFiltrosActivosYRecuento:
             r = client.get("/ui/biblioteca/resultados?tradition=tebeo")
         assert 'href="/ui/biblioteca?page=1"' in r.text
         assert "quitar=todos" in r.text
-        assert "Limpiar todos" in r.text
+        assert "Limpiar filtros" in r.text
 
     def test_retirar_el_chip_de_busqueda_limpia_el_campo_fuera_de_banda(self):
         """El campo de título vive fuera de #rejilla: si no se limpia, queda
@@ -576,13 +576,8 @@ class TestVistaLista:
         assert "<caption class=\"sr\">Series de la biblioteca</caption>" in r.text
         for cabecera in ("Título", "Año", "Tradición", "Números"):
             assert f'<th scope="col">{cabecera}</th>' in r.text
-        assert re.search(
-            r'class="library-vista library-vista-actual"[^>]*aria-current="true">Lista</a>',
-            r.text,
-        )
-        assert re.search(
-            r'class="library-vista"\s+href="/ui/biblioteca\?page=1"\s*>Tarjetas</a>', r.text,
-        )
+        assert 'class="barra-vista"' in r.text
+        assert "Ver como tarjetas" in r.text
 
     def test_valor_desconocido_no_se_convierte_en_cero(self):
         series = make_series("Sin datos")

@@ -1,0 +1,13 @@
+{% if oob %}
+<span id="contador-texto" hx-swap-oob="true">
+  <span aria-hidden="true">{{ contador_corto }}</span>
+  <span class="sr">{{ contador_largo }}</span>
+</span>
+{% else %}
+<div id="contador-biblioteca" class="barra-contador" role="status" aria-live="polite" aria-atomic="true">
+  <span id="contador-texto">
+    <span aria-hidden="true">{{ contador_corto }}</span>
+    <span class="sr">{{ contador_largo }}</span>
+  </span>
+</div>
+{% endif %}
