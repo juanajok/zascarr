@@ -206,7 +206,13 @@ EDITION_NUMBER_PATTERN = re.compile(
 # se leía entero como serie "01" — el guion sin más se confundía con el
 # separador de subtítulo, que se queda con el primer trozo ("01").
 SORT_PREFIX_PATTERN = re.compile(r"^\s*\d{1,3}[a-zA-Z]?\s*\.?\s*-\s*")
-ANNUAL_PATTERN = re.compile(r"\b(?:Annual|Anual|Especial)\b", re.IGNORECASE)
+# Annual/Anual y Especial NO son la misma cosa. Un anual es una publicación
+# con numeración propia dentro de la colección (Metron, GCD y Comic Vine lo
+# publican como serie/volumen propio); «Especial» es una marca de edición que,
+# por ahora, sigue colgando de la serie madre. Mezclarlos fue lo que convirtió
+# «Batman Annual 01» en el nº 1 de «Batman».
+ANNUAL_PATTERN = re.compile(r"\b(?:Annual|Anual)\b", re.IGNORECASE)
+SPECIAL_PATTERN = re.compile(r"\bEspecial\b", re.IGNORECASE)
 FILE_EXT_PATTERN = re.compile(r"\.(cbz|cbr|cb7|pdf|epub)$", re.IGNORECASE)
 
 
@@ -217,7 +223,11 @@ class ParsedComicName:
     volume: int | None = None
     year: int | None = None
     format: str = ""
+    #: `Annual`/`Anual`: publicación con numeración propia; el título conserva
+    #: la palabra porque «Batman Annual» es la serie que hay que buscar.
     is_annual: bool = False
+    #: `Especial`: marca de edición que hoy sigue colgando de la serie madre.
+    is_special: bool = False
     extra_info: list[str] = field(default_factory=list)
     #: Parte que se descartaba como «título del número» cuando iba ANTES del número
     #: ("Superman - Godfall #01"). Sirve para no confundir colecciones distintas;
@@ -380,10 +390,20 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
 
     if ANNUAL_PATTERN.search(working):
         result.is_annual = True
-        # Y se quita del título: "Superman Vol2 Especial 2" es el especial
-        # nº 2 de Superman, no una serie llamada "Superman Especial" que
-        # no igualaría con nada. La condición de annual queda en el flag.
-        working = ANNUAL_PATTERN.sub(" ", working)
+        # NO se quita del título. «Batman Annual 01» es el nº 1 de la serie
+        # «Batman Annual», no el nº 1 de «Batman»: la palabra forma parte del
+        # título que el matcher tiene que buscar. Que sea anual lo dice el
+        # flag y, más adelante, la clasificación de la serie (no el número).
+        # Cambiar esto sin el flag haría que la serie anual no se encontrara
+        # nunca y el archivo volviera a caer en la madre.
+
+    if SPECIAL_PATTERN.search(working):
+        result.is_special = True
+        # «Superman Vol2 Especial 2» sigue siendo el especial nº 2 de
+        # Superman, no una serie llamada «Superman Especial». Hasta que la
+        # clasificación de series separe los especiales, se mantiene el
+        # comportamiento histórico: la marca se quita del título.
+        working = SPECIAL_PATTERN.sub(" ", working)
 
     marcador_volumen: str | None = None
     if result.volume is None:
@@ -538,4 +558,17 @@ def clave_de_coleccion(nombre: str) -> str:
     base = re.sub(r"\s+", " ", base).strip()
     if parsed.is_annual:
         base = (base + " anual").strip()
+    if parsed.is_special:
+        base = (base + " especial").strip()
     return base
+
+
+def es_titulo_de_anual(titulo: str) -> bool:
+    """¿El título de una serie es una línea anual («Batman Annual»)?
+
+    Es una heurística de TÍTULO, no una identidad: mientras no exista la
+    clasificación explícita de series (fase 1), el matcher la usa para no
+    aceptar la serie madre como candidata de un archivo anual. Una serie que
+    se llame «Annual» sin serlo se resolverá a mano; nunca se autoasigna.
+    """
+    return bool(ANNUAL_PATTERN.search(titulo or ""))
