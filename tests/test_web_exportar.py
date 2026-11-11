@@ -104,3 +104,26 @@ def test_descarga_streaming_coleccion_con_bom_y_privacidad(monkeypatch):
     assert r.content.startswith(BOM.encode("utf-8"))
     assert "Thorgal" in r.text
     assert "/tmp/" not in r.text and "file_path" not in r.text
+
+
+@pytest.mark.asyncio
+async def test_csv_neutraliza_formulas_sin_tocar_cabecera_bom_ni_crlf():
+    async def filas():
+        yield ("=1+1", "+SUM(A1)", "-2+3", "@comando", "  =Oculto", "\t+1", "Thorgal")
+
+    chunks = await _recoger(filas(), CABECERAS_COLECCION)
+    crudo = b"".join(chunks)
+    assert crudo.startswith(BOM.encode("utf-8"))
+    texto = crudo.decode("utf-8-sig")
+    lineas = texto.splitlines()
+    assert lineas[0] == "Serie,Año,Editorial,Tradición,Número,Título,Formato,Estado"
+    assert not lineas[0].startswith("'")
+    assert "\r\n" in texto
+    datos = lineas[1]
+    assert "'=1+1" in datos
+    assert "'+SUM(A1)" in datos
+    assert "'-2+3" in datos
+    assert "'@comando" in datos
+    assert "'  =Oculto" in datos
+    assert "'\t+1" in datos
+    assert "Thorgal" in datos and "'Thorgal" not in datos

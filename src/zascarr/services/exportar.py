@@ -37,6 +37,18 @@ CABECERAS_DESEADOS = (
     "Serie", "Número", "Estado", "Política de búsqueda", "Notas",
 )
 
+#: Fórmulas de hoja de cálculo: una celda que empiece por uno de estos caracteres
+#: (aunque lleve espacios delante) se ejecuta al abrir el CSV. Se neutraliza con
+#: un apóstrofo inicial, que Excel/LibreOffice tratan como texto literal.
+_INICIO_PELIGROSO = ("=", "+", "-", "@")
+
+
+def _celda_segura(valor: object | None) -> str:
+    texto = "" if valor is None else str(valor)
+    if texto.lstrip().startswith(_INICIO_PELIGROSO):
+        return "'" + texto
+    return texto
+
 TRADICION_ES = {
     ComicTradition.AMERICAN: "americana",
     ComicTradition.FRANCO_BELGIAN: "franco-belga",
@@ -141,7 +153,8 @@ async def generar_csv(
     buffer.seek(0)
     buffer.truncate(0)
     async for fila in filas:
-        writer.writerow(tuple(fila))
+        # Solo las celdas de datos: la cabecera no se toca y el BOM/CRLF se mantienen.
+        writer.writerow(tuple(_celda_segura(valor) for valor in fila))
         yield buffer.getvalue().encode("utf-8")
         buffer.seek(0)
         buffer.truncate(0)
