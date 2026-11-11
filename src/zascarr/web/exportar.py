@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from zascarr.database import async_session_factory
 from zascarr.services.exportar import (
     CABECERAS_COLECCION,
+    CABECERAS_COLECCION_CON_NOTAS,
     CABECERAS_DESEADOS,
     filas_coleccion,
     filas_deseados,
@@ -41,8 +42,11 @@ def _respuesta(filas_factory, cabeceras, nombre: str) -> StreamingResponse:
 
 
 @router.get("/exportar/coleccion.csv")
-async def exportar_coleccion() -> StreamingResponse:
-    return _respuesta(filas_coleccion, CABECERAS_COLECCION, "coleccion-zascarr.csv")
+async def exportar_coleccion(incluir_notas: bool = False) -> StreamingResponse:
+    cabeceras = CABECERAS_COLECCION_CON_NOTAS if incluir_notas else CABECERAS_COLECCION
+    return _respuesta(
+        lambda sesion: filas_coleccion(sesion, incluir_notas=incluir_notas),
+        cabeceras, "coleccion-zascarr.csv")
 
 
 @router.get("/exportar/deseados.csv")

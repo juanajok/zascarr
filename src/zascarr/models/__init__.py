@@ -903,6 +903,37 @@ class Wishlist(Base):
     issue:  Mapped["Issue|None"]  = relationship()
 
 
+class Note(Base):
+    """BL-WK4 (#342): nota libre de colección, de una serie o de un número.
+
+    Es una tabla propia a propósito: `ReadingProgress.notes` describe la lectura
+    y `Wishlist.notes` el deseo. Aquí solo hay texto de la persona y a qué
+    entidad pertenece; nunca usuario, IP ni HTML interpretado.
+    """
+    __tablename__ = "notes"
+    __table_args__ = (
+        CheckConstraint(
+            "(series_id IS NOT NULL) <> (issue_id IS NOT NULL)",
+            name="ck_notes_una_entidad"),
+        Index(
+            "uq_notes_series", "series_id", unique=True,
+            postgresql_where=text("series_id IS NOT NULL")),
+        Index(
+            "uq_notes_issue", "issue_id", unique=True,
+            postgresql_where=text("issue_id IS NOT NULL")),
+    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    series_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"))
+    issue_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"))
+    texto: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class ReadingProgress(Base):
     __tablename__ = "reading_progress"
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)

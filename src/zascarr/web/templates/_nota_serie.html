@@ -1,0 +1,37 @@
+{#- BL-WK4 (#342): notas de la serie y de sus números. Sin JS; autoescape. -#}
+{% if nota_serie or notas_numeros %}
+<section id="notas-serie" class="notas-serie" aria-labelledby="notas-serie-titulo">
+  <h2 id="notas-serie-titulo" class="titulo-frase">Notas</h2>
+  {% if nota_aviso %}{{ ui.aviso("ok" if nota_aviso in ("Nota guardada.", "Nota borrada.") else "amber", nota_aviso) }}{% endif %}
+  <form method="post" action="/ui/series/{{ series.id }}/nota" class="nota-form">
+    <label for="nota-serie-texto">Nota de la serie</label>
+    <textarea id="nota-serie-texto" name="texto" rows="3" maxlength="4000">{{ nota_serie.texto if nota_serie else "" }}</textarea>
+    <div class="nota-acciones">
+      <button class="btn ghost sm" type="submit">Guardar nota</button>
+      {% if nota_serie %}
+      <button class="btn ghost sm" type="submit" name="accion" value="borrar">Borrar nota</button>
+      {% endif %}
+    </div>
+  </form>
+  {% if notas_numeros %}
+  <h3>Notas de números</h3>
+  <ul class="notas-numeros">
+    {% for nota, issue in notas_numeros %}
+    <li>
+      <a href="/ui/series/{{ series.id }}/numero/{{ issue.id }}#nota-numero">Número {{ issue.issue_number or "sin número" }}</a>
+      <span class="nota-texto">{{ nota.texto }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% else %}
+<details id="notas-serie" class="notas-serie">
+  <summary>Añadir nota</summary>
+  <form method="post" action="/ui/series/{{ series.id }}/nota" class="nota-form">
+    <label for="nota-serie-texto">Nota de la serie</label>
+    <textarea id="nota-serie-texto" name="texto" rows="3" maxlength="4000"></textarea>
+    <button class="btn ghost sm" type="submit">Guardar nota</button>
+  </form>
+</details>
+{% endif %}

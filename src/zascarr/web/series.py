@@ -89,6 +89,18 @@ from zascarr.services.lectura import (
     marcar,
 )
 from zascarr.services.legal import is_acknowledged
+from zascarr.services.notas import (
+    NotaInvalidaError as NotaColeccionInvalidaError,
+)
+from zascarr.services.notas import (
+    borrar_numero,
+    borrar_serie,
+    guardar_numero,
+    guardar_serie,
+    leer_numero,
+    notas_de_serie,
+    numero_existe,
+)
 from zascarr.services.politica import (
     horas_minimas,
     pendientes_de_buscar,
@@ -427,7 +439,7 @@ async def _contexto_politica(db: AsyncSession, series: Series,
 
 @router.get("/{series_id}", response_class=HTMLResponse)
 async def detalle(series_id: UUID, request: Request, volver: str = Query(default=""),
-                  coleccion: str = Query(default=""),
+                  coleccion: str = Query(default=""), nota: str = Query(default=""),
                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = (await db.execute(
         select(Series)
@@ -455,6 +467,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
     # que ya consumían las consultas históricas de esta ruta.
     ficha = await cargar_ficha_serie(db, series_id)
     lecturas = await lecturas_de_serie(db, series_id)
+    nota_serie, notas_numeros = await notas_de_serie(db, series.id)
     sinopsis_visible, sinopsis_resto = partir_sinopsis(ficha.sinopsis) if ficha else ("", "")
     serie_vacia = bool(ficha) and not (ficha.sinopsis or series.publisher or series.start_year
                                        or series.end_year or ficha.autores)
@@ -465,6 +478,14 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
         "serie_vacia": serie_vacia,
         "missing": huecos.faltantes, "huecos": huecos,
+        "nota_serie": nota_serie,
+        "notas_numeros": notas_numeros,
+        "nota_aviso": {
+            "vacia": "La nota no puede estar vacía.",
+            "larga": "La nota es demasiado larga (máximo 4000 caracteres).",
+            "guardada": "Nota guardada.",
+            "borrada": "Nota borrada.",
+        }.get(nota, ""),
         "estado_coleccion": estado_coleccion,
         "aviso_coleccion": aviso_coleccion,
         "coleccion_exito": coleccion in ("guardado", "revertido"),
@@ -798,8 +819,49 @@ async def cambiar_politica(series_id: UUID, request: Request,
     )
 
 
+@router.post("/{series_id}/nota")
+async def guardar_nota_serie(
+    series_id: UUID, texto: str = Form(default=""),
+    accion: str = Form(default="guardar"), db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    await _serie_o_404(db, series_id)
+    try:
+        if accion == "borrar":
+            await borrar_serie(db, series_id)
+            destino = "borrada"
+        else:
+            await guardar_serie(db, series_id, texto)
+            destino = "guardada"
+    except NotaColeccionInvalidaError:
+        destino = "vacia" if not (texto or "").strip() else "larga"
+    return RedirectResponse(
+        url=f"/ui/series/{series_id}?nota={destino}#notas-serie", status_code=303)
+
+
+@router.post("/{series_id}/numero/{issue_id}/nota")
+async def guardar_nota_numero(
+    series_id: UUID, issue_id: UUID, texto: str = Form(default=""),
+    accion: str = Form(default="guardar"), db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    if not await numero_existe(db, series_id, issue_id):
+        raise HTTPException(status_code=404, detail="Número no encontrado")
+    try:
+        if accion == "borrar":
+            await borrar_numero(db, issue_id)
+            destino = "borrada"
+        else:
+            await guardar_numero(db, issue_id, texto)
+            destino = "guardada"
+    except NotaColeccionInvalidaError:
+        destino = "vacia" if not (texto or "").strip() else "larga"
+    return RedirectResponse(
+        url=f"/ui/series/{series_id}/numero/{issue_id}?nota={destino}#nota-numero",
+        status_code=303)
+
+
 @router.get("/{series_id}/numero/{issue_id}", response_class=HTMLResponse)
 async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
+                         nota: str = Query(default=""),
                          db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Ficha de un número: solo lectura, sin red y sin escrituras (#447)."""
     ficha = await cargar_ficha_numero(db, series_id, issue_id)
@@ -818,6 +880,13 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
         "estados_lectura": ((ReadingStatus.UNREAD, "Sin leer"),
                             (ReadingStatus.READING, "Leyendo"),
                             (ReadingStatus.COMPLETED, "Leído")),
+        "nota_numero": await leer_numero(db, issue_id),
+        "nota_aviso": {
+            "vacia": "La nota no puede estar vacía.",
+            "larga": "La nota es demasiado larga (máximo 4000 caracteres).",
+            "guardada": "Nota guardada.",
+            "borrada": "Nota borrada.",
+        }.get(nota, ""),
     })
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
