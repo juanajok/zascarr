@@ -44,11 +44,13 @@ from zascarr.services.etiquetas import (
     sugerencias_filtro,
 )
 from zascarr.services.series import SeriesService
+from zascarr.web.iconos import icono
 from zascarr.web.retorno import url_de_ficha
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
 templates = crear_templates()
+templates.env.globals["icono"] = icono
 
 router = APIRouter(prefix="/ui/biblioteca", tags=["ui"])
 
@@ -519,8 +521,8 @@ async def _contexto(
         "filtros": filtros_finales,
         "tradiciones": [(t.value, _TRADICION_LABEL[t]) for t in ComicTradition],
         "ordenes": (
-            ("titulo", "Título A-Z"), ("titulo_desc", "Título Z-A"),
-            ("anio_desc", "Año reciente"), ("anio_asc", "Año antiguo"),
+            ("titulo", "A-Z"), ("titulo_desc", "Z-A"),
+            ("anio_desc", "Recientes"), ("anio_asc", "Antiguas"),
             ("reciente", "Añadidas"),
         ),
         "vista": filtros_finales.vista,

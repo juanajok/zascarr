@@ -1,7 +1,21 @@
-<a id="control-vista" class="barra-vista" href="{{ url_vista_tarjetas if filtros.vista == 'lista' else url_vista_lista }}"
-   hx-get="{{ url_vista_tarjetas_fragmento if filtros.vista == 'lista' else url_vista_lista_fragmento }}"
-   hx-target="#rejilla" hx-swap="innerHTML"
-   title="{{ 'Ver como tarjetas' if filtros.vista == 'lista' else 'Ver como lista' }}"
-   {% if oob %}hx-swap-oob="true"{% endif %}>
-  {{ "Tarjetas" if filtros.vista == "lista" else "Lista" }}
-</a>
+<div id="control-vista" class="barra-vista" role="group" aria-label="Vista de la biblioteca"
+     {% if oob %}hx-swap-oob="true"{% endif %}>
+  <a class="barra-vista-opcion{% if filtros.vista != 'lista' %} barra-vista-opcion-actual{% endif %}"
+     href="{{ url_vista_tarjetas }}"
+     hx-get="{{ url_vista_tarjetas_fragmento }}"
+     hx-target="#rejilla" hx-swap="innerHTML"
+     {% if filtros.vista != 'lista' %}aria-current="page"{% endif %}
+     aria-label="Tarjetas" title="Vista de tarjetas">
+    <span class="barra-vista-icono" aria-hidden="true">{{ icono("grid") }}</span>
+    <span class="barra-vista-texto">Tarjetas</span>
+  </a>
+  <a class="barra-vista-opcion{% if filtros.vista == 'lista' %} barra-vista-opcion-actual{% endif %}"
+     href="{{ url_vista_lista }}"
+     hx-get="{{ url_vista_lista_fragmento }}"
+     hx-target="#rejilla" hx-swap="innerHTML"
+     {% if filtros.vista == 'lista' %}aria-current="page"{% endif %}
+     aria-label="Lista" title="Vista de lista">
+    <span class="barra-vista-icono" aria-hidden="true">{{ icono("list") }}</span>
+    <span class="barra-vista-texto">Lista</span>
+  </a>
+</div>
