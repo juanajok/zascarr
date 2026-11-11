@@ -123,6 +123,7 @@
               Publicación {{ c.numero }} · {{ formatos.get(c.formato, c.formato) }}{% if c.volumen is not none %} · volumen {{ c.volumen }} (registrado){% endif %}.
               Serie: {{ s.titulo }}{% if s.anio %} ({{ s.anio }}){% endif %} · Editorial: {{ c.editorial or "No consta" }} · Sello: {{ c.sello or "No consta" }} · Tradición: {{ tradiciones.get(c.tradicion, c.tradicion) }} · Fuente: {{ fuentes.get(c.source, c.source or "No consta") }}{% if c.external_id %} · ID de fuente: {{ c.external_id }}{% else %} · ID de fuente: no consta{% endif %}{% if c.con_archivos %} · ya tiene {{ c.con_archivos }} archivo{{ "s" if c.con_archivos != 1 }}{% endif %}
             </label>
+            {% if not c.elegible %}<p class="caption vinc-motivo">{{ c.motivo or "No se puede elegir esta publicación con los datos disponibles." }}</p>{% endif %}
           </li>
           {% endfor %}
         </ul>
