@@ -812,6 +812,8 @@ button[type="submit"].btn-sugerencia {
 
 /* D8: selector de política de búsqueda en la ficha de serie. */
 .politica-serie { margin-top: 28px; }
+.coleccion-serie { margin-top: 22px; display: grid; gap: 8px; }
+.coleccion-serie form { margin: 0; }
 .politica-form {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   margin: 10px 0 4px;

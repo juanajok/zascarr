@@ -56,10 +56,12 @@ class ResumenBiblioteca:
     huecos_pendientes: int
     completitud: Completitud | None
     ultimas_series: tuple[Series, ...]
+    #: Series con la decisión explícita «no la voy a completar» (BL-WK2, #340).
+    series_no_completar: int = 0
 
     @property
     def series_sin_recuento(self) -> int:
-        return self.total_series - self.series_con_recuento
+        return self.total_series - self.series_con_recuento - self.series_no_completar
 
 
 async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
@@ -89,8 +91,7 @@ async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
     # de grapas (ver `UNIDAD_DE_GRAPA`): sumar capítulos de AniList o "números"
     # de Tebeosfera con grapas sería mezclar unidades.
     series_totales = (await db.execute(
-        select(Series.id, Series.total_issues, Series.metadata_source)
-        .where(Series.total_issues.isnot(None))
+        select(Series.id, Series.total_issues, Series.metadata_source, Series.metadata_)
     )).all()
 
     poseidos_por_serie = await numeros_poseidos_por_serie(db)
@@ -98,7 +99,14 @@ async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
     huecos_pendientes = 0
     series_con_recuento = 0
     numeros_con_recuento = 0
-    for series_id, total, fuente in series_totales:
+    series_no_completar = 0
+    for fila in series_totales:
+        # Los dobles de prueba antiguos devuelven 3 columnas (sin metadata).
+        series_id, total, fuente = tuple(fila)[:3]
+        metadata = tuple(fila)[3] if len(tuple(fila)) > 3 else None
+        if isinstance(metadata, dict) and (metadata.get("coleccion") or {}).get("no_completar"):
+            series_no_completar += 1
+            continue
         if fuente not in UNIDAD_DE_GRAPA or not total:
             continue
         series_con_recuento += 1
@@ -138,4 +146,5 @@ async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
         huecos_pendientes=huecos_pendientes,
         completitud=completitud,
         ultimas_series=tuple(ultimas_series),
+        series_no_completar=series_no_completar,
     )

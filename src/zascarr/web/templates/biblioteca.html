@@ -43,6 +43,7 @@
     </select>
     <button class="btn ghost sm" type="submit">Aplicar orden</button>
   </div>
+  {% include "_selector_coleccion.html" %}
   <input type="hidden" name="character_id" value="{{ filtros.character_id }}">
   <input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
   <input type="hidden" name="page" value="1">
