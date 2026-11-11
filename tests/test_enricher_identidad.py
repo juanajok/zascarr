@@ -1,0 +1,34 @@
+"""#565 AC-22: campos de identidad estructurada en las respuestas de CV y AniList."""
+from __future__ import annotations
+
+from zascarr.services.anilist import _parse_media
+from zascarr.services.comic_vine import _parse_issue
+
+
+def test_cv_issue_lee_personajes_y_sagas_de_la_misma_respuesta():
+    issue = _parse_issue({
+        "id": 1, "issue_number": "1", "name": "Uno",
+        "character_credits": [{"id": 10, "name": "Barry Allen"}, {"id": 11, "name": "Iris West"}],
+        "story_arc_credits": [{"id": 20, "name": "Flashpoint"}],
+    })
+    assert issue.characters == ["Barry Allen", "Iris West"]
+    assert issue.story_arcs == ["Flashpoint"]
+
+
+def test_cv_issue_sin_campos_no_inventa():
+    issue = _parse_issue({"id": 2, "issue_number": "2"})
+    assert issue.characters == [] and issue.story_arcs == []
+
+
+def test_anilist_lee_generos_y_personajes_de_la_misma_peticion():
+    media = _parse_media({
+        "id": 3, "title": {"romaji": "Berserk"}, "genres": ["Action", "Horror"],
+        "characters": {"nodes": [{"name": {"full": "Guts"}}, {"name": {"full": "Griffith"}}]},
+    })
+    assert media.genres == ["Action", "Horror"]
+    assert media.characters == ["Guts", "Griffith"]
+
+
+def test_anilist_sin_campos_no_inventa():
+    media = _parse_media({"id": 4, "title": {"romaji": "X"}})
+    assert media.genres == [] and media.characters == []

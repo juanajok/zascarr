@@ -42,19 +42,27 @@ async def banco(url_bd):
 class Fuente:
     """Un cliente de fuente falso: anota lo que se le pregunta y siempre «encuentra» el mismo título."""
 
-    def __init__(self):
+    def __init__(self, *, genres=None, characters=None):
         self.consultas: list[str] = []
+        self.genres = list(genres or [])
+        self.characters = list(characters or [])
 
     async def search_series(self, titulo, limit=10):
         self.consultas.append(titulo)
         return [SimpleNamespace(name=titulo, cv_id=999999, start_year=None, description="d",
                                 image_url=None, count_of_issues=None, slug="slug_nuevo", title=titulo,
-                                kind="collection", cover_url=None, site_url=None)]
+                                kind="collection", cover_url=None, site_url=None,
+                                genres=list(self.genres))]
 
     async def search_manga(self, titulo, limit=10):
         self.consultas.append(titulo)
         return [SimpleNamespace(title_romaji=titulo, title_english=None, anilist_id=888888, start_year=None,
-                                description="d", cover_url=None, chapters=None)]
+                                description="d", cover_url=None, chapters=None,
+                                genres=list(self.genres))]
+
+    async def find_issue(self, _volume_id, _numero):
+        from zascarr.services.comic_vine import CVIssueResult
+        return CVIssueResult(cv_id=777777, characters=list(self.characters))
 
 
 async def sembrar(b: Banco, titulo: str, tradicion=ComicTradition.AMERICAN, **ids) -> UUID:
@@ -142,3 +150,78 @@ class TestIdentidadElegida:
         cv = Fuente()
         await enriquecer(banco, cv=cv)
         assert cv.consultas == [] and (await serie(banco, sid)).comic_vine_id is None
+
+
+@pytest.mark.asyncio
+async def test_generos_de_cv_solo_rellenan_vacio_y_son_idempotentes(banco):
+    from sqlalchemy import func
+
+    from zascarr.models import Genre, series_genres
+    sid = await sembrar(banco, "Flash")
+    cv = Fuente(genres=["Action", "Adventure", "action"])
+    await enriquecer(banco, cv=cv)
+    async with banco.fabrica() as s:
+        filas = (await s.execute(
+            select(Genre.name).join(series_genres, series_genres.c.genre_id == Genre.id)
+            .where(series_genres.c.series_id == sid).order_by(Genre.name))).scalars().all()
+    assert [n.casefold() for n in filas] == ["action", "adventure"]
+    await enriquecer(banco, cv=Fuente(genres=["Other"]))
+    async with banco.fabrica() as s:
+        total = (await s.execute(select(func.count()).select_from(series_genres)
+                                 .where(series_genres.c.series_id == sid))).scalar_one()
+    assert total == 2  # ya tenía géneros: no se sustituyen
+
+
+@pytest.mark.asyncio
+async def test_generos_respetan_locked_y_manual(banco):
+    from zascarr.models import series_genres
+    bloqueada = await sembrar(banco, "Flash", locked_fields=["genres"])
+    manual = await sembrar(banco, "Batman", metadata_source="manual")
+    await enriquecer(banco, cv=Fuente(genres=["Action"]))
+    async with banco.fabrica() as s:
+        for sid in (bloqueada, manual):
+            n = (await s.execute(select(series_genres.c.genre_id)
+                                 .where(series_genres.c.series_id == sid))).first()
+            assert n is None
+
+
+@pytest.mark.asyncio
+async def test_anilist_aporta_generos_y_tebeosfera_no_inventa(banco):
+    from zascarr.models import series_genres
+    manga = await sembrar(banco, "Berserk", ComicTradition.MANGA)
+    tebeo = await sembrar(banco, "Mortadelo", ComicTradition.TEBEO)
+    await enriquecer(banco, anilist=Fuente(genres=["Action"]), tebeosfera=Fuente(genres=["Inventado"]))
+    async with banco.fabrica() as s:
+        manga_n = (await s.execute(select(series_genres.c.genre_id)
+                                   .where(series_genres.c.series_id == manga))).first()
+        tebeo_n = (await s.execute(select(series_genres.c.genre_id)
+                                   .where(series_genres.c.series_id == tebeo))).first()
+    assert manga_n is not None and tebeo_n is None
+
+
+@pytest.mark.asyncio
+async def test_personajes_del_numero_solo_rellenan_vacio_y_respetan_locked(banco):
+    from zascarr.models import Character, Issue, issue_characters
+    sid = await sembrar(banco, "Flash", comic_vine_id=123)
+    iid = uuid4()
+    async with banco.fabrica() as s:
+        s.add(Issue(id=iid, series_id=sid, issue_number="1"))
+        await s.commit()
+    cv = Fuente(characters=["Barry Allen", "Iris West"])
+    informe = EnrichmentReport()
+    async with banco.fabrica() as s:
+        await EnrichmentService(s)._enrich_issues_batch(cv, 20, informe)
+        await s.commit()
+    async with banco.fabrica() as s:
+        nombres = (await s.execute(
+            select(Character.name).join(issue_characters, issue_characters.c.character_id == Character.id)
+            .where(issue_characters.c.issue_id == iid).order_by(Character.name))).scalars().all()
+    assert nombres == ["Barry Allen", "Iris West"]
+    # Idempotente: una segunda pasada no duplica.
+    async with banco.fabrica() as s:
+        await EnrichmentService(s)._enrich_issues_batch(Fuente(characters=["Otro"]), 20, EnrichmentReport())
+        await s.commit()
+    async with banco.fabrica() as s:
+        total = (await s.execute(select(issue_characters.c.character_id)
+                                 .where(issue_characters.c.issue_id == iid))).all()
+    assert len(total) == 2

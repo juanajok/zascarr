@@ -33,6 +33,16 @@ Reglas de convivencia con datos ya existentes (peer review, fix C3):
     elegida (comic_vine_id, anilist_id, tebeosfera_slug o gcd_id): la igualdad de
     título no prueba que sea la misma edición. Asociarle otra fuente es una
     acción explícita y confirmada, que no existe todavía.
+
+AC-22 (#565, decisión PO de 2026-11-11 pese a D-7): los clientes piden
+`genres`/`character_credits`/`story_arc_credits` en la MISMA petición de detalle
+(Comic Vine `field_list` y AniList GraphQL). El enricher rellena
+`Series.genres` e `Issue.characters` solo si están vacíos y no bloqueados; no
+sustituye datos existentes ni toca `metadata_source` de filas manuales. Tebeosfera
+no declara género y no se inventa; GCD no tiene cliente aquí. Los
+`story_arc_credits` se piden y se documentan, pero NO se persisten: `StoryArc`
+no tiene una relación inequívoca serie↔arco en el modelo actual y AC-22 no pide
+crear una relación nueva.
 """
 from __future__ import annotations
 
@@ -41,19 +51,23 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
+    Character,
     ComicTradition,
     Creator,
     CreatorRole,
+    Genre,
     Issue,
     IssueCreator,
     MetadataSource,
     Series,
+    issue_characters,
+    series_genres,
 )
 from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient, CVCredit
@@ -96,6 +110,23 @@ _YEAR_TOLERANCE = 1
 ENRICHMENT_RETRY_AFTER = timedelta(days=30)
 
 
+def _nombres_limpios(valores: list[str], *, maximo: int) -> list[str]:
+    """Nombres no vacíos, recortados al tope y sin duplicados por caja."""
+    salida: list[str] = []
+    vistos: set[str] = set()
+    for valor in valores:
+        nombre = str(valor or "").strip()
+        if not nombre:
+            continue
+        nombre = nombre[:maximo]
+        clave = nombre.casefold()
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        salida.append(nombre)
+    return salida
+
+
 def puede_enlazarse_con_comic_vine(series: Series, comic_vine_activo: bool) -> bool:
     """¿Puede el enriquecedor enlazar esta serie con Comic Vine? Es LA condición de `_enrich_series_batch` (sin
     identidad externa elegida, `metadata_source` distinto de `manual`, tradición con Comic Vine como fuente y la fuente
@@ -135,6 +166,8 @@ class SeriesMatch:
     description: str | None = None
     cover_url: str | None = None
     count_of_issues: int | None = None
+    #: Géneros declarados por la fuente en la MISMA búsqueda (vacío si no los declara).
+    genres: list[str] = field(default_factory=list)
 
 
 class EnrichmentService:
@@ -277,6 +310,7 @@ class EnrichmentService:
                     continue
                 series.enrichment_attempted_at = datetime.now(UTC)
                 self._apply_series_match(series, match, id_field, source_value)
+            await self._aplicar_generos(series, match.genres)
             await self.db.flush()
             report.series_enriched.append(series.title)
             logger.info("enricher.series_enriched", series=series.title,
@@ -330,7 +364,8 @@ class EnrichmentService:
         if chosen is None:
             return None
         return SeriesMatch(source_id=chosen.cv_id, description=chosen.description,
-                           cover_url=chosen.image_url, count_of_issues=chosen.count_of_issues)
+                           cover_url=chosen.image_url, count_of_issues=chosen.count_of_issues,
+                           genres=list(chosen.genres))
 
     async def _find_anilist_match(
         self, client: AniListClient, series: Series
@@ -350,7 +385,8 @@ class EnrichmentService:
         if chosen is None:
             return None
         return SeriesMatch(source_id=chosen.anilist_id, description=chosen.description,
-                           cover_url=chosen.cover_url, count_of_issues=chosen.chapters)
+                           cover_url=chosen.cover_url, count_of_issues=chosen.chapters,
+                           genres=list(chosen.genres))
 
     async def _find_tebeosfera_match(
         self, client: TebeosferaClient, series: Series
@@ -439,9 +475,62 @@ class EnrichmentService:
             if issue.metadata_source is None:
                 issue.metadata_source = MetadataSource.COMIC_VINE.value
             await self._apply_credits(issue, match.credits)
+            await self._aplicar_personajes(issue, match.characters)
             await self.db.flush()
             report.issues_enriched.append(label)
             logger.info("enricher.issue_enriched", issue=label, cv_id=match.cv_id)
+
+    async def _aplicar_generos(self, series: Series, generos: list[str]) -> int:
+        """Puebla `Series.genres` solo si está vacío, no bloqueado y no es manual.
+
+        No crea etiquetas ni toca B6; los géneros son la relación estructurada
+        existente. Si la fuente no declara géneros, no se toca nada.
+        """
+        if not generos or "genres" in (series.locked_fields or []):
+            return 0
+        ya = (await self.db.execute(
+            select(series_genres.c.genre_id).where(series_genres.c.series_id == series.id)
+        )).first()
+        if ya is not None:
+            return 0
+        creados = 0
+        for nombre in _nombres_limpios(generos, maximo=100):
+            genero = (await self.db.execute(
+                select(Genre).where(func.lower(Genre.name) == nombre.casefold())
+            )).scalar_one_or_none()
+            if genero is None:
+                genero = Genre(name=nombre)
+                self.db.add(genero)
+                await self.db.flush()
+                creados += 1
+            await self.db.execute(series_genres.insert().values(
+                series_id=series.id, genre_id=genero.id))
+            creados += 1
+        return creados
+
+    async def _aplicar_personajes(self, issue: Issue, personajes: list[str]) -> int:
+        """Puebla `Issue.characters` solo si está vacío y no bloqueado; nombres tal cual."""
+        if not personajes or "characters" in (issue.locked_fields or []):
+            return 0
+        ya = (await self.db.execute(
+            select(issue_characters.c.character_id).where(issue_characters.c.issue_id == issue.id)
+        )).first()
+        if ya is not None:
+            return 0
+        creados = 0
+        for nombre in _nombres_limpios(personajes, maximo=255):
+            personaje = (await self.db.execute(
+                select(Character).where(func.lower(Character.name) == nombre.casefold())
+            )).scalar_one_or_none()
+            if personaje is None:
+                personaje = Character(name=nombre)
+                self.db.add(personaje)
+                await self.db.flush()
+                creados += 1
+            await self.db.execute(issue_characters.insert().values(
+                issue_id=issue.id, character_id=personaje.id, is_main=False))
+            creados += 1
+        return creados
 
     async def _apply_credits(self, issue: Issue, credits: list[CVCredit]) -> None:
         """Añade créditos SOLO si el issue no tiene ninguno todavía.
