@@ -44,3 +44,10 @@ def test_plantilla_escapa_html():
         ui=None)
     assert "<script>" not in html
     assert "&lt;script&gt;alert" in html
+
+
+def test_aviso_de_numero_se_ve_fuera_del_details():
+    html = crear_templates().get_template("_nota_numero.html").render(
+        series=SimpleNamespace(id=uuid4()), issue=SimpleNamespace(id=uuid4()),
+        nota_numero=None, nota_aviso="La nota no puede estar vacía.")
+    assert html.index("La nota no puede estar vacía.") < html.index('<details id="nota-numero"')

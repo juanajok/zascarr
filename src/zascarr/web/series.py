@@ -825,6 +825,8 @@ async def guardar_nota_serie(
     accion: str = Form(default="guardar"), db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     await _serie_o_404(db, series_id)
+    if accion not in ("guardar", "borrar"):
+        raise HTTPException(status_code=422, detail="Acción de nota no válida")
     try:
         if accion == "borrar":
             await borrar_serie(db, series_id)
@@ -845,6 +847,8 @@ async def guardar_nota_numero(
 ) -> RedirectResponse:
     if not await numero_existe(db, series_id, issue_id):
         raise HTTPException(status_code=404, detail="Número no encontrado")
+    if accion not in ("guardar", "borrar"):
+        raise HTTPException(status_code=422, detail="Acción de nota no válida")
     try:
         if accion == "borrar":
             await borrar_numero(db, issue_id)

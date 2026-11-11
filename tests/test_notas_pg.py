@@ -109,7 +109,7 @@ async def test_migracion_0027_subida_y_bajada():
                 "SELECT to_regclass('public.notes')"))).scalar()
             assert existe is not None
         await engine.dispose()
-        alembic(url, "downgrade", "0026")
+        alembic(url, "downgrade", "0027")
         engine = create_async_engine(_url_asyncpg(url))
         async with engine.connect() as conexion:
             existe = (await conexion.execute(text(
@@ -117,3 +117,37 @@ async def test_migracion_0027_subida_y_bajada():
             assert existe is None
         await engine.dispose()
         alembic(url, "upgrade", "head")
+
+
+@pytest.mark.asyncio
+async def test_upsert_concurrente_no_duplica(db):
+    import asyncio
+
+    from sqlalchemy import delete, func, select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    serie = Series(id=uuid4(), title=f"Concurrente {uuid4().hex}",
+                   tradition=ComicTradition.FRANCO_BELGIAN)
+    async with maker() as sesion:
+        sesion.add(serie)
+        await sesion.commit()
+        sid = serie.id
+
+    async def guardar(texto):
+        async with maker() as sesion:
+            await guardar_serie(sesion, sid, texto)
+            await sesion.commit()
+
+    async with maker() as sesion:
+        pass
+    await asyncio.gather(guardar("uno"), guardar("dos"))
+    async with maker() as sesion:
+        total = (await sesion.execute(
+            select(func.count(Note.id)).where(Note.series_id == sid))).scalar()
+        assert total == 1
+        await sesion.execute(delete(Note).where(Note.series_id == sid))
+        await sesion.execute(delete(Series).where(Series.id == sid))
+        await sesion.commit()
+    await engine.dispose()
