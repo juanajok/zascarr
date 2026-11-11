@@ -11,6 +11,10 @@ todos en `/media/library`, ninguno desaparecido. El detalle y las muestras
 están en [`censo-anuales-2026-11-11.md`](censo-anuales-2026-11-11.md). El censo
 decide que el backfill hace falta, pero no lo autoriza.
 
+**En esta rama:** la migración `0027` y el dry-run
+`scripts/medicion/propuesta_anuales.py` están escritos y probados, pero **no
+aplicados a la Pi**. La migración no mueve datos; el dry-run solo lee.
+
 **Problema.** Un archivo `Batman Annual 01` se parseaba como `Batman` `#1`; el
 matcher podía enlazarlo con la grapa `Batman #1` y `numero_de_grapa` lo contaba
 como ese hueco. Además, la serie anual que sí existe en Comic Vine/GCD/Metron
@@ -80,8 +84,12 @@ madre. Eso es fase 1.
    `scripts/medicion/censo_anuales.py`: 80 archivos anuales, 0 series anuales,
    25 enlazados a la madre y 55 sin Issue. Resultado en
    [`censo-anuales-2026-11-11.md`](censo-anuales-2026-11-11.md).
-2. Migración **aditiva**: `series.kind` (`regular | annual | special`) y
-   `series.parent_series_id` nullable, FK a `series.id`. Sin mover datos.
+2. Migración **aditiva** `0027`: `series.kind` (`regular | annual | special`) y
+   `series.parent_series_id` nullable, FK a `series.id`, con check de no
+   auto-padre. Sin mover datos. Dry-run en
+   `scripts/medicion/propuesta_anuales.py`: 21 series propuestas, 7 con padre,
+   26 sin padre, 22 reclasificaciones, 14 números repetidos, 6 packs y 5 a
+   revisar.
 3. Alta/enlace: la serie anual usa sus IDs de fuente (Comic Vine/GCD/Metron);
    la enrichización funciona con el volumen anual. El enlace al padre se
    propone y se confirma, no se inventa.
