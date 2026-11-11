@@ -2217,7 +2217,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .biblioteca-cabecera { display: block; }
   .barra-acciones { gap: 4px; }
   .barra-contador { font-size: .875rem; }
-  .barra-panel-campos { position: fixed; grid-template-columns: 1fr; left: 0; right: 0; bottom: 64px; width: auto; max-width: 100%; box-sizing: border-box; max-height: calc(100dvh - 6rem); overflow: auto; z-index: 60; border-radius: var(--radius-panel) var(--radius-panel) 0 0; box-shadow: var(--shadow-ink); }
+  .barra-panel-campos { position: fixed; grid-template-columns: 1fr; left: 0; right: 0; bottom: 64px; width: auto; max-width: 100%; box-sizing: border-box; max-height: calc(100dvh - 8.5rem); overflow: auto; z-index: 60; border-radius: var(--radius-panel) var(--radius-panel) 0 0; box-shadow: var(--shadow-ink); }
   .barra-vista { padding: 0 8px; }
   .barra-acciones select { max-width: 7.5rem; }
 }
