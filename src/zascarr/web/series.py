@@ -1116,6 +1116,7 @@ async def previa_numero(series_id: UUID, issue_id: UUID, request: Request,
         if request.headers.get("HX-Request") == "true":
             return HTMLResponse("", headers={"Cache-Control": "no-store"})
         raise HTTPException(status_code=404, detail="Número no encontrado")
+    numero, titulo = issue.issue_number or "", issue.title or ""
     ruta = await ruta_previa(db, series_id, issue_id)
     if ruta is None:
         respuesta: Response = HTMLResponse("")
@@ -1123,7 +1124,7 @@ async def previa_numero(series_id: UUID, issue_id: UUID, request: Request,
         respuesta = templates.TemplateResponse(
             request, "_previa_numero.html",
             {"series_id": series_id, "issue_id": issue_id,
-             "numero": issue.issue_number or "", "titulo": issue.title or ""})
+             "numero": numero, "titulo": titulo})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 

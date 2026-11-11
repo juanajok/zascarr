@@ -99,3 +99,17 @@ class TestAnchoExplicito:
         with Image.open(io.BytesIO(result[0])) as thumb:
             assert thumb.width == 400
             assert thumb.height == 600
+
+
+def test_la_miniatura_rechaza_paginas_demasiado_grandes_sin_decodificarlas(tmp_path):
+    import io
+    import zipfile
+
+    from PIL import Image
+
+    ruta = tmp_path / "grande.cbz"
+    buffer = io.BytesIO()
+    Image.new("RGB", (3000, 2500), "white").save(buffer, "JPEG")
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("001.jpg", buffer.getvalue())
+    assert extract_cover_thumbnail(ruta, max_pixeles=6_000_000) is None
