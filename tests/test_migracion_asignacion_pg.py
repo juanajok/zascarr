@@ -416,7 +416,12 @@ async def sembrar_a_0016(url: str) -> dict:
                           file_format=FileFormat.CBZ, sha256_hash="b" * 64, review_dismissed=True,
                           metadata_={"match_status": "unsorted", "review_motivo": "colision"})
         deseo = Wishlist(id=uuid4(), series_id=serie.id, status=WishlistStatus.WANTED)
-        s.add(serie)
+        # La serie por SQL explícito: el modelo actual tiene `kind` (0027), que en 0016 no existe.
+        await s.execute(text(
+            "INSERT INTO series (id, title, tradition, start_year) "
+            "VALUES (:id, :title, :trad, :anio)"),
+            {"id": str(serie.id), "title": serie.title,
+             "trad": serie.tradition.value, "anio": serie.start_year})
         await s.flush()
         s.add_all([manual, otro])
         await s.flush()
