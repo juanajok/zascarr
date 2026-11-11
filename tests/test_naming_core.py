@@ -1328,6 +1328,29 @@ class TestRealWorldFilenames:
         assert sin_numero.issue_number == ""
         assert sin_numero.issue_count == 4
 
+    @pytest.mark.parametrize("filename,serie,numero", [
+        ("13. Nightwing #73.cbr", "Nightwing", "73"),
+        ("14  JLD #11.cbr", "JLD", "11"),
+        ("73 Dreadstar (First Comics) 61 USA.cbz", "Dreadstar", "61"),
+        ("22.1 Catwoman Vol 02 Year One (1995).cbr", "Catwoman Year One", "22.1"),
+    ])
+    def test_prefijo_numerico_de_orden_no_es_la_serie_ni_el_numero(
+        self, filename, serie, numero
+    ):
+        """`13. Nightwing #73` y `73 Dreadstar ... 61`: el prefijo numérico
+        es orden de lectura, no parte de la serie."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == serie
+        assert result.issue_number == numero
+
+    def test_pack_con_rango_y_anual_no_inventa_numero(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Batman #647-650 y anual 25.cbr")
+        assert result.issue_number == ""
+
     def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
         """«Batman #400 Aniversario»: el número va con #, así que es la
         grapa #400 y no la efeméride del 400 aniversario. El patrón viejo

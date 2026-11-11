@@ -251,6 +251,15 @@ ISSUE_COUNT_PATTERN = re.compile(r"\b(\d{1,3})\s+(?:of|de)\s+(\d{1,3})\b", re.IG
 # se leía entero como serie "01" — el guion sin más se confundía con el
 # separador de subtítulo, que se queda con el primer trozo ("01").
 SORT_PREFIX_PATTERN = re.compile(r"^\s*\d{1,3}[a-zA-Z]?\s*\.?\s*-\s*")
+
+# Prefijo numérico sin guion: "13. Nightwing #73", "14  JLD #11", "16 Catwoman".
+# Si detrás hay otro número/marcador, el prefijo es orden de lectura; si no,
+# el prefijo ES el número y el resto es la serie ("51 Catwoman").
+LEADING_NUMBER_PREFIX_PATTERN = re.compile(
+    r"^\s*(?P<num>\d{1,3}(?:\.\d+)?)(?P<suf>[a-zA-Z]?)(?P<sep>[\.\)]\s*|\s+)"
+    r"(?P<rest>[^\W\d_].*)$",
+    re.UNICODE,
+)
 # Annual/Anual y Especial NO son la misma cosa. Un anual es una publicación
 # con numeración propia dentro de la colección (Metron, GCD y Comic Vine lo
 # publican como serie/volumen propio); «Especial» es una marca de edición que,
@@ -297,6 +306,39 @@ class ParsedComicName:
     # la serie — solo informa qué `Issue.format` corresponde al confirmar
     # la asignación, y qué no debe contar como grapa suelta en los huecos.
     edition_kind: str | None = None
+
+
+def _separar_prefijo_numerico(working: str) -> tuple[str, str | None]:
+    """Separa un prefijo numérico inicial de serie/número.
+
+    Devuelve (texto_sin_prefijo, numero). Si el prefijo es orden de lectura
+    (hay otro número detrás, o va con punto/paréntesis) devuelve numero=None
+    y solo lo quita; si no, el prefijo es el número del tebeo y el resto es
+    la serie. Los títulos que empiezan por cifra ("100 Balas", "1963", "52")
+    no entran: el prefijo de 3 cifras se deja intacto.
+    """
+    m = LEADING_NUMBER_PREFIX_PATTERN.match(working)
+    if not m:
+        return working, None
+    num = m.group("num")
+    if len(num.split(".")[0]) > 2:
+        return working, None
+    resto = m.group("rest").strip()
+    sep = m.group("sep")
+    if not resto:
+        return working, None
+    if "." in num:
+        # "22.1 Catwoman": decimal explícito, es el número del tebeo.
+        return resto, num.lstrip("0") or "0"
+    if sep.strip() in (".", ")"):
+        # "13. Nightwing": prefijo de orden de lectura, no de grapa.
+        return resto, None
+    if re.search(r"#\s*\d", resto) or re.search(r"(?<!New )\b\d{1,3}\b", resto):
+        # "14 JLD #11" / "73 Dreadstar ... 61": hay otro número en el resto.
+        return resto, None
+    # Prefijo suelto sin más evidencia: no se inventa si es número o parte del
+    # título ("12 Monkeys"). Se deja como estaba.
+    return working, None
 
 
 def _abre_el_titulo(working: str, m: re.Match) -> bool:
@@ -380,6 +422,10 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # ANTES de convertir los puntos en espacios, porque el patrón busca
     # el punto literal de "069.- ".
     working = SORT_PREFIX_PATTERN.sub("", working, count=1)
+
+    working, numero_de_prefijo = _separar_prefijo_numerico(working)
+    if numero_de_prefijo is not None:
+        result.issue_number = numero_de_prefijo
 
     working = DOT_SEPARATOR_PATTERN.sub(" ", working)
     working = CREDITS_PATTERN.sub("", working, count=1)
@@ -498,11 +544,15 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # ya se encarga de quitar.
     encontrado = None
     if not result.issue_number:
-        if result.is_annual:
+        # Un pack del tipo «#647-650 y anual 25» no debe quedarse con el 25:
+        # el rango ya dice que no hay una grapa única. Pero un pack que
+        # además identifica una edición («(122-143) Omnigold nº 2») sí puede
+        # llevar su número de tomo; por eso el bloqueo es solo para el anual.
+        if result.is_annual and not era_pack:
             annual_match = ANNUAL_NUMBER_PATTERN.search(working)
             if annual_match:
                 encontrado = (annual_match, True)
-        if encontrado is None:
+        if encontrado is None and not (result.is_annual and era_pack):
             encontrado = _buscar_numero(working)
     if encontrado:
         issue_match, cortar_en_numero = encontrado
@@ -516,7 +566,8 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         corte = issue_match.start(1) if cortar_en_numero else issue_match.start()
         cortado = working[:corte]
         working = cortado if cortado.strip() else working[issue_match.end():]
-    elif marcador_volumen is not None and result.volume is not None and not era_pack:
+    if (not result.issue_number and marcador_volumen is not None
+            and result.volume is not None and not era_pack):
         # Ningún otro número en el nombre: el propio tomo/volumen ES el
         # identificador de este archivo (B15, 2026-09-26 — medido: 8/81
         # archivos reales de la muestra oficial perdían el número así,
@@ -558,6 +609,8 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     series = re.sub(r"[\.\-_]+", " ", series)
     series = re.sub(r"\s+", " ", series)
     series = re.sub(r"\s*[-\u2013\u2014]\s*$", "", series)
+    # Sufijo de edición que no forma parte del título de la serie.
+    series = re.sub(r"\s+The\s+New\s+52!?$", "", series, flags=re.IGNORECASE)
     # La coma y los dos puntos finales sobran igual que el guion: quedan
     # de haber cortado por el n\u00famero ("Patrulla-X, n\u00ba 03" \u2192 "Patrulla X,").
     # El matcher los ignora al normalizar, pero este texto es el que ve el
