@@ -257,6 +257,11 @@ ISSUE_COUNT_PATTERN = re.compile(r"\b(\d{1,3})\s+(?:of|de)\s+(\d{1,3})\b", re.IG
 # separador de subtítulo, que se queda con el primer trozo ("01").
 SORT_PREFIX_PATTERN = re.compile(r"^\s*\d{1,3}[a-zA-Z]?\s*\.?\s*-\s*")
 
+# «Crossover 07 - Dinastía de X 04»: el 07 es orden de lectura del evento;
+# la serie y el número reales van después. No se aplica a un título que
+# simplemente empiece por «Crossover».
+CROSSOVER_PREFIX_PATTERN = re.compile(r"^\s*Crossover\s+\d{1,3}\s*-\s*", re.IGNORECASE)
+
 # Prefijo numérico sin guion: "13. Nightwing #73", "14  JLD #11", "16 Catwoman".
 # Si detrás hay otro número/marcador, el prefijo es orden de lectura; si no,
 # el prefijo ES el número y el resto es la serie ("51 Catwoman").
@@ -427,6 +432,7 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # ANTES de convertir los puntos en espacios, porque el patrón busca
     # el punto literal de "069.- ".
     working = SORT_PREFIX_PATTERN.sub("", working, count=1)
+    working = CROSSOVER_PREFIX_PATTERN.sub("", working, count=1)
 
     working, numero_de_prefijo = _separar_prefijo_numerico(working)
     if numero_de_prefijo is not None:
