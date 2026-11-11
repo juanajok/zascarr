@@ -454,6 +454,83 @@ class TestSeriesMatcherDecide:
         assert len(result.candidates) == 2
 
     @pytest.mark.asyncio
+    async def test_carpeta_desempata_volumen_sin_convertirla_en_identidad(self):
+        """Dos Batman Vol 1/Vol 2 empatados; la carpeta «Batman Vol 1» decide.
+
+        La carpeta solo se usa aquí porque el matcher YA tiene dos candidatos
+        por encima del umbral. No puede convertir una carpeta cualquiera en
+        una serie nueva."""
+        sid1, sid2 = uuid4(), uuid4()
+        iid = uuid4()
+        hits = [
+            SeriesHit(sid1, "Batman Vol 1", 1940, 1.0),
+            SeriesHit(sid2, "Batman Vol 2", 2011, 1.0),
+        ]
+        session = make_session_mock(hits, iid)
+        matcher = SeriesMatcher(session)
+        tr = TriageResult(
+            path=Path("/biblioteca/Batman Vol 1/Batman #12.cbz"),
+            comic_info=ComicInfo(series="Batman", number="12"),
+        )
+        result = await matcher.decide(tr)
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid1
+        assert any("carpeta" in n for n in result.notes)
+
+    @pytest.mark.asyncio
+    async def test_carpeta_sin_coincidencia_no_desempata(self):
+        sid1, sid2 = uuid4(), uuid4()
+        hits = [
+            SeriesHit(sid1, "Batman Vol 1", 1940, 1.0),
+            SeriesHit(sid2, "Batman Vol 2", 2011, 1.0),
+        ]
+        session = make_session_mock(hits)
+        matcher = SeriesMatcher(session)
+        tr = TriageResult(
+            path=Path("/biblioteca/Comics/Batman #12.cbz"),
+            comic_info=ComicInfo(series="Batman", number="12"),
+        )
+        result = await matcher.decide(tr)
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+
+    @pytest.mark.asyncio
+    async def test_carpeta_desempata_por_anio(self):
+        sid1, sid2 = uuid4(), uuid4()
+        hits = [
+            SeriesHit(sid1, "Batman", 1940, 1.0),
+            SeriesHit(sid2, "Batman", 2011, 1.0),
+        ]
+        session = make_session_mock(hits)
+        matcher = SeriesMatcher(session)
+        tr = TriageResult(
+            path=Path("/biblioteca/Batman (2011)/Batman #12.cbz"),
+            comic_info=ComicInfo(series="Batman", number="12"),
+        )
+        result = await matcher.decide(tr)
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid2
+
+    @pytest.mark.asyncio
+    async def test_carpeta_que_contradice_el_volumen_no_desempata(self):
+        """«Batman Vol 3/» no puede elegir «Batman Vol 1»: la carpeta afirma
+        un volumen que no coincide con ningún candidato; mejor Pendientes."""
+        sid1, sid2 = uuid4(), uuid4()
+        hits = [
+            SeriesHit(sid1, "Batman Vol 1", 1940, 1.0),
+            SeriesHit(sid2, "Batman Vol 2", 2011, 1.0),
+        ]
+        session = make_session_mock(hits)
+        matcher = SeriesMatcher(session)
+        tr = TriageResult(
+            path=Path("/biblioteca/Batman Vol 3/Batman #12.cbz"),
+            comic_info=ComicInfo(series="Batman", number="12"),
+        )
+        result = await matcher.decide(tr)
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+
+    @pytest.mark.asyncio
     async def test_desambiguacion_por_año_resuelve_empate(self):
         """Dos Batman, el año en ComicInfo apunta al correcto."""
         sid1, sid2 = uuid4(), uuid4()
