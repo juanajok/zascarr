@@ -51,8 +51,7 @@ class Fuente:
         self.consultas.append(titulo)
         return [SimpleNamespace(name=titulo, cv_id=999999, start_year=None, description="d",
                                 image_url=None, count_of_issues=None, slug="slug_nuevo", title=titulo,
-                                kind="collection", cover_url=None, site_url=None,
-                                genres=list(self.genres))]
+                                kind="collection", cover_url=None, site_url=None)]
 
     async def search_manga(self, titulo, limit=10):
         self.consultas.append(titulo)
@@ -153,19 +152,18 @@ class TestIdentidadElegida:
 
 
 @pytest.mark.asyncio
-async def test_generos_de_cv_solo_rellenan_vacio_y_son_idempotentes(banco):
+async def test_generos_de_anilist_solo_rellenan_vacio_y_son_idempotentes(banco):
     from sqlalchemy import func
 
     from zascarr.models import Genre, series_genres
-    sid = await sembrar(banco, "Flash")
-    cv = Fuente(genres=["Action", "Adventure", "action"])
-    await enriquecer(banco, cv=cv)
+    sid = await sembrar(banco, "Berserk", ComicTradition.MANGA)
+    await enriquecer(banco, anilist=Fuente(genres=["Action", "Adventure", "action"]))
     async with banco.fabrica() as s:
         filas = (await s.execute(
             select(Genre.name).join(series_genres, series_genres.c.genre_id == Genre.id)
             .where(series_genres.c.series_id == sid).order_by(Genre.name))).scalars().all()
     assert [n.casefold() for n in filas] == ["action", "adventure"]
-    await enriquecer(banco, cv=Fuente(genres=["Other"]))
+    await enriquecer(banco, anilist=Fuente(genres=["Other"]))
     async with banco.fabrica() as s:
         total = (await s.execute(select(func.count()).select_from(series_genres)
                                  .where(series_genres.c.series_id == sid))).scalar_one()
@@ -175,9 +173,9 @@ async def test_generos_de_cv_solo_rellenan_vacio_y_son_idempotentes(banco):
 @pytest.mark.asyncio
 async def test_generos_respetan_locked_y_manual(banco):
     from zascarr.models import series_genres
-    bloqueada = await sembrar(banco, "Flash", locked_fields=["genres"])
-    manual = await sembrar(banco, "Batman", metadata_source="manual")
-    await enriquecer(banco, cv=Fuente(genres=["Action"]))
+    bloqueada = await sembrar(banco, "Berserk", ComicTradition.MANGA, locked_fields=["genres"])
+    manual = await sembrar(banco, "Claymore", ComicTradition.MANGA, metadata_source="manual")
+    await enriquecer(banco, anilist=Fuente(genres=["Action"]))
     async with banco.fabrica() as s:
         for sid in (bloqueada, manual):
             n = (await s.execute(select(series_genres.c.genre_id)

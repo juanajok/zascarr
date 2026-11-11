@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from zascarr.services.anilist import _parse_media
-from zascarr.services.comic_vine import _parse_issue
+from zascarr.services.comic_vine import ComicVineClient, _parse_issue
 
 
 def test_cv_issue_lee_personajes_y_sagas_de_la_misma_respuesta():
@@ -32,3 +32,27 @@ def test_anilist_lee_generos_y_personajes_de_la_misma_peticion():
 def test_anilist_sin_campos_no_inventa():
     media = _parse_media({"id": 4, "title": {"romaji": "X"}})
     assert media.genres == [] and media.characters == []
+
+
+class _CVFalso(ComicVineClient):
+    def __init__(self):
+        self.llamadas: list[tuple[str, dict]] = []
+
+    async def _get(self, endpoint: str, params: dict) -> dict:
+        self.llamadas.append((endpoint, params))
+        if endpoint == "/issues/":
+            return {"results": [{"id": 9, "issue_number": "1",
+                                 "character_credits": [{"name": "Barry Allen"}],
+                                 "story_arc_credits": [{"name": "Flashpoint"}]}]}
+        return {"results": [{"id": 5, "name": "Flash"}]}
+
+
+async def test_cv_pide_personajes_y_sagas_pero_no_genres():
+    cliente = _CVFalso()
+    await cliente.search_series("Flash")
+    await cliente.find_issue(1, "1")
+    serie = cliente.llamadas[0][1]["field_list"]
+    numero = cliente.llamadas[1][1]["field_list"]
+    assert "genres" not in serie
+    assert "character_credits" in numero and "story_arc_credits" in numero
+    assert "genres" not in numero
