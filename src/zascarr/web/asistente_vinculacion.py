@@ -129,6 +129,17 @@ MOTIVOS_LEGIBLES: dict[str, str] = {
 }
 
 
+TRADICIONES_ES = {
+    "american": "Grapa americana", "franco_belgian": "Franco-belga (BD)", "manga": "Manga",
+    "tebeo": "Tebeo español", "fumetti": "Fumetti", "manhwa": "Manhwa",
+    "manhua": "Manhua", "british": "Británico", "other": "Otra",
+}
+FUENTES_ES = {
+    "comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera",
+    "gcd": "GCD", "comicinfo_xml": "ComicInfo del archivo", "manual": "Alta a mano",
+}
+
+
 def motivos_legibles(codigos: list[str]) -> list[str]:
     return [MOTIVOS_LEGIBLES[c] for c in codigos if c in MOTIVOS_LEGIBLES]
 
@@ -301,7 +312,7 @@ def _contexto_de_la_revision(r: RespuestaVinculacion, cursor_actual: str, otros:
         "borradores_json": json.dumps({k: b.a_json() for k, b in otros.items() if not b.vacio()}, ensure_ascii=False),
         "pendientes": pendientes, "incluidos": incluidos, "excluidos": excluidos, "limite": LIMITE_ARCHIVOS,
         "motivos_legibles": motivos_legibles, "texto_de_la_pagina": texto_de_la_pagina(r.pagina), "accion": accion,
-        "formatos": FORMATOS_LEGIBLES,
+        "formatos": FORMATOS_LEGIBLES, "tradiciones": TRADICIONES_ES, "fuentes": FUENTES_ES,
         "texto_legible": texto_legible,
         "hay_que_marcar": any(a.marcable and not a.marcado for a in r.archivos),
         "hay_marcados": any(a.marcado for a in r.archivos),
@@ -439,6 +450,14 @@ async def elegir_publicacion(request: Request, db: AsyncSession = Depends(get_db
     estado.desde, estado.hasta = _entero(f.get("pagina_desde")), _entero(f.get("pagina_hasta"))
     crudo = str(f.get("eleccion", ""))
     token, _, candidate_id = crudo.rpartition("|")
+    accion_eleccion = str(f.get("accion_eleccion", ""))
+    if accion_eleccion:
+        objetivo = accion_eleccion.split(":", 1)[1] if ":" in accion_eleccion else accion_eleccion
+        token = str(f.get(f"token_eleccion:{objetivo}", ""))
+        if accion_eleccion.startswith("quitar:"):
+            candidate_id = "__quitar__"
+        else:
+            candidate_id = str(f.get(f"candidata:{objetivo}", ""))
     secreto = get_settings().secret_key
     error = None
     aviso = None
@@ -455,6 +474,7 @@ async def elegir_publicacion(request: Request, db: AsyncSession = Depends(get_db
                 aviso = "Se ha quitado la elección; la fila vuelve a estar como antes."
             else:
                 resultado = await servicio.elegir_publicacion(token=token, candidate_id=candidate_id)
+                estado.marcados = sorted(set(estado.marcados) | {contexto.file_id})
                 aviso = ("Esa publicación ya estaba elegida." if resultado["estado"] == "ya_elegida"
                          else "Publicación elegida. La vinculación sigue siendo un paso aparte.")
         except ValueError as exc:

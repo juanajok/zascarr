@@ -142,6 +142,7 @@ async def test_confirmar_usa_la_publicacion_elegida(entorno):
     async with entorno.banco.fabrica() as db:
         guardado = await db.get(File, f["Flash 1 (1987).cbz"])
         assert str(guardado.issue_id) == candidata["issue_id"]
+        assert "publicacion_identificada" not in (guardado.metadata_ or {})
         assert (await db.execute(text("SELECT count(*) FROM issues WHERE series_id=:s"),
                                 {"s": str(serie)})).scalar() == 2
 
