@@ -7,7 +7,8 @@ se calculan con un agregado, no con una consulta por número.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections import Counter
+from dataclasses import dataclass, field, replace
 from datetime import date
 from uuid import UUID
 
@@ -90,6 +91,19 @@ class ArchivoDeNumero:
     formato: str
     tamano: int | None
     falta_en_disco: bool
+    #: SHA-256 del contenido si consta (B16); None = no se ha comprobado.
+    sha256: str | None = None
+    #: BL-R6: "" (único), copia, variante o sin_comprobar.
+    clasificacion: str = ""
+
+
+@dataclass(frozen=True)
+class OtraEdicion:
+    """Otra publicación de la serie con el mismo número (edición distinta)."""
+    issue_id: str
+    numero: str
+    volumen: int
+    formato: str
 
 
 @dataclass(frozen=True)
@@ -124,6 +138,8 @@ class FichaNumero:
     sinopsis: str
     autores: dict[str, list[str]] = field(default_factory=dict)
     archivos: list[ArchivoDeNumero] = field(default_factory=list)
+    #: BL-R6: otras publicaciones con el mismo número (ediciones distintas, no variantes).
+    otras_ediciones: list[OtraEdicion] = field(default_factory=list)
     procedencia: dict[str, str] = field(default_factory=dict)
     formato: str = ""
     fecha_larga: str | None = None
@@ -227,8 +243,12 @@ async def cargar_ficha_numero(db: AsyncSession, series_id: UUID,
     archivos = [ArchivoDeNumero(
         id=str(f.id), nombre=f.file_name, formato=f.file_format.value,
         tamano=f.file_size_bytes, falta_en_disco=bool(f.is_missing),
+        sha256=getattr(f, "sha256_hash", None),
     ) for f in sorted(getattr(issue, "files", None) or [],
                       key=lambda f: natural_key(f.file_name))]
+    archivos = clasificar_archivos(archivos)
+    otras_ediciones = (await _otras_ediciones(db, series_id, issue)
+                       if len(archivos) > 1 else [])
     procedencia: dict[str, dict[str, str]] = {}
     nombre_fuente = _procedencia(getattr(issue, "metadata_source", None), True)
     fuentes_credito = {getattr(c.creator, "metadata_source", None)
@@ -267,7 +287,8 @@ async def cargar_ficha_numero(db: AsyncSession, series_id: UUID,
     tiene_datos = bool(issue.synopsis or fecha or paginas or autores or archivos)
     return FichaNumero(
         serie=serie, issue=issue, sinopsis=_texto_sinopsis(issue.synopsis),
-        autores=autores, archivos=archivos, procedencia=procedencia, formato=formato,
+        autores=autores, archivos=archivos, otras_ediciones=otras_ediciones,
+        procedencia=procedencia, formato=formato,
         fecha_larga=fecha_larga(fecha),
         editorial=getattr(getattr(serie, "publisher", None), "name", "") or "",
         paginas_texto=(f"{paginas} página" if paginas == 1 else f"{paginas} páginas") if paginas else None,
@@ -316,3 +337,46 @@ def partir_sinopsis(texto: str, max_palabras: int = 40) -> tuple[str, str]:
     if len(palabras) <= max_palabras:
         return texto, ""
     return " ".join(palabras[:max_palabras]), " ".join(palabras[max_palabras:])
+
+
+def clasificar_archivos(archivos: list[ArchivoDeNumero]) -> list[ArchivoDeNumero]:
+    """BL-R6: copia exacta (mismo SHA-256), variante (otro contenido del mismo
+    número) o sin comprobar. Un solo archivo no lleva clasificación."""
+    if len(archivos) <= 1:
+        return list(archivos)
+    cuentas = Counter(a.sha256 for a in archivos if a.sha256)
+    clasificados: list[ArchivoDeNumero] = []
+    for archivo in archivos:
+        if archivo.sha256 is None:
+            clase = "sin_comprobar"
+        elif cuentas[archivo.sha256] > 1:
+            clase = "copia"
+        else:
+            clase = "variante"
+        clasificados.append(replace(archivo, clasificacion=clase))
+    return clasificados
+
+
+async def _otras_ediciones(db: AsyncSession, series_id: UUID, issue: Issue) -> list[OtraEdicion]:
+    """Publicaciones de la misma serie con el MISMO número y distinto volumen/formato.
+
+    No agrupa por título+número: exige otra fila `Issue` y que algún discriminante
+    (volumen o formato) cambie. Si no hay número, no se puede afirmar nada.
+    """
+    if not issue.issue_number:
+        return []
+    clave = natural_key(issue.issue_number)
+    filas = (await db.execute(
+        select(Issue).where(Issue.series_id == series_id, Issue.id != issue.id)
+    )).scalars().all()
+    otras: list[OtraEdicion] = []
+    for fila in filas:
+        if not fila.issue_number or natural_key(fila.issue_number) != clave:
+            continue
+        if fila.volume == issue.volume and fila.format == issue.format:
+            continue
+        otras.append(OtraEdicion(
+            issue_id=str(fila.id), numero=fila.issue_number or "",
+            volumen=int(fila.volume), formato=FORMATOS_LEGIBLES.get(
+                getattr(fila.format, "value", ""), str(getattr(fila.format, "value", "")))))
+    return sorted(otras, key=lambda o: (o.volumen, o.formato))
