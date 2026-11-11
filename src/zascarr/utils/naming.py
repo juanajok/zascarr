@@ -219,6 +219,14 @@ PART_NUMBER_PATTERN = re.compile(r"\[P(\d+)N(\d+)\]", re.IGNORECASE)
 EDITION_NUMBER_PATTERN = re.compile(
     r"\b(Omnigold|Integral|Edici[oó]n\s+Integral)\s+(\d{1,3})\b", re.IGNORECASE
 )
+# Marcador de edición sin el número pegado: «100 Balas - Integral
+# (Ed.Planeta) 01». El número 01 sigue siendo el tomo; aquí solo se marca
+# el formato para que el matcher no lo confunda con una grapa.
+# Solo «Integral»: «Omnigold nº 2» conserva la palabra en el título (es el
+# nombre de la línea editorial y así lo esperan los casos reales).
+EDITION_MARKER_PATTERN = re.compile(
+    r"\b(Integral|Edici[oó]n\s+Integral)\b", re.IGNORECASE
+)
 
 # Formatos de edición que NO son una grapa. Se capturan antes de buscar el
 # número: «Batman Omnibus Vol 1» debe conservar el formato y no convertirse
@@ -282,6 +290,14 @@ ANNUAL_PATTERN = re.compile(r"\b(?:Annual|Anual)\b", re.IGNORECASE)
 # antes que `_buscar_numero`, solo cuando el nombre ya se marcó como anual.
 ANNUAL_NUMBER_PATTERN = re.compile(
     r"\b(?:Annual|Anual)\b\s*#?\s*(\d{1,4}[a-zA-Z]?)\b", re.IGNORECASE
+)
+# «11.1 Annual 01 Catwoman»: el decimal delante es el número de la grapa
+# Villains Month; el archivo es el anual #1 de Catwoman. Se normaliza a
+# «Catwoman Annual» + #1 antes de que el prefijo numérico gane.
+ANNUAL_PREFIX_PATTERN = re.compile(
+    r"^\s*\d{1,3}(?:\.\d+)?\s+(?P<annual>Annual|Anual)\s+"
+    r"(?P<num>\d{1,4}[a-zA-Z]?)\s+(?P<rest>[^\W\d_].*)$",
+    re.IGNORECASE,
 )
 SPECIAL_PATTERN = re.compile(r"\bEspecial\b", re.IGNORECASE)
 FILE_EXT_PATTERN = re.compile(r"\.(cbz|cbr|cb7|pdf|epub)$", re.IGNORECASE)
@@ -539,6 +555,12 @@ def parse_comic_filename(filename: str, carpeta: str | None = None) -> ParsedCom
     working = SORT_PREFIX_PATTERN.sub("", working, count=1)
     working = CROSSOVER_PREFIX_PATTERN.sub("", working, count=1)
 
+    # Annual con un número de grapa delante que no es el del anual.
+    annual_prefijado = ANNUAL_PREFIX_PATTERN.match(working)
+    if annual_prefijado:
+        result.issue_number = annual_prefijado.group("num").lstrip("0") or "0"
+        working = f"{annual_prefijado.group('rest').strip()} {annual_prefijado.group('annual')}"
+
     working, numero_de_prefijo = _prefijo_de_issue_con_carpeta(working, carpeta)
     if numero_de_prefijo is None:
         working, numero_de_prefijo = _separar_prefijo_numerico(working)
@@ -598,11 +620,11 @@ def parse_comic_filename(filename: str, carpeta: str | None = None) -> ParsedCom
     # (`era_pack`): más abajo decide si el volumen puede sustituir al
     # número que falta, o si eso fabricaría una identidad falsa para un
     # pack (ver ese bloque).
-    era_pack = bool(
+    era_pack_rango = bool(
         NUMBER_RANGE_PATTERN.search(working)
         or NUMBER_RANGE_WORD_PATTERN.search(working)
-        or PACK_ISSUE_ANNUAL_PATTERN.search(working)
     )
+    era_pack = era_pack_rango or bool(PACK_ISSUE_ANNUAL_PATTERN.search(working))
     working = NUMBER_RANGE_PATTERN.sub(" ", working)
     working = NUMBER_RANGE_WORD_PATTERN.sub(" ", working)
 
@@ -614,6 +636,7 @@ def parse_comic_filename(filename: str, carpeta: str | None = None) -> ParsedCom
     # si hay marcador de edición: si no, "Integral 20 aniversario" hace
     # que EDITION_NUMBER_PATTERN capture el 20 de la efeméride como si
     # fuera el tomo de la recopilación.
+    tuvo_aniversario = bool(ANIVERSARIO_PATTERN.search(working))
     working = _quitar_numero_de_aniversario(working)
 
     # "Omnigold 5" → captura issue_number="5" + edition_kind="omnigold",
@@ -625,6 +648,11 @@ def parse_comic_filename(filename: str, carpeta: str | None = None) -> ParsedCom
         result.issue_number = numero.lstrip("0") or "0"
         result.edition_kind = "omnigold" if palabra.lower() == "omnigold" else "integral"
         working = EDITION_NUMBER_PATTERN.sub(r"\1", working, count=1)
+    elif not tuvo_aniversario:
+        marcador_edicion = EDITION_MARKER_PATTERN.search(working)
+        if marcador_edicion:
+            result.edition_kind = "integral"
+            working = EDITION_MARKER_PATTERN.sub(" ", working, count=1)
 
     # El ruido entre paréntesis se quita AQUÍ, antes de buscar el número.
     # Estaba después y tapaba una familia entera de casos: en "JSA 81
@@ -719,6 +747,15 @@ def parse_comic_filename(filename: str, carpeta: str | None = None) -> ParsedCom
         result.issue_number = str(result.volume)
         if result.edition_kind is None:
             result.edition_kind = marcador_volumen
+
+    # Un pack con rango («Batman #647-650 y anual 25») deja restos del
+    # rango (#) y del anual cuando no hay número único. Se limpian para no
+    # bautizar la serie como «Batman # y anual 25».
+    if era_pack_rango and not result.issue_number:
+        working = re.sub(r"[#№]", " ", working)
+        working = re.sub(r"\b(?:y|e)\s+(?:anual|annual)\s*\d*\b", " ", working, flags=re.IGNORECASE)
+        working = re.sub(r"\b(?:anual|annual)\s*\d*\b", " ", working, flags=re.IGNORECASE)
+        working = re.sub(r"\s+", " ", working).strip()
 
     # "Serie - Subtítulo" y "Serie #001 - Título del número": todo lo que
     # sigue a un separador " - " (con espacios a los dos lados, a diferencia

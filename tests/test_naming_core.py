@@ -1461,6 +1461,31 @@ class TestRealWorldFilenames:
         batman = parse_comic_filename("Batman #243.cbr", carpeta="Batman Vol. 1")
         assert batman.series == "Batman"
 
+    def test_integral_sin_numero_pegado_marca_edicion(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "100 Balas - Integral (Ed.Planeta) 01 [por x].cbz")
+        assert result.series == "100 Balas"
+        assert result.issue_number == "1"
+        assert result.edition_kind == "integral"
+
+    def test_annual_con_prefijo_decimal_usa_el_numero_del_annual(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("11.1 Annual 01 Catwoman.cbr")
+        assert result.series == "Catwoman Annual"
+        assert result.issue_number == "1"
+        assert result.is_annual is True
+
+    def test_pack_con_rango_y_anual_no_contamina_la_serie(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Batman #647-650 y anual 25.cbr")
+        assert result.series == "Batman"
+        assert result.issue_number == ""
+        assert result.is_annual is True
+
     def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
         """«Batman #400 Aniversario»: el número va con #, así que es la
         grapa #400 y no la efeméride del 400 aniversario. El patrón viejo
