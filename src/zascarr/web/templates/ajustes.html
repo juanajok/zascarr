@@ -145,6 +145,15 @@
       </form>
       <div id="resultado-prowlarr" aria-live="polite"></div>
       <div id="prueba-prowlarr" aria-live="polite"></div>
+      <details class="ajustes-mas">
+        <summary>Indexers para ZascArr</summary>
+        <p class="ajustes-hint">ZascArr puede usar solo algunos indexers de Prowlarr, sin cambiar los que usan tus otras apps. Por defecto usa todos los activos.</p>
+        <p>
+          <button type="button" class="btn ghost" hx-get="/ui/ajustes/prowlarr/indexers"
+                  hx-target="#prowlarr-indexers" hx-swap="innerHTML">Elegir indexers para ZascArr</button>
+        </p>
+        <div id="prowlarr-indexers" aria-live="polite"></div>
+      </details>
     </fieldset>
 
     <fieldset class="ajustes-card ajustes-card--tercio">
