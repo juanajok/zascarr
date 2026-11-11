@@ -514,6 +514,104 @@ class TestSeriesMatcherDecide:
         assert result.series_id == sid
 
 
+class TestSeriesMatcherAnual:
+    """Un anual no comparte espacio de numeración con la grapa.
+
+    Mientras no exista `Series.kind` (fase 1), el matcher se apoya en el
+    título de la serie: solo acepta candidatas cuyo título contenga
+    «Annual»/«Anual». Es una heurística, pero falla cerrado: si no hay serie
+    anual, el archivo va a Pendientes y nunca se enlaza al nº N de la madre.
+    """
+
+    @pytest.mark.asyncio
+    async def test_anual_solo_enlaza_la_serie_anual(self):
+        sid_padre, sid_anual, iid = uuid4(), uuid4(), uuid4()
+        hits = [
+            SeriesHit(sid_padre, "Batman", 2011, 1.0),
+            SeriesHit(sid_anual, "Batman Annual", 2012, 1.0),
+        ]
+        session = make_session_mock(hits, iid)
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(
+            make_triage_result("Batman Annual", "1"), annual=True)
+
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid_anual
+        assert result.issue_id == iid
+
+    @pytest.mark.asyncio
+    async def test_anual_sin_serie_anual_no_enlaza_la_madre(self):
+        """Caso que motivó el cambio: solo existe «Batman». El archivo de
+        «Batman Annual 01» NO puede convertirse en Batman #1; queda en
+        Pendientes."""
+        sid_padre, iid = uuid4(), uuid4()
+        session = make_session_mock([SeriesHit(sid_padre, "Batman", 2011, 1.0)], iid)
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(
+            make_triage_result("Batman Annual", "1"), annual=True)
+
+        assert result.status == MatchStatus.UNSORTED
+        assert result.series_id is None
+        assert result.issue_id is None
+        assert result.candidates == []
+        assert any("anual" in n for n in result.notes)
+
+    @pytest.mark.asyncio
+    async def test_anual_sin_candidatas_va_a_pendientes(self):
+        session = make_session_mock([])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(
+            make_triage_result("Titans 2025 Annual", "1"), annual=True)
+
+        assert result.status == MatchStatus.UNSORTED
+        assert result.series_id is None
+        assert any("anual" in n for n in result.notes)
+
+    @pytest.mark.asyncio
+    async def test_alias_a_la_madre_no_vale_para_un_anual(self):
+        """Un alias aprendido antes de esta regla pudo apuntar a Batman.
+        Para un anual se ignora: no puede saltarse la invariante."""
+        sid_padre = uuid4()
+        alias = SeriesHit(sid_padre, "Batman", 2011, 1.0)
+        session = make_session_mock([], alias_hit=alias)
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(
+            make_triage_result("Batman Annual", "1"), annual=True)
+
+        assert result.status == MatchStatus.UNSORTED
+        assert result.series_id is None
+
+    @pytest.mark.asyncio
+    async def test_alias_a_la_serie_anual_si_vale(self):
+        sid_anual, iid = uuid4(), uuid4()
+        alias = SeriesHit(sid_anual, "Batman Annual", 2012, 1.0)
+        session = make_session_mock([], iid, alias_hit=alias)
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(
+            make_triage_result("Batman Annual", "1"), annual=True)
+
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid_anual
+
+    @pytest.mark.asyncio
+    async def test_sin_marca_anual_la_madre_sigue_siendo_valida(self):
+        """La regla no puede romper el caso normal: Batman #1 sigue siendo
+        Batman #1."""
+        sid_padre, iid = uuid4(), uuid4()
+        session = make_session_mock([SeriesHit(sid_padre, "Batman", 2011, 1.0)], iid)
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("Batman", "1"))
+
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid_padre
+
+
 class TestSeriesMatcherFormatoEdicion:
     """B15: el camino AUTOMÁTICO no enlaza a ciegas por número.
 
@@ -945,15 +1043,66 @@ class TestRealWorldFilenames:
         assert result.series == "Superman"
         assert result.issue_number == "123a"
 
-    def test_especial_no_forma_parte_del_nombre_de_la_serie(self):
-        """"Superman Vol2 Especial 2" es el especial nº 2 de Superman, no
-        una serie llamada "Superman Especial" que no iguala con nada."""
+    def test_annual_forma_parte_del_nombre_de_la_serie(self):
+        """«Batman Annual 01» es el nº 1 de la serie «Batman Annual», no el
+        nº 1 de «Batman». El flag lo marca y la palabra se conserva para que
+        el matcher encuentre la serie anual."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Batman Annual 01 (2012) (Digital).cbz")
+        assert result.series == "Batman Annual"
+        assert result.issue_number == "1"
+        assert result.is_annual
+        assert not result.is_special
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        # El año suelto del final ganaba al número del anual porque el
+        # buscador genérico prefiere 4 cifras: «...Annual_01..._1993» daba
+        # número 1993. Ahora se prueba primero el número pegado a «Annual».
+        ("Shadow_Of_The_Bat_Annual_01__Bloodlines_1993_-.cbz",
+         "Shadow Of The Bat Annual", "1"),
+        ("Shadow_Of_The_Bat_Annual_02_1994 por Froiking.cbr",
+         "Shadow Of The Bat Annual", "2"),
+        ("Batman Anual #28.cbz", "Batman Anual", "28"),
+        ("The Flash Annual #01.cbr", "The Flash Annual", "1"),
+        ("Action Comics Annual #01.cbr", "Action Comics Annual", "1"),
+    ])
+    def test_numero_del_anual_gana_al_año_suelto(
+            self, filename, expected_series, expected_num):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+        assert result.is_annual
+
+    def test_anual_y_especial_no_son_la_misma_clasificacion(self):
+        """«Especial» sigue colgando de la serie madre (comportamiento
+        histórico); «Annual» no. Mezclarlos era el bug de C2 por la puerta
+        de atrás: un Especial marcado como anual acababa buscando una serie
+        anual que no existe."""
         from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename("Superman Vol2 Especial 2 [SC][CRG].cbz")
         assert result.series == "Superman"
         assert result.issue_number == "2"
-        assert result.is_annual
+        assert result.is_special
+        assert not result.is_annual
+
+    def test_clave_de_coleccion_distingue_anual_especial_y_grapa(self):
+        """La clave de colección separa los tres espacios: un anual no es una
+        grapa, y un especial no es ninguna de las dos cosas."""
+        from zascarr.utils.naming import clave_de_coleccion
+
+        grapa = clave_de_coleccion("Batman 001 (2012).cbz")
+        anual = clave_de_coleccion("Batman Annual 01 (2012).cbz")
+        especial = clave_de_coleccion("Superman Vol2 Especial 2.cbz")
+
+        assert grapa == "batman"
+        assert anual == "batman anual"
+        assert especial == "superman especial"
+        assert len({grapa, anual}) == 2
+        assert len({grapa, especial}) == 2
 
     @pytest.mark.parametrize("filename,expected_series,expected_num", [
         ("Promethea Vol1 11 por TheRockJR [CRG].cbr", "Promethea", "11"),
@@ -1162,7 +1311,7 @@ class TestRealWorldFilenames:
         # Con sufijo de letra Y punto a la vez ("049b.-"): el patrón
         # exigía \d{1,3} puros antes del punto, así que ni el punto se
         # reconocía y "049b" entero acababa siendo la serie.
-        ("049b.- Hawkworld v2 Annual 01 Por Kelo5000.cbr", "Hawkworld", "1"),
+        ("049b.- Hawkworld v2 Annual 01 Por Kelo5000.cbr", "Hawkworld Annual", "1"),
     ])
     def test_orden_de_lectura_sin_punto_o_con_sufijo_de_letra(
         self, filename, expected_series, expected_num

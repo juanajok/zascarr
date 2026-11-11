@@ -7,6 +7,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **«Sí, organizar» enseña el destino y pide confirmación antes de mover (F1 de #272, #636).**
+  El botón ya no lanza el movimiento directo: abre una vista previa de solo lectura con serie,
+  número, carpeta de destino y nombre final, y solo «Confirmar y organizar» ejecuta la asignación
+  de siempre. La nota «Mueve y renombra el archivo» pasa a estar antes del botón y a tamaño de
+  lectura, no en un `title` ni en un `<small>` del navegador. La vista previa no escribe ni reserva
+  nada; si el destino cambia antes de confirmar, el servicio existente sigue siendo la autoridad.
 - **Archivos de colecciones distintas ya no se mezclan en el mismo número (BL-INF11, #616).**
   El nombre «Superman - Godfall #01» se entendía como «Superman» nº 1 y se colgaba del número 1
   existente junto a «Superman #01» o «Origen Secreto #01». Ahora, si el número ya tiene archivos

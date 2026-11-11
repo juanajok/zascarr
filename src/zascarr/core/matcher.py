@@ -51,7 +51,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.utils.naming import clave_de_coleccion
+from zascarr.utils.naming import clave_de_coleccion, es_titulo_de_anual
 
 # Umbral de similarity() de pg_trgm.
 # 0.35: discrimina bien títulos cortos con tokens distintivos ("Sandman").
@@ -310,12 +310,19 @@ class SeriesMatcher:
     # ── Decisión ─────────────────────────────────────────────────────────────
 
     async def decide(self, triage, extractor=None,
-                     formato_esperado: str | None = None) -> MatchResult:
+                     formato_esperado: str | None = None,
+                     annual: bool = False) -> MatchResult:
         """Punto de entrada.
 
         `extractor` es la inyección de naming.py:
         callable(filename) -> tuple[title, number, year] | None.
         Es un parámetro para que los tests lo sustituyan por fixtures.
+
+        `annual=True` significa que el nombre identifica un anual. En ese
+        caso solo se aceptan series de título anual («Batman Annual»,
+        «Titans 2025 Annual»): la serie madre no es candidata y, si no hay
+        serie anual en el catálogo, el archivo va a Pendientes. Nunca se
+        busca el nº N de la madre a partir de un anual.
         """
         title = number = year = None
         volume = None
@@ -339,12 +346,25 @@ class SeriesMatcher:
         # B13: alias local (corrección manual previa en Pendientes) manda
         # sobre el fuzzy — se salta capa 2 por completo si hay uno.
         alias_hit = await self.find_alias(title)
+        if alias_hit and annual and not es_titulo_de_anual(alias_hit.title):
+            # Un alias aprendido antes de esta regla pudo apuntar a la serie
+            # madre. Para un anual no vale: se ignora y se sigue por la vía
+            # normal, donde la madre tampoco será candidata.
+            alias_hit = None
         if alias_hit:
             return await self._resolve(alias_hit, number, [alias_hit],
                                         MatchStatus.DIRECT, ["alias local aprendido"],
                                         formato_esperado, nombre=triage.path.name)
 
         hits = await self.find_series(title, year, volume)
+        if annual:
+            hits = [h for h in hits if es_titulo_de_anual(h.title)]
+            if not hits:
+                return MatchResult(
+                    MatchStatus.UNSORTED,
+                    notes=["parece un anual y no hay una serie anual que coincida: "
+                           "no se enlaza a la serie madre"],
+                )
         good = [h for h in hits if h.score >= FUZZY_THRESHOLD]
 
         if not good:
