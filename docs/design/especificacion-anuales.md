@@ -12,8 +12,12 @@ están en [`censo-anuales-2026-11-11.md`](censo-anuales-2026-11-11.md). El censo
 decide que el backfill hace falta, pero no lo autoriza.
 
 **En esta rama:** la migración `0027` y el dry-run
-`scripts/medicion/propuesta_anuales.py` están escritos y probados, pero **no
-aplicados a la Pi**. La migración no mueve datos; el dry-run solo lee.
+`scripts/medicion/propuesta_anuales.py` están escritos y probados. La `0027`
+**ya está aplicada en la Pi** (2026-11-11; ver
+[`despliegue-0027-2026-11-11.md`](despliegue-0027-2026-11-11.md)): no movió
+datos y la app sigue `healthy`. Las columnas nuevas son aditivas; el código de
+la app de la Pi aún es el `main` anterior y las ignora. El backfill y la UI
+siguen sin aplicar.
 
 **Problema.** Un archivo `Batman Annual 01` se parseaba como `Batman` `#1`; el
 matcher podía enlazarlo con la grapa `Batman #1` y `numero_de_grapa` lo contaba
