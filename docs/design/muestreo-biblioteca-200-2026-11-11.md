@@ -101,12 +101,12 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
 | Medida | Resultado |
 |---|---:|
-| `direct` | 82 |
-| `fuzzy` | 15 |
-| `unsorted` | 103 |
-| Enlaces con Issue | 87 |
-| Enlaces con serie+número correctos | **87 / 87** |
-| Cobertura | **87 / 200 = 43,5 %** |
+| `direct` | 86 |
+| `fuzzy` | 14 |
+| `unsorted` | 100 |
+| Enlaces con Issue | 91 |
+| Enlaces con serie+número correctos | **91 / 91** |
+| Cobertura | **91 / 200 = 45,5 %** |
 | Desajustes de formato/tipo | **2** (La Espada del Inmortal y XIII, tomos enlazados a `single_issue`) |
 
 Los 64 enlaces aciertan serie y número según las etiquetas. El único problema
@@ -114,11 +114,12 @@ de formato es `XIII 01`: el revisor lo etiquetó como tomo BD y el catálogo lo
 tiene como `single_issue`; es una discrepancia de **edición**, no de identidad.
 
 La cobertura sigue siendo el problema, pero los alias seguros recuperan
-`100 Balas`, `Shadow of the Bat`, `Smallville` y `WildCATS`. Además se aplicaron los lotes 1 y 2 de series ausentes (10 series, 410 Issues,
-422 archivos): +5 y +9 enlaces nuevos en esta muestra. Ver
+`100 Balas`, `Shadow of the Bat`, `Smallville` y `WildCATS`. Además se aplicaron los lotes 1, 2 y 3 de series ausentes (15 series, 557
+Issues, 573 archivos): +5, +9 y +4 enlaces nuevos en esta muestra. Ver
 [`alias-catalogo-2026-11-11.md`](alias-catalogo-2026-11-11.md),
-[`lote1-series-ausentes-2026-11-11.md`](lote1-series-ausentes-2026-11-11.md) y
-[`lote2-series-ausentes-2026-11-11.md`](lote2-series-ausentes-2026-11-11.md).
+[`lote1-series-ausentes-2026-11-11.md`](lote1-series-ausentes-2026-11-11.md),
+[`lote2-series-ausentes-2026-11-11.md`](lote2-series-ausentes-2026-11-11.md) y
+[`lote3-series-ausentes-2026-11-11.md`](lote3-series-ausentes-2026-11-11.md).
 
 Se añadió además un fallback de **serie completa exacta** para títulos partidos
 por ` - `: `Green Lantern - Origenes Secretos` puede probar la serie completa si
