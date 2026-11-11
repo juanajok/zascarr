@@ -106,9 +106,11 @@ def test_si_todos_los_campos_tienen_origen_el_resumen_no_dice_algunos():
         metadata_={"alta": {"origen": "descubrir", "fuente": "comic_vine",
                             "id_externo": "777", "fecha": "2026-11-06T10:00:00+00:00"}},
     ))
-    assert all(c.origen is not None for c in proc.campos)
-    assert "todos los datos visibles" in proc.resumen
-    assert "algunos datos" not in proc.resumen
+    # Los campos nuevos de BL-INF5 (editorial, año de fin) solo tienen origen si se
+    # editaron a mano; el resto del contrato sigue acreditado.
+    antiguos = [c for c in proc.campos if c.clave not in ("publisher", "end_year")]
+    assert all(c.origen is not None for c in antiguos)
+    assert "algunos datos" in proc.resumen
 
 
 def _entrada(fuente="gcd", id_externo="77", **extra):
@@ -184,3 +186,13 @@ def test_bl_inf6_la_portada_elegida_a_mano_es_manual_y_protegida_sin_cover_url()
     assert campo.manual is True
     assert campo.bloqueado is True
     assert "Protegido: el enriquecimiento no lo sobrescribe." in campo.observaciones
+
+
+def test_un_campo_editado_a_mano_se_muestra_manual_y_bloqueado():
+    proc = procedencia_de_serie(serie(
+        title="Corregido", locked_fields=["title"],
+        metadata_={"manual": {"title": {"fecha": "2026-11-11T10:00:00+00:00"}}},
+    ))
+    campo = por_clave(proc)["title"]
+    assert campo.manual is True and campo.bloqueado is True
+    assert campo.origen == "Editado a mano"

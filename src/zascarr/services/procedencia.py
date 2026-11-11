@@ -31,6 +31,8 @@ from zascarr.utils.texto_html import texto_plano
 CAMPOS_GESTIONADOS: tuple[tuple[str, str], ...] = (
     ("title", "Título"),
     ("start_year", "Año de inicio"),
+    ("end_year", "Año de fin"),
+    ("publisher", "Editorial"),
     ("description", "Sinopsis"),
     ("cover_url", "Portada"),
     ("total_issues", "Números en total"),
@@ -155,6 +157,10 @@ def _valor(clave: str, series: Series, id_presente: bool) -> str:
         return _texto(series.title)
     if clave == "start_year":
         return _texto(series.start_year)
+    if clave == "end_year":
+        return _texto(series.end_year)
+    if clave == "publisher":
+        return _texto(series.publisher.name if series.publisher else None)
     if clave == "description":
         if not series.description:
             return "Sin dato"
@@ -180,6 +186,10 @@ def _tiene_valor(clave: str, series: Series, id_presente: bool) -> bool:
         return bool(series.title)
     if clave == "start_year":
         return series.start_year is not None
+    if clave == "end_year":
+        return series.end_year is not None
+    if clave == "publisher":
+        return series.publisher is not None
     if clave == "description":
         return bool(series.description)
     if clave == "cover_url":
@@ -196,6 +206,11 @@ def _origen(clave: str, series: Series, alta: dict, id_presente: bool) -> tuple[
     # manual.
     if clave == "cover_url" and eleccion_de_portada(series) is not None:
         return "Elegida a mano", True
+    # BL-INF5: la edición manual por campo deja su propia marca con fecha.
+    manual_meta = ((series.metadata_ or {}).get("manual")
+                   if isinstance(series.metadata_, dict) else None)
+    if isinstance(manual_meta, dict) and clave in manual_meta:
+        return "Editado a mano", True
     origen_alta = str(alta.get("origen") or "")
     fuente_alta = alta.get("fuente")
     manual = origen_alta == "manual" or series.metadata_source == MetadataSource.MANUAL.value
