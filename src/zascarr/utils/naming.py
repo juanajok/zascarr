@@ -307,6 +307,10 @@ class ParsedComicName:
     #: ("Superman - Godfall #01"). Sirve para no confundir colecciones distintas;
     #: vacío si el subtítulo iba después del número ("Superman #01 - El origen").
     subtitulo: str = ""
+    #: Serie completa antes de partir por " - " ("Green Lantern - Origenes
+    #: Secretos"). El matcher la prueba como alternativa si la serie corta no
+    #: encuentra candidato; no sustituye a `series` ni crea identidad sola.
+    series_alternativa: str = ""
     original_filename: str = ""
     confidence: float = 0.0
     # B15 (2026-09-26): cuando issue_number viene de un marcador de
@@ -373,6 +377,19 @@ def _buscar_numero(working: str) -> tuple[re.Match, bool] | None:
             if not _abre_el_titulo(working, m):
                 return m, cortar_en_numero
     return None
+
+
+def _limpiar_titulo_serie(texto: str) -> str:
+    """Limpieza final del título: separadores, sufijos de edición y bordes."""
+    series = texto.strip()
+    series = re.sub(r"[\.\-_]+", " ", series)
+    series = re.sub(r"\s+", " ", series)
+    series = re.sub(r"\s*[-\u2013\u2014]\s*$", "", series)
+    # Sufijo de edición que no forma parte del título de la serie.
+    series = re.sub(r"\s+The\s+New\s+52!?$", "", series, flags=re.IGNORECASE)
+    # La coma y los dos puntos finales sobran igual que el guion: quedan
+    # de haber cortado por el número ("Patrulla-X, nº 03" → "Patrulla X,").
+    return series.strip(" -\u2013\u2014(),;:#")
 
 
 def parse_comic_filename(filename: str) -> ParsedComicName:
@@ -613,23 +630,18 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # "Serie - Subtítulo" como "Serie -Subtítulo" ("La liga de los hombres
     # extraordinarios -La Tempestad"). El espacio DELANTE sí se exige, que
     # es lo que distingue el separador de un guion interno ("Spider-Man").
+    serie_completa = working
     partes_subtitulo = re.split(r"\s+-\s*", working, maxsplit=1)
     working = partes_subtitulo[0]
     if len(partes_subtitulo) > 1:
         result.subtitulo = partes_subtitulo[1].strip()
 
-    series = working.strip()
-    series = re.sub(r"[\.\-_]+", " ", series)
-    series = re.sub(r"\s+", " ", series)
-    series = re.sub(r"\s*[-\u2013\u2014]\s*$", "", series)
-    # Sufijo de edición que no forma parte del título de la serie.
-    series = re.sub(r"\s+The\s+New\s+52!?$", "", series, flags=re.IGNORECASE)
-    # La coma y los dos puntos finales sobran igual que el guion: quedan
-    # de haber cortado por el n\u00famero ("Patrulla-X, n\u00ba 03" \u2192 "Patrulla X,").
-    # El matcher los ignora al normalizar, pero este texto es el que ve el
-    # coleccionista en Pendientes y el que aprende el alias local (B13).
-    series = series.strip(" -\u2013\u2014(),;:#")
+    series = _limpiar_titulo_serie(working)
     result.series = series
+    if len(partes_subtitulo) > 1:
+        alternativa = _limpiar_titulo_serie(serie_completa)
+        if alternativa and alternativa != series:
+            result.series_alternativa = alternativa
     result.confidence = _confidence(result)
     return result
 

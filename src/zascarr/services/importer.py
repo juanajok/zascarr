@@ -450,9 +450,12 @@ async def _triage_and_match(
 
     # Un anual solo puede enlazar con una serie anual: `parsed.series` conserva
     # «Annual» y `annual=True` impide que el matcher acepte la serie madre.
+    kwargs = {}
+    if parsed.series_alternativa:
+        kwargs["series_alternativa"] = parsed.series_alternativa
     result = await matcher.decide(
         tr, extractor=extractor, formato_esperado=formato_esperado,
-        annual=parsed.is_annual,
+        annual=parsed.is_annual, **kwargs,
     )
     outcome = _Outcome(tr=tr, result=result, edition_kind=edition_kind)
     if aplicada:
