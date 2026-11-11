@@ -19,7 +19,7 @@ Documentación: https://docs.anilist.co/guide/graphql/
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 import structlog
@@ -50,6 +50,8 @@ query ($search: String, $perPage: Int) {
       startDate { year }
       chapters
       volumes
+      genres
+      characters { nodes { name { full } } }
     }
   }
 }
@@ -66,6 +68,8 @@ class AniListResult:
     start_year: int | None = None
     chapters: int | None = None
     volumes: int | None = None
+    genres: list[str] = field(default_factory=list)
+    characters: list[str] = field(default_factory=list)
     site_url: str | None = None
     raw: dict | None = None
 
@@ -119,9 +123,27 @@ def _parse_media(item: dict) -> AniListResult:
         start_year=(item.get("startDate") or {}).get("year"),
         chapters=item.get("chapters"),
         volumes=item.get("volumes"),
+        genres=_textos(item.get("genres")),
+        characters=_nombres_de_personajes(item.get("characters")),
         site_url=f"https://anilist.co/manga/{item['id']}",
         raw=item,
     )
+
+
+def _textos(valor) -> list[str]:
+    salida: list[str] = []
+    vistos: set[str] = set()
+    for texto in valor or []:
+        limpio = str(texto or "").strip()
+        if limpio and limpio.casefold() not in vistos:
+            vistos.add(limpio.casefold())
+            salida.append(limpio)
+    return salida
+
+
+def _nombres_de_personajes(valor) -> list[str]:
+    nodos = ((valor or {}).get("nodes") or []) if isinstance(valor, dict) else []
+    return _textos([(n.get("name") or {}).get("full") for n in nodos if isinstance(n, dict)])
 
 
 def _clean_description(text: str | None) -> str | None:
