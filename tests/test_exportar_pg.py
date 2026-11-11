@@ -160,3 +160,17 @@ async def test_exportar_notas_opcionales(db, tmp_path):
     texto = con.decode("utf-8-sig")
     assert texto.splitlines()[0].endswith("Nota de la serie,Nota del número")
     assert "nota de serie" in texto and "nota de número" in texto
+
+
+@pytest.mark.asyncio
+async def test_exportar_notas_con_formula_se_sanea(db, tmp_path):
+    serie, issue = await _montar(db, tmp_path)
+    db.add(Note(series_id=serie.id, texto="=HYPERLINK(\"x\")"))
+    db.add(Note(issue_id=issue.id, texto="+SUM(A1)"))
+    await db.flush()
+    crudo = await _csv_crudo(filas_coleccion(db, incluir_notas=True),
+                             CABECERAS_COLECCION_CON_NOTAS)
+    texto = crudo.decode("utf-8")
+    assert "'=HYPERLINK" in texto
+    assert "'+SUM(A1)" in texto
+    assert "\r\n=HYPERLINK" not in texto

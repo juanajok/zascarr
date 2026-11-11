@@ -8,11 +8,18 @@
     <textarea id="nota-serie-texto" name="texto" rows="3" maxlength="4000">{{ nota_serie.texto if nota_serie else "" }}</textarea>
     <div class="nota-acciones">
       <button class="btn ghost sm" type="submit">Guardar nota</button>
-      {% if nota_serie %}
-      <button class="btn ghost sm" type="submit" name="accion" value="borrar">Borrar nota</button>
-      {% endif %}
     </div>
   </form>
+  {% if nota_serie %}
+  <details class="nota-borrar">
+    <summary>Borrar nota</summary>
+    <p>¿Seguro que quieres borrar esta nota?</p>
+    <form method="post" action="/ui/series/{{ series.id }}/nota">
+      <input type="hidden" name="accion" value="borrar">
+      <button class="btn ghost sm" type="submit">Sí, borrar nota</button>
+    </form>
+  </details>
+  {% endif %}
   {% if notas_numeros %}
   <h3>Notas de números</h3>
   <ul class="notas-numeros">
@@ -26,6 +33,7 @@
   {% endif %}
 </section>
 {% else %}
+{% if nota_aviso %}{{ ui.aviso("amber", nota_aviso) }}{% endif %}
 <details id="notas-serie" class="notas-serie">
   <summary>Añadir nota</summary>
   <form method="post" action="/ui/series/{{ series.id }}/nota" class="nota-form">

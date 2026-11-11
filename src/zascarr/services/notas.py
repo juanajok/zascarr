@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import Issue, Note, Series
@@ -35,35 +36,46 @@ def normalizar_texto(texto: str | None) -> str:
 async def leer_serie(db: AsyncSession, series_id: UUID) -> Note | None:
     return (await db.execute(
         select(Note).where(Note.series_id == series_id)
+        .execution_options(populate_existing=True)
     )).scalar_one_or_none()
 
 
 async def leer_numero(db: AsyncSession, issue_id: UUID) -> Note | None:
     return (await db.execute(
         select(Note).where(Note.issue_id == issue_id)
+        .execution_options(populate_existing=True)
     )).scalar_one_or_none()
 
 
 async def guardar_serie(db: AsyncSession, series_id: UUID, texto: str | None) -> Note:
+    """Upsert idempotente: dos guardados concurrentes no crean dos notas."""
     limpio = normalizar_texto(texto)
-    nota = await leer_serie(db, series_id)
-    if nota is None:
-        nota = Note(series_id=series_id, texto=limpio)
-        db.add(nota)
-    else:
-        nota.texto = limpio
+    sentencia = (
+        pg_insert(Note)
+        .values(series_id=series_id, texto=limpio)
+        .on_conflict_do_update(
+            index_elements=[Note.series_id],
+            index_where=Note.series_id.isnot(None),
+            set_={"texto": limpio, "updated_at": func.now()})
+        .returning(Note)
+    )
+    nota = (await db.execute(sentencia)).scalar_one()
     await db.flush()
     return nota
 
 
 async def guardar_numero(db: AsyncSession, issue_id: UUID, texto: str | None) -> Note:
     limpio = normalizar_texto(texto)
-    nota = await leer_numero(db, issue_id)
-    if nota is None:
-        nota = Note(issue_id=issue_id, texto=limpio)
-        db.add(nota)
-    else:
-        nota.texto = limpio
+    sentencia = (
+        pg_insert(Note)
+        .values(issue_id=issue_id, texto=limpio)
+        .on_conflict_do_update(
+            index_elements=[Note.issue_id],
+            index_where=Note.issue_id.isnot(None),
+            set_={"texto": limpio, "updated_at": func.now()})
+        .returning(Note)
+    )
+    nota = (await db.execute(sentencia)).scalar_one()
     await db.flush()
     return nota
 

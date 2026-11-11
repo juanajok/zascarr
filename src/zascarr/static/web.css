@@ -2208,7 +2208,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .nota-form textarea { width: 100%; max-width: 48rem; font: inherit; }
 .nota-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
 .notas-numeros { display: grid; gap: 6px; padding-left: 1.1rem; }
-.nota-texto { display: block; overflow-wrap: anywhere; }
+.nota-texto { display: block; overflow-wrap: anywhere; white-space: pre-wrap; }
+.nota-borrar { margin-top: 8px; }
 .exportar-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 
 @media (prefers-contrast: more), (forced-colors: active) {

@@ -64,3 +64,35 @@ def test_guardar_nota_de_numero():
     assert r.status_code == 303
     assert "#nota-numero" in r.headers["location"]
     assert "nota=guardada" in r.headers["location"]
+
+
+def test_aviso_de_nota_vacia_se_ve_fuera_del_details():
+    series = make_series(total_issues=3)
+    session = FakeSession([
+        FakeExecResult([series]), FakeExecResult([]),
+        acuse(), retirados(), FakeExecResult([]),
+    ])
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}?nota=vacia")
+    assert "La nota no puede estar vacía." in r.text
+    assert r.text.index("La nota no puede estar vacía.") < r.text.index('<details id="notas-serie"')
+
+
+def test_borrar_pide_confirmacion_en_plantilla():
+    from zascarr.web.routes import crear_templates
+    nota = SimpleNamespace(texto="nota")
+    html = crear_templates().get_template("_nota_serie.html").render(
+        series=SimpleNamespace(id=uuid4()), nota_serie=nota, notas_numeros=[],
+        nota_aviso="", ui=None)
+    assert "<summary>Borrar nota</summary>" in html
+    assert "¿Seguro que quieres borrar esta nota?" in html
+    assert 'name="accion" value="borrar"' in html
+
+
+def test_accion_de_nota_desconocida_es_422():
+    series = make_series(total_issues=3)
+    session = FakeSession([], series=series)
+    with use_fake_session(session, ficha=False) as client:
+        r = client.post(f"/ui/series/{series.id}/nota",
+                        data={"texto": "x", "accion": "inventada"})
+    assert r.status_code == 422
