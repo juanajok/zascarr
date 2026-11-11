@@ -431,7 +431,9 @@ async def _triage_and_match(
     if pista is not None:
         nombre = quitar_prefijo_de_cohorte(tr.path.name, pista)
         aplicada = nombre != tr.path.name
-    parsed = parse_comic_filename(nombre)
+    carpetas = [tr.path.parent.parent.name, tr.path.parent.name]
+    contexto = " / ".join(c for c in carpetas if c and c not in (".", ".."))
+    parsed = parse_comic_filename(nombre, carpeta=tr.path.parent.name, contexto=contexto)
     edition_kind = parsed.edition_kind
     # B15: `None` significa "el nombre NO trae marcador de edición" — el matcher
     # entonces no tiene evidencia del formato y solo enlazará si no hay nada que
@@ -450,9 +452,12 @@ async def _triage_and_match(
 
     # Un anual solo puede enlazar con una serie anual: `parsed.series` conserva
     # «Annual» y `annual=True` impide que el matcher acepte la serie madre.
+    kwargs = {}
+    if parsed.series_alternativa:
+        kwargs["series_alternativa"] = parsed.series_alternativa
     result = await matcher.decide(
         tr, extractor=extractor, formato_esperado=formato_esperado,
-        annual=parsed.is_annual,
+        annual=parsed.is_annual, **kwargs,
     )
     outcome = _Outcome(tr=tr, result=result, edition_kind=edition_kind)
     if aplicada:

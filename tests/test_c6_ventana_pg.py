@@ -44,6 +44,10 @@ def url_bd():
 def ajustes(monkeypatch):
     s = get_settings()
     monkeypatch.setattr(s, "prowlarr_enabled", True)
+    # Prowlarr encendido pero incompleto ya no se consulta (d232709); el
+    # fixture simula una fuente configurada, no solo activada.
+    monkeypatch.setattr(s, "prowlarr_url", "http://prowlarr.test")
+    monkeypatch.setattr(s, "prowlarr_api_key", "test-api-key")
     monkeypatch.setattr(s, "forum_enabled", False)
     monkeypatch.setattr(s, "politica_busquedas_por_hora", 2)
     return s

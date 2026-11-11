@@ -454,6 +454,83 @@ class TestSeriesMatcherDecide:
         assert len(result.candidates) == 2
 
     @pytest.mark.asyncio
+    async def test_carpeta_desempata_volumen_sin_convertirla_en_identidad(self):
+        """Dos Batman Vol 1/Vol 2 empatados; la carpeta «Batman Vol 1» decide.
+
+        La carpeta solo se usa aquí porque el matcher YA tiene dos candidatos
+        por encima del umbral. No puede convertir una carpeta cualquiera en
+        una serie nueva."""
+        sid1, sid2 = uuid4(), uuid4()
+        iid = uuid4()
+        hits = [
+            SeriesHit(sid1, "Batman Vol 1", 1940, 1.0),
+            SeriesHit(sid2, "Batman Vol 2", 2011, 1.0),
+        ]
+        session = make_session_mock(hits, iid)
+        matcher = SeriesMatcher(session)
+        tr = TriageResult(
+            path=Path("/biblioteca/Batman Vol 1/Batman #12.cbz"),
+            comic_info=ComicInfo(series="Batman", number="12"),
+        )
+        result = await matcher.decide(tr)
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid1
+        assert any("carpeta" in n for n in result.notes)
+
+    @pytest.mark.asyncio
+    async def test_carpeta_sin_coincidencia_no_desempata(self):
+        sid1, sid2 = uuid4(), uuid4()
+        hits = [
+            SeriesHit(sid1, "Batman Vol 1", 1940, 1.0),
+            SeriesHit(sid2, "Batman Vol 2", 2011, 1.0),
+        ]
+        session = make_session_mock(hits)
+        matcher = SeriesMatcher(session)
+        tr = TriageResult(
+            path=Path("/biblioteca/Comics/Batman #12.cbz"),
+            comic_info=ComicInfo(series="Batman", number="12"),
+        )
+        result = await matcher.decide(tr)
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+
+    @pytest.mark.asyncio
+    async def test_carpeta_desempata_por_anio(self):
+        sid1, sid2 = uuid4(), uuid4()
+        hits = [
+            SeriesHit(sid1, "Batman", 1940, 1.0),
+            SeriesHit(sid2, "Batman", 2011, 1.0),
+        ]
+        session = make_session_mock(hits)
+        matcher = SeriesMatcher(session)
+        tr = TriageResult(
+            path=Path("/biblioteca/Batman (2011)/Batman #12.cbz"),
+            comic_info=ComicInfo(series="Batman", number="12"),
+        )
+        result = await matcher.decide(tr)
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid2
+
+    @pytest.mark.asyncio
+    async def test_carpeta_que_contradice_el_volumen_no_desempata(self):
+        """«Batman Vol 3/» no puede elegir «Batman Vol 1»: la carpeta afirma
+        un volumen que no coincide con ningún candidato; mejor Pendientes."""
+        sid1, sid2 = uuid4(), uuid4()
+        hits = [
+            SeriesHit(sid1, "Batman Vol 1", 1940, 1.0),
+            SeriesHit(sid2, "Batman Vol 2", 2011, 1.0),
+        ]
+        session = make_session_mock(hits)
+        matcher = SeriesMatcher(session)
+        tr = TriageResult(
+            path=Path("/biblioteca/Batman Vol 3/Batman #12.cbz"),
+            comic_info=ComicInfo(series="Batman", number="12"),
+        )
+        result = await matcher.decide(tr)
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+
+    @pytest.mark.asyncio
     async def test_desambiguacion_por_año_resuelve_empate(self):
         """Dos Batman, el año en ComicInfo apunta al correcto."""
         sid1, sid2 = uuid4(), uuid4()
@@ -472,6 +549,32 @@ class TestSeriesMatcherDecide:
         )
         assert result.status == MatchStatus.DIRECT
         assert result.series_id == sid2
+
+    @pytest.mark.asyncio
+    async def test_serie_alternativa_solo_si_la_primera_no_matchea(self):
+        """Green Lantern - Origenes Secretos: la serie corta no matchea; la
+        completa sí, y además de forma exacta."""
+        sid = uuid4()
+        iid = uuid4()
+        session = make_session_mock([], iid)
+        matcher = SeriesMatcher(session)
+        matcher.find_alias = AsyncMock(return_value=None)
+
+        async def fake_find(title, year=None, volume=None):
+            if title == "Green Lantern":
+                return []
+            return [SeriesHit(sid, "Green Lantern - Origenes Secretos", 2011, 1.0)]
+
+        matcher.find_series = fake_find
+        tr = TriageResult(
+            path=Path("Green Lantern - Origenes Secretos #01.cbr"),
+            comic_info=ComicInfo(series="Green Lantern", number="1"),
+        )
+        result = await matcher.decide(
+            tr, series_alternativa="Green Lantern - Origenes Secretos")
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid
+        assert any("serie alternativa" in n for n in result.notes)
 
     @pytest.mark.asyncio
     async def test_sin_titulo_va_a_unsorted(self):
@@ -1214,6 +1317,273 @@ class TestRealWorldFilenames:
         assert parse_comic_filename(
             "Daytripper (por Aruso) CRG 8º Aniversario.cbr"
         ).series == "Daytripper"
+
+    def test_guardar_serie_completa_antes_del_subtitulo(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "Green Lantern - Origenes Secretos #01 (GL vol. 4 #29).cbr")
+        assert result.series == "Green Lantern"
+        assert result.series_alternativa == "Green Lantern Origenes Secretos"
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num,expected_kind", [
+        ("Batman Omnibus Vol 1.cbz", "Batman", "1", "omnibus"),
+        ("Batman Omnibus 2.cbz", "Batman", "2", "omnibus"),
+        ("Saga TPB 2.cbz", "Saga", "2", "trade_paperback"),
+        ("Batman HC 1.cbz", "Batman", "1", "hardcover"),
+        ("Locke & Key Graphic Novel 1.cbz", "Locke & Key", "1", "graphic_novel"),
+    ])
+    def test_formato_de_edicion_no_es_grapa(
+        self, filename, expected_series, expected_num, expected_kind
+    ):
+        """Omnibus/TPB/HC/GN son formatos de Issue, no números de grapa."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+        assert result.edition_kind == expected_kind
+
+    def test_marcadores_de_formato_mapean_al_enum_de_issue(self):
+        from zascarr.models import EDITION_KIND_A_FORMAT, IssueFormat
+
+        assert EDITION_KIND_A_FORMAT["omnibus"] == IssueFormat.OMNIBUS
+        assert EDITION_KIND_A_FORMAT["trade_paperback"] == IssueFormat.TRADE_PAPERBACK
+        assert EDITION_KIND_A_FORMAT["hardcover"] == IssueFormat.HARDCOVER
+        assert EDITION_KIND_A_FORMAT["graphic_novel"] == IssueFormat.GRAPHIC_NOVEL
+
+    def test_cuenta_de_miniserie_es_contexto_no_identidad(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        con_numero = parse_comic_filename("Batman #1 of 4.cbz")
+        assert con_numero.issue_number == "1"
+        assert con_numero.issue_count == 4
+        sin_numero = parse_comic_filename("Batman 1 de 4.cbz")
+        assert sin_numero.issue_number == ""
+        assert sin_numero.issue_count == 4
+
+    @pytest.mark.parametrize("filename,serie,numero", [
+        ("13. Nightwing #73.cbr", "Nightwing", "73"),
+        ("14  JLD #11.cbr", "JLD", "11"),
+        ("73 Dreadstar (First Comics) 61 USA.cbz", "Dreadstar", "61"),
+        ("22.1 Catwoman Vol 02 Year One (1995).cbr", "Catwoman Year One", "22.1"),
+    ])
+    def test_prefijo_numerico_de_orden_no_es_la_serie_ni_el_numero(
+        self, filename, serie, numero
+    ):
+        """`13. Nightwing #73` y `73 Dreadstar ... 61`: el prefijo numérico
+        es orden de lectura, no parte de la serie."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == serie
+        assert result.issue_number == numero
+
+    def test_crossover_no_es_la_serie(self):
+        """«Crossover 07 - Dinastía de X 04»: el 07 es orden de lectura."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "Crossover 07 - Dinastia de X 04 [por Aluci][CRG].cbr")
+        assert result.series == "Dinastia de X"
+        assert result.issue_number == "4"
+
+    @pytest.mark.parametrize("filename", [
+        "Injustice - Gods Among Us - Año 2 #25 - Anual.cbr",
+        "Injustice - Gods Among Us - Año 3 #25 - Anual.cbr",
+        "Injustice - Gods Among Us - Año 5 #41 - Anual.cbr",
+    ])
+    def test_pack_issue_mas_anual_no_es_el_numero_del_anual(self, filename):
+        """«#25 - Anual» es un pack; el 25 no es un número único de grapa."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        assert parse_comic_filename(filename).issue_number == ""
+
+    def test_pack_con_rango_y_anual_no_inventa_numero(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Batman #647-650 y anual 25.cbr")
+        assert result.issue_number == ""
+
+    def test_carpeta_resuelve_issue_delante_de_la_serie(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        for nombre, numero in [
+            ("16 Catwoman The New 52! (Black Diamond, A.R.G.U.S.!).cbr", "16"),
+            ("29 Catwoman The New 52!.cbr", "29"),
+            ("51 Catwoman.cbr", "51"),
+        ]:
+            result = parse_comic_filename(
+                nombre, carpeta="2011 - 2014 Catwoman The New 52!")
+            assert result.series == "Catwoman"
+            assert result.issue_number == numero
+
+    def test_carpeta_quita_credito_delante(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "Hiroaki Samura - La Espada del Inmortal 06 (Spanish, CRG).cbr",
+            carpeta="La Espada del Inmortal")
+        assert result.series == "La Espada del Inmortal"
+        assert result.issue_number == "6"
+
+        result = parse_comic_filename(
+            "C  Gimenez &amp; C  Godard - Una infancia eterna.cbr",
+            carpeta="Carlos Giménez")
+        assert result.series == "Una infancia eterna"
+
+    def test_anio_dentro_del_titulo_no_es_el_numero(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "American Vampire 1976 10 [TM][por Shinji].cbr",
+            carpeta="American Vampire 1976")
+        assert result.series == "American Vampire 1976"
+        assert result.issue_number == "10"
+
+    def test_carpeta_confirma_la_serie_completa(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        gl = parse_comic_filename(
+            "Green Lantern - Origenes Secretos #01.cbr",
+            carpeta="Green Lantern - Origenes Secretos")
+        assert gl.series == "Green Lantern Origenes Secretos"
+        assert gl.issue_number == "1"
+
+        sm = parse_comic_filename(
+            "Superman - Year One #03.cbr", carpeta="Superman_ Year One")
+        assert sm.series == "Superman Year One"
+
+        jk = parse_comic_filename(
+            "Joe Kubert #05.cbr", carpeta="Joe Kubert Presents Vol. 1")
+        assert jk.series == "Joe Kubert Presents"
+
+        batman = parse_comic_filename("Batman #243.cbr", carpeta="Batman Vol. 1")
+        assert batman.series == "Batman"
+
+    def test_integral_sin_numero_pegado_marca_edicion(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "100 Balas - Integral (Ed.Planeta) 01 [por x].cbz")
+        assert result.series == "100 Balas"
+        assert result.issue_number == "1"
+        assert result.edition_kind == "integral"
+
+    def test_annual_con_prefijo_decimal_usa_el_numero_del_annual(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("11.1 Annual 01 Catwoman.cbr")
+        assert result.series == "Catwoman Annual"
+        assert result.issue_number == "1"
+        assert result.is_annual is True
+
+    def test_pack_con_rango_y_anual_no_contamina_la_serie(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Batman #647-650 y anual 25.cbr")
+        assert result.series == "Batman"
+        assert result.issue_number == ""
+        assert result.is_annual is True
+
+    def test_contexto_de_carpetas_expande_acronimos_y_sufijos(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        jld = parse_comic_filename(
+            "14  JLD #11.cbr", carpeta="Justice League Dark",
+            contexto="Comics / Justice League Dark")
+        assert jld.series == "Justice League Dark"
+        assert jld.issue_number == "11"
+
+        op = parse_comic_filename(
+            "OP 966.cbr", carpeta="Volumen 96",
+            contexto="One Piece / Volumen 96")
+        assert op.series == "One Piece"
+        assert op.issue_number == "966"
+
+        op883 = parse_comic_filename(
+            "OP883.cbr", carpeta="Volumen 88",
+            contexto="One Piece / Volumen 88")
+        assert op883.series == "One Piece"
+        assert op883.issue_number == "883"
+
+        vacio = parse_comic_filename(
+            "927.cbr", carpeta="Volumen 92",
+            contexto="One Piece / Volumen 92")
+        assert vacio.series == "One Piece"
+        assert vacio.issue_number == "927"
+
+        injusticia = parse_comic_filename(
+            "Injustice - Gods Among Us - Año 3 #13.cbr",
+            carpeta="Injustice Año 3",
+            contexto="Injustice - Gods Among Us / Injustice Año 3")
+        assert "Gods Among Us" in injusticia.series
+        assert injusticia.issue_number == "13"
+
+        corintio = parse_comic_filename(
+            "The Corinthian - Death in Venice 03.cbr",
+            carpeta="The corinthian-death in venice",
+            contexto="The Sandman presenta a / The corinthian-death in venice")
+        assert "corinthian" in corintio.series.lower()
+        assert corintio.issue_number == "3"
+
+        lobo = parse_comic_filename(
+            "Lobo - Anual 1.cbr", carpeta="Lobo", contexto="Comics / Lobo")
+        assert lobo.series == "Lobo Anual"
+        assert lobo.issue_number == "1"
+        assert lobo.is_annual is True
+
+    def test_alternativa_de_pack_y_marca_corregido(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        inj = parse_comic_filename(
+            "Injustice - Gods Among Us - Año 3 #25 - Anual.cbr",
+            carpeta="Injustice Año 3",
+            contexto="Injustice - Gods Among Us / Injustice Año 3")
+        assert inj.series == "Injustice Gods Among Us Año 3"
+        assert inj.issue_number == ""
+
+        laz = parse_comic_filename(
+            "Lazarus - X+66 (escaneo de Norma Aluci CRG)corregido.cbr",
+            carpeta="Lazarus", contexto="Comics / Lazarus")
+        # Sin catálogo, «Lazarus» + «X+66» es ambiguo con un subtítulo de
+        # grapa; se deja la serie corta en vez de inventar.
+        assert laz.series == "Lazarus"
+
+    def test_carpeta_numerica_no_es_la_serie_y_especial_sin_numero(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        noches = parse_comic_filename(
+            "Noches Eternas 6.cbr",
+            carpeta="02 Endless night-noches eternas",
+            contexto="The Sandman Especiales / 02 Endless night-noches eternas")
+        assert noches.series == "Noches Eternas"
+        assert noches.issue_number == "6"
+
+        lobo = parse_comic_filename(
+            "Lobo - El asunto Qigly.cbr", carpeta="Lobo",
+            contexto="Comics / Lobo")
+        assert lobo.series == "Lobo"
+        assert lobo.issue_number == ""
+
+        corintio = parse_comic_filename(
+            "The Corinthian - Death in Venice 03.cbr",
+            carpeta="The corinthian-death in venice",
+            contexto="The Sandman presenta a / The corinthian-death in venice")
+        assert "corinthian" in corintio.series.lower()
+
+    def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
+        """«Batman #400 Aniversario»: el número va con #, así que es la
+        grapa #400 y no la efeméride del 400 aniversario. El patrón viejo
+        borraba «400 Aniversario» entero antes de buscar el número."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Batman #400 Aniversario.cbr")
+        assert result.series == "Batman"
+        assert result.issue_number == "400"
+        # La efeméride sin marcador de grapa sigue sin ser número.
+        sin_marcador = parse_comic_filename("Iberia Inc. - Integral 20 aniversario.cbr")
+        assert sin_marcador.issue_number == ""
 
     def test_edicion_de_aniversario_no_es_el_numero(self):
         """"Integral 20 aniversario" es una efeméride de la editorial, no
