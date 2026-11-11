@@ -59,6 +59,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Elegir qué indexers de Prowlarr usa ZascArr.** En Ajustes → Prowlarr se puede cargar la lista
+  real de indexers y marcar solo los que quieres para cómics; ZascArr pasa `indexerIds` en la
+  búsqueda y no toca los indexers que usan Sonarr/Radarr u otras apps. Sin marcar ninguno se
+  mantiene el comportamiento anterior (todos los activos). Los indexers apagados en Prowlarr no
+  se ofrecen. Ficha: `docs/design/benchmark-busqueda-deseados-prowlarr-2026-11-11.md`.
 - **Metron y Open Library como fuentes de Descubrir (2026-11-11).** Se pueden encender en Ajustes
   (Metron con token propio; Open Library sin clave) y buscar series/tomos al dar de alta. Guardan
   `metron_id`/`open_library_id` en `Series` (migración aditiva 0027), respetan los estados #133 y

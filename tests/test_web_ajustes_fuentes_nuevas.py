@@ -103,3 +103,41 @@ def test_probar_metron_con_transporte_simulado():
     ok, mensaje = asyncio.run(_test_metron(
         "tok", transporte=httpx.MockTransport(responder)))
     assert ok and "Conexión correcta" in mensaje
+
+
+def test_elegir_indexers_de_prowlarr_muestra_checkboxes(monkeypatch):
+    from types import SimpleNamespace
+
+    from zascarr.services.prowlarr import IndexerProwlarr
+
+    class _Cliente:
+        async def list_indexers(self):
+            return [IndexerProwlarr(1, "Internet Archive", True, ["Books"]),
+                    IndexerProwlarr(2, "Apagado", False, [])]
+
+    monkeypatch.setattr("zascarr.web.ajustes.get_settings", lambda: SimpleNamespace(
+        prowlarr_url="http://prowlarr:9696", prowlarr_api_key="clave",
+        prowlarr_indexer_ids="1"))
+    monkeypatch.setattr("zascarr.web.ajustes.ProwlarrClient", lambda: _Cliente())
+    c = _cliente()
+    try:
+        r = c.get("/ui/ajustes/prowlarr/indexers")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert 'name="indexer_ids" value="1"' in r.text and "Internet Archive" in r.text
+    assert "Apagado" not in r.text          # los apagados en Prowlarr no se ofrecen
+
+
+def test_guardar_indexers_de_prowlarr(monkeypatch):
+    guardar = AsyncMock()
+    monkeypatch.setattr("zascarr.web.ajustes.RuntimeSettingsService",
+                        lambda _db: SimpleNamespace(save=guardar))
+    c = _cliente()
+    try:
+        r = c.post("/ui/ajustes/guardar/prowlarr-indexers",
+                    data={"indexer_ids": ["3", "7"]})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert guardar.await_args.args[0] == {"prowlarr_indexer_ids": "3,7"}

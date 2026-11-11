@@ -44,7 +44,9 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
         "comicvine_enabled", "anilist_enabled", "tebeosfera_enabled", "gcd_enabled",
         "metron_enabled", "open_library_enabled",
     ),
-    "prowlarr": ("prowlarr_url", "prowlarr_api_key", "prowlarr_enabled"),
+    "prowlarr": (
+        "prowlarr_url", "prowlarr_api_key", "prowlarr_enabled", "prowlarr_indexer_ids",
+    ),
     "transmission": (
         "transmission_url", "transmission_username",
         "transmission_password", "transmission_enabled",
