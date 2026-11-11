@@ -1,5 +1,9 @@
 # Alias de catálogo seguros (2026-11-11)
 
+> Las métricas de este documento son las de **antes** del lote 1 de series
+> ausentes; la medición actualizada está en
+> [`muestreo-biblioteca-200-2026-11-11.md`](muestreo-biblioteca-200-2026-11-11.md).
+
 > Alias **de título**, no de identidad. Solo se aplican cuando la serie ya
 > existe en el catálogo y comparte el mismo espacio de numeración. No se usa
 > para inventar series ausentes.

@@ -1,8 +1,8 @@
 # Series ausentes en la biblioteca (2026-11-11)
 
-> Censo de solo lectura. No se han creado series, Issues ni enlaces. La
-> propuesta está en `/mnt/Datos/Documentos/propuestas_series_ausentes_2026-11-11.json`
-> y contiene nombres reales.
+> Censo de solo lectura. **Tras este censo se aplicó el lote 1** (5 series,
+> 211 Issues, 222 archivos); quedan **3.334 archivos sin Issue**. La propuesta
+> completa está en `/mnt/Datos/Documentos/propuestas_series_ausentes_2026-11-11.json`.
 
 ## 1. Alcance
 
