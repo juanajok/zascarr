@@ -180,10 +180,14 @@ async def test_caducidad_ofrece_reabrir_la_vista(entorno):
     async with cliente() as c:
         r = await c.post(
             "/ui/pendientes/carpetas/asistente/vinculacion/elegir",
-            data={"eleccion": "token-invalido|local:%s" % uuid4()})
+            data={"eleccion": f"token-invalido|local:{uuid4()}",
+                  "clave": "Comics/Flash (1987)", "series_id": str(uuid4()),
+                  "cursor_actual": "inicio"})
     assert r.status_code == 200
     assert "Volver a abrir la vista previa" in r.text
+    assert "clave=Comics%2FFlash+%281987%29" in r.text
     assert r.text.count("autofocus") == 1
+    assert 'class="aviso warn"' in r.text and 'class="sr"' not in r.text
 
 
 @pytest.mark.asyncio

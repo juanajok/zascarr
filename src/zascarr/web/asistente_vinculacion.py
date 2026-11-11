@@ -34,6 +34,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
+from urllib.parse import urlencode
 from uuid import UUID
 
 import structlog
@@ -313,6 +314,7 @@ def _contexto_de_la_revision(r: RespuestaVinculacion, cursor_actual: str, otros:
         "pendientes": pendientes, "incluidos": incluidos, "excluidos": excluidos, "limite": LIMITE_ARCHIVOS,
         "motivos_legibles": motivos_legibles, "texto_de_la_pagina": texto_de_la_pagina(r.pagina), "accion": accion,
         "formatos": FORMATOS_LEGIBLES, "tradiciones": TRADICIONES_ES, "fuentes": FUENTES_ES,
+        "url_reabrir_vista": RUTA,
         "texto_legible": texto_legible,
         "hay_que_marcar": any(a.marcable and not a.marcado for a in r.archivos),
         "hay_marcados": any(a.marcado for a in r.archivos),
@@ -493,8 +495,13 @@ async def elegir_publicacion(request: Request, db: AsyncSession = Depends(get_db
                               estado=estado, cursor=cursor_actual, otros=otros,
                               avisos=[x for x in (aviso, error) if x],
                               pagina_completa="hx-request" not in request.headers)
+    consulta = {"clave": clave, "series_id": series_id}
+    if cursor_actual:
+        consulta["cursor"] = cursor_actual
+    url_reabrir = RUTA + "?" + urlencode({k: v for k, v in consulta.items() if v})
     respuesta = templates.TemplateResponse(
-        request, "_vinculacion_revision.html", {"r": None, "error": error})
+        request, "_vinculacion_revision.html",
+        {"r": None, "error": error, "url_reabrir": url_reabrir})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 
