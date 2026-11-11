@@ -5,7 +5,7 @@
     con una región viva (la tecnología de apoyo la vigila desde que existe). Con `innerHTML` htmx descarta esta envoltura y
     solo mete su contenido en el nodo que ya está; los atributos (`aria-live`, `aria-atomic`, `sr`) viven únicamente en la
     página y esta respuesta no lleva ninguno. -#}
-<div id="descubrir-estado" hx-swap-oob="innerHTML">{{ anuncio }}</div>
+{% if not pagina_completa %}<div id="descubrir-estado" hx-swap-oob="innerHTML">{{ anuncio }}</div>{% endif %}
 {#- Los avisos NO llevan `role`: lo que dicen ya va en la región viva y se anunciaría dos veces. -#}
 {% for aviso in avisos %}
 <div class="{{ clase_aviso }}"><span class="aviso-icono" aria-hidden="true">?</span><div>{{ aviso }}</div></div>

@@ -26,10 +26,11 @@ from enum import StrEnum
 from typing import Any
 
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.models import ComicTradition, MetadataSource
+from zascarr.models import ComicTradition, MetadataSource, Series
 from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient
 from zascarr.services.detalle_edicion import (
@@ -41,6 +42,12 @@ from zascarr.services.detalle_edicion import (
     detalle_desde_numero,
 )
 from zascarr.services.gcd import GCDClient, GCDSerie, es_edicion_espanola
+from zascarr.services.identificadores import (
+    Identificador,
+    IdentificadorInvalidoError,
+    ResolucionIdentificador,
+    parsear_identificador,
+)
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 from zascarr.utils.peticiones import ReintentosAgotados, RespuestaNoTransitoria
@@ -449,6 +456,123 @@ class DiscoveryService:
             avisos.extend(avisos_fuente)
         estados = {nombre: detalle.estado for nombre, detalle in detalles.items()}
         return Busqueda(results, avisos, estados, detalles)
+
+    async def resolver_identificador(self, texto: str) -> ResolucionIdentificador:
+        """BL-R5 (#234): resuelve por id exacto ANTES que por título.
+
+        Valida la forma sin red; consulta solo la fuente del identificador y solo al
+        pedirlo. Un error de la fuente se devuelve como estado de #133, nunca como
+        «no existe». Si la serie ya está en la biblioteca, no se consulta la fuente.
+        """
+        try:
+            ident = parsear_identificador(texto)
+        except IdentificadorInvalidoError as exc:
+            return ResolucionIdentificador(camino="invalido", motivo=str(exc))
+
+        local = await self._serie_local_por_identificador(ident)
+        if local is not None:
+            return ResolucionIdentificador(
+                camino="ya_local", identificador=ident, ya_local=local,
+                motivo="Esa serie ya está en tu biblioteca.")
+
+        fuente = ident.fuente
+        settings = get_settings()
+        nombre = fuente.value
+        if not getattr(settings, _INTERRUPTOR[fuente]):
+            return ResolucionIdentificador(
+                camino="error", identificador=ident,
+                estado=_estado_detalle(fuente, FUENTE_APAGADA, "Está apagada en Ajustes."),
+                motivo="Esa fuente está apagada en Ajustes.")
+        if fuente is MetadataSource.COMIC_VINE and not settings.comicvine_api_key:
+            return ResolucionIdentificador(
+                camino="error", identificador=ident,
+                estado=_estado_detalle(
+                    fuente, FUENTE_CONFIGURACION_INCOMPLETA,
+                    "Falta su clave en Ajustes."),
+                motivo="Comic Vine no está configurado: añade su clave en Ajustes.")
+        if fuente is MetadataSource.ANILIST:
+            return ResolucionIdentificador(
+                camino="error", identificador=ident,
+                estado=EstadoFuente(
+                    fuente=fuente.value, capacidad=CAPACIDAD_DETALLE,
+                    estado="sin_metodo_autorizado",
+                    motivo="AniList no permite resolver una serie por identificador; "
+                           "búscala por título."),
+                motivo="AniList no permite resolver por identificador; búscala por título.")
+
+        detalle = None
+        try:
+            if fuente is MetadataSource.COMIC_VINE:
+                detalle = await ComicVineClient().get_volume(int(ident.valor))
+            elif fuente is MetadataSource.GCD:
+                detalle = await GCDClient().get_series(int(ident.valor))
+            elif fuente is MetadataSource.TEBEOSFERA:
+                detalle = await TebeosferaClient().get_collection(ident.valor)
+        except Exception as exc:  # noqa: BLE001 — #133 clasifica, nunca «no existe»
+            estado, _r, _a = _clasificar_outcome(fuente, nombre, exc)
+            estado = _estado_detalle(fuente, estado.estado, estado.motivo)
+            return ResolucionIdentificador(
+                camino="error", identificador=ident, estado=estado, motivo=estado.motivo)
+
+        if detalle is None:
+            estado = _estado_detalle(
+                fuente, FUENTE_SIN_RESULTADOS,
+                "La fuente ha respondido, pero ese identificador no existe.")
+            return ResolucionIdentificador(
+                camino="sin_resultado", identificador=ident, estado=estado,
+                motivo="Ese identificador no existe en la fuente.")
+
+        resultado = self._resultado_desde_identificador(ident, detalle)
+        return ResolucionIdentificador(
+            camino="identificador", identificador=ident, resultado=resultado,
+            estado=_estado_detalle(fuente, FUENTE_OK),
+            motivo=f"Encontrada por identificador en {nombre}.")
+
+    async def _serie_local_por_identificador(self, ident: Identificador) -> Series | None:
+        columna = CAMPO_ID_EXTERNO[ident.fuente]
+        valor: object = int(ident.valor) if columna != "tebeosfera_slug" else ident.valor
+        return (await self.db.execute(
+            select(Series).where(getattr(Series, columna) == valor)
+        )).scalar_one_or_none()
+
+    @staticmethod
+    def _resultado_desde_identificador(ident: Identificador, detalle: object) -> DiscoveryResult:
+        """Convierte la ficha de la fuente en un candidato firmable (sin inventar campos)."""
+        fuente = ident.fuente
+        if fuente is MetadataSource.COMIC_VINE:
+            raw = getattr(detalle, "raw", None) or {}
+            imagen = raw.get("image") if isinstance(raw.get("image"), dict) else {}
+            return DiscoveryResult(
+                source=fuente, external_id=str(getattr(detalle, "cv_id", ident.valor)),
+                title=str(getattr(detalle, "name", "") or f"Volumen {ident.valor}"),
+                start_year=getattr(detalle, "start_year", None),
+                description=raw.get("description"),
+                cover_url=(imagen.get("medium_url") or imagen.get("small_url")
+                           or imagen.get("original_url")),
+                site_url=(raw.get("site_detail_url")
+                          or f"https://comicvine.gamespot.com/volume/4050-{ident.valor}/"),
+                tradition_guess=ComicTradition.AMERICAN,
+                tradition_provenance=ProcedenciaTradicion.POR_DEFECTO,
+                editorial=getattr(detalle, "publisher", None),
+            )
+        if fuente is MetadataSource.GCD:
+            return DiscoveryResult(
+                source=fuente, external_id=str(getattr(detalle, "gcd_id", ident.valor)),
+                title=str(getattr(detalle, "name", "") or f"Serie {ident.valor}"),
+                start_year=getattr(detalle, "year_began", None),
+                description=None, cover_url=None,
+                site_url=f"https://www.comics.org/series/{ident.valor}/",
+            )
+        titulo = getattr(detalle, "titulo", None) or ident.valor.replace("-", " ")
+        return DiscoveryResult(
+            source=fuente, external_id=str(getattr(detalle, "slug", ident.valor)),
+            title=str(titulo), start_year=getattr(detalle, "anio", None),
+            description=None, cover_url=None,
+            site_url=getattr(detalle, "url_ficha", None),
+            tradition_guess=ComicTradition.TEBEO,
+            tradition_provenance=ProcedenciaTradicion.POR_DEFECTO,
+            kind="collection",
+        )
 
     async def buscar_en(self, fuente: MetadataSource, query: str,
                         limit: int = 10) -> Busqueda:

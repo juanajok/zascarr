@@ -48,6 +48,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Resolver una serie por identificador o enlace (BL-R5, #234).** En Descubrir se puede pegar
+  un id o la URL de la ficha (Comic Vine 4050-…, GCD, Tebeosfera y AniList); se valida la
+  forma sin red y, solo al pedirlo, se consulta esa fuente antes que buscar por título. La
+  pantalla dice por qué camino se llegó, un fallo de la fuente no se presenta como «no
+  existe» y el resultado sigue pasando por la candidata firmada y la confirmación. Si la
+  serie ya está en la biblioteca, se enlaza sin consultar. ISBN queda fuera (#182).
 - **Decisiones reutilizables: los alias aprendidos piden consentimiento (MIT-M7-US03, #132).**
   Nueva pantalla «Decisiones reutilizables» (declaraciones, correspondencias, alias aprendidos y
   alias importados) con tipo, origen, estado, alcance, versión, efectos, precedencia y conflictos.
