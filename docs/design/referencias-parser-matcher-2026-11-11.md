@@ -153,8 +153,9 @@ sí mantener alias locales aprendidos y, quizá, una regla manual por serie.
    cubierto con tests de volumen, año y contradicción.
 2. **Tabla de formatos** (`annual`, `special`, `TPB`, `omnibus`, `one_shot`)
    para que el matcher no confunda una recopilación con una grapa; el modelo ya
-   tiene el campo.
+   tiene el campo. **Implementado para Omnibus/TPB/Hardcover/Graphic Novel**.
 3. **`N of M` y cuenta de issues** como confianza, nunca identidad.
+   **Capturado en el parser** (`issue_count`); falta usarlo en el matcher.
 4. **Normalizador de número para ordenar** sin tocar `issue_number`.
 5. **Benchmark etiquetado de 200 archivos** de la biblioteca (ver
    [`benchmark-parser-biblioteca-2026-11-11.md`](benchmark-parser-biblioteca-2026-11-11.md)).
