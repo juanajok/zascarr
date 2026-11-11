@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import Integer, and_, case, cast, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import (
@@ -69,6 +69,8 @@ class SeriesService:
         leido: str | None = None,
         con_issues: bool = False,
         orden: str = "titulo",
+        coleccion: str | None = None,
+        coleccion_ids: set[UUID] | None = None,
         *,
         corregir_pagina: bool = True,
     ) -> tuple[list[Series], int, int]:
@@ -86,6 +88,13 @@ class SeriesService:
             query = query.where(Series.tradition == tradition)
         if status:
             query = query.where(Series.status == status)
+        if coleccion:
+            condicion = condicion_estado_coleccion(coleccion)
+            if condicion is not None:
+                query = query.where(condicion)
+        if coleccion_ids is not None:
+            # Compatibilidad con llamadores antiguos que ya resolvieron los IDs.
+            query = query.where(Series.id.in_(coleccion_ids))
         if search:
             query = query.where(func.to_tsvector("spanish", Series.title).match(search))
         if publisher_id:
@@ -208,6 +217,8 @@ class SeriesService:
         leido: str | None = None,
         con_issues: bool = False,
         orden: str = "titulo",
+        coleccion: str | None = None,
+        coleccion_ids: set[UUID] | None = None,
     ) -> tuple[list[Series], int]:
         """Contrato histórico `(items, total)` para API y tests."""
         items, total, _ = await self._list_series(
@@ -216,7 +227,8 @@ class SeriesService:
             story_arc_id=story_arc_id,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
-            orden=orden, corregir_pagina=False,
+            orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
+            corregir_pagina=False,
         )
         return items, total
 
@@ -235,6 +247,8 @@ class SeriesService:
         leido: str | None = None,
         con_issues: bool = False,
         orden: str = "titulo",
+        coleccion: str | None = None,
+        coleccion_ids: set[UUID] | None = None,
     ) -> tuple[list[Series], int, int]:
         """Como `list_series`, pero devuelve también la página efectiva.
 
@@ -247,7 +261,7 @@ class SeriesService:
             story_arc_id=story_arc_id,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
-            orden=orden,
+            orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
         )
 
     async def list_publishers_with_series(self) -> list[Publisher]:
@@ -319,6 +333,51 @@ class SeriesService:
 # mientras tanto, decir "no se puede calcular" es más honesto que inventarlo.
 
 UNIDAD_DE_GRAPA = {MetadataSource.COMIC_VINE.value}
+
+def condicion_estado_coleccion(tipo: str):
+    """Condición SQL del estado derivado de #340, sin cargar la biblioteca.
+
+    La posesión se cuenta en una subconsulta correlada por serie (grapas con
+    archivo disponible); el total y la unidad de la fuente salen de la propia
+    fila. Así el filtro entra en la misma query paginada y en su COUNT.
+    """
+    decidida = (func.coalesce(
+        Series.metadata_["coleccion"]["no_completar"].astext, "false") == "true")
+    no_decidida = (func.coalesce(
+        Series.metadata_["coleccion"]["no_completar"].astext, "false") != "true")
+    computable = and_(
+        Series.total_issues.isnot(None), Series.total_issues > 0,
+        Series.metadata_source.in_(UNIDAD_DE_GRAPA))
+    no_computable = or_(
+        Series.total_issues.is_(None), Series.total_issues <= 0,
+        Series.metadata_source.is_(None),
+        Series.metadata_source.not_in(UNIDAD_DE_GRAPA))
+    numero = case((Issue.issue_number.op("~")("^[0-9]+$"), Issue.issue_number),
+                  else_=None)
+    numero_int = cast(numero, Integer)
+    poseidos = (
+        select(func.count(func.distinct(numero_int)))
+        .select_from(Issue)
+        .join(File, File.issue_id == Issue.id)
+        .where(Issue.series_id == Series.id,
+               File.is_missing.is_(False),
+               Issue.format == IssueFormat.SINGLE_ISSUE,
+               numero_int.isnot(None),
+               numero_int.between(1, Series.total_issues))
+        .correlate(Series)
+        .scalar_subquery()
+    )
+    faltan = Series.total_issues - func.coalesce(poseidos, 0)
+    if tipo == "no_completar":
+        return decidida
+    if tipo == "no_calculable":
+        return and_(no_decidida, no_computable)
+    if tipo == "completa":
+        return and_(no_decidida, computable, faltan <= 0)
+    if tipo == "faltan":
+        return and_(no_decidida, computable, faltan > 0)
+    return None
+
 
 
 @dataclass(frozen=True)

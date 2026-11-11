@@ -1,0 +1,5 @@
+<option value="">Cualquier estado</option>
+<option value="completa" {% if filtros.coleccion == "completa" %}selected{% endif %}>Completas</option>
+<option value="faltan" {% if filtros.coleccion == "faltan" %}selected{% endif %}>Te faltan números</option>
+<option value="no_calculable" {% if filtros.coleccion == "no_calculable" %}selected{% endif %}>No se puede calcular</option>
+<option value="no_completar" {% if filtros.coleccion == "no_completar" %}selected{% endif %}>No la vas a completar</option>
