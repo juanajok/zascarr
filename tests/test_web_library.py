@@ -649,7 +649,7 @@ class TestOrdenDeterminista:
         session = Capturing([SSResult(0), SSResult([])])
         await SeriesService(session).list_series()
         consulta = " ".join(session.statements)
-        assert "ORDER BY series.sort_title" in consulta
+        assert "ORDER BY coalesce(series.sort_title, series.title_norm)" in consulta
         assert "series.start_year" in consulta
         assert "series.id" in consulta
 

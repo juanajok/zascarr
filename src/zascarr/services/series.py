@@ -19,6 +19,7 @@ from uuid import UUID
 from sqlalchemy import Integer, and_, case, cast, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.core.matcher import normalize_title
 from zascarr.models import (
     Character,
     File,
@@ -82,7 +83,6 @@ class SeriesService:
         un segundo SELECT.
         """
         query = select(Series)
-        needs_distinct = False
 
         if tradition:
             query = query.where(Series.tradition == tradition)
@@ -96,30 +96,31 @@ class SeriesService:
             # Compatibilidad con llamadores antiguos que ya resolvieron los IDs.
             query = query.where(Series.id.in_(coleccion_ids))
         if search:
-            # El vector es español; la tsquery debe usar la MISMA
-            # configuración. `.match(search)` usaba la configuración por
-            # defecto y no casaba Lobo (lob) o Criminal (criminal).
-            query = query.where(
-                func.to_tsvector("spanish", Series.title).op("@@")(
-                    func.plainto_tsquery("spanish", search)
-                )
-            )
+            # #664: el full-text generaba `plainto_tsquery` con config english
+            # (aunque el vector fuera spanish), así que «lobo»/«criminal» no
+            # encontraban sus raíces. La búsqueda principal es subcadena sobre
+            # la columna normalizada (`f_title_norm`, mismo criterio que
+            # `normalize_title`), insensible a tildes/mayúsculas y con parciales.
+            normalizado = normalize_title(search)
+            if normalizado:
+                query = query.where(Series.title_norm.like(f"%{normalizado}%"))
         if publisher_id:
             query = query.where(Series.publisher_id == publisher_id)
+        # #665: nunca JOIN + DISTINCT. El ORDER BY usa `coalesce(...)`, que no
+        # está en el SELECT de `series`; PostgreSQL rechaza esa combinación con
+        # DISTINCT. Subconsultas por id, como en las etiquetas (BL-ETQ1b).
         if character_id:
-            query = (
-                query.join(Issue, Issue.series_id == Series.id)
+            query = query.where(Series.id.in_(
+                select(Issue.series_id)
                 .join(issue_characters, issue_characters.c.issue_id == Issue.id)
                 .where(issue_characters.c.character_id == character_id)
-            )
-            needs_distinct = True
+            ))
         if story_arc_id:
-            query = (
-                query.join(Issue, Issue.series_id == Series.id)
+            query = query.where(Series.id.in_(
+                select(Issue.series_id)
                 .join(StoryArcIssue, StoryArcIssue.issue_id == Issue.id)
                 .where(StoryArcIssue.story_arc_id == story_arc_id)
-            )
-            needs_distinct = True
+            ))
 
         # BL-ETQ1b: EXISTS/NOT EXISTS por token; nunca JOIN+DISTINCT.
         for normalizado in etiquetas_positivas:
@@ -147,9 +148,6 @@ class SeriesService:
                 query = query.where(Series.id.not_in(leidos))
         if con_issues:
             query = query.where(Series.id.in_(select(Issue.series_id)))
-        if needs_distinct:
-            query = query.distinct()
-
         total = (await self.db.execute(
             select(func.count()).select_from(query.subquery())
         )).scalar() or 0
@@ -174,20 +172,23 @@ class SeriesService:
         orden = (orden or "titulo").strip().lower()
         if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente"):
             orden = "titulo"
+        # #664: `sort_title` puede ser NULL en toda la biblioteca; el título
+        # alfabético cae entonces a `title_norm` (norma de `f_title_norm`).
+        titulo = func.coalesce(Series.sort_title, Series.title_norm)
         if orden == "titulo":
-            ordenes = (Series.sort_title.asc().nulls_last(),
+            ordenes = (titulo.asc().nulls_last(),
                        Series.start_year.asc().nulls_last(), Series.id.asc())
         elif orden == "titulo_desc":
-            ordenes = (Series.sort_title.desc().nulls_last(),
+            ordenes = (titulo.desc().nulls_last(),
                        Series.start_year.desc().nulls_last(), Series.id.desc())
         elif orden == "anio_desc":
             ordenes = (Series.start_year.desc().nulls_last(),
-                       Series.sort_title.asc().nulls_last(), Series.id.asc())
+                       titulo.asc().nulls_last(), Series.id.asc())
         elif orden == "anio_asc":
             ordenes = (Series.start_year.asc().nulls_last(),
-                       Series.sort_title.asc().nulls_last(), Series.id.asc())
+                       titulo.asc().nulls_last(), Series.id.asc())
         else:
-            ordenes = (Series.created_at.desc(), Series.sort_title.asc().nulls_last(),
+            ordenes = (Series.created_at.desc(), titulo.asc().nulls_last(),
                        Series.id.asc())
         query = query.order_by(*ordenes)
         query = query.add_columns(leidos_lectura.label("lectura_leidos"),
