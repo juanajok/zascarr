@@ -4,7 +4,7 @@
 Tres pruebas fijas, no temporales, que fijan las decisiones D1/D2 y los ejemplos E1/E7:
 
 - E1: tres archivos, dos de la serie y uno ajeno; solo los dos entran en el token.
-- D2: «Marcar todos» incluye al ajeno marcable, pero su conflicto sigue visible en la revisión.
+- D2 revisada (2026-11-11): «Marcar todos» excluye al ajeno con conflicto; sigue visible y marcable a mano.
 - D1/E7: un token antiguo sigue siendo válido y la confirmación muestra SIEMPRE su serie de origen.
 
 No implementan #289 ni cambian contratos: acreditan el comportamiento del código vigente en `b59b00c`.
@@ -78,17 +78,20 @@ async def test_d2_marcar_todos_incluye_al_ajeno_marcable_y_conserva_su_conflicto
 
     q = await marcar_todos(await abrir(serie))
 
-    # D2: el masivo incluye al ajeno porque es marcable; la protección es la revisión manual.
-    assert all(q.fila(n).marcado and q.fila(n).incluido for n in (FLASH_1, FLASH_2, AJENO))
-    assert q.total("marcados") == 3 and q.total("a_vincular") == 3
+    # D2 revisada: el masivo no decide sobre el ajeno con conflicto.
+    assert all(q.fila(n).marcado and q.fila(n).incluido for n in (FLASH_1, FLASH_2))
+    assert not q.fila(AJENO).marcado and not q.fila(AJENO).incluido
+    assert q.total("marcados") == 2 and q.total("a_vincular") == 2
     firmado = verificar_token_vinculacion(q.token, SECRETO)
-    assert sorted(a.id for a in firmado.archivos) == sorted(str(i) for i in ids.values())
+    assert sorted(a.id for a in firmado.archivos) == sorted([str(ids[FLASH_1]), str(ids[FLASH_2])])
 
-    # D2: el conflicto no desaparece al marcar; la fila y el detalle lo siguen diciendo.
+    # Sigue visible, marcable a mano y con su conflicto.
     ajeno = q.fila(AJENO)
-    assert ajeno.estado == "con_conflicto_de_carpeta"
+    assert ajeno.estado == "con_conflicto_de_carpeta" and ajeno.marcable
     assert "Se puede vincular, pero hay señales que lo contradicen" in ajeno.cuerpo
     assert "Qué dice la carpeta frente a esta serie" in ajeno.cuerpo
+    manual = await q.reenviar(marcar=[AJENO])
+    assert manual.fila(AJENO).marcado and manual.fila(AJENO).incluido
 
 
 async def test_e7_serie_destino_visible_al_confirmar_un_token_antiguo(entorno):

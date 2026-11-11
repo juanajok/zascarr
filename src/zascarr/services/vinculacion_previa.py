@@ -33,6 +33,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import stat as _stat
 import zlib
 from collections import Counter, defaultdict
@@ -82,11 +83,15 @@ LIMITE_ARCHIVOS = 100
 LIMITE_CURSOR = 2000
 
 #: Impedimentos, por orden de precedencia. Un registro con cualquiera de ellos NO se puede marcar.
-BLOQUEOS = ("ya_vinculado", "en_curso", "origen_no_encontrado", "origen_no_verificable", "requiere_numero",
+BLOQUEOS = ("ya_vinculado", "en_curso", "es_pack", "es_especial",
+            "origen_no_encontrado", "origen_no_verificable", "requiere_numero",
             "numero_repetido_en_el_grupo", "colision_de_edicion", "numero_ambiguo", "numero_ya_existe")
-EstadoArchivo = Literal["ya_vinculado", "en_curso", "origen_no_encontrado", "origen_no_verificable",
+EstadoArchivo = Literal["ya_vinculado", "en_curso", "es_pack", "es_especial",
+                        "origen_no_encontrado", "origen_no_verificable",
                         "requiere_numero", "numero_repetido_en_el_grupo", "colision_de_edicion",
                         "numero_ambiguo", "numero_ya_existe", "con_conflicto_de_carpeta", "se_vincularia", "fuera_de_la_pagina"]
+#: Prefijo de orden de lectura del coleccionista («047.- »). No es el número.
+_PREFIJO_ORDEN_LECTURA = re.compile(r"^\s*(\d{1,3})[a-zA-Z]?\.?\s*-\s*")
 Causa = Literal["permiso", "error_de_lectura", "biblioteca_no_accesible", "no_es_un_archivo", "fecha_anterior_a_1970"]
 
 TEXTOS: dict[str, str] = {
@@ -94,6 +99,8 @@ TEXTOS: dict[str, str] = {
     "en_curso": "Tiene una asignación en curso: espera a que termine.",
     "origen_no_encontrado": "Registro pendiente de verificar: en la ruta registrada no hay ningún archivo.",
     "requiere_numero": "Falta el número: escríbelo para poder vincularlo.",
+    "es_pack": "Es un pack de varios números: no se puede vincular como una sola grapa. Queda en Pendientes.",
+    "es_especial": "Es una publicación especial sin número de grapa: no se vincula por el masivo. Queda en Pendientes para el flujo de especial.",
     "con_conflicto_de_carpeta": "Se puede vincular, pero hay señales que lo contradicen: revísalas antes de marcarlo.",
     "se_vincularia": "Se vincularía en su sitio: conservará su nombre y su carpeta.",
     "numero_repetido_en_el_grupo": "Otro archivo marcado tiene el mismo número: marca solo uno de los dos.",
@@ -430,7 +437,7 @@ class VistaPreviaDeVinculacion:
             AsignacionOperacion.file_id.in_(ids), AsignacionOperacion.estado.in_(ASIGNACION_ESTADOS_VIVOS)))).all()}
 
         # ── Número y edición de cada archivo: del nombre, salvo lo que la persona haya editado ──
-        propuesta: dict[str, tuple[str | None, str | None, str, str]] = {}
+        propuesta: dict[str, tuple[str | None, str | None, str, str, bool, bool]] = {}
         descartados: set[str] = set()        # archivos cuyo número del nombre no cumple la regla (se trata como ausente)
         for a in tratados + fuera:
             p = parse_comic_filename(a.nombre)
@@ -442,7 +449,7 @@ class VistaPreviaDeVinculacion:
                 numero, origen = numeros[a.id] or None, "persona"
             else:
                 numero, origen = del_nombre, "nombre" if del_nombre else "ninguno"
-            propuesta[a.id] = (numero, del_nombre, formato, origen)
+            propuesta[a.id] = (numero, del_nombre, formato, origen, p.is_pack, p.is_special)
 
         existentes = await self._issues_de_la_serie(serie.id, {n for n, *_ in propuesta.values() if n})
         origenes = await asyncio.to_thread(
@@ -458,10 +465,11 @@ class VistaPreviaDeVinculacion:
         salida: list[ArchivoVinculacion] = []
         evaluar = {}
         for a in tratados:
-            numero, del_nombre, formato, origen_n = propuesta[a.id]
+            numero, del_nombre, formato, origen_n, es_pack, es_especial = propuesta[a.id]
             evaluar[a.id] = dict(
                 fid=a.id, nombre=a.nombre, ruta=rutas.get(a.id), numero=numero, del_nombre=del_nombre, formato=formato,
                 origen_n=origen_n, origen=origenes.get(a.id), en_curso=a.id in en_curso,
+                es_pack=es_pack, es_especial=es_especial,
                 repetido_con=repetidos.get(a.id, []), existentes=existentes,
                 conflictos=[s for s in senales if a.id in s.archivos], marcado=a.id in marcados,
                 numero_del_nombre_descartado=a.id in descartados)
@@ -475,7 +483,7 @@ class VistaPreviaDeVinculacion:
         en_conflicto = {i for ids_ in por_numero.values() if len(ids_) > 1 for i in ids_}
         salida = [self._evaluar(**evaluar[f.id], repetido_en_seleccion=True) if f.id in en_conflicto else f for f in salida]
         for a in fuera:
-            numero, del_nombre, formato, origen_n = propuesta[a.id]
+            numero, del_nombre, formato, origen_n, _es_pack, _es_especial = propuesta[a.id]
             salida.append(self._fuera_de_la_pagina(a.id, a.nombre, numero, del_nombre, formato, origen_n, a.id in marcados))
         for fid, (nombre, ruta) in ya_vinculados.items():
             salida.append(self._ya_vinculado(fid, nombre, ruta, fid in marcados))
@@ -737,11 +745,16 @@ class VistaPreviaDeVinculacion:
 
     def _evaluar(self, fid, nombre, ruta, numero, del_nombre, formato, origen_n, origen: _Origen | None, en_curso: bool,
                  repetido_con: list[str], existentes, conflictos: list[Senal], marcado: bool,
-                 repetido_en_seleccion: bool, numero_del_nombre_descartado: bool = False) -> ArchivoVinculacion:
+                 repetido_en_seleccion: bool, numero_del_nombre_descartado: bool = False,
+                 es_pack: bool = False, es_especial: bool = False) -> ArchivoVinculacion:
         motivos: list[str] = []
         causa: str | None = None
         if en_curso:
             motivos.append("en_curso")
+        if es_pack:
+            motivos.append("es_pack")
+        if es_especial:
+            motivos.append("es_especial")
         if origen is None or origen.estado == "no_encontrado":
             motivos.append("origen_no_encontrado")
         elif origen.estado == "no_verificable":
@@ -779,6 +792,12 @@ class VistaPreviaDeVinculacion:
                 texto = TEXTO_NUMERO_DEL_NOMBRE_NO_VALIDO
             else:
                 texto = TEXTOS[estado]
+                if estado in ("requiere_numero", "es_pack", "es_especial"):
+                    prefijo = _PREFIJO_ORDEN_LECTURA.match(nombre)
+                    if prefijo:
+                        texto += (
+                            f" El {prefijo.group(1)} inicial es orden de lectura, "
+                            "no el número del cómic.")
         else:
             estado = "con_conflicto_de_carpeta" if any(s.severidad == "conflicto" for s in conflictos) else "se_vincularia"
             texto = TEXTOS[estado]

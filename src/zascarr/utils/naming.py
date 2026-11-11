@@ -321,6 +321,9 @@ class ParsedComicName:
     is_annual: bool = False
     #: `Especial`: marca de edición que hoy sigue colgando de la serie madre.
     is_special: bool = False
+    #: Pack de varios números (rango o «#N - Anual»): no identifica UNA grapa.
+    #: El asistente lo trata como publicación sin número, no como grapa.
+    is_pack: bool = False
     extra_info: list[str] = field(default_factory=list)
     #: Parte que se descartaba como «título del número» cuando iba ANTES del número
     #: ("Superman - Godfall #01"). Sirve para no confundir colecciones distintas;
@@ -694,6 +697,7 @@ def parse_comic_filename(
         or NUMBER_RANGE_WORD_PATTERN.search(working)
     )
     era_pack = era_pack_rango or bool(PACK_ISSUE_ANNUAL_PATTERN.search(working))
+    result.is_pack = era_pack
     working = NUMBER_RANGE_PATTERN.sub(" ", working)
     working = NUMBER_RANGE_WORD_PATTERN.sub(" ", working)
 
