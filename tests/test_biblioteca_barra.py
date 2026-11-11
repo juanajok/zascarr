@@ -297,9 +297,13 @@ def test_chips_son_texto_sin_flecha_y_quitar_es_icono_accesible():
 
 def test_limpiar_es_boton_pildora_no_texto_subrayado():
     html = _index(path="/ui/biblioteca?tradition=tebeo")
-    assert 'class="btn ghost sm limpiar-filtros"' in html
+    assert 'class="btn sm limpiar-filtros"' in html
+    assert "ghost" not in html.split('class="btn sm limpiar-filtros"', 1)[1].split(">", 1)[0]
     assert ">Limpiar filtros</a>" in html
     from pathlib import Path
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
-    assert ".limpiar-filtros" not in css
+    bloque = css.split(".limpiar-filtros {", 1)[1].split("}", 1)[0]
+    assert "border-radius: var(--radius-pill);" in bloque
+    assert "min-height: 44px;" in bloque
+    assert "text-decoration" not in bloque
     assert "width: 44px; min-width: 44px; min-height: 44px;" in css.split(".quitar-filtro {", 1)[1][:160]
