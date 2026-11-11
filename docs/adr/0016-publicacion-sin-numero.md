@@ -2,7 +2,8 @@
 
 ## Estado
 
-**Propuesto** — 2026-11-11. No hay migración ni cambio de código aplicado.
+**Propuesto** — 2026-11-11. Prototipo backend en `services/especiales.py`
+(3 tests PG); **sin UI, sin migración y sin cambios en producción**.
 
 ## Contexto
 
