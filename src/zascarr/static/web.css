@@ -2426,6 +2426,19 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .prowlarr-indexer-cats { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; justify-content: flex-end; flex: 0 1 auto; }
 .prowlarr-indexer-cats .caption { white-space: nowrap; }
 
+
+/* BL-INF5 (#591): formularios de edición manual. */
+.edicion-form { display: grid; gap: 14px; max-width: 48rem; }
+.edicion-form label { display: grid; gap: 5px; font-weight: 600; }
+.edicion-form input, .edicion-form textarea, .edicion-form select { font: inherit; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 6px; background: var(--paper); color: var(--ink); }
+.edicion-form textarea { resize: vertical; }
+.edicion-dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 12px; }
+.campo-error { color: var(--warn-t); font-weight: 700; font-size: .875rem; }
+.edicion-acciones { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.edicion-manuales { margin-top: 22px; }
+.edicion-manuales ul { list-style: none; padding: 0; display: grid; gap: 8px; }
+.inline-desbloquear { display: inline; margin-left: 6px; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
