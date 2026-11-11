@@ -1533,6 +1533,45 @@ class TestRealWorldFilenames:
         assert lobo.issue_number == "1"
         assert lobo.is_annual is True
 
+    def test_alternativa_de_pack_y_marca_corregido(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        inj = parse_comic_filename(
+            "Injustice - Gods Among Us - Año 3 #25 - Anual.cbr",
+            carpeta="Injustice Año 3",
+            contexto="Injustice - Gods Among Us / Injustice Año 3")
+        assert inj.series == "Injustice Gods Among Us Año 3"
+        assert inj.issue_number == ""
+
+        laz = parse_comic_filename(
+            "Lazarus - X+66 (escaneo de Norma Aluci CRG)corregido.cbr",
+            carpeta="Lazarus", contexto="Comics / Lazarus")
+        # Sin catálogo, «Lazarus» + «X+66» es ambiguo con un subtítulo de
+        # grapa; se deja la serie corta en vez de inventar.
+        assert laz.series == "Lazarus"
+
+    def test_carpeta_numerica_no_es_la_serie_y_especial_sin_numero(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        noches = parse_comic_filename(
+            "Noches Eternas 6.cbr",
+            carpeta="02 Endless night-noches eternas",
+            contexto="The Sandman Especiales / 02 Endless night-noches eternas")
+        assert noches.series == "Noches Eternas"
+        assert noches.issue_number == "6"
+
+        lobo = parse_comic_filename(
+            "Lobo - El asunto Qigly.cbr", carpeta="Lobo",
+            contexto="Comics / Lobo")
+        assert lobo.series == "Lobo"
+        assert lobo.issue_number == ""
+
+        corintio = parse_comic_filename(
+            "The Corinthian - Death in Venice 03.cbr",
+            carpeta="The corinthian-death in venice",
+            contexto="The Sandman presenta a / The corinthian-death in venice")
+        assert "corinthian" in corintio.series.lower()
+
     def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
         """«Batman #400 Aniversario»: el número va con #, así que es la
         grapa #400 y no la efeméride del 400 aniversario. El patrón viejo

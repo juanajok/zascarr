@@ -71,6 +71,10 @@ CATALOG_ALIASES: dict[str, str] = {
     "shadow of the bat annual": "Batman: Shadow of the Bat Annual",
     "smallville temporada 11": "Smallville: Season Eleven",
     "wildcats": "WildC.A.T.s: Covert Action Teams",
+    # «Horizontes Lejanos» es un volumen de la serie de Torrezno; la carpeta
+    # y la etiqueta humana confirman el título canónico.
+    "horizontes lejanos": "Las aventuras del Capitán Torrezno",
+    "forever evil a r g u s": "Forever Evil: A.R.G.U.S",
 }
 
 # B15: valor con el que se persiste una grapa suelta (models.IssueFormat.
