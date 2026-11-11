@@ -161,3 +161,17 @@ def test_css_panel_absoluto_tambien_en_movil_y_tactil_ancho():
     assert "position: absolute" in bloque and "left: 0" in bloque and "right: 0" in bloque
     assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px; min-width: 44px;" in css
     assert "min-width: 44px" in css.split(".quitar-filtro,", 1)[1][:200]
+
+
+def test_flujo_htmx_vista_y_luego_orden_usa_el_hidden_actualizado():
+    import re
+    # Página inicial (tarjetas) y fragmento al cambiar a lista.
+    pagina = _index(path="/ui/biblioteca")
+    fragmento = _index(path="/ui/biblioteca/resultados?vista=lista")
+    hidden_oob = re.search(r'<input[^>]*id="f-vista"[^>]*hx-swap-oob="true"[^>]*>', fragmento)
+    assert hidden_oob is not None
+    # htmx sustituye el hidden fuera de #rejilla; simulamos ese paso y comprobamos
+    # que el siguiente cambio (orden) envía vista=lista.
+    pagina_tras_swap = re.sub(
+        r'<input[^>]*id="f-vista"[^>]*>', hidden_oob.group(0), pagina, count=1)
+    assert 'id="f-vista" name="vista" value="lista"' in pagina_tras_swap
