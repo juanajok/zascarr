@@ -76,6 +76,9 @@ def _seudonimo(valor: str) -> str:
 
 @dataclass
 class Propuesta:
+    file_id: str
+    actual_issue_id: str | None
+    actual_series_id: str | None
     archivo: str
     archivo_visible: str
     actual_serie: str | None
@@ -195,6 +198,9 @@ def _propuesta(fila: dict, series: list[dict], por_hash: Counter, local: bool) -
         notas = []
 
     return Propuesta(
+        file_id=str(fila["id"]),
+        actual_issue_id=str(fila["issue_id"]) if fila["issue_id"] else None,
+        actual_series_id=str(fila["serie_actual_id"]) if fila["serie_actual_id"] else None,
         archivo=_seudonimo(fila["file_name"]) if not local else fila["file_name"],
         archivo_visible=fila["file_name"] if local else _seudonimo(fila["file_name"]),
         actual_serie=actual_serie,
