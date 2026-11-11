@@ -159,6 +159,7 @@ class CandidataPublicacion(BaseModel):
     con_archivos: int
     snapshot: str
     elegible: bool
+    motivo: str | None = None
     nivel_editorial: str = "numero"
 
 
@@ -653,7 +654,11 @@ class VistaPreviaDeVinculacion:
                 elegible=True))
         # Indistinguibles = mismo snapshot: se muestran, pero ninguna se puede elegir.
         vistos: dict[str, int] = Counter(c.snapshot for c in candidatas)
-        return [c.model_copy(update={"elegible": vistos[c.snapshot] == 1}) for c in candidatas]
+        return [c.model_copy(update={
+            "elegible": vistos[c.snapshot] == 1,
+            "motivo": None if vistos[c.snapshot] == 1 else
+            "No se puede distinguir de las demás con estos datos.",
+        }) for c in candidatas]
 
     async def elegir_publicacion(self, *, token: str, candidate_id: str) -> dict:
         """H1: revalida y guarda SOLO `File.metadata_["publicacion_identificada"]`.

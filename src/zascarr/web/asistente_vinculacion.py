@@ -493,8 +493,8 @@ async def elegir_publicacion(request: Request, db: AsyncSession = Depends(get_db
                               estado=estado, cursor=cursor_actual, otros=otros,
                               avisos=[x for x in (aviso, error) if x],
                               pagina_completa="hx-request" not in request.headers)
-    plantilla = "asistente_vinculacion.html" if "hx-request" not in request.headers else "_vinculacion_revision.html"
-    respuesta = templates.TemplateResponse(request, plantilla, {"r": None, "error": error})
+    respuesta = templates.TemplateResponse(
+        request, "_vinculacion_revision.html", {"r": None, "error": error})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 
