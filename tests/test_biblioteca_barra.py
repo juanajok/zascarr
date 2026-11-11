@@ -301,5 +301,5 @@ def test_limpiar_es_boton_pildora_no_texto_subrayado():
     assert ">Limpiar filtros</a>" in html
     from pathlib import Path
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
-    assert ".limpiar-filtros { text-decoration: none; min-height: 44px; }" in css
+    assert ".limpiar-filtros" not in css
     assert "width: 44px; min-width: 44px; min-height: 44px;" in css.split(".quitar-filtro {", 1)[1][:160]
