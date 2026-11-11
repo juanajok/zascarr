@@ -137,35 +137,39 @@
          hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
 {% include "_politica_serie.html" %}
 
-    <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo">
+    <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo"
+             {% if aviso_coleccion %}tabindex="-1" autofocus{% endif %}>
       <h2 id="coleccion-serie-titulo" class="titulo-frase">Estado de la colección</h2>
       <p>
         {% if estado_coleccion.tipo == "no_completar" %}
-          {{ ui.chip("ok", "No la vas a completar") }}
+          {{ ui.chip("neutro", "No la vas a completar") }}
         {% elif estado_coleccion.tipo == "completa" %}
-          {{ ui.chip("ok", "Completa") }}
+          {{ ui.chip("neutro", "Completa") }}
         {% elif estado_coleccion.tipo == "faltan" %}
-          {{ ui.chip("warn", "Te faltan " ~ (estado_coleccion.faltantes|length)) }}
+          {{ ui.chip("neutro", "Te faltan " ~ (estado_coleccion.faltantes|length)) }}
         {% else %}
-          {{ ui.chip("info", "No se puede calcular") }}
+          {{ ui.chip("neutro", "No se puede calcular") }}
           <span class="muted">{{ estado_coleccion.motivo }}</span>
         {% endif %}
       </p>
-      {% if aviso_coleccion %}{{ ui.aviso("amber", aviso_coleccion) }}{% endif %}
+      {% if aviso_coleccion %}{{ ui.aviso("ok" if coleccion_exito else "amber", aviso_coleccion) }}{% endif %}
       {% if estado_coleccion.no_completar %}
       <form method="post" action="/ui/series/{{ series.id }}/coleccion">
         <input type="hidden" name="accion" value="revertir">
+        <input type="hidden" name="version" value="{{ coleccion_version }}">
         <button class="btn ghost sm" type="submit">Volver a completarla</button>
       </form>
       {% elif conflicto_coleccion %}
       <form method="post" action="/ui/series/{{ series.id }}/coleccion">
         <input type="hidden" name="accion" value="no_completar">
         <input type="hidden" name="confirmar" value="si">
+        <input type="hidden" name="version" value="{{ coleccion_version }}">
         <button class="btn ghost sm" type="submit" {% if aviso_coleccion %}autofocus{% endif %}>Sí, no la voy a completar</button>
       </form>
       {% else %}
       <form method="post" action="/ui/series/{{ series.id }}/coleccion">
         <input type="hidden" name="accion" value="no_completar">
+        <input type="hidden" name="version" value="{{ coleccion_version }}">
         <button class="btn ghost sm" type="submit">No la voy a completar</button>
       </form>
       {% endif %}

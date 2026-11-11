@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import Series, WishlistPolicy
@@ -38,6 +38,18 @@ ETIQUETAS = {
     NO_CALCULABLE: "No se puede calcular",
     NO_COMPLETAR: "No la vas a completar",
 }
+
+
+class ConflictoVersionError(RuntimeError):
+    """Otra pestaña guardó una decisión distinta desde que se abrió la ficha."""
+
+
+def version_de_decision(series: Series) -> int:
+    datos = (series.metadata_ or {}).get(CLAVE_METADATA) or {}
+    try:
+        return max(0, int(datos.get("version") or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 @dataclass(frozen=True)
@@ -87,6 +99,42 @@ def revertir_no_completar(series: Series) -> None:
         "version": VERSION,
     }
     series.metadata_ = actual
+
+
+async def cambiar_decision(
+    db: AsyncSession, series_id: UUID, *, no_completar: bool,
+    version_esperada: int,
+) -> int:
+    """UPDATE optimista del JSONB: solo escribe si la versión sigue siendo la vista.
+
+    No hace falta cargar ni bloquear la fila: el `WHERE` incluye la versión y
+    devuelve 0 filas si otra pestaña se adelantó; el router lo convierte en 409.
+    """
+    version_esperada = max(0, int(version_esperada))
+    nueva_version = version_esperada + 1
+    actualizado = datetime.now(UTC).isoformat(timespec="seconds")
+    # Se construye del lado de Postgres para que el JSONB sea un objeto (un
+    # dict de Python pasado a JSONB se serializa como string y `||` daría un array).
+    coleccion = func.jsonb_build_object(
+        "no_completar", bool(no_completar),
+        "actualizado_en", actualizado,
+        "version", nueva_version)
+    condicion_version = func.coalesce(
+        Series.metadata_["coleccion"]["version"].astext, "0"
+    ) == str(version_esperada)
+    sentencia = (
+        update(Series)
+        .where(Series.id == series_id, condicion_version)
+        .values(metadata_=(
+            func.coalesce(Series.metadata_, func.jsonb_build_object())
+            .op("||")(func.jsonb_build_object("coleccion", coleccion))))
+        .returning(Series.id)
+    )
+    resultado = await db.execute(sentencia)
+    if resultado.scalar_one_or_none() is None:
+        raise ConflictoVersionError("La decisión cambió en otra pestaña")
+    await db.flush()
+    return nueva_version
 
 
 def estado_puro(series: Series, poseidos: set[int]) -> EstadoColeccion:
