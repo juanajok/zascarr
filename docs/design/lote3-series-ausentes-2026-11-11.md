@@ -1,7 +1,8 @@
 # Lote 3 de series ausentes — propuesta revisada (2026-11-11)
 
-> **No aplicado.** No se han creado series, Issues ni enlaces. La propuesta
-> está en `/mnt/Datos/Documentos/propuesta_lote_series_ausentes_3_2026-11-11.json`.
+> **Aplicado el 2026-11-11.** 5 series, 147 Issues y 151 enlaces. Backup:
+> `/var/backups/zascarr/pre_lote3_series_ausentes_20261111_164711.sql.gz`
+> (SHA-256 `bc344f6d…5775`). Sin mover ni renombrar archivos.
 
 ## 1. Criterios
 
@@ -31,7 +32,7 @@ inventan Huecos ni Issues ausentes; solo se crean los números con archivo.
 Los duplicados de `Superboy` son copias/portadas del mismo número y se
 enlazan al mismo Issue, sin borrar archivos.
 
-## 3. Qué se escribiría si se aprueba
+## 3. Qué se escribió
 
 1. 5 filas `series`: `kind=regular`, `tradition=american`,
    `metadata_source=manual`, `start_year=NULL`, sin fuente externa.
@@ -56,3 +57,26 @@ enlazan al mismo Issue, sin borrar archivos.
 2. Backup + preflight + transacción única.
 3. Aplicar y verificar 5/147/151.
 4. Revisar aparte la carpeta `Batgirl: Joker War + Tie-ins`.
+
+## 6. Aplicación y verificación
+
+| Dato | Resultado |
+|---|---:|
+| Series creadas | **5** |
+| Issues creados | **147** |
+| Archivos enlazados | **151** |
+| Issues duplicados por número | **0** |
+| Archivos movidos/renombrados | **0** |
+| App tras aplicar | **healthy** |
+
+IDs de serie:
+
+- `Teen Titans Vol. 4`: `24faf0bf-93fc-4848-a5d5-098ccb9f3080`
+- `Birds of Prey Vol. 3`: `489bc283-dfe5-4c2a-b2ec-d5408467303c`
+- `Action Comics Vol. 2`: `4c6c0559-eb42-49f6-aeb9-ead8157cc5fe`
+- `Superboy`: `82c0b8bd-fac6-4bc0-920b-a04d02fbe76f`
+- `Batgirl`: `03aee66a-0dee-49b5-a6f7-563e24dccf60`
+
+Verificación: 151/151 archivos apuntan a la serie y número esperados;
+`Superboy` tiene 30 archivos en 26 Issues; `Batgirl` solo la carpeta
+principal; la app responde `healthy`.

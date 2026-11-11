@@ -1,8 +1,8 @@
 # Series ausentes en la biblioteca (2026-11-11)
 
-> Censo de solo lectura. **Tras este censo se aplicaron los lotes 1 y 2**
-> (10 series, 410 Issues, 422 archivos); quedan **3.134 archivos sin Issue**.
-> Estado: 61 series, 1.846 Issues. La propuesta completa está en
+> Censo de solo lectura. **Tras este censo se aplicaron los lotes 1, 2 y 3**
+> (15 series, 557 Issues, 573 archivos); quedan **2.983 archivos sin Issue**.
+> Estado: 66 series, 1.993 Issues. La propuesta completa está en
 > `/mnt/Datos/Documentos/propuestas_series_ausentes_2026-11-11.json`.
 
 ## 1. Alcance
