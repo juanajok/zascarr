@@ -91,7 +91,14 @@ async def vinculado(ent, *nombres, serie=None, metadata_source=None, numeros=Non
             await s.execute(text("UPDATE files SET metadata_source = :m"), {"m": metadata_source})
             await s.commit()
     extra = {"numeros": {k: v for k, v in numeros.items()}} if numeros else {}
+    from tests.test_vinculacion_pg import elegir_candidata
+
     r = await api_previa_vinculacion(serie, ids.values(), **extra)
+    if r.status_code == 200 and not r.json()["token"]:
+        for a in r.json()["archivos"]:
+            if a.get("token_eleccion") and a.get("candidatas"):
+                await elegir_candidata(ent, serie, UUID(a["id"]))
+        r = await api_previa_vinculacion(serie, ids.values(), **extra)
     assert r.status_code == 200 and r.json()["token"], r.text
     c = await confirmar(r.json()["token"])
     assert c.status_code == 200 and c.json()["resultado"]["global"] == "vinculados_todos", c.text
@@ -832,7 +839,11 @@ class TestCadena:
         serie, ids = await vinculado(ent, F1)
         fid = ids[F1]
         await deshacer(await token_desv(fid))
+        from tests.test_vinculacion_pg import elegir_candidata
         rv = await api_previa_vinculacion(serie, [fid])
+        if not rv.json()["token"]:
+            await elegir_candidata(ent, serie, fid)
+            rv = await api_previa_vinculacion(serie, [fid])
         c = (await confirmar(rv.json()["token"])).json()
         assert c["resultado"]["archivos"][0]["issue_creado"] is False and await numero_de("issues", ent.banco) == 1
 
