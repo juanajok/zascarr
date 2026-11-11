@@ -1345,6 +1345,15 @@ class TestRealWorldFilenames:
         assert result.series == serie
         assert result.issue_number == numero
 
+    def test_crossover_no_es_la_serie(self):
+        """«Crossover 07 - Dinastía de X 04»: el 07 es orden de lectura."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "Crossover 07 - Dinastia de X 04 [por Aluci][CRG].cbr")
+        assert result.series == "Dinastia de X"
+        assert result.issue_number == "4"
+
     @pytest.mark.parametrize("filename", [
         "Injustice - Gods Among Us - Año 2 #25 - Anual.cbr",
         "Injustice - Gods Among Us - Año 3 #25 - Anual.cbr",
