@@ -26,8 +26,13 @@ archivos movidos. Quedan los 25 enlaces incorrectos y 48 anuales sin Issue.
 anuales; 3 excluidos (dos `Animal Man` con dos padres posibles y el pack
 `Batman #647-650 y anual 25`). Se crearon tres series anuales nuevas
 (`Green Lantern Annual`, `Green Lantern Corps Annual`, `JSA Annual`) y 22
-Issues; 0 archivos movidos. Quedan 3 enlaces incorrectos y 48 anuales sin
-Issue. El detalle está en
+Issues; 0 archivos movidos.
+
+**Cierre de los 3 restantes (2026-11-11):** `Animal Man Annual` se creó como
+serie independiente (sin padre) con #1/#2; el pack de Batman se desvinculó y
+queda en Pendientes. Quedan **0 anuales mal enlazados** y **49 archivos sin
+Issue** (48 anuales + el pack). Hay **19 Issues padre vacíos** que no se borran
+sin revisión. El detalle está en
 [`despliegue-0027-2026-11-11.md`](despliegue-0027-2026-11-11.md).
 
 **Problema.** Un archivo `Batman Annual 01` se parseaba como `Batman` `#1`; el
