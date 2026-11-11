@@ -1092,16 +1092,29 @@ class TestEstadoColeccionWK2:
         assert "coleccion=revertido" in r.headers["location"]
         assert series.wishlist_policy == WishlistPolicy.MISSING
 
-    def test_version_obsoleta_da_409_sin_escribir(self):
+    def test_version_obsoleta_redirige_a_ficha_con_layout(self):
         series = make_series(total_issues=3)
         session = FakeSession([FakeExecResult([series]), FakeExecResult([])])
         with use_fake_session(session) as client:
             r = client.post(f"/ui/series/{series.id}/coleccion",
                             data={"accion": "no_completar", "version": "0"},
                             follow_redirects=False)
-        assert r.status_code == 409
-        assert r.headers.get("cache-control") == "no-store"
-        assert "Otra pestaña" in r.text
+        assert r.status_code == 303
+        assert "coleccion=conflicto_version" in r.headers["location"]
+        assert not (series.metadata_ or {}).get("coleccion")
+
+        # La redirección vuelve a la ficha completa (no un partial), con foco.
+        session2 = FakeSession([
+            FakeExecResult([series]), FakeExecResult([]),
+            acuse(), retirados(), FakeExecResult([]),
+        ])
+        with use_fake_session(session2) as client:
+            ficha = client.get(r.headers["location"])
+        assert ficha.status_code == 200
+        assert "<html" in ficha.text and "<body" in ficha.text
+        assert "Otra pestaña cambió esta serie" in ficha.text
+        assert 'id="coleccion-serie"' in ficha.text and "tabindex=\"-1\" autofocus" in ficha.text
+        assert ficha.text.count("autofocus") == 1
 
     def test_conflicto_d8_se_explica_y_ofrece_confirmacion(self):
         series = make_series(total_issues=3)
