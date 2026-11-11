@@ -431,7 +431,7 @@ async def _triage_and_match(
     if pista is not None:
         nombre = quitar_prefijo_de_cohorte(tr.path.name, pista)
         aplicada = nombre != tr.path.name
-    parsed = parse_comic_filename(nombre)
+    parsed = parse_comic_filename(nombre, carpeta=tr.path.parent.name)
     edition_kind = parsed.edition_kind
     # B15: `None` significa "el nombre NO trae marcador de edición" — el matcher
     # entonces no tiene evidencia del formato y solo enlazará si no hay nada que

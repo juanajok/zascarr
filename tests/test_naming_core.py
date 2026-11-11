@@ -1405,6 +1405,42 @@ class TestRealWorldFilenames:
         result = parse_comic_filename("Batman #647-650 y anual 25.cbr")
         assert result.issue_number == ""
 
+    def test_carpeta_resuelve_issue_delante_de_la_serie(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        for nombre, numero in [
+            ("16 Catwoman The New 52! (Black Diamond, A.R.G.U.S.!).cbr", "16"),
+            ("29 Catwoman The New 52!.cbr", "29"),
+            ("51 Catwoman.cbr", "51"),
+        ]:
+            result = parse_comic_filename(
+                nombre, carpeta="2011 - 2014 Catwoman The New 52!")
+            assert result.series == "Catwoman"
+            assert result.issue_number == numero
+
+    def test_carpeta_quita_credito_delante(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "Hiroaki Samura - La Espada del Inmortal 06 (Spanish, CRG).cbr",
+            carpeta="La Espada del Inmortal")
+        assert result.series == "La Espada del Inmortal"
+        assert result.issue_number == "6"
+
+        result = parse_comic_filename(
+            "C  Gimenez &amp; C  Godard - Una infancia eterna.cbr",
+            carpeta="Carlos Giménez")
+        assert result.series == "Una infancia eterna"
+
+    def test_anio_dentro_del_titulo_no_es_el_numero(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "American Vampire 1976 10 [TM][por Shinji].cbr",
+            carpeta="American Vampire 1976")
+        assert result.series == "American Vampire 1976"
+        assert result.issue_number == "10"
+
     def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
         """«Batman #400 Aniversario»: el número va con #, así que es la
         grapa #400 y no la efeméride del 400 aniversario. El patrón viejo
