@@ -95,6 +95,38 @@
 
       <p class="vinc-texto">{{ texto_legible(a.texto) }}</p>
 
+      {% if a.candidatas %}
+      <fieldset class="vinc-candidatas">
+        <legend>¿Cuál de estas publicaciones es?</legend>
+        <p class="caption">Hay varias publicaciones con este número. Elige la que corresponda; no se elige sola.</p>
+        {% if a.eleccion %}
+        <p class="vinc-eleccion" role="status">Elegida: Publicación {{ a.eleccion.numero }} · {{ a.eleccion.formato }}. La vinculación sigue pendiente hasta que la confirmes.</p>
+        <button type="button" class="btn ghost sm"
+                hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/elegir') }}"
+                hx-vals='{"eleccion": "{{ a.token_eleccion }}|__quitar__"}'
+                hx-include="closest form" hx-target="#revision" hx-swap="outerHTML">Quitar la elección</button>
+        {% endif %}
+        <ul class="vinc-candidatas-lista">
+          {% for c in a.candidatas %}
+          <li class="vinc-candidata{% if a.eleccion and a.eleccion.issue_id == c.issue_id %} elegida{% endif %}">
+            <p class="vinc-candidata-titulo">Publicación {{ c.numero }} · {{ c.formato }}{% if c.volumen is not none %} · volumen {{ c.volumen }} (registrado){% endif %}</p>
+            <p class="caption">Serie: {{ s.titulo }}{% if s.anio %} ({{ s.anio }}){% endif %} · Editorial: {{ c.editorial or "No consta" }} · Sello: {{ c.sello or "No consta" }}</p>
+            <p class="caption">Tradición: {{ c.tradicion }} · Fuente: {{ c.source or "No consta" }}{% if c.external_id %} · {{ c.external_id }}{% endif %}{% if c.con_archivos %} · ya tiene {{ c.con_archivos }} archivo{{ "s" if c.con_archivos != 1 }}{% endif %}</p>
+            {% if c.elegible %}
+            <button type="button" class="btn ghost sm"
+                    hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/elegir') }}"
+                    hx-vals='{"eleccion": "{{ a.token_eleccion }}|{{ c.candidate_id }}"}'
+                    hx-include="closest form" hx-target="#revision" hx-swap="outerHTML">Elegir esta publicación</button>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% if not a.candidatas | selectattr("elegible") | list %}
+        <p class="caption">No puedo distinguir estas publicaciones con los datos que tengo. No elijo por ti: déjalo para después o revísalo a mano.</p>
+        {% endif %}
+      </fieldset>
+      {% endif %}
+
       {% if a.motivos and a.motivos | length > 1 %}
       {% set otros_motivos = motivos_legibles(a.motivos[1:]) %}
       {% if otros_motivos %}<p class="caption vinc-motivos">Otros motivos: {{ otros_motivos | join(", ") }}.</p>{% endif %}
