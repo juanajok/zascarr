@@ -7,6 +7,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Miniatura de portada endurecida (BL-INF9, #603).** Presupuesto y concurrencia acotados
+  (`wait_for` + semáforo global de 2 generaciones), consulta corta que libera la conexión de BD
+  antes de esperar el lock, tope de píxeles específico para miniaturas (6/12 Mpx) y caché
+  invalidada por huella (tamaño/mtime), con caché negativa para no repetir extracciones sin
+  portada. La escritura comprueba espacio y limpia temporales; no se escribe en la biblioteca.
 - **Selector de indexers de Prowlarr legible.** Ya no pinta todas las categorías de cada
   indexer: muestra solo las de cómic/libros (máximo 2), un contador `+N` si hay más y una
   lista compacta con scroll; los indexers relevantes van primero y los apagados no se ofrecen.
