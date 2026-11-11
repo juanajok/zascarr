@@ -33,9 +33,13 @@ serie independiente (sin padre) con #1/#2; el pack de Batman se desvinculó y
 queda en Pendientes.
 
 **Lote 4 aplicado (2026-11-11):** 15 series anuales independientes y 26 Issues
-nuevos; 0 archivos movidos. Estado final: **21 series anuales**, **57 Issues**,
-**0 anuales mal enlazados** y **23 archivos pendientes** (14 duplicados, 6
-packs y 3 a revisión). Hay **19 Issues padre vacíos** que no se borran sin
+nuevos; 0 archivos movidos.
+
+**Lote 5 aplicado (2026-11-11):** 14 duplicados agrupados en 7 Issues, con
+**dos archivos por Issue** como copias. Serie nueva `Superman Batman Annual`
+junto al `Flash Annual` existente. Estado final: **22 series anuales**,
+**64 Issues**, **0 anuales mal enlazados** y **9 archivos pendientes**
+(6 packs + 3 revisión). Hay **19 Issues padre vacíos** que no se borran sin
 revisión. El detalle está en
 [`despliegue-0027-2026-11-11.md`](despliegue-0027-2026-11-11.md).
 
