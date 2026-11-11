@@ -1,8 +1,8 @@
 # Lote 1 de series ausentes — propuesta revisada (2026-11-11)
 
-> **No aplicado.** No se han creado series, Issues ni enlaces. La propuesta
-> está en `/mnt/Datos/Documentos/propuesta_lote_series_ausentes_1_2026-11-11.json`
-> y contiene IDs y nombres reales.
+> **Aplicado el 2026-11-11.** 5 series, 211 Issues y 222 enlaces. Backup:
+> `/var/backups/zascarr/pre_lote1_series_ausentes_20261111_162955.sql.gz`
+> (SHA-256 `86d5d094…b4c4`). Sin mover ni renombrar archivos.
 
 ## 1. Criterios de selección
 
@@ -33,7 +33,7 @@ serie ya catalogada `Dreadstar: La Odisea…`).
 Los duplicados son varias copias/portadas del **mismo número**: se enlazarán
 al mismo Issue, no se borrará ninguno.
 
-## 3. Qué se escribiría si se aprueba
+## 3. Qué se escribió
 
 En una transacción:
 
@@ -44,20 +44,18 @@ En una transacción:
    - `metadata_source=manual`
    - `start_year=NULL` (se enriquecerá después)
    - `metadata={"origen":"propuesta_series_ausentes_lote1","carpeta":...}`
-2. 211 filas `issues` con `format=single_issue`, `locked_fields` de identidad y
-   `sort_order` numérico.
+2. 211 filas `issues` con `locked_fields` de identidad y `sort_order` numérico.
+   `single_issue` en las cuatro series de grapas; `trade_paperback` en
+   `20th Century Boys` (son volúmenes, corregido tras la validación).
 3. 222 actualizaciones de `files.issue_id`.
 4. **Ningún archivo se mueve, renombra ni borra.**
 
-## 4. Por qué no se aplica todavía
+## 4. Decisiones tomadas
 
-- No hay IDs de Comic Vine/GCD: son series locales manuales.
-- Los títulos canónicos (`Superman/Batman`) y la tradición manga deben ser
-  confirmados.
-- Hay 11 archivos duplicados que conviene revisar como copias/portadas antes
-  de enlazarlos al mismo Issue.
-- Crear 211 Issues desde nombres es una mutación grande; mejor revisión
-  explícita.
+- No hay IDs de Comic Vine/GCD: son series locales `metadata_source=manual`.
+- `Superman/Batman` se normaliza con barra; `20th Century Boys` es manga.
+- Los 11 duplicados se enlazan al mismo Issue como copias/portadas.
+- Se revisó antes de aplicar; no se creó nada fuera del lote.
 
 ## 5. Validación ya hecha
 
@@ -73,3 +71,26 @@ En una transacción:
 2. Backup + preflight + transacción única.
 3. Aplicar y verificar 5/211/222.
 4. Repetir con el siguiente bloque, dejando fuera las series ambiguas.
+
+## 7. Aplicación y verificación
+
+| Dato | Resultado |
+|---|---:|
+| Series creadas | **5** |
+| Issues creados | **211** |
+| Archivos enlazados | **222** |
+| Issues duplicados por número | **0** |
+| Archivos movidos/renombrados | **0** |
+| App tras aplicar | **healthy** |
+
+IDs de serie:
+
+- `Superman/Batman`: `80140880-69a8-4e0e-8891-738bb0a67399`
+- `Transmetropolitan`: `5c684113-1efb-448c-abe4-092855305696`
+- `Irredeemable`: `fc0e73df-6ba9-4571-bb64-a11c04aece6d`
+- `20th Century Boys`: `616e1b0b-645c-4ed2-9962-8f5620386e96`
+- `Doomsday Clock`: `8043439e-c14e-4f16-a305-9c13a2fc6bca`
+
+Verificación posterior: 222/222 archivos apuntan a la serie y número
+esperados; los 22 Issues de `20th Century Boys` quedaron en
+`trade_paperback`; la app responde `healthy`.
