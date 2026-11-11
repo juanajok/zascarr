@@ -1,81 +1,104 @@
 {% extends "base.html" %}
 {% block title %}Biblioteca — ZascArr{% endblock %}
 {% block content %}
-<h1>Biblioteca</h1>
-<p class="subtitle">Acota tu biblioteca por título, tradición, editorial, personaje o saga.</p>
-<p><a class="btn ghost sm" href="/ui/biblioteca/comicinfo">Leer la información de mis archivos</a></p>
+<div class="biblioteca-cabecera">
+  <div>
+    <h1>Biblioteca</h1>
+    <p class="subtitle">Busca por título y acota el resto desde «Filtros».</p>
+  </div>
+  <a class="btn ghost sm" href="/ui/biblioteca/comicinfo">Leer la información de mis archivos</a>
+</div>
 
-<form id="filtros" class="filter-bar" action="/ui/biblioteca" method="get"
+<form id="filtros" class="barra-biblioteca" action="/ui/biblioteca" method="get"
       hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML"
       hx-trigger="change, submit">
-  <label class="sr" for="f-q">Buscar por título</label>
-  {% set valor = filtros.q %}{% set oob = false %}{% set foco = false %}
-  {% include "_campo_q.html" %}
-  <label class="sr" for="f-tradition">Tradición</label>
-  <select name="tradition" id="f-tradition">
-    <option value="">Todas las tradiciones</option>
-    {% for value, label in tradiciones %}
-    <option value="{{ value }}" {% if value == filtros.tradition %}selected{% endif %}>{{ label }}</option>
-    {% endfor %}
-  </select>
-  {% if publishers %}
-  <label class="sr" for="f-publisher">Editorial</label>
-  <select name="publisher_id" id="f-publisher">
-    <option value="">Todas las editoriales</option>
-    {% for p in publishers %}
-    <option value="{{ p.id }}" {% if filtros.publisher_id and p.id|string == filtros.publisher_id %}selected{% endif %}>{{ p.name }}</option>
-    {% endfor %}
-  </select>
-  {% endif %}
-  <label class="sr" for="f-leido">Lectura</label>
-  <select name="leido" id="f-leido">
-    <option value="">Toda la lectura</option>
-    <option value="si" {% if filtros.leido == "si" %}selected{% endif %}>Con leídos</option>
-    <option value="leyendo" {% if filtros.leido == "leyendo" %}selected{% endif %}>Leyendo</option>
-    <option value="no" {% if filtros.leido == "no" %}selected{% endif %}>Sin leídos</option>
-  </select>
-  <div class="filtro-campo">
-    <label for="f-orden">Ordenar por</label>
+  <div class="barra-busqueda">
+    <label class="sr" for="f-q">Buscar por título</label>
+    {% set valor = filtros.q %}{% set oob = false %}{% set foco = false %}
+    {% include "_campo_q.html" %}
+  </div>
+
+  <div class="barra-acciones">
+    {% include "_contador_biblioteca.html" %}
+    <details id="panel-filtros" class="barra-panel">
+      <summary aria-controls="filtros-campos">
+        <span id="cuenta-filtros">Filtros{% if num_filtros %} ({{ num_filtros }}){% endif %}</span>
+      </summary>
+      <div id="filtros-campos" class="barra-panel-campos">
+        <div class="filtro-campo">
+          <label for="f-tradition">Tradición</label>
+          <select name="tradition" id="f-tradition">
+            <option value="">Todas las tradiciones</option>
+            {% for value, label in tradiciones %}
+            <option value="{{ value }}" {% if value == filtros.tradition %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if publishers %}
+        <div class="filtro-campo">
+          <label for="f-publisher">Editorial</label>
+          <select name="publisher_id" id="f-publisher">
+            <option value="">Todas las editoriales</option>
+            {% for p in publishers %}
+            <option value="{{ p.id }}" {% if filtros.publisher_id and p.id|string == filtros.publisher_id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="filtro-campo">
+          <label for="f-leido">Lectura</label>
+          <select name="leido" id="f-leido">
+            <option value="">Toda la lectura</option>
+            <option value="si" {% if filtros.leido == "si" %}selected{% endif %}>Con leídos</option>
+            <option value="leyendo" {% if filtros.leido == "leyendo" %}selected{% endif %}>Leyendo</option>
+            <option value="no" {% if filtros.leido == "no" %}selected{% endif %}>Sin leídos</option>
+          </select>
+        </div>
+        <div class="filtro-campo">
+          <label for="f-personaje">Personaje</label>
+          <input type="search" placeholder="Buscar personaje…" id="f-personaje" name="personaje"
+                 hx-get="/ui/biblioteca/buscar-personaje" hx-trigger="keyup changed delay:400ms"
+                 hx-target="#resultados-personaje" hx-swap="innerHTML" hx-include="#filtros">
+          <div id="resultados-personaje" class="series-results" aria-live="polite"></div>
+        </div>
+        <div class="filtro-campo">
+          <label for="f-saga">Saga</label>
+          <input type="search" placeholder="Buscar saga…" id="f-saga" name="saga"
+                 hx-get="/ui/biblioteca/buscar-saga" hx-trigger="keyup changed delay:400ms"
+                 hx-target="#resultados-saga" hx-swap="innerHTML" hx-include="#filtros">
+          <div id="resultados-saga" class="series-results" aria-live="polite"></div>
+        </div>
+        <div class="filtro-campo">
+          <label for="f-etiquetas">Etiquetas</label>
+          <input type="search" id="f-etiquetas" name="etiquetas" value="{{ filtros.etiquetas }}"
+                 placeholder="Buscar por etiqueta…" autocomplete="off"
+                 hx-get="/ui/biblioteca/etiquetas/sugerir" hx-trigger="keyup changed delay:300ms"
+                 hx-target="#sugerencias-etiquetas" hx-swap="innerHTML" hx-include="#filtros">
+          <div id="sugerencias-etiquetas" class="series-results" aria-live="polite"></div>
+        </div>
+        <input type="hidden" name="character_id" value="{{ filtros.character_id }}">
+        <input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
+        <input type="hidden" name="page" value="1">
+        <p class="caption barra-panel-ayuda">Los filtros se aplican al cambiarlos.</p>
+        <noscript><button class="btn ghost sm" type="submit">Aplicar filtros</button></noscript>
+      </div>
+    </details>
+
+    <label class="sr" for="f-orden">Ordenar por</label>
     <select id="f-orden" name="orden">
       {% for value, label in ordenes %}
       <option value="{{ value }}" {% if filtros.orden == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
-    <button class="btn ghost sm" type="submit">Aplicar orden</button>
-  </div>
-  <input type="hidden" name="character_id" value="{{ filtros.character_id }}">
-  <input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
-  <input type="hidden" name="page" value="1">
-  <div class="filter-search-box">
-    <label class="sr" for="f-etiquetas">Buscar por etiqueta</label>
-    <input type="search" id="f-etiquetas" name="etiquetas" value="{{ filtros.etiquetas }}"
-           placeholder="Buscar por etiqueta…" autocomplete="off"
-           hx-get="/ui/biblioteca/etiquetas/sugerir"
-           hx-trigger="keyup changed delay:300ms"
-           hx-target="#sugerencias-etiquetas" hx-swap="innerHTML"
-           hx-include="#filtros" hx-sync="this:replace">
-    <div id="sugerencias-etiquetas" class="series-results" aria-live="polite"></div>
+
+    <a class="barra-vista" href="{{ url_vista_tarjetas if filtros.vista == 'lista' else url_vista_lista }}"
+       hx-get="{{ url_vista_tarjetas_fragmento if filtros.vista == 'lista' else url_vista_lista_fragmento }}"
+       hx-target="#rejilla" hx-swap="innerHTML"
+       title="{{ 'Ver como tarjetas' if filtros.vista == 'lista' else 'Ver como lista' }}">
+      {{ "Tarjetas" if filtros.vista == "lista" else "Lista" }}
+    </a>
   </div>
 </form>
-
-<div class="filter-bar filter-bar-secondary">
-  <div class="filter-search-box">
-    <label class="sr" for="f-personaje">Buscar personaje</label>
-    <input type="search" placeholder="Buscar personaje…" id="f-personaje" name="personaje"
-           hx-get="/ui/biblioteca/buscar-personaje" hx-trigger="keyup changed delay:400ms"
-           hx-target="#resultados-personaje" hx-swap="innerHTML"
-           hx-include="#filtros">
-    <div id="resultados-personaje" class="series-results" aria-live="polite"></div>
-  </div>
-  <div class="filter-search-box">
-    <label class="sr" for="f-saga">Buscar saga</label>
-    <input type="search" placeholder="Buscar saga…" id="f-saga" name="saga"
-           hx-get="/ui/biblioteca/buscar-saga" hx-trigger="keyup changed delay:400ms"
-           hx-target="#resultados-saga" hx-swap="innerHTML"
-           hx-include="#filtros">
-    <div id="resultados-saga" class="series-results" aria-live="polite"></div>
-  </div>
-</div>
 
 <div id="rejilla">
   {% include "_rejilla_biblioteca.html" %}

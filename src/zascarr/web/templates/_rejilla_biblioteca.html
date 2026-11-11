@@ -8,18 +8,18 @@
     (no enfoca ni emite el campo fuera de banda) — BL-IT01, spec §6.2. -#}
 {% set quitar = request.query_params.get("quitar") %}
 {% set quitar_valido = quitar if quitar in (
-  "q", "tradition", "publisher_id", "character_id", "story_arc_id", "todos"
+  "q", "tradition", "publisher_id", "character_id", "story_arc_id", "leido", "etiquetas", "todos"
 ) else none %}
+{% if es_fragmento %}
+{% set oob = true %}{% include "_contador_biblioteca.html" %}
+<span id="cuenta-filtros" hx-swap-oob="true">Filtros{% if num_filtros %} ({{ num_filtros }}){% endif %}</span>
+{% endif %}
 <div id="resumen-biblioteca" class="resumen-biblioteca">
   {% if error %}
   {{ ui.aviso("warn", "No se pudo cargar la biblioteca. Vuelve a intentarlo.") }}
   <p><a class="btn ghost" href="{{ url_reintento }}"
         hx-get="{{ url_reintento_fragmento }}" hx-target="#rejilla"
         hx-swap="innerHTML">Reintentar</a></p>
-  {% else %}
-  {% call ui.region_viva("recuento-biblioteca") %}
-  <p class="subtitle recuento-biblioteca">{{ recuento }}{% if recuento_lectura %} · {{ recuento_lectura }}{% endif %}</p>
-  {% endcall %}
   {% endif %}
 
   {% for aviso in avisos %}
@@ -50,10 +50,11 @@
     <li>
       <a class="limpiar-filtros" href="{{ url_limpiar }}"
          hx-get="{{ url_limpiar_fragmento }}" hx-target="#rejilla"
-         hx-swap="innerHTML">Limpiar todos</a>
+         hx-swap="innerHTML">Limpiar filtros</a>
     </li>
   </ul>
   {% endif %}
+  {% if recuento_lectura %}<p class="caption" id="detalle-lectura">{{ recuento_lectura }}</p>{% endif %}
   {% if facetas %}
   <section class="facetas-biblioteca" id="facetas-biblioteca" aria-labelledby="facetas-titulo">
     <h2 id="facetas-titulo">Etiquetas de tu biblioteca</h2>
@@ -70,14 +71,7 @@
   {% endif %}
 </div>
 
-<div class="library-vistas" role="group" aria-label="Presentación de la biblioteca">
-  <a class="library-vista{% if vista != "lista" %} library-vista-actual{% endif %}"
-     href="{{ url_vista_tarjetas }}"
-     {% if vista != "lista" %}aria-current="true"{% endif %}>Tarjetas</a>
-  <a class="library-vista{% if vista == "lista" %} library-vista-actual{% endif %}"
-     href="{{ url_vista_lista }}"
-     {% if vista == "lista" %}aria-current="true"{% endif %}>Lista</a>
-</div>
+
 
 {% if error %}
 {#- El aviso y el reintento ya están arriba; no se pinta una rejilla vacía que
