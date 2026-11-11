@@ -2202,15 +2202,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .previa-confirmar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .previa-error { margin: 0 0 8px; font-weight: 700; }
 
-@media (prefers-contrast: more), (forced-colors: active) {
-  body::before,
-  .metric-card::before,
-  .empty-state::before,
-  .pagina-error::after { display: none; }
-  .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
-  .pagina-error h1 { text-shadow: none; }
-}
-
 /* BL-WK4 (#342): notas de colección discretas en las fichas. */
 .notas-serie, .nota-numero { margin-top: 22px; }
 .nota-form { display: grid; gap: 6px; margin-top: 6px; }
@@ -2219,3 +2210,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .notas-numeros { display: grid; gap: 6px; padding-left: 1.1rem; }
 .nota-texto { display: block; overflow-wrap: anywhere; }
 .exportar-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  body::before,
+  .metric-card::before,
+  .empty-state::before,
+  .pagina-error::after { display: none; }
+  .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
+  .pagina-error h1 { text-shadow: none; }
+}
