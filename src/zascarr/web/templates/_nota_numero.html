@@ -1,0 +1,25 @@
+{#- BL-WK4 (#342): nota libre del número. Sin JS; autoescape. -#}
+{% if nota_numero %}
+<section id="nota-numero" class="nota-numero" aria-labelledby="nota-numero-titulo">
+  <h2 id="nota-numero-titulo" class="titulo-frase">Nota del número</h2>
+  {% if nota_aviso %}{{ ui.aviso("ok" if nota_aviso in ("Nota guardada.", "Nota borrada.") else "amber", nota_aviso) }}{% endif %}
+  <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/nota" class="nota-form">
+    <label for="nota-numero-texto">Nota del número</label>
+    <textarea id="nota-numero-texto" name="texto" rows="3" maxlength="4000">{{ nota_numero.texto }}</textarea>
+    <div class="nota-acciones">
+      <button class="btn ghost sm" type="submit">Guardar nota</button>
+      <button class="btn ghost sm" type="submit" name="accion" value="borrar">Borrar nota</button>
+    </div>
+  </form>
+</section>
+{% else %}
+<details id="nota-numero" class="nota-numero">
+  <summary>Añadir nota</summary>
+  {% if nota_aviso %}{{ ui.aviso("amber", nota_aviso) }}{% endif %}
+  <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/nota" class="nota-form">
+    <label for="nota-numero-texto">Nota del número</label>
+    <textarea id="nota-numero-texto" name="texto" rows="3" maxlength="4000"></textarea>
+    <button class="btn ghost sm" type="submit">Guardar nota</button>
+  </form>
+</details>
+{% endif %}
