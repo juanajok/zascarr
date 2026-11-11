@@ -30,9 +30,13 @@ Issues; 0 archivos movidos.
 
 **Cierre de los 3 restantes (2026-11-11):** `Animal Man Annual` se creó como
 serie independiente (sin padre) con #1/#2; el pack de Batman se desvinculó y
-queda en Pendientes. Quedan **0 anuales mal enlazados** y **49 archivos sin
-Issue** (48 anuales + el pack). Hay **19 Issues padre vacíos** que no se borran
-sin revisión. El detalle está en
+queda en Pendientes.
+
+**Lote 4 aplicado (2026-11-11):** 15 series anuales independientes y 26 Issues
+nuevos; 0 archivos movidos. Estado final: **21 series anuales**, **57 Issues**,
+**0 anuales mal enlazados** y **23 archivos pendientes** (14 duplicados, 6
+packs y 3 a revisión). Hay **19 Issues padre vacíos** que no se borran sin
+revisión. El detalle está en
 [`despliegue-0027-2026-11-11.md`](despliegue-0027-2026-11-11.md).
 
 **Problema.** Un archivo `Batman Annual 01` se parseaba como `Batman` `#1`; el
