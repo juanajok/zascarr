@@ -60,6 +60,23 @@ from zascarr.utils.naming import clave_de_coleccion, es_titulo_de_anual
 SIMILARITY_THRESHOLD = 0.35
 FUZZY_THRESHOLD = 0.60      # por debajo: ruido, aunque supere el WHERE
 
+# Alias de catálogo SEGUROS: mismo espacio de numeración,distinto título de
+# release (traducción, prefijo editorial o forma abreviada). La clave es
+# normalize_title() del título que sale del archivo; el valor es el título
+# exacto de la serie en BD. No se meten aquí series con numeración propia
+# ausente del catálogo (Emerald Warriors, ARGUS, Injustice Año N...).
+CATALOG_ALIASES: dict[str, str] = {
+    "100 balas": "100 Bullets",
+    "shadow of the bat": "Batman: Shadow of the Bat",
+    "shadow of the bat annual": "Batman: Shadow of the Bat Annual",
+    "smallville temporada 11": "Smallville: Season Eleven",
+    "wildcats": "WildC.A.T.s: Covert Action Teams",
+    # «Horizontes Lejanos» es un volumen de la serie de Torrezno; la carpeta
+    # y la etiqueta humana confirman el título canónico.
+    "horizontes lejanos": "Las aventuras del Capitán Torrezno",
+    "forever evil a r g u s": "Forever Evil: A.R.G.U.S",
+}
+
 # B15: valor con el que se persiste una grapa suelta (models.IssueFormat.
 # SINGLE_ISSUE). Se repite como literal a propósito: core/ no importa models/
 # en ningún sitio y no es el momento de romper esa frontera. Un test
@@ -90,6 +107,70 @@ _ARTICLE_TRAILING = re.compile(rf",\s*(?:{_ARTICLE_WORDS})\s*$", re.IGNORECASE)
 _ABBREV = re.compile(r"(?<=\w)\.(?=\w)")   # punto entre letras → eliminar
 _PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
 _WS = re.compile(r"\s+")
+
+#: Sufijo de edición/volumen al final del título ya normalizado: «batman vol 1»,
+#: «batman volume 2», «batman v3», «daredevil tomo 1». El parser extrae el
+#: título limpio («Batman») porque el marcador de volumen no es parte del nombre
+#: de la obra; el catálogo, en cambio, suele distinguir tomos como «Batman Vol 1»
+#: y «Batman Vol 2». Sin esta equivalencia, «Batman #25» se quedaba en 0,54 de
+#: similitud y no enlazaba aunque la serie y el número existieran.
+_VOLUME_SUFFIX = re.compile(
+    r"\s+(?:vol(?:umen)?\.?\s*\d+|v\s*\d+|tomo\s*\d+)$", re.IGNORECASE)
+
+
+def _base_title(title: str) -> str:
+    """Título sin el sufijo de volumen/edición final, ya normalizado."""
+    return _VOLUME_SUFFIX.sub("", normalize_title(title)).strip()
+
+
+_VOLUME_IN_NAME = re.compile(
+    r"\b(?:vol(?:umen)?\.?|v|tomo)\s*(\d+)\b", re.IGNORECASE)
+_YEAR_IN_NAME = re.compile(r"\((?:19|20)\d{2}\)")
+
+
+def _desempatar_por_carpeta(tied: list[SeriesHit], carpeta: str) -> SeriesHit | None:
+    """Desempata por el nombre de la carpeta, solo si hay evidencia única.
+
+    Es una pista de contexto, nunca una identidad: la carpeta puede ser
+    genérica («Comics», «Descargas») o contener otra cosa. Solo se usa cuando
+    el matcher ya tiene varios candidatos empatados y la carpeta identifica a
+    uno —y solo a uno— por título base, volumen o año. Si no, se devuelve None
+    y el archivo sigue en `unsorted`.
+    """
+    if not carpeta:
+        return None
+    # El año entre paréntesis no forma parte del título base; el volumen sí
+    # se puede usar como discriminador.
+    sin_anio = _YEAR_IN_NAME.sub(" ", carpeta)
+    base = _base_title(sin_anio)
+    if not base:
+        return None
+    candidatos = [h for h in tied if _base_title(h.title) == base]
+    if not candidatos:
+        return None
+
+    # Si la carpeta afirma un volumen/año, el candidato tiene que cuadrar con
+    # esa afirmación. No se usa la base como permiso para ignorar una
+    # contradicción explícita («Batman Vol 3/» con un único «Batman Vol 1»).
+    volumen = _VOLUME_IN_NAME.search(carpeta)
+    if volumen:
+        por_volumen = [h for h in candidatos if _volume_matches(h, int(volumen.group(1)))]
+        if len(por_volumen) == 1:
+            return por_volumen[0]
+        return None
+
+    anio = re.search(r"\((19|20)(\d{2})\)", carpeta)
+    if anio:
+        year = int(anio.group(1) + anio.group(2))
+        por_anio = [
+            h for h in candidatos
+            if h.start_year is not None and abs(h.start_year - year) <= 1
+        ]
+        if len(por_anio) == 1:
+            return por_anio[0]
+        return None
+
+    return candidatos[0] if len(candidatos) == 1 else None
 
 
 def normalize_title(title: str) -> str:
@@ -173,6 +254,10 @@ class SeriesMatcher:
         Orden de prioridad: exacto → por año → por volumen → fuzzy completo.
         """
         norm = normalize_title(raw_title)
+        # Alias de catálogo: si el release usa una traducción/prefijo conocido,
+        # se busca la serie canónica por su título exacto. No es fuzzy.
+        if norm in CATALOG_ALIASES:
+            norm = normalize_title(CATALOG_ALIASES[norm])
 
         # ── Exacto normalizado ───────────────────────────────────────────────
         # title_norm es una columna generada por Postgres (f_title_norm(title),
@@ -190,6 +275,8 @@ class SeriesMatcher:
                 for r in exact]
 
         # ── Fuzzy si no hay exacto ───────────────────────────────────────────
+        exacto = bool(hits)
+
         if not hits:
             fuzzy = await self.db.execute(sa.text("""
                 SELECT id, title, start_year,
@@ -204,6 +291,26 @@ class SeriesMatcher:
                 for r in fuzzy
                 if r.score >= SIMILARITY_THRESHOLD
             ]
+
+        # Un título con volumen en el catálogo («Batman Vol 1») es la misma
+        # serie que el título limpio del archivo («Batman»). No se baja el
+        # umbral fuzzy —eso cruzaría «Thor» con «Thorgal»—: se busca el sufijo
+        # de edición y se promueve a coincidencia exacta. Solo si no hay ya
+        # una coincidencia exacta de título.
+        if not exacto:
+            base = _base_title(raw_title)
+            if base:
+                por_id = {str(h.series_id): h for h in hits}
+                base_rows = await self.db.execute(sa.text("""
+                    SELECT id, title, start_year
+                    FROM series
+                    WHERE title_norm LIKE :prefijo
+                """), {"prefijo": base + " %"})
+                for r in base_rows:
+                    if _base_title(r.title) == base:
+                        por_id[str(r.id)] = SeriesHit(
+                            UUID(str(r.id)), r.title, r.start_year, 1.0)
+                hits = sorted(por_id.values(), key=lambda h: (-h.score, h.title))
 
         if len(hits) <= 1:
             return hits
@@ -311,7 +418,8 @@ class SeriesMatcher:
 
     async def decide(self, triage, extractor=None,
                      formato_esperado: str | None = None,
-                     annual: bool = False) -> MatchResult:
+                     annual: bool = False,
+                     series_alternativa: str | None = None) -> MatchResult:
         """Punto de entrada.
 
         `extractor` es la inyección de naming.py:
@@ -365,6 +473,22 @@ class SeriesMatcher:
                     notes=["parece un anual y no hay una serie anual que coincida: "
                            "no se enlaza a la serie madre"],
                 )
+
+        # La serie completa («Green Lantern - Origenes Secretos») es más
+        # específica que la corta («Green Lantern»). Si hay una única
+        # coincidencia EXACTA con la completa, manda: si no, se sigue con la
+        # corta y su umbral normal. Nunca se usa la alternativa fuzzy.
+        if series_alternativa:
+            alt_hits = await self.find_series(series_alternativa, year, volume)
+            if annual:
+                alt_hits = [h for h in alt_hits if es_titulo_de_anual(h.title)]
+            exactos = [h for h in alt_hits if h.score == 1.0]
+            if len(exactos) == 1:
+                return await self._resolve(
+                    exactos[0], number, alt_hits, MatchStatus.DIRECT,
+                    [f"serie alternativa exacta: {exactos[0].title}"],
+                    formato_esperado, nombre=triage.path.name)
+
         good = [h for h in hits if h.score >= FUZZY_THRESHOLD]
 
         if not good:
@@ -376,16 +500,23 @@ class SeriesMatcher:
 
         top = good[0].score
         tied = [h for h in good if abs(h.score - top) < 0.05]
+        notas: list[str] = []
         if len(tied) > 1:
-            return MatchResult(
-                MatchStatus.UNSORTED,
-                candidates=tied,
-                notes=[f"empate ambiguo: {[h.title for h in tied]}"],
-            )
+            # La carpeta solo desempata entre candidatos que ya han pasado el
+            # umbral. Nunca convierte un desconocido en candidato.
+            hit = _desempatar_por_carpeta(tied, triage.path.parent.name)
+            if hit is None:
+                return MatchResult(
+                    MatchStatus.UNSORTED,
+                    candidates=tied,
+                    notes=[f"empate ambiguo: {[h.title for h in tied]}"],
+                )
+            notas.append(f"desempatado por la carpeta: {hit.title}")
+        else:
+            hit = good[0]
 
-        hit = good[0]
         status = MatchStatus.DIRECT if hit.score == 1.0 else MatchStatus.FUZZY
-        return await self._resolve(hit, number, good, status, [], formato_esperado,
+        return await self._resolve(hit, number, good, status, notas, formato_esperado,
                                    nombre=triage.path.name)
 
     async def _resolve(self, hit: SeriesHit, number: str, candidates: list[SeriesHit],
@@ -414,6 +545,18 @@ class SeriesMatcher:
             clave = clave_de_coleccion(nombre)
             otras = {clave_de_coleccion(f) for f in candidata.archivos}
             otras.discard("")
+            # Un Issue con archivos de varias colecciones ya está contaminado
+            # (caso real: «Flashpoint #2» con diez tie-ins distintos). Aunque
+            # el archivo nuevo sea una copia de una de esas colecciones, no se
+            # añade: primero hay que separar el Issue. Si no, la contaminación
+            # se propaga y cada copia la hace más difícil de deshacer.
+            if len(otras) > 1:
+                return MatchResult(
+                    MatchStatus.UNSORTED,
+                    candidates=candidates,
+                    notes=[f"el número '{number}' de '{hit.title}' mezcla varias "
+                           "colecciones; no se añade nada hasta revisarlo"],
+                )
             if clave and otras and clave not in otras:
                 return MatchResult(
                     MatchStatus.UNSORTED,

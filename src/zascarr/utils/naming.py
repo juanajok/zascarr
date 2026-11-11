@@ -94,8 +94,28 @@ CREDITS_PATTERN = re.compile(
 # Aniversario"): el número es de la efeméride, no del tebeo. Sin esto,
 # "Iberia Inc. - Integral 20 aniversario" se registraba como el nº 20.
 ANIVERSARIO_PATTERN = re.compile(
-    r"\b(?:\d+|[IVXL]+)\s*(?:º|ª|°|o|mo|er|to)?\s*aniversario\b", re.IGNORECASE
+    r"\b(?P<numero>\d+|[IVXL]+)\s*(?:º|ª|°|o|mo|er|to)?\s*aniversario\b",
+    re.IGNORECASE,
 )
+
+
+def _quitar_numero_de_aniversario(texto: str) -> str:
+    """Quita «20 aniversario» sin comerse un número de grapa explícito.
+
+    Bug real de la biblioteca (2026-11-11): «Batman #400 Aniversario» se
+    quedaba sin número porque el patrón borraba «400 Aniversario» entero. Si
+    delante del número hay un marcador de grapa (#, nº, num.), el número es
+    del cómic; solo se quita la palabra «aniversario». En «Iberia Inc. -
+    Integral 20 aniversario» no hay marcador y se quita la efeméride completa,
+    que es lo que se pretendía.
+    """
+    def _repl(match: re.Match[str]) -> str:
+        antes = texto[max(0, match.start() - 8):match.start()]
+        if re.search(r"(?:#|№|\bn[ºo]|\bnum(?:ero)?\.?)\s*$", antes, re.IGNORECASE):
+            return match.group("numero") + " "
+        return " "
+
+    return ANIVERSARIO_PATTERN.sub(_repl, texto)
 
 # El punto como separador es habitual en los scans ("La.Mazmorra..
 # Integral.6.-.Sfar"). Se convierte en espacio ANTES de extraer el
@@ -160,6 +180,11 @@ NUMBER_RANGE_PATTERN = re.compile(r"\b\d{1,4}-\d{1,4}[a-zA-Z]?\b")
 # guion.
 NUMBER_RANGE_WORD_PATTERN = re.compile(r"\b\d{1,4}\s+al?\s+\d{1,4}\b", re.IGNORECASE)
 
+# «#25 - Anual»: no es el anual nº25, es un pack con el issue #25 y el anual.
+# «Batman Annual #25» (marca delante) sí es un anual normal y no entra aquí.
+PACK_ISSUE_ANNUAL_PATTERN = re.compile(
+    r"#\s*\d{1,4}[a-zA-Z]?\s*-\s*(?:Annual|Anual)\b", re.IGNORECASE)
+
 # "1 de 4", "3 de 8": posición dentro de un arco publicado en fascículos
 # (Transmetropolitan y similares), nunca el número de grapa. Sin esto no
 # causaba daño en los casos ya vistos (el "#01" real se encuentra antes
@@ -194,6 +219,39 @@ PART_NUMBER_PATTERN = re.compile(r"\[P(\d+)N(\d+)\]", re.IGNORECASE)
 EDITION_NUMBER_PATTERN = re.compile(
     r"\b(Omnigold|Integral|Edici[oó]n\s+Integral)\s+(\d{1,3})\b", re.IGNORECASE
 )
+# Marcador de edición sin el número pegado: «100 Balas - Integral
+# (Ed.Planeta) 01». El número 01 sigue siendo el tomo; aquí solo se marca
+# el formato para que el matcher no lo confunda con una grapa.
+# Solo «Integral»: «Omnigold nº 2» conserva la palabra en el título (es el
+# nombre de la línea editorial y así lo esperan los casos reales).
+EDITION_MARKER_PATTERN = re.compile(
+    r"\b(Integral|Edici[oó]n\s+Integral)\b", re.IGNORECASE
+)
+
+# Formatos de edición que NO son una grapa. Se capturan antes de buscar el
+# número: «Batman Omnibus Vol 1» debe conservar el formato y no convertirse
+# en una grapa #1 sin más. La etiqueta se mapea a IssueFormat en models.
+EDITION_FORMAT_NUMBER_PATTERN = re.compile(
+    r"\b(?P<formato>Omnibus|TPB|Trade\s+Paperback|Hardcover|HC|Graphic\s+Novel|GN)"
+    r"\s+(?P<numero>\d{1,3})\b",
+    re.IGNORECASE,
+)
+EDITION_FORMAT_PATTERN = re.compile(
+    r"\b(?:Omnibus|TPB|Trade\s+Paperback|Hardcover|HC|Graphic\s+Novel|GN)\b",
+    re.IGNORECASE,
+)
+EDITION_FORMAT_KIND = {
+    "omnibus": "omnibus",
+    "tpb": "trade_paperback",
+    "trade paperback": "trade_paperback",
+    "hardcover": "hardcover",
+    "hc": "hardcover",
+    "graphic novel": "graphic_novel",
+    "gn": "graphic_novel",
+}
+# «1 of 4» / «1 de 4»: cuenta de la miniserie. El número de issue, si lo hay,
+# lo sigue extrayendo el buscador normal; esto solo guarda el total.
+ISSUE_COUNT_PATTERN = re.compile(r"\b(\d{1,3})\s+(?:of|de)\s+(\d{1,3})\b", re.IGNORECASE)
 
 # Prefijo de ORDEN DE LECTURA al principio del nombre ("069.- Flash v2
 # 62", "247.- Wonder Woman v2 214"): numera la colección/orden del
@@ -206,6 +264,20 @@ EDITION_NUMBER_PATTERN = re.compile(
 # se leía entero como serie "01" — el guion sin más se confundía con el
 # separador de subtítulo, que se queda con el primer trozo ("01").
 SORT_PREFIX_PATTERN = re.compile(r"^\s*\d{1,3}[a-zA-Z]?\s*\.?\s*-\s*")
+
+# «Crossover 07 - Dinastía de X 04»: el 07 es orden de lectura del evento;
+# la serie y el número reales van después. No se aplica a un título que
+# simplemente empiece por «Crossover».
+CROSSOVER_PREFIX_PATTERN = re.compile(r"^\s*Crossover\s+\d{1,3}\s*-\s*", re.IGNORECASE)
+
+# Prefijo numérico sin guion: "13. Nightwing #73", "14  JLD #11", "16 Catwoman".
+# Si detrás hay otro número/marcador, el prefijo es orden de lectura; si no,
+# el prefijo ES el número y el resto es la serie ("51 Catwoman").
+LEADING_NUMBER_PREFIX_PATTERN = re.compile(
+    r"^\s*(?P<num>\d{1,3}(?:\.\d+)?)(?P<suf>[a-zA-Z]?)(?P<sep>[\.\)]\s*|\s+)"
+    r"(?P<rest>[^\W\d_].*)$",
+    re.UNICODE,
+)
 # Annual/Anual y Especial NO son la misma cosa. Un anual es una publicación
 # con numeración propia dentro de la colección (Metron, GCD y Comic Vine lo
 # publican como serie/volumen propio); «Especial» es una marca de edición que,
@@ -219,6 +291,17 @@ ANNUAL_PATTERN = re.compile(r"\b(?:Annual|Anual)\b", re.IGNORECASE)
 ANNUAL_NUMBER_PATTERN = re.compile(
     r"\b(?:Annual|Anual)\b\s*#?\s*(\d{1,4}[a-zA-Z]?)\b", re.IGNORECASE
 )
+# «11.1 Annual 01 Catwoman»: el decimal delante es el número de la grapa
+# Villains Month; el archivo es el anual #1 de Catwoman. Se normaliza a
+# «Catwoman Annual» + #1 antes de que el prefijo numérico gane.
+ANNUAL_PREFIX_PATTERN = re.compile(
+    r"^\s*\d{1,3}(?:\.\d+)?\s+(?P<annual>Annual|Anual)\s+"
+    r"(?P<num>\d{1,4}[a-zA-Z]?)\s+(?P<rest>[^\W\d_].*)$",
+    re.IGNORECASE,
+)
+# «JLD»/«OP»: acrónimo de una carpeta antecesora con el mismo inicial.
+ACRONYM_SERIES_PATTERN = re.compile(r"^[A-Z]{2,5}$")
+ACRONYM_NUMBER_PATTERN = re.compile(r"^(?P<acr>[A-Z]{2,5})(?P<num>\d{1,4}[a-zA-Z]?)$")
 SPECIAL_PATTERN = re.compile(r"\bEspecial\b", re.IGNORECASE)
 FILE_EXT_PATTERN = re.compile(r"\.(cbz|cbr|cb7|pdf|epub)$", re.IGNORECASE)
 
@@ -229,6 +312,9 @@ class ParsedComicName:
     issue_number: str = ""
     volume: int | None = None
     year: int | None = None
+    #: Total de la miniserie si el nombre lo dice («1 of 4», «1 de 4»).
+    #: Es contexto para validar, no el número del archivo.
+    issue_count: int | None = None
     format: str = ""
     #: `Annual`/`Anual`: publicación con numeración propia; el título conserva
     #: la palabra porque «Batman Annual» es la serie que hay que buscar.
@@ -240,6 +326,10 @@ class ParsedComicName:
     #: ("Superman - Godfall #01"). Sirve para no confundir colecciones distintas;
     #: vacío si el subtítulo iba después del número ("Superman #01 - El origen").
     subtitulo: str = ""
+    #: Serie completa antes de partir por " - " ("Green Lantern - Origenes
+    #: Secretos"). El matcher la prueba como alternativa si la serie corta no
+    #: encuentra candidato; no sustituye a `series` ni crea identidad sola.
+    series_alternativa: str = ""
     original_filename: str = ""
     confidence: float = 0.0
     # B15 (2026-09-26): cuando issue_number viene de un marcador de
@@ -249,6 +339,191 @@ class ParsedComicName:
     # la serie — solo informa qué `Issue.format` corresponde al confirmar
     # la asignación, y qué no debe contar como grapa suelta en los huecos.
     edition_kind: str | None = None
+
+
+def _separar_prefijo_numerico(working: str) -> tuple[str, str | None]:
+    """Separa un prefijo numérico inicial de serie/número.
+
+    Devuelve (texto_sin_prefijo, numero). Si el prefijo es orden de lectura
+    (hay otro número detrás, o va con punto/paréntesis) devuelve numero=None
+    y solo lo quita; si no, el prefijo es el número del tebeo y el resto es
+    la serie. Los títulos que empiezan por cifra ("100 Balas", "1963", "52")
+    no entran: el prefijo de 3 cifras se deja intacto.
+    """
+    m = LEADING_NUMBER_PREFIX_PATTERN.match(working)
+    if not m:
+        return working, None
+    num = m.group("num")
+    if len(num.split(".")[0]) > 2:
+        return working, None
+    resto = m.group("rest").strip()
+    sep = m.group("sep")
+    if not resto:
+        return working, None
+    if "." in num:
+        # "22.1 Catwoman": decimal explícito, es el número del tebeo.
+        return resto, num.lstrip("0") or "0"
+    if sep.strip() in (".", ")"):
+        # "13. Nightwing": prefijo de orden de lectura, no de grapa.
+        return resto, None
+    if re.search(r"#\s*\d", resto) or re.search(r"(?<!New )\b\d{1,3}\b", resto):
+        # "14 JLD #11" / "73 Dreadstar ... 61": hay otro número en el resto.
+        return resto, None
+    # Prefijo suelto sin más evidencia: no se inventa si es número o parte del
+    # título ("12 Monkeys"). Se deja como estaba.
+    return working, None
+
+
+def _segmentos_contexto(contexto: str | None) -> list[str]:
+    if not contexto:
+        return []
+    return [s.strip() for s in contexto.split(" / ") if s.strip()]
+
+
+def _segmento_por_acronimo(acronimo: str, contexto: str | None) -> str | None:
+    for segmento in _segmentos_contexto(contexto):
+        if re.search(r"\b(?:vol(?:umen)?|tomo)\b", segmento, re.IGNORECASE):
+            continue
+        iniciales = "".join(p[0] for p in re.findall(r"[^\W\d_]+", segmento, re.UNICODE))
+        if iniciales.upper() == acronimo.upper():
+            return _limpiar_titulo_serie(segmento)
+    return None
+
+
+def _serie_desde_carpeta(series: str, alternativa: str, carpeta: str | None,
+                          contexto: str | None = None, is_annual: bool = False,
+                          sin_numero: bool = False) -> str:
+    """Ajusta la serie usando carpetas, sin inventar.
+
+    - Alternativa del nombre cuyos tokens están en el contexto de carpetas
+      («Injustice» + «Año 3» → «Injustice: Gods Among Us - Año 3»).
+    - Acrónimo de una carpeta antecesora («JLD» → «Justice League Dark»,
+      «OP» → «One Piece»).
+    - Carpeta que termina en la serie («The Corinthian» + «Death in Venice»).
+    - Extensión editorial exacta («Joe Kubert» + «Presents»).
+    """
+    if not carpeta and not contexto:
+        return series
+    limpia = re.sub(
+        r"\b(?:vol(?:umen)?\.?\s*\d+|v\s*\d+)\b", " ", carpeta or "",
+        flags=re.IGNORECASE)
+    limpia = re.sub(r"\b(?:19|20)\d{2}\b", " ", limpia)
+    limpia = _limpiar_titulo_serie(limpia)
+    limpia_norm = normalize_series_name(limpia)
+    # La alternativa de un pack puede llevar «#25 Anual» pegado; para la
+    # serie solo interesa lo anterior al pack. «corregido» es una marca de
+    # release, no parte del título.
+    alternativa_limpia = alternativa
+    if "#" in alternativa_limpia or "№" in alternativa_limpia:
+        alternativa_limpia = re.sub(r"[#№].*$", " ", alternativa_limpia)
+    alternativa_limpia = re.sub(
+        r"\b(?:corregido|corregida|actualizado|actualizada)\b", " ",
+        alternativa_limpia, flags=re.IGNORECASE)
+    alternativa_limpia = _limpiar_titulo_serie(alternativa_limpia)
+    alternativa_norm = normalize_series_name(alternativa_limpia)
+    if alternativa_norm and alternativa_norm == limpia_norm:
+        return alternativa_limpia
+    # Alternativa contenida en el contexto de abuelo+padre.
+    if alternativa_norm and contexto:
+        tokens_alt = set(alternativa_norm.split())
+        tokens_ctx = set(normalize_series_name(contexto).split())
+        if tokens_alt and tokens_alt <= tokens_ctx:
+            return alternativa_limpia
+    # Acrónimo de una carpeta antecesora.
+    if ACRONYM_SERIES_PATTERN.fullmatch(series):
+        segmento = _segmento_por_acronimo(series, contexto)
+        if segmento:
+            return segmento
+    series_norm = normalize_series_name(series)
+    # La carpeta es el título completo que termina en la serie
+    # («The corinthian-death in venice»).
+    # Una carpeta que empieza por número suele ser un arco/volumen, no el
+    # título canónico («02 Endless night-noches eternas» no es la serie).
+    if (series_norm and limpia_norm and not re.match(r"^\s*\d", carpeta or "")
+            and limpia_norm.endswith(series_norm)
+            and len(limpia_norm.split()) > len(series_norm.split())):
+        return limpia
+    # Especial sin número dentro de la carpeta de la serie («Lobo - Año 1»).
+    if (sin_numero and series_norm and limpia_norm
+            and series_norm.startswith(limpia_norm + " ")):
+        return limpia
+    # Con número de issue, la carpeta es la serie corta y la alternativa
+    # añade la línea concreta («Forever Evil» → «Forever Evil: A.R.G.U.S»).
+    if (not sin_numero and alternativa_norm and limpia_norm
+            and alternativa_norm.startswith(limpia_norm + " ")
+            and len(alternativa_norm.split()) > len(limpia_norm.split())):
+        return alternativa_limpia
+    # Extensión editorial explícita («Joe Kubert» + «Presents»).
+    if series_norm and limpia_norm == series_norm + " presents":
+        return limpia
+    # Anual sin número en la serie corta («Lobo - Anual 1»).
+    if (is_annual and alternativa_norm.endswith(("annual", "anual"))
+            and not re.search(r"\d", alternativa_limpia)
+            and series_norm and alternativa_norm.startswith(series_norm + " ")):
+        return alternativa_limpia
+    return series
+
+
+def _quitar_credito_con_carpeta(working: str, carpeta: str | None) -> str:
+    """Quita «Hiroaki Samura - » cuando el resto coincide con la carpeta.
+
+    Solo actúa con un separador « - », un prefijo que parece crédito (varias
+    palabras o «&») y una carpeta que contiene el título restante. Nunca
+    convierte una serie de una palabra en subtítulo.
+    """
+    if not carpeta or " - " not in working:
+        return working
+    m = re.match(r"^(.+?)\s+-\s+(.+)$", working)
+    if not m:
+        return working
+    credito, resto = m.group(1).strip(), m.group(2).strip()
+    parece_credito = (
+        "&" in credito
+        or bool(re.match(r"^[A-ZÁÉÍÓÚÑ][\wÀ-ÿ.'-]+(?:\s+[A-ZÁÉÍÓÚÑ][\wÀ-ÿ.'-]+)+$", credito))
+    )
+    if not parece_credito:
+        return working
+    sin_numero = re.sub(r"\s+\d{1,4}[a-zA-Z]?\s*$", "", resto).strip()
+    if not sin_numero:
+        return working
+    resto_norm = normalize_series_name(sin_numero)
+    carpeta_norm = normalize_series_name(carpeta)
+    if resto_norm and (resto_norm in carpeta_norm or carpeta_norm in resto_norm):
+        return resto
+    if "&" in credito:
+        return resto
+    return working
+
+
+def _prefijo_de_issue_con_carpeta(working: str, carpeta: str | None) -> tuple[str, str | None]:
+    """«16 Catwoman» + carpeta Catwoman → issue 16, serie Catwoman.
+
+    Solo si el resto coincide con la carpeta y la carpeta no empieza por ese
+    mismo número (para no romper series como «12 Monkeys»).
+    """
+    if not carpeta:
+        return working, None
+    m = re.match(r"^\s*(\d{1,3})\s+([^\W\d_].*)$", working, re.UNICODE)
+    if not m:
+        return working, None
+    numero, resto = m.group(1), m.group(2).strip()
+    if len(numero) > 2:
+        return working, None
+    resto_limpio = re.sub(r"\([^)]*\)", " ", resto).strip()
+    resto_norm = normalize_series_name(resto_limpio)
+    carpeta_norm = normalize_series_name(carpeta)
+    if not resto_norm or resto_norm not in carpeta_norm:
+        return working, None
+    if carpeta_norm.startswith(numero + " "):
+        return working, None
+    return resto, numero.lstrip("0") or "0"
+
+
+YEAR_IN_TITLE_NUMBER_PATTERN = re.compile(
+    r"^\s*(?P<title>.+?)\s+(?P<year>(?:19|20)\d{2})\s+"
+    r"(?P<num>\d{1,3}[a-zA-Z]?)\s*$",
+    re.IGNORECASE,
+)
 
 
 def _abre_el_titulo(working: str, m: re.Match) -> bool:
@@ -275,7 +550,22 @@ def _buscar_numero(working: str) -> tuple[re.Match, bool] | None:
     return None
 
 
-def parse_comic_filename(filename: str) -> ParsedComicName:
+def _limpiar_titulo_serie(texto: str) -> str:
+    """Limpieza final del título: separadores, sufijos de edición y bordes."""
+    series = texto.strip()
+    series = re.sub(r"[\.\-_]+", " ", series)
+    series = re.sub(r"\s+", " ", series)
+    series = re.sub(r"\s*[-\u2013\u2014]\s*$", "", series)
+    # Sufijo de edición que no forma parte del título de la serie.
+    series = re.sub(r"\s+The\s+New\s+52!?$", "", series, flags=re.IGNORECASE)
+    # La coma y los dos puntos finales sobran igual que el guion: quedan
+    # de haber cortado por el número ("Patrulla-X, nº 03" → "Patrulla X,").
+    return series.strip(" -\u2013\u2014(),;:#")
+
+
+def parse_comic_filename(
+    filename: str, carpeta: str | None = None, contexto: str | None = None
+) -> ParsedComicName:
     """Parsea un nombre de archivo de cómic y extrae metadatos."""
     result = ParsedComicName(original_filename=filename)
 
@@ -332,9 +622,45 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # ANTES de convertir los puntos en espacios, porque el patrón busca
     # el punto literal de "069.- ".
     working = SORT_PREFIX_PATTERN.sub("", working, count=1)
+    working = CROSSOVER_PREFIX_PATTERN.sub("", working, count=1)
+
+    # Annual con un número de grapa delante que no es el del anual.
+    annual_prefijado = ANNUAL_PREFIX_PATTERN.match(working)
+    if annual_prefijado:
+        result.issue_number = annual_prefijado.group("num").lstrip("0") or "0"
+        working = f"{annual_prefijado.group('rest').strip()} {annual_prefijado.group('annual')}"
+
+    working, numero_de_prefijo = _prefijo_de_issue_con_carpeta(working, carpeta)
+    if numero_de_prefijo is None:
+        working, numero_de_prefijo = _separar_prefijo_numerico(working)
+    if numero_de_prefijo is not None:
+        result.issue_number = numero_de_prefijo
 
     working = DOT_SEPARATOR_PATTERN.sub(" ", working)
     working = CREDITS_PATTERN.sub("", working, count=1)
+    working = _quitar_credito_con_carpeta(working, carpeta)
+
+    # Formato de edición: Omnibus/TPB/HC/GN. Primero la variante con número
+    # inmediato («Omnibus 1»), que además resuelve el número; si no, solo se
+    # marca el formato y se quita la palabra del título.
+    formato_con_numero = EDITION_FORMAT_NUMBER_PATTERN.search(working)
+    if formato_con_numero:
+        etiqueta = re.sub(r"\s+", " ", formato_con_numero.group("formato").lower())
+        result.edition_kind = EDITION_FORMAT_KIND.get(etiqueta, etiqueta)
+        result.issue_number = formato_con_numero.group("numero").lstrip("0") or "0"
+        working = EDITION_FORMAT_NUMBER_PATTERN.sub(" ", working, count=1)
+    else:
+        formato = EDITION_FORMAT_PATTERN.search(working)
+        if formato:
+            etiqueta = re.sub(r"\s+", " ", formato.group(0).lower())
+            result.edition_kind = EDITION_FORMAT_KIND.get(etiqueta, etiqueta)
+            working = EDITION_FORMAT_PATTERN.sub(" ", working, count=1)
+
+    # Cuenta de la miniserie («1 of 4»): contexto, no identidad. Se mide antes
+    # de que el patrón de posición de arco quite «N de M».
+    cuenta = ISSUE_COUNT_PATTERN.search(working)
+    if cuenta:
+        result.issue_count = int(cuenta.group(2))
 
     # Fecha de publicación antes que nada: "(2004-08)" es un año, y si se
     # deja pasar hasta la extracción de número se convierte en una grapa
@@ -350,15 +676,24 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         if 1900 <= year <= 2099:
             result.year = year
 
+    # «American Vampire 1976 10»: el año forma parte del título de la serie,
+    # no es el número. Solo si queda un número corto al final.
+    anio_titulo = YEAR_IN_TITLE_NUMBER_PATTERN.match(working)
+    if anio_titulo and not result.issue_number:
+        result.issue_number = anio_titulo.group("num").lstrip("0") or "0"
+        working = f"{anio_titulo.group('title')} {anio_titulo.group('year')}"
+
     # Rangos ("144-158", y su forma en palabra "170 al 173"): un pack no
     # tiene UN número. Se quitan antes de extraer el número para no
     # quedarse con el primero del rango. Se registra SI hubo rango
     # (`era_pack`): más abajo decide si el volumen puede sustituir al
     # número que falta, o si eso fabricaría una identidad falsa para un
     # pack (ver ese bloque).
-    era_pack = bool(
-        NUMBER_RANGE_PATTERN.search(working) or NUMBER_RANGE_WORD_PATTERN.search(working)
+    era_pack_rango = bool(
+        NUMBER_RANGE_PATTERN.search(working)
+        or NUMBER_RANGE_WORD_PATTERN.search(working)
     )
+    era_pack = era_pack_rango or bool(PACK_ISSUE_ANNUAL_PATTERN.search(working))
     working = NUMBER_RANGE_PATTERN.sub(" ", working)
     working = NUMBER_RANGE_WORD_PATTERN.sub(" ", working)
 
@@ -370,7 +705,8 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # si hay marcador de edición: si no, "Integral 20 aniversario" hace
     # que EDITION_NUMBER_PATTERN capture el 20 de la efeméride como si
     # fuera el tomo de la recopilación.
-    working = ANIVERSARIO_PATTERN.sub(" ", working)
+    tuvo_aniversario = bool(ANIVERSARIO_PATTERN.search(working))
+    working = _quitar_numero_de_aniversario(working)
 
     # "Omnigold 5" → captura issue_number="5" + edition_kind="omnigold",
     # y el título se queda solo con "Omnigold" (el número no forma parte
@@ -381,6 +717,11 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         result.issue_number = numero.lstrip("0") or "0"
         result.edition_kind = "omnigold" if palabra.lower() == "omnigold" else "integral"
         working = EDITION_NUMBER_PATTERN.sub(r"\1", working, count=1)
+    elif not tuvo_aniversario:
+        marcador_edicion = EDITION_MARKER_PATTERN.search(working)
+        if marcador_edicion:
+            result.edition_kind = "integral"
+            working = EDITION_MARKER_PATTERN.sub(" ", working, count=1)
 
     # El ruido entre paréntesis se quita AQUÍ, antes de buscar el número.
     # Estaba después y tapaba una familia entera de casos: en "JSA 81
@@ -428,11 +769,15 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # ya se encarga de quitar.
     encontrado = None
     if not result.issue_number:
-        if result.is_annual:
+        # Un pack del tipo «#647-650 y anual 25» no debe quedarse con el 25:
+        # el rango ya dice que no hay una grapa única. Pero un pack que
+        # además identifica una edición («(122-143) Omnigold nº 2») sí puede
+        # llevar su número de tomo; por eso el bloqueo es solo para el anual.
+        if result.is_annual and not era_pack:
             annual_match = ANNUAL_NUMBER_PATTERN.search(working)
             if annual_match:
                 encontrado = (annual_match, True)
-        if encontrado is None:
+        if encontrado is None and not (result.is_annual and era_pack):
             encontrado = _buscar_numero(working)
     if encontrado:
         issue_match, cortar_en_numero = encontrado
@@ -446,7 +791,8 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         corte = issue_match.start(1) if cortar_en_numero else issue_match.start()
         cortado = working[:corte]
         working = cortado if cortado.strip() else working[issue_match.end():]
-    elif marcador_volumen is not None and result.volume is not None and not era_pack:
+    if (not result.issue_number and marcador_volumen is not None
+            and result.volume is not None and not era_pack):
         # Ningún otro número en el nombre: el propio tomo/volumen ES el
         # identificador de este archivo (B15, 2026-09-26 — medido: 8/81
         # archivos reales de la muestra oficial perdían el número así,
@@ -468,7 +814,17 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         # el "2" del volumen ahí habría sido fabricar una identidad falsa
         # para tapar el hueco, exactamente lo que este proyecto evita.
         result.issue_number = str(result.volume)
-        result.edition_kind = marcador_volumen
+        if result.edition_kind is None:
+            result.edition_kind = marcador_volumen
+
+    # Un pack con rango («Batman #647-650 y anual 25») deja restos del
+    # rango (#) y del anual cuando no hay número único. Se limpian para no
+    # bautizar la serie como «Batman # y anual 25».
+    if era_pack_rango and not result.issue_number:
+        working = re.sub(r"[#№]", " ", working)
+        working = re.sub(r"\b(?:y|e)\s+(?:anual|annual)\s*\d*\b", " ", working, flags=re.IGNORECASE)
+        working = re.sub(r"\b(?:anual|annual)\s*\d*\b", " ", working, flags=re.IGNORECASE)
+        working = re.sub(r"\s+", " ", working).strip()
 
     # "Serie - Subtítulo" y "Serie #001 - Título del número": todo lo que
     # sigue a un separador " - " (con espacios a los dos lados, a diferencia
@@ -478,20 +834,38 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # "Serie - Subtítulo" como "Serie -Subtítulo" ("La liga de los hombres
     # extraordinarios -La Tempestad"). El espacio DELANTE sí se exige, que
     # es lo que distingue el separador de un guion interno ("Spider-Man").
+    serie_completa = working
     partes_subtitulo = re.split(r"\s+-\s*", working, maxsplit=1)
     working = partes_subtitulo[0]
     if len(partes_subtitulo) > 1:
         result.subtitulo = partes_subtitulo[1].strip()
 
-    series = working.strip()
-    series = re.sub(r"[\.\-_]+", " ", series)
-    series = re.sub(r"\s+", " ", series)
-    series = re.sub(r"\s*[-\u2013\u2014]\s*$", "", series)
-    # La coma y los dos puntos finales sobran igual que el guion: quedan
-    # de haber cortado por el n\u00famero ("Patrulla-X, n\u00ba 03" \u2192 "Patrulla X,").
-    # El matcher los ignora al normalizar, pero este texto es el que ve el
-    # coleccionista en Pendientes y el que aprende el alias local (B13).
-    series = series.strip(" -\u2013\u2014(),;:#")
+    series = _limpiar_titulo_serie(working)
+    if len(partes_subtitulo) > 1:
+        alternativa = _limpiar_titulo_serie(serie_completa)
+        if alternativa and alternativa != series:
+            result.series_alternativa = alternativa
+
+    # «OP883»: acrónimo + número sin separador; «927.cbr»: serie vacía pero
+    # el contexto de carpetas sí dice la colección.
+    if not result.issue_number:
+        acronimo_numero = ACRONYM_NUMBER_PATTERN.fullmatch(series)
+        if acronimo_numero:
+            segmento = _segmento_por_acronimo(acronimo_numero.group("acr"), contexto)
+            if segmento:
+                result.issue_number = acronimo_numero.group("num").lstrip("0") or "0"
+                series = segmento
+    if not series and contexto and result.issue_number:
+        for segmento in _segmentos_contexto(contexto):
+            if re.search(r"\b(?:vol(?:umen)?|tomo)\b", segmento, re.IGNORECASE):
+                continue
+            if re.search(r"[^\W\d_]", segmento):
+                series = _limpiar_titulo_serie(segmento)
+                break
+
+    series = _serie_desde_carpeta(
+        series, result.series_alternativa, carpeta, contexto, result.is_annual,
+        sin_numero=not result.issue_number)
     result.series = series
     result.confidence = _confidence(result)
     return result
