@@ -29,6 +29,7 @@ from zascarr.services.vinculacion_previa import VistaPreviaDeVinculacion
 from zascarr.web import asistente_vinculacion
 
 URL = os.environ.get("TEST_DATABASE_URL")
+pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Postgres real)")
 
 
 @pytest.fixture(scope="module")
