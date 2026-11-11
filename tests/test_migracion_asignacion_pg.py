@@ -405,18 +405,24 @@ async def sembrar_a_0016(url: str) -> dict:
     motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
     fab = async_sessionmaker(motor, expire_on_commit=False)
     async with fab() as s:
-        serie = Series(id=uuid4(), title="Saga del Faro", tradition=ComicTradition.AMERICAN, start_year=2010)
-        manual = Issue(id=uuid4(), series_id=serie.id, issue_number="12", locked_fields=["series_id", "issue_number"],
+        serie_id = uuid4()
+        manual = Issue(id=uuid4(), series_id=serie_id, issue_number="12", locked_fields=["series_id", "issue_number"],
                        metadata_source=MetadataSource.MANUAL.value)
-        otro = Issue(id=uuid4(), series_id=serie.id, issue_number="13")
+        otro = Issue(id=uuid4(), series_id=serie_id, issue_number="13")
         f_manual = File(id=uuid4(), file_path="/lib/Comics/Saga/Saga #012.cbz", file_name="Saga #012.cbz",
                         file_format=FileFormat.CBZ, sha256_hash=SHA, issue_id=manual.id,
                         metadata_source=MetadataSource.MANUAL.value, review_dismissed=False)
         f_ignorado = File(id=uuid4(), file_path="/lib/_Unsorted/suelto.cbz", file_name="suelto.cbz",
                           file_format=FileFormat.CBZ, sha256_hash="b" * 64, review_dismissed=True,
                           metadata_={"match_status": "unsorted", "review_motivo": "colision"})
-        deseo = Wishlist(id=uuid4(), series_id=serie.id, status=WishlistStatus.WANTED)
-        s.add(serie)
+        deseo = Wishlist(id=uuid4(), series_id=serie_id, status=WishlistStatus.WANTED)
+        # Serie por SQL explícito: el modelo actual tiene columnas posteriores a 0016
+        # (`kind` y `parent_series_id`, 0027) y un INSERT del ORM las incluiría.
+        await s.execute(text(
+            "INSERT INTO series (id, title, tradition, start_year) "
+            "VALUES (:id, :titulo, :tradicion, :anio)"),
+            {"id": str(serie_id), "titulo": "Saga del Faro",
+             "tradicion": ComicTradition.AMERICAN.value, "anio": 2010})
         await s.flush()
         s.add_all([manual, otro])
         await s.flush()
@@ -434,10 +440,10 @@ async def sembrar_a_0016(url: str) -> dict:
         await s.execute(text(
             "INSERT INTO local_aliases (id, pattern_norm, series_id) "
             "VALUES (:id, :patron, :sid)"),
-            {"id": str(uuid4()), "patron": "saga del faro", "sid": str(serie.id)})
+            {"id": str(uuid4()), "patron": "saga del faro", "sid": str(serie_id)})
         s.add(deseo)
         await s.commit()
-        ids = {"serie": serie.id, "manual": manual.id, "f_manual": f_manual.id, "f_ignorado": f_ignorado.id}
+        ids = {"serie": serie_id, "manual": manual.id, "f_manual": f_manual.id, "f_ignorado": f_ignorado.id}
     await motor.dispose()
     return ids
 

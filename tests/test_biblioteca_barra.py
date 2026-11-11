@@ -129,7 +129,7 @@ def test_oob_incluye_campos_del_panel_para_no_resucitar_filtros():
 
 def test_formulario_conserva_vista_y_no_revierte_a_tarjetas():
     html = _index(path="/ui/biblioteca?vista=lista&orden=reciente")
-    assert '<input type="hidden" name="vista" value="lista">' in html
+    assert '<input type="hidden" id="f-vista" name="vista" value="lista">' in html
     assert "value=\"reciente\" selected" in html
 
 
@@ -142,3 +142,22 @@ def test_css_objetivos_tactiles_y_panel_ancho_completo():
     assert "min-height: 44px" in css.split(".quitar-filtro,", 1)[1][:160]
     assert ".barra-panel-campos { position: absolute; z-index: 50;" in css
     assert "max-height: calc(100dvh - 8rem)" in css
+
+
+def test_flujo_vista_lista_cambiar_orden_conserva_vista():
+    # Fragmento tras cambiar de vista: el hidden y el control se actualizan por OOB.
+    fragmento = _index(path="/ui/biblioteca/resultados?vista=lista&orden=reciente")
+    assert '<input type="hidden" id="f-vista" name="vista" value="lista" hx-swap-oob="true">' in fragmento
+    assert 'id="control-vista"' in fragmento
+    # Página completa equivalente: el form lleva vista=lista.
+    pagina = _index(path="/ui/biblioteca?vista=lista&orden=reciente")
+    assert '<input type="hidden" id="f-vista" name="vista" value="lista">' in pagina
+
+
+def test_css_panel_absoluto_tambien_en_movil_y_tactil_ancho():
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    bloque = css.split("@media (max-width: 640px)", 1)[1].split("@media (max-width: 360px)", 1)[0]
+    assert "position: absolute" in bloque and "left: 0" in bloque and "right: 0" in bloque
+    assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px; min-width: 44px;" in css
+    assert "min-width: 44px" in css.split(".quitar-filtro,", 1)[1][:200]

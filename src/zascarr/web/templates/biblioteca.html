@@ -12,7 +12,7 @@
 <form id="filtros" class="barra-biblioteca" action="/ui/biblioteca" method="get"
       hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML"
       hx-trigger="change, submit">
-  <input type="hidden" name="vista" value="{{ filtros.vista }}">
+  <input type="hidden" id="f-vista" name="vista" value="{{ filtros.vista }}">
   <div class="barra-busqueda">
     <label class="sr" for="f-q">Buscar por título</label>
     {% set valor = filtros.q %}{% set oob = false %}{% set foco = false %}

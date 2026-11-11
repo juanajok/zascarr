@@ -95,7 +95,7 @@ def test_selector_fuera_de_rejilla_se_actualiza_por_oob(monkeypatch):
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert fragmento.status_code == 200
-    assert 'hx-swap-oob="outerHTML"' in fragmento.text
+    assert 'id="f-coleccion" hx-swap-oob="outerHTML"' in fragmento.text
     assert 'aria-label="Estado de la colección"' in fragmento.text
     assert '<option value="">Cualquier estado</option>' in fragmento.text
     assert 'selected' not in fragmento.text.split('hx-swap-oob="outerHTML"', 1)[1]
@@ -108,8 +108,8 @@ def test_selector_fuera_de_rejilla_se_actualiza_por_oob(monkeypatch):
             headers={"HX-Request": "true"})
     finally:
         app.dependency_overrides.pop(get_db, None)
-    assert 'hx-swap-oob="outerHTML"' in limpiar.text
-    assert 'selected' not in limpiar.text.split('hx-swap-oob="outerHTML"', 1)[1]
+    assert 'id="f-coleccion" hx-swap-oob="outerHTML"' in limpiar.text
+    assert 'selected' not in limpiar.text.split('id="f-coleccion" hx-swap-oob="outerHTML"', 1)[1]
     assert fragmento.headers.get("cache-control") == "no-store"
 
 
