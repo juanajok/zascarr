@@ -67,6 +67,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Sagas en orden de lectura, aunque crucen series (BL-C4, #151).** Biblioteca → «Sagas en
+  orden»: lista de arcos con recuento de números/series y una ficha por saga que respeta
+  `story_arc_issues.reading_order`, enlaza cada número a su ficha y marca si está en la
+  biblioteca. Solo lectura; no crea ni modifica arcos.
 - **Editar metadatos de serie y número a mano (BL-INF5, #591).** Formulario propio para corregir
   título, años, editorial, sinopsis y total de la serie; y número, título, fecha, formato y
   sinopsis del número. Cada campo que cambia queda **manual** (`metadata_["manual"]` con fecha)

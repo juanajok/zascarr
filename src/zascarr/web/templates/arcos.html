@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Sagas en orden — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/biblioteca">← Volver a Biblioteca</a></p>
+<h1>Sagas en orden</h1>
+<p class="subtitle">Listas de lectura que cruzan series, en el orden que marca cada arco.</p>
+{% if pagina.total == 0 %}
+{{ ui.estado_vacio("Todavía no hay sagas registradas", "Cuando ZascArr tenga arcos con números enlazados, aparecerán aquí en su orden de lectura.") }}
+{% else %}
+<p class="caption">{{ pagina.total }} {{ "saga" if pagina.total == 1 else "sagas" }} · mostrando {{ pagina.desde + 1 }}–{{ pagina.hasta }}</p>
+<ul class="arcos-lista">
+  {% for a in pagina.filas %}
+  <li class="arco-fila">
+    <a href="/ui/arcos/{{ a.id }}">{{ a.title }}</a>
+    {% if a.is_crossover %}{{ ui.chip("info", "Crossover") }}{% endif %}
+    <span class="muted">{{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }} · {{ a.series }} {{ "serie" if a.series == 1 else "series" }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% if pagina.paginas > 1 %}
+<nav class="pagination" aria-label="Páginas de sagas">
+  {% if pagina.pagina > 1 %}<a class="page-link" href="/ui/arcos?pagina={{ pagina.pagina - 1 }}">← Anteriores</a>{% endif %}
+  <span class="page-current">Página {{ pagina.pagina }} de {{ pagina.paginas }}</span>
+  {% if pagina.pagina < pagina.paginas %}<a class="page-link" href="/ui/arcos?pagina={{ pagina.pagina + 1 }}">Siguientes →</a>{% endif %}
+</nav>
+{% endif %}
+{% endif %}
+{% endblock %}

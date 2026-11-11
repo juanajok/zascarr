@@ -2439,6 +2439,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .edicion-manuales ul { list-style: none; padding: 0; display: grid; gap: 8px; }
 .inline-desbloquear { display: inline; margin-left: 6px; }
 
+
+
+/* BL-C4 (#151): sagas en orden de lectura. */
+.arcos-lista, .arco-orden { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+.arco-fila, .arco-orden li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 8px 10px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); background: var(--paper); }
+.arco-posicion { min-width: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
