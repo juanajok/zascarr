@@ -448,7 +448,12 @@ async def _triage_and_match(
             return parsed.series, parsed.issue_number, parsed.year
         return None
 
-    result = await matcher.decide(tr, extractor=extractor, formato_esperado=formato_esperado)
+    # Un anual solo puede enlazar con una serie anual: `parsed.series` conserva
+    # «Annual» y `annual=True` impide que el matcher acepte la serie madre.
+    result = await matcher.decide(
+        tr, extractor=extractor, formato_esperado=formato_esperado,
+        annual=parsed.is_annual,
+    )
     outcome = _Outcome(tr=tr, result=result, edition_kind=edition_kind)
     if aplicada:
         outcome.cohorte_explicacion = pista.explicacion
