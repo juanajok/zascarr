@@ -118,10 +118,10 @@ cerrado.
 
 | Medida | Resultado |
 |---|---:|
-| Serie correcta | 148 / 200 = **74,0 %** |
-| Número correcto | 185 / 200 = **92,5 %** |
-| Ambos correctos | 147 / 200 = **73,5 %** |
-| Ambos + número no vacío | 143 / 200 = **71,5 %** |
+| Serie correcta | 151 / 200 = **75,5 %** |
+| Número correcto | 187 / 200 = **93,5 %** |
+| Ambos correctos | 150 / 200 = **75,0 %** |
+| Ambos + número no vacío | 146 / 200 = **73,0 %** |
 
 ### Matcher
 
@@ -141,15 +141,30 @@ otro título, alias de idioma (`100 Balas` vs `100 Bullets`), colecciones y
 huecos de Issue. Eso es precisamente lo que hay que separar en la siguiente
 iteración.
 
+## 7. Segunda pasada de parser (sin tocar etiquetas)
+
+Se corrigieron dos familias medidas:
+
+- prefijos de orden de lectura (`13. Nightwing #73`, `14  JLD #11`,
+  `73 Dreadstar ... 61`) y prefijo decimal (`22.1 Catwoman`);
+- packs con rango + anual (`Batman #647-650 y anual 25`) que producían un
+  número inexistente.
+
+El parser pasó de **147 a 150** aciertos de serie+número. El matcher no cambió
+en esta muestra (64 enlaces correctos), porque los archivos recuperados por el
+parser siguen sin existir o sin alias en el catálogo. Las etiquetas no se
+modificaron después de ver estos resultados.
+
 ### Familias de fallo observadas
 
 - `Anual` vs `Annual` y títulos canónicos con prefijo (`Batman: Shadow of the
   Bat`).
 - Prefijos numéricos de orden de lectura (`73 Dreadstar ... 61`,
   `13. Nightwing #73`) y números delante de la serie (`16 Catwoman`,
-  `51 Catwoman`).
-- Packs que no son una grapa; el parser a veces extrae el último número
-  (`#25 - Anual`).
+  `51 Catwoman`). Los primeros están corregidos; los segundos siguen siendo
+  ambiguos sin carpeta.
+- Packs que no son una grapa; el rango+anual ya no inventa número, pero
+  `#25 - Anual` sin rango sigue necesitando una regla de contexto.
 - Series con subtítulo/colección (`Green Lantern: Emerald Warriors`,
   `Forever Evil: A.R.G.U.S`).
 - Créditos delante del título (`Hiroaki Samura - La Espada del Inmortal`).
