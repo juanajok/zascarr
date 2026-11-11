@@ -55,6 +55,17 @@ from zascarr.services.discrepancias import (
 from zascarr.services.discrepancias import (
     entrada as entrada_discrepancia,
 )
+from zascarr.services.edicion_manual import (
+    campos_manuales,
+    desbloquear_numero,
+    desbloquear_serie,
+)
+from zascarr.services.edicion_manual import (
+    guardar_numero as guardar_numero_manual,
+)
+from zascarr.services.edicion_manual import (
+    guardar_serie as guardar_serie_manual,
+)
 from zascarr.services.enricher import puede_enlazarse_con_comic_vine
 from zascarr.services.enriquecimiento_plan import (
     EnriquecimientoPlanService,
@@ -440,6 +451,7 @@ async def _contexto_politica(db: AsyncSession, series: Series,
 @router.get("/{series_id}", response_class=HTMLResponse)
 async def detalle(series_id: UUID, request: Request, volver: str = Query(default=""),
                   coleccion: str = Query(default=""), nota: str = Query(default=""),
+                  guardado: str = Query(default=""),
                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = (await db.execute(
         select(Series)
@@ -498,6 +510,10 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "procedencia": procedencia_de_serie(series),
         "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
+        "aviso_guardado": {
+            "serie": "Guardado: la ficha muestra lo que has escrito.",
+            "desbloqueado": "Ese dato vuelve a quedar a cargo del enriquecimiento; no se ha borrado.",
+        }.get(guardado, ""),
         # BL-INF6: separador de caché del navegador de la portada; cambia al elegir otra.
         "portada_version": await _version_de_portada(db, series),
     })
@@ -863,9 +879,140 @@ async def guardar_nota_numero(
         status_code=303)
 
 
+def _valores_serie(series: Series, valores: dict | None = None) -> dict:
+    return valores or {
+        "title": series.title or "",
+        "start_year": "" if series.start_year is None else str(series.start_year),
+        "end_year": "" if series.end_year is None else str(series.end_year),
+        "publisher": series.publisher.name if series.publisher else "",
+        "description": series.description or "",
+        "total_issues": "" if series.total_issues is None else str(series.total_issues),
+    }
+
+
+@router.get("/{series_id}/editar", response_class=HTMLResponse)
+async def editar_serie_form(series_id: UUID, request: Request,
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = (await db.execute(select(Series).options(selectinload(Series.publisher))
+                               .where(Series.id == series_id))).scalar_one_or_none()
+    if series is None:
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    respuesta = templates.TemplateResponse(request, "editar_serie.html", {
+        "series": series, "valores": _valores_serie(series), "errores": {},
+        "campos_manuales": campos_manuales(series.metadata_),
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/editar", response_class=HTMLResponse)
+async def editar_serie_guardar(
+    series_id: UUID, request: Request,
+    title: str = Form(default=""), start_year: str = Form(default=""),
+    end_year: str = Form(default=""), publisher: str = Form(default=""),
+    description: str = Form(default=""), total_issues: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    resultado = await guardar_serie_manual(
+        db, series_id, title=title, start_year=start_year, end_year=end_year,
+        publisher=publisher, description=description, total_issues=total_issues)
+    series = (await db.execute(select(Series).options(selectinload(Series.publisher))
+                               .where(Series.id == series_id))).scalar_one()
+    if not resultado.ok:
+        await db.rollback()
+        respuesta = templates.TemplateResponse(request, "editar_serie.html", {
+            "series": series, "valores": {
+                "title": title, "start_year": start_year, "end_year": end_year,
+                "publisher": publisher, "description": description,
+                "total_issues": total_issues},
+            "errores": resultado.errores, "campos_manuales": campos_manuales(series.metadata_),
+        })
+        respuesta.headers["Cache-Control"] = "no-store"
+        return respuesta
+    await db.commit()
+    return RedirectResponse(f"/ui/series/{series_id}?guardado=serie", status_code=303)
+
+
+@router.post("/{series_id}/editar/desbloquear/{campo}")
+async def desbloquear_serie_campo(series_id: UUID, campo: str,
+                                  db: AsyncSession = Depends(get_db)) -> Response:
+    if not await desbloquear_serie(db, series_id, campo):
+        raise HTTPException(status_code=404, detail="Campo no editable")
+    await db.commit()
+    return RedirectResponse(f"/ui/series/{series_id}?guardado=desbloqueado", status_code=303)
+
+
+def _valores_numero(issue: Issue, valores: dict | None = None) -> dict:
+    return valores or {
+        "issue_number": issue.issue_number or "",
+        "title": issue.title or "",
+        "release_date": issue.release_date.isoformat() if issue.release_date else "",
+        "format": issue.format.value if issue.format else "single_issue",
+        "synopsis": issue.synopsis or "",
+    }
+
+
+@router.get("/{series_id}/numero/{issue_id}/editar", response_class=HTMLResponse)
+async def editar_numero_form(series_id: UUID, issue_id: UUID, request: Request,
+                             db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    fila = (await db.execute(select(Issue, Series).join(Series, Issue.series_id == Series.id)
+                             .where(Issue.id == issue_id, Issue.series_id == series_id))).first()
+    if fila is None:
+        raise HTTPException(status_code=404, detail="Número no encontrado")
+    issue, series = fila
+    respuesta = templates.TemplateResponse(request, "editar_numero.html", {
+        "series": series, "issue": issue, "valores": _valores_numero(issue), "errores": {},
+        "formatos": FORMATOS_LEGIBLES, "campos_manuales": campos_manuales(issue.metadata_),
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/numero/{issue_id}/editar", response_class=HTMLResponse)
+async def editar_numero_guardar(
+    series_id: UUID, issue_id: UUID, request: Request,
+    issue_number: str = Form(default=""), title: str = Form(default=""),
+    release_date: str = Form(default=""), format: str = Form(default="single_issue"),
+    synopsis: str = Form(default=""), db: AsyncSession = Depends(get_db),
+) -> Response:
+    resultado = await guardar_numero_manual(
+        db, series_id, issue_id, issue_number=issue_number, title=title,
+        release_date=release_date, format=format, synopsis=synopsis)
+    fila = (await db.execute(select(Issue, Series).join(Series, Issue.series_id == Series.id)
+                             .where(Issue.id == issue_id, Issue.series_id == series_id))).first()
+    if fila is None:
+        raise HTTPException(status_code=404, detail="Número no encontrado")
+    issue, series = fila
+    if not resultado.ok:
+        await db.rollback()
+        respuesta = templates.TemplateResponse(request, "editar_numero.html", {
+            "series": series, "issue": issue,
+            "valores": {"issue_number": issue_number, "title": title,
+                        "release_date": release_date, "format": format, "synopsis": synopsis},
+            "errores": resultado.errores, "formatos": FORMATOS_LEGIBLES,
+            "campos_manuales": campos_manuales(issue.metadata_),
+        })
+        respuesta.headers["Cache-Control"] = "no-store"
+        return respuesta
+    await db.commit()
+    return RedirectResponse(
+        f"/ui/series/{series_id}/numero/{issue_id}?guardado=numero", status_code=303)
+
+
+@router.post("/{series_id}/numero/{issue_id}/editar/desbloquear/{campo}")
+async def desbloquear_numero_campo(series_id: UUID, issue_id: UUID, campo: str,
+                                   db: AsyncSession = Depends(get_db)) -> Response:
+    if not await desbloquear_numero(db, series_id, issue_id, campo):
+        raise HTTPException(status_code=404, detail="Campo no editable")
+    await db.commit()
+    return RedirectResponse(
+        f"/ui/series/{series_id}/numero/{issue_id}?guardado=desbloqueado", status_code=303)
+
+
 @router.get("/{series_id}/numero/{issue_id}", response_class=HTMLResponse)
 async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
                          nota: str = Query(default=""),
+                         guardado: str = Query(default=""),
                          db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Ficha de un número: solo lectura, sin red y sin escrituras (#447)."""
     ficha = await cargar_ficha_numero(db, series_id, issue_id)
@@ -885,6 +1032,10 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
                             (ReadingStatus.READING, "Leyendo"),
                             (ReadingStatus.COMPLETED, "Leído")),
         "nota_numero": await leer_numero(db, issue_id),
+        "aviso_guardado": {
+            "numero": "Guardado: el número muestra lo que has escrito.",
+            "desbloqueado": "Ese dato vuelve a quedar a cargo del enriquecimiento; no se ha borrado.",
+        }.get(guardado, ""),
         "nota_aviso": {
             "vacia": "La nota no puede estar vacía.",
             "larga": "La nota es demasiado larga (máximo 4000 caracteres).",

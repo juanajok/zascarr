@@ -12,6 +12,8 @@
     {% if issue.title %}<p class="titulo-frase subtitulo-numero">{{ issue.title }}</p>{% endif %}
     {% if not issue.issue_number %}<p class="subtitle">Sin número</p>{% endif %}
     <p class="series-intro">Todo lo que ZascArr sabe de este número.</p>
+    {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
+    <p><a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar">Editar el número</a></p>
   </div>
 </div>
 {% include "_nota_numero.html" %}
