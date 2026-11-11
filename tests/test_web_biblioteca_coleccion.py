@@ -75,11 +75,11 @@ def test_filtro_coleccion_se_combina_y_se_puede_quitar(monkeypatch):
     assert kwargs["coleccion"] == "faltan"
     assert 'value="faltan" selected' in r.text
     assert "Te faltan números" in r.text
-    assert "Quitar filtro Te faltan números" in r.text
+    assert "Quitar filtro: Te faltan números" in r.text
     assert "coleccion=faltan" in r.text
     assert '<label for="f-coleccion">Estado de la colección</label>' in r.text
     # El chip de quitar conserva los demás filtros y pierde solo coleccion.
-    quitar = r.text.split("Quitar filtro Te faltan números", 1)[0].rsplit("href=\"", 1)[1]
+    quitar = r.text.split("Quitar filtro: Te faltan números", 1)[0].rsplit("href=\"", 1)[1]
     assert "q=Thorgal" in quitar and "tradition=american" in quitar
     assert "coleccion=faltan" not in quitar
 
