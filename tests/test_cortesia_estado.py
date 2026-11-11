@@ -154,13 +154,14 @@ class TestPoliticaDeAjustes:
         ajustes.gcd_rate_limit = 2.0
         contexto = texto_politica_ajustes(ajustes)
         assert ("Cortesía: Comic Vine 1 s y 3 intentos; AniList 1,5 s y 3; "
-                "Tebeosfera 2,5 s y 1; GCD 2 s y 2.") in contexto["politica"]
+                "Tebeosfera 2,5 s y 1; GCD 2 s y 2; Metron 3 s y 2; "
+                "Open Library 1 s y 2.") in contexto["politica"]
         assert "sitio del que vienen y no se reintentan" in contexto["politica"]
         assert "cada una espera por su cuenta" in contexto["coordinacion"]
 
     def test_dice_que_fuentes_estan_apagadas(self):
         contexto = texto_politica_ajustes(Ajustes())
-        assert contexto["apagadas"] == ["AniList", "GCD"]
+        assert contexto["apagadas"] == ["AniList", "GCD", "Metron", "Open Library"]
         assert contexto["nota_apagada"] == "No se consulta ni se reintenta."
 
 

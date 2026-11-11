@@ -33,7 +33,8 @@ from zascarr.utils.texto_html import (
 
 #: Cómo se llama cada fuente: los mismos nombres que usa el servicio en sus avisos.
 ETIQUETAS = {
-    "comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera", "gcd": "GCD"}
+    "comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera",
+    "gcd": "GCD", "metron": "Metron", "open_library": "Open Library"}
 OTRA_FUENTE = "otra fuente"
 
 #: Capacidades verificadas por el contrato, con su nombre para la persona. Lo que no esté aquí
@@ -141,10 +142,14 @@ def fuentes_que_se_consultan(ajustes) -> list[str]:
     """Los nombres de las fuentes que una búsqueda va a consultar, en el orden fijo de siempre.
     Comic Vine encendida pero sin clave NO se consulta (el servicio la salta): no se nombra."""
     activas = {
-        "comic_vine": bool(ajustes.comicvine_enabled and ajustes.comicvine_api_key),
-        "anilist": bool(ajustes.anilist_enabled),
-        "tebeosfera": bool(ajustes.tebeosfera_enabled),
-        "gcd": bool(ajustes.gcd_enabled),
+        "comic_vine": bool(getattr(ajustes, "comicvine_enabled", False)
+                           and getattr(ajustes, "comicvine_api_key", "")),
+        "anilist": bool(getattr(ajustes, "anilist_enabled", False)),
+        "tebeosfera": bool(getattr(ajustes, "tebeosfera_enabled", False)),
+        "gcd": bool(getattr(ajustes, "gcd_enabled", False)),
+        "metron": bool(getattr(ajustes, "metron_enabled", False)
+                       and getattr(ajustes, "metron_token", "")),
+        "open_library": bool(getattr(ajustes, "open_library_enabled", False)),
     }
     return [ETIQUETAS[f.value] for f in ORDEN_DE_FUENTES if activas[f.value]]
 

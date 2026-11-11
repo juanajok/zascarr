@@ -59,6 +59,16 @@ class Settings(BaseSettings):
     # enricher todavía no lo consulta — ampliarlo es otra historia (ver
     # BACKLOG E7). Apagado = ninguna consulta a GCD en Descubrir.
     gcd_enabled: bool = Field(default=False)
+    # Metron y Open Library: fuentes de Descubrir (no enricher todavía).
+    # Metron exige token propio de cada instalación; sin él no se consulta. Sus datos
+    # son CC BY-SA 4.0 y sus portadas NO están cubiertas por esa licencia: no se usan.
+    metron_enabled: bool = Field(default=False)
+    metron_token: str = Field(default="")
+    metron_rate_limit: float = 3.0
+    # Open Library: sin clave; User-Agent identificado y 1 req/s conservador.
+    open_library_enabled: bool = Field(default=False)
+    open_library_rate_limit: float = 1.0
+    open_library_base_url: str = "https://openlibrary.org"
     # Estado «heredado» (ADR 0013): la migración 0020 lo pone a True en las instalaciones que se
     # actualizaron con uso previo y NUNCA guardaron las fuentes en Ajustes, y les conservó las
     # fuentes activas. Guardar «Fuentes de metadatos» en Ajustes lo pone a False (y el aviso

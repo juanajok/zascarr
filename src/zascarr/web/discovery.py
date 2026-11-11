@@ -83,6 +83,7 @@ _ALLOWED_COVER_HOSTS: dict[MetadataSource, tuple[str, ...]] = {
     MetadataSource.ANILIST: ("anilist.co",),
     MetadataSource.TEBEOSFERA: ("tebeosfera.com",),
     MetadataSource.GCD: ("comics.org",),
+    MetadataSource.OPEN_LIBRARY: ("covers.openlibrary.org",),
 }
 
 

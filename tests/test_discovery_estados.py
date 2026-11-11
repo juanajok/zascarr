@@ -11,6 +11,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from zascarr.models import MetadataSource
 from zascarr.services.anilist import AniListResult
 from zascarr.services.comic_vine import CVResult
 from zascarr.services.discovery import (
@@ -84,9 +85,17 @@ async def _busca(monkeypatch, *, ajustes=None, cv=None, al=None, tb=None, gc=Non
 
 async def test_todas_ok(monkeypatch):
     b = await _busca(monkeypatch)
-    assert b.fuentes == {f.value: FUENTE_OK for f in ORDEN_DE_FUENTES}
+    # Las cuatro fuentes de siempre están OK; Metron y Open Library siguen apagadas por
+    # defecto (no se configuran en este fixture y no deben consultarse).
+    viejas = (MetadataSource.COMIC_VINE, MetadataSource.ANILIST,
+              MetadataSource.TEBEOSFERA, MetadataSource.GCD)
+    assert {f.value: b.fuentes[f.value] for f in viejas} == {
+        f.value: FUENTE_OK for f in viejas}
+    assert b.fuentes[MetadataSource.METRON.value] == FUENTE_APAGADA
+    assert b.fuentes[MetadataSource.OPEN_LIBRARY.value] == FUENTE_APAGADA
     assert len(b.resultados) == 4 and b.avisos == []
-    assert {d.estado for d in b.detalles.values()} == {FUENTE_OK}
+    assert {d.estado for f, d in b.detalles.items() if f in {x.value for x in viejas}} == {
+        FUENTE_OK}
 
 
 async def test_el_conjunto_de_estados_es_cerrado(monkeypatch):
