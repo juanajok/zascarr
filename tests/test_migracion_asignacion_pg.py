@@ -416,13 +416,12 @@ async def sembrar_a_0016(url: str) -> dict:
                           file_format=FileFormat.CBZ, sha256_hash="b" * 64, review_dismissed=True,
                           metadata_={"match_status": "unsorted", "review_motivo": "colision"})
         deseo = Wishlist(id=uuid4(), series_id=serie_id, status=WishlistStatus.WANTED)
-        # Serie por SQL explícito: el modelo actual tiene columnas posteriores a 0016
-        # (`kind` y `parent_series_id`, 0027) y un INSERT del ORM las incluiría.
+        # La serie por SQL explícito: el modelo actual tiene `kind` (0027), que en 0016 no existe.
         await s.execute(text(
             "INSERT INTO series (id, title, tradition, start_year) "
-            "VALUES (:id, :titulo, :tradicion, :anio)"),
-            {"id": str(serie_id), "titulo": "Saga del Faro",
-             "tradicion": ComicTradition.AMERICAN.value, "anio": 2010})
+            "VALUES (:id, :title, :trad, :anio)"),
+            {"id": str(serie_id), "title": "Saga del Faro",
+             "trad": ComicTradition.AMERICAN.value, "anio": 2010})
         await s.flush()
         s.add_all([manual, otro])
         await s.flush()

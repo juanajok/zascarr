@@ -136,6 +136,7 @@
 <section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
          hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
 {% include "_politica_serie.html" %}
+{% include "_nota_serie.html" %}
 
     <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo"
              {% if aviso_coleccion %}tabindex="-1" autofocus{% endif %}>
