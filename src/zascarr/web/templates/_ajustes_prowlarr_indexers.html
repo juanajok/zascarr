@@ -6,16 +6,24 @@
 {% else %}
 <form hx-post="/ui/ajustes/guardar/prowlarr-indexers"
       hx-target="#prowlarr-indexers" hx-swap="innerHTML">
-  <p class="ajustes-hint">Marca solo los indexers que quieres que use ZascArr. Si no marcas ninguno, usa todos los activos de Prowlarr.</p>
+  <p class="ajustes-hint">Marca solo los indexers que quieres que use ZascArr. Si no marcas ninguno, usa todos los activos de Prowlarr. Solo se muestran las categorías de cómic/libros; el resto se oculta.</p>
+  <p class="caption">{{ indexers | selectattr("enabled") | list | length }} activos · {{ seleccionados | length }} marcados</p>
   <ul class="prowlarr-indexers-lista">
     {% for i in indexers if i.enabled %}
     <li>
       <label class="legal-checkbox">
         <input type="checkbox" name="indexer_ids" value="{{ i.id }}"
                {% if i.id in seleccionados %}checked{% endif %}>
-        {{ i.name }}
+        <span class="prowlarr-indexer-nombre">{{ i.name }}</span>
       </label>
-      {% if i.categories %}<span class="rotulo">{{ i.categories | join(", ") }}</span>{% endif %}
+      <span class="prowlarr-indexer-cats">
+        {% if i.relevantes %}
+          {% for categoria in i.relevantes[:2] %}{{ ui.chip("info", categoria) }}{% endfor %}
+          {% set total = i.categories | length %}{% set rel = i.relevantes | length %}{% if total > rel %}<span class="rotulo">+{{ total - rel }}</span>{% endif %}
+        {% else %}
+          <span class="rotulo">Sin cómics/libros</span>
+        {% endif %}
+      </span>
     </li>
     {% else %}
     <li class="muted">Prowlarr no tiene indexers activos.</li>

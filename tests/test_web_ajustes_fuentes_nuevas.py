@@ -113,7 +113,9 @@ def test_elegir_indexers_de_prowlarr_muestra_checkboxes(monkeypatch):
     class _Cliente:
         async def list_indexers(self):
             return [IndexerProwlarr(1, "Internet Archive", True, ["Books"]),
-                    IndexerProwlarr(2, "Apagado", False, [])]
+                    IndexerProwlarr(2, "Apagado", False, []),
+                    IndexerProwlarr(3, "General", True,
+                                     ["TV", "MOVIES", "AUDIO", "BOOKS", "COMIC"])]
 
     monkeypatch.setattr("zascarr.web.ajustes.get_settings", lambda: SimpleNamespace(
         prowlarr_url="http://prowlarr:9696", prowlarr_api_key="clave",
@@ -127,6 +129,9 @@ def test_elegir_indexers_de_prowlarr_muestra_checkboxes(monkeypatch):
     assert r.status_code == 200
     assert 'name="indexer_ids" value="1"' in r.text and "Internet Archive" in r.text
     assert "Apagado" not in r.text          # los apagados en Prowlarr no se ofrecen
+    # UX: no se pinta la lista entera de categorías, solo las relevantes.
+    assert "MOVIES" not in r.text and "AUDIO" not in r.text
+    assert "BOOKS" in r.text and "COMIC" in r.text
 
 
 def test_guardar_indexers_de_prowlarr(monkeypatch):
