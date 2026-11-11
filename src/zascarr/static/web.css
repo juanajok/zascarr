@@ -1661,7 +1661,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .filtro-activo .chip { white-space: normal; text-align: left; }
 .quitar-filtro,
 .limpiar-filtros {
-  display: inline-flex; align-items: center; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px;
   font-size: .875rem; font-weight: 700; color: var(--ink);
   text-decoration: underline; text-underline-offset: 3px;
 }
@@ -1929,7 +1929,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   border: 2px solid var(--ink); border-radius: 999px;
   padding: 3px 10px; font-size: .875rem; background: var(--paper-2);
 }
-.faceta-etiqueta a { font-size: .875rem; min-height: 44px; display: inline-flex; align-items: center; }
+.faceta-etiqueta a { font-size: .875rem; min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
 .sugerencia-nombre { font-weight: 700; margin-right: 4px; }
 #sugerencias-etiquetas:not(:empty) {
   position: relative; z-index: 11; margin-top: 4px;
@@ -2216,7 +2216,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .biblioteca-cabecera { display: block; }
   .barra-acciones { gap: 4px; }
   .barra-contador { font-size: .875rem; }
-  .barra-panel-campos { position: static; grid-template-columns: 1fr; width: 100%; max-height: calc(100dvh - 8rem); overflow: auto; box-shadow: none; }
+  .barra-panel-campos { position: absolute; grid-template-columns: 1fr; left: 0; right: 0; width: auto; max-width: 100%; box-sizing: border-box; max-height: calc(100dvh - 8rem); overflow: auto; box-shadow: none; }
   .barra-vista { padding: 0 8px; }
   .barra-acciones select { max-width: 7.5rem; }
 }
