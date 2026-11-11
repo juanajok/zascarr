@@ -34,6 +34,15 @@
     <option value="leyendo" {% if filtros.leido == "leyendo" %}selected{% endif %}>Leyendo</option>
     <option value="no" {% if filtros.leido == "no" %}selected{% endif %}>Sin leídos</option>
   </select>
+  <div class="filtro-campo">
+    <label for="f-orden">Ordenar por</label>
+    <select id="f-orden" name="orden">
+      {% for value, label in ordenes %}
+      <option value="{{ value }}" {% if filtros.orden == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn ghost sm" type="submit">Aplicar orden</button>
+  </div>
   <input type="hidden" name="character_id" value="{{ filtros.character_id }}">
   <input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
   <input type="hidden" name="page" value="1">

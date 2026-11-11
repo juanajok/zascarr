@@ -68,6 +68,7 @@ class SeriesService:
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
         con_issues: bool = False,
+        orden: str = "titulo",
         *,
         corregir_pagina: bool = True,
     ) -> tuple[list[Series], int, int]:
@@ -154,7 +155,25 @@ class SeriesService:
             .correlate(Series)
             .scalar_subquery()
         )
-        query = query.order_by(Series.sort_title, Series.start_year, Series.id)
+        orden = (orden or "titulo").strip().lower()
+        if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente"):
+            orden = "titulo"
+        if orden == "titulo":
+            ordenes = (Series.sort_title.asc().nulls_last(),
+                       Series.start_year.asc().nulls_last(), Series.id.asc())
+        elif orden == "titulo_desc":
+            ordenes = (Series.sort_title.desc().nulls_last(),
+                       Series.start_year.desc().nulls_last(), Series.id.desc())
+        elif orden == "anio_desc":
+            ordenes = (Series.start_year.desc().nulls_last(),
+                       Series.sort_title.asc().nulls_last(), Series.id.asc())
+        elif orden == "anio_asc":
+            ordenes = (Series.start_year.asc().nulls_last(),
+                       Series.sort_title.asc().nulls_last(), Series.id.asc())
+        else:
+            ordenes = (Series.created_at.desc(), Series.sort_title.asc().nulls_last(),
+                       Series.id.asc())
+        query = query.order_by(*ordenes)
         query = query.add_columns(leidos_lectura.label("lectura_leidos"),
                                   total_numeros.label("lectura_total"))
         query = query.offset((pagina - 1) * page_size).limit(page_size)
@@ -188,6 +207,7 @@ class SeriesService:
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
         con_issues: bool = False,
+        orden: str = "titulo",
     ) -> tuple[list[Series], int]:
         """Contrato histórico `(items, total)` para API y tests."""
         items, total, _ = await self._list_series(
@@ -196,7 +216,7 @@ class SeriesService:
             story_arc_id=story_arc_id,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
-            corregir_pagina=False,
+            orden=orden, corregir_pagina=False,
         )
         return items, total
 
@@ -214,6 +234,7 @@ class SeriesService:
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
         con_issues: bool = False,
+        orden: str = "titulo",
     ) -> tuple[list[Series], int, int]:
         """Como `list_series`, pero devuelve también la página efectiva.
 
@@ -226,6 +247,7 @@ class SeriesService:
             story_arc_id=story_arc_id,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
+            orden=orden,
         )
 
     async def list_publishers_with_series(self) -> list[Publisher]:
