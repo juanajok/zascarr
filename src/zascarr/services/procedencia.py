@@ -158,9 +158,10 @@ def _valor(clave: str, series: Series, id_presente: bool) -> str:
     if clave == "start_year":
         return _texto(series.start_year)
     if clave == "end_year":
-        return _texto(series.end_year)
+        return _texto(getattr(series, "end_year", None))
     if clave == "publisher":
-        return _texto(series.publisher.name if series.publisher else None)
+        publisher = getattr(series, "publisher", None)
+        return _texto(publisher.name if publisher else None)
     if clave == "description":
         if not series.description:
             return "Sin dato"
@@ -187,9 +188,9 @@ def _tiene_valor(clave: str, series: Series, id_presente: bool) -> bool:
     if clave == "start_year":
         return series.start_year is not None
     if clave == "end_year":
-        return series.end_year is not None
+        return getattr(series, "end_year", None) is not None
     if clave == "publisher":
-        return series.publisher is not None
+        return getattr(series, "publisher", None) is not None
     if clave == "description":
         return bool(series.description)
     if clave == "cover_url":
