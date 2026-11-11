@@ -106,6 +106,56 @@ def _base_title(title: str) -> str:
     return _VOLUME_SUFFIX.sub("", normalize_title(title)).strip()
 
 
+_VOLUME_IN_NAME = re.compile(
+    r"\b(?:vol(?:umen)?\.?|v|tomo)\s*(\d+)\b", re.IGNORECASE)
+_YEAR_IN_NAME = re.compile(r"\((?:19|20)\d{2}\)")
+
+
+def _desempatar_por_carpeta(tied: list[SeriesHit], carpeta: str) -> SeriesHit | None:
+    """Desempata por el nombre de la carpeta, solo si hay evidencia única.
+
+    Es una pista de contexto, nunca una identidad: la carpeta puede ser
+    genérica («Comics», «Descargas») o contener otra cosa. Solo se usa cuando
+    el matcher ya tiene varios candidatos empatados y la carpeta identifica a
+    uno —y solo a uno— por título base, volumen o año. Si no, se devuelve None
+    y el archivo sigue en `unsorted`.
+    """
+    if not carpeta:
+        return None
+    # El año entre paréntesis no forma parte del título base; el volumen sí
+    # se puede usar como discriminador.
+    sin_anio = _YEAR_IN_NAME.sub(" ", carpeta)
+    base = _base_title(sin_anio)
+    if not base:
+        return None
+    candidatos = [h for h in tied if _base_title(h.title) == base]
+    if not candidatos:
+        return None
+
+    # Si la carpeta afirma un volumen/año, el candidato tiene que cuadrar con
+    # esa afirmación. No se usa la base como permiso para ignorar una
+    # contradicción explícita («Batman Vol 3/» con un único «Batman Vol 1»).
+    volumen = _VOLUME_IN_NAME.search(carpeta)
+    if volumen:
+        por_volumen = [h for h in candidatos if _volume_matches(h, int(volumen.group(1)))]
+        if len(por_volumen) == 1:
+            return por_volumen[0]
+        return None
+
+    anio = re.search(r"\((19|20)(\d{2})\)", carpeta)
+    if anio:
+        year = int(anio.group(1) + anio.group(2))
+        por_anio = [
+            h for h in candidatos
+            if h.start_year is not None and abs(h.start_year - year) <= 1
+        ]
+        if len(por_anio) == 1:
+            return por_anio[0]
+        return None
+
+    return candidatos[0] if len(candidatos) == 1 else None
+
+
 def normalize_title(title: str) -> str:
     """Normalización para matching: minúsculas, sin acentos, sin artículo
     inicial o pospuesto, sin puntuación.
@@ -412,16 +462,23 @@ class SeriesMatcher:
 
         top = good[0].score
         tied = [h for h in good if abs(h.score - top) < 0.05]
+        notas: list[str] = []
         if len(tied) > 1:
-            return MatchResult(
-                MatchStatus.UNSORTED,
-                candidates=tied,
-                notes=[f"empate ambiguo: {[h.title for h in tied]}"],
-            )
+            # La carpeta solo desempata entre candidatos que ya han pasado el
+            # umbral. Nunca convierte un desconocido en candidato.
+            hit = _desempatar_por_carpeta(tied, triage.path.parent.name)
+            if hit is None:
+                return MatchResult(
+                    MatchStatus.UNSORTED,
+                    candidates=tied,
+                    notes=[f"empate ambiguo: {[h.title for h in tied]}"],
+                )
+            notas.append(f"desempatado por la carpeta: {hit.title}")
+        else:
+            hit = good[0]
 
-        hit = good[0]
         status = MatchStatus.DIRECT if hit.score == 1.0 else MatchStatus.FUZZY
-        return await self._resolve(hit, number, good, status, [], formato_esperado,
+        return await self._resolve(hit, number, good, status, notas, formato_esperado,
                                    nombre=triage.path.name)
 
     async def _resolve(self, hit: SeriesHit, number: str, candidates: list[SeriesHit],
