@@ -576,8 +576,12 @@ class TestVistaLista:
         assert "<caption class=\"sr\">Series de la biblioteca</caption>" in r.text
         for cabecera in ("Título", "Año", "Tradición", "Números"):
             assert f'<th scope="col">{cabecera}</th>' in r.text
-        assert 'class="barra-vista"' in r.text
-        assert "Ver como tarjetas" in r.text
+        assert 'id="control-vista" class="barra-vista" role="group"' in r.text
+        assert '<span class="barra-vista-texto">Tarjetas</span>' in r.text
+        assert '<span class="barra-vista-texto">Lista</span>' in r.text
+        assert 'aria-current="page"' in r.text
+        assert 'aria-label="Tarjetas"' in r.text
+        assert 'aria-label="Lista"' in r.text
 
     def test_valor_desconocido_no_se_convierte_en_cero(self):
         series = make_series("Sin datos")
