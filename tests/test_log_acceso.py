@@ -375,6 +375,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "carpeta", "historial", "origen",
     # BL-R5 (#234): identificador o enlace pegado en Descubrir.
     "identificador",
+    # BL-R7 (#236): página de una vista de trabajo (estado de la vista).
+    "pagina",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
     "desde",
 })
