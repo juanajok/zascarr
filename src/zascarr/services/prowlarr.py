@@ -16,6 +16,25 @@ class IndexerProwlarr:
     enabled: bool
     categories: list[str]
 
+    @property
+    def relevantes(self) -> list[str]:
+        """Solo las categorías que importan para este selector (cómic/libros).
+
+        Prowlarr devuelve listas enormes y localizadas («TV, ANIME, PC, AUDIO, …»);
+        pintarlas enteras convierte la tarjeta en un muro de texto.
+        """
+        claves = ("comic", "cómic", "book", "libro")
+        vistas: list[str] = []
+        for categoria in self.categories:
+            texto = str(categoria).casefold()
+            if any(clave in texto for clave in claves) and categoria not in vistas:
+                vistas.append(categoria)
+        return vistas
+
+    @property
+    def tiene_categorias_relevantes(self) -> bool:
+        return bool(self.relevantes)
+
 
 @dataclass
 class SearchResult:
@@ -88,4 +107,7 @@ class ProwlarrClient:
             indexers.append(IndexerProwlarr(
                 id=int(item["id"]), name=str(item.get("name") or f"Indexer {item['id']}"),
                 enabled=bool(item.get("enable", True)), categories=categorias))
+        # Los que declaran cómic/libros primero: son los útiles para ZascArr.
+        indexers.sort(key=lambda i: (
+            not i.tiene_categorias_relevantes, not i.enabled, i.name.casefold()))
         return indexers

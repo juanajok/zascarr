@@ -7,6 +7,9 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Selector de indexers de Prowlarr legible.** Ya no pinta todas las categorías de cada
+  indexer: muestra solo las de cómic/libros (máximo 2), un contador `+N` si hay más y una
+  lista compacta con scroll; los indexers relevantes van primero y los apagados no se ofrecen.
 - **Deseados distingue Prowlarr incompleto de «sin resultados».** Si Prowlarr está encendido
   pero le falta la URL o la clave de API, no se consulta y el deseo muestra esa causa con un
   aviso y enlace a Ajustes, en vez de parecer que la búsqueda no encontró nada. La pantalla
