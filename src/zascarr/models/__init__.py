@@ -226,6 +226,21 @@ class EstadoRegla(enum.StrEnum):
     RETIRADA = "retirada"
 
 
+class OrigenAlias(enum.StrEnum):
+    """De dónde sale un alias reutilizable."""
+    APRENDIDO = "aprendido"
+    IMPORTADO = "importado"
+    MANUAL = "manual"
+
+
+class EstadoAlias(enum.StrEnum):
+    """Ciclo de vida de un alias: propuesto no se aplica hasta consentir."""
+    PROPUESTO = "propuesto"
+    ACTIVO = "activo"
+    DESACTIVADO = "desactivado"
+    RETIRADO = "retirado"
+
+
 class MetadataSource(enum.StrEnum):
     COMIC_VINE    = "comic_vine"
     GCD           = "gcd"
@@ -1063,4 +1078,56 @@ class LocalAlias(Base):
     series_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), nullable=False
     )
+    # #132: ciclo de vida del alias aprendido, sin romper pattern_norm único.
+    origen: Mapped[OrigenAlias] = mapped_column(
+        Enum(OrigenAlias, name="origen_alias", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=OrigenAlias.APRENDIDO, server_default="aprendido")
+    estado: Mapped[EstadoAlias] = mapped_column(
+        Enum(EstadoAlias, name="estado_alias", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=EstadoAlias.PROPUESTO, server_default="propuesto")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    scope_path: Mapped[str | None] = mapped_column(Text)
+    historial: Mapped[list] = mapped_column(JSONB, nullable=False, default=list,
+                                            server_default=text("'[]'::jsonb"))
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                     server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AliasImportado(Base):
+    """#132: alias importado versionado, subordinado a la declaración local.
+
+    No lo consume el matcher en esta entrega: solo se administra en el inventario.
+    """
+    __tablename__ = "alias_importado"
+    __table_args__ = (
+        UniqueConstraint("alias_id", "version", name="uq_alias_importado_alias_version"),
+        Index("uq_alias_importado_vigente", "alias_id", unique=True,
+              postgresql_where=text("vigente_hasta IS NULL")),
+        Index("uq_alias_importado_activo", "patron_norm",
+              text("COALESCE(scope_path, '')"), unique=True,
+              postgresql_where=text("vigente_hasta IS NULL AND estado = 'activo'")),
+        Index("ix_alias_importado_patron", "patron_norm"),
+        Index("ix_alias_importado_scope", "scope_path"),
+        Index("ix_alias_importado_estado", "estado"),
+    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    alias_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    patron_norm: Mapped[str] = mapped_column(Text, nullable=False)
+    scope_path: Mapped[str | None] = mapped_column(Text)
+    series_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), nullable=False)
+    origen: Mapped[OrigenAlias] = mapped_column(
+        Enum(OrigenAlias, name="origen_alias", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=OrigenAlias.IMPORTADO, server_default="importado")
+    estado: Mapped[EstadoAlias] = mapped_column(
+        Enum(EstadoAlias, name="estado_alias", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=EstadoAlias.PROPUESTO, server_default="propuesto")
+    vigente_desde: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                    server_default=func.now())
+    vigente_hasta: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    procedencia: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,
+                                              server_default=text("'{}'::jsonb"))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                server_default=func.now())

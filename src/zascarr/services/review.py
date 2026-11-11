@@ -35,11 +35,13 @@ from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
     EDITION_KIND_A_FORMAT,
+    EstadoAlias,
     File,
     Issue,
     IssueFormat,
     LocalAlias,
     MetadataSource,
+    OrigenAlias,
     Series,
 )
 from zascarr.services.importer import build_library_path
@@ -325,26 +327,63 @@ class ReviewService:
         return file
 
     async def _learn_alias(self, original_filename: str, series_id) -> None:
-        """B13: cada asignación manual desde Pendientes es, por definición,
-        una corrección — el matcher ya no supo resolverla solo (esa es la
-        única razón por la que el archivo llegó a esta bandeja). Se
-        aprende el patrón (título que naming.py extrae del nombre de
-        archivo, normalizado) → serie, para que SeriesMatcher.decide()
-        no vuelva a preguntar la próxima vez que aparezca. Una corrección
-        más reciente sobre el mismo patrón sustituye a la anterior."""
+        """B13 (#132): aprende una propuesta, nunca activa sin consentimiento.
+
+        - nuevo: `propuesto` v1 con historial;
+        - propuesto/desactivado: actualiza serie y versión, sigue `propuesto`;
+        - activo con la misma serie: no hace nada;
+        - activo con otra serie: no lo pisa, deja evento `conflicto`;
+        - retirado: nueva propuesta en la misma fila, sin reactivar el retiro.
+        """
         parsed = parse_comic_filename(original_filename)
         if not parsed.series:
             return
         pattern = normalize_title(parsed.series)
         if not pattern:
             return
+        ahora = datetime.now(UTC).isoformat()
         existing = (await self.db.execute(
             select(LocalAlias).where(LocalAlias.pattern_norm == pattern)
         )).scalar_one_or_none()
-        if existing:
-            existing.series_id = series_id
-        else:
-            self.db.add(LocalAlias(pattern_norm=pattern, series_id=series_id))
+        if existing is None:
+            self.db.add(LocalAlias(
+                pattern_norm=pattern, series_id=series_id,
+                origen=OrigenAlias.APRENDIDO, estado=EstadoAlias.PROPUESTO,
+                version=1, historial=[{
+                    "version": 1, "estado": "propuesto", "origen": "aprendido",
+                    "series_id": str(series_id), "scope_path": None,
+                    "fecha": ahora, "motivo": "aprendizaje"}]))
+            await self.db.flush()
+            return
+        if existing.estado is None:
+            existing.estado = EstadoAlias.PROPUESTO
+        if existing.origen is None:
+            existing.origen = OrigenAlias.APRENDIDO
+        if existing.version is None:
+            existing.version = 1
+        historial = list(existing.historial or [])
+        if existing.estado is EstadoAlias.ACTIVO:
+            if existing.series_id == series_id:
+                return
+            historial.append({
+                "version": existing.version, "estado": "activo", "origen": "aprendido",
+                "series_id": str(existing.series_id), "series_propuesta": str(series_id),
+                "scope_path": existing.scope_path, "fecha": ahora, "motivo": "conflicto"})
+            existing.historial = historial
+            await self.db.flush()
+            return
+        estaba_retirado = existing.estado is EstadoAlias.RETIRADO
+        existing.series_id = series_id
+        existing.estado = EstadoAlias.PROPUESTO
+        existing.version += 1
+        historial.append({
+            "version": existing.version, "estado": "propuesto", "origen": existing.origen.value,
+            "series_id": str(series_id), "scope_path": existing.scope_path,
+            "fecha": ahora,
+            "motivo": ("reactivacion_por_aprendizaje" if estaba_retirado
+                       else "aprendizaje")})
+        existing.historial = historial
+        existing.actualizado_en = datetime.now(UTC)
         await self.db.flush()
 
     async def dismiss(self, file_id) -> None:
