@@ -161,3 +161,11 @@ benchmark no autoriza cambios por sí solo.
 Historia **#647**: se distingue Prowlarr incompleto de «sin resultados», con aviso en Deseados y
 motivo explícito en la fila. **No** se implementa búsqueda automática al añadir (no lanzar red sin
 acción/consentimiento); sí se aclara que el ciclo es periódico y «Buscar ahora» es inmediato.
+
+
+## 11. Filtro de indexers para ZascArr (2026-11-11, #652)
+
+Prowlarr admite `indexerIds` en `/api/v1/search`. Se añadió en Ajustes una **multiselección de
+indexers** para ZascArr: se cargan desde Prowlarr, se guardan como lista de IDs y solo esos se
+envían en la búsqueda. Vacío = todos. No modifica la configuración de Prowlarr ni afecta a otras
+apps; evita desactivar globalmente 78 indexers para dejar 2–3 de cómics.

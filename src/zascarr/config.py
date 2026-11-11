@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     prowlarr_url: str = Field(default="http://127.0.0.1:9696")
     prowlarr_api_key: str = Field(default="")
     prowlarr_enabled: bool = Field(default=False)
+    #: IDs de indexers de Prowlarr que usa ZascArr, separados por comas. Vacío = todos.
+    prowlarr_indexer_ids: str = Field(default="")
 
     # ── Transmission (baremetal) ───────────────────────────────────
     transmission_url: str = Field(default="http://127.0.0.1:9091")
