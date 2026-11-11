@@ -381,6 +381,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "identificador",
     # BL-R7 (#236): página de una vista de trabajo (estado de la vista).
     "pagina",
+    # F1 (#636/#272): número en la vista previa de organizar (GET, solo lectura).
+    "issue_number",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
     "desde",
 })
