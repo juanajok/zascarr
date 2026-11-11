@@ -62,23 +62,30 @@ revisión humana manda sobre la simulada y revierte varias decisiones:
 - `Bad Weekend - Criminal`: spin-off, se trata de forma análoga a
   anuales/especiales.
 - `Lobo y Sovereign Seven`: se trata como especial.
-- `Flash 158 2.0`: el humano no entiende la variante; queda dudosa.
-- `Crossover 07`: pendiente de una política de crossovers; queda dudosa.
-- `GunSmith Cats [P2N2]` y `Los detectives muertos`: dudosas.
+- `Flash 158 2.0`: cerrado como **Flash #158, grapa**; `2.0` es versión/scan.
+- `Crossover 07`: cerrado como **Dinastía de X #4, grapa**; el 07 es orden de
+  lectura; la portada dice “4 de 6”.
+- `GunSmith Cats [P2N2]`: cerrado como **GunSmith Cats #2, capítulo**; P2N2 es
+  parte/número, no tomo 2.
+- `Los detectives muertos`: cerrado como **tomo sin número**, edición ECC
+  cartoné de 176 pp, 1 número.
 
 Resultado final:
 
 | Estado | Filas |
 |---|---:|
 | Mantener | **187** |
-| Corregir | **9** |
-| Dudosa (excluida de métrica limpia) | **4** |
+| Corregir | **13** |
+| Dudosa | **0** |
 | **Total** | **200** |
 
-Las 4 dudosas se marcan `excluir_benchmark=TRUE`. **Siguen siendo decisiones
-humanas, no una validación de catálogo.**
+Las cuatro que quedaban dudosas se cerraron con evidencia de archivo y ficha
+bibliográfica (portada, páginas internas, `7z`, Tebeosfera y comparación con
+ComicTagger/Kapowarr). Ver
+[`cierre-dudosas-2026-11-11.md`](cierre-dudosas-2026-11-11.md). **Siguen siendo
+decisiones humanas, no una validación de catálogo.**
 
-## 4. Resultados con las 196 filas limpias
+## 4. Resultados con las 200 filas
 
 Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
@@ -86,9 +93,9 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
 | Medida | Resultado |
 |---|---:|
-| Serie correcta | **148 / 196 = 75,5 %** |
-| Número correcto | **187 / 196 = 95,4 %** |
-| Ambos correctos | **147 / 196 = 75,0 %** |
+| Serie correcta | **152 / 200 = 76,0 %** |
+| Número correcto | **191 / 200 = 95,5 %** |
+| Ambos correctos | **151 / 200 = 75,5 %** |
 
 ### Matcher
 
@@ -96,10 +103,10 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 |---|---:|
 | `direct` | 53 |
 | `fuzzy` | 22 |
-| `unsorted` | 121 |
+| `unsorted` | 125 |
 | Enlaces con Issue | 64 |
 | Enlaces con serie+número correctos | **64 / 64** |
-| Cobertura | **64 / 196 = 32,7 %** |
+| Cobertura | **64 / 200 = 32,0 %** |
 | Discrepancia de formato/tipo | **1** (XIII tomo enlazado a `single_issue`) |
 
 Los 64 enlaces aciertan serie y número según las etiquetas. El único problema
@@ -124,8 +131,7 @@ Bullets`), series del catálogo con otro título, colecciones y huecos de Issue.
 
 ## 6. Qué falta para un benchmark definitivo
 
-1. Cerrar las 4 dudosas: Flash 2.0, crossover, GunSmith Cats y Los detectives
-   muertos.
+1. Convertir los cuatro casos cerrados en tests de regresión.
 2. Decidir la política de títulos canónicos (`Shadow of the Bat` vs
    `Batman: Shadow of the Bat`, `Flash` vs `The Flash`, apóstrofos).
 3. Repetir la medición manteniendo separado parser y matcher.
@@ -137,5 +143,5 @@ Bullets`), series del catálogo con otro título, colecciones y huecos de Issue.
 - Aplicar revisión: `scripts/medicion/aplicar_revision_etiquetas.py`.
 - Evaluar: `scripts/medicion/evaluar_muestra_200.py`.
 - Resultado JSON: `/mnt/Datos/Documentos/resultados_muestra_200_humana.json`.
-- Última regla: `#N - Anual` se trata como pack y no produce número; la
-  métrica de número sube de 183 a **187**.
+- Reglas añadidas: `#N - Anual` es pack; `Crossover NN -` es prefijo de orden;
+  las cuatro dudosas se cerraron con evidencia.
