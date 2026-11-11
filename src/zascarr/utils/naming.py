@@ -180,6 +180,11 @@ NUMBER_RANGE_PATTERN = re.compile(r"\b\d{1,4}-\d{1,4}[a-zA-Z]?\b")
 # guion.
 NUMBER_RANGE_WORD_PATTERN = re.compile(r"\b\d{1,4}\s+al?\s+\d{1,4}\b", re.IGNORECASE)
 
+# «#25 - Anual»: no es el anual nº25, es un pack con el issue #25 y el anual.
+# «Batman Annual #25» (marca delante) sí es un anual normal y no entra aquí.
+PACK_ISSUE_ANNUAL_PATTERN = re.compile(
+    r"#\s*\d{1,4}[a-zA-Z]?\s*-\s*(?:Annual|Anual)\b", re.IGNORECASE)
+
 # "1 de 4", "3 de 8": posición dentro de un arco publicado en fascículos
 # (Transmetropolitan y similares), nunca el número de grapa. Sin esto no
 # causaba daño en los casos ya vistos (el "#01" real se encuentra antes
@@ -473,7 +478,9 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # número que falta, o si eso fabricaría una identidad falsa para un
     # pack (ver ese bloque).
     era_pack = bool(
-        NUMBER_RANGE_PATTERN.search(working) or NUMBER_RANGE_WORD_PATTERN.search(working)
+        NUMBER_RANGE_PATTERN.search(working)
+        or NUMBER_RANGE_WORD_PATTERN.search(working)
+        or PACK_ISSUE_ANNUAL_PATTERN.search(working)
     )
     working = NUMBER_RANGE_PATTERN.sub(" ", working)
     working = NUMBER_RANGE_WORD_PATTERN.sub(" ", working)
