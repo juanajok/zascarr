@@ -148,7 +148,9 @@ sí mantener alias locales aprendidos y, quizá, una regla manual por serie.
 
 1. **Contexto de carpeta como desempate** en el matcher: si el parser no cambia
    de candidato pero hay empate, la carpeta puede preferir uno; si no hay
-   evidencia, sigue `unsorted`.
+   evidencia, sigue `unsorted`. **Implementado en esta rama**: 0 cambios en la
+   foto actual de 3.556 pendientes porque no hay empates con evidencia, pero
+   cubierto con tests de volumen, año y contradicción.
 2. **Tabla de formatos** (`annual`, `special`, `TPB`, `omnibus`, `one_shot`)
    para que el matcher no confunda una recopilación con una grapa; el modelo ya
    tiene el campo.
