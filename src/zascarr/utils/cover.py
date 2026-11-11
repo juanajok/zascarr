@@ -213,7 +213,8 @@ def es_candidato_de_portada(path: Path, formato_contenido: dict | None = None) -
 
 def extract_cover_thumbnail(path: Path,
                             formato_contenido: dict | None = None,
-                            *, ancho: int = _THUMB_MAX_WIDTH) -> tuple[bytes, str] | None:
+                            *, ancho: int = _THUMB_MAX_WIDTH,
+                            max_pixeles: int | None = None) -> tuple[bytes, str] | None:
     """(bytes JPEG, content-type) de una miniatura de la primera página en orden natural, o None
     si el archivo no es un ZIP legible, no
     tiene páginas de imagen o su primera página supera los topes (CBR real: requeriría una
@@ -261,8 +262,9 @@ def extract_cover_thumbnail(path: Path,
 
     try:
         with Image.open(io.BytesIO(data)) as img:
-            # `open` solo lee la cabecera: se rechaza SIN decodificar
-            if img.width * img.height > MAX_PIXELES_PORTADA:
+            # `open` solo lee la cabecera: se rechaza SIN decodificar. Las miniaturas
+            # (240/600 px) no necesitan decodificar una página de 40 Mpx: #603.
+            if img.width * img.height > (max_pixeles or MAX_PIXELES_PORTADA):
                 return None
             img.thumbnail((ancho, ancho * 2))
             buf = io.BytesIO()

@@ -96,12 +96,12 @@ def elegir_pagina(listado: Listado, ext: str) -> EntradaRar:
     return paginas[0]
 
 
-def _jpeg_de(datos: bytes, ancho: int) -> tuple[bytes, str]:
+def _jpeg_de(datos: bytes, ancho: int, max_pixeles: int | None = None) -> tuple[bytes, str]:
     """Recorta a `ancho` SIN ampliar y devuelve JPEG calidad 80, como el ZIP. La cabecera se mide antes
     de decodificar: una imagen enorme no se carga."""
     try:
         with Image.open(io.BytesIO(datos)) as img:
-            if img.width * img.height > MAX_PIXELES_PORTADA:
+            if img.width * img.height > (max_pixeles or MAX_PIXELES_PORTADA):
                 raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
             img.thumbnail((ancho, ancho * 2))
             salida = io.BytesIO()
@@ -113,7 +113,8 @@ def _jpeg_de(datos: bytes, ancho: int) -> tuple[bytes, str]:
         raise ErrorRar(MotivoRar.ILEGIBLE) from exc
 
 
-def portada_de_rar(path: Path, covers: Path, *, ancho: int) -> tuple[bytes, str]:
+def portada_de_rar(path: Path, covers: Path, *, ancho: int,
+                   max_pixeles: int | None = None) -> tuple[bytes, str]:
     """(JPEG, content-type) de la primera página de un RAR. Falla con `ErrorRar`; el temporal se
     crea dentro de `covers` y se borra siempre."""
     # un solo turno para listar y leer: no se pierde a mitad bajo carga (dictamen SecOps N-2 b)
@@ -121,7 +122,7 @@ def portada_de_rar(path: Path, covers: Path, *, ancho: int) -> tuple[bytes, str]
         listado = lector_rar.listar(path, temporal=tmp)
         pagina = elegir_pagina(listado, path.suffix.lower())
         datos = lector_rar.leer_entrada(path, pagina, MAX_ENTRADA_LEIDA, temporal=tmp)
-    return _jpeg_de(datos, ancho)
+    return _jpeg_de(datos, ancho, max_pixeles=max_pixeles)
 
 
 # ── Marca de fallo por archivo ───────────────────────────────────────────────────────────────────
