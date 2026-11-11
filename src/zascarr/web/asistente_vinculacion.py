@@ -301,6 +301,7 @@ def _contexto_de_la_revision(r: RespuestaVinculacion, cursor_actual: str, otros:
         "borradores_json": json.dumps({k: b.a_json() for k, b in otros.items() if not b.vacio()}, ensure_ascii=False),
         "pendientes": pendientes, "incluidos": incluidos, "excluidos": excluidos, "limite": LIMITE_ARCHIVOS,
         "motivos_legibles": motivos_legibles, "texto_de_la_pagina": texto_de_la_pagina(r.pagina), "accion": accion,
+        "formatos": FORMATOS_LEGIBLES,
         "texto_legible": texto_legible,
         "hay_que_marcar": any(a.marcable and not a.marcado for a in r.archivos),
         "hay_marcados": any(a.marcado for a in r.archivos),
@@ -424,8 +425,18 @@ async def revisar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
 
 @router.post("/elegir", response_class=HTMLResponse)
 async def elegir_publicacion(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    """H1 (#183): elección explícita de una publicación local. No vincula ni crea nada."""
+    """H1 (#183): elección explícita de una publicación local. No vincula ni crea nada.
+
+    Reutiliza el mismo formulario que `/revisar`: conserva marcas, números, borradores y página.
+    """
     f = await request.form()
+    clave = str(f.get("clave", ""))
+    series_id = str(f.get("series_id", ""))
+    cursor_actual = str(f.get("cursor_actual", INICIO))
+    cursor_actual = "" if cursor_actual == INICIO else cursor_actual
+    otros = leer_borradores(str(f.get("borradores", "")))
+    estado = leer_estado_de_la_pagina(f)
+    estado.desde, estado.hasta = _entero(f.get("pagina_desde")), _entero(f.get("pagina_hasta"))
     crudo = str(f.get("eleccion", ""))
     token, _, candidate_id = crudo.rpartition("|")
     secreto = get_settings().secret_key
@@ -457,9 +468,11 @@ async def elegir_publicacion(request: Request, db: AsyncSession = Depends(get_db
             }
             error = motivos.get(str(exc), "No se pudo guardar la elección. No se ha cambiado nada; vuelve a intentarlo.")
     if contexto is not None:
-        return await _revisar(request, db, contexto.clave, contexto.series_id, estado=Borrador(),
-                              cursor="", otros={}, avisos=[x for x in (aviso, error) if x], pagina_completa=False)
-    plantilla = "_vinculacion_revision.html"
+        return await _revisar(request, db, clave or contexto.clave, series_id or contexto.series_id,
+                              estado=estado, cursor=cursor_actual, otros=otros,
+                              avisos=[x for x in (aviso, error) if x],
+                              pagina_completa="hx-request" not in request.headers)
+    plantilla = "asistente_vinculacion.html" if "hx-request" not in request.headers else "_vinculacion_revision.html"
     respuesta = templates.TemplateResponse(request, plantilla, {"r": None, "error": error})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta

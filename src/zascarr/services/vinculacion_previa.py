@@ -660,6 +660,9 @@ class VistaPreviaDeVinculacion:
         candidata_id = next((i for i, _s in verificado.candidatas if f"local:{i}" == candidate_id), None)
         if candidata_id is None:
             raise ValueError("candidata_no_ofrecida")
+        grupo = await RevisionCarpetas(self._db, self._biblioteca).archivos_del_grupo(verificado.clave)
+        if grupo is None or verificado.file_id not in {a.id for a in grupo[1]}:
+            raise ValueError("archivo_no_encontrado")
         fila = (await self._db.execute(
             select(File).where(File.id == UUID(verificado.file_id)).with_for_update())).scalar_one_or_none()
         if fila is None:
@@ -705,6 +708,9 @@ class VistaPreviaDeVinculacion:
         verificado = verificar_token_eleccion(token, self._secret, ahora=self._ahora)
         if verificado is None:
             raise ValueError("vista_caducada")
+        grupo = await RevisionCarpetas(self._db, self._biblioteca).archivos_del_grupo(verificado.clave)
+        if grupo is None or verificado.file_id not in {a.id for a in grupo[1]}:
+            raise ValueError("archivo_no_encontrado")
         fila = (await self._db.execute(
             select(File).where(File.id == UUID(verificado.file_id)).with_for_update())).scalar_one_or_none()
         if fila is None:

@@ -154,14 +154,22 @@ async def test_ruta_elegir_devuelve_la_fila_actualizada(entorno):
     f = await archivos(entorno, "Flash 1 (1987).cbz")
     fila = por_id(await previsualizar(serie))[str(f["Flash 1 (1987).cbz"])]
     candidata = next(c for c in fila["candidatas"] if c["formato"] == "single_issue")
+    fid = str(f["Flash 1 (1987).cbz"])
     async with cliente() as c:
         r = await c.post(
             "/ui/pendientes/carpetas/asistente/vinculacion/elegir",
-            data={"eleccion": f"{fila['token_eleccion']}|{candidata['candidate_id']}"})
+            data={"eleccion": f"{fila['token_eleccion']}|{candidata['candidate_id']}",
+                  "clave": "Comics/Flash (1987)", "series_id": str(serie),
+                  "cursor_actual": "inicio", "pagina_desde": "1", "pagina_hasta": "1",
+                  "marcar": fid, f"numero:{fid}": "1", f"numero_base:{fid}": "1",
+                  f"numero_origen:{fid}": "nombre"})
     assert r.status_code == 200
     assert "Publicación elegida" in r.text
     assert r.headers["cache-control"] == "no-store"
     assert 'class="vinc-candidatas"' in r.text
+    # Task-153: la elección no pierde marcas ni números de la página.
+    assert f'name="marcar" value="{fid}" checked' in r.text
+    assert f'name="numero:{fid}" value="1"' in r.text
 
 
 @pytest.mark.asyncio
