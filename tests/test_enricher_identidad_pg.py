@@ -295,6 +295,32 @@ async def test_backfill_personajes_cv_rellena_vacios_es_idempotente(banco):
 
 
 @pytest.mark.asyncio
+async def test_backfill_no_deja_que_una_bloqueada_acapare_el_limite(banco):
+    from zascarr.models import Issue, series_genres
+    await sembrar(banco, "Berserk", ComicTradition.MANGA, anilist_id=77,
+                  locked_fields=["genres"])
+    normal = await sembrar(banco, "Claymore", ComicTradition.MANGA, anilist_id=78)
+    sid = await sembrar(banco, "Flash", comic_vine_id=123)
+    locked_issue = uuid4()
+    normal_issue = uuid4()
+    async with banco.fabrica() as s:
+        s.add(Issue(id=locked_issue, series_id=sid, issue_number="1", comic_vine_id=1,
+                    locked_fields=["characters"]))
+        s.add(Issue(id=normal_issue, series_id=sid, issue_number="2", comic_vine_id=2))
+        await s.commit()
+    fuente = FuenteConDetalle(generos=["Action"], personajes=["Barry Allen"])
+    async with banco.fabrica() as s:
+        await EnrichmentService(s)._backfill_generos_anilist(fuente, 1, EnrichmentReport())
+        await EnrichmentService(s)._backfill_personajes_cv(fuente, 1, EnrichmentReport())
+        await s.commit()
+    assert fuente.pedidos == [78, 2]
+    async with banco.fabrica() as s:
+        n = (await s.execute(select(series_genres.c.genre_id)
+                             .where(series_genres.c.series_id == normal))).first()
+    assert n is not None
+
+
+@pytest.mark.asyncio
 async def test_backfill_respeta_manual_y_locked(banco):
     from zascarr.models import Issue, series_genres
     bloqueada = await sembrar(banco, "Berserk", ComicTradition.MANGA, anilist_id=77,
