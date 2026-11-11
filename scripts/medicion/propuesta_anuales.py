@@ -164,7 +164,8 @@ def _propuesta(fila: dict, series: list[dict], por_hash: Counter, local: bool) -
         confianza = "ambigua"
 
     anual_title = (
-        f"{_parent_title(padre['title'])} Annual" if padre else (parsed.series or None)
+        f"{_parent_title(padre['title'])} Annual" if padre else
+        (ANUAL_RE.sub("Annual", parsed.series) if parsed.series else None)
     )
 
     numero = parsed.issue_number or ""
@@ -191,6 +192,11 @@ def _propuesta(fila: dict, series: list[dict], por_hash: Counter, local: bool) -
     elif titulo_raro:
         accion = "revisar"
         motivo = "el título de serie empieza por cifra; revisar el nombre"
+    elif (actual_serie is not None
+          and _norm_anual(actual_serie) == _norm_anual(anual_title or "")
+          and not numero_actual_distinto):
+        accion = "mantener"
+        motivo = "ya está en la serie anual correcta"
     elif len(candidatos) > 1 and padre is None:
         accion = "revisar"
         motivo = "varios padres posibles"
