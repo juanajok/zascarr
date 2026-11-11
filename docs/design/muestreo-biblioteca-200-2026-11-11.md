@@ -22,7 +22,7 @@ Foto del 2026-11-11:
 | Sin Issue | 3.556 |
 | Series | 51 |
 
-Semilla: **20261111**. Script:
+Semilla: **20261112**. Script:
 `scripts/medicion/muestreo_biblioteca.py`.
 
 ## 3. Cuotas
@@ -44,7 +44,7 @@ Composición resultante:
 
 - **80 con Issue / 120 sin Issue**.
 - **28 anuales** (20 con Issue + 8 sin Issue).
-- **172 CBR / 28 CBZ**.
+- **186 CBR / 14 CBZ**.
 - Categorías: Comics 175, Manga 17, Graphic Novels 5, Tebeos 3.
 - **0 SHA256 repetidos** en la muestra.
 
@@ -54,8 +54,18 @@ Fuera del repo:
 
 ```text
 /mnt/Datos/Documentos/muestra_biblioteca_200_2026-11-11.csv
+/mnt/Datos/Documentos/muestra_biblioteca_200_2026-11-11_etiquetada.csv
 /mnt/Datos/Documentos/muestra_biblioteca_200_2026-11-11_contexto.csv
 ```
+
+### `..._etiquetada.csv` (primera pasada de etiquetas)
+
+Las etiquetas se rellenaron **sin abrir el CSV de contexto ni ejecutar el
+parser**. Son una **primera pasada asistida**, no una validación humana:
+`etiquetado_por=asistente`. Antes de usar los números como benchmark definitivo
+hay que revisar, sobre todo, los 18 casos marcados `requiere_contexto=TRUE` y
+los títulos canónicos con prefijo editorial (por ejemplo, si la etiqueta debe
+ser `Shadow of the Bat` o `Batman: Shadow of the Bat`).
 
 ### `...csv` (ciego, para etiquetar)
 
@@ -69,10 +79,10 @@ Columnas:
 | `estrato` | `con_issue_anual`, `sin_issue_anual`, `con_issue_normal`, `sin_issue_normal` |
 | `categoria_carpeta` | Comics/Manga/Graphic Novels/Tebeos/_Unsorted |
 | `sha256` | Identidad de contenido |
-| `serie_real` | **Etiqueta manual**; vacío al generar |
-| `numero_real` | **Etiqueta manual**; vacío al generar |
-| `tipo_real` | **Etiqueta manual**: `grapa`, `anual`, `tomo`, `obra_unica`, `pack`, `desconocido` |
-| `requiere_contexto` | **Etiqueta manual**: `TRUE` si sin carpeta/catálogo no se puede decidir |
+| `serie_real` | **Etiqueta** (primera pasada asistida); vacía al generar |
+| `numero_real` | **Etiqueta** (primera pasada asistida); vacía al generar |
+| `tipo_real` | **Etiqueta**: `grapa`, `anual`, `capitulo`, `tomo`, `obra_unica`, `pack`, `especial`, `desconocido` |
+| `requiere_contexto` | **Etiqueta**: `TRUE` si sin carpeta/catálogo no se puede decidir |
 | `notas` | Motivo de duda o decisión |
 | `etiquetado_por`, `fecha_etiqueta` | Trazabilidad |
 
@@ -95,8 +105,57 @@ etiquetar: sesgaría la medición.
 6. No corregir etiquetas después de ver la salida del parser. Si hace falta una
    segunda pasada, conservar la primera y documentar el cambio.
 7. No usar el CSV de contexto hasta que las 200 etiquetas estén cerradas.
+8. La etiqueta `asistente` es una primera pasada: la revisión humana es
+   obligatoria antes de publicar una métrica definitiva.
 
-## 6. Qué se medirá después
+## 6. Resultado preliminar de la primera pasada
+
+Métrica con la misma normalización para etiqueta y salida del parser
+(`Anual`≡`Annual` y sufijo de volumen fuera). No es un benchmark humano
+cerrado.
+
+### Parser
+
+| Medida | Resultado |
+|---|---:|
+| Serie correcta | 148 / 200 = **74,0 %** |
+| Número correcto | 185 / 200 = **92,5 %** |
+| Ambos correctos | 147 / 200 = **73,5 %** |
+| Ambos + número no vacío | 143 / 200 = **71,5 %** |
+
+### Matcher
+
+| Medida | Resultado |
+|---|---:|
+| `direct` | 53 |
+| `fuzzy` | 22 |
+| `unsorted` | 125 |
+| Enlaces con Issue | 64 |
+| Enlaces correctos (serie y número) | **64 / 64** |
+| Falsos positivos en pack/tomo/obra única/especial | **0** |
+| Series correctas (con o sin Issue) | 66 / 200 |
+
+La **precisión de los enlaces es 100%** en esta muestra, pero la cobertura es
+baja: 64/200. La causa principal no es el matcher: hay series del catálogo con
+otro título, alias de idioma (`100 Balas` vs `100 Bullets`), colecciones y
+huecos de Issue. Eso es precisamente lo que hay que separar en la siguiente
+iteración.
+
+### Familias de fallo observadas
+
+- `Anual` vs `Annual` y títulos canónicos con prefijo (`Batman: Shadow of the
+  Bat`).
+- Prefijos numéricos de orden de lectura (`73 Dreadstar ... 61`,
+  `13. Nightwing #73`) y números delante de la serie (`16 Catwoman`,
+  `51 Catwoman`).
+- Packs que no son una grapa; el parser a veces extrae el último número
+  (`#25 - Anual`).
+- Series con subtítulo/colección (`Green Lantern: Emerald Warriors`,
+  `Forever Evil: A.R.G.U.S`).
+- Créditos delante del título (`Hiroaki Samura - La Espada del Inmortal`).
+- Años dentro del título (`American Vampire 1976 10`).
+
+## 7. Qué se medirá después
 
 - Parser: serie exacta/tolerante, número exacto, ambos, y **tasa de números
   inventados** (un número que no aparece en el nombre).
@@ -107,7 +166,7 @@ etiquetar: sesgaría la medición.
   de inventar no cuenta.
 - Cada fallo etiquetado se convierte en test de regresión.
 
-## 7. Limitaciones
+## 8. Limitaciones
 
 - 200 etiquetas permiten detectar fallos y comparar versiones, no estimar
   precisión con un margen estrecho.
