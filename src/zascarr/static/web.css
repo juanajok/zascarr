@@ -2154,6 +2154,19 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .comicinfo-opcion { padding-left: 8px; }
 .comicinfo-avisos { display: grid; gap: 6px; overflow-wrap: anywhere; }
 
+
+/* BL-INF/#132-b: inventario de decisiones reutilizables. */
+.decisiones-filtros { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 14px 0 18px; }
+.decisiones-filtros label { display: grid; gap: 4px; font-weight: 600; }
+.decisiones-check { display: flex; align-items: center; gap: 6px; }
+.decisiones-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.decision-card { border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); padding: 12px 14px; }
+.decision-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+.decision-version { font-size: .875rem; color: var(--ink-soft); }
+.decision-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 0; }
+.decision-resumen { border: 2px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); padding: 10px 12px; margin: 12px 0; }
+.decision-historial { font-size: .875rem; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

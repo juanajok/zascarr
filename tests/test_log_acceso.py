@@ -369,6 +369,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "aviso", "incluir", "tipo", "error",
     # MIT-M7 (#131-b): declaración de origen y filtro del buscador de correspondencias.
     "declaracion", "tipo_registro",
+    # MIT-M7-US03 (#132-b): filtros del inventario de decisiones reutilizables.
+    "carpeta", "historial", "origen",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
     "desde",
 })
