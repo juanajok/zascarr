@@ -2240,12 +2240,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0 12px;
-  border: 2px solid var(--ink);
-  border-radius: var(--radius-pill);
-  background: var(--paper);
+  padding: 0 4px;
+  color: var(--ink-soft);
   font-size: .875rem;
-  font-weight: 800;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -2372,19 +2370,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 @media (max-width: 480px) {
   .barra-biblioteca { padding: 8px; gap: 6px; }
-  .barra-contador { display: none; }
-  .contador-resumen {
-    display: block;
-    margin: 0 0 8px;
-    font-size: .875rem;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-  }
+  .contador-resumen { display: none; }
   .barra-acciones { gap: 6px; }
+  .barra-panel { order: 1; }
+  .barra-orden { order: 2; }
+  .barra-contador { display: inline-flex; order: 4; }
+  .barra-vista-grupo { order: 5; margin-left: auto; }
   .barra-orden select { max-width: 6.5rem; }
   .barra-vista-texto { display: none; }
   .barra-vista-opcion { width: 44px; padding: 0; }
-  .barra-vista { margin-left: auto; }
 }
 @media (max-width: 360px) {
   .barra-acciones { gap: 4px; }

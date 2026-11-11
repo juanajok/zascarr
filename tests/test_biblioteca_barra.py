@@ -42,7 +42,7 @@ def test_barra_unica_con_busqueda_acciones_y_panel():
     assert 'class="barra-acciones"' in html
     assert 'id="panel-filtros"' in html
     assert 'id="f-orden"' in html
-    assert 'class="barra-vista"' in html
+    assert 'barra-vista-grupo' in html
     assert "Buscar por título" in html
 
 
@@ -220,7 +220,7 @@ def test_summary_es_un_boton_con_chevron_y_estado_abierto():
 
 def test_vista_es_segmentada_con_aria_current_y_oob():
     html = _index()
-    assert '<div id="control-vista" class="barra-vista" role="group"' in html
+    assert '<div id="control-vista" class="barra-vista barra-vista-grupo" role="group"' in html
     assert html.count('class="barra-vista-opcion') == 2
     assert 'aria-current="page"' in html
     assert ">Tarjetas</span>" in html and ">Lista</span>" in html
@@ -242,7 +242,7 @@ def test_orden_tiene_etiqueta_visible_y_opciones_cortas():
     assert "Ordenar por</label>" not in html
 
 
-def test_alturas_44_y_movil_sin_contador_en_la_barra():
+def test_alturas_44_y_movil_con_contador_y_vista_en_su_fila():
     from pathlib import Path
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     for selector in (".barra-contador {", ".barra-panel-boton {", ".barra-orden select {",
@@ -252,8 +252,13 @@ def test_alturas_44_y_movil_sin_contador_en_la_barra():
     assert ".barra-acciones > * { min-height: 44px; }" in css
     assert ".contador-resumen { display: none; }" in css
     assert "@media (max-width: 480px)" in css
-    assert ".barra-contador { display: none; }" in css
-    assert ".contador-resumen {" in css and "display: block;" in css
+    bloque = css.split("@media (max-width: 480px)", 1)[1].split("@media (max-width: 360px)", 1)[0]
+    assert "display: inline-flex; order: 4;" in bloque
+    assert "order: 5; margin-left: auto;" in bloque
+    assert ".barra-panel { order: 1; }" in bloque
+    assert ".barra-orden { order: 2; }" in bloque
+    assert ".contador-resumen { display: none; }" in bloque
+    assert ".barra-contador { display: none; }" not in bloque
 
 
 def test_cabecera_accion_es_boton_y_no_enlace_subrayado():
@@ -264,3 +269,14 @@ def test_cabecera_accion_es_boton_y_no_enlace_subrayado():
     assert ".biblioteca-cabecera .biblioteca-accion {" in css
     assert "text-decoration: none;" in css
     assert "grid-template-areas: \"titulo accion\" \"subtitulo subtitulo\";" in css
+
+
+def test_contador_es_dato_no_boton():
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    bloque = css.split(".barra-contador {", 1)[1].split("}", 1)[0]
+    assert "border:" not in bloque and "background:" not in bloque and "border-radius:" not in bloque
+    assert "color: var(--ink-soft);" in bloque
+    assert "font-weight: 700;" in bloque
+    assert "min-height: 44px;" in bloque
+    assert "font-variant-numeric: tabular-nums;" in bloque

@@ -576,7 +576,7 @@ class TestVistaLista:
         assert "<caption class=\"sr\">Series de la biblioteca</caption>" in r.text
         for cabecera in ("Título", "Año", "Tradición", "Números"):
             assert f'<th scope="col">{cabecera}</th>' in r.text
-        assert 'id="control-vista" class="barra-vista" role="group"' in r.text
+        assert 'id="control-vista" class="barra-vista barra-vista-grupo" role="group"' in r.text
         assert '<span class="barra-vista-texto">Tarjetas</span>' in r.text
         assert '<span class="barra-vista-texto">Lista</span>' in r.text
         assert 'aria-current="page"' in r.text
