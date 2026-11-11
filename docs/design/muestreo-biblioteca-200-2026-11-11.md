@@ -93,20 +93,20 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
 | Medida | Resultado |
 |---|---:|
-| Serie correcta | **182 / 200 = 91,0 %** |
+| Serie correcta | **192 / 200 = 96,0 %** |
 | Número correcto | **197 / 200 = 98,5 %** |
-| Ambos correctos | **181 / 200 = 90,5 %** |
+| Ambos correctos | **192 / 200 = 96,0 %** |
 
 ### Matcher
 
 | Medida | Resultado |
 |---|---:|
-| `direct` | 90 |
+| `direct` | 97 |
 | `fuzzy` | 14 |
-| `unsorted` | 96 |
-| Enlaces con Issue | 95 |
-| Enlaces con serie+número correctos | **95 / 95** |
-| Cobertura | **95 / 200 = 47,5 %** |
+| `unsorted` | 89 |
+| Enlaces con Issue | 103 |
+| Enlaces con serie+número correctos | **103 / 103** |
+| Cobertura | **103 / 200 = 51,5 %** |
 | Desajustes de formato/tipo | **2** (La Espada del Inmortal y XIII, tomos enlazados a `single_issue`) |
 
 Los 64 enlaces aciertan serie y número según las etiquetas. El único problema
@@ -114,8 +114,8 @@ de formato es `XIII 01`: el revisor lo etiquetó como tomo BD y el catálogo lo
 tiene como `single_issue`; es una discrepancia de **edición**, no de identidad.
 
 La cobertura sigue siendo el problema, pero los alias seguros recuperan
-`100 Balas`, `Shadow of the Bat`, `Smallville` y `WildCATS`. Además se aplicaron los lotes 1, 2 y 3 de series ausentes (15 series, 557
-Issues, 573 archivos): +5, +9 y +4 enlaces nuevos en esta muestra. Ver
+`100 Balas`, `Shadow of the Bat`, `Smallville` y `WildCATS`. Además se aplicaron los lotes 1, 2, 3 y 5 de series ausentes (21 series, 590
+Issues, 606 archivos): +5, +9, +4 y +8 enlaces nuevos en esta muestra. Ver
 [`alias-catalogo-2026-11-11.md`](alias-catalogo-2026-11-11.md),
 [`lote1-series-ausentes-2026-11-11.md`](lote1-series-ausentes-2026-11-11.md),
 [`lote2-series-ausentes-2026-11-11.md`](lote2-series-ausentes-2026-11-11.md) y

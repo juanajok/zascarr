@@ -391,7 +391,8 @@ def _segmento_por_acronimo(acronimo: str, contexto: str | None) -> str | None:
 
 
 def _serie_desde_carpeta(series: str, alternativa: str, carpeta: str | None,
-                          contexto: str | None = None, is_annual: bool = False) -> str:
+                          contexto: str | None = None, is_annual: bool = False,
+                          sin_numero: bool = False) -> str:
     """Ajusta la serie usando carpetas, sin inventar.
 
     - Alternativa del nombre cuyos tokens están en el contexto de carpetas
@@ -409,15 +410,25 @@ def _serie_desde_carpeta(series: str, alternativa: str, carpeta: str | None,
     limpia = re.sub(r"\b(?:19|20)\d{2}\b", " ", limpia)
     limpia = _limpiar_titulo_serie(limpia)
     limpia_norm = normalize_series_name(limpia)
-    alternativa_norm = normalize_series_name(alternativa)
+    # La alternativa de un pack puede llevar «#25 Anual» pegado; para la
+    # serie solo interesa lo anterior al pack. «corregido» es una marca de
+    # release, no parte del título.
+    alternativa_limpia = alternativa
+    if "#" in alternativa_limpia or "№" in alternativa_limpia:
+        alternativa_limpia = re.sub(r"[#№].*$", " ", alternativa_limpia)
+    alternativa_limpia = re.sub(
+        r"\b(?:corregido|corregida|actualizado|actualizada)\b", " ",
+        alternativa_limpia, flags=re.IGNORECASE)
+    alternativa_limpia = _limpiar_titulo_serie(alternativa_limpia)
+    alternativa_norm = normalize_series_name(alternativa_limpia)
     if alternativa_norm and alternativa_norm == limpia_norm:
-        return alternativa
+        return alternativa_limpia
     # Alternativa contenida en el contexto de abuelo+padre.
     if alternativa_norm and contexto:
         tokens_alt = set(alternativa_norm.split())
         tokens_ctx = set(normalize_series_name(contexto).split())
         if tokens_alt and tokens_alt <= tokens_ctx:
-            return alternativa
+            return alternativa_limpia
     # Acrónimo de una carpeta antecesora.
     if ACRONYM_SERIES_PATTERN.fullmatch(series):
         segmento = _segmento_por_acronimo(series, contexto)
@@ -426,17 +437,30 @@ def _serie_desde_carpeta(series: str, alternativa: str, carpeta: str | None,
     series_norm = normalize_series_name(series)
     # La carpeta es el título completo que termina en la serie
     # («The corinthian-death in venice»).
-    if (series_norm and limpia_norm.endswith(series_norm)
+    # Una carpeta que empieza por número suele ser un arco/volumen, no el
+    # título canónico («02 Endless night-noches eternas» no es la serie).
+    if (series_norm and limpia_norm and not re.match(r"^\s*\d", carpeta or "")
+            and limpia_norm.endswith(series_norm)
             and len(limpia_norm.split()) > len(series_norm.split())):
         return limpia
+    # Especial sin número dentro de la carpeta de la serie («Lobo - Año 1»).
+    if (sin_numero and series_norm and limpia_norm
+            and series_norm.startswith(limpia_norm + " ")):
+        return limpia
+    # Con número de issue, la carpeta es la serie corta y la alternativa
+    # añade la línea concreta («Forever Evil» → «Forever Evil: A.R.G.U.S»).
+    if (not sin_numero and alternativa_norm and limpia_norm
+            and alternativa_norm.startswith(limpia_norm + " ")
+            and len(alternativa_norm.split()) > len(limpia_norm.split())):
+        return alternativa_limpia
     # Extensión editorial explícita («Joe Kubert» + «Presents»).
     if series_norm and limpia_norm == series_norm + " presents":
         return limpia
     # Anual sin número en la serie corta («Lobo - Anual 1»).
     if (is_annual and alternativa_norm.endswith(("annual", "anual"))
-            and not re.search(r"\d", alternativa)
+            and not re.search(r"\d", alternativa_limpia)
             and series_norm and alternativa_norm.startswith(series_norm + " ")):
-        return alternativa
+        return alternativa_limpia
     return series
 
 
@@ -840,7 +864,8 @@ def parse_comic_filename(
                 break
 
     series = _serie_desde_carpeta(
-        series, result.series_alternativa, carpeta, contexto, result.is_annual)
+        series, result.series_alternativa, carpeta, contexto, result.is_annual,
+        sin_numero=not result.issue_number)
     result.series = series
     result.confidence = _confidence(result)
     return result

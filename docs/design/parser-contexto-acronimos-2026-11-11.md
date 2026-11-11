@@ -40,15 +40,19 @@ la serie corta es su prefijo.
 
 | Medida | Antes | Después |
 |---|---:|---:|
-| Parser serie | 171 | **182 / 200** |
+| Parser serie | 171 | **192 / 200** |
 | Parser número | 196 | **197 / 200** |
-| Parser ambos | 170 | **181 / 200** |
-| Matcher enlaces | 94 | **95** |
-| Identidad serie+número | 94/94 | **95/95** |
-| Cobertura | 47,0 % | **47,5 %** |
+| Parser ambos | 170 | **192 / 200** |
+| Matcher enlaces | 94 | **103** |
+| Identidad serie+número | 94/94 | **103/103** |
+| Cobertura | 47,0 % | **51,5 %** |
 | Desajustes de formato | 2 | **2** |
 
-Tests del parser: **178** en verde; suite afectada completa en verde.
+Incluye los ajustes posteriores: limpieza de alternativas de packs, carpeta
+numérica que no es serie, especiales sin número dentro de carpeta y alias de
+`Horizontes Lejanos`/`Forever Evil: A.R.G.U.S`.
+
+Tests del parser: **180** en verde; suite afectada completa en verde.
 
 Quedan fallos que dependen de catálogo o de títulos canónicos sin señal en la
 carpeta: `Batman: Shadow of the Bat`, `Green Lantern: Emerald Warriors`,
