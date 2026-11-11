@@ -30,6 +30,8 @@ async def test_lista_indexers_con_sus_categorias():
     indexers = await ProwlarrClient(transporte=httpx.MockTransport(responder)).list_indexers()
     assert [i.name for i in indexers] == ["Internet Archive", "Apagado"]
     assert indexers[0].categories == ["Books"] and indexers[1].enabled is False
+    assert indexers[0].relevantes == ["Books"]
+    assert indexers[1].relevantes == []
 
 
 @pytest.mark.asyncio
