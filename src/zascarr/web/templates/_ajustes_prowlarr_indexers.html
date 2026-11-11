@@ -1,0 +1,26 @@
+{% if error %}
+  {{ ui.aviso("amber", error) }}
+  <p><button type="button" class="btn ghost"
+           hx-get="/ui/ajustes/prowlarr/indexers"
+           hx-target="#prowlarr-indexers" hx-swap="innerHTML">Reintentar</button></p>
+{% else %}
+<form hx-post="/ui/ajustes/guardar/prowlarr-indexers"
+      hx-target="#prowlarr-indexers" hx-swap="innerHTML">
+  <p class="ajustes-hint">Marca solo los indexers que quieres que use ZascArr. Si no marcas ninguno, usa todos los activos de Prowlarr.</p>
+  <ul class="prowlarr-indexers-lista">
+    {% for i in indexers if i.enabled %}
+    <li>
+      <label class="legal-checkbox">
+        <input type="checkbox" name="indexer_ids" value="{{ i.id }}"
+               {% if i.id in seleccionados %}checked{% endif %}>
+        {{ i.name }}
+      </label>
+      {% if i.categories %}<span class="rotulo">{{ i.categories | join(", ") }}</span>{% endif %}
+    </li>
+    {% else %}
+    <li class="muted">Prowlarr no tiene indexers activos.</li>
+    {% endfor %}
+  </ul>
+  <div class="ajustes-actions"><button type="submit">Guardar selección</button></div>
+</form>
+{% endif %}
