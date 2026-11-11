@@ -13,14 +13,16 @@ import io
 from collections.abc import AsyncIterator, Iterable
 from datetime import date, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from zascarr.models import (
     ComicTradition,
     File,
     FileFormat,
     Issue,
+    Note,
     Publisher,
     Series,
     Wishlist,
@@ -33,6 +35,7 @@ BOM = "\ufeff"
 CABECERAS_COLECCION = (
     "Serie", "Año", "Editorial", "Tradición", "Número", "Título", "Formato", "Estado",
 )
+CABECERAS_COLECCION_CON_NOTAS = CABECERAS_COLECCION + ("Nota de la serie", "Nota del número")
 CABECERAS_DESEADOS = (
     "Serie", "Número", "Estado", "Política de búsqueda", "Notas",
 )
@@ -93,31 +96,55 @@ def _formato(formato: FileFormat | str | None) -> str:
     return getattr(formato, "value", str(formato)).upper()
 
 
-async def filas_coleccion(db: AsyncSession) -> AsyncIterator[tuple[str, ...]]:
-    """Una fila por archivo registrado (un número puede tener varios)."""
+async def filas_coleccion(
+    db: AsyncSession, *, incluir_notas: bool = False,
+) -> AsyncIterator[tuple[str, ...]]:
+    """Una fila por archivo registrado (un número puede tener varios).
+
+    Con `incluir_notas`, añade la nota de la serie y la del número al final; sin
+    el flag no se emiten esas columnas. Las notas van por alias para no duplicar
+    filas (una nota por serie y otra por número).
+    """
+    columnas = [
+        Series.title, Series.start_year, Series.tradition, Publisher.name,
+        Issue.issue_number, Issue.title, Issue.release_date,
+        File.file_format, File.is_missing,
+    ]
+    nota_serie = nota_numero = None
+    if incluir_notas:
+        # El JOIN de notas solo se paga cuando se piden: sin el flag, es la
+        # query de siempre (la exportación por defecto no toca `notes`).
+        nota_serie = aliased(Note)
+        nota_numero = aliased(Note)
+        columnas += [nota_serie.texto, nota_numero.texto]
     stmt = (
-        select(
-            Series.title, Series.start_year, Series.tradition, Publisher.name,
-            Issue.issue_number, Issue.title, Issue.release_date,
-            File.file_format, File.is_missing,
-        )
+        select(*columnas)
         .select_from(File)
         .join(Issue, File.issue_id == Issue.id)
         .join(Series, Issue.series_id == Series.id)
         .outerjoin(Publisher, Series.publisher_id == Publisher.id)
-        .order_by(Series.sort_title, Series.title, Issue.sort_order, Issue.issue_number, File.id)
     )
+    if incluir_notas:
+        stmt = stmt.outerjoin(nota_serie, and_(
+            nota_serie.series_id == Series.id, nota_serie.issue_id.is_(None)))
+        stmt = stmt.outerjoin(nota_numero, nota_numero.issue_id == Issue.id)
+    stmt = stmt.order_by(
+        Series.sort_title, Series.title, Issue.sort_order, Issue.issue_number, File.id)
     result = await db.stream(stmt)
     async for fila in result:
-        (titulo, start_year, tradicion, editorial, numero, titulo_issue,
-         fecha, formato, falta) = fila
-        anio = _anio(fecha, start_year)
+        valores = tuple(fila[:9])
+        (titulo, _start_year, tradicion, _editorial, _numero, _titulo_issue,
+         fecha, formato, falta) = valores
+        anio = _anio(fecha, _start_year)
         trad = TRADICION_ES.get(tradicion, _texto(getattr(tradicion, "value", tradicion)))
         estado = "falta" if bool(falta) else "tengo"
-        yield (
-            _texto(titulo), anio, _texto(editorial), trad, _texto(numero),
-            _texto(titulo_issue), _formato(formato), estado,
+        salida = (
+            _texto(titulo), anio, _texto(_editorial), trad, _texto(_numero),
+            _texto(_titulo_issue), _formato(formato), estado,
         )
+        if incluir_notas:
+            salida += (_texto(fila[9]), _texto(fila[10]))
+        yield salida
 
 
 async def filas_deseados(db: AsyncSession) -> AsyncIterator[tuple[str, ...]]:
