@@ -49,6 +49,7 @@ from zascarr.utils.cortesia import (
 #: Dominios (y sus subdominios) de los que se aceptan portadas. Son los mismos de `/ui/descubrir/portada`.
 HOSTS_PERMITIDOS: tuple[str, ...] = (
     "comicvine.gamespot.com", "cbsistatic.com", "anilist.co", "tebeosfera.com", "comics.org",
+    "covers.openlibrary.org",
 )
 LONGITUD_MAXIMA_URL = 500
 MAX_SALTOS = 3

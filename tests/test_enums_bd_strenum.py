@@ -93,6 +93,8 @@ MIEMBROS = {
         "GCD": "gcd",
         "ANILIST": "anilist",
         "TEBEOSFERA": "tebeosfera",
+        "METRON": "metron",
+        "OPEN_LIBRARY": "open_library",
         "COMICINFO_XML": "comicinfo_xml",
         "MANUAL": "manual",
     },

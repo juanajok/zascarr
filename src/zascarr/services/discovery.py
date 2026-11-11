@@ -48,6 +48,8 @@ from zascarr.services.identificadores import (
     ResolucionIdentificador,
     parsear_identificador,
 )
+from zascarr.services.metron import MetronClient
+from zascarr.services.open_library import OpenLibraryClient
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 from zascarr.utils.peticiones import ReintentosAgotados, RespuestaNoTransitoria
@@ -62,13 +64,16 @@ CAMPO_ID_EXTERNO: dict[MetadataSource, str] = {
     MetadataSource.ANILIST: "anilist_id",
     MetadataSource.TEBEOSFERA: "tebeosfera_slug",
     MetadataSource.GCD: "gcd_id",
+    MetadataSource.METRON: "metron_id",
+    MetadataSource.OPEN_LIBRARY: "open_library_id",
 }
-CAMPOS_ID_DE_TEXTO = {"tebeosfera_slug"}
+CAMPOS_ID_DE_TEXTO = {"tebeosfera_slug", "open_library_id"}
 
 #: Orden FIJO y neutro de las fuentes en cualquier listado (nunca «la mejor primero»).
 ORDEN_DE_FUENTES: tuple[MetadataSource, ...] = (
     MetadataSource.COMIC_VINE, MetadataSource.ANILIST,
     MetadataSource.TEBEOSFERA, MetadataSource.GCD,
+    MetadataSource.METRON, MetadataSource.OPEN_LIBRARY,
 )
 
 # #133: el conjunto cerrado y `EstadoFuente` viven en un módulo stdlib-only para que las
@@ -93,6 +98,8 @@ _INTERRUPTOR = {
     MetadataSource.ANILIST: "anilist_enabled",
     MetadataSource.TEBEOSFERA: "tebeosfera_enabled",
     MetadataSource.GCD: "gcd_enabled",
+    MetadataSource.METRON: "metron_enabled",
+    MetadataSource.OPEN_LIBRARY: "open_library_enabled",
 }
 
 
@@ -223,10 +230,13 @@ def _clasificar_outcome(fuente: MetadataSource, nombre: str,
                          "Ha pedido esperar antes de volver a consultarla.")
         return estado, [], [f"{nombre}: ha pedido esperar antes de volver a consultarla."]
     if (isinstance(outcome, RespuestaNoTransitoria)
-            and outcome.codigo in (401, 403) and fuente is MetadataSource.COMIC_VINE):
-        # H15: una clave inválida de CV es configuración, no un fallo transitorio.
-        return _estado(fuente, FUENTE_CONFIGURACION_INCOMPLETA,
-                       "La clave de Comic Vine no se ha aceptado."), [], []
+            and outcome.codigo in (401, 403)
+            and fuente in (MetadataSource.COMIC_VINE, MetadataSource.METRON)):
+        # Una credencial inválida es configuración, no un fallo transitorio.
+        motivo = ("La clave de Comic Vine no se ha aceptado."
+                  if fuente is MetadataSource.COMIC_VINE
+                  else "Metron no ha aceptado el token.")
+        return _estado(fuente, FUENTE_CONFIGURACION_INCOMPLETA, motivo), [], []
     if isinstance(outcome, BaseException):
         logger.warning("discovery.source_failed", source=nombre, error=str(outcome))
         return (_estado(fuente, FUENTE_FALLO_TRANSITORIO, "No ha respondido ahora mismo."),
@@ -267,9 +277,13 @@ class DiscoveryService:
         del unidad  # el contraste/la unidad se decide en el consumidor; aquí no cambia la petición
         fuente = resultado.source
         settings = get_settings()
-        if not getattr(settings, _INTERRUPTOR[fuente], False):
+        if getattr(settings, _INTERRUPTOR[fuente], False) is not True:
             return ResultadoDetalle(_estado_detalle(
                 fuente, FUENTE_APAGADA, "Está apagada en Ajustes."), None)
+        if fuente is MetadataSource.METRON and not getattr(settings, "metron_token", ""):
+            return ResultadoDetalle(_estado_detalle(
+                fuente, FUENTE_CONFIGURACION_INCOMPLETA,
+                "Falta su token en Ajustes."), None)
         if fuente is MetadataSource.COMIC_VINE and not settings.comicvine_api_key:
             return ResultadoDetalle(_estado_detalle(
                 fuente, FUENTE_CONFIGURACION_INCOMPLETA,
@@ -420,9 +434,17 @@ class DiscoveryService:
         detalles: dict[str, EstadoFuente] = {}
 
         for fuente in ORDEN_DE_FUENTES:
-            if not getattr(settings, _INTERRUPTOR[fuente]):
+            # `is True`: una fuente nueva no se enciende por un atributo simulado o ausente.
+            if getattr(settings, _INTERRUPTOR[fuente], False) is not True:
                 detalles[fuente.value] = _estado(fuente, FUENTE_APAGADA, "Está apagada en Ajustes.")
 
+        if (getattr(settings, "metron_enabled", False) is True
+                and not getattr(settings, "metron_token", "")):
+            avisos.append("Metron no está configurado: añade su token en Ajustes "
+                          "para incluirlo en la búsqueda.")
+            detalles[MetadataSource.METRON.value] = _estado(
+                MetadataSource.METRON, FUENTE_CONFIGURACION_INCOMPLETA,
+                "Falta su token en Ajustes.")
         if settings.comicvine_enabled and not settings.comicvine_api_key:
             avisos.append(
                 "Comic Vine no está configurado: añade su clave en Ajustes "
@@ -445,6 +467,13 @@ class DiscoveryService:
                 (MetadataSource.TEBEOSFERA, "Tebeosfera", self._search_tebeosfera(query, limit)))
         if settings.gcd_enabled:
             fuentes.append((MetadataSource.GCD, "GCD", self._search_gcd(query, limit)))
+        if (getattr(settings, "metron_enabled", False) is True
+                and bool(getattr(settings, "metron_token", ""))):
+            fuentes.append((MetadataSource.METRON, "Metron",
+                            self._search_metron(query, limit)))
+        if getattr(settings, "open_library_enabled", False) is True:
+            fuentes.append((MetadataSource.OPEN_LIBRARY, "Open Library",
+                            self._search_open_library(query, limit)))
 
         outcomes = await asyncio.gather(*(coro for _, _, coro in fuentes), return_exceptions=True)
 
@@ -456,6 +485,41 @@ class DiscoveryService:
             avisos.extend(avisos_fuente)
         estados = {nombre: detalle.estado for nombre, detalle in detalles.items()}
         return Busqueda(results, avisos, estados, detalles)
+
+    async def _search_metron(self, query: str, limit: int) -> list[DiscoveryResult]:
+        if not get_settings().metron_token:
+            return []
+        async with MetronClient() as client:
+            hits = await client.search_series(query, limit=limit)
+        return [
+            DiscoveryResult(
+                source=MetadataSource.METRON, external_id=str(h.metron_id),
+                title=h.name, start_year=h.year_began, description=h.descripcion,
+                # Sin portada: las imágenes de Metron no están bajo CC BY-SA.
+                cover_url=None, site_url=h.site_url,
+                tradition_guess=(None if h.tradition_guess is None
+                                 else ComicTradition(h.tradition_guess)),
+                tradition_provenance=(None if h.tradition_guess is None
+                                      else ProcedenciaTradicion.TRANSFORMADA),
+                editorial=h.publisher, idioma=h.language,
+            )
+            for h in hits
+        ]
+
+    async def _search_open_library(self, query: str, limit: int) -> list[DiscoveryResult]:
+        async with OpenLibraryClient() as client:
+            hits = await client.search_works(query, limit=limit)
+        return [
+            DiscoveryResult(
+                source=MetadataSource.OPEN_LIBRARY, external_id=h.work_id,
+                title=h.title, start_year=h.start_year, description=None,
+                cover_url=h.cover_url, site_url=h.site_url,
+                # Open Library no declara tradición de cómic: no se inventa.
+                tradition_guess=None, tradition_provenance=None,
+                editorial=h.editorial, idioma=h.idioma, kind="work",
+            )
+            for h in hits
+        ]
 
     async def resolver_identificador(self, texto: str) -> ResolucionIdentificador:
         """BL-R5 (#234): resuelve por id exacto ANTES que por título.
@@ -478,11 +542,18 @@ class DiscoveryService:
         fuente = ident.fuente
         settings = get_settings()
         nombre = fuente.value
-        if not getattr(settings, _INTERRUPTOR[fuente]):
+        if getattr(settings, _INTERRUPTOR[fuente], False) is not True:
             return ResolucionIdentificador(
                 camino="error", identificador=ident,
                 estado=_estado_detalle(fuente, FUENTE_APAGADA, "Está apagada en Ajustes."),
                 motivo="Esa fuente está apagada en Ajustes.")
+        if fuente is MetadataSource.METRON and not getattr(settings, "metron_token", ""):
+            return ResolucionIdentificador(
+                camino="error", identificador=ident,
+                estado=_estado_detalle(
+                    fuente, FUENTE_CONFIGURACION_INCOMPLETA,
+                    "Falta su token en Ajustes."),
+                motivo="Metron no está configurado: añade su token en Ajustes.")
         if fuente is MetadataSource.COMIC_VINE and not settings.comicvine_api_key:
             return ResolucionIdentificador(
                 camino="error", identificador=ident,
@@ -601,6 +672,8 @@ class DiscoveryService:
             MetadataSource.ANILIST: self._search_anilist,
             MetadataSource.TEBEOSFERA: self._search_tebeosfera,
             MetadataSource.GCD: self._search_gcd,
+            MetadataSource.METRON: self._search_metron,
+            MetadataSource.OPEN_LIBRARY: self._search_open_library,
         }
         try:
             outcome = await constructores[fuente](query, limit)

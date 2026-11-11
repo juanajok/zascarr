@@ -104,12 +104,15 @@ NOMBRES_DE_FUENTE: dict[str, str] = {
     "anilist": "AniList",
     "tebeosfera": "Tebeosfera",
     "gcd": "GCD",
+    "metron": "Metron",
+    "open_library": "Open Library",
     "foro": "Foro",
     "portada": "Portadas",
 }
 
 #: Las fuentes que el snapshot lista SIEMPRE, aunque estén apagadas (§6.1).
-FUENTES_DECLARADAS: tuple[str, ...] = ("comicvine", "anilist", "tebeosfera", "gcd", "foro", "portada")
+FUENTES_DECLARADAS: tuple[str, ...] = (
+    "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library", "foro", "portada")
 
 #: Intervalo del nivel host para las portadas (su URL no lleva fuente; §3.1 y §14.2).
 #: Se aplica por origen normalizado; los subdominios del CDN de Comic Vine heredan su intervalo.
@@ -119,6 +122,7 @@ INTERVALO_PORTADA_POR_HOST: tuple[tuple[str, float], ...] = (
     ("anilist.co", 1.5),
     ("tebeosfera.com", 2.5),
     ("comics.org", 2.0),
+    ("openlibrary.org", 1.0),
 )
 INTERVALO_PORTADA_DESCONOCIDO_S = 2.5
 
@@ -129,6 +133,8 @@ HOST_DE_FUENTE_PARA_PORTADAS: tuple[tuple[str, str], ...] = (
     ("anilist.co", "anilist"),
     ("tebeosfera.com", "tebeosfera"),
     ("comics.org", "gcd"),
+    ("metron.cloud", "metron"),
+    ("openlibrary.org", "open_library"),
 )
 
 
@@ -219,6 +225,10 @@ def politica_de(fuente: str, ajustes=None, *, host: str | None = None) -> Politi
         return PoliticaFuente(fuente, nombre, intervalo, 1, 3)
     if fuente == "gcd":
         return PoliticaFuente(fuente, nombre, float(s.gcd_rate_limit), 2, 3)
+    if fuente == "metron":
+        return PoliticaFuente(fuente, nombre, float(getattr(s, "metron_rate_limit", 3.0)), 2, 2)
+    if fuente == "open_library":
+        return PoliticaFuente(fuente, nombre, float(getattr(s, "open_library_rate_limit", 1.0)), 2, 2)
     if fuente == "foro":
         return PoliticaFuente(fuente, nombre, float(s.forum_rate_limit), 2, 3)
     if fuente == "portada":

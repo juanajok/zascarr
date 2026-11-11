@@ -48,12 +48,15 @@ NOMBRE_DE_FUENTE = {
     MetadataSource.ANILIST.value: "AniList",
     MetadataSource.TEBEOSFERA.value: "Tebeosfera",
     MetadataSource.GCD.value: "GCD",
+    MetadataSource.METRON.value: "Metron",
+    MetadataSource.OPEN_LIBRARY.value: "Open Library",
     MetadataSource.COMICINFO_XML.value: "el propio archivo",
     MetadataSource.MANUAL.value: "manual",
 }
 
 ID_FIELDS = (
     "comic_vine_id", "anilist_id", "tebeosfera_slug", "gcd_id",
+    "metron_id", "open_library_id",
 )
 
 #: H8: una entrada activa con un campo desconocido o incompleta no se interpreta.
