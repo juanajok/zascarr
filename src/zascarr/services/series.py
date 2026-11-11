@@ -96,7 +96,14 @@ class SeriesService:
             # Compatibilidad con llamadores antiguos que ya resolvieron los IDs.
             query = query.where(Series.id.in_(coleccion_ids))
         if search:
-            query = query.where(func.to_tsvector("spanish", Series.title).match(search))
+            # El vector es español; la tsquery debe usar la MISMA
+            # configuración. `.match(search)` usaba la configuración por
+            # defecto y no casaba Lobo (lob) o Criminal (criminal).
+            query = query.where(
+                func.to_tsvector("spanish", Series.title).op("@@")(
+                    func.plainto_tsquery("spanish", search)
+                )
+            )
         if publisher_id:
             query = query.where(Series.publisher_id == publisher_id)
         if character_id:
