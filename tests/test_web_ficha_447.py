@@ -181,3 +181,27 @@ def test_ficha_de_numero_ofrece_convertir_solo_para_cbr():
     assert "Copia exacta" in r.text
     assert f"/ui/series/{serie.id}/archivos/{cbr.id}/deshacer" in r.text
     assert "Separar del número" in r.text
+
+
+def test_especial_sin_numero_se_pinta_con_titulo_no_con_hashtag_vacio(monkeypatch):
+    from types import SimpleNamespace
+
+    from zascarr.services.archivos_por_numero import NumeroConArchivos
+    from zascarr.services.ficha_numero import FichaSerie
+    from zascarr.web import series as web_series
+
+    serie = make_series(total_issues=1)
+    ficha = FichaSerie(serie=serie, sinopsis="", numeros=[])
+    monkeypatch.setattr(web_series, "cargar_ficha_serie", AsyncMock(return_value=ficha))
+    monkeypatch.setattr(web_series, "numeros_poseidos", AsyncMock(return_value=set()))
+    monkeypatch.setattr(web_series, "huecos_de_serie", AsyncMock(return_value=SimpleNamespace(
+        computable=True, faltantes=[], motivo=None)))
+    monkeypatch.setattr(web_series, "archivos_por_numero", AsyncMock(return_value=[
+        NumeroConArchivos(issue_id="issue-1", numero="(sin número)",
+                          titulo="Bad Weekend", archivos=[])]))
+    with use_fake_session(FakeSession([FakeExecResult([serie])]
+                                      + [FakeExecResult([])] * 8)) as client:
+        r = client.get(f"/ui/series/{serie.id}")
+    assert r.status_code == 200
+    assert "Sin número · Bad Weekend" in r.text
+    assert "#(sin número)" not in r.text
