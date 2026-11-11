@@ -2190,6 +2190,18 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vista-fila { border-bottom: 2px solid var(--paper-2); padding: 8px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
 .vista-detalle { color: var(--ink-soft); }
 
+
+/* F1 (#636/#272): efecto visible antes de organizar y vista previa con destino/nombre. */
+.efecto-asignacion { margin: 6px 0 4px; font-size: .875rem; font-weight: 700; color: var(--ink); }
+.asignar-previa:not(:empty) { margin-top: 8px; }
+.previa-asignacion { margin-top: 8px; padding: 12px 14px; border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); }
+.previa-datos { display: grid; gap: 4px; margin: 8px 0; }
+.previa-datos div { display: grid; grid-template-columns: 9rem 1fr; gap: 8px; }
+.previa-datos dt { font-weight: 700; }
+.previa-datos dd { margin: 0; overflow-wrap: anywhere; }
+.previa-confirmar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.previa-error { margin: 0 0 8px; font-weight: 700; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

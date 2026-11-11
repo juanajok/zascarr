@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import zipfile
 from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -178,7 +180,9 @@ class TestLaAsignacionSeRotulaOrganizar:
     @staticmethod
     def _botones_de_asignar(html: str) -> list[str]:
         import re
-        formularios = re.findall(r'<form[^>]*hx-post="/ui/pendientes/[^"]+/asignar"[^>]*>(.*?)</form>', html, re.S)
+        formularios = re.findall(
+            r'<form[^>]*hx-get="/ui/pendientes/[^"]+/asignar/previa"[^>]*>(.*?)</form>',
+            html, re.S)
         return [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", re.search(r'<button[^>]*type="submit"[^>]*>.*?</button>', f, re.S).group(0))).strip()
                 for f in formularios]
 
@@ -209,7 +213,7 @@ class TestLaAsignacionSeRotulaOrganizar:
                   for t, y in (("Batman", 2011), ("Batman Begins", 2005))]
         with use_fake_session(FakeSession(exec_queue=[FakeExecResult(series)])) as client:
             html = client.get(f"/ui/pendientes/{uuid4()}/buscar-serie?q=bat").text
-        assert self._botones_de_asignar(html) == ["Organizar", "Organizar"]
+        assert self._botones_de_asignar(html) == ["Ver antes de organizar", "Ver antes de organizar"]
         assert "«organizar» mueve y renombra el archivo" in self._texto_visible(html)
         assert ">Confirmar<" not in html
 
@@ -219,18 +223,26 @@ class TestLaAsignacionSeRotulaOrganizar:
 
         import zascarr.web as web
         plantillas = Path(web.__file__).parent / "templates"
-        con_asignar = [p for p in plantillas.glob("*.html") if "/asignar" in p.read_text(encoding="utf-8")]
-        assert {p.name for p in con_asignar} == {"_tarjeta_pendiente.html", "_resultados_serie.html"}
-        for p in con_asignar:
+        con_previa = [p for p in plantillas.glob("*.html")
+                      if "/asignar/previa" in p.read_text(encoding="utf-8")]
+        assert {p.name for p in con_previa} == {"_tarjeta_pendiente.html", "_resultados_serie.html"}
+        for p in con_previa:
             html = p.read_text(encoding="utf-8")
             botones = self._botones_de_asignar(html)
             assert botones and all("organizar" in b.lower() for b in botones), p.name
             assert "mueve y renombra el archivo" in self._texto_visible(html), p.name
+            assert 'hx-post="/ui/pendientes/{{ c.file.id }}/asignar"' not in html, p.name
+        previa = (plantillas / "_previa_asignacion.html").read_text(encoding="utf-8")
+        assert 'hx-post="/ui/pendientes/{{ file_id }}/asignar"' in previa
+        assert "Confirmar y organizar" in previa
 
     def test_el_recorrido_no_cambia_misma_ruta_y_mismos_campos(self):
         html, file, sid = self._tarjeta()
-        assert f'hx-post="/ui/pendientes/{file.id}/asignar"' in html
+        assert f'hx-get="/ui/pendientes/{file.id}/asignar/previa"' in html
         assert f'name="series_id" value="{sid}"' in html and 'name="issue_number"' in html
+        previa = (Path(__import__("zascarr.web", fromlist=["x"]).__file__).parent
+                  / "templates" / "_previa_asignacion.html").read_text(encoding="utf-8")
+        assert 'hx-post="/ui/pendientes/{{ file_id }}/asignar"' in previa
 
 
 class TestFragmentoDeRecuento:
@@ -359,3 +371,39 @@ class TestPortada:
         with use_fake_session(FakeSession()) as client:
             r = client.get(f"/ui/pendientes/{uuid4()}/portada")
         assert r.status_code == 404
+
+
+class TestPreviaAsignacion:
+    """F1 (#636/#272): el destino se enseña antes; la vista previa no escribe y el POST queda para confirmar."""
+
+    def test_la_previa_ensena_carpeta_y_nombre_final_sin_escribir(self, tmp_path, monkeypatch):
+        path = tmp_path / "x.cbz"
+        path.write_bytes(b"contenido")
+        file = File(id=uuid4(), file_path=str(path), file_name="x.cbz",
+                    file_format=FileFormat.CBZ)
+        series = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                        start_year=2011)
+        session = FakeSession(get_map={(File, file.id): file, (Series, series.id): series},
+                              exec_queue=[FakeExecResult([]), FakeExecResult([])])
+        monkeypatch.setattr("zascarr.web.pendientes.get_settings",
+                            lambda: SimpleNamespace(library_path=tmp_path / "library"))
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/pendientes/{file.id}/asignar/previa",
+                           params={"series_id": str(series.id), "issue_number": "12"})
+        assert r.status_code == 200
+        assert "Esto es lo que pasará" in r.text
+        assert "Batman (2011)" in r.text
+        assert "Batman #012.cbz" in r.text
+        assert "Confirmar y organizar" in r.text
+        assert session.commit.await_count == 0
+
+    def test_numero_vacio_avisa_sin_consultar_ni_escribir(self):
+        file = File(id=uuid4(), file_path="/no/existe.cbz", file_name="x.cbz",
+                    file_format=FileFormat.CBZ)
+        series = Series(id=uuid4(), title="Batman")
+        session = FakeSession(get_map={(File, file.id): file, (Series, series.id): series})
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/pendientes/{file.id}/asignar/previa",
+                           params={"series_id": str(series.id), "issue_number": "  "})
+        assert r.status_code == 200 and "Escribe el número" in r.text
+        assert session.commit.await_count == 0
