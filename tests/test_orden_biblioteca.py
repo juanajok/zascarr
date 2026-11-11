@@ -42,7 +42,7 @@ def test_selector_renderiza_label_y_opcion_elegida():
     with use_fake_session(session) as client:
         r = client.get("/ui/biblioteca?orden=reciente&q=Batman")
     assert r.status_code == 200
-    assert 'for="f-orden">Ordenar por</label>' in r.text
+    assert 'for="f-orden">Orden</label>' in r.text
     assert 'id="f-orden"' in r.text
     assert 'value="reciente" selected' in r.text
     assert "Añadidas" in r.text

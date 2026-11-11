@@ -21,6 +21,10 @@
 {% include "_control_vista.html" %}
 {% endif %}
 <div id="resumen-biblioteca" class="resumen-biblioteca">
+  <p class="contador-resumen" role="status" aria-live="polite" aria-atomic="true">
+    <span aria-hidden="true">{{ contador_corto }}</span>
+    <span class="sr">{{ contador_largo }}</span>
+  </p>
   {% if error %}
   {{ ui.aviso("warn", "No se pudo cargar la biblioteca. Vuelve a intentarlo.") }}
   <p><a class="btn ghost" href="{{ url_reintento }}"

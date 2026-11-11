@@ -448,7 +448,13 @@ class TestPaginas:
             r = client.get(ruta)
         a = arbol(r.text)
         url = URLS_DE_SIEMPRE[clave]
-        assert {at["href"] for t, at, _ in a.elementos if at.get("aria-current") == "page"} == {url}
+        # La vista segmentada de Biblioteca también marca su opción activa con
+        # aria-current="page"; la entrada del menú es la que se comprueba aquí.
+        activos = {
+            at["href"] for t, at, _ in a.elementos
+            if at.get("aria-current") == "page" and "barra-vista-opcion" not in clases(at)
+        }
+        assert activos == {url}
 
     @pytest.mark.parametrize("ruta", ["/ui/legal", "/legal"])
     def test_las_paginas_legales_no_marcan_ninguna_entrada(self, con_sesion, ruta):
