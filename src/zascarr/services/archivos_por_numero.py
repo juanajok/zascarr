@@ -47,6 +47,8 @@ class NumeroConArchivos:
     issue_id: str
     numero: str
     archivos: list[ArchivoDeNumero] = field(default_factory=list)
+    #: Título de la publicación; en un especial sin número es lo que la identifica.
+    titulo: str = ""
     #: BL-INF11: hay archivos con claves de colección distintas (posible mezcla).
     mezcla: bool = False
 
@@ -56,8 +58,8 @@ async def archivos_por_numero(db: AsyncSession, series_id: UUID) -> list[NumeroC
     filas = (await db.execute(
         select(File.id, File.file_name, File.file_format, File.is_missing,
                File.metadata_source, File.metadata_,
-               Issue.id.label("issue_id"), Issue.issue_number, Issue.sort_order,
-               Issue.series_id, Issue.format)
+               Issue.id.label("issue_id"), Issue.issue_number, Issue.title,
+               Issue.sort_order, Issue.series_id, Issue.format)
         .join(Issue, File.issue_id == Issue.id).where(Issue.series_id == series_id))).all()
     if not filas:
         return []
@@ -76,7 +78,10 @@ async def archivos_por_numero(db: AsyncSession, series_id: UUID) -> list[NumeroC
         visibles: list[dict] = []
         if es_protegida(estado_de_relacion(archivo, issue)):
             visibles = pendientes(f.metadata_, relacion_actual(archivo, issue))
-        n = por_numero.setdefault(str(f.issue_id), NumeroConArchivos(str(f.issue_id), f.issue_number or "(sin número)"))
+        n = por_numero.setdefault(
+            str(f.issue_id),
+            NumeroConArchivos(str(f.issue_id), f.issue_number or "(sin número)",
+                              titulo=getattr(f, "title", "") or ""))
         orden.setdefault(str(f.issue_id), (f.sort_order is None, f.sort_order or 0.0, natural_key(f.issue_number or "")))
         n.archivos.append(ArchivoDeNumero(
             id=str(f.id), nombre=f.file_name, formato=f.file_format.value, falta_en_disco=bool(f.is_missing),
