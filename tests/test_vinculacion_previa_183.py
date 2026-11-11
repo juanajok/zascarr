@@ -172,6 +172,18 @@ async def test_ruta_elegir_devuelve_la_fila_actualizada(entorno):
     # Task-153: la elección no pierde marcas ni números de la página.
     assert f'name="marcar" value="{fid}" checked' in r.text
     assert f'name="numero:{fid}" value="1"' in r.text
+    assert r.text.count("autofocus") == 1
+
+
+@pytest.mark.asyncio
+async def test_caducidad_ofrece_reabrir_la_vista(entorno):
+    async with cliente() as c:
+        r = await c.post(
+            "/ui/pendientes/carpetas/asistente/vinculacion/elegir",
+            data={"eleccion": "token-invalido|local:%s" % uuid4()})
+    assert r.status_code == 200
+    assert "Volver a abrir la vista previa" in r.text
+    assert r.text.count("autofocus") == 1
 
 
 @pytest.mark.asyncio
