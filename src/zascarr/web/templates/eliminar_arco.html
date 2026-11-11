@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Eliminar {{ arco.title }} — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/arcos/{{ arco.id }}">← Volver a la saga</a></p>
+<h1>Eliminar la saga</h1>
+<p>Vas a eliminar <strong>{{ arco.title }}</strong> y sus {{ arco.filas | length }} vínculos de orden de lectura.</p>
+<p class="caption">No se borra ningún número, archivo ni serie. Los números seguirán en tu biblioteca.</p>
+<form method="post" action="/ui/arcos/{{ arco.id }}/eliminar">
+  <div class="edicion-acciones">
+    <button type="submit" class="btn primary">Sí, eliminar la saga</button>
+    <a class="btn ghost" href="/ui/arcos/{{ arco.id }}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}
