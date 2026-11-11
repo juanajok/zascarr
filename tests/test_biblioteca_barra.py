@@ -86,9 +86,14 @@ def test_limpiar_filtros_conserva_orden_y_vista():
 def test_css_de_barra_compacta_y_44_px():
     from pathlib import Path
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
-    assert ".barra-acciones { display: flex; flex-wrap: nowrap;" in css
+    assert ".barra-biblioteca {" in css
+    assert "border: 3px solid var(--ink);" in css
+    assert "background: var(--paper-2);" in css
+    assert ".barra-busqueda { flex: 1 1 320px; max-width: 560px;" in css
+    assert ".barra-acciones { display: flex; flex-wrap: wrap; align-items: center;" in css
+    assert "margin-left: auto;" in css
+    assert ".barra-acciones > * { min-height: 44px; }" in css
     assert "min-height: 44px" in css
-    assert ".barra-panel-campos" in css
     assert "max-height: calc(100dvh - 8.5rem)" in css
 
 
@@ -140,7 +145,9 @@ def test_css_objetivos_tactiles_y_panel_ancho_completo():
     assert ".barra-panel-campos .series-results a { min-height: 44px;" in css
     assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px;" in css
     assert "min-height: 44px" in css.split(".quitar-filtro,", 1)[1][:160]
-    assert ".barra-panel-campos { position: absolute; z-index: 50;" in css
+    assert ".barra-panel { min-width: 0; position: relative; }" in css
+    assert ".barra-panel-campos {" in css
+    assert "top: calc(100% + 8px);" in css and "right: 0;" in css
     assert "max-height: calc(100dvh - 8.5rem)" in css
     assert ".barra-biblioteca .barra-panel-campos select" in css
     assert "max-width: none; width: 100%;" in css
@@ -178,3 +185,82 @@ def test_flujo_htmx_vista_y_luego_orden_usa_el_hidden_actualizado():
     pagina_tras_swap = re.sub(
         r'<input[^>]*id="f-vista"[^>]*>', hidden_oob.group(0), pagina, count=1)
     assert 'id="f-vista" name="vista" value="lista"' in pagina_tras_swap
+
+
+def test_barra_es_un_panel_con_busqueda_acotada_y_acciones_a_la_derecha():
+    from pathlib import Path
+    html = _index()
+    assert '<form id="filtros" class="barra-biblioteca"' in html
+    assert '<div class="barra-busqueda">' in html
+    assert '<div class="barra-acciones">' in html
+    assert 'class="contador-resumen" role="status"' in html
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert ".barra-biblioteca {" in css and "border: 3px solid var(--ink);" in css
+    assert "padding: 10px 12px;" in css
+    assert "background: var(--paper-2);" in css
+    assert ".barra-busqueda { flex: 1 1 320px; max-width: 560px;" in css
+    assert ".barra-acciones { display: flex; flex-wrap: wrap; align-items: center;" in css
+    assert "margin-left: auto;" in css
+
+
+def test_summary_es_un_boton_con_chevron_y_estado_abierto():
+    from pathlib import Path
+    html = _index()
+    assert '<summary class="barra-panel-boton"' in html
+    assert 'aria-controls="filtros-campos"' in html
+    assert 'class="barra-panel-chevron"' in html
+    assert "m6 9 6 6 6-6" in html  # chevron-down de Lucide
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert ".barra-panel-boton {" in css
+    assert "border: 2px solid var(--ink);" in css
+    assert "border-radius: var(--radius-pill);" in css
+    assert "box-shadow: var(--shadow-ink-sm);" in css
+    assert ".barra-panel[open] > .barra-panel-boton { background: var(--ink); color: var(--paper); }" in css
+
+
+def test_vista_es_segmentada_con_aria_current_y_oob():
+    html = _index()
+    assert '<div id="control-vista" class="barra-vista" role="group"' in html
+    assert html.count('class="barra-vista-opcion') == 2
+    assert 'aria-current="page"' in html
+    assert ">Tarjetas</span>" in html and ">Lista</span>" in html
+    fragmento = _index(path="/ui/biblioteca/resultados?vista=lista")
+    control = fragmento[fragmento.index('id="control-vista"'):]
+    control = control[:control.index("</div>")]
+    assert 'hx-swap-oob="true"' in control
+    assert 'aria-current="page"' in control
+    assert "barra-vista-opcion-actual" in control
+
+
+def test_orden_tiene_etiqueta_visible_y_opciones_cortas():
+    html = _index(path="/ui/biblioteca?orden=reciente")
+    assert '<label for="f-orden">Orden</label>' in html
+    assert 'value="reciente" selected' in html
+    for opcion in (">A-Z</option>", ">Z-A</option>", ">Recientes</option>",
+                   ">Antiguas</option>", ">Añadidas</option>"):
+        assert opcion in html
+    assert "Ordenar por</label>" not in html
+
+
+def test_alturas_44_y_movil_sin_contador_en_la_barra():
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    for selector in (".barra-contador {", ".barra-panel-boton {", ".barra-orden select {",
+                     ".barra-vista-opcion {"):
+        bloque = css.split(selector, 1)[1].split("}", 1)[0]
+        assert "min-height: 44px" in bloque, selector
+    assert ".barra-acciones > * { min-height: 44px; }" in css
+    assert ".contador-resumen { display: none; }" in css
+    assert "@media (max-width: 480px)" in css
+    assert ".barra-contador { display: none; }" in css
+    assert ".contador-resumen {" in css and "display: block;" in css
+
+
+def test_cabecera_accion_es_boton_y_no_enlace_subrayado():
+    from pathlib import Path
+    html = _index()
+    assert 'class="btn ghost sm biblioteca-accion"' in html
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert ".biblioteca-cabecera .biblioteca-accion {" in css
+    assert "text-decoration: none;" in css
+    assert "grid-template-areas: \"titulo accion\" \"subtitulo subtitulo\";" in css
