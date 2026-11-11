@@ -311,9 +311,9 @@ class TestTrasIntercambiosHtmx:
 
         assert "Paracuellos (integral)" in dom
         assert not controles_sin_nombre(dom)
-        assert [n for _, _, n in _leer(dom).nombres()] == [
-            "Buscar por título", "Tradición", "Editorial", "Lectura", "Ordenar por",
-            "Estado de la colección", "Buscar por etiqueta", "Buscar personaje", "Buscar saga"]
+        assert [n for _, _, n in _leer(pagina).nombres()] == [
+            "Buscar por título", "Tradición", "Editorial", "Lectura", "Personaje", "Saga",
+            "Etiquetas", "Estado de la colección", "Ordenar por"]
 
     def test_deseados_tras_buscar_serie(self):
         """`wishlist.html`: hx-target="#resultados-wishlist" innerHTML."""

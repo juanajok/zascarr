@@ -398,7 +398,8 @@ async def _contexto(
                     "nombre": resueltas[normalizado].name,
                     "negativa": negativa,
                     "url_quitar": _url_pagina(sin_filtros, page=1),
-                    "url_quitar_fragmento": _url_fragmento(sin_filtros, page=1),
+                    "url_quitar_fragmento": (
+                        _url_fragmento(sin_filtros, page=1) + "&quitar=etiquetas"),
                 })
         items, total, pagina = await service.list_series_paginado(
             page=pagina,
@@ -493,6 +494,20 @@ async def _contexto(
         avisos=tuple(avisos),
     )
     activos = _filtros_activos(filtros_finales, nombres)
+    num_filtros = sum(bool(v) for v in (
+        filtros_finales.q, filtros_finales.tradition, filtros_finales.publisher_id,
+        filtros_finales.character_id, filtros_finales.story_arc_id,
+        filtros_finales.leido, filtros_finales.coleccion)) + len(etiquetas_activas)
+    recuento = (_texto_recuento_etiquetas(total, etiquetas_activas)
+                or _texto_recuento(total, bool(activos) or bool(etiquetas_activas)))
+    if error:
+        contador_corto = "—"
+        contador_largo = "No se pudo cargar el contador."
+    else:
+        contador_corto = f"{total} serie" if total == 1 else f"{total} series"
+        contador_largo = recuento
+        if recuento_lectura_texto:
+            contador_largo = f"{contador_largo} {recuento_lectura_texto}"
     url_canonica = _url_pagina(filtros_finales, page=pagina)
     return {
         "items": items,
@@ -502,11 +517,11 @@ async def _contexto(
         "error": error,
         "avisos": avisos,
         "filtros": filtros_finales,
+        "tradiciones": [(t.value, _TRADICION_LABEL[t]) for t in ComicTradition],
         "ordenes": (
-            ("titulo", "Título (A-Z)"), ("titulo_desc", "Título (Z-A)"),
-            ("anio_desc", "Año de inicio: más recientes primero"),
-            ("anio_asc", "Año de inicio: más antiguas primero"),
-            ("reciente", "Añadidas recientemente"),
+            ("titulo", "Título A-Z"), ("titulo_desc", "Título Z-A"),
+            ("anio_desc", "Año reciente"), ("anio_asc", "Año antiguo"),
+            ("reciente", "Añadidas"),
         ),
         "vista": filtros_finales.vista,
         "filtros_activos": activos,
@@ -514,8 +529,10 @@ async def _contexto(
         "facetas": facetas,
         "hay_filtros": bool(activos) or bool(etiquetas_activas),
         "coleccion": filtros.coleccion,
-        "recuento": (_texto_recuento_etiquetas(total, etiquetas_activas)
-                     or _texto_recuento(total, bool(activos))),
+        "recuento": recuento,
+        "num_filtros": num_filtros,
+        "contador_corto": contador_corto,
+        "contador_largo": contador_largo,
         "url_canonica": url_canonica,
         "url_serie": lambda series_id: url_de_ficha(series_id, url_canonica),
         "url_pagina": lambda p: _url_pagina(filtros_finales, page=p),
@@ -525,6 +542,10 @@ async def _contexto(
         "url_reintento_fragmento": _url_fragmento(filtros_finales, page=pagina),
         "url_vista_tarjetas": _url_pagina(replace(filtros_finales, vista="tarjetas"), page=pagina),
         "url_vista_lista": _url_pagina(replace(filtros_finales, vista="lista"), page=pagina),
+        "url_vista_tarjetas_fragmento": _url_fragmento(
+            replace(filtros_finales, vista="tarjetas"), page=pagina),
+        "url_vista_lista_fragmento": _url_fragmento(
+            replace(filtros_finales, vista="lista"), page=pagina),
         "url_limpiar": _url_pagina(replace(
             filtros_finales, q="", tradition="", publisher_id="", character_id="",
             story_arc_id="", etiquetas="", leido="", coleccion=""), page=1),
@@ -535,12 +556,19 @@ async def _contexto(
     }
 
 
-def _respuesta_fragmento(request: Request, ctx: dict) -> Response:
+async def _respuesta_fragmento(
+        request: Request, ctx: dict, db: AsyncSession | None = None) -> Response:
     """Fragmento HTMX: la URL que se empuja es siempre la de la PÁGINA completa.
 
     `HX-Push-Url` evita que recargar o marcar deje HTML sin layout (riesgo alto
     del benchmark BL-IT01). `no-store` evita mezclar filtros con el botón Atrás.
     """
+    ctx["es_fragmento"] = True
+    if request.headers.get("HX-Request") == "true" and db is not None:
+        try:
+            ctx["publishers"] = await SeriesService(db).list_publishers_with_series()
+        except Exception:  # noqa: BLE001 — el panel ya tiene su OOB mínimo
+            ctx["publishers"] = []
     respuesta = templates.TemplateResponse(request, "_rejilla_biblioteca.html", ctx)
     respuesta.headers["HX-Push-Url"] = ctx["url_canonica"]
     respuesta.headers["Cache-Control"] = "no-store"
@@ -654,7 +682,7 @@ async def resultados(
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         leido, orden, coleccion)
-    return _respuesta_fragmento(request, await _contexto(db, filtros))
+    return await _respuesta_fragmento(request, await _contexto(db, filtros), db)
 
 
 def _enlace_con_filtro(filtros: Filtros, clave: str, valor: str) -> str:

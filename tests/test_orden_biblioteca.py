@@ -45,8 +45,8 @@ def test_selector_renderiza_label_y_opcion_elegida():
     assert 'for="f-orden">Ordenar por</label>' in r.text
     assert 'id="f-orden"' in r.text
     assert 'value="reciente" selected' in r.text
-    assert "Añadidas recientemente" in r.text
-    assert "Aplicar orden" in r.text
+    assert "Añadidas" in r.text
+    assert "Aplicar orden" not in r.text
 
 
 def test_url_conserva_todos_los_filtros_y_vista():
