@@ -14,6 +14,10 @@
 {% if es_fragmento %}
 {% set oob = true %}{% include "_contador_biblioteca.html" %}
 <span id="cuenta-filtros" hx-swap-oob="true">Filtros{% if num_filtros %} ({{ num_filtros }}){% endif %}</span>
+<div id="filtros-campos" class="barra-panel-campos" hx-swap-oob="true">
+  {% include "_filtros_panel_campos.html" %}
+</div>
+{% include "_control_vista.html" %}
 {% endif %}
 <div id="resumen-biblioteca" class="resumen-biblioteca">
   {% if error %}

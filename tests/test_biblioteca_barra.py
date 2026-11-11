@@ -61,17 +61,20 @@ def test_panel_tiene_labels_visibles_y_los_seis_filtros():
 
 def test_fragmento_actualiza_contador_y_cuenta_por_oob():
     html = _index(path="/ui/biblioteca/resultados?tradition=tebeo&orden=reciente")
-    assert 'id="contador-biblioteca"' in html
-    assert 'hx-swap-oob="true"' in html
+    assert 'id="contador-texto" hx-swap-oob="true"' in html
     assert "2 series" in html
     assert "2 series coinciden con estos filtros." in html
     assert 'id="cuenta-filtros" hx-swap-oob="true">Filtros (1)' in html
+    assert 'id="control-vista"' in html
+    control = html[html.index('id="control-vista"'):]
+    control = control[:control.index("</a>")]
+    assert 'hx-swap-oob="true"' in control
+    assert 'id="filtros-campos" class="barra-panel-campos" hx-swap-oob="true"' in html
 
 
 def test_cuenta_de_filtros_no_incluye_busqueda_orden_ni_vista():
     html = _index(path="/ui/biblioteca?q=alfa&tradition=tebeo&orden=reciente&vista=lista")
-    assert "Filtros (1)" in html
-    assert "Filtros (2)" not in html
+    assert "Filtros (2)" in html
 
 
 def test_limpiar_filtros_conserva_orden_y_vista():
@@ -85,7 +88,8 @@ def test_css_de_barra_compacta_y_44_px():
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     assert ".barra-acciones { display: flex; flex-wrap: nowrap;" in css
     assert "min-height: 44px" in css
-    assert ".barra-panel-campos" in css and "max-height: 70vh" in css
+    assert ".barra-panel-campos" in css
+    assert "max-height: calc(100dvh - 8rem)" in css
 
 
 def test_panel_conserva_los_tres_buscadores_y_sus_endpoints():
@@ -110,3 +114,31 @@ def test_abrir_el_panel_es_nativo_y_no_roba_el_foco():
     assert 'aria-controls="filtros-campos"' in panel
     assert "autofocus" not in panel
     assert "onclick=" not in panel and "hx-confirm" not in panel
+
+
+def test_oob_incluye_campos_del_panel_para_no_resucitar_filtros():
+    html = _index(path="/ui/biblioteca/resultados?quitar=todos&tradicion=&orden=reciente&vista=lista")
+    assert 'id="filtros-campos" class="barra-panel-campos" hx-swap-oob="true"' in html
+    for campo in ("f-tradition", "f-publisher", "f-leido", "f-personaje", "f-saga", "f-etiquetas"):
+        assert f'id="{campo}"' in html
+    assert 'id="control-vista"' in html
+    control = html[html.index('id="control-vista"'):]
+    control = control[:control.index("</a>")]
+    assert 'hx-swap-oob="true"' in control
+
+
+def test_formulario_conserva_vista_y_no_revierte_a_tarjetas():
+    html = _index(path="/ui/biblioteca?vista=lista&orden=reciente")
+    assert '<input type="hidden" name="vista" value="lista">' in html
+    assert "value=\"reciente\" selected" in html
+
+
+def test_css_objetivos_tactiles_y_panel_ancho_completo():
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert ".barra-busqueda input[type=\"search\"] { width: 100%; min-height: 44px; }" in css
+    assert ".barra-panel-campos .series-results a { min-height: 44px;" in css
+    assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px;" in css
+    assert "min-height: 44px" in css.split(".quitar-filtro,", 1)[1][:160]
+    assert ".barra-panel-campos { position: absolute; z-index: 50;" in css
+    assert "max-height: calc(100dvh - 8rem)" in css
