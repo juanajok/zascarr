@@ -19,12 +19,17 @@ from collections import Counter
 from pathlib import Path
 
 from zascarr.core.importer_triage import TriageResult
-from zascarr.core.matcher import SeriesMatcher, _base_title
+from zascarr.core.matcher import CATALOG_ALIASES, SeriesMatcher, _base_title, normalize_title
+from zascarr.models import EDITION_KIND_A_FORMAT, IssueFormat
 from zascarr.utils.naming import ANNUAL_PATTERN, parse_comic_filename
 
 
 def _canon_serie(s: str) -> str:
-    return _base_title(ANNUAL_PATTERN.sub("Annual", s or ""))
+    limpio = ANNUAL_PATTERN.sub("Annual", s or "")
+    norm = normalize_title(limpio)
+    if norm in CATALOG_ALIASES:
+        limpio = CATALOG_ALIASES[norm]
+    return _base_title(limpio)
 
 
 def _norm_num(n: str | None) -> str:
@@ -64,9 +69,12 @@ async def _matcher(rows: list[dict], db_url: str) -> dict:
             for r in rows:
                 p = parse_comic_filename(r["archivo"], carpeta=Path(r["ruta"]).parent.name)
                 tr = TriageResult(path=Path(r["ruta"]))
+                formato = (
+                    EDITION_KIND_A_FORMAT.get(p.edition_kind, IssueFormat.SINGLE_ISSUE).value
+                    if p.edition_kind is not None else None)
                 res = await matcher.decide(
                     tr, extractor=lambda _n, p=p: (p.series, p.issue_number, p.year),
-                    annual=p.is_annual,
+                    formato_esperado=formato, annual=p.is_annual,
                     series_alternativa=p.series_alternativa or None)
                 c[str(res.status)] += 1
                 serie_t = numero_t = None

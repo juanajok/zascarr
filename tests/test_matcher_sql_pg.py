@@ -19,14 +19,13 @@ Se salta automáticamente si TEST_DATABASE_URL no está definida:
 from __future__ import annotations
 
 import os
+from pathlib import Path
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-from pathlib import Path
-from unittest.mock import AsyncMock
 
 from zascarr.core.importer_triage import TriageResult
 from zascarr.core.matcher import MatchStatus, SeriesHit, SeriesMatcher
@@ -240,5 +239,30 @@ async def test_no_anade_copias_a_un_numero_ya_contaminado():
             assert r.status is MatchStatus.UNSORTED
             assert r.issue_id is None
             assert any("mezcla varias colecciones" in n for n in r.notes)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_alias_de_catalogo_solo_mismo_espacio_de_numeracion():
+    """Un alias traduce el título, no cambia la serie ni el número."""
+    engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            await session.execute(text(_CREATE_TEMP_SERIES))
+            sid1, sid2 = uuid4(), uuid4()
+            await session.execute(text(_INSERT_SERIES), {
+                "id": str(sid1), "title": "100 Bullets", "year": 1999,
+                "norm": "100 bullets"})
+            await session.execute(text(_INSERT_SERIES), {
+                "id": str(sid2), "title": "Batman: Shadow of the Bat", "year": 1992,
+                "norm": "batman shadow of the bat"})
+            matcher = SeriesMatcher(session)
+            hit = await matcher.find_series("100 Balas")
+            assert len(hit) == 1 and hit[0].series_id == sid1
+            assert hit[0].score == 1.0
+            hit = await matcher.find_series("Shadow of the Bat")
+            assert len(hit) == 1 and hit[0].series_id == sid2
+            assert hit[0].score == 1.0
     finally:
         await engine.dispose()
