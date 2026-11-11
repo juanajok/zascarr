@@ -93,28 +93,30 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
 | Medida | Resultado |
 |---|---:|
-| Serie correcta | **162 / 200 = 81,0 %** |
+| Serie correcta | **169 / 200 = 84,5 %** |
 | Número correcto | **195 / 200 = 97,5 %** |
-| Ambos correctos | **161 / 200 = 80,5 %** |
+| Ambos correctos | **168 / 200 = 84,0 %** |
 
 ### Matcher
 
 | Medida | Resultado |
 |---|---:|
-| `direct` | 53 |
-| `fuzzy` | 22 |
-| `unsorted` | 125 |
-| Enlaces con Issue | 65 |
-| Enlaces con serie+número correctos | **65 / 65** |
-| Cobertura | **65 / 200 = 32,5 %** |
+| `direct` | 68 |
+| `fuzzy` | 15 |
+| `unsorted` | 117 |
+| Enlaces con Issue | 73 |
+| Enlaces con serie+número correctos | **73 / 73** |
+| Cobertura | **73 / 200 = 36,5 %** |
 | Desajustes de formato/tipo | **2** (La Espada del Inmortal y XIII, tomos enlazados a `single_issue`) |
 
 Los 64 enlaces aciertan serie y número según las etiquetas. El único problema
 de formato es `XIII 01`: el revisor lo etiquetó como tomo BD y el catálogo lo
 tiene como `single_issue`; es una discrepancia de **edición**, no de identidad.
 
-La cobertura sigue siendo el problema: alias de idioma (`100 Balas`/`100
-Bullets`), series del catálogo con otro título, colecciones y huecos de Issue.
+La cobertura sigue siendo el problema, pero los alias seguros ya recuperan
+`100 Balas`, `Shadow of the Bat`, `Smallville` y `WildCATS`. Quedan series con
+numeración propia que no existen en el catálogo; no se aliasan. Ver
+[`alias-catalogo-2026-11-11.md`](alias-catalogo-2026-11-11.md).
 
 Se añadió además un fallback de **serie completa exacta** para títulos partidos
 por ` - `: `Green Lantern - Origenes Secretos` puede probar la serie completa si
