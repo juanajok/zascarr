@@ -408,8 +408,11 @@ async def sembrar_a_0016(url: str) -> dict:
         serie_id = uuid4()
         # `Series` por SQL Core: el modelo actual tiene `kind`/`parent_series_id` (0027) que
         # la 0016 no tiene; el ORM las incluiría en el INSERT.
-        await s.execute(insert(Series.__table__).values(
-            id=serie_id, title="Saga del Faro", tradition=ComicTradition.AMERICAN, start_year=2010))
+        await s.execute(text(
+            "INSERT INTO series (id, title, tradition, start_year) "
+            "VALUES (:id, :titulo, :tradicion, :anio)"),
+            {"id": str(serie_id), "titulo": "Saga del Faro",
+             "tradicion": ComicTradition.AMERICAN.value, "anio": 2010})
         manual = Issue(id=uuid4(), series_id=serie_id, issue_number="12", locked_fields=["series_id", "issue_number"],
                        metadata_source=MetadataSource.MANUAL.value)
         otro = Issue(id=uuid4(), series_id=serie_id, issue_number="13")
