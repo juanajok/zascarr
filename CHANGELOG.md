@@ -54,6 +54,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Metron y Open Library como fuentes de Descubrir (2026-11-11).** Se pueden encender en Ajustes
+  (Metron con token propio; Open Library sin clave) y buscar series/tomos al dar de alta. Guardan
+  `metron_id`/`open_library_id` en `Series` (migración aditiva 0027), respetan los estados #133 y
+  no consultan si están apagadas o sin token. Metron no muestra portadas (su licencia no las cubre)
+  y se atribuye CC BY-SA 4.0; Open Library enlaza su ficha. Por ahora ambas son **solo Descubrir**:
+  no se integran en el enricher. La decisión previa que descartaba Metron como fuente queda reabierta
+  y registrada en `docs/design/benchmark-metron-openlibrary-2026-11-11.md`.
 - **Vistas de trabajo predefinidas (BL-R7, #236).** Nueva pantalla «Vistas de trabajo» con cinco
   consultas vivas y su recuento: **sin identificar**, **identificación dudosa**, **con
   discrepancias**, **no disponibles** y **con varias variantes** (publicaciones con más de un

@@ -62,7 +62,9 @@ router = APIRouter(prefix="/ui/pendientes/carpetas/asistente", tags=["ui"])
 
 RUTA = "/ui/pendientes/carpetas/asistente"
 
-_NOMBRE_FUENTE = {"comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera", "gcd": "GCD"}
+_NOMBRE_FUENTE = {
+    "comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera",
+    "gcd": "GCD", "metron": "Metron", "open_library": "Open Library"}
 
 #: Estados del conjunto cerrado #133 que implican que la fuente SÍ llegó a consultarse (o se
 #: intentó). Los demás (apagada, sin configurar) no generan tráfico.

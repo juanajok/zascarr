@@ -266,6 +266,8 @@ class MetadataSource(enum.StrEnum):
     GCD           = "gcd"
     ANILIST       = "anilist"
     TEBEOSFERA    = "tebeosfera"
+    METRON        = "metron"
+    OPEN_LIBRARY  = "open_library"
     COMICINFO_XML = "comicinfo_xml"
     MANUAL        = "manual"
 
@@ -518,6 +520,11 @@ class Series(Base):
     # GCD (C0, descubrimiento — ver docs/adr/0002-enricher-scope.md): sí
     # tiene IDs numéricos, igual que Comic Vine/AniList.
     gcd_id:          Mapped[int|None] = mapped_column(BigInteger, unique=True)
+    # Metron: solo series EN/IT; datos CC BY-SA 4.0 (atribución en la UI). Open
+    # Library: obra/tomo, clave `OL…W`; nunca una grapa. Columnas paralelas, como
+    # las demás fuentes (ADR 0002); una serie usa como mucho una en la práctica.
+    metron_id:       Mapped[int|None] = mapped_column(BigInteger, unique=True)
+    open_library_id: Mapped[str|None] = mapped_column(String(64), unique=True)
     cover_url:       Mapped[str|None] = mapped_column(String(500))
     metadata_:       Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None] = mapped_column(String(20))
