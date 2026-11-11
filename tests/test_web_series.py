@@ -40,6 +40,9 @@ class FakeExecResult:
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
 
+    def scalar_one(self):
+        return self._rows[0] if self._rows else None
+
     def scalars(self):
         return FakeScalarResult(self._rows)
 
@@ -63,6 +66,10 @@ class FakeSession:
         self._queue = list(queue)
         self._series = series
         self.flush = AsyncMock()
+        self.added = []
+
+    def add(self, objeto):
+        self.added.append(objeto)
 
     async def execute(self, _statement):
         return self._queue.pop(0)
@@ -96,7 +103,8 @@ def use_fake_session(session, *, ficha=True):
     # Las tres lecturas fijas de la ficha (#447) se declaran aquí, en el borde del test,
     # para que la sesión siga siendo estricta y una consulta inesperada falle.
     if ficha:
-        session._queue.extend([FakeExecResult([]), FakeExecResult([]), FakeExecResult([]), FakeExecResult([])])
+        session._queue.extend([FakeExecResult([]), FakeExecResult([]), FakeExecResult([]),
+                               FakeExecResult([]), FakeExecResult([]), FakeExecResult([])])
     class _Ctx:
         def __enter__(self):
             app.dependency_overrides[get_db] = override_get_db(session)

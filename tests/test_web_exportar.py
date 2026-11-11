@@ -35,6 +35,8 @@ def test_pagina_muestra_ambas_descargas_y_aviso_de_copia():
     assert "copia real" in r.text
     assert "rutas del disco" in r.text
     assert "Descargar colección" in r.text and "Descargar deseados" in r.text
+    assert 'name="incluir_notas"' in r.text
+    assert 'action="/ui/exportar/coleccion.csv"' in r.text
 
 
 @pytest.mark.asyncio
@@ -82,7 +84,7 @@ async def test_streaming_entrega_la_cabecera_sin_consumir_las_filas():
 
 def test_descarga_streaming_coleccion_con_bom_y_privacidad(monkeypatch):
     filas = [("Thorgal", "1980", "americana", "Editorial", "1", "La magia",
-              None, "cbz", False)]
+              None, "cbz", False, None, None)]
 
     class _Sesion:
         async def stream(self, _stmt):

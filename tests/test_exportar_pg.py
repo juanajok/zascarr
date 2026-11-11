@@ -15,6 +15,7 @@ from zascarr.models import (
     File,
     FileFormat,
     Issue,
+    Note,
     Publisher,
     Series,
     Wishlist,
@@ -24,6 +25,7 @@ from zascarr.models import (
 from zascarr.services.exportar import (
     BOM,
     CABECERAS_COLECCION,
+    CABECERAS_COLECCION_CON_NOTAS,
     CABECERAS_DESEADOS,
     filas_coleccion,
     filas_deseados,
@@ -139,3 +141,36 @@ async def test_consulta_stream_no_carga_todo(db, tmp_path, monkeypatch):
     primera = await anext(generador)
     assert primera[0] == "Thorgal"
     await generador.aclose()
+
+
+@pytest.mark.asyncio
+async def test_exportar_notas_opcionales(db, tmp_path):
+    serie, issue = await _montar(db, tmp_path)
+    db.add(Note(series_id=serie.id, texto="nota de serie"))
+    db.add(Note(issue_id=issue.id, texto="nota de número"))
+    await db.flush()
+
+    sin = await _csv_crudo(filas_coleccion(db), CABECERAS_COLECCION)
+    texto_sin = sin.decode("utf-8-sig")
+    assert "Nota de la serie" not in texto_sin
+    assert "nota de serie" not in texto_sin and "nota de número" not in texto_sin
+
+    con = await _csv_crudo(filas_coleccion(db, incluir_notas=True),
+                           CABECERAS_COLECCION_CON_NOTAS)
+    texto = con.decode("utf-8-sig")
+    assert texto.splitlines()[0].endswith("Nota de la serie,Nota del número")
+    assert "nota de serie" in texto and "nota de número" in texto
+
+
+@pytest.mark.asyncio
+async def test_exportar_notas_con_formula_se_sanea(db, tmp_path):
+    serie, issue = await _montar(db, tmp_path)
+    db.add(Note(series_id=serie.id, texto="=HYPERLINK(\"x\")"))
+    db.add(Note(issue_id=issue.id, texto="+SUM(A1)"))
+    await db.flush()
+    crudo = await _csv_crudo(filas_coleccion(db, incluir_notas=True),
+                             CABECERAS_COLECCION_CON_NOTAS)
+    texto = crudo.decode("utf-8")
+    assert "'=HYPERLINK" in texto
+    assert "'+SUM(A1)" in texto
+    assert "\r\n=HYPERLINK" not in texto
