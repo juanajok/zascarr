@@ -96,6 +96,19 @@ class TestMarcarTodos:
         assert "Se marcaron 3 archivos que se pueden vincular" in q.visible
         assert q.total("a_vincular") == 3 and q.total("marcados_bloqueados") == 0 and q.token is not None
 
+    async def test_pack_y_especial_no_se_marcan_y_avisan_del_orden_de_lectura(self, entorno):
+        serie = await serie_de_prueba(entorno, "Flash", 1987)
+        await archivos(entorno, "Flash 01 (1987).cbz", "Flash v2 001-002.cbr",
+                       "047.- Flash Especial 50 Aniversario.cbr")
+        p = await abrir(serie)
+        pack = p.fila("Flash v2 001-002.cbr")
+        especial = p.fila("047.- Flash Especial 50 Aniversario.cbr")
+        assert not pack.marcable and "pack" in pack.cuerpo
+        assert not especial.marcable and "especial" in especial.cuerpo
+        assert "047 inicial es orden de lectura" in especial.cuerpo
+        q = await accionar(p, "marcar_todos")
+        assert nombres_marcados(q) == ["Flash 01 (1987).cbz"]
+
     async def test_no_marca_ni_toca_lo_de_otras_paginas_ni_sus_borradores(self, entorno):
         """Mecanismo: la acción actúa sobre la página que se ve; lo de las demás son borradores de la persona."""
         serie = await serie_de_prueba(entorno)

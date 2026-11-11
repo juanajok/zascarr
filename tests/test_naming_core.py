@@ -1572,6 +1572,17 @@ class TestRealWorldFilenames:
             contexto="The Sandman presenta a / The corinthian-death in venice")
         assert "corinthian" in corintio.series.lower()
 
+    def test_pack_y_especial_se_marcan_para_el_asistente(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        pack = parse_comic_filename("001.- Flash v2 001-002 Por Alphaflacen.cbr")
+        assert pack.is_pack is True
+        assert pack.issue_number == ""
+        especial = parse_comic_filename("047.- Flash Especial 50 Aniversario.cbr")
+        assert especial.is_special is True
+        assert especial.is_pack is False
+        assert especial.issue_number == ""
+
     def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
         """«Batman #400 Aniversario»: el número va con #, así que es la
         grapa #400 y no la efeméride del 400 aniversario. El patrón viejo

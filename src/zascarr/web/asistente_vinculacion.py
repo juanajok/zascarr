@@ -127,6 +127,8 @@ MOTIVOS_LEGIBLES: dict[str, str] = {
     "colision_de_edicion": "ese número ya existe como otra edición",
     "numero_ambiguo": "la serie tiene más de un número así",
     "numero_ya_existe": "ese número ya tiene un archivo vinculado",
+    "es_pack": "es un pack de varios números",
+    "es_especial": "es una publicación especial sin número de grapa",
 }
 
 
@@ -171,7 +173,15 @@ def elegir_para_marcar_todos(r: RespuestaVinculacion) -> tuple[list[str], int]:
     `marcable`. Si un archivo comparte número con otro que ya está marcado o que también se marcaría, NO se marca ninguno
     de ellos por la persona: marcar los dos los bloquearía a ambos, y elegir uno sería decidir por ella."""
     ya = {a.id for a in r.archivos if a.marcado}
-    candidatos = [a for a in r.archivos if a.marcable and not a.marcado]
+    # D2 revisada (2026-11-11): el masivo no decide sobre archivos que
+    # contradicen la carpeta/serie. Siguen visibles y marcables a mano. La
+    # excepción es un número escrito por la persona: su decisión manda.
+    candidatos = [
+        a for a in r.archivos
+        if a.marcable and not a.marcado
+        and not (a.numero_origen != "persona"
+                 and any(c.severidad == "conflicto" for c in a.conflictos))
+    ]
     conjunto = ya | {a.id for a in candidatos}
     elegidos: list[str] = []
     repetidos = 0
