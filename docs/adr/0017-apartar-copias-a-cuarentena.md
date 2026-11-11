@@ -1,7 +1,8 @@
 # ADR 0017: apartar copias idénticas sobrantes a una cuarentena reversible
 
-- **Estado:** **Propuesto**. Lo acepta el PO. **No autoriza implementación, migración,
-  ejecución ni despliegue.**
+- **Estado:** **Aceptado** (2026-11-12, PO). Acepta D1-D4 con las recomendaciones del
+  benchmark. **No autoriza migración en producción, ejecución sobre bibliotecas reales ni
+  despliegue**: cada uno exige su decisión separada.
 - **Fecha:** 2026-11-12.
 - **Relación:** #264 BL-DUP1, feature #262 (principios D1-D4), #263 BL-DUP0 (benchmark y
   medición), ADR 0006 (asignación recuperable), ADR 0007 (vincular en su sitio), ADR 0008
