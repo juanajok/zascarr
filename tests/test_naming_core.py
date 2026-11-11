@@ -1055,6 +1055,27 @@ class TestRealWorldFilenames:
         assert result.is_annual
         assert not result.is_special
 
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        # El año suelto del final ganaba al número del anual porque el
+        # buscador genérico prefiere 4 cifras: «...Annual_01..._1993» daba
+        # número 1993. Ahora se prueba primero el número pegado a «Annual».
+        ("Shadow_Of_The_Bat_Annual_01__Bloodlines_1993_-.cbz",
+         "Shadow Of The Bat Annual", "1"),
+        ("Shadow_Of_The_Bat_Annual_02_1994 por Froiking.cbr",
+         "Shadow Of The Bat Annual", "2"),
+        ("Batman Anual #28.cbz", "Batman Anual", "28"),
+        ("The Flash Annual #01.cbr", "The Flash Annual", "1"),
+        ("Action Comics Annual #01.cbr", "Action Comics Annual", "1"),
+    ])
+    def test_numero_del_anual_gana_al_año_suelto(
+            self, filename, expected_series, expected_num):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+        assert result.is_annual
+
     def test_anual_y_especial_no_son_la_misma_clasificacion(self):
         """«Especial» sigue colgando de la serie madre (comportamiento
         histórico); «Annual» no. Mezclarlos era el bug de C2 por la puerta
