@@ -48,6 +48,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Copia, variante o edición distinta en la ficha del número (BL-R6, #235).** Si un número tiene
+  varios archivos, la ficha dice cuáles son **copia exacta** (mismo SHA-256), **variante** (otra
+  digitalización del mismo número) o **contenido sin comprobar** (no se ha hasheado), con formato y
+  tamaño. Si hay otra publicación de la serie con el mismo número, se muestra aparte como
+  **edición distinta** (con volumen y formato); nunca se agrupa solo por título y número. Cada
+  archivo ofrece «Separar del número» (BL-R1, sin borrar ni mover) y no se elige ninguna copia
+  como «la buena».
 - **Resolver una serie por identificador o enlace (BL-R5, #234).** En Descubrir se puede pegar
   un id o la URL de la ficha (Comic Vine 4050-…, GCD, Tebeosfera y AniList); se valida la
   forma sin red y, solo al pedirlo, se consulta esa fuente antes que buscar por título. La
