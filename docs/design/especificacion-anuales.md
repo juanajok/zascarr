@@ -16,8 +16,11 @@ decide que el backfill hace falta, pero no lo autoriza.
 **ya está aplicada en la Pi** (2026-11-11; ver
 [`despliegue-0027-2026-11-11.md`](despliegue-0027-2026-11-11.md)): no movió
 datos y la app sigue `healthy`. Las columnas nuevas son aditivas; el código de
-la app de la Pi aún es el `main` anterior y las ignora. El backfill y la UI
-siguen sin aplicar.
+la app de la Pi aún es el `main` anterior y las ignora.
+
+**Lote 1 aplicado (2026-11-11):** 2 series anuales (`Batman Annual` y
+`Batman: Shadow of the Bat Annual`), 7 Issues y 7 archivos enlazados; 0
+archivos movidos. Quedan los 25 enlaces incorrectos y 48 anuales sin Issue.
 
 **Problema.** Un archivo `Batman Annual 01` se parseaba como `Batman` `#1`; el
 matcher podía enlazarlo con la grapa `Batman #1` y `numero_de_grapa` lo contaba
