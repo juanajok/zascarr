@@ -407,7 +407,8 @@ class VinculacionDeArchivos:
         }
         r = await self._db.execute(text(
             "UPDATE files SET issue_id = :i, metadata_source = 'manual', "
-            "metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('vinculo', CAST(:v AS jsonb)) "
+            "metadata = (coalesce(metadata, '{}'::jsonb) || jsonb_build_object('vinculo', CAST(:v AS jsonb)))"
+            " - 'publicacion_identificada' "
             "WHERE id = :f AND issue_id IS NULL"),
             {"i": issue_id, "v": json.dumps(vinculo, ensure_ascii=False), "f": a.id})
         if r.rowcount != 1:
