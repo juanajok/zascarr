@@ -355,6 +355,32 @@ def _separar_prefijo_numerico(working: str) -> tuple[str, str | None]:
     return working, None
 
 
+def _serie_desde_carpeta(series: str, alternativa: str, carpeta: str | None) -> str:
+    """Ajusta la serie usando la carpeta padre, sin inventar.
+
+    - Si la carpeta (limpia de volumen/año) coincide con la alternativa del
+      nombre partido, se prefiere la alternativa.
+    - Si la carpeta empieza por la serie y añade una palabra editorial
+      («Joe Kubert» + «Presents»), se prefiere la carpeta.
+    """
+    if not carpeta:
+        return series
+    limpia = re.sub(r"\b(?:vol(?:umen)?\.?\s*\d+|v\s*\d+)\b", " ", carpeta, flags=re.IGNORECASE)
+    limpia = re.sub(r"\b(?:19|20)\d{2}\b", " ", limpia)
+    limpia = _limpiar_titulo_serie(limpia)
+    limpia_norm = normalize_series_name(limpia)
+    if not limpia_norm:
+        return series
+    alternativa_norm = normalize_series_name(alternativa)
+    if alternativa_norm and alternativa_norm == limpia_norm:
+        return alternativa
+    # Solo una extensión editorial explícita («Joe Kubert» + «Presents»).
+    series_norm = normalize_series_name(series)
+    if series_norm and limpia_norm == series_norm + " presents":
+        return limpia
+    return series
+
+
 def _quitar_credito_con_carpeta(working: str, carpeta: str | None) -> str:
     """Quita «Hiroaki Samura - » cuando el resto coincide con la carpeta.
 
@@ -709,11 +735,12 @@ def parse_comic_filename(filename: str, carpeta: str | None = None) -> ParsedCom
         result.subtitulo = partes_subtitulo[1].strip()
 
     series = _limpiar_titulo_serie(working)
-    result.series = series
     if len(partes_subtitulo) > 1:
         alternativa = _limpiar_titulo_serie(serie_completa)
         if alternativa and alternativa != series:
             result.series_alternativa = alternativa
+    series = _serie_desde_carpeta(series, result.series_alternativa, carpeta)
+    result.series = series
     result.confidence = _confidence(result)
     return result
 
