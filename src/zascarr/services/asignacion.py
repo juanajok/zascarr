@@ -122,6 +122,22 @@ class Resultado:
         object.__setattr__(self, "estado", EstadoResultado(self.estado))
 
 
+@dataclass(frozen=True)
+class PreviaAsignacion:
+    """Lo que la persona verá ANTES de que se mueva nada (F1 de #272).
+
+    Solo datos de lectura: no hay operación, reserva ni escritura. `estado` es un
+    conjunto corto de la vista previa, separado de `EstadoResultado`.
+    """
+
+    estado: str
+    serie: str | None = None
+    numero: str | None = None
+    carpeta: str | None = None
+    nombre: str | None = None
+    motivo: str = ""
+
+
 async def _no_hacer_nada(_punto: str) -> None:
     return None
 
@@ -764,3 +780,64 @@ async def reconciliar_al_arrancar(servicio: AsignacionService | None = None) -> 
                         pendientes=sum(1 for r in resultados if r.estado in RESULTADOS_RECUPERABLES))
         return len(resultados)
     return 0
+
+
+async def previsualizar_asignacion(
+    db: AsyncSession,
+    biblioteca: Path,
+    file_id: UUID,
+    series_id: UUID,
+    issue_number: str,
+) -> PreviaAsignacion:
+    """Calcula el destino SIN tocar nada (F1 de #272).
+
+    Reutiliza las mismas reglas de nombre y de colisión que `_preparar`, pero no
+    crea operación, no reserva, no copia y no escribe. La confirmación posterior
+    vuelve a pasar por `AsignacionService.asignar`, que sigue siendo la autoridad
+    si el destino cambia entre la vista previa y el POST.
+    """
+    numero = (issue_number or "").strip()
+    if not numero:
+        return PreviaAsignacion("datos_no_validos",
+                                motivo="Escribe el número del tebeo antes de organizar.")
+    file = await db.get(File, file_id)
+    serie = await db.get(Series, series_id)
+    if file is None or serie is None:
+        return PreviaAsignacion("no_encontrado",
+                                motivo="El archivo o la serie ya no existen. Recarga la página.")
+    try:
+        origen = Path(file.file_path)
+        if not origen.exists():
+            return PreviaAsignacion("origen_ausente",
+                                    motivo="El archivo ya no está en su sitio; no se puede organizar.")
+    except OSError:
+        return PreviaAsignacion("error", motivo="No se pudo comprobar el archivo de origen.")
+
+    formato = EDITION_KIND_A_FORMAT.get(
+        parse_comic_filename(file.file_name).edition_kind, IssueFormat.SINGLE_ISSUE)
+    issue = (await db.execute(select(Issue).where(
+        Issue.series_id == serie.id, Issue.issue_number == numero))).scalar_one_or_none()
+    if issue is not None and (issue.format or IssueFormat.SINGLE_ISSUE) != formato:
+        return PreviaAsignacion(
+            "colision_edicion",
+            motivo="Ese número ya existe como otra edición (por ejemplo una grapa y un "
+                   "recopilatorio). Elige otro número o revísalo a mano.")
+    if issue is not None and file.issue_id == issue.id:
+        return PreviaAsignacion(
+            "ya_asignado", serie=serie.title, numero=numero,
+            motivo="Ese archivo ya está en esa publicación; no hace falta moverlo.")
+
+    canonico = build_library_path(biblioteca, serie, numero, origen.suffix)
+    for k in range(0, 1000):
+        candidato = canonico if k == 0 else canonico.with_name(
+            f"{canonico.stem} ({k}){canonico.suffix}")
+        if candidato.exists():
+            continue
+        registrado = (await db.execute(
+            select(File.id).where(File.file_path == str(candidato)))).scalar_one_or_none()
+        if registrado is not None:
+            continue
+        return PreviaAsignacion(
+            "ok", serie=serie.title, numero=numero,
+            carpeta=canonico.parent.name, nombre=candidato.name)
+    return PreviaAsignacion("error", motivo="No se encontró un nombre de destino libre.")
