@@ -88,8 +88,14 @@ class IssueFormat(enum.StrEnum):
 EDITION_KIND_A_FORMAT: dict[str, IssueFormat] = {
     "omnigold": IssueFormat.OMNIBUS,
     "integral": IssueFormat.OMNIBUS,
+    "omnibus": IssueFormat.OMNIBUS,
     "tomo": IssueFormat.TRADE_PAPERBACK,
     "volumen": IssueFormat.TRADE_PAPERBACK,
+    "trade_paperback": IssueFormat.TRADE_PAPERBACK,
+    "tpb": IssueFormat.TRADE_PAPERBACK,
+    "hardcover": IssueFormat.HARDCOVER,
+    "hc": IssueFormat.HARDCOVER,
+    "graphic_novel": IssueFormat.GRAPHIC_NOVEL,
 }
 
 class FileFormat(enum.StrEnum):

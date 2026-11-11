@@ -1292,6 +1292,42 @@ class TestRealWorldFilenames:
             "Daytripper (por Aruso) CRG 8º Aniversario.cbr"
         ).series == "Daytripper"
 
+    @pytest.mark.parametrize("filename,expected_series,expected_num,expected_kind", [
+        ("Batman Omnibus Vol 1.cbz", "Batman", "1", "omnibus"),
+        ("Batman Omnibus 2.cbz", "Batman", "2", "omnibus"),
+        ("Saga TPB 2.cbz", "Saga", "2", "trade_paperback"),
+        ("Batman HC 1.cbz", "Batman", "1", "hardcover"),
+        ("Locke & Key Graphic Novel 1.cbz", "Locke & Key", "1", "graphic_novel"),
+    ])
+    def test_formato_de_edicion_no_es_grapa(
+        self, filename, expected_series, expected_num, expected_kind
+    ):
+        """Omnibus/TPB/HC/GN son formatos de Issue, no números de grapa."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+        assert result.edition_kind == expected_kind
+
+    def test_marcadores_de_formato_mapean_al_enum_de_issue(self):
+        from zascarr.models import EDITION_KIND_A_FORMAT, IssueFormat
+
+        assert EDITION_KIND_A_FORMAT["omnibus"] == IssueFormat.OMNIBUS
+        assert EDITION_KIND_A_FORMAT["trade_paperback"] == IssueFormat.TRADE_PAPERBACK
+        assert EDITION_KIND_A_FORMAT["hardcover"] == IssueFormat.HARDCOVER
+        assert EDITION_KIND_A_FORMAT["graphic_novel"] == IssueFormat.GRAPHIC_NOVEL
+
+    def test_cuenta_de_miniserie_es_contexto_no_identidad(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        con_numero = parse_comic_filename("Batman #1 of 4.cbz")
+        assert con_numero.issue_number == "1"
+        assert con_numero.issue_count == 4
+        sin_numero = parse_comic_filename("Batman 1 de 4.cbz")
+        assert sin_numero.issue_number == ""
+        assert sin_numero.issue_count == 4
+
     def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
         """«Batman #400 Aniversario»: el número va con #, así que es la
         grapa #400 y no la efeméride del 400 aniversario. El patrón viejo
