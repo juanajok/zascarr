@@ -93,21 +93,21 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
 | Medida | Resultado |
 |---|---:|
-| Serie correcta | **152 / 200 = 76,0 %** |
-| Número correcto | **191 / 200 = 95,5 %** |
-| Ambos correctos | **151 / 200 = 75,5 %** |
+| Serie correcta | **158 / 200 = 79,0 %** |
+| Número correcto | **195 / 200 = 97,5 %** |
+| Ambos correctos | **157 / 200 = 78,5 %** |
 
 ### Matcher
 
 | Medida | Resultado |
 |---|---:|
-| `direct` | 53 |
+| `direct` | 54 |
 | `fuzzy` | 22 |
-| `unsorted` | 125 |
-| Enlaces con Issue | 64 |
-| Enlaces con serie+número correctos | **64 / 64** |
-| Cobertura | **64 / 200 = 32,0 %** |
-| Discrepancia de formato/tipo | **1** (XIII tomo enlazado a `single_issue`) |
+| `unsorted` | 124 |
+| Enlaces con Issue | 65 |
+| Enlaces con serie+número correctos | **65 / 65** |
+| Cobertura | **65 / 200 = 32,5 %** |
+| Desajustes de formato/tipo | **2** (La Espada del Inmortal y XIII, tomos enlazados a `single_issue`) |
 
 Los 64 enlaces aciertan serie y número según las etiquetas. El único problema
 de formato es `XIII 01`: el revisor lo etiquetó como tomo BD y el catálogo lo
@@ -128,10 +128,12 @@ catálogo no tiene esas series completas), pero no introdujo regresiones.
   `Forever Evil: A.R.G.U.S`, `Green Lantern - Origenes Secretos`.
 - Créditos delante: `Hiroaki Samura - La Espada del Inmortal`.
 - Año dentro del título: `American Vampire 1976 10`.
-- Prefijos de número delante de la serie (`16 Catwoman`, `51 Catwoman`): siguen
-  ambiguos sin carpeta.
+- Prefijos de número delante de la serie (`16 Catwoman`, `51 Catwoman`):
+  corregidos usando la carpeta como contexto.
 - Packs `#25 - Anual` sin rango: ya no producen número; la serie parcial
   (`Injustice`) sigue siendo el fallo restante.
+- Créditos delante y años dentro del título: corregidos con carpeta/patrón
+  (`Hiroaki Samura`, `American Vampire 1976`).
 - Alias y huecos del catálogo: limitan la cobertura del matcher, no su
   precisión de identidad.
 
