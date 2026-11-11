@@ -60,10 +60,32 @@ RUTA = "/api/revision/vinculacion"
 SHA = "a" * 64
 
 
+_ENT = None
+
+
 @pytest.fixture
 async def ent(entorno, monkeypatch):
+    global _ENT
     monkeypatch.setattr(vinculacion, "get_settings", lambda: SimpleNamespace(library_path=entorno.lib))
+    _ENT = entorno
     return entorno
+
+
+async def elegir_candidata(ent, serie, file_id, *, clave=CLAVE) -> None:
+    """El contrato nuevo exige elección explícita también con una sola candidata."""
+    from zascarr.services.vinculacion_previa import VistaPreviaDeVinculacion
+
+    r = await previsualizar(serie, marcados=[file_id], clave=clave)
+    fila = next(a for a in r.json()["archivos"] if a["id"] == str(file_id))
+    if fila.get("eleccion") or not fila.get("candidatas"):
+        return
+    elegible = next((c for c in fila["candidatas"] if c["elegible"]), None)
+    if elegible is None:
+        return
+    async with ent.banco.fabrica() as s:
+        await VistaPreviaDeVinculacion(s, secret=SECRETO).elegir_publicacion(
+            token=fila["token_eleccion"], candidate_id=elegible["candidate_id"])
+        await s.commit()
 
 
 async def post(ruta: str, cuerpo: dict) -> httpx.Response:
@@ -77,6 +99,11 @@ async def confirmar(token: str) -> httpx.Response:
 
 async def token_de(serie, marcados, **extra) -> str:
     r = await previsualizar(serie, marcados=list(marcados), **extra)
+    if r.status_code == 200 and not r.json()["token"] and _ENT is not None:
+        for a in r.json()["archivos"]:
+            if a.get("token_eleccion") and a.get("candidatas"):
+                await elegir_candidata(_ENT, serie, UUID(a["id"]))
+        r = await previsualizar(serie, marcados=list(marcados), **extra)
     assert r.status_code == 200 and r.json()["token"], r.text
     return r.json()["token"]
 

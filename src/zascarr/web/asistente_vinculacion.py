@@ -471,6 +471,7 @@ async def elegir_publicacion(request: Request, db: AsyncSession = Depends(get_db
         try:
             if candidate_id == "__quitar__":
                 resultado = await servicio.quitar_eleccion(token=token)
+                estado.marcados = [x for x in estado.marcados if x != contexto.file_id]
                 aviso = "Se ha quitado la elección; la fila vuelve a estar como antes."
             else:
                 resultado = await servicio.elegir_publicacion(token=token, candidate_id=candidate_id)

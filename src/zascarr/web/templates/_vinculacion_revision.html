@@ -96,7 +96,7 @@
       <p class="vinc-texto">{{ texto_legible(a.texto) }}</p>
 
       {% if a.candidatas %}
-      <fieldset class="vinc-candidatas"{% if a.eleccion %} tabindex="-1" autofocus{% endif %}>
+      <fieldset class="vinc-candidatas"{% if a.eleccion or avisos %} tabindex="-1" autofocus{% endif %}>
         <legend>¿Cuál de estas publicaciones es?</legend>
         {% if a.candidatas | length == 1 %}
         <p class="caption">Esta es la única publicación con ese número. Confírmala si es la correcta; no se elige sola.</p>
