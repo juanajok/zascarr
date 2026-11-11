@@ -8,7 +8,8 @@
     (no enfoca ni emite el campo fuera de banda) — BL-IT01, spec §6.2. -#}
 {% set quitar = request.query_params.get("quitar") %}
 {% set quitar_valido = quitar if quitar in (
-  "q", "tradition", "publisher_id", "character_id", "story_arc_id", "todos"
+  "q", "tradition", "publisher_id", "character_id", "story_arc_id", "leido",
+  "coleccion", "todos"
 ) else none %}
 <div id="resumen-biblioteca" class="resumen-biblioteca">
   {% if error %}

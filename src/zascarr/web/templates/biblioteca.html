@@ -43,6 +43,14 @@
     </select>
     <button class="btn ghost sm" type="submit">Aplicar orden</button>
   </div>
+  <label class="sr" for="f-coleccion">Estado de colección</label>
+  <select name="coleccion" id="f-coleccion">
+    <option value="">Todo el estado</option>
+    <option value="completa" {% if filtros.coleccion == "completa" %}selected{% endif %}>Completas</option>
+    <option value="faltan" {% if filtros.coleccion == "faltan" %}selected{% endif %}>Con faltantes</option>
+    <option value="no_calculable" {% if filtros.coleccion == "no_calculable" %}selected{% endif %}>Sin poder calcular</option>
+    <option value="no_completar" {% if filtros.coleccion == "no_completar" %}selected{% endif %}>No se van a completar</option>
+  </select>
   <input type="hidden" name="character_id" value="{{ filtros.character_id }}">
   <input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
   <input type="hidden" name="page" value="1">

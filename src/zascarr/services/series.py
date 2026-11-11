@@ -69,6 +69,7 @@ class SeriesService:
         leido: str | None = None,
         con_issues: bool = False,
         orden: str = "titulo",
+        coleccion_ids: set[UUID] | None = None,
         *,
         corregir_pagina: bool = True,
     ) -> tuple[list[Series], int, int]:
@@ -86,6 +87,9 @@ class SeriesService:
             query = query.where(Series.tradition == tradition)
         if status:
             query = query.where(Series.status == status)
+        if coleccion_ids is not None:
+            # BL-WK2 (#340): estado derivado ya resuelto por `services.coleccion`.
+            query = query.where(Series.id.in_(coleccion_ids))
         if search:
             query = query.where(func.to_tsvector("spanish", Series.title).match(search))
         if publisher_id:
@@ -208,6 +212,7 @@ class SeriesService:
         leido: str | None = None,
         con_issues: bool = False,
         orden: str = "titulo",
+        coleccion_ids: set[UUID] | None = None,
     ) -> tuple[list[Series], int]:
         """Contrato histórico `(items, total)` para API y tests."""
         items, total, _ = await self._list_series(
@@ -216,7 +221,7 @@ class SeriesService:
             story_arc_id=story_arc_id,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
-            orden=orden, corregir_pagina=False,
+            orden=orden, coleccion_ids=coleccion_ids, corregir_pagina=False,
         )
         return items, total
 
@@ -235,6 +240,7 @@ class SeriesService:
         leido: str | None = None,
         con_issues: bool = False,
         orden: str = "titulo",
+        coleccion_ids: set[UUID] | None = None,
     ) -> tuple[list[Series], int, int]:
         """Como `list_series`, pero devuelve también la página efectiva.
 
@@ -247,7 +253,7 @@ class SeriesService:
             story_arc_id=story_arc_id,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
-            orden=orden,
+            orden=orden, coleccion_ids=coleccion_ids,
         )
 
     async def list_publishers_with_series(self) -> list[Publisher]:

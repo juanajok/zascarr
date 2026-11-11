@@ -38,6 +38,12 @@ from zascarr.models import (
     WishlistStatus,
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
+from zascarr.services.coleccion import (
+    conflicto_con_politica,
+    estado_de_coleccion,
+    marcar_no_completar,
+    revertir_no_completar,
+)
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
 from zascarr.services.conversion import ConversionDeArchivo
@@ -420,6 +426,7 @@ async def _contexto_politica(db: AsyncSession, series: Series,
 
 @router.get("/{series_id}", response_class=HTMLResponse)
 async def detalle(series_id: UUID, request: Request, volver: str = Query(default=""),
+                  coleccion: str = Query(default=""),
                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = (await db.execute(
         select(Series)
@@ -431,6 +438,13 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
 
     poseidos = await numeros_poseidos(db, series.id)
     huecos = await huecos_de_serie(db, series, poseidos)
+    estado_coleccion = await estado_de_coleccion(db, series, poseidos)
+    aviso_coleccion = {
+        "conflicto": "Esa serie tiene activada la búsqueda de faltantes. "
+                     "Puedes dejar de completarla, pero la política no se cambia sola.",
+        "guardado": "Guardado: sus huecos ya no cuentan como faltas.",
+        "revertido": "Vuelve a contar como una serie que quieres completar.",
+    }.get(coleccion, "")
 
     politica = await _contexto_politica(db, series)
     archivos = await archivos_por_numero(db, series.id)
@@ -448,6 +462,9 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
         "serie_vacia": serie_vacia,
         "missing": huecos.faltantes, "huecos": huecos,
+        "estado_coleccion": estado_coleccion,
+        "aviso_coleccion": aviso_coleccion,
+        "conflicto_coleccion": conflicto_con_politica(series),
         **politica,
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
         "archivos_por_numero": archivos,
@@ -680,6 +697,38 @@ async def quitar_etiqueta_web(series_id: UUID, request: Request,
     )
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
+
+
+@router.post("/{series_id}/coleccion")
+async def cambiar_coleccion(
+    series_id: UUID, request: Request, accion: str = Form(...),
+    confirmar: str = Form(default=""), db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    """BL-WK2 (#340): marcar o revertir «no la voy a completar».
+
+    La decisión vive en `Series.metadata_` (JSONB), no en `Series.status` ni en
+    la política D8. Si la política busca faltantes, el primer POST **no escribe**:
+    vuelve a la ficha con el aviso y un botón de confirmación explícita.
+    """
+    series = (await db.execute(
+        select(Series).where(Series.id == series_id)
+    )).scalar_one_or_none()
+    if not series:
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    if accion not in ("no_completar", "revertir"):
+        raise HTTPException(status_code=422, detail="Acción de colección no válida")
+    if accion == "no_completar":
+        if conflicto_con_politica(series) and confirmar != "si":
+            return RedirectResponse(
+                url=f"/ui/series/{series_id}?coleccion=conflicto", status_code=303)
+        marcar_no_completar(series)
+        destino = "guardado"
+    else:
+        revertir_no_completar(series)
+        destino = "revertido"
+    await db.flush()
+    return RedirectResponse(
+        url=f"/ui/series/{series_id}?coleccion={destino}", status_code=303)
 
 
 @router.post("/{series_id}/politica", response_class=HTMLResponse)
