@@ -171,7 +171,15 @@ def elegir_para_marcar_todos(r: RespuestaVinculacion) -> tuple[list[str], int]:
     `marcable`. Si un archivo comparte número con otro que ya está marcado o que también se marcaría, NO se marca ninguno
     de ellos por la persona: marcar los dos los bloquearía a ambos, y elegir uno sería decidir por ella."""
     ya = {a.id for a in r.archivos if a.marcado}
-    candidatos = [a for a in r.archivos if a.marcable and not a.marcado]
+    # «Marcar todos» no decide sobre un archivo que contradice la carpeta o
+    # la serie elegida: esos siguen siendo marcables a mano, con su aviso
+    # delante, pero no se marcan en bloque.
+    candidatos = [
+        a for a in r.archivos
+        if a.marcable and not a.marcado
+        and not (a.numero_origen != "persona"
+                 and any(c.severidad == "conflicto" for c in a.conflictos))
+    ]
     conjunto = ya | {a.id for a in candidatos}
     elegidos: list[str] = []
     repetidos = 0

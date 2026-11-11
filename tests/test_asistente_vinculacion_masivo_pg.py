@@ -96,6 +96,17 @@ class TestMarcarTodos:
         assert "Se marcaron 3 archivos que se pueden vincular" in q.visible
         assert q.total("a_vincular") == 3 and q.total("marcados_bloqueados") == 0 and q.token is not None
 
+    async def test_no_marca_automaticamente_conflictos_de_carpeta(self, entorno):
+        """Un archivo de otra serie en la carpeta se puede marcar a mano, pero
+        «Marcar todos» no lo elige por la persona."""
+        serie = await serie_de_prueba(entorno, "Flash", 1987)
+        await archivos(entorno, "Flash 01 (1987).cbz", "Flash 10 (1999).cbz")
+        p = await abrir(serie)
+        q = await accionar(p, "marcar_todos")
+        assert nombres_marcados(q) == ["Flash 01 (1987).cbz"]
+        assert not q.fila("Flash 10 (1999).cbz").marcado
+        assert q.fila("Flash 10 (1999).cbz").marcable       # sigue disponible a mano
+
     async def test_no_marca_ni_toca_lo_de_otras_paginas_ni_sus_borradores(self, entorno):
         """Mecanismo: la acción actúa sobre la página que se ve; lo de las demás son borradores de la persona."""
         serie = await serie_de_prueba(entorno)
