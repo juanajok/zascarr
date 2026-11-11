@@ -1215,6 +1215,19 @@ class TestRealWorldFilenames:
             "Daytripper (por Aruso) CRG 8º Aniversario.cbr"
         ).series == "Daytripper"
 
+    def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
+        """«Batman #400 Aniversario»: el número va con #, así que es la
+        grapa #400 y no la efeméride del 400 aniversario. El patrón viejo
+        borraba «400 Aniversario» entero antes de buscar el número."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Batman #400 Aniversario.cbr")
+        assert result.series == "Batman"
+        assert result.issue_number == "400"
+        # La efeméride sin marcador de grapa sigue sin ser número.
+        sin_marcador = parse_comic_filename("Iberia Inc. - Integral 20 aniversario.cbr")
+        assert sin_marcador.issue_number == ""
+
     def test_edicion_de_aniversario_no_es_el_numero(self):
         """"Integral 20 aniversario" es una efeméride de la editorial, no
         el número 20 de la serie. Con B15 (naming.py ya captura el número
