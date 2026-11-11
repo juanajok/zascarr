@@ -59,14 +59,16 @@ def main() -> None:
         fila["revision_por"] = "simulacion_agente"
         fila["excluir_benchmark"] = "TRUE" if estado == "dudosa" else "FALSE"
         if estado == "corregir":
-            for campo in ("serie_revisada", "numero_revisado", "tipo_revisado"):
+            # El número puede quedar vacío en una corrección de tipo/serie
+            # (p. ej. un álbum sin número); serie y tipo sí son obligatorios.
+            for campo in ("serie_revisada", "tipo_revisado"):
                 if not (rev.get(campo) or "").strip():
                     raise SystemExit(f"Falta {campo} en corrección de {r['id']}")
             nuevo_tipo = rev["tipo_revisado"].strip().lower()
             if nuevo_tipo not in TIPOS:
                 raise SystemExit(f"Tipo inválido en {r['id']}: {nuevo_tipo}")
             fila["serie_real"] = rev["serie_revisada"].strip()
-            fila["numero_real"] = rev["numero_revisado"].strip()
+            fila["numero_real"] = (rev.get("numero_revisado") or "").strip()
             fila["tipo_real"] = nuevo_tipo
             if (rev.get("requiere_contexto_revisado") or "").strip().upper() in {"TRUE", "FALSE"}:
                 fila["requiere_contexto"] = rev["requiere_contexto_revisado"].strip().upper()

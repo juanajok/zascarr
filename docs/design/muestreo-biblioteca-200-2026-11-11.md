@@ -1,17 +1,10 @@
-# Muestreo de 200 archivos para etiquetar parser/matcher (2026-11-11)
+# Muestreo de 200 archivos y revisión simulada (2026-11-11)
 
-> Muestreo de solo lectura. Los CSV contienen **rutas reales** de la biblioteca
-> y se guardan fuera del repositorio. No se ha escrito en la biblioteca ni en
-> la base de datos.
+> Muestreo de solo lectura. Los CSV contienen rutas reales de la biblioteca y
+> se guardan fuera del repositorio. No se ha escrito en la biblioteca ni en la
+> base de datos.
 
-## 1. Objetivo
-
-Sustituir el benchmark de 81 rutas de Descargas por una muestra de la
-biblioteca real, etiquetada **antes** de mirar la salida del parser. Se mide el
-parser y el matcher por separado; los vínculos actuales del catálogo no son
-verdad de referencia (ver `benchmark-parser-biblioteca-2026-11-11.md`).
-
-## 2. Población y muestra
+## 1. Población y muestra
 
 Foto del 2026-11-11:
 
@@ -22,10 +15,8 @@ Foto del 2026-11-11:
 | Sin Issue | 3.556 |
 | Series | 51 |
 
-Semilla: **20261112**. Script:
+Semilla **20261112**. Script:
 `scripts/medicion/muestreo_biblioteca.py`.
-
-## 3. Cuotas
 
 | Estrato | Población | Muestra |
 |---|---:|---:|
@@ -35,106 +26,69 @@ Semilla: **20261112**. Script:
 | Sin Issue + normal | 3.548 | **112** |
 | **Total** | **5.049** | **200** |
 
-Los anuales se sobremuestrean a propósito: son ~1,6% de la población y
-concentran los fallos de identidad. La muestra no es proporcional; cualquier
-estimación debe ponderar o decir explícitamente que es una muestra
-enriquecida.
+Composición: **80 con Issue / 120 sin Issue**, **28 anuales**, **186 CBR / 14
+CBZ**, **0 SHA256 repetidos**. Los anuales se sobremuestrean a propósito
+(~1,6% de la biblioteca); la muestra no es proporcional.
 
-Composición resultante:
-
-- **80 con Issue / 120 sin Issue**.
-- **28 anuales** (20 con Issue + 8 sin Issue).
-- **186 CBR / 14 CBZ**.
-- Categorías: Comics 175, Manga 17, Graphic Novels 5, Tebeos 3.
-- **0 SHA256 repetidos** en la muestra.
-
-## 4. Archivos generados
-
-Fuera del repo:
+## 2. Archivos
 
 ```text
 /mnt/Datos/Documentos/muestra_biblioteca_200_2026-11-11.csv
 /mnt/Datos/Documentos/muestra_biblioteca_200_2026-11-11_etiquetada.csv
+/mnt/Datos/Documentos/muestra_biblioteca_200_2026-11-11_etiquetada_revisada.csv
+/mnt/Datos/Documentos/revision_simulada_200_2026-11-11.csv
+/mnt/Datos/Documentos/cambios_revision_simulada_200.csv
 /mnt/Datos/Documentos/muestra_biblioteca_200_2026-11-11_contexto.csv
 ```
 
-### `..._etiquetada.csv` (primera pasada de etiquetas)
+El CSV de contexto no se usó para etiquetar. Los CSV con rutas no se commitean.
 
-Las etiquetas se rellenaron **sin abrir el CSV de contexto ni ejecutar el
-parser**. Son una **primera pasada asistida**, no una validación humana:
-`etiquetado_por=asistente`.
+## 3. Etiquetado y revisión simulada
 
-Se hizo después una **revisión simulada por el agente** (no humana): 182
-etiquetas se mantuvieron y 18 se marcaron `dudosa` por depender de contexto
-externo. **No se corrigió ninguna etiqueta para favorecer al parser.** Las 18
-dudosas se excluyen de la métrica limpia y se reportan aparte. La revisión
-independiente que se intentó lanzar no produjo salida; no se presenta como
-humana.
+La primera pasada se hizo **sin abrir el contexto ni ejecutar parser/matcher**;
+las etiquetas llevan `etiquetado_por=asistente`.
 
-| Revisión | Filas |
+Después se hizo una **revisión independiente simulada** (un agente distinto, no
+una persona). El revisor solo vio la muestra ciega y las etiquetas; no leyó el
+contexto ni ejecutó parser/matcher. Resultado:
+
+| Estado | Filas |
 |---|---:|
-| Total | 200 |
-| Mantener | **182** |
-| Dudosa (excluida de métrica limpia) | **18** |
-| Corregir | **0** |
+| Mantener | **188** |
+| Corregir | **10** |
+| Dudosa (excluida de métrica limpia) | **2** |
+| **Total** | **200** |
 
-### `...csv` (ciego, para etiquetar)
+Correcciones aplicadas, todas revisables por una persona:
 
-Columnas:
+- 4 archivos `Injustice ... - Anual`: de pack a **anual** (#25 o #41 según el
+  año). Es la corrección más discutible: el nombre también admite “issue +
+  anual”.
+- `Catwoman 11.1 Annual 01`: de pack a **Catwoman Annual #1**.
+- `Catwoman 22.1 Year One (1995)`: de grapa #22.1 a **Catwoman Annual #2**.
+- `XIII 01`: de grapa a **tomo** (álbum BD).
+- `Noches Eternas 6/7`: de grapa a **capítulo**.
+- `Horizontes Lejanos`: de obra única a **tomo** de la serie del Capitán
+  Torrezno.
 
-| Columna | Uso |
-|---|---|
-| `id` | UUID del archivo; no cambiar |
-| `archivo`, `ruta` | Nombre y ruta reales; no se copian al repo |
-| `extension` | `cbr`, `cbz`, etc. |
-| `estrato` | `con_issue_anual`, `sin_issue_anual`, `con_issue_normal`, `sin_issue_normal` |
-| `categoria_carpeta` | Comics/Manga/Graphic Novels/Tebeos/_Unsorted |
-| `sha256` | Identidad de contenido |
-| `serie_real` | **Etiqueta** (primera pasada asistida); vacía al generar |
-| `numero_real` | **Etiqueta** (primera pasada asistida); vacía al generar |
-| `tipo_real` | **Etiqueta**: `grapa`, `anual`, `capitulo`, `tomo`, `obra_unica`, `pack`, `especial`, `desconocido` |
-| `requiere_contexto` | **Etiqueta**: `TRUE` si sin carpeta/catálogo no se puede decidir |
-| `notas` | Motivo de duda o decisión |
-| `etiquetado_por`, `fecha_etiqueta` | Trazabilidad |
+Dudosas: `GunSmith Cats [P2N2]` (parte 2 o tomo 2) y `Los detectives muertos`
+(tomo recopilatorio u one-shot). Se marcan `excluir_benchmark=TRUE`.
 
-### `..._contexto.csv` (NO abrir al etiquetar)
+**No es una revisión humana.** Las 10 correcciones son juicios del revisor
+simulado; las de Injustice y Catwoman Annual necesitan confirmación humana
+antes de convertirlas en verdad de referencia.
 
-Contiene el Issue actual del catálogo. Sirve para auditar después si la
-etiqueta coincide o discrepa del vínculo existente. No debe usarse para
-etiquetar: sesgaría la medición.
+## 4. Resultados con las 198 filas limpias
 
-## 5. Protocolo de etiquetado
-
-1. Abrir solo el CSV ciego.
-2. Etiquetar **antes de ejecutar** el parser o el matcher sobre la muestra.
-3. `serie_real` es el título canónico que el archivo afirma; si es un
-   one-shot/tomo sin número, dejar `numero_real` vacío y marcar `tipo_real`.
-4. Si hay dos interpretaciones razonables, anotar en `notas` y marcar
-   `requiere_contexto=TRUE`; no elegir una al azar.
-5. Un pack/rango (`#608-619`, `#647-650 + anual`) no es una grapa: `tipo_real=pack`
-   y `numero_real` vacío.
-6. No corregir etiquetas después de ver la salida del parser. Si hace falta una
-   segunda pasada, conservar la primera y documentar el cambio.
-7. No usar el CSV de contexto hasta que las 200 etiquetas estén cerradas.
-8. La etiqueta `asistente` es una primera pasada: la revisión humana es
-   obligatoria antes de publicar una métrica definitiva.
-
-## 6. Resultado de la primera pasada y de la revisión
-
-Métrica con la misma normalización para etiqueta y salida del parser
-(`Anual`≡`Annual` y sufijo de volumen fuera). No es un benchmark humano
-cerrado.
-
-### Revisión simulada: 182 filas limpias / 18 dudosas
+Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
 ### Parser
 
 | Medida | Resultado |
 |---|---:|
-| Serie correcta | 151 / 200 = **75,5 %** |
-| Número correcto | 187 / 200 = **93,5 %** |
-| Ambos correctos | 150 / 200 = **75,0 %** |
-| Ambos + número no vacío | 146 / 200 = **73,0 %** |
+| Serie correcta | **149 / 198 = 75,3 %** |
+| Número correcto | **188 / 198 = 94,9 %** |
+| Ambos correctos | **148 / 198 = 74,7 %** |
 
 ### Matcher
 
@@ -142,77 +96,42 @@ cerrado.
 |---|---:|
 | `direct` | 53 |
 | `fuzzy` | 22 |
-| `unsorted` | 125 |
+| `unsorted` | 123 |
 | Enlaces con Issue | 64 |
-| Enlaces correctos (serie y número) | **64 / 64** |
-| Falsos positivos en pack/tomo/obra única/especial | **0** |
-| Series correctas (con o sin Issue) | 66 / 200 |
+| Enlaces con serie+número correctos | **64 / 64** |
+| Cobertura | **64 / 198 = 32,3 %** |
+| Discrepancia de formato/tipo | **1** (XIII tomo enlazado a `single_issue`) |
 
-La **precisión de los enlaces es 100%** en esta muestra, pero la cobertura es
-baja: 64/200. La causa principal no es el matcher: hay series del catálogo con
-otro título, alias de idioma (`100 Balas` vs `100 Bullets`), colecciones y
-huecos de Issue. Eso es precisamente lo que hay que separar en la siguiente
-iteración.
+Los 64 enlaces aciertan serie y número según las etiquetas. El único problema
+de formato es `XIII 01`: el revisor lo etiquetó como tomo BD y el catálogo lo
+tiene como `single_issue`; es una discrepancia de **edición**, no de identidad.
 
-### Comparación
+La cobertura sigue siendo el problema: alias de idioma (`100 Balas`/`100
+Bullets`), series del catálogo con otro título, colecciones y huecos de Issue.
 
-| Medida | 200 sin revisar | 182 revisadas |
-|---|---:|---:|
-| Parser serie | 151 | **148 / 182 = 81,3 %** |
-| Parser número | 187 | **177 / 182 = 97,3 %** |
-| Parser ambos | 150 | **147 / 182 = 80,8 %** |
-| Matcher enlaces correctos | 64 | **64 / 64** |
-| Matcher cobertura | 32,0 % | **35,2 %** |
-| Matcher `unsorted` | 125 | **107** |
-| Falsos positivos de pack/tomo/obra única/especial | 0 | **0** |
+## 5. Fallos pendientes
 
-Las 18 dudosas son exactamente las que ya estaban marcadas
-`requiere_contexto=TRUE` en la primera pasada, antes de ver resultados.
-
-## 7. Segunda pasada de parser (sin tocar etiquetas)
-
-Se corrigieron dos familias medidas:
-
-- prefijos de orden de lectura (`13. Nightwing #73`, `14  JLD #11`,
-  `73 Dreadstar ... 61`) y prefijo decimal (`22.1 Catwoman`);
-- packs con rango + anual (`Batman #647-650 y anual 25`) que producían un
-  número inexistente.
-
-El parser pasó de **147 a 150** aciertos de serie+número. El matcher no cambió
-en esta muestra (64 enlaces correctos), porque los archivos recuperados por el
-parser siguen sin existir o sin alias en el catálogo. Las etiquetas no se
-modificaron después de ver estos resultados.
-
-### Familias de fallo observadas
-
-- `Anual` vs `Annual` y títulos canónicos con prefijo (`Batman: Shadow of the
-  Bat`).
-- Prefijos numéricos de orden de lectura (`73 Dreadstar ... 61`,
-  `13. Nightwing #73`) y números delante de la serie (`16 Catwoman`,
-  `51 Catwoman`). Los primeros están corregidos; los segundos siguen siendo
+- Subtítulos/colecciones: `Green Lantern: Emerald Warriors`,
+  `Forever Evil: A.R.G.U.S`, `Green Lantern - Origenes Secretos`.
+- Créditos delante: `Hiroaki Samura - La Espada del Inmortal`.
+- Año dentro del título: `American Vampire 1976 10`.
+- Prefijos de número delante de la serie (`16 Catwoman`, `51 Catwoman`): siguen
   ambiguos sin carpeta.
-- Packs que no son una grapa; el rango+anual ya no inventa número, pero
-  `#25 - Anual` sin rango sigue necesitando una regla de contexto.
-- Series con subtítulo/colección (`Green Lantern: Emerald Warriors`,
-  `Forever Evil: A.R.G.U.S`).
-- Créditos delante del título (`Hiroaki Samura - La Espada del Inmortal`).
-- Años dentro del título (`American Vampire 1976 10`).
+- Packs `#25 - Anual` sin rango: dependen de la interpretación anterior.
+- Alias y huecos del catálogo: limitan la cobertura del matcher, no su
+  precisión de identidad.
 
-## 7. Qué se medirá después
+## 6. Qué falta para un benchmark definitivo
 
-- Parser: serie exacta/tolerante, número exacto, ambos, y **tasa de números
-  inventados** (un número que no aparece en el nombre).
-- Matcher: `direct`/`fuzzy`/`unsorted`, precisión de los enlaces, cobertura de
-  los que tienen Issue y casos en que el catálogo no tiene el número.
-- Corte por estrato: anual/no anual, con/sin Issue, español/inglés, formato.
-- Criterio duro: **errores = 0** en los casos etiquetados; acertar más a costa
-  de inventar no cuenta.
-- Cada fallo etiquetado se convierte en test de regresión.
+1. Revisión **humana** de las 10 correcciones y de las 2 dudosas.
+2. Decidir la política de títulos canónicos (`Shadow of the Bat` vs
+   `Batman: Shadow of the Bat`, `Flash` vs `The Flash`, apóstrofos).
+3. Repetir la medición manteniendo separado parser y matcher.
+4. Convertir cada fallo confirmado en test de regresión.
 
-## 8. Limitaciones
+## 7. Reproducción
 
-- 200 etiquetas permiten detectar fallos y comparar versiones, no estimar
-  precisión con un margen estrecho.
-- La muestra está enriquecida en anuales y en archivos sin Issue; no es una
-  estimación directa de la biblioteca completa.
-- Las rutas y nombres son datos personales: los CSV no se commitean.
+- Muestreo: `scripts/medicion/muestreo_biblioteca.py --seed 20261112`.
+- Aplicar revisión: `scripts/medicion/aplicar_revision_etiquetas.py`.
+- Evaluar: `scripts/medicion/evaluar_muestra_200.py`.
+- Resultado JSON: `/mnt/Datos/Documentos/resultados_muestra_200_revisada.json`.
