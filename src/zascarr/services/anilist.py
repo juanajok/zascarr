@@ -125,6 +125,12 @@ class AniListClient:
         media = ((data.get("data") or {}).get("Page") or {}).get("media") or []
         return [_parse_media(m) for m in media]
 
+    async def get_manga(self, anilist_id: int) -> AniListResult | None:
+        """Detalle por id para el backfill; una sola petición y `None` si no existe."""
+        data = await self._post(_DETAIL_QUERY, {"id": int(anilist_id)})
+        media = (data.get("data") or {}).get("Media")
+        return _parse_media(media) if isinstance(media, dict) else None
+
 
 def _parse_media(item: dict) -> AniListResult:
     title = item.get("title") or {}

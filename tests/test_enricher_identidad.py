@@ -1,7 +1,7 @@
 """#565 AC-22: campos de identidad estructurada en las respuestas de CV y AniList."""
 from __future__ import annotations
 
-from zascarr.services.anilist import _parse_media
+from zascarr.services.anilist import AniListClient, _parse_media
 from zascarr.services.comic_vine import ComicVineClient, _parse_issue
 
 
@@ -54,3 +54,28 @@ async def test_cv_pide_personajes_y_sagas_pero_no_genres():
     assert "genres" not in serie
     assert "character_credits" in numero and "story_arc_credits" in numero
     assert "genres" not in numero
+
+
+class _AniListFalso(AniListClient):
+    def __init__(self, respuesta):
+        self.respuesta = respuesta
+        self.llamadas: list[tuple[str, dict]] = []
+
+    async def _post(self, query: str, variables: dict) -> dict:
+        self.llamadas.append((query, variables))
+        return self.respuesta
+
+
+async def test_anilist_get_manga_pide_detalle_y_parsea_generos():
+    cliente = _AniListFalso({"data": {"Media": {"id": 7, "title": {"romaji": "Berserk"},
+                                               "genres": ["Action"]}}})
+    media = await cliente.get_manga(7)
+    assert media is not None and media.genres == ["Action"]
+    query, variables = cliente.llamadas[0]
+    assert variables == {"id": 7}
+    assert "Media(id: $id" in query and "genres" in query and "characters" not in query
+
+
+async def test_anilist_get_manga_none_si_no_existe():
+    cliente = _AniListFalso({"data": {"Media": None}})
+    assert await cliente.get_manga(8) is None
