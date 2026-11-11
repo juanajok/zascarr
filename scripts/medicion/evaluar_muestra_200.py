@@ -42,10 +42,16 @@ def _leer(path: Path) -> list[dict]:
         return list(csv.DictReader(fh))
 
 
+def _parse_row(r: dict):
+    ruta = Path(r["ruta"])
+    contexto = " / ".join(x.name for x in (ruta.parent.parent, ruta.parent))
+    return parse_comic_filename(r["archivo"], carpeta=ruta.parent.name, contexto=contexto)
+
+
 def _parser(rows: list[dict]) -> dict:
     c = Counter()
     for r in rows:
-        p = parse_comic_filename(r["archivo"], carpeta=Path(r["ruta"]).parent.name)
+        p = _parse_row(r)
         serie = _canon_serie(p.series) == _canon_serie(r["serie_real"])
         numero = _norm_num(p.issue_number) == _norm_num(r["numero_real"])
         c["serie"] += serie
@@ -67,7 +73,7 @@ async def _matcher(rows: list[dict], db_url: str) -> dict:
         async with session_factory() as session:
             matcher = SeriesMatcher(session)
             for r in rows:
-                p = parse_comic_filename(r["archivo"], carpeta=Path(r["ruta"]).parent.name)
+                p = _parse_row(r)
                 tr = TriageResult(path=Path(r["ruta"]))
                 formato = (
                     EDITION_KIND_A_FORMAT.get(p.edition_kind, IssueFormat.SINGLE_ISSUE).value

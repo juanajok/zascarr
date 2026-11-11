@@ -1486,6 +1486,53 @@ class TestRealWorldFilenames:
         assert result.issue_number == ""
         assert result.is_annual is True
 
+    def test_contexto_de_carpetas_expande_acronimos_y_sufijos(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        jld = parse_comic_filename(
+            "14  JLD #11.cbr", carpeta="Justice League Dark",
+            contexto="Comics / Justice League Dark")
+        assert jld.series == "Justice League Dark"
+        assert jld.issue_number == "11"
+
+        op = parse_comic_filename(
+            "OP 966.cbr", carpeta="Volumen 96",
+            contexto="One Piece / Volumen 96")
+        assert op.series == "One Piece"
+        assert op.issue_number == "966"
+
+        op883 = parse_comic_filename(
+            "OP883.cbr", carpeta="Volumen 88",
+            contexto="One Piece / Volumen 88")
+        assert op883.series == "One Piece"
+        assert op883.issue_number == "883"
+
+        vacio = parse_comic_filename(
+            "927.cbr", carpeta="Volumen 92",
+            contexto="One Piece / Volumen 92")
+        assert vacio.series == "One Piece"
+        assert vacio.issue_number == "927"
+
+        injusticia = parse_comic_filename(
+            "Injustice - Gods Among Us - Año 3 #13.cbr",
+            carpeta="Injustice Año 3",
+            contexto="Injustice - Gods Among Us / Injustice Año 3")
+        assert "Gods Among Us" in injusticia.series
+        assert injusticia.issue_number == "13"
+
+        corintio = parse_comic_filename(
+            "The Corinthian - Death in Venice 03.cbr",
+            carpeta="The corinthian-death in venice",
+            contexto="The Sandman presenta a / The corinthian-death in venice")
+        assert "corinthian" in corintio.series.lower()
+        assert corintio.issue_number == "3"
+
+        lobo = parse_comic_filename(
+            "Lobo - Anual 1.cbr", carpeta="Lobo", contexto="Comics / Lobo")
+        assert lobo.series == "Lobo Anual"
+        assert lobo.issue_number == "1"
+        assert lobo.is_annual is True
+
     def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
         """«Batman #400 Aniversario»: el número va con #, así que es la
         grapa #400 y no la efeméride del 400 aniversario. El patrón viejo

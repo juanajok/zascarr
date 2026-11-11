@@ -299,6 +299,9 @@ ANNUAL_PREFIX_PATTERN = re.compile(
     r"(?P<num>\d{1,4}[a-zA-Z]?)\s+(?P<rest>[^\W\d_].*)$",
     re.IGNORECASE,
 )
+# «JLD»/«OP»: acrónimo de una carpeta antecesora con el mismo inicial.
+ACRONYM_SERIES_PATTERN = re.compile(r"^[A-Z]{2,5}$")
+ACRONYM_NUMBER_PATTERN = re.compile(r"^(?P<acr>[A-Z]{2,5})(?P<num>\d{1,4}[a-zA-Z]?)$")
 SPECIAL_PATTERN = re.compile(r"\bEspecial\b", re.IGNORECASE)
 FILE_EXT_PATTERN = re.compile(r"\.(cbz|cbr|cb7|pdf|epub)$", re.IGNORECASE)
 
@@ -371,29 +374,69 @@ def _separar_prefijo_numerico(working: str) -> tuple[str, str | None]:
     return working, None
 
 
-def _serie_desde_carpeta(series: str, alternativa: str, carpeta: str | None) -> str:
-    """Ajusta la serie usando la carpeta padre, sin inventar.
+def _segmentos_contexto(contexto: str | None) -> list[str]:
+    if not contexto:
+        return []
+    return [s.strip() for s in contexto.split(" / ") if s.strip()]
 
-    - Si la carpeta (limpia de volumen/año) coincide con la alternativa del
-      nombre partido, se prefiere la alternativa.
-    - Si la carpeta empieza por la serie y añade una palabra editorial
-      («Joe Kubert» + «Presents»), se prefiere la carpeta.
+
+def _segmento_por_acronimo(acronimo: str, contexto: str | None) -> str | None:
+    for segmento in _segmentos_contexto(contexto):
+        if re.search(r"\b(?:vol(?:umen)?|tomo)\b", segmento, re.IGNORECASE):
+            continue
+        iniciales = "".join(p[0] for p in re.findall(r"[^\W\d_]+", segmento, re.UNICODE))
+        if iniciales.upper() == acronimo.upper():
+            return _limpiar_titulo_serie(segmento)
+    return None
+
+
+def _serie_desde_carpeta(series: str, alternativa: str, carpeta: str | None,
+                          contexto: str | None = None, is_annual: bool = False) -> str:
+    """Ajusta la serie usando carpetas, sin inventar.
+
+    - Alternativa del nombre cuyos tokens están en el contexto de carpetas
+      («Injustice» + «Año 3» → «Injustice: Gods Among Us - Año 3»).
+    - Acrónimo de una carpeta antecesora («JLD» → «Justice League Dark»,
+      «OP» → «One Piece»).
+    - Carpeta que termina en la serie («The Corinthian» + «Death in Venice»).
+    - Extensión editorial exacta («Joe Kubert» + «Presents»).
     """
-    if not carpeta:
+    if not carpeta and not contexto:
         return series
-    limpia = re.sub(r"\b(?:vol(?:umen)?\.?\s*\d+|v\s*\d+)\b", " ", carpeta, flags=re.IGNORECASE)
+    limpia = re.sub(
+        r"\b(?:vol(?:umen)?\.?\s*\d+|v\s*\d+)\b", " ", carpeta or "",
+        flags=re.IGNORECASE)
     limpia = re.sub(r"\b(?:19|20)\d{2}\b", " ", limpia)
     limpia = _limpiar_titulo_serie(limpia)
     limpia_norm = normalize_series_name(limpia)
-    if not limpia_norm:
-        return series
     alternativa_norm = normalize_series_name(alternativa)
     if alternativa_norm and alternativa_norm == limpia_norm:
         return alternativa
-    # Solo una extensión editorial explícita («Joe Kubert» + «Presents»).
+    # Alternativa contenida en el contexto de abuelo+padre.
+    if alternativa_norm and contexto:
+        tokens_alt = set(alternativa_norm.split())
+        tokens_ctx = set(normalize_series_name(contexto).split())
+        if tokens_alt and tokens_alt <= tokens_ctx:
+            return alternativa
+    # Acrónimo de una carpeta antecesora.
+    if ACRONYM_SERIES_PATTERN.fullmatch(series):
+        segmento = _segmento_por_acronimo(series, contexto)
+        if segmento:
+            return segmento
     series_norm = normalize_series_name(series)
+    # La carpeta es el título completo que termina en la serie
+    # («The corinthian-death in venice»).
+    if (series_norm and limpia_norm.endswith(series_norm)
+            and len(limpia_norm.split()) > len(series_norm.split())):
+        return limpia
+    # Extensión editorial explícita («Joe Kubert» + «Presents»).
     if series_norm and limpia_norm == series_norm + " presents":
         return limpia
+    # Anual sin número en la serie corta («Lobo - Anual 1»).
+    if (is_annual and alternativa_norm.endswith(("annual", "anual"))
+            and not re.search(r"\d", alternativa)
+            and series_norm and alternativa_norm.startswith(series_norm + " ")):
+        return alternativa
     return series
 
 
@@ -496,7 +539,9 @@ def _limpiar_titulo_serie(texto: str) -> str:
     return series.strip(" -\u2013\u2014(),;:#")
 
 
-def parse_comic_filename(filename: str, carpeta: str | None = None) -> ParsedComicName:
+def parse_comic_filename(
+    filename: str, carpeta: str | None = None, contexto: str | None = None
+) -> ParsedComicName:
     """Parsea un nombre de archivo de cómic y extrae metadatos."""
     result = ParsedComicName(original_filename=filename)
 
@@ -776,7 +821,26 @@ def parse_comic_filename(filename: str, carpeta: str | None = None) -> ParsedCom
         alternativa = _limpiar_titulo_serie(serie_completa)
         if alternativa and alternativa != series:
             result.series_alternativa = alternativa
-    series = _serie_desde_carpeta(series, result.series_alternativa, carpeta)
+
+    # «OP883»: acrónimo + número sin separador; «927.cbr»: serie vacía pero
+    # el contexto de carpetas sí dice la colección.
+    if not result.issue_number:
+        acronimo_numero = ACRONYM_NUMBER_PATTERN.fullmatch(series)
+        if acronimo_numero:
+            segmento = _segmento_por_acronimo(acronimo_numero.group("acr"), contexto)
+            if segmento:
+                result.issue_number = acronimo_numero.group("num").lstrip("0") or "0"
+                series = segmento
+    if not series and contexto and result.issue_number:
+        for segmento in _segmentos_contexto(contexto):
+            if re.search(r"\b(?:vol(?:umen)?|tomo)\b", segmento, re.IGNORECASE):
+                continue
+            if re.search(r"[^\W\d_]", segmento):
+                series = _limpiar_titulo_serie(segmento)
+                break
+
+    series = _serie_desde_carpeta(
+        series, result.series_alternativa, carpeta, contexto, result.is_annual)
     result.series = series
     result.confidence = _confidence(result)
     return result
