@@ -2202,6 +2202,16 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .previa-confirmar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .previa-error { margin: 0 0 8px; font-weight: 700; }
 
+/* BL-WK4 (#342): notas de colección discretas en las fichas. */
+.notas-serie, .nota-numero { margin-top: 22px; }
+.nota-form { display: grid; gap: 6px; margin-top: 6px; }
+.nota-form textarea { width: 100%; max-width: 48rem; font: inherit; }
+.nota-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.notas-numeros { display: grid; gap: 6px; padding-left: 1.1rem; }
+.nota-texto { display: block; overflow-wrap: anywhere; white-space: pre-wrap; }
+.nota-borrar { margin-top: 8px; }
+.exportar-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
