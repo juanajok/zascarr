@@ -2179,6 +2179,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .otras-ediciones { margin-top: 10px; }
 .otras-ediciones ul { font-size: .875rem; }
 
+
+/* BL-R7 (#236): vistas de trabajo predefinidas. */
+.vistas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 14px; margin: 16px 0 20px; }
+.vista-card { border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); padding: 14px; }
+.vista-recuento { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: 4px 0; }
+.vista-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.vista-fila { border-bottom: 2px solid var(--paper-2); padding: 8px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.vista-detalle { color: var(--ink-soft); }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
