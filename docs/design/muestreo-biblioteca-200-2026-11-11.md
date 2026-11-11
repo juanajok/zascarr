@@ -62,10 +62,21 @@ Fuera del repo:
 
 Las etiquetas se rellenaron **sin abrir el CSV de contexto ni ejecutar el
 parser**. Son una **primera pasada asistida**, no una validación humana:
-`etiquetado_por=asistente`. Antes de usar los números como benchmark definitivo
-hay que revisar, sobre todo, los 18 casos marcados `requiere_contexto=TRUE` y
-los títulos canónicos con prefijo editorial (por ejemplo, si la etiqueta debe
-ser `Shadow of the Bat` o `Batman: Shadow of the Bat`).
+`etiquetado_por=asistente`.
+
+Se hizo después una **revisión simulada por el agente** (no humana): 182
+etiquetas se mantuvieron y 18 se marcaron `dudosa` por depender de contexto
+externo. **No se corrigió ninguna etiqueta para favorecer al parser.** Las 18
+dudosas se excluyen de la métrica limpia y se reportan aparte. La revisión
+independiente que se intentó lanzar no produjo salida; no se presenta como
+humana.
+
+| Revisión | Filas |
+|---|---:|
+| Total | 200 |
+| Mantener | **182** |
+| Dudosa (excluida de métrica limpia) | **18** |
+| Corregir | **0** |
 
 ### `...csv` (ciego, para etiquetar)
 
@@ -108,11 +119,13 @@ etiquetar: sesgaría la medición.
 8. La etiqueta `asistente` es una primera pasada: la revisión humana es
    obligatoria antes de publicar una métrica definitiva.
 
-## 6. Resultado preliminar de la primera pasada
+## 6. Resultado de la primera pasada y de la revisión
 
 Métrica con la misma normalización para etiqueta y salida del parser
 (`Anual`≡`Annual` y sufijo de volumen fuera). No es un benchmark humano
 cerrado.
+
+### Revisión simulada: 182 filas limpias / 18 dudosas
 
 ### Parser
 
@@ -140,6 +153,21 @@ baja: 64/200. La causa principal no es el matcher: hay series del catálogo con
 otro título, alias de idioma (`100 Balas` vs `100 Bullets`), colecciones y
 huecos de Issue. Eso es precisamente lo que hay que separar en la siguiente
 iteración.
+
+### Comparación
+
+| Medida | 200 sin revisar | 182 revisadas |
+|---|---:|---:|
+| Parser serie | 151 | **148 / 182 = 81,3 %** |
+| Parser número | 187 | **177 / 182 = 97,3 %** |
+| Parser ambos | 150 | **147 / 182 = 80,8 %** |
+| Matcher enlaces correctos | 64 | **64 / 64** |
+| Matcher cobertura | 32,0 % | **35,2 %** |
+| Matcher `unsorted` | 125 | **107** |
+| Falsos positivos de pack/tomo/obra única/especial | 0 | **0** |
+
+Las 18 dudosas son exactamente las que ya estaban marcadas
+`requiere_contexto=TRUE` en la primera pasada, antes de ver resultados.
 
 ## 7. Segunda pasada de parser (sin tocar etiquetas)
 
