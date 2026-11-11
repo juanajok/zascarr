@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ arco.title }} en orden — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
+<h1>{{ arco.title }}</h1>
+<p class="subtitle">Orden de lectura{% if arco.is_crossover %} · cruza varias series{% endif %}.</p>
+{% if arco.description %}<p>{{ arco.description }}</p>{% endif %}
+<p class="caption">{{ arco.filas | length }} {{ "número" if arco.filas | length == 1 else "números" }} · {{ arco.series }} {{ "serie" if arco.series == 1 else "series" }}</p>
+{% if not arco.filas %}
+{{ ui.estado_vacio("Esta saga no tiene números enlazados", "No hay un orden de lectura que mostrar todavía.") }}
+{% else %}
+<ol class="arco-orden">
+  {% for f in arco.filas %}
+  <li>
+    <span class="arco-posicion">{{ f.orden }}</span>
+    <a href="/ui/series/{{ f.series_id }}/numero/{{ f.issue_id }}">{{ f.series }} #{{ f.numero }}{% if f.titulo %} · {{ f.titulo }}{% endif %}</a>
+    {% if f.fecha %}<span class="muted">{{ f.fecha }}</span>{% endif %}
+    {% if f.disponible %}{{ ui.chip("ok", "En tu biblioteca") }}{% else %}{{ ui.chip("neutro", "No disponible") }}{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% endif %}
+{% endblock %}

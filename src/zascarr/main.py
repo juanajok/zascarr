@@ -381,6 +381,7 @@ def create_app() -> FastAPI:
     from zascarr.api.wishlist import router as wishlist_router
     from zascarr.services.auth import AuthMiddleware
     from zascarr.web.ajustes import router as ajustes_router
+    from zascarr.web.arcos import router as arcos_ui_router
     from zascarr.web.asistente_carpetas import router as asistente_carpetas_router
     from zascarr.web.asistente_vinculacion import router as asistente_vinculacion_router
     from zascarr.web.asociar_fuente import router as asociar_fuente_ui_router
@@ -430,6 +431,7 @@ def create_app() -> FastAPI:
     app.include_router(legal_ui_router)
     app.include_router(navegacion_router)
     app.include_router(library_router)
+    app.include_router(arcos_ui_router)
     app.include_router(asistente_carpetas_router)
     app.include_router(asistente_vinculacion_router)
     app.include_router(pendientes_router)
