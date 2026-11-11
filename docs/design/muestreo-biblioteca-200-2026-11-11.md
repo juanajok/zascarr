@@ -116,6 +116,12 @@ tiene como `single_issue`; es una discrepancia de **edición**, no de identidad.
 La cobertura sigue siendo el problema: alias de idioma (`100 Balas`/`100
 Bullets`), series del catálogo con otro título, colecciones y huecos de Issue.
 
+Se añadió además un fallback de **serie completa exacta** para títulos partidos
+por ` - `: `Green Lantern - Origenes Secretos` puede probar la serie completa si
+la corta no matchea o si la completa es una coincidencia exacta más específica.
+No se usa fuzzy alternativo. En esta muestra no añadió enlaces nuevos (el
+catálogo no tiene esas series completas), pero no introdujo regresiones.
+
 ## 5. Fallos pendientes
 
 - Subtítulos/colecciones: `Green Lantern: Emerald Warriors`,
