@@ -96,6 +96,7 @@ def test_selector_fuera_de_rejilla_se_actualiza_por_oob(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
     assert fragmento.status_code == 200
     assert 'hx-swap-oob="outerHTML"' in fragmento.text
+    assert 'aria-label="Estado de la colección"' in fragmento.text
     assert '<option value="">Cualquier estado</option>' in fragmento.text
     assert 'selected' not in fragmento.text.split('hx-swap-oob="outerHTML"', 1)[1]
 

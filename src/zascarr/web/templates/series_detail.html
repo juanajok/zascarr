@@ -164,7 +164,7 @@
         <input type="hidden" name="accion" value="no_completar">
         <input type="hidden" name="confirmar" value="si">
         <input type="hidden" name="version" value="{{ coleccion_version }}">
-        <button class="btn ghost sm" type="submit" {% if aviso_coleccion %}autofocus{% endif %}>Sí, no la voy a completar</button>
+        <button class="btn ghost sm" type="submit">Sí, no la voy a completar</button>
       </form>
       {% else %}
       <form method="post" action="/ui/series/{{ series.id }}/coleccion">

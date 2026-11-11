@@ -445,6 +445,8 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
                      "Puedes dejar de completarla, pero la política no se cambia sola.",
         "guardado": "Guardado: sus huecos ya no cuentan como faltas.",
         "revertido": "Vuelve a contar como una serie que quieres completar.",
+        "conflicto_version": "Otra pestaña cambió esta serie desde que abriste la ficha. "
+                             "No se ha cambiado nada en esta pestaña: vuelve a intentarlo.",
     }.get(coleccion, "")
 
     politica = await _contexto_politica(db, series)
@@ -733,11 +735,10 @@ async def cambiar_coleccion(
             db, series_id, no_completar=(accion == "no_completar"),
             version_esperada=version)
     except ConflictoVersionError:
-        respuesta = templates.TemplateResponse(
-            request, "_coleccion_conflicto.html", {"series": series})
-        respuesta.status_code = 409
-        respuesta.headers["Cache-Control"] = "no-store"
-        return respuesta
+        # La ficha usa POST normal: se vuelve a ella (layout completo) con el
+        # aviso y el foco, en vez de devolver un fragmento sin cabecera.
+        return RedirectResponse(
+            url=f"/ui/series/{series_id}?coleccion=conflicto_version", status_code=303)
     return RedirectResponse(
         url=f"/ui/series/{series_id}?coleccion={destino}", status_code=303)
 
