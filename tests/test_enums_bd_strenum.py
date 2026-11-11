@@ -25,6 +25,7 @@ from zascarr.models import (
     IssueFormat,
     MetadataSource,
     ReadingStatus,
+    SeriesKind,
     WishlistOrigin,
     WishlistPolicy,
     WishlistStatus,
@@ -100,6 +101,11 @@ MIEMBROS = {
         "CONFIRMADA": "confirmada",
         "LIMPIADA": "limpiada",
         "CANCELADA": "cancelada",
+    },
+    SeriesKind: {
+        "REGULAR": "regular",
+        "ANNUAL": "annual",
+        "SPECIAL": "special",
     },
     DownloadBackend: {"TRANSMISSION": "transmission", "AMULE": "amule"},
 }

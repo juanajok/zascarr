@@ -106,8 +106,10 @@ class TestFormatoEsperadoAlMatcher:
     async def test_omnigold_se_traduce_a_omnibus(self, tmp_path, monkeypatch):
         capturado: dict = {}
 
-        async def decide_falso(self, triage, extractor=None, formato_esperado=None):
+        async def decide_falso(self, triage, extractor=None, formato_esperado=None,
+                               annual=False):
             capturado["formato"] = formato_esperado
+            capturado["annual"] = annual
             capturado["extraido"] = extractor(triage.path.name) if extractor else None
             return MatchResult(MatchStatus.UNSORTED, notes=[])
 
@@ -118,6 +120,7 @@ class TestFormatoEsperadoAlMatcher:
         resultado = await _triage_and_match(FakeDedupeSession(None), src)
 
         assert capturado["formato"] == "omnibus"          # OMNIBUS.value
+        assert capturado["annual"] is False
         assert capturado["extraido"][1] == "12"           # el número sigue saliendo
         assert resultado.edition_kind == "omnigold"
 
@@ -128,8 +131,10 @@ class TestFormatoEsperadoAlMatcher:
         y el matcher entonces solo enlaza si no hay nada que desambiguar."""
         capturado: dict = {}
 
-        async def decide_falso(self, triage, extractor=None, formato_esperado=None):
+        async def decide_falso(self, triage, extractor=None, formato_esperado=None,
+                               annual=False):
             capturado["formato"] = formato_esperado
+            capturado["annual"] = annual
             return MatchResult(MatchStatus.UNSORTED, notes=[])
 
         monkeypatch.setattr("zascarr.core.matcher.SeriesMatcher.decide", decide_falso)
@@ -139,7 +144,31 @@ class TestFormatoEsperadoAlMatcher:
         resultado = await _triage_and_match(FakeDedupeSession(None), src)
 
         assert capturado["formato"] is None
+        assert capturado["annual"] is False
         assert resultado.edition_kind is None
+
+    @pytest.mark.asyncio
+    async def test_anual_llega_al_matcher_con_la_marca_y_con_annual_en_el_titulo(
+            self, tmp_path, monkeypatch):
+        """El importer no puede perder la marca: si el matcher no sabe que es
+        anual, vuelve a enlazarlo con el nº 1 de la madre."""
+        capturado: dict = {}
+
+        async def decide_falso(self, triage, extractor=None, formato_esperado=None,
+                               annual=False):
+            capturado["annual"] = annual
+            capturado["extraido"] = extractor(triage.path.name) if extractor else None
+            return MatchResult(MatchStatus.UNSORTED, notes=[])
+
+        monkeypatch.setattr("zascarr.core.matcher.SeriesMatcher.decide", decide_falso)
+
+        src = tmp_path / "Batman Annual 01 (2012).cbz"
+        make_cbz(src)
+        await _triage_and_match(FakeDedupeSession(None), src)
+
+        assert capturado["annual"] is True
+        assert capturado["extraido"][0] == "Batman Annual"
+        assert capturado["extraido"][1] == "1"
 
 
 class TestImportFileDuplicado:

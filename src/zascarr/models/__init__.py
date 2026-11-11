@@ -42,6 +42,23 @@ class ComicTradition(enum.StrEnum):
     BRITISH       = "british"
     OTHER         = "other"
 
+
+class SeriesKind(enum.StrEnum):
+    """Clasificación de la serie, no del Issue.
+
+    Un anual es una línea de numeración propia y se representa como una serie
+    con `kind=annual` y `parent_series_id` apuntando a la serie madre. No se
+    mete en `Issue.format`: la grapa y el anual comparten formato de
+    publicación, lo que cambia es el espacio de numeración.
+
+    `special` queda preparado para la decisión pendiente de los «Especiales»;
+    no se usa todavía en el camino automático.
+    """
+
+    REGULAR = "regular"
+    ANNUAL = "annual"
+    SPECIAL = "special"
+
 class CreatorRole(enum.StrEnum):
     WRITER      = "writer"
     PENCILER    = "penciler"
@@ -441,6 +458,10 @@ class Character(Base):
 
 class Series(Base):
     __tablename__ = "series"
+    __table_args__ = (
+        CheckConstraint("parent_series_id IS NULL OR parent_series_id <> id",
+                        name="ck_series_parent_no_self"),
+    )
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     title:           Mapped[str]      = mapped_column(String(500), nullable=False)
     sort_title:      Mapped[str|None] = mapped_column(String(500))
@@ -466,6 +487,19 @@ class Series(Base):
             values_callable=lambda obj: [e.value for e in obj],
         ),
         default=ComicTradition.AMERICAN,
+    )
+    # Clasificación de la serie: `annual` es una línea con numeración propia.
+    # No se usa `Issue.format` para esto (ver SeriesKind).
+    kind: Mapped[SeriesKind] = mapped_column(
+        Enum(SeriesKind, name="series_kind",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=SeriesKind.REGULAR,
+        server_default=SeriesKind.REGULAR.value,
+    )
+    #: Para una serie anual, la serie madre. Relación de presentación, no
+    #: identidad: se propone/confirma, nunca se deduce solo del título.
+    parent_series_id: Mapped[str|None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"), index=True
     )
     start_year:      Mapped[int|None] = mapped_column(SmallInteger)
     end_year:        Mapped[int|None] = mapped_column(SmallInteger)
