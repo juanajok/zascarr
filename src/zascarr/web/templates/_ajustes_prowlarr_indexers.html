@@ -15,7 +15,7 @@
                {% if i.id in seleccionados %}checked{% endif %}>
         {{ i.name }}
       </label>
-      {% if i.categories %}<span class="caption">{{ i.categories | join(", ") }}</span>{% endif %}
+      {% if i.categories %}<span class="rotulo">{{ i.categories | join(", ") }}</span>{% endif %}
     </li>
     {% else %}
     <li class="muted">Prowlarr no tiene indexers activos.</li>
