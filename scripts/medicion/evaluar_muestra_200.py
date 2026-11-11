@@ -66,7 +66,8 @@ async def _matcher(rows: list[dict], db_url: str) -> dict:
                 tr = TriageResult(path=Path(r["ruta"]))
                 res = await matcher.decide(
                     tr, extractor=lambda _n, p=p: (p.series, p.issue_number, p.year),
-                    annual=p.is_annual)
+                    annual=p.is_annual,
+                    series_alternativa=p.series_alternativa or None)
                 c[str(res.status)] += 1
                 serie_t = numero_t = None
                 if res.series_id:

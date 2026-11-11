@@ -551,6 +551,32 @@ class TestSeriesMatcherDecide:
         assert result.series_id == sid2
 
     @pytest.mark.asyncio
+    async def test_serie_alternativa_solo_si_la_primera_no_matchea(self):
+        """Green Lantern - Origenes Secretos: la serie corta no matchea; la
+        completa sí, y además de forma exacta."""
+        sid = uuid4()
+        iid = uuid4()
+        session = make_session_mock([], iid)
+        matcher = SeriesMatcher(session)
+        matcher.find_alias = AsyncMock(return_value=None)
+
+        async def fake_find(title, year=None, volume=None):
+            if title == "Green Lantern":
+                return []
+            return [SeriesHit(sid, "Green Lantern - Origenes Secretos", 2011, 1.0)]
+
+        matcher.find_series = fake_find
+        tr = TriageResult(
+            path=Path("Green Lantern - Origenes Secretos #01.cbr"),
+            comic_info=ComicInfo(series="Green Lantern", number="1"),
+        )
+        result = await matcher.decide(
+            tr, series_alternativa="Green Lantern - Origenes Secretos")
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid
+        assert any("serie alternativa" in n for n in result.notes)
+
+    @pytest.mark.asyncio
     async def test_sin_titulo_va_a_unsorted(self):
         session = make_session_mock([])
         matcher = SeriesMatcher(session)
@@ -1291,6 +1317,14 @@ class TestRealWorldFilenames:
         assert parse_comic_filename(
             "Daytripper (por Aruso) CRG 8º Aniversario.cbr"
         ).series == "Daytripper"
+
+    def test_guardar_serie_completa_antes_del_subtitulo(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "Green Lantern - Origenes Secretos #01 (GL vol. 4 #29).cbr")
+        assert result.series == "Green Lantern"
+        assert result.series_alternativa == "Green Lantern Origenes Secretos"
 
     @pytest.mark.parametrize("filename,expected_series,expected_num,expected_kind", [
         ("Batman Omnibus Vol 1.cbz", "Batman", "1", "omnibus"),

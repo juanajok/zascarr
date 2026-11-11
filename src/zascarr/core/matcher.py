@@ -397,7 +397,8 @@ class SeriesMatcher:
 
     async def decide(self, triage, extractor=None,
                      formato_esperado: str | None = None,
-                     annual: bool = False) -> MatchResult:
+                     annual: bool = False,
+                     series_alternativa: str | None = None) -> MatchResult:
         """Punto de entrada.
 
         `extractor` es la inyección de naming.py:
@@ -451,6 +452,22 @@ class SeriesMatcher:
                     notes=["parece un anual y no hay una serie anual que coincida: "
                            "no se enlaza a la serie madre"],
                 )
+
+        # La serie completa («Green Lantern - Origenes Secretos») es más
+        # específica que la corta («Green Lantern»). Si hay una única
+        # coincidencia EXACTA con la completa, manda: si no, se sigue con la
+        # corta y su umbral normal. Nunca se usa la alternativa fuzzy.
+        if series_alternativa:
+            alt_hits = await self.find_series(series_alternativa, year, volume)
+            if annual:
+                alt_hits = [h for h in alt_hits if es_titulo_de_anual(h.title)]
+            exactos = [h for h in alt_hits if h.score == 1.0]
+            if len(exactos) == 1:
+                return await self._resolve(
+                    exactos[0], number, alt_hits, MatchStatus.DIRECT,
+                    [f"serie alternativa exacta: {exactos[0].title}"],
+                    formato_esperado, nombre=triage.path.name)
+
         good = [h for h in hits if h.score >= FUZZY_THRESHOLD]
 
         if not good:
