@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Editar la ficha — {{ series.title }} — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/series/{{ series.id }}">← Volver a la serie</a></p>
+<h1>Editar la ficha</h1>
+<p class="subtitle">Corrige lo que no cuadre. Los campos que cambies quedarán como manuales y protegidos.</p>
+{% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
+<form method="post" action="/ui/series/{{ series.id }}/editar" class="edicion-form">
+  <label>Título
+    <input type="text" name="title" value="{{ valores.title }}" maxlength="500" required>
+    {% if errores.title %}<span class="campo-error">{{ errores.title }}</span>{% endif %}
+    {% if "title" in campos_manuales %}{{ ui.chip("info", "Manual") }}{% endif %}
+  </label>
+  <div class="edicion-dos">
+    <label>Año de inicio
+      <input type="text" name="start_year" value="{{ valores.start_year }}" inputmode="numeric" placeholder="1987">
+      {% if errores.start_year %}<span class="campo-error">{{ errores.start_year }}</span>{% endif %}
+    </label>
+    <label>Año de fin
+      <input type="text" name="end_year" value="{{ valores.end_year }}" inputmode="numeric" placeholder="1995">
+      {% if errores.end_year %}<span class="campo-error">{{ errores.end_year }}</span>{% endif %}
+    </label>
+  </div>
+  <label>Editorial
+    <input type="text" name="publisher" value="{{ valores.publisher }}" maxlength="255">
+    {% if errores.publisher %}<span class="campo-error">{{ errores.publisher }}</span>{% endif %}
+  </label>
+  <label>Sinopsis
+    <textarea name="description" rows="6" maxlength="10000">{{ valores.description }}</textarea>
+    {% if errores.description %}<span class="campo-error">{{ errores.description }}</span>{% endif %}
+  </label>
+  <label>Números en total
+    <input type="text" name="total_issues" value="{{ valores.total_issues }}" inputmode="numeric" placeholder="12">
+    {% if errores.total_issues %}<span class="campo-error">{{ errores.total_issues }}</span>{% endif %}
+  </label>
+  <p class="caption">Solo cambia lo que ves en ZascArr; tus archivos no se tocan. Los campos editados quedan protegidos frente al enriquecimiento.</p>
+  <div class="edicion-acciones">
+    <button type="submit" class="btn primary">Guardar</button>
+    <a class="btn ghost" href="/ui/series/{{ series.id }}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

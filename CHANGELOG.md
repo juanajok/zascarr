@@ -62,6 +62,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Editar metadatos de serie y número a mano (BL-INF5, #591).** Formulario propio para corregir
+  título, años, editorial, sinopsis y total de la serie; y número, título, fecha, formato y
+  sinopsis del número. Cada campo que cambia queda **manual** (`metadata_["manual"]` con fecha)
+  y **bloqueado** por defecto; la tabla de procedencia lo muestra y permite «Volver a la fuente»
+  sin borrar el valor. Valida años/total/longitudes y colisión de número; no toca archivos ni
+  `metadata_source`. Sin migración. Ficha: `docs/design/benchmark-BL-INF5-edicion-metadatos.md`.
 - **Elegir qué indexers de Prowlarr usa ZascArr.** En Ajustes → Prowlarr se puede cargar la lista
   real de indexers y marcar solo los que quieres para cómics; ZascArr pasa `indexerIds` en la
   búsqueda y no toca los indexers que usan Sonarr/Radarr u otras apps. Sin marcar ninguno se
