@@ -1345,6 +1345,17 @@ class TestRealWorldFilenames:
         assert result.series == serie
         assert result.issue_number == numero
 
+    @pytest.mark.parametrize("filename", [
+        "Injustice - Gods Among Us - Año 2 #25 - Anual.cbr",
+        "Injustice - Gods Among Us - Año 3 #25 - Anual.cbr",
+        "Injustice - Gods Among Us - Año 5 #41 - Anual.cbr",
+    ])
+    def test_pack_issue_mas_anual_no_es_el_numero_del_anual(self, filename):
+        """«#25 - Anual» es un pack; el 25 no es un número único de grapa."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        assert parse_comic_filename(filename).issue_number == ""
+
     def test_pack_con_rango_y_anual_no_inventa_numero(self):
         from zascarr.utils.naming import parse_comic_filename
 
