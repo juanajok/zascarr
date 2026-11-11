@@ -93,6 +93,45 @@ Dos nombres no son un anual puro y hay que tratarlos como pack o caso mixto:
    línea; la fuente (Comic Vine/GCD/Metron) o una confirmación humana deben
    decidir el título canónico y el padre.
 
+## Dry-run de clasificación (2026-11-11, solo lectura)
+
+`scripts/medicion/propuesta_anuales.py` se ejecutó contra la misma base, con el
+parser de la rama, en una transacción de solo lectura. No creó nada; escribió
+una propuesta local. Resumen:
+
+| Acción | Archivos |
+|---|---:|
+| Crear serie anual con padre | 7 |
+| Crear serie anual sin padre | 26 |
+| Reclasificar un enlace actual | 22 |
+| Revisar número repetido | 14 |
+| Pack/mixto (no convertir en anual) | 6 |
+| Revisar a mano | 5 |
+| **Total** | **80** |
+
+- **21 series anuales** con propuesta de creación/cambio (el resto de grupos
+  son packs, duplicados o revisión).
+- **27 archivos** van a una serie anual sin padre en el catálogo: la biblioteca
+  solo tiene 29 series y no están las series madre de la mayoría de estos
+  anuales. El enlace al padre es opcional; se puede crear la serie anual y
+  enlazarla cuando exista el padre.
+- **14 archivos** son 7 pares con el mismo número anual (`Flash Annual #1/#2`
+  y `Superman Batman Anual #1–#5`, cada uno con dos escaneos). No se crean dos
+  Issues: hay que decidir copia/publicación.
+- **6 packs/mixtos**, entre ellos `Batman #647-650 y anual 25`, cuatro
+  `Injustice ... #25 - Anual` y `51 JLD #34B-Anual2`.
+- **5 a revisar**: dos `Animal Man Annual` (hay dos series `ANIMAL MAN`/`Animal
+  Man`), `Injustice - Gods Among Us Annual #01` y `Lobo - Anual 1` (la marca
+  anual cae fuera del título de serie) y `11.1 Annual 01 Catwoman`.
+- Solo 4 padres se identifican con confianza: `Batman Vol 1`,
+  `Batman: Shadow of the Bat`, `Green Lantern` y `JSA`.
+
+La propuesta no se aplica: el dry-run es material de revisión. Los títulos
+`Batman Anual`/`Batman Annual`, `Flash Annual`/`The Flash Annual` y
+`Shadow Of The Bat Annual`/`Batman: Shadow of the Bat Annual` se normalizan en
+la propuesta, pero el título canónico definitivo debe venir de la fuente o de
+una confirmación humana.
+
 ## Siguiente fase
 
 La decisión A sigue siendo la adecuada, pero el backfill no es un
