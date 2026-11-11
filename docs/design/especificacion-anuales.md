@@ -2,7 +2,14 @@
 
 **Estado:** decisión del PO (2026-11-11): **opción A**, serie anual propia con
 enlace a la serie madre. **No autoriza migración ni backfill**: la fase 1
-espera al censo de la biblioteca real. La fase 0 (sin esquema) va en esta rama.
+espera a una autorización explícita después del censo. La fase 0 (sin esquema)
+va en esta rama.
+
+**Censo real ejecutado (2026-11-11):** 80 archivos anuales, **0 series
+anuales**, **25 enlazados a la serie madre** (5 series) y **55 sin Issue**;
+todos en `/media/library`, ninguno desaparecido. El detalle y las muestras
+están en [`censo-anuales-2026-11-11.md`](censo-anuales-2026-11-11.md). El censo
+decide que el backfill hace falta, pero no lo autoriza.
 
 **Problema.** Un archivo `Batman Annual 01` se parseaba como `Batman` `#1`; el
 matcher podía enlazarlo con la grapa `Batman #1` y `numero_de_grapa` lo contaba
@@ -67,11 +74,12 @@ Reglas:
 que se llame «Annual» sin serlo, y no arregla los archivos ya enlazados a la
 madre. Eso es fase 1.
 
-## Fase 1 — pendiente del censo
+## Fase 1 — censo ejecutado, pendiente de autorización
 
-1. Censo de solo lectura con `scripts/medicion/censo_anuales.py`:
-   series anuales, issues con número anual, archivos anuales sin Issue y
-   archivos anuales ya enlazados a una serie no anual.
+1. Censo de solo lectura ejecutado el 2026-11-11 con
+   `scripts/medicion/censo_anuales.py`: 80 archivos anuales, 0 series anuales,
+   25 enlazados a la madre y 55 sin Issue. Resultado en
+   [`censo-anuales-2026-11-11.md`](censo-anuales-2026-11-11.md).
 2. Migración **aditiva**: `series.kind` (`regular | annual | special`) y
    `series.parent_series_id` nullable, FK a `series.id`. Sin mover datos.
 3. Alta/enlace: la serie anual usa sus IDs de fuente (Comic Vine/GCD/Metron);
