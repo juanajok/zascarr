@@ -8,7 +8,7 @@ Transmission/aMule ni Prowlarr reales.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -20,7 +20,6 @@ from zascarr.models import (
     ComicTradition,
     File,
     FileFormat,
-    Issue,
     MetadataSource,
     Series,
     Wishlist,
@@ -37,6 +36,7 @@ from zascarr.services.orchestrator import (
     MOTIVO_SIN_FUENTE,
     MOTIVO_SIN_RESULTADOS,
     DownloadBackend,
+    MOTIVO_PROWlARR_CONFIGURACION,
     Orchestrator,
     SincronizacionPolitica,
     _extract_ed2k_hash,
@@ -62,7 +62,8 @@ def _p2p_enabled(monkeypatch):
     así que se habilitan los tres para no romper cada test existente."""
     settings = get_settings()
     settings = settings.model_copy(update={
-        "prowlarr_enabled": True, "transmission_enabled": True, "amule_enabled": True,
+        "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+        "prowlarr_api_key": "clave", "transmission_enabled": True, "amule_enabled": True,
     })
     monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
 
@@ -311,7 +312,8 @@ class TestMotivoNoAvanza:
     @pytest.mark.asyncio
     async def test_candidatos_encontrados_pero_backend_apagado(self, monkeypatch):
         settings = get_settings().model_copy(update={
-            "prowlarr_enabled": True, "transmission_enabled": False, "amule_enabled": False,
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave", "transmission_enabled": False, "amule_enabled": False,
         })
         monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
         item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
@@ -629,7 +631,7 @@ class TestUltimoIntento:
         """Sin DB real: se verifica que el WHERE generado cubre WANTED y
         FAILED (no solo WANTED, o un fallo de envío se abandona para
         siempre) y compara last_searched_at contra NULL o el cooldown."""
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
+        cutoff = datetime.now(UTC) - timedelta(hours=6)
         from sqlalchemy import or_
         stmt = (
             select(Wishlist)
@@ -692,7 +694,7 @@ class TestCheckCompletions:
     async def test_item_solo_con_series_id_busca_por_join_a_issues(self):
         series_id = uuid4()
         item = Wishlist(id=uuid4(), series_id=series_id, status=WishlistStatus.DOWNLOADING,
-                        added_at=datetime.now(timezone.utc) - timedelta(days=1))
+                        added_at=datetime.now(UTC) - timedelta(days=1))
         session = FakeSession([
             FakeExecResult([item]),
             FakeExecResult([make_file()]),  # el join ya filtra por series_id
@@ -720,7 +722,7 @@ class TestCheckCompletions:
     async def test_por_series_id_filtra_is_missing_en_el_where(self):
         series_id = uuid4()
         item = Wishlist(id=uuid4(), series_id=series_id, status=WishlistStatus.DOWNLOADING,
-                        added_at=datetime.now(timezone.utc) - timedelta(days=1))
+                        added_at=datetime.now(UTC) - timedelta(days=1))
         session = CapturingSession([FakeExecResult([item]), FakeExecResult([])])
         orch = Orchestrator(db=session)
 
@@ -754,7 +756,8 @@ class TestGateLegalYOptInP2P:
         (transmission_enabled=False, default de fábrica) no se intenta."""
         item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
         settings = get_settings().model_copy(update={
-            "prowlarr_enabled": True, "transmission_enabled": False, "amule_enabled": False,
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave", "transmission_enabled": False, "amule_enabled": False,
         })
         monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
 
@@ -1181,3 +1184,22 @@ class TestSincronizacionD8:
 
         assert resultado == SincronizacionPolitica(0, 0)
         assert len(session._queue) == 0, "sin acuse no se consulta siquiera la política"
+
+
+    @pytest.mark.asyncio
+    async def test_prowlarr_encendido_sin_url_o_clave_no_es_sin_resultados(self, monkeypatch):
+        """Una fuente encendida pero incompleta no se consulta y se dice la causa."""
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "", "prowlarr_api_key": "",
+            "forum_enabled": False,
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+
+        result = await orch._process_item(item)
+
+        assert result is False
+        assert item.last_error == MOTIVO_PROWlARR_CONFIGURACION
+        orch._prowlarr.search.assert_not_called()

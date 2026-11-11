@@ -75,6 +75,14 @@ COMIC_CATEGORIES = [7030, 7020]
 MAX_SIZE_BYTES = 500 * 1024 * 1024
 
 
+def prowlarr_configurado(settings) -> bool:
+    """¿Prowlarr tiene URL y API key? Una fuente encendida pero incompleta no se consulta."""
+    return bool(
+        (getattr(settings, "prowlarr_url", "") or "").strip()
+        and (getattr(settings, "prowlarr_api_key", "") or "").strip()
+    )
+
+
 def hay_fuente_de_busqueda(settings) -> bool:
     """¿Hay al menos una fuente de búsqueda de descargas activa? (D9; la reutiliza el Inicio, V4,
     para no inventar su propia definición de «fuente activa»)."""
@@ -90,6 +98,9 @@ def hay_fuente_de_busqueda(settings) -> bool:
 # vive aquí: es un estado global (ver services/legal.py), lo muestra la
 # UI de wishlist con un banner propio en vez de escribirse en cada fila.
 MOTIVO_SIN_FUENTE = "Sin fuente de búsqueda activa — activa Prowlarr o el foro en Ajustes"
+MOTIVO_PROWlARR_CONFIGURACION = (
+    "Prowlarr está encendido pero le falta la URL o la clave de API — revísalo en Ajustes"
+)
 MOTIVO_FUENTE_INACCESIBLE = (
     "La fuente de búsqueda no respondió a tiempo — se reintentará automáticamente"
 )
@@ -295,11 +306,15 @@ class Orchestrator:
         results: list[SearchResult] = []
         motivo_prowlarr: str | None = None
         if settings.prowlarr_enabled:
-            try:
-                results = await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
-            except Exception:
-                logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
-                motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
+            if not prowlarr_configurado(settings):
+                # D9 (2026-11-11): fuente encendida pero incompleta NO es «sin resultados».
+                motivo_prowlarr = MOTIVO_PROWlARR_CONFIGURACION
+            else:
+                try:
+                    results = await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
+                except Exception:
+                    logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
+                    motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
 
         candidates = self._ranked_candidates(results, query) if results else []
 

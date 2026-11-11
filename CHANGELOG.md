@@ -7,6 +7,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Deseados distingue Prowlarr incompleto de «sin resultados».** Si Prowlarr está encendido
+  pero le falta la URL o la clave de API, no se consulta y el deseo muestra esa causa con un
+  aviso y enlace a Ajustes, en vez de parecer que la búsqueda no encontró nada. La pantalla
+  aclara que el ciclo busca periódicamente y «Buscar ahora» es inmediato; no se busca solo al
+  añadir. Ficha: `docs/design/benchmark-busqueda-deseados-prowlarr-2026-11-11.md`.
 - **«Sí, organizar» enseña el destino y pide confirmación antes de mover (F1 de #272, #636).**
   El botón ya no lanza el movimiento directo: abre una vista previa de solo lectura con serie,
   número, carpeta de destino y nombre final, y solo «Confirmar y organizar» ejecuta la asignación

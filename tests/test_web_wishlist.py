@@ -9,7 +9,6 @@ lógica de negocio (ya cubierta en test_wishlist_service.py).
 from __future__ import annotations
 
 import re
-
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -24,7 +23,7 @@ from zascarr.services.orchestrator import Orchestrator, crear_token_candidato
 from zascarr.services.prowlarr import SearchResult
 
 
-def _accepted() -> "FakeExecResult":
+def _accepted() -> FakeExecResult:
     """Fila de la comprobación de aviso legal (gate de rutas de riesgo)
     — va SIEMPRE la primera en la cola de las rutas gateadas, antes que
     cualquier query propia del endpoint."""
@@ -441,3 +440,15 @@ class TestEnviarCandidato:
                             data={"token": self._token(item_id)})
         assert r.status_code == 403
         assert r.headers["hx-redirect"] == "/ui/legal"
+
+
+def test_index_avisa_si_prowlarr_esta_incompleto(monkeypatch):
+    """D9 (2026-11-11): Prowlarr encendido sin URL/clave no se presenta como «sin resultados»."""
+    settings = get_settings().model_copy(update={
+        "prowlarr_enabled": True, "prowlarr_url": "", "prowlarr_api_key": ""})
+    monkeypatch.setattr("zascarr.web.wishlist.get_settings", lambda: settings)
+    with use_fake_session(FakeSession(exec_queue=[FakeExecResult([]), _accepted()])) as client:
+        r = client.get("/ui/wishlist")
+    assert r.status_code == 200
+    assert "Prowlarr está encendido pero le falta la URL o la clave" in r.text
+    assert "Revisar Prowlarr en Ajustes" in r.text
