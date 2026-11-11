@@ -1,0 +1,63 @@
+{#- Campos del panel «Filtros»: se reutilizan en la barra y en el OOB del fragmento. -#}
+<div class="filtro-campo">
+  <label for="f-tradition">Tradición</label>
+  <select name="tradition" id="f-tradition">
+    <option value="">Todas las tradiciones</option>
+    {% for value, label in tradiciones %}
+    <option value="{{ value }}" {% if value == filtros.tradition %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% if publishers or es_fragmento %}
+<div class="filtro-campo">
+  <label for="f-publisher">Editorial</label>
+  <select name="publisher_id" id="f-publisher">
+    <option value="">Todas las editoriales</option>
+    {% for p in publishers or [] %}
+    <option value="{{ p.id }}" {% if filtros.publisher_id and p.id|string == filtros.publisher_id %}selected{% endif %}>{{ p.name }}</option>
+    {% endfor %}
+    {% if filtros.publisher_id and not publishers %}
+    <option value="{{ filtros.publisher_id }}" selected>{{ publisher_conocido or "Editorial seleccionada" }}</option>
+    {% endif %}
+  </select>
+</div>
+{% endif %}
+<div class="filtro-campo">
+  <label for="f-leido">Lectura</label>
+  <select name="leido" id="f-leido">
+    <option value="">Toda la lectura</option>
+    <option value="si" {% if filtros.leido == "si" %}selected{% endif %}>Con leídos</option>
+    <option value="leyendo" {% if filtros.leido == "leyendo" %}selected{% endif %}>Leyendo</option>
+    <option value="no" {% if filtros.leido == "no" %}selected{% endif %}>Sin leídos</option>
+  </select>
+</div>
+<div class="filtro-campo">
+  <label for="f-personaje">Personaje</label>
+  <input type="search" placeholder="Buscar personaje…" id="f-personaje" name="personaje"
+         hx-get="/ui/biblioteca/buscar-personaje" hx-trigger="keyup changed delay:400ms"
+         hx-target="#resultados-personaje" hx-swap="innerHTML" hx-include="#filtros">
+  <div id="resultados-personaje" class="series-results" aria-live="polite"></div>
+</div>
+<div class="filtro-campo">
+  <label for="f-saga">Saga</label>
+  <input type="search" placeholder="Buscar saga…" id="f-saga" name="saga"
+         hx-get="/ui/biblioteca/buscar-saga" hx-trigger="keyup changed delay:400ms"
+         hx-target="#resultados-saga" hx-swap="innerHTML" hx-include="#filtros">
+  <div id="resultados-saga" class="series-results" aria-live="polite"></div>
+</div>
+<div class="filtro-campo">
+  <label for="f-etiquetas">Etiquetas</label>
+  <input type="search" id="f-etiquetas" name="etiquetas" value="{{ filtros.etiquetas }}"
+         placeholder="Buscar por etiqueta…" autocomplete="off"
+         hx-get="/ui/biblioteca/etiquetas/sugerir" hx-trigger="keyup changed delay:300ms"
+         hx-target="#sugerencias-etiquetas" hx-swap="innerHTML" hx-include="#filtros">
+  <div id="sugerencias-etiquetas" class="series-results" aria-live="polite"></div>
+</div>
+<div class="filtro-campo">
+  {% include "_selector_coleccion.html" %}
+</div>
+<input type="hidden" name="character_id" value="{{ filtros.character_id }}">
+<input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
+<input type="hidden" name="page" value="1">
+<p class="caption barra-panel-ayuda">Los filtros se aplican al cambiarlos.</p>
+<noscript><button class="btn ghost sm" type="submit">Aplicar filtros</button></noscript>

@@ -398,7 +398,8 @@ async def _contexto(
                     "nombre": resueltas[normalizado].name,
                     "negativa": negativa,
                     "url_quitar": _url_pagina(sin_filtros, page=1),
-                    "url_quitar_fragmento": _url_fragmento(sin_filtros, page=1),
+                    "url_quitar_fragmento": (
+                        _url_fragmento(sin_filtros, page=1) + "&quitar=etiquetas"),
                 })
         items, total, pagina = await service.list_series_paginado(
             page=pagina,
@@ -494,9 +495,9 @@ async def _contexto(
     )
     activos = _filtros_activos(filtros_finales, nombres)
     num_filtros = sum(bool(v) for v in (
-        filtros_finales.tradition, filtros_finales.publisher_id,
+        filtros_finales.q, filtros_finales.tradition, filtros_finales.publisher_id,
         filtros_finales.character_id, filtros_finales.story_arc_id,
-        filtros_finales.leido)) + len(etiquetas_activas)
+        filtros_finales.leido, filtros_finales.coleccion)) + len(etiquetas_activas)
     recuento = (_texto_recuento_etiquetas(total, etiquetas_activas)
                 or _texto_recuento(total, bool(activos) or bool(etiquetas_activas)))
     if error:
@@ -516,6 +517,7 @@ async def _contexto(
         "error": error,
         "avisos": avisos,
         "filtros": filtros_finales,
+        "tradiciones": [(t.value, _TRADICION_LABEL[t]) for t in ComicTradition],
         "ordenes": (
             ("titulo", "Título A-Z"), ("titulo_desc", "Título Z-A"),
             ("anio_desc", "Año reciente"), ("anio_asc", "Año antiguo"),
@@ -554,13 +556,19 @@ async def _contexto(
     }
 
 
-def _respuesta_fragmento(request: Request, ctx: dict) -> Response:
+async def _respuesta_fragmento(
+        request: Request, ctx: dict, db: AsyncSession | None = None) -> Response:
     """Fragmento HTMX: la URL que se empuja es siempre la de la PÁGINA completa.
 
     `HX-Push-Url` evita que recargar o marcar deje HTML sin layout (riesgo alto
     del benchmark BL-IT01). `no-store` evita mezclar filtros con el botón Atrás.
     """
     ctx["es_fragmento"] = True
+    if request.headers.get("HX-Request") == "true" and db is not None:
+        try:
+            ctx["publishers"] = await SeriesService(db).list_publishers_with_series()
+        except Exception:  # noqa: BLE001 — el panel ya tiene su OOB mínimo
+            ctx["publishers"] = []
     respuesta = templates.TemplateResponse(request, "_rejilla_biblioteca.html", ctx)
     respuesta.headers["HX-Push-Url"] = ctx["url_canonica"]
     respuesta.headers["Cache-Control"] = "no-store"
@@ -674,7 +682,7 @@ async def resultados(
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         leido, orden, coleccion)
-    return _respuesta_fragmento(request, await _contexto(db, filtros))
+    return await _respuesta_fragmento(request, await _contexto(db, filtros), db)
 
 
 def _enlace_con_filtro(filtros: Filtros, clave: str, valor: str) -> str:
