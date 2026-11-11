@@ -93,17 +93,17 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
 | Medida | Resultado |
 |---|---:|
-| Serie correcta | **158 / 200 = 79,0 %** |
+| Serie correcta | **162 / 200 = 81,0 %** |
 | Número correcto | **195 / 200 = 97,5 %** |
-| Ambos correctos | **157 / 200 = 78,5 %** |
+| Ambos correctos | **161 / 200 = 80,5 %** |
 
 ### Matcher
 
 | Medida | Resultado |
 |---|---:|
-| `direct` | 54 |
+| `direct` | 53 |
 | `fuzzy` | 22 |
-| `unsorted` | 124 |
+| `unsorted` | 125 |
 | Enlaces con Issue | 65 |
 | Enlaces con serie+número correctos | **65 / 65** |
 | Cobertura | **65 / 200 = 32,5 %** |
@@ -124,8 +124,10 @@ catálogo no tiene esas series completas), pero no introdujo regresiones.
 
 ## 5. Fallos pendientes
 
-- Subtítulos/colecciones: `Green Lantern: Emerald Warriors`,
-  `Forever Evil: A.R.G.U.S`, `Green Lantern - Origenes Secretos`.
+- Subtítulos/colecciones que siguen fallando: `Green Lantern: Emerald Warriors`,
+  `Forever Evil: A.R.G.U.S`, `Injustice: Gods Among Us - Año N` y
+  `Supergirl: Woman of Tomorrow`. En varios casos el catálogo no tiene la
+  serie completa; no se fuerza el título sin evidencia.
 - Créditos delante: `Hiroaki Samura - La Espada del Inmortal`.
 - Año dentro del título: `American Vampire 1976 10`.
 - Prefijos de número delante de la serie (`16 Catwoman`, `51 Catwoman`):
@@ -134,6 +136,9 @@ catálogo no tiene esas series completas), pero no introdujo regresiones.
   (`Injustice`) sigue siendo el fallo restante.
 - Créditos delante y años dentro del título: corregidos con carpeta/patrón
   (`Hiroaki Samura`, `American Vampire 1976`).
+- Subtítulos con carpeta exacta (`Green Lantern - Origenes Secretos`,
+  `Superman: Year One`, `Joe Kubert Presents`): corregidos; el resto se deja
+  como fallo de catálogo, no como invención.
 - Alias y huecos del catálogo: limitan la cobertura del matcher, no su
   precisión de identidad.
 
