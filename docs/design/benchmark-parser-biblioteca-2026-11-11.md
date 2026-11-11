@@ -146,4 +146,28 @@ fluctuación, cosa que con 81 no se podía.
 
 - `naming.py`: número explícito antes de “aniversario”.
 - `matcher.py`: equivalencia de sufijo de volumen; guarda de Issue contaminado.
-- Tests: aniversario, volumen y contaminación, incluidos tests PG reales.
+- `matcher.py`: desempate por carpeta cuando hay varios candidatos ya
+  empatados por encima del umbral.
+- Tests: aniversario, volumen, contaminación y carpeta, incluidos tests PG reales.
+
+## 9. Contexto de carpeta: implementado, sin efecto todavía
+
+Se implementó `_desempatar_por_carpeta`: si el matcher tiene dos o más
+candidatos empatados, mira el nombre de la carpeta padre. Solo elige si la
+carpeta identifica a **uno** de los candidatos por título base, volumen o año.
+Si la carpeta es genérica, contradictoria o no hay candidato, sigue `unsorted`.
+**Nunca crea una serie ni mete un candidato que no hubiera pasado el umbral.**
+
+Medición sobre los 3.556 archivos sin Issue:
+
+| | Sin carpeta | Con carpeta |
+|---|---:|---:|
+| Enlaces con Issue | 11 | 11 |
+| `direct` | 121 | 121 |
+| `unsorted` | 3.234 | 3.234 |
+| Nuevos/perdidos | — | 0 / 0 |
+
+No cambia nada en esta foto porque no hay empates con evidencia de carpeta en
+los pendientes actuales; sí queda cubierto para cuando aparezcan duplicados de
+volumen/edición. Se probó con tests de volumen, año, carpeta genérica y carpeta
+que contradice el volumen.
