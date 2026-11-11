@@ -215,6 +215,31 @@ EDITION_NUMBER_PATTERN = re.compile(
     r"\b(Omnigold|Integral|Edici[oó]n\s+Integral)\s+(\d{1,3})\b", re.IGNORECASE
 )
 
+# Formatos de edición que NO son una grapa. Se capturan antes de buscar el
+# número: «Batman Omnibus Vol 1» debe conservar el formato y no convertirse
+# en una grapa #1 sin más. La etiqueta se mapea a IssueFormat en models.
+EDITION_FORMAT_NUMBER_PATTERN = re.compile(
+    r"\b(?P<formato>Omnibus|TPB|Trade\s+Paperback|Hardcover|HC|Graphic\s+Novel|GN)"
+    r"\s+(?P<numero>\d{1,3})\b",
+    re.IGNORECASE,
+)
+EDITION_FORMAT_PATTERN = re.compile(
+    r"\b(?:Omnibus|TPB|Trade\s+Paperback|Hardcover|HC|Graphic\s+Novel|GN)\b",
+    re.IGNORECASE,
+)
+EDITION_FORMAT_KIND = {
+    "omnibus": "omnibus",
+    "tpb": "trade_paperback",
+    "trade paperback": "trade_paperback",
+    "hardcover": "hardcover",
+    "hc": "hardcover",
+    "graphic novel": "graphic_novel",
+    "gn": "graphic_novel",
+}
+# «1 of 4» / «1 de 4»: cuenta de la miniserie. El número de issue, si lo hay,
+# lo sigue extrayendo el buscador normal; esto solo guarda el total.
+ISSUE_COUNT_PATTERN = re.compile(r"\b(\d{1,3})\s+(?:of|de)\s+(\d{1,3})\b", re.IGNORECASE)
+
 # Prefijo de ORDEN DE LECTURA al principio del nombre ("069.- Flash v2
 # 62", "247.- Wonder Woman v2 214"): numera la colección/orden del
 # coleccionista, no la grapa. Sin esto se llevaba el patrón genérico de
@@ -249,6 +274,9 @@ class ParsedComicName:
     issue_number: str = ""
     volume: int | None = None
     year: int | None = None
+    #: Total de la miniserie si el nombre lo dice («1 of 4», «1 de 4»).
+    #: Es contexto para validar, no el número del archivo.
+    issue_count: int | None = None
     format: str = ""
     #: `Annual`/`Anual`: publicación con numeración propia; el título conserva
     #: la palabra porque «Batman Annual» es la serie que hay que buscar.
@@ -355,6 +383,28 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
 
     working = DOT_SEPARATOR_PATTERN.sub(" ", working)
     working = CREDITS_PATTERN.sub("", working, count=1)
+
+    # Formato de edición: Omnibus/TPB/HC/GN. Primero la variante con número
+    # inmediato («Omnibus 1»), que además resuelve el número; si no, solo se
+    # marca el formato y se quita la palabra del título.
+    formato_con_numero = EDITION_FORMAT_NUMBER_PATTERN.search(working)
+    if formato_con_numero:
+        etiqueta = re.sub(r"\s+", " ", formato_con_numero.group("formato").lower())
+        result.edition_kind = EDITION_FORMAT_KIND.get(etiqueta, etiqueta)
+        result.issue_number = formato_con_numero.group("numero").lstrip("0") or "0"
+        working = EDITION_FORMAT_NUMBER_PATTERN.sub(" ", working, count=1)
+    else:
+        formato = EDITION_FORMAT_PATTERN.search(working)
+        if formato:
+            etiqueta = re.sub(r"\s+", " ", formato.group(0).lower())
+            result.edition_kind = EDITION_FORMAT_KIND.get(etiqueta, etiqueta)
+            working = EDITION_FORMAT_PATTERN.sub(" ", working, count=1)
+
+    # Cuenta de la miniserie («1 of 4»): contexto, no identidad. Se mide antes
+    # de que el patrón de posición de arco quite «N de M».
+    cuenta = ISSUE_COUNT_PATTERN.search(working)
+    if cuenta:
+        result.issue_count = int(cuenta.group(2))
 
     # Fecha de publicación antes que nada: "(2004-08)" es un año, y si se
     # deja pasar hasta la extracción de número se convierte en una grapa
@@ -488,7 +538,8 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         # el "2" del volumen ahí habría sido fabricar una identidad falsa
         # para tapar el hueco, exactamente lo que este proyecto evita.
         result.issue_number = str(result.volume)
-        result.edition_kind = marcador_volumen
+        if result.edition_kind is None:
+            result.edition_kind = marcador_volumen
 
     # "Serie - Subtítulo" y "Serie #001 - Título del número": todo lo que
     # sigue a un separador " - " (con espacios a los dos lados, a diferencia
