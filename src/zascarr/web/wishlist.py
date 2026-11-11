@@ -25,6 +25,7 @@ from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
 from zascarr.services.orchestrator import (
     Orchestrator,
     crear_token_candidato,
+    prowlarr_configurado,
     verificar_token_candidato,
 )
 from zascarr.services.wishlist import WishlistService
@@ -102,8 +103,15 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
     # una fila concreta) — se muestra como banner aparte, no se escribe
     # en Wishlist.last_error de cada item (ver services/orchestrator.py).
     aviso_legal_pendiente = not await is_acknowledged(db)
+    settings = get_settings()
+    prowlarr_incompleto = bool(
+        getattr(settings, "prowlarr_enabled", False) and not prowlarr_configurado(settings))
     return templates.TemplateResponse(
-        request, "wishlist.html", {"rows": rows, "aviso_legal_pendiente": aviso_legal_pendiente}
+        request, "wishlist.html", {
+            "rows": rows,
+            "aviso_legal_pendiente": aviso_legal_pendiente,
+            "prowlarr_incompleto": prowlarr_incompleto,
+        }
     )
 
 

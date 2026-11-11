@@ -3,8 +3,14 @@
 {% block content %}
 <h1>Deseados</h1>
 <p class="subtitle">Marca una serie que ya tengas catalogada como deseada y el sistema la busca, la descarga y la importa solo.</p>
+<p class="caption">El ciclo automático busca periódicamente; «Buscar ahora» en cada deseo lanza la búsqueda al momento.</p>
 
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
+{% if prowlarr_incompleto %}
+{{ ui.aviso("amber", "Prowlarr está encendido pero le falta la URL o la clave de API. Las búsquedas no pueden usar Prowlarr hasta completarlo.") }}
+<p><a class="btn ghost" href="/ui/ajustes">Revisar Prowlarr en Ajustes</a></p>
+{% endif %}
+
 {% if aviso_legal_pendiente %}
 <aside class="legal-notice legal-notice-warn">
   <strong>Aviso legal pendiente.</strong> Las búsquedas automáticas están en
