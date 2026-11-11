@@ -60,6 +60,19 @@ from zascarr.utils.naming import clave_de_coleccion, es_titulo_de_anual
 SIMILARITY_THRESHOLD = 0.35
 FUZZY_THRESHOLD = 0.60      # por debajo: ruido, aunque supere el WHERE
 
+# Alias de catálogo SEGUROS: mismo espacio de numeración,distinto título de
+# release (traducción, prefijo editorial o forma abreviada). La clave es
+# normalize_title() del título que sale del archivo; el valor es el título
+# exacto de la serie en BD. No se meten aquí series con numeración propia
+# ausente del catálogo (Emerald Warriors, ARGUS, Injustice Año N...).
+CATALOG_ALIASES: dict[str, str] = {
+    "100 balas": "100 Bullets",
+    "shadow of the bat": "Batman: Shadow of the Bat",
+    "shadow of the bat annual": "Batman: Shadow of the Bat Annual",
+    "smallville temporada 11": "Smallville: Season Eleven",
+    "wildcats": "WildC.A.T.s: Covert Action Teams",
+}
+
 # B15: valor con el que se persiste una grapa suelta (models.IssueFormat.
 # SINGLE_ISSUE). Se repite como literal a propósito: core/ no importa models/
 # en ningún sitio y no es el momento de romper esa frontera. Un test
@@ -237,6 +250,10 @@ class SeriesMatcher:
         Orden de prioridad: exacto → por año → por volumen → fuzzy completo.
         """
         norm = normalize_title(raw_title)
+        # Alias de catálogo: si el release usa una traducción/prefijo conocido,
+        # se busca la serie canónica por su título exacto. No es fuzzy.
+        if norm in CATALOG_ALIASES:
+            norm = normalize_title(CATALOG_ALIASES[norm])
 
         # ── Exacto normalizado ───────────────────────────────────────────────
         # title_norm es una columna generada por Postgres (f_title_norm(title),
