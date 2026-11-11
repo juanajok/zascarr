@@ -33,7 +33,9 @@
         Número total de la serie desconocido todavía: no se puede calcular huecos.
       {% endif %}
     </p>
+    {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
     <p class="series-acciones">
+      <a class="btn ghost" href="/ui/series/{{ series.id }}/editar">Editar la ficha</a>
       <a class="btn primary" href="/ui/pendientes/carpetas?serie={{ series.id }}">Añadir números del disco</a>
       <span class="muted">Abre las carpetas pendientes con esta serie ya fijada. Vincular no mueve ni renombra el archivo.</span>
     </p>
@@ -115,6 +117,12 @@
         </span>
         {% if c.manual %}{{ ui.chip("info", "Manual") }}{% endif %}
         {% if c.bloqueado %}{{ ui.chip("ok", "Protegido") }}{% endif %}
+        {% if c.manual and c.clave not in ("cover_url", "identidad") %}
+        <form method="post" class="inline-desbloquear"
+              action="/ui/series/{{ series.id }}/editar/desbloquear/{{ c.clave }}">
+          <button type="submit" class="btn ghost sm">Volver a la fuente</button>
+        </form>
+        {% endif %}
         {% for o in c.observaciones %}<small class="muted">{{ o }}</small>{% endfor %}
       </dd>
     </div>
