@@ -20,18 +20,16 @@ def test_cv_issue_sin_campos_no_inventa():
     assert issue.characters == [] and issue.story_arcs == []
 
 
-def test_anilist_lee_generos_y_personajes_de_la_misma_peticion():
+def test_anilist_lee_generos_de_la_misma_peticion():
     media = _parse_media({
         "id": 3, "title": {"romaji": "Berserk"}, "genres": ["Action", "Horror"],
-        "characters": {"nodes": [{"name": {"full": "Guts"}}, {"name": {"full": "Griffith"}}]},
     })
     assert media.genres == ["Action", "Horror"]
-    assert media.characters == ["Guts", "Griffith"]
 
 
 def test_anilist_sin_campos_no_inventa():
     media = _parse_media({"id": 4, "title": {"romaji": "X"}})
-    assert media.genres == [] and media.characters == []
+    assert media.genres == []
 
 
 class _CVFalso(ComicVineClient):

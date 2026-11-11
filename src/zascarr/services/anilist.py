@@ -51,8 +51,23 @@ query ($search: String, $perPage: Int) {
       chapters
       volumes
       genres
-      characters { nodes { name { full } } }
     }
+  }
+}
+"""
+
+
+_DETAIL_QUERY = """
+query ($id: Int) {
+  Media(id: $id, type: MANGA) {
+    id
+    title { romaji english }
+    description(asHtml: false)
+    coverImage { large }
+    startDate { year }
+    chapters
+    volumes
+    genres
   }
 }
 """
@@ -69,7 +84,6 @@ class AniListResult:
     chapters: int | None = None
     volumes: int | None = None
     genres: list[str] = field(default_factory=list)
-    characters: list[str] = field(default_factory=list)
     site_url: str | None = None
     raw: dict | None = None
 
@@ -124,7 +138,6 @@ def _parse_media(item: dict) -> AniListResult:
         chapters=item.get("chapters"),
         volumes=item.get("volumes"),
         genres=_textos(item.get("genres")),
-        characters=_nombres_de_personajes(item.get("characters")),
         site_url=f"https://anilist.co/manga/{item['id']}",
         raw=item,
     )
@@ -141,9 +154,6 @@ def _textos(valor) -> list[str]:
     return salida
 
 
-def _nombres_de_personajes(valor) -> list[str]:
-    nodos = ((valor or {}).get("nodes") or []) if isinstance(valor, dict) else []
-    return _textos([(n.get("name") or {}).get("full") for n in nodos if isinstance(n, dict)])
 
 
 def _clean_description(text: str | None) -> str | None:
