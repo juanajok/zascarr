@@ -31,6 +31,7 @@ logger = structlog.get_logger()
 _BASE_URL = "https://metron.cloud/api"
 SITIO = "https://metron.cloud"
 ATRIBUCION = "Datos de Metron, CC BY-SA 4.0"
+USER_AGENT = "ZascArr/0.1 (+https://github.com/juanajok/zascarr)"
 
 
 @dataclass(frozen=True)
@@ -117,7 +118,7 @@ class MetronClient:
             base_url=_BASE_URL, timeout=30.0, follow_redirects=False,
             transport=self._transporte,
             headers={
-                "User-Agent": "ZascArr/0.1 (+https://github.com/juanajok/zascarr)",
+                "User-Agent": USER_AGENT,
                 "Accept": "application/json",
                 "Authorization": f"Bearer {self._token.strip()}",
             })

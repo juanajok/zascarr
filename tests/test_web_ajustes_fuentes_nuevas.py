@@ -74,3 +74,32 @@ def test_guardar_token_de_metron(monkeypatch):
         _cerrar()
     assert r.status_code == 200
     assert guardar.await_args.args[0] == {"metron_token": "secreto"}
+
+
+def test_probar_metron_usa_el_token_del_formulario(monkeypatch):
+    from unittest.mock import AsyncMock as _AsyncMock
+    prueba = _AsyncMock(return_value=(True, "Conexión correcta: Metron respondió."))
+    monkeypatch.setattr("zascarr.web.ajustes._test_metron", prueba)
+    c = _cliente()
+    try:
+        r = c.post("/ui/ajustes/probar/metron", data={"metron_token": "tok"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "Conexión correcta" in r.text
+    prueba.assert_awaited_once_with("tok")
+
+
+def test_probar_metron_con_transporte_simulado():
+    import asyncio
+
+    import httpx
+
+    from zascarr.web.ajustes import _test_metron
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == "Bearer tok"
+        return httpx.Response(200, json={"count": 1, "results": [{"id": 1, "series": "Batman"}]})
+
+    ok, mensaje = asyncio.run(_test_metron(
+        "tok", transporte=httpx.MockTransport(responder)))
+    assert ok and "Conexión correcta" in mensaje

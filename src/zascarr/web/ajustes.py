@@ -468,6 +468,18 @@ async def probar_comic_vine(
     )
 
 
+@router.post("/probar/metron", response_class=HTMLResponse)
+async def probar_metron(
+    request: Request, metron_token: str = Form(default="")
+) -> HTMLResponse:
+    token = _secreto_o_guardado(metron_token, "metron_token")
+    ok, mensaje = await _test_metron(token)
+    aviso = (not ok) and mensaje.startswith("No se ha probado")
+    return templates.TemplateResponse(
+        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje, "aviso": aviso}
+    )
+
+
 @router.post("/probar/prowlarr", response_class=HTMLResponse)
 async def probar_prowlarr(
     request: Request, prowlarr_url: str = Form(...), prowlarr_api_key: str = Form(default=""),
@@ -549,6 +561,50 @@ async def _test_comic_vine(api_key: str) -> tuple[bool, str]:
         return False, f"Comic Vine respondió HTTP {exc.codigo}."
     except (ReintentosAgotados, FuenteApagada, httpx.HTTPError, ErrorDePeticion) as exc:
         logger.warning("ajustes.test_failed", integracion="comic_vine",
+                       error=type(exc).__name__)
+        return False, "No se pudo conectar (red o timeout)."
+
+
+async def _test_metron(
+    token: str, transporte: httpx.AsyncBaseTransport | None = None) -> tuple[bool, str]:
+    """Prueba manual de Metron: una búsqueda de una página, sin guardar ni escribir.
+
+    Misma excepción explícita que Comic Vine: acción del operador, `permitir_apagada=True` y
+    un solo intento. Usa el mismo User-Agent del cliente real.
+    """
+    if not token:
+        return False, "Falta el token de Metron."
+    from dataclasses import replace
+
+    from zascarr.services.metron import SITIO, USER_AGENT
+
+    politica = replace(politica_de("metron"), max_intentos=1)
+    try:
+        async with httpx.AsyncClient(
+                timeout=10.0, follow_redirects=False, transport=transporte,
+                headers={"User-Agent": USER_AGENT, "Accept": "application/json",
+                         "Authorization": f"Bearer {token.strip()}"}) as client:
+            r = await pedir_con_cortesia(
+                client, "GET", f"{SITIO}/api/series/?q=batman",
+                politica=politica, espera_max_s=10.0, permitir_apagada=True,
+            )
+        data = r.json()
+        if isinstance(data, dict) and isinstance(data.get("results"), list):
+            return True, "Conexión correcta: Metron respondió."
+        return False, "Metron respondió, pero no se pudo leer la respuesta."
+    except CortesiaEnEspera as exc:
+        segundos = max(1, round(exc.espera_estimada_s))
+        return False, ("No se ha probado: hay que esperar ~" f"{segundos} s por cortesía. "
+                       "Inténtalo de nuevo en un momento.")
+    except RespuestaNoTransitoria as exc:
+        if exc.codigo in (401, 403):
+            return False, ("Metron rechazó el token (HTTP 401/403). Créalo de nuevo en tu "
+                           "cuenta de Metron, en «Tokens», y vuelve a probar.")
+        if exc.codigo == 429:
+            return False, "Metron ha pedido esperar antes de volver a consultarlo."
+        return False, f"Metron respondió HTTP {exc.codigo}."
+    except (ReintentosAgotados, FuenteApagada, httpx.HTTPError, ErrorDePeticion, ValueError) as exc:
+        logger.warning("ajustes.test_failed", integracion="metron",
                        error=type(exc).__name__)
         return False, "No se pudo conectar (red o timeout)."
 

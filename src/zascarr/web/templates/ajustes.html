@@ -101,9 +101,16 @@
         <p class="ajustes-hint">Créalo en tu cuenta de Metron, en «Tokens». Por ahora Metron y Open Library solo se usan en Descubrir: no completan series ya catalogadas. Los datos de Metron se muestran con atribución CC BY-SA 4.0; sus portadas no se usan.</p>
         <div class="ajustes-actions">
           <button type="submit">Guardar</button>
+          <button type="button" hx-post="/ui/ajustes/probar/metron" hx-include="closest form"
+                  hx-target="#prueba-metron" hx-swap="innerHTML">Probar conexión</button>
         </div>
       </form>
       <div id="resultado-metron" aria-live="polite"></div>
+      <div id="prueba-metron" aria-live="polite"></div>
+      <details class="ajustes-mas">
+        <summary>Qué hace «Probar conexión»</summary>
+        <p class="ajustes-hint">Hace una búsqueda de prueba con el token del formulario o el guardado. No descarga nada ni cambia tu catálogo.</p>
+      </details>
     </fieldset>
 
 
