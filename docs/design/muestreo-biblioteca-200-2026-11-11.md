@@ -43,42 +43,42 @@ CBZ**, **0 SHA256 repetidos**. Los anuales se sobremuestrean a propósito
 
 El CSV de contexto no se usó para etiquetar. Los CSV con rutas no se commitean.
 
-## 3. Etiquetado y revisión simulada
+## 3. Etiquetado y revisión
 
 La primera pasada se hizo **sin abrir el contexto ni ejecutar parser/matcher**;
 las etiquetas llevan `etiquetado_por=asistente`.
 
-Después se hizo una **revisión independiente simulada** (un agente distinto, no
-una persona). El revisor solo vio la muestra ciega y las etiquetas; no leyó el
-contexto ni ejecutó parser/matcher. Resultado:
+La revisión independiente simulada dio 188 mantener / 10 corregir / 2 dudosas.
+Después se recibió una **revisión humana** con 18 comentarios fila a fila. La
+revisión humana manda sobre la simulada y revierte varias decisiones:
+
+- 4 `Injustice ... #25/#41 - Anual`: el humano confirma que son **packs**
+  (varios issues en un archivo), no anuales. Es la corrección más importante:
+  el simulador los había convertido en anuales.
+- `Catwoman 11.1 Annual 01`: annual de Catwoman, serie aparte con dependencia
+  de la madre. `Catwoman 22.1 Year One`: se trata como especial análogo a un
+  annual.
+- `Horizontes Lejanos`: tomo de Las aventuras del Capitán Torrezno.
+- `Bad Weekend - Criminal`: spin-off, se trata de forma análoga a
+  anuales/especiales.
+- `Lobo y Sovereign Seven`: se trata como especial.
+- `Flash 158 2.0`: el humano no entiende la variante; queda dudosa.
+- `Crossover 07`: pendiente de una política de crossovers; queda dudosa.
+- `GunSmith Cats [P2N2]` y `Los detectives muertos`: dudosas.
+
+Resultado final:
 
 | Estado | Filas |
 |---|---:|
-| Mantener | **188** |
-| Corregir | **10** |
-| Dudosa (excluida de métrica limpia) | **2** |
+| Mantener | **187** |
+| Corregir | **9** |
+| Dudosa (excluida de métrica limpia) | **4** |
 | **Total** | **200** |
 
-Correcciones aplicadas, todas revisables por una persona:
+Las 4 dudosas se marcan `excluir_benchmark=TRUE`. **Siguen siendo decisiones
+humanas, no una validación de catálogo.**
 
-- 4 archivos `Injustice ... - Anual`: de pack a **anual** (#25 o #41 según el
-  año). Es la corrección más discutible: el nombre también admite “issue +
-  anual”.
-- `Catwoman 11.1 Annual 01`: de pack a **Catwoman Annual #1**.
-- `Catwoman 22.1 Year One (1995)`: de grapa #22.1 a **Catwoman Annual #2**.
-- `XIII 01`: de grapa a **tomo** (álbum BD).
-- `Noches Eternas 6/7`: de grapa a **capítulo**.
-- `Horizontes Lejanos`: de obra única a **tomo** de la serie del Capitán
-  Torrezno.
-
-Dudosas: `GunSmith Cats [P2N2]` (parte 2 o tomo 2) y `Los detectives muertos`
-(tomo recopilatorio u one-shot). Se marcan `excluir_benchmark=TRUE`.
-
-**No es una revisión humana.** Las 10 correcciones son juicios del revisor
-simulado; las de Injustice y Catwoman Annual necesitan confirmación humana
-antes de convertirlas en verdad de referencia.
-
-## 4. Resultados con las 198 filas limpias
+## 4. Resultados con las 196 filas limpias
 
 Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
@@ -86,9 +86,9 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 
 | Medida | Resultado |
 |---|---:|
-| Serie correcta | **149 / 198 = 75,3 %** |
-| Número correcto | **188 / 198 = 94,9 %** |
-| Ambos correctos | **148 / 198 = 74,7 %** |
+| Serie correcta | **148 / 196 = 75,5 %** |
+| Número correcto | **183 / 196 = 93,4 %** |
+| Ambos correctos | **147 / 196 = 75,0 %** |
 
 ### Matcher
 
@@ -96,10 +96,10 @@ Normalización común: `Anual`≡`Annual` y sufijo de volumen fuera.
 |---|---:|
 | `direct` | 53 |
 | `fuzzy` | 22 |
-| `unsorted` | 123 |
+| `unsorted` | 121 |
 | Enlaces con Issue | 64 |
 | Enlaces con serie+número correctos | **64 / 64** |
-| Cobertura | **64 / 198 = 32,3 %** |
+| Cobertura | **64 / 196 = 32,7 %** |
 | Discrepancia de formato/tipo | **1** (XIII tomo enlazado a `single_issue`) |
 
 Los 64 enlaces aciertan serie y número según las etiquetas. El único problema
@@ -123,7 +123,8 @@ Bullets`), series del catálogo con otro título, colecciones y huecos de Issue.
 
 ## 6. Qué falta para un benchmark definitivo
 
-1. Revisión **humana** de las 10 correcciones y de las 2 dudosas.
+1. Cerrar las 4 dudosas: Flash 2.0, crossover, GunSmith Cats y Los detectives
+   muertos.
 2. Decidir la política de títulos canónicos (`Shadow of the Bat` vs
    `Batman: Shadow of the Bat`, `Flash` vs `The Flash`, apóstrofos).
 3. Repetir la medición manteniendo separado parser y matcher.
@@ -134,4 +135,4 @@ Bullets`), series del catálogo con otro título, colecciones y huecos de Issue.
 - Muestreo: `scripts/medicion/muestreo_biblioteca.py --seed 20261112`.
 - Aplicar revisión: `scripts/medicion/aplicar_revision_etiquetas.py`.
 - Evaluar: `scripts/medicion/evaluar_muestra_200.py`.
-- Resultado JSON: `/mnt/Datos/Documentos/resultados_muestra_200_revisada.json`.
+- Resultado JSON: `/mnt/Datos/Documentos/resultados_muestra_200_humana.json`.
