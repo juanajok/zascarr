@@ -73,7 +73,8 @@ class TestEndpoint:
         datos = r.json()
         assert datos["coordinacion"] == "proceso"
         assert {f["fuente"] for f in datos["fuentes"]} == {
-            "comicvine", "anilist", "tebeosfera", "gcd", "foro", "portada"}
+            "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library",
+            "foro", "portada"}
         assert all("://" not in h["host"] for h in datos["hosts"])
         assert all(h["host"] in ("comicvine.gamespot.com", "cbsistatic.com") for h in datos["hosts"])
         texto = json.dumps(datos)
@@ -153,7 +154,8 @@ class TestAjustes:
     def test_politica_dinamica_y_coordinacion(self, monkeypatch):
         monkeypatch.setattr("zascarr.web.ajustes.get_settings", lambda: self._ajustes())
         r = TestClient(app).get("/ui/ajustes")
-        assert "Cortesía: Comic Vine 1 s y 3 intentos; AniList 1,5 s y 3; Tebeosfera 2,5 s y 1; GCD 2 s y 2." in r.text
+        assert ("Cortesía: Comic Vine 1 s y 3 intentos; AniList 1,5 s y 3; Tebeosfera 2,5 s y 1; "
+                "GCD 2 s y 2; Metron 3 s y 2; Open Library 1 s y 2.") in r.text
         assert "cada una espera por su cuenta" in r.text
         assert "Apagada: No se consulta ni se reintenta." in r.text
 

@@ -21,7 +21,7 @@ ESTADOS_DE_FUENTE = frozenset({
     FUENTE_CONFIGURACION_INCOMPLETA, FUENTE_LIMITE_DE_CORTESIA, FUENTE_APAGADA,
 })
 
-#: Única capacidad VERIFICADA en esta entrega para las cuatro fuentes: **buscar series**.
+#: Única capacidad VERIFICADA en esta entrega para las fuentes: **buscar series**.
 CAPACIDAD_BUSQUEDA = "busqueda"
 
 #: Capacidad de #465 (detalle de edición). No es un estado nuevo: reutiliza el conjunto
