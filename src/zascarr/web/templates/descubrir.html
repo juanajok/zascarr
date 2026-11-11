@@ -2,7 +2,7 @@
 {% block title %}Descubrir — ZascArr{% endblock %}
 {% block content %}
 <h1>Descubrir</h1>
-<p class="subtitle">Busca un título en Comic Vine, AniList, Tebeosfera y GCD, y dalo de alta en tu biblioteca — sin esto, Deseados y la clasificación automática no tienen con qué comparar.</p>
+<p class="subtitle">Busca un título en las fuentes que enciendas en Ajustes y dalo de alta en tu biblioteca: sin esto, Deseados y la clasificación automática no tienen con qué comparar.</p>
 
 <details class="identificador-form">
   <summary>¿Conoces el identificador o el enlace de la ficha?</summary>
@@ -14,6 +14,11 @@
     <button class="btn ghost" type="submit">Buscar por identificador</button>
   </form>
   <p class="caption">Se consulta solo la fuente de ese identificador y solo al pulsar. La forma se valida antes de llamar: si está mal, no se hace ninguna petición. Un error de la fuente no significa que el identificador no exista. El ISBN no es un identificador de serie.</p>
+</details>
+
+<details class="fuentes-licencias">
+  <summary>Fuentes y licencias</summary>
+  <p class="caption">Metron: datos bajo CC BY-SA 4.0; no se usan sus portadas. Open Library: datos de Internet Archive, obra/tomo con enlace a su ficha. Las demás fuentes enlazan su ficha y sus condiciones.</p>
 </details>
 
 <input type="search" class="series-search" placeholder="Título de la serie…"

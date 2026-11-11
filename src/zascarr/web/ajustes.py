@@ -117,6 +117,9 @@ def _contexto() -> dict:
         "anilist_enabled": s.anilist_enabled,
         "tebeosfera_enabled": s.tebeosfera_enabled,
         "gcd_enabled": s.gcd_enabled,
+        "metron_enabled": bool(getattr(s, "metron_enabled", False)),
+        "open_library_enabled": bool(getattr(s, "open_library_enabled", False)),
+        "metron_token_configurado": bool(getattr(s, "metron_token", "")),
         "fuentes_heredadas": s.fuentes_heredadas,
         "prowlarr_url": s.prowlarr_url,
         "prowlarr_api_key_configurada": bool(s.prowlarr_api_key),
@@ -165,6 +168,16 @@ async def guardar_comic_vine(
 ) -> HTMLResponse:
     await RuntimeSettingsService(db).save({"comicvine_api_key": comicvine_api_key})
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Comic Vine"})
+
+
+@router.post("/guardar/metron", response_class=HTMLResponse)
+async def guardar_metron(
+    request: Request, metron_token: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    await RuntimeSettingsService(db).save({"metron_token": metron_token})
+    return templates.TemplateResponse(
+        request, "_ajustes_guardado.html", {"nombre": "Metron"})
 
 
 @router.post("/guardar/avisos", response_class=HTMLResponse)
@@ -249,6 +262,8 @@ async def guardar_fuentes(
     anilist_enabled: bool = Form(default=False),
     tebeosfera_enabled: bool = Form(default=False),
     gcd_enabled: bool = Form(default=False),
+    metron_enabled: bool = Form(default=False),
+    open_library_enabled: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     await RuntimeSettingsService(db).save({
@@ -256,6 +271,8 @@ async def guardar_fuentes(
         "anilist_enabled": anilist_enabled,
         "tebeosfera_enabled": tebeosfera_enabled,
         "gcd_enabled": gcd_enabled,
+        "metron_enabled": metron_enabled,
+        "open_library_enabled": open_library_enabled,
         # Guardar es tomar la decisión (aunque sea confirmar el estado actual): deja de ser
         # «heredado».
         "fuentes_heredadas": False,

@@ -172,13 +172,17 @@ def texto_politica_ajustes(ajustes=None) -> dict:
     linea = (
         f"Cortesía: Comic Vine {_numero(ajustes.comicvine_rate_limit)} s y 3 intentos; "
         f"AniList {_numero(ajustes.anilist_rate_limit)} s y 3; Tebeosfera 2,5 s y 1; "
-        f"GCD {_numero(ajustes.gcd_rate_limit)} s y 2. Las portadas se descargan al ritmo del "
+        f"GCD {_numero(ajustes.gcd_rate_limit)} s y 2; "
+        f"Metron {_numero(getattr(ajustes, 'metron_rate_limit', 3.0))} s y 2; "
+        f"Open Library {_numero(getattr(ajustes, 'open_library_rate_limit', 1.0))} s y 2. "
+        "Las portadas se descargan al ritmo del "
         "sitio del que vienen y no se reintentan."
     )
     apagadas = [
         NOMBRES_DE_FUENTE[f] for f, atributo in (
             ("comicvine", "comicvine_enabled"), ("anilist", "anilist_enabled"),
             ("tebeosfera", "tebeosfera_enabled"), ("gcd", "gcd_enabled"),
+            ("metron", "metron_enabled"), ("open_library", "open_library_enabled"),
         ) if not getattr(ajustes, atributo, False)
     ]
     return {
