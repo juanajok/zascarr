@@ -83,7 +83,6 @@ class SeriesService:
         un segundo SELECT.
         """
         query = select(Series)
-        needs_distinct = False
 
         if tradition:
             query = query.where(Series.tradition == tradition)
@@ -107,20 +106,21 @@ class SeriesService:
                 query = query.where(Series.title_norm.like(f"%{normalizado}%"))
         if publisher_id:
             query = query.where(Series.publisher_id == publisher_id)
+        # #665: nunca JOIN + DISTINCT. El ORDER BY usa `coalesce(...)`, que no
+        # está en el SELECT de `series`; PostgreSQL rechaza esa combinación con
+        # DISTINCT. Subconsultas por id, como en las etiquetas (BL-ETQ1b).
         if character_id:
-            query = (
-                query.join(Issue, Issue.series_id == Series.id)
+            query = query.where(Series.id.in_(
+                select(Issue.series_id)
                 .join(issue_characters, issue_characters.c.issue_id == Issue.id)
                 .where(issue_characters.c.character_id == character_id)
-            )
-            needs_distinct = True
+            ))
         if story_arc_id:
-            query = (
-                query.join(Issue, Issue.series_id == Series.id)
+            query = query.where(Series.id.in_(
+                select(Issue.series_id)
                 .join(StoryArcIssue, StoryArcIssue.issue_id == Issue.id)
                 .where(StoryArcIssue.story_arc_id == story_arc_id)
-            )
-            needs_distinct = True
+            ))
 
         # BL-ETQ1b: EXISTS/NOT EXISTS por token; nunca JOIN+DISTINCT.
         for normalizado in etiquetas_positivas:
@@ -148,9 +148,6 @@ class SeriesService:
                 query = query.where(Series.id.not_in(leidos))
         if con_issues:
             query = query.where(Series.id.in_(select(Issue.series_id)))
-        if needs_distinct:
-            query = query.distinct()
-
         total = (await self.db.execute(
             select(func.count()).select_from(query.subquery())
         )).scalar() or 0
