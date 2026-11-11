@@ -1441,6 +1441,26 @@ class TestRealWorldFilenames:
         assert result.series == "American Vampire 1976"
         assert result.issue_number == "10"
 
+    def test_carpeta_confirma_la_serie_completa(self):
+        from zascarr.utils.naming import parse_comic_filename
+
+        gl = parse_comic_filename(
+            "Green Lantern - Origenes Secretos #01.cbr",
+            carpeta="Green Lantern - Origenes Secretos")
+        assert gl.series == "Green Lantern Origenes Secretos"
+        assert gl.issue_number == "1"
+
+        sm = parse_comic_filename(
+            "Superman - Year One #03.cbr", carpeta="Superman_ Year One")
+        assert sm.series == "Superman Year One"
+
+        jk = parse_comic_filename(
+            "Joe Kubert #05.cbr", carpeta="Joe Kubert Presents Vol. 1")
+        assert jk.series == "Joe Kubert Presents"
+
+        batman = parse_comic_filename("Batman #243.cbr", carpeta="Batman Vol. 1")
+        assert batman.series == "Batman"
+
     def test_numero_explicito_antes_de_aniversario_no_se_pierde(self):
         """«Batman #400 Aniversario»: el número va con #, así que es la
         grapa #400 y no la efeméride del 400 aniversario. El patrón viejo
