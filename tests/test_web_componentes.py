@@ -432,8 +432,9 @@ class TestCssDeLosComponentes:
 
 
 # ── compatibilidad: ninguna clase de antes desaparece ─────────────────────────────────────
-# `wishlist-badge` se retiró a propósito: ya no la usa ninguna plantilla (las filas de Deseados pintan
-# `ui.chip`, deuda 6 de la revisión de diseño); sus reglas por estado (`.estado-imported`…) con ella.
+# `wishlist-badge` se retiró a propósito: ya no la usa ninguna plantilla (las filas
+# de Deseados pintan `ui.chip`, deuda 6 de la revisión de diseño); sus reglas por
+# estado (`.estado-imported`…) con ella.
 # `cover-missing` se retiró a propósito con la portada de dos capas (ui.portada, sin `onerror=`); la
 # sustituye `.portada` (test_portada_marca.py).
 CLASES_ANTERIORES_A_V2 = (
@@ -480,12 +481,17 @@ class TestCompatibilidad:
         assert not perdidas, f"clases que desaparecen (se retiran en V14, no antes): {perdidas}"
 
     def test_las_plantillas_no_usan_clases_inexistentes_del_vocabulario_nuevo(self):
-        """Salvo el uso ya existente de `.btn`, ninguna plantilla estrena aún los componentes."""
+        """Salvo `.btn` y el chip de filtros, ninguna plantilla estrena los componentes."""
         nuevos = {"chip", "group", "ghead", "aviso", "hero-state", "toast", "region-viva"}
         usadas = set()
         for f in PLANTILLAS.glob("*.html"):
             if f.name == "_componentes.html":
                 continue
             for valor in re.findall(r'class="([^"]+)"', f.read_text(encoding="utf-8")):
-                usadas |= nuevos & set(valor.split())
+                encontrados = nuevos & set(valor.split())
+                # Los chips de filtros activos son la excepción: son texto plano con
+                # el mismo aspecto de píldora, sin el icono de flecha de `ui.chip`.
+                if f.name == "_rejilla_biblioteca.html":
+                    encontrados -= {"chip"}
+                usadas |= encontrados
         assert not usadas, f"V2 no migra pantallas; las usa alguna ya: {usadas}"
