@@ -34,9 +34,11 @@ Reglas de convivencia con datos ya existentes (peer review, fix C3):
     título no prueba que sea la misma edición. Asociarle otra fuente es una
     acción explícita y confirmada, que no existe todavía.
 
-AC-22 (#565, decisión PO de 2026-11-11 pese a D-7): los clientes piden
-`genres`/`character_credits`/`story_arc_credits` en la MISMA petición de detalle
-(Comic Vine `field_list` y AniList GraphQL). El enricher rellena
+AC-22 (#565, decisión PO de 2026-11-11 pese a D-7): los clientes piden los
+campos que su API documenta en la MISMA petición: AniList `genres`/`characters`
+en su GraphQL y Comic Vine `character_credits`/`story_arc_credits` en la búsqueda
+de número (Comic Vine **no** expone `genres` en volumen/issue: no se pide). El
+enricher rellena
 `Series.genres` e `Issue.characters` solo si están vacíos y no bloqueados; no
 sustituye datos existentes ni toca `metadata_source` de filas manuales. Tebeosfera
 no declara género y no se inventa; GCD no tiene cliente aquí. Los
@@ -364,8 +366,7 @@ class EnrichmentService:
         if chosen is None:
             return None
         return SeriesMatch(source_id=chosen.cv_id, description=chosen.description,
-                           cover_url=chosen.image_url, count_of_issues=chosen.count_of_issues,
-                           genres=list(chosen.genres))
+                           cover_url=chosen.image_url, count_of_issues=chosen.count_of_issues)
 
     async def _find_anilist_match(
         self, client: AniListClient, series: Series

@@ -48,7 +48,6 @@ class CVResult:
     start_year: int | None = None
     count_of_issues: int | None = None
     site_url: str | None = None
-    genres: list[str] = field(default_factory=list)
     raw: dict | None = None
 
 
@@ -160,8 +159,7 @@ class ComicVineClient:
         # inútil en la Pi. Se pide `limit` y se recorta por si la API devuelve más.
         data = await self._get("/search/", {
             "query": query, "resources": "volume", "limit": limit,
-            "field_list": ("id,name,description,image,start_year,count_of_issues,"
-                           "site_detail_url,genres"),
+            "field_list": "id,name,description,image,start_year,count_of_issues,site_detail_url",
         })
         resultados = [CVResult(
             cv_id=item["id"], name=item.get("name", ""),
@@ -170,7 +168,6 @@ class ComicVineClient:
             start_year=_safe_int(item.get("start_year")),
             count_of_issues=item.get("count_of_issues"),
             site_url=item.get("site_detail_url"),
-            genres=_nombres(item.get("genres")),
             raw=item,
         ) for item in data.get("results", [])]
         return resultados[:limit]
