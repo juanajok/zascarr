@@ -1,7 +1,8 @@
 # Lote 2 de series ausentes — propuesta revisada (2026-11-11)
 
-> **No aplicado.** No se han creado series, Issues ni enlaces. La propuesta
-> está en `/mnt/Datos/Documentos/propuesta_lote_series_ausentes_2_2026-11-11.json`.
+> **Aplicado el 2026-11-11.** 5 series, 199 Issues y 200 enlaces. Backup:
+> `/var/backups/zascarr/pre_lote2_series_ausentes_20261111_163720.sql.gz`
+> (SHA-256 `80fb5cf3…2059`). Sin mover ni renombrar archivos.
 
 ## 1. Criterios
 
@@ -30,7 +31,7 @@ Año N`, `JLD`, `OP`/`One Piece`, `Monstress`, `Dreadstar` y `The Sandman`
 Sin anuales, especiales, packs ni archivos sin número. El duplicado de
 `Earth 2 #1` se enlaza al mismo Issue.
 
-## 3. Qué se escribiría si se aprueba
+## 3. Qué se escribió
 
 1. 5 filas `series`: `kind=regular`, `tradition=american`,
    `metadata_source=manual`, `start_year=NULL`, sin fuente externa.
@@ -54,3 +55,25 @@ Sin anuales, especiales, packs ni archivos sin número. El duplicado de
 2. Backup + preflight + transacción única.
 3. Aplicar y verificar 5/199/200.
 4. Preparar lote 3 con las series DC restantes.
+
+## 6. Aplicación y verificación
+
+| Dato | Resultado |
+|---|---:|
+| Series creadas | **5** |
+| Issues creados | **199** |
+| Archivos enlazados | **200** |
+| Issues duplicados por número | **0** |
+| Archivos movidos/renombrados | **0** |
+| App tras aplicar | **healthy** |
+
+IDs de serie:
+
+- `Booster Gold Vol. 2`: `55935e7f-8df9-4107-93d5-0b67d5779eca`
+- `Batwoman Vol. 2`: `5d342489-785d-40eb-8f70-a664e7380d54`
+- `Trinity Vol. 1`: `9deadfcd-8722-4565-b3b5-de7d0e4e4a39`
+- `Batwing Vol. 1`: `53e98464-e466-48db-af51-f798ad21fd0c`
+- `Earth 2 Vol. 1`: `21ba9fb1-57d2-48db-8dc9-ea1f8bf433e9`
+
+Verificación: 200/200 archivos apuntan a la serie y número esperados;
+`Earth 2 #1` tiene dos archivos en el mismo Issue; la app responde `healthy`.
