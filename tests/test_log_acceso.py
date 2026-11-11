@@ -363,10 +363,14 @@ PARAMETROS_DE_QUERY = frozenset({
     "etiquetas",
     # BL-C3 (#150): filtro de estado de lectura (estado de la vista).
     "leido",
+    # BL-WK2 (#340): estado derivado de la colección (estado de la vista).
+    "coleccion",
     # BL-INF2 (#448): desplazamiento de la acción explícita por tandas.
     "offset",
     # BL-INF11 (#628): criterio de orden de la biblioteca.
     "orden",
+    # BL-WK2 (#340): estado derivado de la colección (estado de la vista).
+    "coleccion",
     # MIT-M7 (#130-b): contexto declarado (ruta, aviso y valores del formulario).
     "aviso", "incluir", "tipo", "error",
     # MIT-M7 (#131-b): declaración de origen y filtro del buscador de correspondencias.
@@ -377,6 +381,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "identificador",
     # BL-R7 (#236): página de una vista de trabajo (estado de la vista).
     "pagina",
+    # F1 (#636/#272): número en la vista previa de organizar (GET, solo lectura).
+    "issue_number",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
     "desde",
 })

@@ -199,3 +199,10 @@ ayuda a decidir.
 - Guion: `guion-sesion.md`.
 - Informes: `resultados-P1.md`, `resultados-P2.md`, `resultados-P3.md`.
 - Fecha: 2026-10-21. Código de producto: `origin/main` `8589b47` (los prototipos no dependen de la app).
+
+---
+
+## Simulación posterior sobre la pantalla implementada (2026-11-11)
+
+Se añadió una segunda simulación con 4 perfiles sobre la pantalla ya implementada de U13/BL-R, con el guion
+adaptado. **Sigue siendo simulación, no validación real**: [`simulacion-272-2026-11-11.md`](simulacion-272-2026-11-11.md).

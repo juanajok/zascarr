@@ -1,0 +1,25 @@
+{#- F1 (#636/#272): vista previa de la asignación. Solo lectura: el POST que mueve está aquí,
+    después de enseñar serie, número, carpeta y nombre final. -#}
+<div class="previa-asignacion" role="region" aria-label="Vista previa de organizar">
+{% if previa.estado == "ok" %}
+  <h3 class="titulo-frase">Esto es lo que pasará si confirmas</h3>
+  <dl class="previa-datos">
+    <div><dt>Serie</dt><dd>{{ previa.serie }}</dd></div>
+    <div><dt>Número</dt><dd>{{ previa.numero }}</dd></div>
+    <div><dt>Carpeta de destino</dt><dd>{{ previa.carpeta }}</dd></div>
+    <div><dt>Nombre final</dt><dd>{{ previa.nombre }}</dd></div>
+  </dl>
+  <p class="caption">Se copia el archivo y se verifica; después se retira el original. Si el nombre se ocupa justo antes de confirmar, ZascArr usará otro libre: nunca reemplaza un archivo.</p>
+  <form class="previa-confirmar"
+        hx-post="/ui/pendientes/{{ file_id }}/asignar"
+        hx-target="#card-{{ file_id }}" hx-swap="outerHTML">
+    <input type="hidden" name="series_id" value="{{ series_id }}">
+    <input type="hidden" name="issue_number" value="{{ issue_number }}">
+    <button type="submit" class="btn primary">Confirmar y organizar</button>
+    <a class="btn ghost" href="/ui/pendientes">Cancelar</a>
+  </form>
+{% else %}
+  <p class="previa-error" role="alert">{{ previa.motivo }}</p>
+  <a class="btn ghost" href="/ui/pendientes">Volver a «Por revisar»</a>
+{% endif %}
+</div>

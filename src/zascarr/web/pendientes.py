@@ -20,13 +20,16 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
 from zascarr.database import get_db
 from zascarr.models import File, Series
 from zascarr.services import registro_biblioteca
 from zascarr.services.asignacion import (
     EstadoResultado,
+    PreviaAsignacion,
     Resultado,
+    previsualizar_asignacion,
     servicio_por_defecto,
 )
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ClavePendiente, ReviewService
@@ -609,6 +612,21 @@ RECONTAR_MENU = (
 
 def _es_htmx(request: Request) -> bool:
     return request.headers.get("HX-Request", "").lower() == "true"
+
+
+@router.get("/{file_id}/asignar/previa", response_class=HTMLResponse)
+async def previa_asignar(request: Request, file_id: UUID, series_id: UUID = Query(...),
+                         issue_number: str = Query(default=""),
+                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """F1 (#636/#272): enseña destino y nombre ANTES de mover; no escribe nada."""
+    previa: PreviaAsignacion = await previsualizar_asignacion(
+        db, get_settings().library_path, file_id, series_id, issue_number)
+    resp = templates.TemplateResponse(request, "_previa_asignacion.html", {
+        "previa": previa, "file_id": file_id, "series_id": series_id,
+        "issue_number": (issue_number or "").strip(),
+    })
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.post("/{file_id}/asignar", response_class=HTMLResponse)
