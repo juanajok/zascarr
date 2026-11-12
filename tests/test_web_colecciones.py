@@ -38,6 +38,7 @@ def test_lista_muestra_colecciones_y_politica():
         _cerrar()
     assert r.status_code == 200
     assert "Grapas" in r.text and "Buscar faltantes de todas" in r.text
+    assert "No buscar automáticamente" in r.text and "(heredar)" not in r.text
     assert "Nueva colección" in r.text
 
 
@@ -63,6 +64,7 @@ def test_detalle_muestra_series_y_selector():
     assert "No buscar automáticamente" in r.text
     assert "Borrar esta colección" in r.text
     assert "confirm(" not in r.text
+    assert ">ninguno<" not in r.text and ">heredar<" not in r.text
 
 
 def test_crear_valida_y_redirige():
