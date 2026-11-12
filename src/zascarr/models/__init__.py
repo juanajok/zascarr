@@ -180,6 +180,13 @@ class WishlistStatus(enum.StrEnum):
     RETIRADO    = "retirado"
 
 
+class CollectionAutoSearch(enum.StrEnum):
+    """#155/BL-D6: qué hace la colección con la auto-búsqueda de sus series."""
+    HEREDAR = "heredar"   # usa la política guardada de cada serie (D8 actual)
+    INCLUIR = "incluir"   # busca faltantes aunque la serie diga «ninguno»
+    EXCLUIR = "excluir"   # veta la auto-búsqueda y retira items de política
+
+
 class WishlistPolicy(enum.StrEnum):
     """D8: qué números de una serie busca ZascArr **por su cuenta**.
 
@@ -464,6 +471,23 @@ class Character(Base):
     universe: Mapped["Universe|None"] = relationship(back_populates="characters")
 
 
+class Collection(Base):
+    """#155/BL-D6: agrupación manual de series con política de auto-búsqueda."""
+    __tablename__ = "collections"
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500))
+    auto_search: Mapped[CollectionAutoSearch] = mapped_column(
+        Enum(CollectionAutoSearch, name="collection_auto_search",
+             values_callable=lambda e: [m.value for m in e]),
+        default=CollectionAutoSearch.HEREDAR, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    series: Mapped[list["Series"]] = relationship(back_populates="collection")
+
+
 class Series(Base):
     __tablename__ = "series"
     __table_args__ = (
@@ -479,6 +503,14 @@ class Series(Base):
     title_norm: Mapped[str | None] = mapped_column(
         Text, Computed("f_title_norm(title)", persisted=True)
     )
+    #: Volumen/edición cuando la fuente o el título lo declaran. No es
+    #: identidad; se usa para desambiguar la referencia (Catwoman Vol. 4/5).
+    volume: Mapped[int | None] = mapped_column(SmallInteger)
+    #: Referencia humana derivada (título + año + volumen). No única, no es
+    #: identidad y no sustituye a `title`/`title_norm`.
+    reference_name: Mapped[str | None] = mapped_column(
+        Text, Computed("public.f_series_reference(title, start_year, volume)", persisted=True)
+    )
     publisher_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="SET NULL")
     )
@@ -488,6 +520,10 @@ class Series(Base):
     universe_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL")
     )
+    collection_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("collections.id", ondelete="SET NULL")
+    )
+    collection: Mapped["Collection|None"] = relationship(back_populates="series")
     tradition: Mapped[ComicTradition] = mapped_column(
         Enum(
             ComicTradition,
@@ -587,6 +623,11 @@ class Issue(Base):
         UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), nullable=False
     )
     issue_number:    Mapped[str|None]     = mapped_column(String(20))
+    #: Clave canónica del número dentro de la serie; conserva sufijos,
+    #: decimales y especiales. No es única ni sustituye a `issue_number`.
+    number_key: Mapped[str | None] = mapped_column(
+        Text, Computed("public.f_number_key(issue_number)", persisted=True)
+    )
     volume:          Mapped[int]          = mapped_column(Integer, default=1)
     title:           Mapped[str|None]     = mapped_column(String(500))
     release_date:    Mapped[date|None]    = mapped_column(Date)

@@ -426,10 +426,15 @@ se recorta a los topes de §7.4 **con aviso, sin abortar el ciclo**; XML roto = 
 (`ComicInfoInvalidoError`); no pisa manuales; no escribe XML. *Prueba:* `tests/test_comicinfo_tags_pg.py`
 + CBZ sintéticos; cuántos CBZ reales traen `<Tags>` es NOT RUN (benchmark §1) y se mide aquí.
 
-**AC-22 (BL-ETQ3) — identidad estructurada:** los clientes piden `genres`/`character_credits`/
-`story_arc_credits` en la misma petición (sin llamadas extra) y el enricher puebla
-`Series.genres`/`Issue.characters` respetando `locked_fields` y sin pisar `manual`; Tebeosfera sigue
-sin género (no se inventa); probado con respuestas grabadas, sin red real.
+**AC-22 (BL-ETQ3) — identidad estructurada:** los clientes piden en la misma petición los campos
+que su API documenta: AniList `genres` (sin `characters`: no hay relación serie↔personajes donde
+persistirlos) y Comic Vine `character_credits`/`story_arc_credits` en el detalle del número
+(**Comic Vine no expone `genres`**: no se pide). El enricher puebla `Series.genres`/`Issue.characters`
+respetando `locked_fields` y sin pisar `manual`, solo si están vacíos; hay un backfill acotado por
+identidad (`anilist_id`/`comic_vine_id`) para filas ya identificadas con la relación vacía. Tebeosfera
+sigue sin género (no se inventa); `story_arc_credits` se pide pero no se persiste (no hay relación
+inequívoca serie↔arco). Probado con respuestas grabadas, sin red real. *(Implementado en #671,
+fusionado el 2026-11-12.)*
 
 **AC-23 (BL-ETQ4) — enriquecimiento de tags:** una serie con `anilist_id` recibe solo el espacio
 `etiqueta` ratificado en D-1/D-2 con `weight` = `rank` real (0–100) y `source='anilist'`; una fila
@@ -455,7 +460,7 @@ caracteres y pruebas de ida/vuelta; mientras, el veredicto de seguridad es **NO 
 | **BL-ETQ1a** Etiquetar una serie | §7.1, §7.4–§7.5, ficha (añadir, quitar, crear), sugerencias de la ficha, migración **0022**, pruebas, docs | benchmark + esta spec + D-1/D-6 | 1 PR (#403) | M | sin datos si D-6 se rechaza (ya ratificada); validación y autoescape |
 | **BL-ETQ1b** Filtrar Biblioteca | §7.2–§7.4 (filtro, facetas, sugerencias), `SeriesService.list_series`, fragmento compuesto sobre `#rejilla`, pruebas | **BL-ETQ1a fusionada** + BL-IT01 (#283) | 1 PR (#431) | M | paginación que pierde `etiquetas`; coste de facetas |
 | **BL-ETQ2** ComicInfo de lectura | `<Tags>`/`<Genre>`, `source='comicinfo_xml'`, `Series.genres` desde fichero, topes, `oculta` | ETQ1a | 1 PR | M | volumen de `<Tags>` (ALTO §11); cobertura real desconocida (NOT RUN) |
-| **BL-ETQ3** Identidad estructurada | poblado de `genres`/`characters` desde fuentes (campos nuevos en la misma petición) | ETQ1a (contrato) | 1 PR | M–L | duplicidad con BL-ETQ4 si se decide mal D-1; rate limits intactos |
+| **BL-ETQ3** Identidad estructurada | poblado de `genres`/`characters` desde fuentes (campos nuevos en la misma petición) + backfill acotado | ETQ1a (contrato) | 1 PR (#671) | M–L | duplicidad con BL-ETQ4 si se decide mal D-1; rate limits intactos |
 | **BL-ETQ4** Enriquecimiento de tags | mapeo de fuentes a `etiqueta` con `weight=rank`, precedencia, caché H2 | ETQ1a, ETQ3, **D-1/D-2** | 1 PR | M | idioma de tags (D-2); fragmentación; no pisar manual |
 | **BL-ETQ5** Alias / implicaciones / reglas | tablas de alias/padres, validación de ciclos, reglas propuestas, `regla` en `MetadataSource` (si se aprueba) | ETQ1a, ETQ4 | 1 PR | L | ciclos, fusión silenciosa, coste de CTE; ¿quién cura? (D-5) |
 | **BL-ETQ6** Export ComicInfo/Kavita | extender B6 + escritura de `<Tags>` + B20 | ETQ1a, contrato B6 | 1 PR (no autorizada antes de extender B6) | L | corromper CBZ / pisar ajeno; **NO APTO** hasta B6 |

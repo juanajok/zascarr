@@ -265,9 +265,12 @@ def test_alturas_44_y_movil_con_contador_y_vista_en_su_fila():
 def test_cabecera_accion_es_boton_y_no_enlace_subrayado():
     from pathlib import Path
     html = _index()
-    assert 'class="btn ghost sm biblioteca-accion"' in html
+    assert 'class="biblioteca-acciones"' in html
+    assert html.count('class="btn ghost sm biblioteca-accion"') == 2
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert ".biblioteca-cabecera .biblioteca-acciones {" in css
     assert ".biblioteca-cabecera .biblioteca-accion {" in css
+    assert "display: flex;" in css.split(".biblioteca-cabecera .biblioteca-acciones {", 1)[1].split("}", 1)[0]
     assert "text-decoration: none;" in css
     assert "grid-template-areas: \"titulo accion\" \"subtitulo subtitulo\";" in css
 

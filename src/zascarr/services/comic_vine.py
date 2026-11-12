@@ -91,6 +91,11 @@ class CVIssueResult:
     image_url: str | None = None
     cover_date: str | None = None
     credits: list[CVCredit] = field(default_factory=list)
+    #: Nombres de personaje tal como los declara Comic Vine (no inventados).
+    characters: list[str] = field(default_factory=list)
+    #: Nombres de saga/arco; hoy se piden y se documentan, pero no se persiste
+    #: `story_arc_issues` (no hay relación inequívoca serie↔arco en la app).
+    story_arcs: list[str] = field(default_factory=list)
     raw: dict | None = None
 
 
@@ -229,7 +234,8 @@ class ComicVineClient:
         """
         data = await self._get("/issues/", {
             "filter": f"volume:{volume_id},issue_number:{issue_number}",
-            "field_list": "id,issue_number,description,image,cover_date,person_credits",
+            "field_list": ("id,issue_number,description,image,cover_date,person_credits,"
+                           "character_credits,story_arc_credits"),
             "limit": 1,
         })
         results = data.get("results", [])
@@ -251,6 +257,8 @@ def _parse_issue(item: dict) -> CVIssueResult:
         image_url=_portada(item),
         cover_date=item.get("cover_date"),
         credits=credits,
+        characters=_nombres(item.get("character_credits")),
+        story_arcs=_nombres(item.get("story_arc_credits")),
         raw=item,
     )
 
@@ -280,6 +288,21 @@ def _parse_cv_volume(item: dict) -> CVVolume:
         raw=item,
         peticiones=1,
     )
+
+
+def _nombres(valor: Any) -> list[str]:
+    """Nombres de una lista de objetos `{name: ...}` de Comic Vine, sin duplicados de caja."""
+    salida: list[str] = []
+    vistos: set[str] = set()
+    for item in valor or []:
+        if not isinstance(item, dict):
+            continue
+        nombre = str(item.get("name") or "").strip()
+        if not nombre or nombre.casefold() in vistos:
+            continue
+        vistos.add(nombre.casefold())
+        salida.append(nombre)
+    return salida
 
 
 def _safe_int(v: Any) -> int | None:

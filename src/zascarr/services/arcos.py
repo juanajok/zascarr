@@ -5,7 +5,7 @@ modifica arcos, no consulta fuentes y no toca archivos.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from sqlalchemy import exists, func, select
@@ -113,3 +113,150 @@ async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
         id=str(arco.id), title=arco.title, description=arco.description,
         is_crossover=bool(arco.is_crossover), filas=detalle,
         series=len({f.series_id for f in detalle}))
+
+
+@dataclass
+class ResultadoArco:
+    ok: bool
+    errores: dict[str, str] = field(default_factory=dict)
+    arco: StoryArc | None = None
+
+
+def _titulo(valor: str) -> tuple[str, str | None]:
+    titulo = (valor or "").strip()
+    if not titulo:
+        return "", "El título no puede estar vacío."
+    if len(titulo) > 500:
+        return "", "El título no puede superar 500 caracteres."
+    return titulo, None
+
+
+async def crear_arco(db: AsyncSession, *, title: str, description: str,
+                     is_crossover: bool) -> ResultadoArco:
+    titulo, error = _titulo(title)
+    errores = {}
+    if error:
+        errores["title"] = error
+    descripcion = (description or "").strip()
+    if len(descripcion) > 10_000:
+        errores["description"] = "La descripción no puede superar 10000 caracteres."
+    if errores:
+        return ResultadoArco(False, errores)
+    arco = StoryArc(title=titulo, description=descripcion or None,
+                    is_crossover=bool(is_crossover))
+    db.add(arco)
+    await db.flush()
+    return ResultadoArco(True, arco=arco)
+
+
+async def editar_arco(db: AsyncSession, arco_id: UUID, *, title: str,
+                      description: str, is_crossover: bool) -> ResultadoArco:
+    arco = await db.get(StoryArc, arco_id)
+    if arco is None:
+        return ResultadoArco(False, {"general": "La saga ya no existe."})
+    titulo, error = _titulo(title)
+    errores = {}
+    if error:
+        errores["title"] = error
+    descripcion = (description or "").strip()
+    if len(descripcion) > 10_000:
+        errores["description"] = "La descripción no puede superar 10000 caracteres."
+    if errores:
+        return ResultadoArco(False, errores, arco)
+    arco.title = titulo
+    arco.description = descripcion or None
+    arco.is_crossover = bool(is_crossover)
+    await db.flush()
+    return ResultadoArco(True, arco=arco)
+
+
+async def eliminar_arco(db: AsyncSession, arco_id: UUID) -> bool:
+    arco = await db.get(StoryArc, arco_id)
+    if arco is None:
+        return False
+    await db.delete(arco)      # cascade de story_arc_issues; no toca issues/files
+    await db.flush()
+    return True
+
+
+async def _serie_por_texto(db: AsyncSession, texto: str) -> Series | None:
+    """Una serie por id (UUID) o por título exacto; ambigüedad → None (se avisa)."""
+    texto = (texto or "").strip()
+    if not texto:
+        return None
+    try:
+        return await db.get(Series, UUID(texto))
+    except (ValueError, TypeError):
+        pass
+    filas = (await db.execute(
+        select(Series).where(func.lower(Series.title) == texto.casefold())
+        .order_by(Series.start_year, Series.id).limit(2))).scalars().all()
+    return filas[0] if len(filas) == 1 else None
+
+
+async def agregar_numero(db: AsyncSession, arco_id: UUID, *, serie: str,
+                         numero: str, orden: int | None = None) -> ResultadoArco:
+    arco = await db.get(StoryArc, arco_id)
+    if arco is None:
+        return ResultadoArco(False, {"general": "La saga ya no existe."})
+    numero = (numero or "").strip()
+    if not numero:
+        return ResultadoArco(False, {"numero": "Escribe el número."})
+    serie_obj = await _serie_por_texto(db, serie)
+    if serie_obj is None:
+        return ResultadoArco(False, {
+            "serie": "No encuentro una única serie con ese nombre. Escribe el título exacto."})
+    issue = (await db.execute(select(Issue).where(
+        Issue.series_id == serie_obj.id, Issue.issue_number == numero))).scalar_one_or_none()
+    if issue is None:
+        return ResultadoArco(False, {
+            "numero": f"No existe el nº {numero} en «{serie_obj.title}»."})
+    existente = (await db.execute(select(StoryArcIssue).where(
+        StoryArcIssue.story_arc_id == arco_id,
+        StoryArcIssue.issue_id == issue.id))).scalar_one_or_none()
+    if existente is not None:
+        return ResultadoArco(False, {"numero": "Ese número ya está en la saga."})
+    maximo = (await db.execute(
+        select(func.max(StoryArcIssue.reading_order)).where(
+            StoryArcIssue.story_arc_id == arco_id))).scalar_one() or 0
+    posicion = max(1, min(int(orden) if orden is not None else maximo + 1, maximo + 1))
+    if posicion <= maximo:
+        await db.execute(
+            StoryArcIssue.__table__.update()
+            .where(StoryArcIssue.story_arc_id == arco_id,
+                   StoryArcIssue.reading_order >= posicion)
+            .values(reading_order=StoryArcIssue.reading_order + 1))
+    db.add(StoryArcIssue(story_arc_id=arco_id, issue_id=issue.id, reading_order=posicion))
+    await db.flush()
+    return ResultadoArco(True, arco=arco)
+
+
+async def quitar_numero(db: AsyncSession, arco_id: UUID, issue_id: UUID) -> bool:
+    vinculo = await db.get(StoryArcIssue, (arco_id, issue_id))
+    if vinculo is None:
+        return False
+    await db.delete(vinculo)
+    await db.flush()
+    filas = (await db.execute(
+        select(StoryArcIssue).where(StoryArcIssue.story_arc_id == arco_id)
+        .order_by(StoryArcIssue.reading_order))).scalars().all()
+    for posicion, fila in enumerate(filas, start=1):
+        fila.reading_order = posicion
+    await db.flush()
+    return True
+
+
+async def mover_numero(db: AsyncSession, arco_id: UUID, issue_id: UUID, *, subir: bool) -> bool:
+    filas = (await db.execute(
+        select(StoryArcIssue).where(StoryArcIssue.story_arc_id == arco_id)
+        .order_by(StoryArcIssue.reading_order))).scalars().all()
+    indice = next((i for i, f in enumerate(filas) if f.issue_id == issue_id), None)
+    if indice is None:
+        return False
+    destino = indice - 1 if subir else indice + 1
+    if destino < 0 or destino >= len(filas):
+        return True
+    filas[indice].reading_order, filas[destino].reading_order = (
+        filas[destino].reading_order, filas[indice].reading_order)
+    await db.flush()
+    return True

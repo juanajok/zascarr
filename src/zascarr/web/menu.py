@@ -32,6 +32,7 @@ ENTRADAS: tuple[Entrada, ...] = (
     Entrada("revisar", "Por revisar", "/ui/pendientes", "Mi colección", "revisar",
             corta="Revisar", movil_principal=True, contador="pendientes"),
     Entrada("biblioteca", "Biblioteca", "/ui/biblioteca", "Mi colección", "biblioteca"),
+    Entrada("colecciones", "Colecciones", "/ui/colecciones", "Mi colección", "colecciones"),
     Entrada("duplicados", "Duplicados", "/ui/auditoria", "Mi colección", "duplicados"),
     Entrada("descubrir", "Descubrir", "/ui/descubrir", "Añadir", "descubrir"),
     Entrada("deseados", "Deseados", "/ui/wishlist", "Añadir", "deseados",
@@ -46,6 +47,7 @@ ENTRADAS: tuple[Entrada, ...] = (
 _PREFIJOS: tuple[tuple[str, str], ...] = (
     ("/ui/pendientes", "revisar"),
     ("/ui/biblioteca", "biblioteca"),
+    ("/ui/colecciones", "colecciones"),
     ("/ui/series", "biblioteca"),
     ("/ui/auditoria", "duplicados"),
     ("/ui/descubrir", "descubrir"),

@@ -44,6 +44,13 @@
   <p id="politica-efecto" class="muted politica-efecto">
     Se guarda al elegir. Si dejas de completar, lo ya empezado termina.
   </p>
+  {% if politica_efectiva and politica_efectiva != politica_actual %}
+  <p class="caption politica-efecto">
+    La política efectiva es «{{ politica_efectiva_etiqueta }}», aunque la guardada sea
+    «{{ politica_actual_etiqueta }}». {% if coleccion_causa %}{{ coleccion_causa }} {% endif %}
+    La búsqueda manual no se toca.
+  </p>
+  {% endif %}
 
   <details class="politica-detalles">
     <summary>¿Por qué una opción no se puede elegir?</summary>

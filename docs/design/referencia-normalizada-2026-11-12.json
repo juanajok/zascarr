@@ -1,0 +1,121 @@
+{
+  "muestra_total": 200,
+  "referencia_normalizada": {
+    "serie_unica": 134,
+    "issue_exacto": 125,
+    "ambos": 125,
+    "serie_ausente": 61,
+    "serie_ambigua": 5,
+    "numero_no_existe": 9
+  },
+  "catalogo": {
+    "series": 90,
+    "issues": 2735,
+    "series_ref_colisiones": 2,
+    "series_ref_grupos": 4,
+    "issue_ref_colisiones": 0,
+    "issue_ref_grupos": 0
+  },
+  "series_ausentes_ejemplo": [
+    [
+      "Green Lantern Corps",
+      "60",
+      "grapa"
+    ],
+    [
+      "Una infancia eterna",
+      "",
+      "obra_unica"
+    ],
+    [
+      "Green Lantern - Origenes Secretos",
+      "1",
+      "grapa"
+    ],
+    [
+      "Injustice: Gods Among Us - Año 2",
+      "",
+      "pack"
+    ],
+    [
+      "Injustice: Gods Among Us - Año 3",
+      "",
+      "pack"
+    ],
+    [
+      "Injustice: Gods Among Us - Año 4",
+      "",
+      "pack"
+    ],
+    [
+      "Injustice: Gods Among Us - Año 5",
+      "",
+      "pack"
+    ],
+    [
+      "Lobo Annual",
+      "1",
+      "anual"
+    ],
+    [
+      "Nightwing",
+      "73",
+      "grapa"
+    ],
+    [
+      "Nightwing",
+      "71",
+      "grapa"
+    ],
+    [
+      "Dreadstar",
+      "61",
+      "grapa"
+    ],
+    [
+      "One Piece",
+      "927",
+      "capitulo"
+    ],
+    [
+      "1963",
+      "6",
+      "grapa"
+    ],
+    [
+      "American Vampire 1976",
+      "10",
+      "grapa"
+    ],
+    [
+      "Capitán Átomo",
+      "11",
+      "grapa"
+    ],
+    [
+      "Constantine",
+      "16",
+      "grapa"
+    ],
+    [
+      "Constantine",
+      "22",
+      "grapa"
+    ],
+    [
+      "Dinastía de X",
+      "4",
+      "grapa"
+    ],
+    [
+      "Demon Knights",
+      "17",
+      "grapa"
+    ],
+    [
+      "El Ángel Caído",
+      "1",
+      "grapa"
+    ]
+  ]
+}

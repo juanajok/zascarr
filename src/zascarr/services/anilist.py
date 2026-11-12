@@ -19,7 +19,7 @@ Documentación: https://docs.anilist.co/guide/graphql/
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 import structlog
@@ -50,7 +50,24 @@ query ($search: String, $perPage: Int) {
       startDate { year }
       chapters
       volumes
+      genres
     }
+  }
+}
+"""
+
+
+_DETAIL_QUERY = """
+query ($id: Int) {
+  Media(id: $id, type: MANGA) {
+    id
+    title { romaji english }
+    description(asHtml: false)
+    coverImage { large }
+    startDate { year }
+    chapters
+    volumes
+    genres
   }
 }
 """
@@ -66,6 +83,7 @@ class AniListResult:
     start_year: int | None = None
     chapters: int | None = None
     volumes: int | None = None
+    genres: list[str] = field(default_factory=list)
     site_url: str | None = None
     raw: dict | None = None
 
@@ -107,6 +125,12 @@ class AniListClient:
         media = ((data.get("data") or {}).get("Page") or {}).get("media") or []
         return [_parse_media(m) for m in media]
 
+    async def get_manga(self, anilist_id: int) -> AniListResult | None:
+        """Detalle por id para el backfill; una sola petición y `None` si no existe."""
+        data = await self._post(_DETAIL_QUERY, {"id": int(anilist_id)})
+        media = (data.get("data") or {}).get("Media")
+        return _parse_media(media) if isinstance(media, dict) else None
+
 
 def _parse_media(item: dict) -> AniListResult:
     title = item.get("title") or {}
@@ -119,9 +143,23 @@ def _parse_media(item: dict) -> AniListResult:
         start_year=(item.get("startDate") or {}).get("year"),
         chapters=item.get("chapters"),
         volumes=item.get("volumes"),
+        genres=_textos(item.get("genres")),
         site_url=f"https://anilist.co/manga/{item['id']}",
         raw=item,
     )
+
+
+def _textos(valor) -> list[str]:
+    salida: list[str] = []
+    vistos: set[str] = set()
+    for texto in valor or []:
+        limpio = str(texto or "").strip()
+        if limpio and limpio.casefold() not in vistos:
+            vistos.add(limpio.casefold())
+            salida.append(limpio)
+    return salida
+
+
 
 
 def _clean_description(text: str | None) -> str | None:
