@@ -210,12 +210,41 @@ class ApartadoDuplicadosService:
         except OSError:
             return 0
 
+    def _base_cuarentena(self, operacion: UUID) -> Path:
+        """Cuarentena real, resuelta: nunca fuera de la biblioteca (symlink incluido)."""
+        raiz = self._library.resolve()
+        base = self._library / ".zascarr" / "apartados" / str(operacion)
+        real = base.resolve(strict=False)
+        if real != raiz and raiz not in real.parents:
+            raise GrupoRechazado("cuarentena_fuera", "La cuarentena queda fuera de la biblioteca.")
+        try:
+            if real.stat().st_dev != raiz.stat().st_dev:
+                raise GrupoRechazado("montura_distinta", "La cuarentena está en otra montura.")
+        except FileNotFoundError:
+            pass
+        return base
+
+    async def _file_original_previo(self, paths: Sequence[Path], keep: int) -> dict | None:
+        filas = await self._filas_del_grupo(paths)
+        if len(filas) > 1:
+            raise GrupoRechazado("catalogo_ambiguo", "El catálogo tiene más de una fila para este grupo.")
+        if not filas or filas[0].file_path == str(paths[keep]):
+            return None
+        fila = filas[0]
+        if fila.file_path not in {str(p) for i, p in enumerate(paths) if i != keep}:
+            raise GrupoRechazado("catalogo_incoherente", "El catálogo no coincide con las copias.")
+        return {"file_id": str(fila.id), "file_path": fila.file_path,
+                "file_name": fila.file_name, "file_size_bytes": fila.file_size_bytes,
+                "sha256_hash": fila.sha256_hash, "file_mtime_ns": fila.file_mtime_ns}
+
     async def confirmar(self, token: str, grupos: Sequence[GrupoEntrada | dict] | None = None,
                         *, secret: str | None = None) -> ResultadoApartado:
         """Confirma un token de apartar. No acepta rutas que no estén en el token."""
         firma = self._verificar(token, secret)
         if firma is None:
             raise TokenApartadoInvalido("La propuesta caducó o no es válida.")
+        if firma.accion != "apartar":
+            raise TokenApartadoInvalido("Este token no es de apartar.")
         entradas = self._coercionar_grupos(grupos)
         if len(entradas) != len(firma.grupos):
             raise TokenApartadoInvalido("Los grupos no coinciden con la propuesta.")
@@ -276,10 +305,15 @@ class ApartadoDuplicadosService:
             )
             self._db.add(op)
             for sha, paths, rels, keep in grupos:
+                try:
+                    file_original = await self._file_original_previo(paths, keep)
+                except GrupoRechazado:
+                    file_original = None
                 self._db.add(ApartadoGrupo(
                     operacion_id=operacion_id, grupo_clave=sha, sha256=sha,
                     size_bytes=paths[0].stat().st_size, estado=ApartadoGrupoEstado.PENDIENTE,
-                    detalle={"keep_index": keep, "rutas": rels, "items": []},
+                    detalle={"keep_index": keep, "rutas": rels, "items": [],
+                             "file_original": file_original},
                 ))
             await self._db.commit()
             op = await self._cargar_operacion(operacion_id) or op
@@ -308,30 +342,33 @@ class ApartadoDuplicadosService:
             paths = [self._relativa(r)[0] for r in rutas_rel]
             if len(paths) < 2 or not 0 <= keep < len(paths):
                 raise GrupoRechazado("grupo_invalido", "El grupo no es válido.")
-            if any(not p.exists() for p in paths):
-                raise GrupoRechazado("no_existe", "Alguna copia ya no está.")
-            for p in paths:
+            previos = {
+                item.get("ruta") for item in (detalle.get("items") or [])
+                if item.get("estado") == "movido"
+            }
+            for i, p in enumerate(paths):
+                if i != keep and rutas_rel[i] in previos:
+                    continue
+                if not p.exists():
+                    raise GrupoRechazado("no_existe", "Alguna copia ya no está.")
+            for i, p in enumerate(paths):
+                if i != keep and rutas_rel[i] in previos:
+                    continue
                 if p.stat().st_size > 0 and await_hash(p) != grupo.sha256:
                     raise GrupoRechazado("contenido_cambiado", "El contenido cambió; no se mueve.")
-            if any(p.stat().st_size != paths[keep].stat().st_size for p in paths):
-                raise GrupoRechazado("tamano_distinto", "Las copias ya no son idénticas.")
+                if p.stat().st_size != paths[keep].stat().st_size:
+                    raise GrupoRechazado("tamano_distinto", "Las copias ya no son idénticas.")
             filas = await self._filas_del_grupo(paths)
             if len(filas) > 1:
                 raise GrupoRechazado("catalogo_ambiguo", "El catálogo tiene más de una fila para este grupo.")
-            file_original = None
-            if len(filas) == 1:
-                fila = filas[0]
-                if fila.file_path == str(paths[keep]):
-                    file_original = None
-                elif fila.file_path in {str(p) for i, p in enumerate(paths) if i != keep}:
-                    file_original = {
-                        "file_id": str(fila.id), "file_path": fila.file_path,
-                        "file_name": fila.file_name, "file_size_bytes": fila.file_size_bytes,
-                        "sha256_hash": fila.sha256_hash, "file_mtime_ns": fila.file_mtime_ns,
-                    }
-                else:
-                    raise GrupoRechazado("catalogo_incoherente", "El catálogo no coincide con las copias.")
-            destino_base = self._library / ".zascarr" / "apartados" / str(op.id)
+            file_original = detalle.get("file_original")
+            if file_original is None:
+                file_original = await self._file_original_previo(paths, keep)
+            destino_base = self._base_cuarentena(op.id)
+            if detalle.get("file_original") != file_original:
+                detalle["file_original"] = file_original
+                grupo.detalle = detalle
+                await self._db.commit()  # write-ahead antes de mover
             items_previos = {
                 item.get("ruta"): item for item in (detalle.get("items") or [])
                 if item.get("estado") == "movido"
@@ -375,23 +412,33 @@ class ApartadoDuplicadosService:
             grupo.detalle = detalle
             grupo.estado = ApartadoGrupoEstado.MOVIDO
         except GrupoRechazado as exc:
-            await self._compensar_movidos(movidos)
-            grupo.detalle = {**detalle, "motivo": exc.motivo, "detalle": exc.detalle}
-            grupo.estado = ApartadoGrupoEstado.RECHAZADO
+            compensado = await self._compensar_movidos(movidos)
+            if not compensado:
+                grupo.detalle = {**detalle, "motivo": "compensacion_fallida",
+                                 "detalle": "No se pudo devolver una copia ya movida."}
+                grupo.estado = ApartadoGrupoEstado.ERROR
+            else:
+                grupo.detalle = {**detalle, "motivo": exc.motivo, "detalle": exc.detalle}
+                grupo.estado = ApartadoGrupoEstado.RECHAZADO
         except (OSError, ValueError) as exc:
-            await self._compensar_movidos(movidos)
-            grupo.detalle = {**detalle, "motivo": "error_disco", "detalle": str(exc)}
-            grupo.estado = ApartadoGrupoEstado.ERROR
+            compensado = await self._compensar_movidos(movidos)
+            if not compensado:
+                grupo.detalle = {**detalle, "motivo": "compensacion_fallida",
+                                 "detalle": "No se pudo devolver una copia ya movida."}
+                grupo.estado = ApartadoGrupoEstado.ERROR
+            else:
+                grupo.detalle = {**detalle, "motivo": "error_disco", "detalle": str(exc)}
+                grupo.estado = ApartadoGrupoEstado.ERROR
 
-    async def _compensar_movidos(self, movidos: list[tuple[Path, Path]]) -> None:
+    async def _compensar_movidos(self, movidos: list[tuple[Path, Path]]) -> bool:
         for origen, destino in reversed(movidos):
             try:
                 if destino.exists() and not origen.exists():
                     os.replace(destino, origen)
                     _fsync_dir(origen.parent)
             except OSError:
-                # La operación queda en_curso para recuperación; nunca se anuncia éxito.
-                return
+                return False
+        return True
 
     async def _filas_del_grupo(self, paths: Sequence[Path]) -> list[File]:
         resultado = await self._db.execute(select(File).where(File.file_path.in_([str(p) for p in paths])))
@@ -472,7 +519,13 @@ class ApartadoDuplicadosService:
             items = list(detalle.get("items") or [])
             rutas_rel = list(detalle.get("rutas") or [])
             keep = int(detalle.get("keep_index", 0))
-            base = self._library / ".zascarr" / "apartados" / str(op.id)
+            base = self._base_cuarentena(op.id)
+            if not detalle.get("file_original"):
+                try:
+                    detalle["file_original"] = await self._file_original_previo(
+                        [self._relativa(r)[0] for r in rutas_rel], keep)
+                except GrupoRechazado:
+                    detalle["file_original"] = None
             if not items and rutas_rel:
                 items = [
                     {"ruta": rel, "estado": "pendiente", "destino": str(base / Path(rel))}

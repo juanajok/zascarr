@@ -68,12 +68,14 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     bind.execute(sa.text("LOCK TABLE apartado_operaciones IN ACCESS EXCLUSIVE MODE"))
-    en_curso = bind.execute(sa.text(
-        "SELECT count(*) FROM apartado_operaciones WHERE estado = 'en_curso'")).scalar()
-    if en_curso:
+    pendientes = bind.execute(sa.text(
+        "SELECT count(*) FROM apartado_operaciones o "
+        "LEFT JOIN apartado_grupos g ON g.operacion_id = o.id "
+        "WHERE o.estado = 'en_curso' OR g.estado = 'movido'")).scalar()
+    if pendientes:
         raise RuntimeError(
-            "No se puede bajar de la 0030: hay apartados en curso. "
-            "Termínalos o recupéralos antes de bajar la migración."
+            "No se puede bajar de la 0030: hay apartados en curso o copias movidas "
+            "en cuarentena. Termínalos o deshazlos antes de bajar la migración."
         )
     op.drop_table("apartado_grupos")
     op.drop_table("apartado_operaciones")

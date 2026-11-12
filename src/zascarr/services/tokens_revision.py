@@ -1216,7 +1216,7 @@ def crear_token_apartar(operacion: str | UUID, grupos: Sequence[GrupoFirmado], s
     """Firma la intención de apartar (o deshacer) sin rutas completas."""
     if accion not in ("apartar", "deshacer"):
         raise ValueError("Acción de apartado desconocida")
-    if not uuid_texto(operacion):
+    if not uuid_texto(str(operacion)):
         raise ValueError("Operación de apartado inválida")
     if len(grupos) > MAX_GRUPOS_APARTAR:
         raise ValueError("Demasiados grupos para una sola confirmación")
