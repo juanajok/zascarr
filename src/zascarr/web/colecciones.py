@@ -25,7 +25,7 @@ router = APIRouter(prefix="/ui/colecciones", tags=["ui"])
 templates = crear_templates()
 
 POLITICAS = {
-    CollectionAutoSearch.HEREDAR: "Como cada serie (heredar)",
+    CollectionAutoSearch.HEREDAR: "Como cada serie",
     CollectionAutoSearch.INCLUIR: "Buscar faltantes de todas",
     CollectionAutoSearch.EXCLUIR: "No buscar automáticamente",
 }

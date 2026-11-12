@@ -22,7 +22,7 @@
     <option value="{{ valor.value }}" {% if (valores.auto_search if valores else coleccion.auto_search) == valor.value %}selected{% endif %}>{{ etiqueta }}</option>
     {% endfor %}
   </select>
-  <p class="caption">«Heredar» respeta el «Qué buscar» de cada serie. «Buscar faltantes» lo fuerza aunque la serie diga «ninguno». «No buscar» lo veta y retira los deseos automáticos pendientes. La búsqueda manual no se toca.</p>
+  <p class="caption">«Como cada serie» respeta el «Qué buscar» de cada serie. «Buscar faltantes» lo fuerza aunque la serie no busque por su cuenta. «No buscar» lo veta y retira los deseos automáticos pendientes. La búsqueda manual no se toca.</p>
   <button class="btn primary" type="submit">Guardar colección</button>
 </form>
 <details class="politica-detalles">
