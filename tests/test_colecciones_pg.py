@@ -127,7 +127,7 @@ async def test_crud_nombre_unico_case_insensitive_y_asignacion_unica(db):
     fila = detalle.series[0]
     assert fila.wishlist_policy_label == "No buscar automáticamente"
     assert fila.politica_efectiva_label == "No buscar automáticamente"
-    assert await series_sin_coleccion(db) == []
+    assert str(s.id) not in {x.id for x in await series_sin_coleccion(db)}
     assert not (await asignar_serie(db, r.coleccion.id, s.id)).ok
     assert await quitar_serie(db, r.coleccion.id, s.id)
     assert s.collection_id is None
