@@ -91,8 +91,11 @@ def _preparar(tmp_path: Path) -> dict:
         "issues": int(_psql(pg, "select count(*) from issues")),
         "wishlist": int(_psql(pg, "select count(*) from wishlist")),
         "alembic": _psql(pg, "select version_num from alembic_version"),
+        # El script de restauración cuenta tablas base (relkind r/p), no vistas.
+        # La referencia normalizada añade una vista: no debe cambiar el conteo.
         "tablas": int(_psql(
-            pg, "select count(*) from information_schema.tables where table_schema='public'"
+            pg, "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace "
+                "where n.nspname='public' and c.relkind in ('r','p')"
         )),
     }
     dump = backup / "backup_pg_test.sql.gz"

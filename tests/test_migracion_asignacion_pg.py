@@ -423,7 +423,17 @@ async def sembrar_a_0016(url: str) -> dict:
             {"id": str(serie_id), "title": "Saga del Faro",
              "trad": ComicTradition.AMERICAN.value, "anio": 2010})
         await s.flush()
-        s.add_all([manual, otro])
+        # Issues por SQL explícito: el modelo actual tiene `number_key` (0030),
+        # que aquí (0016) no existe y el INSERT del ORM intentaría leerla.
+        await s.execute(text(
+            "INSERT INTO issues (id, series_id, issue_number, volume, format, locked_fields, metadata_source) "
+            "VALUES (:id, :sid, :num, 1, 'single_issue', :locked, :src)"),
+            {"id": str(manual.id), "sid": str(serie_id), "num": "12",
+             "locked": ["series_id", "issue_number"], "src": MetadataSource.MANUAL.value})
+        await s.execute(text(
+            "INSERT INTO issues (id, series_id, issue_number, volume, format) "
+            "VALUES (:id, :sid, :num, 1, 'single_issue')"),
+            {"id": str(otro.id), "sid": str(serie_id), "num": "13"})
         await s.flush()
         # Los dos archivos por SQL Core: el modelo File tiene columnas posteriores a 0016
         # (`file_mtime_ns`, 0021) y un INSERT del ORM las incluiría y reventaría aquí.
@@ -459,7 +469,10 @@ async def foto(url: str, ids: dict) -> dict:
         f_i = (await s.execute(text(
             "SELECT review_dismissed, metadata FROM files WHERE id = :id"),
             {"id": str(ids["f_ignorado"])})).one()
-        i_m = await s.get(Issue, ids["manual"])
+        # La foto se toma también con la BD en 0016: SQL explícito, no el modelo.
+        i_m = (await s.execute(text(
+            "SELECT metadata_source, locked_fields FROM issues WHERE id = :id"),
+            {"id": str(ids["manual"])})).one()
         res = dict(
             series=(await s.execute(text("SELECT count(*) FROM series"))).scalar(),
             issues=(await s.execute(text("SELECT count(*) FROM issues"))).scalar(),
