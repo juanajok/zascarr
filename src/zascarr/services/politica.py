@@ -23,6 +23,8 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import (
+    Collection,
+    CollectionAutoSearch,
     Issue,
     Series,
     Wishlist,
@@ -94,7 +96,29 @@ class Querer:
     fuente: str | None = None
 
 
-async def querer_de_serie(db: AsyncSession, series: Series) -> Querer:
+async def politica_efectiva(db: AsyncSession, series: Series) -> WishlistPolicy:
+    """#155: política que de verdad aplica el orquestador para ESTA serie.
+
+    Sin colección o con `heredar`, la guardada (D8 actual). `incluir` fuerza
+    faltantes; `excluir` veta la auto-búsqueda. La ficha puede seguir mostrando
+    la guardada, pero la generación/retirada usan esta.
+    """
+    guardada = series.wishlist_policy or WishlistPolicy.NONE
+    if series.collection_id is None:
+        return guardada
+    coleccion = await db.get(Collection, series.collection_id)
+    if coleccion is None:
+        return guardada
+    if coleccion.auto_search == CollectionAutoSearch.INCLUIR:
+        return WishlistPolicy.MISSING
+    if coleccion.auto_search == CollectionAutoSearch.EXCLUIR:
+        return WishlistPolicy.NONE
+    return guardada
+
+
+async def querer_de_serie(
+    db: AsyncSession, series: Series, *, politica: WishlistPolicy | None = None
+) -> Querer:
     """«Números que la política de ESTA serie quiere ahora» — el predicado único
     de D8.
 
@@ -105,7 +129,7 @@ async def querer_de_serie(db: AsyncSession, series: Series) -> Querer:
     # `None` solo puede aparecer en un objeto aún sin pasar por la BD (la
     # columna es NOT NULL con `default`/`server_default`). Se trata como el
     # valor por defecto para que el predicado sea total.
-    politica = series.wishlist_policy or WishlistPolicy.NONE
+    politica = politica or series.wishlist_policy or WishlistPolicy.NONE
     if politica == WishlistPolicy.NONE:
         return Querer(frozenset(), True)
     if politica == WishlistPolicy.FUTURE:

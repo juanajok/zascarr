@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{% if arco %}Editar la saga{% else %}Nueva saga{% endif %} — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
+<h1>{% if arco %}Editar la saga{% else %}Nueva saga{% endif %}</h1>
+<p class="subtitle">Una saga puede reunir números de varias series y tiene un orden de lectura.</p>
+{% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
+<form method="post" action="{{ accion }}" class="edicion-form">
+  <label>Título
+    <input type="text" name="title" value="{{ valores.title }}" maxlength="500" required>
+    {% if errores.title %}<span class="campo-error">{{ errores.title }}</span>{% endif %}
+  </label>
+  <label>Descripción
+    <textarea name="description" rows="5" maxlength="10000">{{ valores.description }}</textarea>
+    {% if errores.description %}<span class="campo-error">{{ errores.description }}</span>{% endif %}
+  </label>
+  <label class="legal-checkbox">
+    <input type="checkbox" name="is_crossover" value="true" {% if valores.is_crossover %}checked{% endif %}>
+    Cruza varias series
+  </label>
+  <p class="caption">Solo cambia la saga en ZascArr; no se toca ningún número, archivo ni serie.</p>
+  <div class="edicion-acciones">
+    <button type="submit" class="btn primary">Guardar</button>
+    <a class="btn ghost" href="/ui/arcos{% if arco %}/{{ arco.id }}{% endif %}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

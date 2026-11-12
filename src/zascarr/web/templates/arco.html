@@ -2,9 +2,14 @@
 {% block title %}{{ arco.title }} en orden — ZascArr{% endblock %}
 {% block content %}
 <p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
+{% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
 <h1>{{ arco.title }}</h1>
 <p class="subtitle">Orden de lectura{% if arco.is_crossover %} · cruza varias series{% endif %}.</p>
 {% if arco.description %}<p>{{ arco.description }}</p>{% endif %}
+<div class="arco-acciones">
+  <a class="btn ghost sm" href="/ui/arcos/{{ arco.id }}/editar">Editar la saga</a>
+  <a class="btn ghost sm" href="/ui/arcos/{{ arco.id }}/eliminar">Eliminar la saga</a>
+</div>
 <p class="caption">{{ arco.filas | length }} {{ "número" if arco.filas | length == 1 else "números" }} · {{ arco.series }} {{ "serie" if arco.series == 1 else "series" }}</p>
 {% if not arco.filas %}
 {{ ui.estado_vacio("Esta saga no tiene números enlazados", "No hay un orden de lectura que mostrar todavía.") }}
@@ -16,6 +21,17 @@
     <a href="/ui/series/{{ f.series_id }}/numero/{{ f.issue_id }}">{{ f.series }} #{{ f.numero }}{% if f.titulo %} · {{ f.titulo }}{% endif %}</a>
     {% if f.fecha %}<span class="muted">{{ f.fecha }}</span>{% endif %}
     {% if f.disponible %}{{ ui.chip("ok", "En tu biblioteca") }}{% else %}{{ ui.chip("neutro", "No disponible") }}{% endif %}
+    <span class="arco-controles">
+      <form method="post" action="/ui/arcos/{{ arco.id }}/numeros/{{ f.issue_id }}/mover" class="inline-desbloquear">
+        <input type="hidden" name="subir" value="true"><button type="submit" class="btn ghost sm">Subir</button>
+      </form>
+      <form method="post" action="/ui/arcos/{{ arco.id }}/numeros/{{ f.issue_id }}/mover" class="inline-desbloquear">
+        <input type="hidden" name="subir" value="false"><button type="submit" class="btn ghost sm">Bajar</button>
+      </form>
+      <form method="post" action="/ui/arcos/{{ arco.id }}/numeros/{{ f.issue_id }}/quitar" class="inline-desbloquear">
+        <button type="submit" class="btn ghost sm">Quitar de la saga</button>
+      </form>
+    </span>
   </li>
   {% endfor %}
 </ol>

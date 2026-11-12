@@ -38,13 +38,15 @@ from enum import StrEnum
 from uuid import uuid4
 
 import structlog
-from sqlalchemy import func, or_, select, text, update
+from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
+    Collection,
+    CollectionAutoSearch,
     EstadoAlias,
     File,
     Issue,
@@ -61,6 +63,7 @@ from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     ESTADOS_REACTIVABLES,
     Querer,
+    politica_efectiva,
     querer_de_serie,
     retirar_de_serie,
 )
@@ -729,8 +732,10 @@ class Orchestrator:
 
         if lote is None:
             lote = get_settings().orchestrator_politica_lote
-        planes = [(serie, await querer_de_serie(self.db, serie))
-                  for serie in await self._series_para_sincronizar()]
+        planes = []
+        for serie in await self._series_para_sincronizar():
+            efectiva = await politica_efectiva(self.db, serie)
+            planes.append((serie, await querer_de_serie(self.db, serie, politica=efectiva)))
         retirados = await self._retirar_lo_que_ya_no_se_quiere(planes)
         generados = await self._generar_lo_que_falta(planes, lote)
         return SincronizacionPolitica(generados, retirados)
@@ -749,14 +754,26 @@ class Orchestrator:
             Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]),
             Wishlist.series_id.is_not(None),
         )
-        return list((await self.db.execute(
+        # #155: la colección puede añadir series (incluir) o vetarlas
+        # (excluir). Las excluidas solo entran si tienen items de política que
+        # retirar; las incluidas entran aunque su wishlist_policy sea «ninguno».
+        consulta = (
             select(Series)
+            .outerjoin(Collection, Series.collection_id == Collection.id)
             .where(or_(
-                Series.wishlist_policy.in_([WishlistPolicy.MISSING, WishlistPolicy.ALL]),
                 Series.id.in_(pendientes),
+                and_(
+                    or_(
+                        Collection.id.is_(None),
+                        Collection.auto_search == CollectionAutoSearch.HEREDAR,
+                    ),
+                    Series.wishlist_policy.in_([WishlistPolicy.MISSING, WishlistPolicy.ALL]),
+                ),
+                Collection.auto_search == CollectionAutoSearch.INCLUIR,
             ))
             .order_by(Series.sort_title)
-        )).scalars().all())
+        )
+        return list((await self.db.execute(consulta)).scalars().all())
 
     async def _retirar_lo_que_ya_no_se_quiere(
             self, planes: list[tuple[Series, Querer]]) -> int:

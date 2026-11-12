@@ -2206,10 +2206,16 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 .biblioteca-cabecera h1 { grid-area: titulo; margin: 0; }
 .biblioteca-cabecera .subtitle { grid-area: subtitulo; margin: 0; }
-.biblioteca-cabecera .biblioteca-accion {
+.biblioteca-cabecera .biblioteca-acciones {
   grid-area: accion;
   justify-self: end;
   align-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.biblioteca-cabecera .biblioteca-accion {
   text-decoration: none;
   color: var(--ink);
   background: var(--paper);
@@ -2352,7 +2358,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
     grid-template-areas: "titulo" "subtitulo" "accion";
     gap: 4px;
   }
-  .biblioteca-cabecera .biblioteca-accion { justify-self: start; margin-top: 6px; }
+  .biblioteca-cabecera .biblioteca-acciones { justify-self: start; justify-content: flex-start; margin-top: 6px; }
   .barra-panel-campos {
     position: fixed;
     top: auto;
@@ -2445,6 +2451,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .arcos-lista, .arco-orden { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
 .arco-fila, .arco-orden li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 8px 10px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); background: var(--paper); }
 .arco-posicion { min-width: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+
+/* BL-C4 (#151): gestión manual de sagas. */
+.arco-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 16px; }
+.arco-anadir { margin: 18px 0; padding: 12px 14px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); }
+.arco-controles { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,

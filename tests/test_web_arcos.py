@@ -14,7 +14,7 @@ from zascarr.services.arcos import ArcoResumen, DetalleArco, FilaArco, PaginaArc
 
 def _cliente():
     async def _db():
-        yield SimpleNamespace()
+        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
     app.dependency_overrides[get_db] = _db
     return TestClient(app)
 
@@ -62,3 +62,30 @@ def test_saga_sin_datos_muestra_estado_vacio():
     finally:
         _cerrar()
     assert r.status_code == 200 and "Todavía no hay sagas" in r.text
+
+
+def test_formularios_crud_y_redirecciones(monkeypatch):
+    from zascarr.services.arcos import DetalleArco, ResultadoArco
+
+    serie = SimpleNamespace(id=uuid4())
+    arco = SimpleNamespace(id=uuid4(), title="Saga", description=None,
+                           is_crossover=False)
+    detalle = DetalleArco(str(arco.id), "Saga", None, False, [], 0)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.crear_arco", AsyncMock(
+                return_value=ResultadoArco(True, arco=arco))):
+            r = c.post("/ui/arcos/nueva", data={"title": "Saga"},
+                       follow_redirects=False)
+        assert r.status_code == 303 and str(arco.id) in r.headers["location"]
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            assert c.get(f"/ui/arcos/{arco.id}/editar").status_code == 200
+            assert c.get(f"/ui/arcos/{arco.id}/eliminar").status_code == 200
+        with patch("zascarr.web.arcos.agregar_numero", AsyncMock(
+                return_value=ResultadoArco(True, arco=arco))):
+            r = c.post(f"/ui/arcos/{arco.id}/numeros",
+                       data={"serie": "Batman", "numero": "1"},
+                       follow_redirects=False)
+        assert r.status_code == 303
+    finally:
+        _cerrar()
