@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    PrimaryKeyConstraint,
     SmallInteger,
     String,
     Table,
@@ -640,6 +641,12 @@ class Issue(Base):
     synopsis:        Mapped[str|None]     = mapped_column(Text)
     cover_url:       Mapped[str|None]     = mapped_column(String(500))
     comic_vine_id:   Mapped[int|None]     = mapped_column(BigInteger, unique=True)
+    # Fase 2: IDs externos por issue, en columnas paralelas por fuente (mismo
+    # principio que Series). Ninguno es obligatorio ni sustituye a `id`.
+    gcd_id:          Mapped[int|None]     = mapped_column(BigInteger, unique=True)
+    metron_id:       Mapped[int|None]     = mapped_column(BigInteger, unique=True)
+    anilist_id:      Mapped[int|None]     = mapped_column(BigInteger, unique=True)
+    tebeosfera_slug: Mapped[str|None]     = mapped_column(String(255), unique=True)
     sort_order:      Mapped[float|None]   = mapped_column(Float)
     metadata_:       Mapped[dict]         = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None]     = mapped_column(String(20))
@@ -1263,3 +1270,48 @@ class AliasImportado(Base):
                                               server_default=text("'{}'::jsonb"))
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
                                                 server_default=func.now())
+
+
+class EntitySourceRecord(Base):
+    """Payload normalizado de una fuente y su procedencia (fase 2).
+
+    No es identidad: es la evidencia que respalda los IDs/campos. `entity_type`
+    limita los tipos válidos por CHECK; no hay FK polimórfica a propósito.
+    """
+    __tablename__ = "entity_source_records"
+    __table_args__ = (
+        CheckConstraint("entity_type IN ('series','issue')", name="ck_entity_source_type"),
+        UniqueConstraint("entity_type", "entity_id", "source", "external_id",
+                         name="uq_entity_source_record"),
+        Index("ix_entity_source_entity", "entity_type", "entity_id"),
+        Index("ix_entity_source_external", "source", "external_id"),
+    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    entity_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    entity_id: Mapped[str] = mapped_column(UUID(as_uuid=True), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_url: Mapped[str|None] = mapped_column(String(500))
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    payload_hash: Mapped[str|None] = mapped_column(String(64))
+    license: Mapped[str|None] = mapped_column(String(100))
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class FieldProvenance(Base):
+    """Origen del último valor de un campo de una serie o issue (fase 2)."""
+    __tablename__ = "field_provenance"
+    __table_args__ = (
+        CheckConstraint("entity_type IN ('series','issue')", name="ck_field_provenance_type"),
+        PrimaryKeyConstraint("entity_type", "entity_id", "field"),
+    )
+    entity_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    entity_id: Mapped[str] = mapped_column(UUID(as_uuid=True), nullable=False)
+    field: Mapped[str] = mapped_column(String(100), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    value: Mapped[dict|None] = mapped_column(JSONB)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    locked: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default=text("false"))
