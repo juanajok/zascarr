@@ -44,7 +44,10 @@ def test_lista_muestra_colecciones_y_politica():
 def test_detalle_muestra_series_y_selector():
     c = _cliente()
     detalle = DetalleColeccion("c1", "Grapas", "En curso", "excluir",
-                               [SerieDeColeccion("s1", "Flash", 1987, "faltantes")])
+                               [SerieDeColeccion(
+                                   "s1", "Flash", 1987, "faltantes",
+                                   "Buscar los números que faltan", "ninguno",
+                                   "No buscar automáticamente")])
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
              patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
@@ -55,6 +58,8 @@ def test_detalle_muestra_series_y_selector():
         _cerrar()
     assert r.status_code == 200
     assert "Flash" in r.text and "Batman" in r.text
+    assert "Guardada: Buscar los números que faltan" in r.text
+    assert "Efectiva: No buscar automáticamente" in r.text
     assert "No buscar automáticamente" in r.text
     assert "Borrar esta colección" in r.text
     assert "confirm(" not in r.text

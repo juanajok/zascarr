@@ -27,3 +27,17 @@ def test_politica_tri_estado_solo_acepta_valores_conocidos():
     assert _politica("INCLUIR") is not None
     assert _politica("excluir") is not None
     assert _politica("otra") is None
+
+
+def test_etiquetas_llanas_y_politica_efectiva_para_la_ui():
+    from zascarr.models import CollectionAutoSearch, WishlistPolicy
+    from zascarr.services.colecciones import (
+        etiqueta_politica,
+        politica_efectiva_de,
+    )
+
+    assert etiqueta_politica(WishlistPolicy.NONE) == "No buscar automáticamente"
+    assert etiqueta_politica("faltantes") == "Buscar los números que faltan"
+    assert politica_efectiva_de("ninguno", CollectionAutoSearch.HEREDAR) == "ninguno"
+    assert politica_efectiva_de("ninguno", CollectionAutoSearch.INCLUIR) == "faltantes"
+    assert politica_efectiva_de("faltantes", CollectionAutoSearch.EXCLUIR) == "ninguno"

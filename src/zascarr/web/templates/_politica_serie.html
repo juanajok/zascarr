@@ -46,8 +46,9 @@
   </p>
   {% if politica_efectiva and politica_efectiva != politica_actual %}
   <p class="caption politica-efecto">
-    Esta serie está en una colección: la auto-búsqueda efectiva ahora es «{{ politica_efectiva.value }}»,
-    aunque el selector muestre la política guardada de la serie.
+    La política efectiva es «{{ politica_efectiva_etiqueta }}», aunque la guardada sea
+    «{{ politica_actual_etiqueta }}». {% if coleccion_causa %}{{ coleccion_causa }} {% endif %}
+    La búsqueda manual no se toca.
   </p>
   {% endif %}
 
