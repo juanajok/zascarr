@@ -138,6 +138,8 @@ def _causas_que_emiten_los_scripts() -> set[str]:
     causas = set(re.findall(r'(?:VERIFY_ERROR_CODE|OFFSITE_ERROR|ANCHOR_ERROR)="([a-z_]+)"', texto))
     causas |= set(re.findall(r'escribir_estado "(?:failed|degraded)" "([a-z_]+)"', texto))
     causas |= set(re.findall(r'VERIFY_ERROR_CODE:-([a-z_]+)\}', texto))         # la causa de respaldo de la verificación
+    # `on_exit` escribe la causa con la variable de fase (`unexpected`, y `precondition_failed` en la preparación)
+    causas |= set(re.findall(r'codigo="([a-z_]+)"', texto))
     return causas
 
 

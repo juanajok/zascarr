@@ -58,6 +58,10 @@ die()     { echo -e "${R}✗${N} $*" >&2; exit 1; }
 
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
 
+# El cerrojo único de las operaciones (BL-OPS1): ofrece `tomar_cerrojo_operaciones`.
+# shellcheck source=scripts/_cerrojo.sh
+source "${SCRIPT_DIR}/_cerrojo.sh"
+
 # Helper de espacio: único umbral y una sola implementación (#123b).
 # shellcheck source=scripts/_espacio.sh
 source "${SCRIPT_DIR}/_espacio.sh"

@@ -18,6 +18,7 @@ no se aplica, así que se saltan.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -51,7 +52,7 @@ def arbol(tmp_path: Path) -> dict[str, Path]:
     raiz = tmp_path / "raiz"
     repo = raiz / "zascarr"
     (repo / "scripts").mkdir(parents=True)
-    for f in ("docker-compose.yml", "scripts/_comun.sh", "scripts/_espacio.sh", "scripts/_rutas.sh",
+    for f in ("docker-compose.yml", "scripts/_comun.sh", "scripts/_espacio.sh", "scripts/_cerrojo.sh", "scripts/_rutas.sh",
               "scripts/_credenciales.sh", "scripts/etiquetar.sh", "scripts/backup.sh",
               "scripts/uninstall.sh"):
         origen = REPO / f
@@ -79,6 +80,9 @@ def _ejecutar(arbol, script: str, *args: str):
         "ZASCARR_ROOT": str(arbol["raiz"]),
         "ZASCARR_REPO": str(arbol["repo"]),
         "BACKUP_DIR": str(arbol["backups"]),
+        # BL-OPS1 (FR-14): `backup.sh` crea el directorio de estado ANTES de comprobar los requisitos (para poder
+        # dejar `precondition_failed`); sin root no podría crear el de producción.
+        "BACKUP_STATUS_DIR": str(arbol["backups"].parent / "estado"),
     }
     entorno.pop("ENV_FILE", None)
     return subprocess.run(
@@ -148,8 +152,12 @@ class TestScriptsSeDetienenAntesDeTocarNada:
         r = _ejecutar(arbol, "backup.sh")
         assert r.returncode == 1
         assert _dice_sudo(r), r.stderr
-        assert "run" not in _llamadas(arbol) and "exec" not in _llamadas(arbol)
+        # BL-OPS1 (FR-14): al fallar la preparación `backup.sh` deja `precondition_failed` en `status.json`, y eso
+        # consulta la versión de Alembic con un `exec`; lo que NO puede hacer es volcar ni crear nada en la copia.
+        assert "run" not in _llamadas(arbol) and "pg_dump" not in _llamadas(arbol)
         assert not arbol["backups"].exists() or not any(arbol["backups"].iterdir())
+        estado = json.loads((arbol["backups"].parent / "estado" / "status.json").read_text())
+        assert estado["status"] == "failed" and estado["error"] == "precondition_failed"
 
     def test_uninstall_no_trabaja_con_valores_por_defecto(self, arbol):
         """Peor caso: lo leería como «ausente» y calcularía rutas con los valores
