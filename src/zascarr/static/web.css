@@ -2206,10 +2206,16 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 .biblioteca-cabecera h1 { grid-area: titulo; margin: 0; }
 .biblioteca-cabecera .subtitle { grid-area: subtitulo; margin: 0; }
-.biblioteca-cabecera .biblioteca-accion {
+.biblioteca-cabecera .biblioteca-acciones {
   grid-area: accion;
   justify-self: end;
   align-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.biblioteca-cabecera .biblioteca-accion {
   text-decoration: none;
   color: var(--ink);
   background: var(--paper);
@@ -2352,7 +2358,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
     grid-template-areas: "titulo" "subtitulo" "accion";
     gap: 4px;
   }
-  .biblioteca-cabecera .biblioteca-accion { justify-self: start; margin-top: 6px; }
+  .biblioteca-cabecera .biblioteca-acciones { justify-self: start; justify-content: flex-start; margin-top: 6px; }
   .barra-panel-campos {
     position: fixed;
     top: auto;
