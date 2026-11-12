@@ -384,3 +384,26 @@ evidencia que un título.
   - [GCD](https://www.comics.org/)
   - [IFLA FRBR/WEMI](https://cdn.ifla.org/wp-content/uploads/2019/05/assets/cataloguing/isbd/OtherDocumentation/resource-wemi.pdf)
   - [Diamond UPC guide](https://www.diamondcomics.com/SiteData/Downloads/UPCGuide%20forComics10-15.pdf)
+
+## 10. Implementación fase 1 (2026-11-12)
+
+Ya implementado en la migración **0030**:
+
+- `series.volume` (smallint, aditivo).
+- `series.reference_name`: generado con `f_series_reference(title, start_year, volume)`.
+- `issues.number_key`: generado con `f_number_key(issue_number)`; conserva sufijos,
+  decimales y especiales, y elimina ceros a la izquierda.
+- Vista `v_issue_reference`: referencia de issue (`serie #número`), usando la
+  referencia de serie y `number_key`.
+- Índice `ix_issues_series_number_key` (no único).
+- Relleno de `sort_title` y de `volume` cuando el título lo declara.
+
+No cambia el matcher, la identidad ni el nombre de los archivos. Los tests de
+Postgres cubren `001`, `000`, `012a`, `023.1`, `023.1a`, `E1`, `2A3`, espacios,
+vacío/NULL, año/volumen y la vista de issue.
+
+Pendiente de fase 1:
+
+- `start_year` se rellena desde fuente/carpeta, no se deduce en la migración.
+- La UI/consumidores aún no pintan `reference_name`; el dato ya está disponible
+  en la BD para la siguiente entrega.
