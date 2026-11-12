@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""#264 A: migración 0030 aditiva y reversible (Postgres real)."""
+"""#264 A: migración 0032 aditiva y reversible (Postgres real)."""
 from __future__ import annotations
 
 import asyncio
