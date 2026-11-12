@@ -55,6 +55,9 @@ echo -e "${B}====================================${N}\n"
 [[ "${BRANCH}" =~ ^[A-Za-z0-9._/-]+$ && "${BRANCH}" != -* && "${BRANCH}" != "HEAD" ]] || die \
     "El nombre de la rama no es válido. NO se ha actualizado nada."
 
+# ── Cerrojo único de operaciones (BL-OPS1): una operación de mantenimiento a la vez ────────────────
+tomar_cerrojo_operaciones || exit $?
+
 # ── 1. Requisitos ────────────────────────────────────────────────────────────
 comprobar_requisitos
 comprobar_git_utilizable
