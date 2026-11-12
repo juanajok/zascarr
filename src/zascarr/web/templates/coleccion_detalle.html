@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ coleccion.name if coleccion else "Colección" }} — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/colecciones">← Volver a Colecciones</a></p>
+{% if not coleccion %}
+{{ ui.aviso("warn", "La colección ya no existe.") }}
+{% else %}
+<h1>{{ coleccion.name }}</h1>
+{% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
+{% if errores %}
+{% for campo, mensaje in errores.items() %}{{ ui.aviso("warn", mensaje) }}{% endfor %}
+{% endif %}
+<form method="post" action="/ui/colecciones/{{ coleccion.id }}/editar" class="tarjeta formulario">
+  <h2>Datos y política</h2>
+  <label for="name">Nombre</label>
+  <input id="name" name="name" maxlength="120" required value="{{ valores.name if valores else coleccion.name }}">
+  <label for="description">Descripción (opcional)</label>
+  <input id="description" name="description" maxlength="500" value="{{ valores.description if valores else (coleccion.description or '') }}">
+  <label for="auto_search">Auto-búsqueda</label>
+  <select id="auto_search" name="auto_search">
+    {% for valor, etiqueta in politicas.items() %}
+    <option value="{{ valor.value }}" {% if (valores.auto_search if valores else coleccion.auto_search) == valor.value %}selected{% endif %}>{{ etiqueta }}</option>
+    {% endfor %}
+  </select>
+  <p class="caption">«Heredar» respeta el «Qué buscar» de cada serie. «Buscar faltantes» lo fuerza aunque la serie diga «ninguno». «No buscar» lo veta y retira los deseos automáticos pendientes. La búsqueda manual no se toca.</p>
+  <button class="btn primary" type="submit">Guardar colección</button>
+</form>
+<details class="politica-detalles">
+  <summary>Borrar esta colección</summary>
+  <p class="caption">Las series seguirán en tu biblioteca, sin colección. No se borra ninguna serie ni archivo.</p>
+  <form method="post" action="/ui/colecciones/{{ coleccion.id }}/borrar">
+    <button class="btn ghost" type="submit">Sí, borrar la colección</button>
+  </form>
+</details>
+<h2>Series ({{ coleccion.series | length }})</h2>
+{% if coleccion.series %}
+<ul class="arcos-lista">
+  {% for s in coleccion.series %}
+  <li class="arco-fila">
+    <a href="/ui/series/{{ s.id }}">{{ s.title }}</a>
+    <span class="muted">{{ s.start_year or "Año no consta" }} · Qué buscar: {{ s.wishlist_policy }}</span>
+    <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
+      <button class="btn ghost sm" type="submit">Quitar de la colección</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}{{ ui.estado_vacio("Esta colección está vacía", "Añade series de la lista de abajo.") }}{% endif %}
+{% if series %}
+<form method="post" action="/ui/colecciones/{{ coleccion.id }}/series" class="tarjeta formulario">
+  <label for="serie_id">Añadir una serie sin colección</label>
+  <select id="serie_id" name="serie_id" required>
+    {% for s in series %}<option value="{{ s.id }}">{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">Añadir a la colección</button>
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

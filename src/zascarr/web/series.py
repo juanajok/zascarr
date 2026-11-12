@@ -115,6 +115,7 @@ from zascarr.services.notas import (
 from zascarr.services.politica import (
     horas_minimas,
     pendientes_de_buscar,
+    politica_efectiva,
     querer_de_serie,
     retirar_de_serie,
     texto_de_cota,
@@ -428,12 +429,14 @@ async def _contexto_politica(db: AsyncSession, series: Series,
     `aviso_legal_pendiente`: si el manejador ya consultó el acuse (puerta legal), se reutiliza;
     `None` = consultarlo aquí.
     """
+    efectiva = await politica_efectiva(db, series)
     if querer is None:
-        querer = await querer_de_serie(db, series)
+        querer = await querer_de_serie(db, series, politica=efectiva)
     pendiente_de_aviso = (
         not await is_acknowledged(db) if aviso_legal_pendiente is None else aviso_legal_pendiente)
     politica_actual = series.wishlist_policy or WishlistPolicy.NONE
     return {
+        "politica_efectiva": efectiva,
         "veredicto": await _veredicto(db, series, querer, politica_actual, pendiente_de_aviso),
         "querer": querer,
         "politica_actual": politica_actual,
@@ -825,7 +828,8 @@ async def cambiar_politica(series_id: UUID, request: Request,
     series.wishlist_policy = politica
     await db.flush()
 
-    querer = await querer_de_serie(db, series)
+    efectiva = await politica_efectiva(db, series)
+    querer = await querer_de_serie(db, series, politica=efectiva)
     retirados_ahora = await retirar_de_serie(db, series, querer)
     contexto = await _contexto_politica(
         db, series, querer=querer, retirados_ahora=retirados_ahora,
