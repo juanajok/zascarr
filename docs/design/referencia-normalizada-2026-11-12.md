@@ -407,3 +407,34 @@ Pendiente de fase 1:
 - `start_year` se rellena desde fuente/carpeta, no se deduce en la migración.
 - La UI/consumidores aún no pintan `reference_name`; el dato ya está disponible
   en la BD para la siguiente entrega.
+
+## 11. Implementación fase 2 y UI (2026-11-12)
+
+### IDs externos por issue
+
+Migración **0032** (aditiva, después de `0031_colecciones`):
+
+- `issues.gcd_id`, `issues.metron_id`, `issues.anilist_id`, `issues.tebeosfera_slug`:
+  columnas paralelas por fuente, opcionales y únicas. Se mantiene el principio
+  del proyecto de no crear una clave global de identidad.
+
+### Payloads y procedencia
+
+- `entity_source_records`: payload normalizado de una fuente con `source_url`,
+  `payload_hash`, `license` y `fetched_at`; no es identidad.
+- `field_provenance`: origen del último valor de un campo, con `locked`.
+- Sin FK polimórfica: `entity_type` limitado por CHECK a `series`/`issue`.
+- Sin backfill automático: las fuentes rellenan estas tablas cuando enriquecen.
+
+### UI
+
+- La ficha de serie muestra `series.reference_name`.
+- La ficha de número muestra `series.reference_name #issue.number_key`
+  (o el título si no hay número). Ambas son derivadas: si faltan, se muestra
+  el título de la serie.
+
+### Tests
+
+- `tests/test_referencia_fase2_pg.py`: columnas, unicidad, CHECK, payloads y
+  procedencia.
+- Tests de fase 1 y suite de fichas en verde.
