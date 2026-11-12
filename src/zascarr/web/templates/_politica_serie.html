@@ -44,6 +44,12 @@
   <p id="politica-efecto" class="muted politica-efecto">
     Se guarda al elegir. Si dejas de completar, lo ya empezado termina.
   </p>
+  {% if politica_efectiva and politica_efectiva != politica_actual %}
+  <p class="caption politica-efecto">
+    Esta serie está en una colección: la auto-búsqueda efectiva ahora es «{{ politica_efectiva.value }}»,
+    aunque el selector muestre la política guardada de la serie.
+  </p>
+  {% endif %}
 
   <details class="politica-detalles">
     <summary>¿Por qué una opción no se puede elegir?</summary>
