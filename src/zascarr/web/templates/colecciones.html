@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Colecciones — ZascArr{% endblock %}
+{% block content %}
+<h1>Colecciones</h1>
+<p class="subtitle">Agrupa series y decide si ZascArr busca sus números que faltan. Una serie puede estar en una sola colección.</p>
+{% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
+{% if errores %}
+{% for campo, mensaje in errores.items() %}{{ ui.aviso("warn", mensaje) }}{% endfor %}
+{% endif %}
+<form method="post" action="/ui/colecciones/nueva" class="tarjeta formulario">
+  <h2>Nueva colección</h2>
+  <label for="name">Nombre</label>
+  <input id="name" name="name" maxlength="120" required value="{{ valores.name if valores else '' }}">
+  <label for="description">Descripción (opcional)</label>
+  <input id="description" name="description" maxlength="500" value="{{ valores.description if valores else '' }}">
+  <label for="auto_search">Auto-búsqueda</label>
+  <select id="auto_search" name="auto_search">
+    {% for valor, etiqueta in politicas.items() %}
+    <option value="{{ valor.value }}" {% if valores and valores.auto_search == valor.value %}selected{% endif %}>{{ etiqueta }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn primary" type="submit">Crear colección</button>
+</form>
+{% if colecciones %}
+<ul class="arcos-lista">
+  {% for c in colecciones %}
+  <li class="arco-fila">
+    <a href="/ui/colecciones/{{ c.id }}">{{ c.name }}</a>
+    <span class="muted">{{ c.series }} {{ "serie" if c.series == 1 else "series" }} · {{ politicas.get(c.auto_search, c.auto_search) }}</span>
+    {% if c.description %}<p class="caption">{{ c.description }}</p>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+{{ ui.estado_vacio("Todavía no hay colecciones", "Crea una para agrupar series y decidir su auto-búsqueda.") }}
+{% endif %}
+{% endblock %}
