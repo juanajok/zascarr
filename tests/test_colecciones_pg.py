@@ -28,6 +28,7 @@ from zascarr.services.colecciones import (
     asignar_serie,
     borrar_coleccion,
     crear_coleccion,
+    detalle_coleccion,
     editar_coleccion,
     listar_colecciones,
     quitar_serie,
@@ -121,6 +122,11 @@ async def test_crud_nombre_unico_case_insensitive_y_asignacion_unica(db):
     assert (await listar_colecciones(db))[0].name == "Grapas"
     assert not (await asignar_serie(db, r.coleccion.id, s.id)).errores
     assert s.collection_id == r.coleccion.id
+    detalle = await detalle_coleccion(db, r.coleccion.id)
+    assert detalle is not None and len(detalle.series) == 1
+    fila = detalle.series[0]
+    assert fila.wishlist_policy_label == "No buscar automáticamente"
+    assert fila.politica_efectiva_label == "No buscar automáticamente"
     assert await series_sin_coleccion(db) == []
     assert not (await asignar_serie(db, r.coleccion.id, s.id)).ok
     assert await quitar_serie(db, r.coleccion.id, s.id)
@@ -176,3 +182,27 @@ async def test_orquestador_excluye_y_retira_solo_politica(db):
     assert (await db.execute(select(Wishlist).where(
         Wishlist.series_id == s.id, Wishlist.origen == WishlistOrigin.POLICY,
         Wishlist.status == WishlistStatus.WANTED))).first() is None
+
+
+async def test_ficha_usa_la_politica_efectiva_y_explica_la_coleccion(db):
+    from zascarr.web.series import _contexto_politica
+    await aceptar(db)
+    c_inc = await crear_coleccion(db, name="Incluye", description="", auto_search="incluir")
+    s_inc = await serie(db, "Flash", policy=WishlistPolicy.NONE, total=3,
+                        collection=c_inc.coleccion)
+    await presente(db, s_inc)
+    ctx_inc = await _contexto_politica(db, s_inc)
+    assert ctx_inc["politica_actual"] == WishlistPolicy.NONE
+    assert ctx_inc["politica_efectiva"] == WishlistPolicy.MISSING
+    assert ctx_inc["veredicto"]["tipo"] != "ninguno"
+    assert ctx_inc["politica_actual_etiqueta"] == "No buscar automáticamente"
+    assert ctx_inc["politica_efectiva_etiqueta"] == "Buscar los números que faltan"
+    assert "Incluye" in (ctx_inc["coleccion_causa"] or "")
+    c_exc = await crear_coleccion(db, name="Excluye", description="", auto_search="excluir")
+    s_exc = await serie(db, "Batman", policy=WishlistPolicy.MISSING, total=3,
+                        collection=c_exc.coleccion)
+    ctx_exc = await _contexto_politica(db, s_exc)
+    assert ctx_exc["politica_actual"] == WishlistPolicy.MISSING
+    assert ctx_exc["politica_efectiva"] == WishlistPolicy.NONE
+    assert ctx_exc["veredicto"]["tipo"] == "ninguno"
+    assert "Excluye" in (ctx_exc["coleccion_causa"] or "")

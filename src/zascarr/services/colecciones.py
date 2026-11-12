@@ -13,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.models import Collection, CollectionAutoSearch, Series
+from zascarr.models import Collection, CollectionAutoSearch, Series, WishlistPolicy
 
 MAX_NOMBRE = 120
 MAX_DESCRIPCION = 500
@@ -28,12 +28,41 @@ class ColeccionResumen:
     series: int
 
 
+ETIQUETAS_POLITICA = {
+    WishlistPolicy.NONE.value: "No buscar automáticamente",
+    WishlistPolicy.MISSING.value: "Buscar los números que faltan",
+    WishlistPolicy.FUTURE.value: "Números futuros (todavía no disponible)",
+    WishlistPolicy.ALL.value: "Todos los números (reservado)",
+}
+
+
+def etiqueta_politica(valor: str | WishlistPolicy | None) -> str:
+    crudo = (valor.value if isinstance(valor, WishlistPolicy)
+             else (valor or WishlistPolicy.NONE.value))
+    return ETIQUETAS_POLITICA.get(crudo, "No buscar automáticamente")
+
+
+def politica_efectiva_de(guardada: str | WishlistPolicy | None,
+                         auto_search: str | CollectionAutoSearch | None) -> str:
+    """Misma regla que `politica_efectiva` pero sin BD, para los DTO de la UI."""
+    crudo = guardada.value if isinstance(guardada, WishlistPolicy) else (guardada or "ninguno")
+    auto = auto_search.value if isinstance(auto_search, CollectionAutoSearch) else auto_search
+    if auto == CollectionAutoSearch.INCLUIR.value:
+        return WishlistPolicy.MISSING.value
+    if auto == CollectionAutoSearch.EXCLUIR.value:
+        return WishlistPolicy.NONE.value
+    return crudo
+
+
 @dataclass(frozen=True)
 class SerieDeColeccion:
     id: str
     title: str
     start_year: int | None
     wishlist_policy: str
+    wishlist_policy_label: str = ""
+    politica_efectiva: str = ""
+    politica_efectiva_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -103,8 +132,13 @@ async def detalle_coleccion(db: AsyncSession, coleccion_id: UUID) -> DetalleCole
     )).scalars().all()
     return DetalleColeccion(
         str(coleccion.id), coleccion.name, coleccion.description, coleccion.auto_search.value,
-        [SerieDeColeccion(str(s.id), s.title, s.start_year,
-                          (s.wishlist_policy or "ninguno")) for s in filas])
+        [SerieDeColeccion(
+            str(s.id), s.title, s.start_year,
+            (s.wishlist_policy or WishlistPolicy.NONE.value),
+            etiqueta_politica(s.wishlist_policy),
+            politica_efectiva_de(s.wishlist_policy, coleccion.auto_search),
+            etiqueta_politica(politica_efectiva_de(s.wishlist_policy, coleccion.auto_search)))
+         for s in filas])
 
 
 async def crear_coleccion(db: AsyncSession, *, name: str, description: str,
@@ -169,8 +203,13 @@ async def series_sin_coleccion(db: AsyncSession) -> list[SerieDeColeccion]:
         select(Series).where(Series.collection_id.is_(None))
         .order_by(Series.sort_title, Series.title)
     )).scalars().all()
-    return [SerieDeColeccion(str(s.id), s.title, s.start_year,
-                             (s.wishlist_policy or "ninguno")) for s in filas]
+    return [SerieDeColeccion(
+        str(s.id), s.title, s.start_year,
+        (s.wishlist_policy or WishlistPolicy.NONE.value),
+        etiqueta_politica(s.wishlist_policy),
+        politica_efectiva_de(s.wishlist_policy, None),
+        etiqueta_politica(politica_efectiva_de(s.wishlist_policy, None)))
+        for s in filas]
 
 
 async def asignar_serie(db: AsyncSession, coleccion_id: UUID, serie_id: UUID) -> ResultadoColeccion:
