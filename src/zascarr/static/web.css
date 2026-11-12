@@ -705,7 +705,10 @@ button[type="submit"].neutro {
   height: auto;
   margin: 0 auto;
 }
-.pending-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.pending-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+/* «Ignorar» va siempre al pie: en una fila de tarjetas los botones quedan alineados aunque el nombre, lo
+   detectado o la portada midan distinto. */
+.pending-body > .btn-ignorar { margin-top: auto; }
 /* U12: el nombre se lee ENTERO: se parte si no cabe (también uno largo y sin espacios), nunca se recorta. */
 .filename {
   font-size: .875rem;
@@ -742,6 +745,10 @@ button[type="submit"].btn-sugerencia {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .series-name { font-size: .88rem; flex: 1; font-weight: 600; }
+/* El formulario de «especial sin número» vive dentro de una tarjeta de 200 px: sus campos ocupan el ancho
+   disponible en vez de su tamaño natural, que los sacaba de la tarjeta. */
+.especial-form .series-name { flex-basis: 100%; }
+.especial-input { width: 100%; min-width: 0; }
 .no-results { color: var(--ink-faint); font-size: .875rem; }
 
 /* ── 10bis. REVISIÓN DE BIBLIOTECA (B16) ─────────────────────────────────── */
@@ -854,6 +861,10 @@ button[type="submit"].btn-sugerencia {
 .back-link:hover { color: var(--cyan-t); }
 
 .series-header { display: flex; gap: 22px; margin-bottom: 24px; flex-wrap: wrap; }
+/* Los datos van a la derecha de la portada: sin base propia, su texto largo los mandaba debajo incluso a
+   1280 px. Bajan solo cuando no caben (y en el móvil, por la regla de ≤ 860 px). */
+.series-header > div { flex: 1 1 20rem; min-width: 0; }
+.anio-titulo { display: inline; }
 .portada.series-cover {
   width: 140px;
   border: 3px solid var(--ink); border-radius: var(--radius-panel);
@@ -862,6 +873,8 @@ button[type="submit"].btn-sugerencia {
 .series-meta { color: var(--ink-soft); font-size: .9rem; margin: 2px 0; }
 .series-intro { margin: 0 0 6px; font-weight: 600; }
 .series-acciones { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 10px 0 0; }
+/* Fila de enlaces secundarios bajo la frase de entrada (p. ej. las otras formas de revisar). */
+.acciones-fila { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin: 4px 0 16px; }
 .series-fuentes, .politica-detalles { margin-top: 8px; }
 .politica-detalles code { font-size: .875rem; }
 .series-fuentes summary, .politica-detalles summary {
