@@ -180,6 +180,13 @@ class WishlistStatus(enum.StrEnum):
     RETIRADO    = "retirado"
 
 
+class CollectionAutoSearch(enum.StrEnum):
+    """#155/BL-D6: qué hace la colección con la auto-búsqueda de sus series."""
+    HEREDAR = "heredar"   # usa la política guardada de cada serie (D8 actual)
+    INCLUIR = "incluir"   # busca faltantes aunque la serie diga «ninguno»
+    EXCLUIR = "excluir"   # veta la auto-búsqueda y retira items de política
+
+
 class WishlistPolicy(enum.StrEnum):
     """D8: qué números de una serie busca ZascArr **por su cuenta**.
 
@@ -464,6 +471,23 @@ class Character(Base):
     universe: Mapped["Universe|None"] = relationship(back_populates="characters")
 
 
+class Collection(Base):
+    """#155/BL-D6: agrupación manual de series con política de auto-búsqueda."""
+    __tablename__ = "collections"
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500))
+    auto_search: Mapped[CollectionAutoSearch] = mapped_column(
+        Enum(CollectionAutoSearch, name="collection_auto_search",
+             values_callable=lambda e: [m.value for m in e]),
+        default=CollectionAutoSearch.HEREDAR, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    series: Mapped[list["Series"]] = relationship(back_populates="collection")
+
+
 class Series(Base):
     __tablename__ = "series"
     __table_args__ = (
@@ -496,6 +520,10 @@ class Series(Base):
     universe_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL")
     )
+    collection_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("collections.id", ondelete="SET NULL")
+    )
+    collection: Mapped["Collection|None"] = relationship(back_populates="series")
     tradition: Mapped[ComicTradition] = mapped_column(
         Enum(
             ComicTradition,

@@ -27,6 +27,7 @@ from zascarr.api.series import huecos_de_serie, numeros_poseidos
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import (
+    Collection,
     File,
     Issue,
     MotivoRar,
@@ -45,6 +46,7 @@ from zascarr.services.coleccion import (
     estado_de_coleccion,
     version_de_decision,
 )
+from zascarr.services.colecciones import etiqueta_politica
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
 from zascarr.services.conversion import ConversionDeArchivo
@@ -115,6 +117,7 @@ from zascarr.services.notas import (
 from zascarr.services.politica import (
     horas_minimas,
     pendientes_de_buscar,
+    politica_efectiva,
     querer_de_serie,
     retirar_de_serie,
     texto_de_cota,
@@ -412,6 +415,20 @@ async def _veredicto(db: AsyncSession, series: Series, querer, politica: Wishlis
     return {"tipo": "completa"}
 
 
+async def _causa_de_coleccion(db: AsyncSession, series: Series) -> str | None:
+    """Texto llano de por qué la política efectiva no es la guardada (o None)."""
+    if series.collection_id is None:
+        return None
+    coleccion = await db.get(Collection, series.collection_id)
+    if coleccion is None:
+        return None
+    if coleccion.auto_search.value == "incluir":
+        return f"La colección «{coleccion.name}» fuerza a buscar los números que faltan."
+    if coleccion.auto_search.value == "excluir":
+        return f"La colección «{coleccion.name}» veta la búsqueda automática."
+    return None
+
+
 async def _contexto_politica(db: AsyncSession, series: Series,
                              querer=None, retirados_ahora: int | None = None,
                              aviso_legal_pendiente: bool | None = None) -> dict:
@@ -428,13 +445,19 @@ async def _contexto_politica(db: AsyncSession, series: Series,
     `aviso_legal_pendiente`: si el manejador ya consultó el acuse (puerta legal), se reutiliza;
     `None` = consultarlo aquí.
     """
+    efectiva = await politica_efectiva(db, series)
     if querer is None:
-        querer = await querer_de_serie(db, series)
+        querer = await querer_de_serie(db, series, politica=efectiva)
     pendiente_de_aviso = (
         not await is_acknowledged(db) if aviso_legal_pendiente is None else aviso_legal_pendiente)
     politica_actual = series.wishlist_policy or WishlistPolicy.NONE
+    causa = await _causa_de_coleccion(db, series)
     return {
-        "veredicto": await _veredicto(db, series, querer, politica_actual, pendiente_de_aviso),
+        "politica_efectiva": efectiva,
+        "politica_actual_etiqueta": etiqueta_politica(politica_actual),
+        "politica_efectiva_etiqueta": etiqueta_politica(efectiva),
+        "coleccion_causa": causa,
+        "veredicto": await _veredicto(db, series, querer, efectiva, pendiente_de_aviso),
         "querer": querer,
         "politica_actual": politica_actual,
         "politicas_ofrecidas": _POLITICAS_OFRECIDAS,
@@ -825,7 +848,8 @@ async def cambiar_politica(series_id: UUID, request: Request,
     series.wishlist_policy = politica
     await db.flush()
 
-    querer = await querer_de_serie(db, series)
+    efectiva = await politica_efectiva(db, series)
+    querer = await querer_de_serie(db, series, politica=efectiva)
     retirados_ahora = await retirar_de_serie(db, series, querer)
     contexto = await _contexto_politica(
         db, series, querer=querer, retirados_ahora=retirados_ahora,
