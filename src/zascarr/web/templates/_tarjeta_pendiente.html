@@ -41,7 +41,7 @@
       <input type="search" class="series-search" placeholder="Buscar serie…"
              name="q" id="q-{{ c.file.id }}"
              hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
-             hx-trigger="keyup changed delay:400ms"
+             hx-trigger="input changed delay:400ms, search"
              hx-target="#resultados-{{ c.file.id }}"
              hx-swap="innerHTML">
       <div id="resultados-{{ c.file.id }}" class="series-results"></div>

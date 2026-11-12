@@ -23,7 +23,7 @@
 <input type="search" class="series-search" placeholder="Buscar serie para añadir…"
        name="q" id="q-deseados"
        hx-get="/ui/wishlist/buscar-serie"
-       hx-trigger="keyup changed delay:400ms"
+       hx-trigger="input changed delay:400ms, search"
        hx-target="#resultados-wishlist"
        hx-swap="innerHTML">
 <div id="resultados-wishlist" class="series-results"></div>
