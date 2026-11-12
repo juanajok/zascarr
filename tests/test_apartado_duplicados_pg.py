@@ -344,8 +344,8 @@ async def test_st_dev_distinto_rechaza_antes_de_os_replace(banco, tmp_path, monk
     real_replace = os.replace
     llamadas = {"replace": 0}
 
-    def stat_falso(self):
-        st = real_stat(self)
+    def stat_falso(self, *, follow_symlinks=True):
+        st = real_stat(self, follow_symlinks=follow_symlinks)
         if self.name == "dos.cbz":
             campos = list(st)
             campos[2] = st.st_dev + 1
