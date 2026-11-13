@@ -27,7 +27,7 @@
 
 <section class="coleccion-panel" id="series">
   <div class="coleccion-series-cabecera">
-    <h2 id="series-titulo"{% if foco_vista|default(false) %} tabindex="-1" autofocus{% endif %}>Series</h2>
+    <h2 id="series-titulo"{% if foco_vista|default(false) and not aviso and not errores %} tabindex="-1" autofocus{% endif %}>Series</h2>
     <div class="barra-vista" role="group" aria-label="Vista de las series de la colección">
       <a class="barra-vista-opcion{% if vista|default('lista') == 'tarjetas' %} barra-vista-opcion-actual{% endif %}"
          href="{{ url_vista_tarjetas|default('/ui/colecciones/' ~ coleccion.id ~ '?vista=tarjetas') }}"
