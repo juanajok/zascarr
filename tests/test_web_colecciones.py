@@ -52,7 +52,8 @@ def test_detalle_muestra_series_y_selector():
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
              patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
-                 SerieDeColeccion("s2", "Batman", 1940, "ninguno")])):
+                 SerieDeColeccion("s2", "Batman", 1940, "ninguno")])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
             cid = uuid4()
             r = c.get(f"/ui/colecciones/{cid}")
     finally:

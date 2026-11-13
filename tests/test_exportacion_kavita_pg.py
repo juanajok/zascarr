@@ -90,6 +90,8 @@ async def test_exporta_hardlink_manifiesto_run_y_no_toca_origen(db, tmp_path, mo
     run = (await db.execute(
         select(svc.ImportRun).where(svc.ImportRun.id == resumen.run_id))).scalar_one_or_none()
     assert run is not None and run.details["kind"] == "export"
+    historial = await svc.historial_exportaciones(db, coleccion.id)
+    assert historial and historial[0]["run_id"] == resumen.run_id
 
 
 async def test_reexportar_es_idempotente_y_no_rehace(db, tmp_path, monkeypatch):
