@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Mejoras de edición — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/biblioteca">← Volver a Biblioteca</a></p>
+<h1>Mejoras de edición</h1>
+<p class="subtitle">Ediciones mejores para números que ya tienes. ZascArr propone; tú decides.</p>
+{% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
+{% if error %}{{ ui.aviso("amber", error) }}{% endif %}
+<form method="post" action="/ui/mejoras/escanear" class="mejoras-escanear">
+  <button type="submit" class="btn ghost">Buscar mejoras ahora</button>
+</form>
+{% if not mejoras %}
+{{ ui.estado_vacio("No hay mejoras pendientes", "Si aparece una edición mejor para un número que tienes, aparecerá aquí. También puedes buscar una mejora desde la ficha de un número.") }}
+{% else %}
+<ul class="mejoras-lista">
+  {% for fila in mejoras %}
+  <li class="mejora-fila">
+    <div>
+      <a href="/ui/series/{{ fila.m.serie.id }}/numero/{{ fila.m.issue.id }}">{{ fila.m.serie.title }} #{{ fila.m.issue.issue_number or "(sin número)" }}</a>
+      <p class="caption">Tu edición: {{ fila.m.current_label }} · propuesta: {{ fila.m.candidate_label }}</p>
+      <strong>{{ fila.m.propuesta.candidate_title }}</strong>
+      <p class="muted">{{ fila.m.propuesta.candidate_indexer }} · {{ (fila.m.propuesta.candidate_size_bytes / 1048576) | round(1) }} MB · {{ fila.m.propuesta.candidate_seeders }} semillas</p>
+    </div>
+    <div class="mejora-acciones">
+      <form method="post" action="/ui/mejoras/{{ fila.m.propuesta.id }}/descargar" class="inline-desbloquear">
+        <input type="hidden" name="token" value="{{ fila.token }}">
+        <button type="submit" class="btn ghost sm">Descargar esta edición</button>
+      </form>
+      <form method="post" action="/ui/mejoras/{{ fila.m.propuesta.id }}/descartar" class="inline-desbloquear">
+        <button type="submit" class="btn ghost sm">Descartar</button>
+      </form>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+<p class="caption">No se sustituye ni borra ningún archivo: la edición descargada se importará junto a la actual.</p>
+{% endblock %}
