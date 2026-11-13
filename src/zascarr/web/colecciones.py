@@ -1,6 +1,7 @@
 """#155/BL-D6: UI de colecciones y su política de auto-búsqueda."""
 from __future__ import annotations
 
+from pathlib import Path
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -8,8 +9,9 @@ from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.config import get_settings
 from zascarr.database import get_db
-from zascarr.models import CollectionAutoSearch, ComicTradition
+from zascarr.models import Collection, CollectionAutoSearch, ComicTradition, Series
 from zascarr.services.colecciones import (
     asignar_series,
     borrar_coleccion,
@@ -30,8 +32,10 @@ from zascarr.services.portada_coleccion import (
     candidatas_portada,
     elegir_portada,
     obtener_portada,
+    portada_cacheada,
 )
 from zascarr.utils.cover import cached_image_response
+from zascarr.web.iconos import icono
 from zascarr.web.library import _TRADICION_LABEL
 from zascarr.web.routes import crear_templates
 
@@ -60,9 +64,12 @@ def _filtros(q: str, tradicion: str) -> tuple[str, str]:
 
 
 def _url_ficha(cid: UUID, q: str, tradicion: str, seleccion: list[str],
-               pagina: int = 1) -> str:
+               pagina: int = 1, vista: str = "lista",
+               cambio_vista: str = "") -> str:
     params: list[tuple[str, str]] = [("q", q), ("tradicion", tradicion),
-                                     ("pagina", str(pagina))]
+                                     ("pagina", str(pagina)), ("vista", vista)]
+    if cambio_vista:
+        params.append(("cambio_vista", "1"))
     params += [("serie_ids", sid) for sid in seleccion]
     return f"/ui/colecciones/{cid}?{urlencode(params)}"
 
@@ -75,6 +82,7 @@ POLITICAS = {
 
 
 def _respuesta(request: Request, plantilla: str, contexto: dict) -> HTMLResponse:
+    contexto.setdefault("icono", icono)
     resp = templates.TemplateResponse(request, plantilla, contexto)
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -120,6 +128,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
                   q: str = Query(""), tradicion: str = Query(""),
                   serie_ids: list[str] = Query([]),
                   pagina: int = Query(1, ge=1), limpiar: str = Query(""),
+                  vista: str = Query("lista"), cambio_vista: str = Query(""),
                   db: AsyncSession = Depends(get_db)):
     c = await detalle_coleccion(db, coleccion_id)
     if c is None:
@@ -129,6 +138,8 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
     q, tradicion = _filtros(q, tradicion)
     if limpiar == "1":
         q, tradicion = "", ""
+    vista = vista if vista in {"lista", "tarjetas"} else "lista"
+    foco_vista = cambio_vista == "1"
     seleccion = _seleccion_valida(serie_ids)
     pagina_datos = await pagina_series_sin_coleccion(
         db, q=q, tradicion=tradicion, pagina=pagina)
@@ -138,14 +149,19 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
         "coleccion": c, "politicas": POLITICAS,
         "series": pagina_datos.series, "pagina": pagina_datos,
         "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
-        "seleccion": seleccion, "seleccion_oculta": seleccion_oculta,
+        "seleccion": seleccion, "seleccion_oculta": seleccion_oculta, "vista": vista,
+        "foco_vista": foco_vista,
         "foco_filtros": bool(q or tradicion or limpiar == "1" or pagina > 1
                             or navegar == "1"),
+        "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
+                                      pagina_datos.pagina, "lista", "1"),
+        "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,
+                                         pagina_datos.pagina, "tarjetas", "1"),
         "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                   max(1, pagina_datos.pagina - 1)),
+                                   max(1, pagina_datos.pagina - 1), vista),
         "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                    min(pagina_datos.paginas, pagina_datos.pagina + 1)),
-        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1) + "&limpiar=1",
+                                    min(pagina_datos.paginas, pagina_datos.pagina + 1), vista),
+        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1, vista) + "&limpiar=1",
         "candidatas_portada": await candidatas_portada(db, coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": {}, "aviso": {
@@ -194,6 +210,23 @@ async def portada(coleccion_id: UUID, request: Request,
         return Response(content=resultado.datos, media_type=resultado.content_type,
                         headers={"Cache-Control": "no-store"})
     return cached_image_response(request, resultado.datos, resultado.content_type, resultado.etag)
+
+
+@router.get("/{coleccion_id}/previa/{serie_id}", response_class=HTMLResponse)
+async def previa_serie(request: Request, coleccion_id: UUID, serie_id: UUID,
+                       db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento HTMX con la portada local de una serie; no toca disco ni red."""
+    coleccion = await db.get(Collection, coleccion_id)
+    serie = await db.get(Series, serie_id) if coleccion is not None else None
+    if (coleccion is None or serie is None
+            or serie.collection_id != coleccion_id):
+        return HTMLResponse("", status_code=404, headers={"Cache-Control": "no-store"})
+    cache = portada_cacheada(Path(get_settings().covers_cache_path), serie.id)
+    portada_src = f"/ui/series/{serie.id}/portada" if cache is not None else None
+    resp = templates.TemplateResponse(
+        request, "_previa_serie.html", {"serie": serie, "portada_src": portada_src})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.post("/{coleccion_id}/portada")
@@ -264,7 +297,8 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
 async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
                   serie_ids: list[str] = Form([]), serie_id: str = Form(""),
                   q: str = Form(""), tradicion: str = Form(""),
-                  pagina: int = Form(1), db: AsyncSession = Depends(get_db)):
+                  pagina: int = Form(1), vista: str = Form("lista"),
+                  db: AsyncSession = Depends(get_db)):
     crudos = [s for s in serie_ids if s.strip()]
     if serie_id.strip():
         crudos.append(serie_id)
@@ -283,7 +317,8 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
         if r.ok:
             await db.commit()
             q, tradicion = _filtros(q, tradicion)
-            consulta = {"guardado": "asignadas"}
+            vista = vista if vista in {"lista", "tarjetas"} else "lista"
+            consulta = {"guardado": "asignadas", "vista": vista}
             if q:
                 consulta["q"] = q
             if tradicion:
@@ -292,6 +327,7 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
         r_errores = r.errores
     c = await detalle_coleccion(db, coleccion_id)
     q, tradicion = _filtros(q, tradicion)
+    vista = vista if vista in {"lista", "tarjetas"} else "lista"
     seleccion = _seleccion_valida(crudos)
     pagina_datos = await pagina_series_sin_coleccion(
         db, q=q, tradicion=tradicion, pagina=pagina)
@@ -300,21 +336,34 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
         "coleccion": c, "politicas": POLITICAS,
         "series": pagina_datos.series, "pagina": pagina_datos,
         "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
-        "seleccion": seleccion,
+        "seleccion": seleccion, "vista": vista,
         "foco_filtros": bool(q or tradicion or pagina > 1 or navegar == "1"),
         "seleccion_oculta": [sid for sid in seleccion if sid not in visibles],
+        "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
+                                      pagina_datos.pagina, "lista", "1"),
+        "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,
+                                         pagina_datos.pagina, "tarjetas", "1"),
         "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                   max(1, pagina_datos.pagina - 1)),
+                                   max(1, pagina_datos.pagina - 1), vista),
         "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                    min(pagina_datos.paginas, pagina_datos.pagina + 1)),
-        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1) + "&limpiar=1",
+                                    min(pagina_datos.paginas, pagina_datos.pagina + 1), vista),
+        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1, vista) + "&limpiar=1",
         "candidatas_portada": await candidatas_portada(db, coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": r_errores, "aviso": ""})
 
 
 @router.post("/{coleccion_id}/series/{serie_id}/quitar")
-async def quitar(coleccion_id: UUID, serie_id: UUID, db: AsyncSession = Depends(get_db)):
+async def quitar(coleccion_id: UUID, serie_id: UUID, q: str = Form(""),
+                 tradicion: str = Form(""), pagina: int = Form(1),
+                 vista: str = Form("lista"), serie_ids: list[str] = Form([]),
+                 db: AsyncSession = Depends(get_db)):
     await quitar_serie(db, coleccion_id, serie_id)
     await db.commit()
-    return _redirigir(f"/ui/colecciones/{coleccion_id}?guardado=quitada")
+    q, tradicion = _filtros(q, tradicion)
+    vista = vista if vista in {"lista", "tarjetas"} else "lista"
+    consulta: list[tuple[str, str]] = [
+        ("guardado", "quitada"), ("q", q), ("tradicion", tradicion),
+        ("pagina", str(max(1, pagina))), ("vista", vista)]
+    consulta += [("serie_ids", sid) for sid in _seleccion_valida(serie_ids)]
+    return _redirigir(f"/ui/colecciones/{coleccion_id}?{urlencode(consulta)}")

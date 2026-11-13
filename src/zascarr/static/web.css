@@ -2431,12 +2431,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-descripcion { margin: 0 0 var(--space-2); color: var(--ink-soft); max-width: 62ch; }
 .coleccion-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; }
 .coleccion-series-lista { list-style: none; margin: 0 0 var(--space-3); padding: 0; }
-.coleccion-serie-fila { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: var(--border-line) solid var(--paper-2); }
+.coleccion-serie-fila { position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: var(--border-line) solid var(--paper-2); }
 .coleccion-serie-fila:last-child { border-bottom: 0; }
 .coleccion-alta-grupo { border: 0; padding: 0; margin: 0; }
 .coleccion-alta-grupo legend { font-weight: 700; margin-bottom: var(--space-1); }
 .coleccion-checkgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-2); margin: 10px 0; }
-.coleccion-check { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: var(--space-2) 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); cursor: pointer; }
+.coleccion-check { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: var(--space-2) 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); cursor: pointer; }
 .coleccion-check:hover { background: var(--yellow); color: var(--on-yellow); }
 .coleccion-check:focus-within { outline: 3px solid var(--cyan-t); outline-offset: 2px; }
 .coleccion-check input { width: 24px; height: 24px; flex-shrink: 0; }
@@ -2465,6 +2465,47 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-paginacion { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 12px; }
 .coleccion-paginacion .btn, .coleccion-paginacion [aria-disabled="true"] { min-height: 44px; }
 .coleccion-paginacion [aria-disabled="true"] { opacity: .55; cursor: default; }
+
+.coleccion-series-cabecera { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.coleccion-series-cabecera h2 { margin: 0; }
+.coleccion-series-grid { margin-bottom: 12px; }
+.coleccion-serie-card { display: flex; flex-direction: column; align-items: stretch; }
+.coleccion-serie-card-portada { display: block; }
+.coleccion-serie-card .btn { margin: 0 var(--space-2) 10px; min-height: 44px; }
+.coleccion-series-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  grid-template-areas: "principal previa";
+  gap: 16px;
+  align-items: start;
+}
+.coleccion-series-col { grid-area: principal; min-width: 0; }
+.coleccion-previa-panel {
+  grid-area: previa;
+  position: sticky;
+  top: 16px;
+  width: 132px;
+  padding: 8px;
+  background: var(--paper-2);
+  border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-panel);
+}
+.coleccion-previa-panel .portada { width: 100%; }
+.coleccion-previa-titulo { margin: 8px 0 2px; font-weight: 700; overflow-wrap: anywhere; }
+.coleccion-previa-contenido .caption { margin: 0; }
+@media (max-width: 760px) {
+  .coleccion-series-layout { grid-template-columns: 1fr; grid-template-areas: "previa" "principal"; }
+  .coleccion-previa-panel {
+    position: sticky;
+    top: 0;
+    width: auto;
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+  }
+  .coleccion-previa-panel .portada { width: 72px; }
+}
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
