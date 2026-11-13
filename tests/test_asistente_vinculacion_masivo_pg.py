@@ -95,6 +95,10 @@ class TestMarcarTodos:
         assert aviso_de_accion(q) == {"accion": "marcar_todos", "n": 3, "repetidos": 0}
         assert "Se marcaron 3 archivos que se pueden vincular" in q.visible
         assert q.total("a_vincular") == 3 and q.total("marcados_bloqueados") == 0 and q.token is not None
+        # #721: la barra fija muestra progreso y lleva al resumen sin vincular sola.
+        assert "Página 1–4 de 4" in q.visible
+        assert "3 marcados · 3 listos" in q.visible
+        assert "Revisar y vincular" in q.visible
 
     async def test_pack_y_especial_no_se_marcan_y_avisan_del_orden_de_lectura(self, entorno):
         serie = await serie_de_prueba(entorno, "Flash", 1987)
