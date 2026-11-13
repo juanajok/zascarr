@@ -26,6 +26,7 @@ from zascarr.models import (
 )
 from zascarr.services.colecciones import (
     asignar_serie,
+    asignar_series,
     borrar_coleccion,
     crear_coleccion,
     detalle_coleccion,
@@ -307,3 +308,18 @@ async def test_override_invalido_conserva_la_eleccion(db, tmp_path, monkeypatch)
     assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id
     assert not (await pc.elegir_portada(db, c.coleccion.id, uuid4())).ok
     assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id
+
+
+async def test_asignar_series_es_atomico(db):
+    c1 = await crear_coleccion(db, name="Uno", description="", auto_search="heredar")
+    c2 = await crear_coleccion(db, name="Dos", description="", auto_search="heredar")
+    a = await serie(db, "A")
+    b = await serie(db, "B")
+    ya = await serie(db, "Ya", collection=c2.coleccion)
+    assert (await asignar_series(db, c1.coleccion.id, [a.id, b.id, a.id])).ok
+    assert a.collection_id == b.collection_id == c1.coleccion.id
+    assert not (await asignar_series(db, c1.coleccion.id, [a.id])).ok   # ya asignada
+    assert not (await asignar_series(db, c1.coleccion.id, [ya.id, b.id])).ok
+    assert ya.collection_id == c2.coleccion.id                         # ninguna cambió
+    assert not (await asignar_series(db, c1.coleccion.id, [])).ok
+    assert not (await asignar_series(db, c1.coleccion.id, [uuid4()])).ok

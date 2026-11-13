@@ -112,11 +112,12 @@ def test_editar_asignar_quitar_y_borrar_redirigen():
                        data={"name": "Otra", "description": "", "auto_search": "excluir"},
                        follow_redirects=False)
         assert r.status_code == 303 and "guardado=guardada" in r.headers["location"]
-        with patch("zascarr.web.colecciones.asignar_serie", AsyncMock(
+        with patch("zascarr.web.colecciones.asignar_series", AsyncMock(
                 return_value=ResultadoColeccion(True, coleccion=coleccion))):
             r = c.post(f"/ui/colecciones/{coleccion.id}/series",
-                       data={"serie_id": str(uuid4())}, follow_redirects=False)
-        assert r.status_code == 303 and "guardado=asignada" in r.headers["location"]
+                       data={"serie_ids": [str(uuid4()), str(uuid4())]},
+                       follow_redirects=False)
+        assert r.status_code == 303 and "guardado=asignadas" in r.headers["location"]
         with patch("zascarr.web.colecciones.quitar_serie", AsyncMock(return_value=True)):
             r = c.post(f"/ui/colecciones/{coleccion.id}/series/{uuid4()}/quitar",
                        follow_redirects=False)
@@ -203,3 +204,50 @@ def test_aviso_portada_tras_elegir_y_fallback_sin_img():
     assert "autofocus" in r.text
     # Sin portada cacheada no se emite un <img> que daría 404.
     assert f'src="/ui/colecciones/{cid}/portada' not in r.text
+
+
+def test_multiseleccion_muestra_checkboxes_y_redirige():
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    s1, s2 = str(uuid4()), str(uuid4())
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
+                 SerieDeColeccion(s1, "Flash", 1987, "ninguno"),
+                 SerieDeColeccion(s2, "Batman", 1940, "ninguno")])), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.asignar_series", AsyncMock(
+                 return_value=ResultadoColeccion(True))):
+            r = c.get(f"/ui/colecciones/{cid}")
+            assert r.status_code == 200
+            assert 'name="serie_ids"' in r.text and "Añadir seleccionadas" in r.text
+            assert 'name="serie_ids" value="' + s1 + '"' in r.text
+            r2 = c.post(f"/ui/colecciones/{cid}/series",
+                        data={"serie_ids": [s1, s2]}, follow_redirects=False)
+        assert r2.status_code == 303 and "guardado=asignadas" in r2.headers["location"]
+    finally:
+        _cerrar()
+
+
+def test_multiseleccion_uuid_invalido_no_llama_al_servicio():
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    valida = str(uuid4())
+    c = _cliente()
+    llamada = AsyncMock()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
+                 SerieDeColeccion(valida, "Flash", 1987, "ninguno")])), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.asignar_series", llamada):
+            r = c.post(f"/ui/colecciones/{cid}/series",
+                       data={"serie_ids": [valida, "no-uuid"]})
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "no es válida" in r.text
+    assert f'value="{valida}"' in r.text and "checked" in r.text
+    llamada.assert_not_awaited()
