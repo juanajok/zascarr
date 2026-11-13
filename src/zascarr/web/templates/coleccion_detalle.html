@@ -31,7 +31,7 @@
   <p class="caption">Crea una copia legible por Kavita en la carpeta de exportación. No mueve ni toca la biblioteca: los archivos siguen donde están. Se enlazan sin gastar espacio cuando se puede; si no, se copian. El parche de ComicInfo todavía no está disponible (fase 2).</p>
   <p class="caption"><strong>ZascArr no mueve ni modifica tu biblioteca.</strong> Pero sin marcar «Copiar», los archivos se enlazan (mismo inodo): si otra herramienta edita la exportación, también puede cambiar el original. Marca «Copiar» para aislarlo.</p>
   <form method="post" action="/ui/colecciones/{{ coleccion.id }}/exportar">
-    <input type="hidden" name="patch_comicinfo" value="0">
+    <label><input type="checkbox" name="patch_comicinfo" value="1"> Actualizar ComicInfo en los CBZ (se copia una copia privada; el original no se toca)</label>
     <label><input type="checkbox" name="copiar" value="1"> Copiar en vez de enlazar (aislado; ocupa espacio)</label>
     <label><input type="checkbox" name="confirmo" value="1" required> Entiendo que ZascArr no mueve ni modifica la biblioteca; sin «Copiar», otra herramienta podría modificar el original.</label>
     <button class="btn" type="submit">Exportar esta colección</button>
@@ -46,8 +46,13 @@
     <p class="caption">Nuevos: {{ exportacion.materializados }} · ya estaban: {{ exportacion.saltados }} · omitidos: {{ exportacion.omitidos }} · colisiones: {{ exportacion.colisiones }} · deriva: {{ exportacion.deriva }} · errores: {{ exportacion.errores }} · copiados: {{ exportacion.bytes_copiados }} bytes · carpetas desambiguadas: {{ exportacion.carpetas_colisionadas }}.</p>
     <p class="caption">Forma de preparar los archivos:
       {% if exportacion.modo == "hardlink" %}enlace (no gasta espacio){% elif exportacion.modo == "copy" %}copia (aislada){% else %}mixta{% endif %}.
+      {% if exportacion.parcheados %}ComicInfo actualizado en {{ exportacion.parcheados }} CBZ.{% endif %}
+      {% if exportacion.patch_no_escribible %}{{ exportacion.patch_no_escribible }} archivos no escribibles viajan sin parche.{% endif %}
     </p>
   </details>
+  {% if exportacion.parcheados or exportacion.patch_no_escribible %}
+  <p class="caption">ComicInfo: {{ exportacion.parcheados }} CBZ parcheados sobre copia privada; {{ exportacion.patch_no_escribible }} formatos no escribibles se copiaron sin parche.</p>
+  {% endif %}
   {% if exportacion.errores or exportacion.deriva %}
   <p class="caption">La exportación terminó con incidencias: lo que se preparó está bien y lo demás se ha dejado como estaba. Vuelve a intentarlo cuando quieras.</p>
   {% endif %}

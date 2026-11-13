@@ -1,6 +1,6 @@
 # B20: Exportación de colección → carpeta compatible con Kavita
 
-**Estado:** fase 1 implementada (núcleo sin parche ComicInfo); parche = fase 2
+**Estado:** fases 1 y 2 implementadas (núcleo + parche ComicInfo opcional)
 **Origen:** análisis de la biblioteca real de TV del coleccionista (Sonarr, 2026-09-26) — la carpeta de serie es la unidad portable
 **Relación:** el **formato de exportación** es el contrato de lectura de los futuros consumidores de la exportación. Con B14 la relación es **conceptual, no de dependencia**: B20 crea carpetas de DESTINO para Kavita, mientras B14 analiza carpetas de ORIGEN durante la adopción — la exportación no aporta contexto a los ficheros planos originales.
 
@@ -30,6 +30,16 @@ Esta entrega implementa el **núcleo sin parche** y usa las colecciones de
   y completo, y el modo global es `hardlink`, `copy` o `mixed`.
 
 ## 1. Objetivo
+
+### Fase 2 (task-201)
+
+`patch_comicinfo=true` está disponible: cada CBZ se materializa **siempre como
+copia privada** (nunca hardlink), se parchea el `ComicInfo.xml` de esa copia
+con el plan/fusión de B6 y se publica con `os.link` sin pisar. El original
+conserva bytes, tamaño y mtime. CBR/CB7/PDF/EPUB viajan sin parche y se
+registran con `patch_status="no_escribible"`. El manifiesto y el run llevan
+`patched`/`patch_status` por archivo y `patch_comicinfo` global. La UI ofrece
+la casilla y avisa de que se copia; la API acepta `patch_comicinfo: true`.
 
 Volcar una colección de la biblioteca canónica de ZascArr a un árbol nuevo, legible por Kavita, **sin modificar el origen**. La biblioteca canónica sigue siendo la única fuente de verdad; la exportación es una vista derivada.
 
