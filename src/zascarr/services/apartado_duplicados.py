@@ -108,6 +108,13 @@ class ResultadoApartado:
         return self.a_dict()[clave]
 
 
+def _ruta_relativa_de(library: Path, ruta: str) -> str:
+    try:
+        return Path(ruta).resolve().relative_to(library.resolve()).as_posix()
+    except (OSError, ValueError):
+        return Path(ruta).name
+
+
 def digest_rutas(rutas: Iterable[str]) -> str:
     """SHA-256 de las rutas relativas normalizadas, ordenadas y separadas por NUL."""
     normalizadas = sorted(str(r) for r in rutas)
@@ -295,7 +302,7 @@ class ApartadoDuplicadosService:
         if op is not None and op.estado in (ApartadoEstado.CONFIRMADA, ApartadoEstado.DESHECHA):
             return self._resultado_guardado(op, idempotente=True)
         if op is not None and op.estado == ApartadoEstado.CANCELADA:
-            raise TokenApartadoInvalido("Esta operación se canceló.")
+            return self._resultado_guardado(op, idempotente=True)
         if op is None:
             op = ApartadoOperacion(
                 id=operacion_id, estado=ApartadoEstado.EN_CURSO,
@@ -414,6 +421,12 @@ class ApartadoDuplicadosService:
         except GrupoRechazado as exc:
             compensado = await self._compensar_movidos(movidos)
             if not compensado:
+                detalle["items"] = [
+                    {"ruta": _ruta_relativa_de(self._library, str(origen)), "estado": "movido",
+                     "destino": str(destino)}
+                    for origen, destino in movidos
+                    if destino.exists() and not origen.exists()
+                ]
                 grupo.detalle = {**detalle, "motivo": "compensacion_fallida",
                                  "detalle": "No se pudo devolver una copia ya movida."}
                 grupo.estado = ApartadoGrupoEstado.ERROR
@@ -423,6 +436,12 @@ class ApartadoDuplicadosService:
         except (OSError, ValueError) as exc:
             compensado = await self._compensar_movidos(movidos)
             if not compensado:
+                detalle["items"] = [
+                    {"ruta": _ruta_relativa_de(self._library, str(origen)), "estado": "movido",
+                     "destino": str(destino)}
+                    for origen, destino in movidos
+                    if destino.exists() and not origen.exists()
+                ]
                 grupo.detalle = {**detalle, "motivo": "compensacion_fallida",
                                  "detalle": "No se pudo devolver una copia ya movida."}
                 grupo.estado = ApartadoGrupoEstado.ERROR
@@ -570,12 +589,30 @@ class ApartadoDuplicadosService:
     async def _cerrar_operacion(self, op: ApartadoOperacion) -> None:
         if any(g.estado == ApartadoGrupoEstado.PENDIENTE for g in op.grupos):
             return
-        if any(g.estado == ApartadoGrupoEstado.ERROR for g in op.grupos):
+        movidos = 0
+        bytes_movidos = 0
+        for g in op.grupos:
+            n = sum(1 for item in (g.detalle or {}).get("items", [])
+                    if item.get("estado") == "movido")
+            movidos += n
+            bytes_movidos += n * g.size_bytes
+        # Totales REALES: no se anuncia lo que se pretendía mover, sino lo movido.
+        op.total_archivos = movidos
+        op.total_bytes = bytes_movidos
+        if movidos == 0:
+            # Ningún archivo se movió: esto no es un éxito, aunque todos los
+            # grupos tengan un resultado (todos rechazados/error). El estado
+            # persistido equivalente es «cancelada» (sin efectos).
+            op.estado = ApartadoEstado.CANCELADA
+            motivo = "No se ha apartado nada: ninguna copia se pudo mover."
+        elif any(g.estado == ApartadoGrupoEstado.ERROR for g in op.grupos):
             # Fallo incierto: queda en_curso para recuperación; nunca éxito falso.
             op.estado = ApartadoEstado.EN_CURSO
+            motivo = None
         else:
             op.estado = ApartadoEstado.CONFIRMADA
-        op.resultado = self._resultado_dict(op)
+            motivo = None
+        op.resultado = self._resultado_dict(op, motivo)
         op.actualizada = datetime.now(UTC)
         await self._db.commit()
 
@@ -602,6 +639,8 @@ class ApartadoDuplicadosService:
                 detalle.get("motivo"), len(movidos), g.size_bytes * len(movidos),
                 bool(detalle.get("file_original")),
             ))
+        if motivo is None and op.resultado:
+            motivo = op.resultado.get("motivo")
         return ResultadoApartado(
             str(op.id), op.estado.value if hasattr(op.estado, "value") else op.estado,
             grupos, op.total_grupos, op.total_archivos, op.total_bytes, idempotente, motivo)
