@@ -79,6 +79,9 @@ def test_detalle_muestra_series_y_selector():
     assert "Flash" in r.text and "Batman" in r.text
     assert "Elegir portada" in r.text and "Usar la automática" in r.text
     assert "/portada" in r.text
+    assert r.text.count("coleccion-previa") >= 2
+    assert "/ui/series/s1/portada" in r.text
+    assert "/ui/series/s2/portada" in r.text
     assert "Guardada: Buscar los números que faltan" in r.text
     assert "Efectiva: No buscar automáticamente" in r.text
     assert "No buscar automáticamente" in r.text
