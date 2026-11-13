@@ -233,7 +233,7 @@ def _materializar(
                                        == Path(accion.source_path).stat().st_ino)
                     except OSError:
                         mismo_inodo = False
-                    if mismo_inodo or modo_previo == "hardlink":
+                    if (mismo_inodo or modo_previo == "hardlink") and sha_destino == sha_fuente:
                         fd, temp = tempfile.mkstemp(
                             prefix=f".{destino.name}.", dir=str(destino.parent))
                         os.close(fd)
