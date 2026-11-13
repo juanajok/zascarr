@@ -40,9 +40,9 @@ class TestAvisosDeAuditoria:
             assert 'ui.aviso("ok"' in texto, nombre
         assert 'ui.aviso("info"' in (PLANTILLAS / "_duplicados.html").read_text(encoding="utf-8")
 
-    def test_la_clase_sigue_en_la_hoja_por_compatibilidad(self):
-        # Se retira en la V14, no antes (lo exige test_web_componentes).
-        assert ".audit-ok" in CSS
+    def test_la_clase_se_retiro_en_la_v14(self):
+        # V14 (#750): `.audit-ok` ya no lo usa ninguna plantilla; la regla se retiró.
+        assert ".audit-ok" not in CSS
 
 
 class TestBotonSecundarioReal:
