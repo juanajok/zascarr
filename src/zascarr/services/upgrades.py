@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.config import get_settings
 from zascarr.models import File, Issue, Series, UpgradeProposal
 from zascarr.services.calidad import NIVELES, buscar_mejoras
+from zascarr.services.legal import is_acknowledged
 from zascarr.services.prowlarr import SearchResult
 
 logger = structlog.get_logger()
@@ -59,6 +60,10 @@ def motivo_sin_escaneo(settings=None) -> str | None:
 
 async def escanear_mejoras(db: AsyncSession, batch: int | None = None) -> int:
     """Busca mejoras para un lote pequeño; devuelve cuántas propuestas nuevas creó."""
+    # El escaneo busca en Prowlarr por su cuenta cada cierto tiempo: es una acción de riesgo y
+    # sin aviso legal aceptado no se hace (CLAUDE.md §5.2; hallazgo F-1 de SecOps sobre BL-D3).
+    if not await is_acknowledged(db):
+        return 0
     settings = get_settings()
     perfil, objetivo = perfil_y_objetivo(settings)
     if objetivo == 0 or not _prowlarr_listo(settings):
