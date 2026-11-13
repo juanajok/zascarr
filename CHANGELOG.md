@@ -7,6 +7,9 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **D3: lote de escaneo configurable (2026-11-13).** Ajustes → Calidad permite elegir cuántos
+  números revisa cada pasada (1/3/5/10); el valor se valida en servidor y se guarda como override
+  en caliente. Cambio en `web/ajustes.py`: pendiente de dictamen de SecOps antes de fusionar.
 - **D3: progreso del escaneo y acceso a Mejoras (2026-11-13).** «Buscar mejoras ahora»
   informa de cuántos números se revisaron, cuántas propuestas salieron y cuántos fallos se
   reintentarán; el ciclo periódico lo registra igual. Mejoras entra en el menú (Mi colección),
