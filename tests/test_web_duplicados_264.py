@@ -187,3 +187,18 @@ def test_deshacer_ocupado_se_explica_sin_sobrescribir(tmp_path, monkeypatch):
     assert r.status_code == 200
     assert "No se ha deshecho" in r.text
     assert "El sitio original está ocupado" in r.text
+
+
+def test_resultado_rechazado_sin_movimientos_no_dice_listo(monkeypatch):
+    async def confirmar(_self, _token, _grupos):
+        return ResultadoApartado(
+            "44444444-4444-4444-4444-444444444444", "rechazada", [],
+            1, 0, 0, motivo="No se ha apartado nada: ninguna copia se pudo mover.")
+    monkeypatch.setattr(ApartadoDuplicadosService, "confirmar", confirmar)
+    with use_fake_session(FakeSession([])) as c:
+        r = c.post("/ui/auditoria/duplicados/confirmar",
+                   data={"token": "t", "grupos": '{"sha256":"%s","rutas":["a","b"],"keep_index":0}' % ("a" * 64)})
+    assert r.status_code == 200
+    assert "Listo" not in r.text
+    assert "No se ha apartado nada" in r.text
+    assert "Ninguna copia se pudo mover" in r.text
