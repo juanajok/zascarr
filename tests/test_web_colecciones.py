@@ -289,6 +289,7 @@ def test_filtros_y_seleccion_oculta_en_plantilla():
 
 def test_filtro_sin_resultados_ofrece_limpiar():
     cid = uuid4()
+    sid = str(uuid4())
     detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
     c = _cliente()
     try:
@@ -297,10 +298,11 @@ def test_filtro_sin_resultados_ofrece_limpiar():
                    AsyncMock(return_value=_pagina())), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
-            r = c.get(f"/ui/colecciones/{cid}", params={"q": "nada"})
+            r = c.get(f"/ui/colecciones/{cid}", params=[("q", "nada"), ("serie_ids", sid)])
     finally:
         _cerrar()
     assert "No hay series con esos filtros" in r.text and "Limpiar filtros" in r.text
+    assert f"serie_ids={sid}" in r.text
 
 
 def test_paginacion_conserva_seleccion_y_limpiar_es_boton():
