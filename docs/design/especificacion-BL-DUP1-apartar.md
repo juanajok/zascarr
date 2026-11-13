@@ -350,7 +350,7 @@ ejecutan.
 
 ## 9. Migración propuesta (no aplicada)
 
-- **Migración aditiva `0032`** (siguiente libre tras `0029`), propuesta en la ADR 0017:
+- **Migración aditiva `0033`** (siguiente libre tras `0029`), propuesta en la ADR 0017:
   - enums `apartado_estado` (`en_curso`, `confirmada`, `deshecha`, `cancelada`) y
     `apartado_grupo_estado` (`pendiente`, `movido`, `deshecho`, `rechazado`, `error`), con
     `postgresql.ENUM` explícito y `values_callable` en minúsculas;
@@ -371,7 +371,7 @@ ejecutan.
 
 | Rebanada | Contenido | Talla | Depende |
 |---|---|---:|---|
-| **A · servicio, tablas y token** | Migración 0032; modelo/servicio `apartar_duplicados.py`; `PROPOSITO_APARTAR` + `MAX_TOKEN_APARTAR`; previsualizar (sin escribir), confirmar multi-grupo, mover/compensar, repunte de `File`, deshacer; lock y idempotencia | **M** | ADR 0017; B16 |
+| **A · servicio, tablas y token** | Migración 0033; modelo/servicio `apartar_duplicados.py`; `PROPOSITO_APARTAR` + `MAX_TOKEN_APARTAR`; previsualizar (sin escribir), confirmar multi-grupo, mover/compensar, repunte de `File`, deshacer; lock y idempotencia | **M** | ADR 0017; B16 |
 | **B · UI en Duplicados** | Selección sin premarca, vista previa, resumen, confirmar, resultados por grupo, deshacer; textos, accesibilidad, 320 px, navegador real | **M** | A |
 | **C · robustez** | EXDEV/permisos PUID/PGID, muerte entre mover y commit, reconciliación `en_curso`, deshacer con sitio ocupado, exclusión de `.zascarr`, pruebas de caos; no añade alcance | **S/M** | A |
 
@@ -381,7 +381,7 @@ ejecutan.
 ### 10.2 Plan de pruebas (definido, no ejecutado)
 
 **Postgres real**
-1. Migración 0032: tablas/enums/índices/unique; `down` reversible; sin tocar tablas existentes.
+1. Migración 0033: tablas/enums/índices/unique; `down` reversible; sin tocar tablas existentes.
 2. Operación idempotente: mismo token dos veces → mismo resultado, una operación, sin mover dos veces.
 3. Multi-grupo: un grupo cambia y se rechaza, otro se aparta; resultado por grupo y operación correcta.
 4. Repunte: `File` de copia movida → `file_path` a la que se queda; identidad, `issue_id`,

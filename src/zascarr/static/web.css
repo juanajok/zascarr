@@ -2458,6 +2458,25 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .arco-anadir { margin: 18px 0; padding: 12px 14px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); }
 .arco-controles { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 
+/* #264 B: apartar copias idénticas desde Duplicados. */
+.duplicados-apartar { margin-top: 22px; }
+.duplicados-form { display: grid; gap: 14px; margin: 12px 0; }
+.duplicado-grupo { border: 2px solid var(--ink); border-radius: var(--radius-panel); padding: 10px 12px 12px; margin: 0; min-width: 0; }
+.duplicado-grupo legend { font-weight: 800; padding: 0 4px; }
+.duplicado-copia { display: flex; align-items: flex-start; gap: 8px; min-height: 44px; padding: 6px 0; cursor: pointer; }
+.duplicado-copia input[type="radio"] { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.duplicado-copia-datos { display: grid; gap: 2px; min-width: 0; }
+.duplicado-ruta { font-family: var(--font-body); overflow-wrap: anywhere; }
+.duplicado-preview { border-top: 2px dashed var(--paper-2); padding-top: 8px; margin-top: 8px; }
+.duplicados-operaciones { list-style: none; padding: 0; display: grid; gap: 8px; }
+.duplicados-operaciones li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.duplicados-deshacer { display: inline-flex; margin: 0; }
+@media (max-width: 480px) {
+  .duplicado-grupo { padding: 8px; }
+  .duplicados-operaciones li { display: grid; }
+  .duplicados-form .btn { width: 100%; }
+}
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
