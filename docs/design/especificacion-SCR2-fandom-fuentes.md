@@ -133,7 +133,7 @@ reverificado aquí.
 |---|---|---|---|
 | Identidad por número (`issues.fandom_*_slug`, UQ por wiki) | **Falta [B]** | Migración 0034 sí; ORM no | Mismo bloqueo que la serie; sin columnas no hay ni `INSERT` ni caché negativa por número |
 | Página del número «`<volumen> <número>`» | **Hecho** (construcción) | `enricher.py:794-795` | Anuales, especiales y números con formato raro (`1/2`, `12.NOW`, `1A`) usan otra convención de título: la página no existe y el número queda en negativa de 30 días |
-| Fecha | **Parcial [B] corrección** | `fandom.py:310-323`; etiqueta «Fecha de portada» en `services/ficha_numero.py:35` | DC mezcla `Day` (día de venta, según la propia wiki, marcado GCD) con `Month`/`Year` (mes/año de **portada**). Batman #404 en vivo: `Day=21`, `Month=2`, `Year=1987` → el código da 1987-02-21, una fecha que no consta en la fuente (portada 1987-02; venta 1986-10-21). El fixture del test fija `Month=5` y no cubre el caso real |
+| Fecha | **Hecho** (decisión PO 2026-11-13: fecha de **venta**) | `fandom.py` usa `Pubmonth`/`Pubyear`+`Day` (venta) y deja `Month`/`Year` como respaldo; `comic_vine.py` añade `store_date` y el enricher lo prefiere con `cover_date` como respaldo; etiqueta «Fecha de publicación» en `services/ficha_numero.py:35` | Batman #404 en vivo: venta 1986-10-21 (portada 1987-02) — regresión con esos parámetros reales; la portada, si se quiere, irá a `metadata_` en otra historia |
 | Sinopsis, título de historia y créditos | **Hecho** (solo si el número no tiene ya créditos) | `fandom.py:601-608`; `enricher.py:829-871` | Marvel `Synopsis1`/`StoryTitle1` no verificados en vivo; créditos por nombre reutilizan el creador existente (misma convención que CV) |
 | Portada del número | **Parcial** | `enricher.py:825-826`; la ficha del número pinta la portada del **archivo**, no la de la fuente (`templates/issue_detail.html:8`; `services/portada_numero.py`) | `issues.cover_url` se guarda y no se muestra ni se cachea: dato muerto salvo que otra vista lo use (hoy no) |
 | No pisar lo manual ni lo bloqueado (`locked_fields`) | **Hecho** | `enricher.py:816-830` (patrón de CV) | Correcto por diseño; sin prueba específica de Fandom |
@@ -194,11 +194,12 @@ fusión van marcados `[B]`.
   (E-11/E-12).
 - **AC-SCR2-04 `[B]` — La fecha DC sale de una sola convención.** DADO un `Comic Template` de DC con
   `Day`/`Month`/`Year` y `Pubmonth`/`Pubyear`, CUANDO se enriquece el número, ENTONCES
-  `Issue.release_date` es coherente con la etiqueta visible «Fecha de portada» (`Month`/`Year`, día 1
-  si la wiki no da día de portada) **o** con una decisión explícita del PO de usar fecha de venta
-  (D-5), pero nunca una mezcla. *Verificación:* regresión con los parámetros reales de Batman #404
-  (`Day=21`, `Month=2`, `Year=1987`, `Pubmonth=10`, `Pubyear=1986`); hoy el fixture fija `Month=5` y
-  no prueba el caso real. *Hoy:* **falla** (ver §3.2).
+  `Issue.release_date` es la fecha de **venta** (decisión del PO del 2026-11-13, D-5): Fandom la saca
+  de `Pubmonth`/`Pubyear` + `Day` y Comic Vine de `store_date` (con `cover_date` solo como
+  aproximación si falta la de venta); la etiqueta visible dice «Fecha de publicación». *Verificación:*
+  regresión con los parámetros reales de Batman #404 (`Day=21`, `Month=2`, `Year=1987`,
+  `Pubmonth=10`, `Pubyear=1986` → 1986-10-21) y con `store_date`/`cover_date` de Comic Vine.
+  *Hoy:* **pasa**.
 - **AC-SCR2-05 `[B]` — `LEGAL.md` y la UI cuentan lo mismo.** DADO que la fila de Fandom exige enlace
   al artículo y a la licencia, CUANDO se revisa la superficie donde se muestra el dato, ENTONCES no
   queda ninguna vista que enseñe texto de Fandom con un aviso genérico. *Verificación:* revisión
@@ -356,7 +357,7 @@ fusión van marcados `[B]`.
 | # | Decisión | Por qué | Recomendación | ¿Bloquea fusión? |
 |---|---|---|---|---|
 | D-4 | **Orden SCR1 → SCR2**: ¿se acepta fusionar SCR2 sin la infraestructura común (`robots.py` + `http_cache`), contra el orden propuesto en la épica? | Afecta a la «negativa corta» de SCR2 y a la caché condicional; sin ella cada apertura repite consultas | Aceptar la desviación **por escrito** (el tráfico a `/api.php` es bajo y la API está abierta) y dejar la negativa corta como deuda de SCR1; o bloquear SCR2 hasta SCR1 | No (con la desviación escrita) |
-| D-5 | **Semántica de `Issue.release_date`**: fecha de portada o fecha de venta | Hoy la ficha la llama «Fecha de portada» (`ficha_numero.py:35`) y Comic Vine escribe `cover_date`; DC da ambas y el código las mezcla (AC-04) | Fecha de **portada** (mes/año; día 1 si no consta), coherente con la etiqueta y con CV; la venta no se guarda en esta entrega | Sí para DC (AC-04) |
+| D-5 | **Semántica de `Issue.release_date`**: fecha de portada o fecha de venta | La ficha decía «Fecha de portada» y CV escribía `cover_date`; DC da ambas y el código las mezclaba (AC-04) | **Decidido por el PO (2026-11-13): fecha de VENTA.** Fandom usa `Pubmonth`/`Pubyear`+`Day`; CV añade `store_date` (preferido, `cover_date` como respaldo); etiqueta «Fecha de publicación»; regresión con Batman #404 | Hecho (AC-04 pasa) |
 | D-6 | **Superficie de atribución**: ¿basta la ficha de serie, o también la del número y `/ui/arcos`? | `LEGAL.md` dice «en las vistas donde se muestre texto/metadatos» | Las tres, con un helper común de enlace artículo+licencia; es cumplimiento, no diseño | Sí (AC-03/AC-05) |
 | D-7 | **Gate del CDN de portadas**: mapear `static.wikia.nocookie.net` a Fandom (¿qué pasa si una wiki está encendida y la otra no?) o aceptar la excepción | El host es común a las dos wikis; el patrón actual bloquea por fuente | Mapear a una fuente lógica «fandom» que solo se considera apagada si **ambas** lo están; alternativa: excepción documentada | No (pero sí antes de fusionar por coherencia ADR 0013) |
 | D-8 | **Anuales, especiales y formatos raros**: ¿soporte en SCR2 o límite declarado? | Ver §5.2; hoy caen en negativa de 30 días | Declarar límite en SCR2 y abrir historia aparte si el PO lo quiere; no inventar títulos | No |

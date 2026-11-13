@@ -66,7 +66,7 @@ from __future__ import annotations
 
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
 from sqlalchemy import exists, func, or_, select, update
@@ -131,6 +131,16 @@ _COMIC_VINE_TRADITIONS = {ComicTradition.AMERICAN, ComicTradition.BRITISH}
 # Desambiguación por año como en matcher.py: ±1 absorbe discrepancias de
 # "año de la serie" vs "año del primer número" entre fuentes.
 _YEAR_TOLERANCE = 1
+
+
+def _fecha_iso(texto: str | None) -> date | None:
+    """Fecha ISO `YYYY-MM-DD` de Comic Vine, o None si falta o no es válida."""
+    if not texto:
+        return None
+    try:
+        return date.fromisoformat(texto)
+    except ValueError:
+        return None
 
 # H2 (peer review v2): antes, una serie/issue sin match entraba en el batch
 # en CADA ciclo para siempre, quemando rate limit de APIs externas en
@@ -746,6 +756,13 @@ class EnrichmentService:
                 issue.synopsis = match.description
             if "cover_url" not in locked and not issue.cover_url:
                 issue.cover_url = match.image_url
+            if "release_date" not in locked and issue.release_date is None:
+                # Unificación del PO (2026-11-13): `release_date` = fecha de VENTA.
+                # Comic Vine expone `store_date` (venta) y `cover_date` (portada): se prefiere
+                # la primera y la portada queda solo como aproximación si no hay venta.
+                fecha = _fecha_iso(match.store_date) or _fecha_iso(match.cover_date)
+                if fecha is not None:
+                    issue.release_date = fecha
             if issue.metadata_source is None:
                 issue.metadata_source = MetadataSource.COMIC_VINE.value
             await self._apply_credits(issue, match.credits)
