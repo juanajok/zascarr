@@ -1608,6 +1608,7 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
 - El spike de Fase 0 es ejecutable y reproducible: `python scripts/spike_fase0_fuentes.py` (1 petición por comprobación, pausa de 2,5 s). Sus resultados mandan sobre las suposiciones del estudio: si alguno cambia, se actualiza el informe antes que el código.
 - Orden de ataque propuesto: **SCR1 → SCR2 → SCR4 → SCR3 → SCR5** (la infraestructura primero; el foro es barato y depende solo de credenciales; las guías son el bloque más grande; Herald, último y condicionado).
 - Antes de cerrar una historia de esta épica: actualizar `LEGAL.md` en el mismo PR (el hash invalida la aceptación solo) y dejar en la ficha la decisión del PO que aplicaba (§8 del estudio).
+- **Kanban (Project 1):** SCR1 [#702](https://github.com/juanajok/zascarr/issues/702) · SCR2 [#703](https://github.com/juanajok/zascarr/issues/703) · SCR3 [#704](https://github.com/juanajok/zascarr/issues/704) · SCR4 [#705](https://github.com/juanajok/zascarr/issues/705) · SCR5 [#706](https://github.com/juanajok/zascarr/issues/706) — las cuatro primeras en «En refinamiento» (P1) y la condicional en «Backlog» (P2), con Talla, MoSCoW, Bloqueada y Dependencias cargadas.
 
 ## Deuda técnica registrada (peer review v2, hallazgos medios)
 
