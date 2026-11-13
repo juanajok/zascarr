@@ -251,3 +251,41 @@ def test_multiseleccion_uuid_invalido_no_llama_al_servicio():
     assert r.status_code == 200 and "no es válida" in r.text
     assert f'value="{valida}"' in r.text and "checked" in r.text
     llamada.assert_not_awaited()
+
+
+def test_filtros_y_seleccion_oculta_en_plantilla():
+    cid = uuid4()
+    visible, oculta = str(uuid4()), str(uuid4())
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
+                 SerieDeColeccion(visible, "Flash", 1987, "ninguno")])), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}", params=[
+                ("q", "flash"), ("tradicion", "american"),
+                ("serie_ids", visible), ("serie_ids", oculta)])
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert 'name="q"' in r.text and 'name="tradicion"' in r.text
+    assert "1 serie disponible" in r.text
+    assert f'name="serie_ids" value="{oculta}"' in r.text
+    assert f'value="{visible}"' in r.text and "checked" in r.text
+
+
+def test_filtro_sin_resultados_ofrece_limpiar():
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}", params={"q": "nada"})
+    finally:
+        _cerrar()
+    assert "No hay series con esos filtros" in r.text and "Limpiar filtros" in r.text

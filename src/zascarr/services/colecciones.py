@@ -16,7 +16,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.models import Collection, CollectionAutoSearch, Series, WishlistPolicy
+from zascarr.core.matcher import normalize_title
+from zascarr.models import Collection, CollectionAutoSearch, ComicTradition, Series, WishlistPolicy
 from zascarr.services.portada_coleccion import VERSION as PORTADA_VERSION
 from zascarr.services.portada_coleccion import portada_cacheada
 
@@ -251,11 +252,23 @@ async def borrar_coleccion(db: AsyncSession, coleccion_id: UUID) -> bool:
     return True
 
 
-async def series_sin_coleccion(db: AsyncSession) -> list[SerieDeColeccion]:
+async def series_sin_coleccion(db: AsyncSession, *, q: str = "",
+                               tradicion: str = "") -> list[SerieDeColeccion]:
+    """Series sin colección, con filtros tolerantes a acentos y artículos.
+
+    `q` se normaliza con el MISMO normalizador que el matcher (`title_norm`);
+    `tradicion` solo filtra si es un valor conocido. Orden estable y tope 200.
+    """
+    stmt = select(Series).where(Series.collection_id.is_(None))
+    texto = (q or "").strip()[:120]
+    if texto:
+        normalizado = normalize_title(texto)
+        if normalizado:
+            stmt = stmt.where(Series.title_norm.like(f"%{normalizado}%"))
+    if tradicion in {t.value for t in ComicTradition}:
+        stmt = stmt.where(Series.tradition == ComicTradition(tradicion))
     filas = (await db.execute(
-        select(Series).where(Series.collection_id.is_(None))
-        .order_by(Series.sort_title, Series.title)
-    )).scalars().all()
+        stmt.order_by(Series.sort_title, Series.title).limit(200))).scalars().all()
     return [SerieDeColeccion(
         str(s.id), s.title, s.start_year,
         (s.wishlist_policy or WishlistPolicy.NONE.value),

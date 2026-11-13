@@ -7,6 +7,9 @@
 {% else %}
 {% set errores = errores|default({}) %}
 {% set seleccion = seleccion|default([]) %}
+{% set seleccion_oculta = seleccion_oculta|default([]) %}
+{% set q = q|default("") %}
+{% set tradicion = tradicion|default("") %}
 <header class="coleccion-cabecera coleccion-panel">
   <div class="coleccion-portada">{{ ui.portada(coleccion.name, coleccion.id, coleccion.portada_url if coleccion.tiene_portada else none, clase="portada-coleccion") }}</div>
   <div class="coleccion-cabecera-texto">
@@ -40,26 +43,59 @@
   {% else %}
   {{ ui.estado_vacio("Esta colección está vacía", "Añade series de la lista de abajo.") }}
   {% endif %}
-  {% if series %}
-  <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series" class="coleccion-alta">
+  {% set visibles = series|map(attribute="id")|list %}
+  <form method="get" action="/ui/colecciones/{{ coleccion.id }}" class="coleccion-alta">
     <fieldset class="coleccion-alta-grupo">
       <legend>Añadir series sin colección</legend>
-      <p class="caption">Marca una o varias. Se añaden todas o ninguna.</p>
+      <p class="caption">Filtra y marca una o varias. Se añaden todas o ninguna.</p>
+      <div class="coleccion-filtros">
+        <div class="coleccion-filtro">
+          <label for="alta-q">Buscar por título</label>
+          <input id="alta-q" type="search" name="q" value="{{ q }}" maxlength="120"
+                 placeholder="Escribe parte del título" autocomplete="off">
+        </div>
+        <div class="coleccion-filtro">
+          <label for="alta-tradicion">Tradición</label>
+          <select id="alta-tradicion" name="tradicion">
+            <option value="">Todas</option>
+            {% for valor, etiqueta in tradiciones|default([]) %}
+            <option value="{{ valor }}" {% if tradicion == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="coleccion-filtro-acciones">
+          <button class="btn" type="submit">Filtrar</button>
+          <a class="btn ghost" href="/ui/colecciones/{{ coleccion.id }}">Limpiar filtros</a>
+        </div>
+      </div>
+      <p class="coleccion-contador" role="status">{{ series|length }} {{ "serie disponible" if series|length == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
+      {% for sid in seleccion_oculta %}
+      <input type="hidden" name="serie_ids" value="{{ sid }}">
+      {% endfor %}
+      {% if series %}
       <div class="coleccion-checkgrid">
         {% for s in series %}
         <label class="coleccion-check" for="serie-{{ s.id }}">
           <input type="checkbox" id="serie-{{ s.id }}" name="serie_ids" value="{{ s.id }}"
-                 {% if s.id in (seleccion|default([])) %}checked{% endif %}>
+                 {% if s.id in seleccion %}checked{% endif %}>
           <span>{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</span>
         </label>
         {% endfor %}
       </div>
-      <button class="btn" type="submit">Añadir series seleccionadas</button>
+      <button class="btn" type="submit" formaction="/ui/colecciones/{{ coleccion.id }}/series"
+              formmethod="post">Añadir series seleccionadas</button>
+      {% elif q or tradicion %}
+      {{ ui.estado_vacio("No hay series con esos filtros", "Prueba con otro título o tradición, o limpia los filtros.") }}
+      <p><a class="btn ghost" href="/ui/colecciones/{{ coleccion.id }}">Limpiar filtros</a></p>
+      {% else %}
+      <p class="caption">No quedan series sin colección.</p>
+      {% endif %}
+      {% if seleccion_oculta and not series %}
+      <button class="btn" type="submit" formaction="/ui/colecciones/{{ coleccion.id }}/series"
+              formmethod="post">Añadir series seleccionadas</button>
+      {% endif %}
     </fieldset>
   </form>
-  {% else %}
-  <p class="caption">No quedan series sin colección.</p>
-  {% endif %}
 </section>
 
 <section class="coleccion-panel">
