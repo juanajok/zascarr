@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
-from zascarr.models import CollectionAutoSearch, ComicTradition
+from zascarr.models import Collection, CollectionAutoSearch, ComicTradition, Series
 from zascarr.services.colecciones import (
     asignar_series,
     borrar_coleccion,
@@ -194,6 +194,20 @@ async def portada(coleccion_id: UUID, request: Request,
         return Response(content=resultado.datos, media_type=resultado.content_type,
                         headers={"Cache-Control": "no-store"})
     return cached_image_response(request, resultado.datos, resultado.content_type, resultado.etag)
+
+
+@router.get("/{coleccion_id}/previa/{serie_id}", response_class=HTMLResponse)
+async def previa_serie(request: Request, coleccion_id: UUID, serie_id: UUID,
+                       db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento HTMX con la portada local de una serie; no toca disco ni red."""
+    coleccion = await db.get(Collection, coleccion_id)
+    serie = await db.get(Series, serie_id) if coleccion is not None else None
+    if coleccion is None or serie is None:
+        return HTMLResponse("", status_code=404, headers={"Cache-Control": "no-store"})
+    resp = templates.TemplateResponse(
+        request, "_previa_serie.html", {"serie": serie})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.post("/{coleccion_id}/portada")
