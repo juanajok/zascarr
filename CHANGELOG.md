@@ -11,6 +11,18 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   U12 y el marcador vuelve a reservar el 2:3 para que las tarjetas de una fila se alineen; la `<img>` solo se
   pide cuando la extensión tiene extractor (cero peticiones que darán 404) y sin `onerror`. Detalle:
   `docs/design/ui-auditoria-sistema-diseno-2026-11-13.md`.
+
+- **Fandom (SCR2): la búsqueda por título encontraba personajes, no volúmenes.** Verificado en vivo:
+  `Batman` devuelve fichas de personaje y números, así que el enricher no emparejaba. Ahora se busca
+  con el sufijo `Vol` y se descartan las páginas que no son volúmenes (`X Vol N`), con hasta 4
+  candidatas desambiguadas por año; la portada solo se pide para la elegida.
+- **Fandom (SCR2): los arcos de DC declaraban sus números con `{{c|…}}`, no con enlaces.** El
+  extractor lee la plantilla `Storyline Template` (y mantiene los respaldos de sección/enlaces); el
+  arco «Batman: Year One» ya enlaza su número 404 en `story_arc_issues.reading_order`.
+- **Portadas externas: 403 de Cloudflare en CDN que exigen identificación y referencia.** La descarga
+  con IP fijada manda ahora `User-Agent` propio y `Referer` del propio origen; verificado con la
+  portada de Fandom (200, 768 KB; el endpoint sirve y cachea en `covers/externa/`).
+
 - **Tokens de tipografía, forma y espaciado (2026-11-13, #689).** `web.css` declara en `:root`
   la escala de texto del sistema (15 estilos + la excepción del móvil) y los tokens
   `--border-panel/control/chip/line` y `--space-1..6`; las 140 declaraciones `font-size`, los
