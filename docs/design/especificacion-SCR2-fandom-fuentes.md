@@ -47,7 +47,7 @@ Fandom**; y arcos de **DC Database** volcados a `story_arcs`/`story_arc_issues.r
 vista ya existente `/ui/arcos` muestra sola. `LEGAL.md` tiene fila nueva; el hash de
 `services/legal.py` versiona la aceptación sin paso manual.
 
-**Qué falta, y es bloqueante.** La migración 0034 añade `fandom_dc_slug`/`fandom_marvel_slug` a
+**Qué falta, y es bloqueante.** La migración 0035 añade `fandom_dc_slug`/`fandom_marvel_slug` a
 `series` e `issues`, pero **el ORM no las mapea** en `models/__init__.py` (solo añade los valores del
 enum). El enricher consulta esas columnas en su primer `SELECT` (`enricher.py:415-416`), así que
 **todo ciclo de enriquecimiento revienta** con `AttributeError`, tenga o no Fandom encendida. Verificado: `tests/test_enricher.py` da **17 fallos y 36 aprobados**; los 21 tests de
@@ -87,7 +87,7 @@ importa guías externas y no decide el modelo de producto de las órdenes de lec
 | E-2 | `missingtitle` en HTTP 200 → `None`; `maxlag` → bloqueo compartido y excepción transitoria | `fandom.py:71-73, 477-492, 629-640`; tests `test_missingtitle_es_none`, `test_maxlag_lanza_y_bloquea_cortesia` | 21 tests de `tests/test_fandom.py` **aprobados** |
 | E-3 | La portada se resuelve por `imageinfo` (`iiprop=url`) y el host `static.wikia.nocookie.net` está en la lista blanca y con intervalo propio | `fandom.py:516-529`; `utils/url_portada.py:50-56`; `utils/cortesia.py:130-131` | Lectura + test del cliente |
 | E-4 | Cadena de fuentes para `american`/`british`: Comic Vine → DC → Marvel (ratificado: CV prevalece); el resto mantiene su fuente única | `enricher.py:541-556`; test `test_cadena_de_fuentes_american_con_fandom` | Test aprobado |
-| E-5 | **El ORM no mapea las columnas de 0034.** `getattr(Series, "fandom_dc_slug")` → ausente; `Issue` idem | `models/__init__.py` (solo enum en `:282-287`); migración `alembic/versions/20261113_0034_fandom_slugs.py:23-37` | Comprobado con el intérprete del venv de pruebas |
+| E-5 | **El ORM no mapea las columnas de 0035.** `getattr(Series, "fandom_dc_slug")` → ausente; `Issue` idem | `models/__init__.py` (solo enum en `:282-287`); migración `alembic/versions/20261113_0035_fandom_slugs.py:23-37` | Comprobado con el intérprete del venv de pruebas |
 | E-6 | Consecuencia de E-5: cualquier `enrich_pending()` falla antes de tocar la BD, porque el `SELECT` de series usa esas columnas | `enricher.py:415-416` | `PYTHONPATH=src .tmp-test-venv/bin/python -m pytest tests/test_enricher.py -q` → **17 failed, 36 passed**; el fallo es `AttributeError` en `enricher.py:415` (no se ejecutó la suite completa: la corre QA) |
 | E-7 | El enricher crea arcos y enlaces de lectura con la marca `metadata_["fandom_arcos_intentado"]` para no releer la ficha | `enricher.py:874-989` | Lectura de código; **sin prueba** |
 | E-8 | `/ui/arcos` ya lista cualquier `StoryArc` con sus números, sin cambio de plantilla | `services/arcos.py:55-75`; `web/arcos.py:38-43` | Lectura de código |
@@ -98,8 +98,8 @@ importa guías externas y no decide el modelo de producto de las órdenes de lec
 | E-13 | El plan de enriquecimiento por campo (#128) no consulta Fandom: solo CV/AniList/Tebeosfera | `services/enriquecimiento_plan.py:254-272,347-354` | Lectura de código |
 | E-14 | `/api/health` no lista las fuentes Fandom en `fuentes` (B8 solo cubre CV/AniList/Tebeosfera/GCD) | `api/health.py:464-469` | Lectura de código |
 | E-15 | El CDN de portadas no está en `HOST_DE_FUENTE_PARA_PORTADAS`: apagar Fandom **no** corta la descarga de una portada suya ya guardada | `utils/cortesia.py:135-153`; gate en `utils/url_portada.py:249-250` | Lectura de código |
-| E-16 | `tests/test_fandom.py` no cubre el servicio; `test_enricher.py` no tiene casos Fandom; no hay prueba de la migración 0034 ni de los defaults nuevos | `tests/test_fandom.py`; `tests/test_enricher.py`; `tests/test_fuentes_apagadas_por_defecto.py:11` (`CAMPOS` de cuatro); `tests/test_migracion_fuentes_pg.py` (solo 0020) | Lectura + ejecución de E-6 |
-| E-17 | La documentación citada por el código no está en `main`/`feat/fandom-fuentes` | `fandom.py:3,15`; docstring de la migración 0034 | `git ls-tree` y búsqueda en `docs/` |
+| E-16 | `tests/test_fandom.py` no cubre el servicio; `test_enricher.py` no tiene casos Fandom; no hay prueba de la migración 0035 ni de los defaults nuevos | `tests/test_fandom.py`; `tests/test_enricher.py`; `tests/test_fuentes_apagadas_por_defecto.py:11` (`CAMPOS` de cuatro); `tests/test_migracion_fuentes_pg.py` (solo 0020) | Lectura + ejecución de E-6 |
+| E-17 | La documentación citada por el código no está en `main`/`feat/fandom-fuentes` | `fandom.py:3,15`; docstring de la migración 0035 | `git ls-tree` y búsqueda en `docs/` |
 
 **No ejecutado en esta revisión:** suite completa, tráfico real, peticiones en vivo nuevas, migración
 sobre Postgres (no hay `TEST_DATABASE_URL` configurada para esta revisión). Los datos «en vivo» que se
@@ -114,7 +114,7 @@ reverificado aquí.
 
 | Capacidad | Estado | Evidencia / dónde | Riesgo si queda así |
 |---|---|---|---|
-| Identidad por wiki (`fandom_dc_slug`, `fandom_marvel_slug`) | **Falta [B]** | Migración 0034 sí; ORM no (`models/__init__.py`); el enricher ya las usa | E-5/E-6: el ciclo del enricher entero cae; QA no puede pasar |
+| Identidad por wiki (`fandom_dc_slug`, `fandom_marvel_slug`) | **Falta [B]** | Migración 0035 sí; ORM no (`models/__init__.py`); el enricher ya las usa | E-5/E-6: el ciclo del enricher entero cae; QA no puede pasar |
 | Búsqueda y emparejamiento conservador (título base normalizado exacto; año ±1) | **Parcial** | `enricher.py:641-675`; `_pick_by_year` `:678-687` | Con un único candidato exacto se acepta **sin mirar el año** (`_pick_by_year` devuelve el primero si `len == 1` o no hay año destino): puede atar «Batman» a otro volumen; no hay prueba de integración |
 | Cadena CV → DC → Marvel para `american`/`british` | **Hecho y ratificado** (PO, 2026-11-13: Comic Vine prevalece; Fandom, respaldo) | `enricher.py:542-556,445-500` | Fandom nunca es fuente primaria; un fallo transitorio de CV hace gastar 2 búsquedas más; orden DC→Marvel fijo (una serie Marvel no-CV gasta una búsqueda en DC) |
 | Marcar intento solo cuando se han probado todas las fuentes de la tradición; no marcar si fallo transitorio | **Hecho** | `enricher.py:493-500` | Un error de payload desconocido (`FandomPayloadError`) se trata como transitorio y **reintenta cada ciclo para siempre** (no entra en la negativa de 30 días) |
@@ -131,7 +131,7 @@ reverificado aquí.
 
 | Capacidad | Estado | Evidencia / dónde | Riesgo si queda así |
 |---|---|---|---|
-| Identidad por número (`issues.fandom_*_slug`, UQ por wiki) | **Falta [B]** | Migración 0034 sí; ORM no | Mismo bloqueo que la serie; sin columnas no hay ni `INSERT` ni caché negativa por número |
+| Identidad por número (`issues.fandom_*_slug`, UQ por wiki) | **Falta [B]** | Migración 0035 sí; ORM no | Mismo bloqueo que la serie; sin columnas no hay ni `INSERT` ni caché negativa por número |
 | Página del número «`<volumen> <número>`» | **Hecho** (construcción) | `enricher.py:794-795` | Anuales, especiales y números con formato raro (`1/2`, `12.NOW`, `1A`) usan otra convención de título: la página no existe y el número queda en negativa de 30 días |
 | Fecha | **Hecho** (decisión PO 2026-11-13: fecha de **venta**) | `fandom.py` usa `Pubmonth`/`Pubyear`+`Day` (venta) y deja `Month`/`Year` como respaldo; `comic_vine.py` añade `store_date` y el enricher lo prefiere con `cover_date` como respaldo; etiqueta «Fecha de publicación» en `services/ficha_numero.py:35` | Batman #404 en vivo: venta 1986-10-21 (portada 1987-02) — regresión con esos parámetros reales; la portada, si se quiere, irá a `metadata_` en otra historia |
 | Sinopsis, título de historia y créditos | **Hecho** (solo si el número no tiene ya créditos) | `fandom.py:601-608`; `enricher.py:829-871` | Marvel `Synopsis1`/`StoryTitle1` no verificados en vivo; créditos por nombre reutilizan el creador existente (misma convención que CV) |
@@ -174,10 +174,10 @@ fusión van marcados `[B]`.
 
 **Bloqueantes técnicos y legales**
 
-- **AC-SCR2-01 `[B]` — El ORM mapea las columnas de 0034.** DADO el modelo cargado, CUANDO se evalúa
+- **AC-SCR2-01 `[B]` — El ORM mapea las columnas de 0035.** DADO el modelo cargado, CUANDO se evalúa
   `Series.fandom_dc_slug`, `Series.fandom_marvel_slug`, `Issue.fandom_dc_slug` e
   `Issue.fandom_marvel_slug`, ENTONCES existen como columnas `String(255)` únicas, y la migración
-  0034 sube y baja en una BD efímera. *Verificación:* prueba de esquema (ORM) + prueba de migración
+  0035 sube y baja en una BD efímera. *Verificación:* prueba de esquema (ORM) + prueba de migración
   con `tests._pg.bd_efimera()` (patrón `test_migracion_fuentes_pg.py`). *Hoy:* **falla** (E-5).
 - **AC-SCR2-02 `[B]` — El ciclo del enricher no revienta y es idempotente.** CUANDO corre
   `EnrichmentService.enrich_pending()` con cualquier combinación de fuentes (todas apagadas, solo
@@ -293,7 +293,7 @@ fusión van marcados `[B]`.
 
 ## 5. Huecos reales (sin inflarlos)
 
-1. **La migración 0034 va por delante del ORM.** Es el único hueco que hoy rompe el enricher entero;
+1. **La migración 0035 va por delante del ORM.** Es el único hueco que hoy rompe el enricher entero;
    los demás son cobertura o cumplimiento. No es un fallo de diseño del cliente.
 2. **Anuales y especiales sin página estándar.** La página del número se construye como
    «`<volumen> <número>`»; la convención de anuales de DC Database es un volumen propio
