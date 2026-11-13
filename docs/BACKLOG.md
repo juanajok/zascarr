@@ -1982,6 +1982,26 @@ exigía.
   incompatibilidades de tipo reales en `enricher.py`/`transmission.py` que
   requieren entender la intención del código, no un fix mecánico.
 
+- **Cerrado el 2026-11-13 (#211 BL-L1): `ruff check src/` y `ruff check --select S src/` en 0.**
+  Recuento de partida de la historia: **178** en `ruff check src/` y **11** en `--select S`
+  (`main` `e65e047`, 2026-10-15). Verificación final con los mismos comandos de la CI
+  (ruff 0.17.5 en el runner, 0.17.3 en local): `All checks passed!` en ambos; evidencia en el
+  run `43410871757` de `main`. No se crea otra sección de deuda: esta la sustituye.
+  - **A · mecánico (E501, E701, I001):** líneas largas, sentencias múltiples e imports sin
+    ordenar quedaron limpiados sin cambios de comportamiento; la suite completa es la prueba.
+  - **B · con impacto (UP042, SIM):** los enums de dominio pasan a `StrEnum` y hay pruebas que
+    fijan el valor persistido y el `str()` (`tests/test_enums_bd_strenum.py`,
+    `tests/test_formato_enums_strenum.py`); `alembic/versions/` no se tocó.
+  - **C · seguridad (S):** dictamen de SecOps aplicado — `md5(..., usedforsecurity=False)`
+    porque eD2K no es uso criptográfico, `assert` de producción eliminados (con `-O` no
+    existían), `S314` acotado con el tope de descomposición del ComicInfo
+    (`64a6bbfc`) y `# noqa` con motivo donde el patrón es correcto; `S608` solo interpola
+    constantes del código (`VIVAS`), nunca datos de la persona. Recuentos en
+    `SECURITY.md` y en el histórico (`964e3e2c`).
+  - **Pendiente de decisión del responsable (no dentro de #211):** retirar
+    `continue-on-error: true` del job `ruff` de la CI (criterio 6 de la historia). Hasta que
+    se decida, el job sigue siendo informativo aunque esté en verde.
+
 ## Deuda técnica registrada (integridad del hash de fichero, 2026-09-29)
 
 Ficha `benchmark-integridad-hash-dedupe`; PR de implementación de la batida de
