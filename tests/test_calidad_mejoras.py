@@ -42,3 +42,24 @@ def test_solo_ofrece_mismo_numero_serie_y_calidad_estrictamente_mejor():
     mejores = filtrar_mejoras(resultados, [actual], "1", "Batman")
     assert [m.resultado.title for m in mejores] == ["Batman 001 (Digital).cbz"]
     assert mejores[0].calidad.etiqueta == "alta"
+
+
+def test_digital_solo_por_origen_y_la_resolucion_no_lo_finge():
+    assert calidad_de_archivo(_archivo(source_tag="scan", width_px=2400)).puntuacion == 2
+    assert calidad_de_archivo(_archivo(source_tag="digital")).puntuacion == 3
+    # «Digitalizado» es un escaneo, no un digital: límites de palabra.
+    assert calidad_de_titulo("Batman 001 (Digitalizado).cbz").puntuacion == 0
+    assert calidad_de_titulo("Batman 001 (Digital).cbz").puntuacion == 3
+
+
+def test_descarta_volumen_distinto_pack_y_variante():
+    actual = _archivo(source_tag="scan", width_px=1000)
+    resultados = [
+        _r("Batman Vol. 3 001 (Digital).cbz"),          # volumen 3, no el 1
+        _r("Batman 001 (Digital) (1 de 2).cbz"),        # pack parcial
+        _r("Batman 001 (Digital) (Cover B).cbz"),       # variante
+        _r("Batman 001 (Digital).cbz"),                 # válida
+    ]
+    mejores = filtrar_mejoras(resultados, [actual], "1", "Batman",
+                              volumen=1, anio=2016)
+    assert [m.resultado.title for m in mejores] == ["Batman 001 (Digital).cbz"]

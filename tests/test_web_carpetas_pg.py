@@ -706,6 +706,9 @@ class TestSerieFijada:
         assert "Quitar la serie" in t and "Ver la ficha" in t
         assert "Preparar los archivos de esta carpeta para esta serie" in t
         assert "Sugerida para esta serie" in t
+        # #724: una acción principal visible y las avanzadas dentro del desplegable.
+        assert 'carpeta-accion-principal' in r.text
+        assert 'class="carpeta-avanzado"' in r.text
         # una acción nueva por cada una de las dos carpetas, sin la vieja con serie
         assert len(re.findall(r"/asistente/vinculacion\?clave=", r.text)) == 2
         assert "/asistente?clave=" not in r.text

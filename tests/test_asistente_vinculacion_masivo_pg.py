@@ -17,6 +17,7 @@ import html
 import os
 import re
 import time
+from urllib.parse import urlencode
 
 import pytest
 
@@ -34,6 +35,7 @@ from tests.test_asistente_vinculacion_pg import (  # noqa: F401
     CLAVE,
     INICIO,
     LIMITE_ARCHIVOS,
+    RUTA,
     Pagina,
     _secreto_en_el_asistente,
     abrir,
@@ -99,6 +101,23 @@ class TestMarcarTodos:
         assert "Página 1–4 de 4" in q.visible
         assert "3 marcados · 3 listos" in q.visible
         assert "Revisar y vincular" in q.visible
+
+    async def test_quitar_un_archivo_del_conflicto_deja_el_otro_listo(self, entorno):
+        """#722: el conflicto se resuelve en la fila, sin salir ni recordar nombres."""
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, "Flash 01 (1987).cbz", "Flash 01 (copia).cbz")
+        p = await abrir(serie)
+        a, b = p.filas
+        assert a.nombre != b.nombre
+        campos = p.formulario(marcar=(a.nombre, b.nombre))
+        campos.append(("quitar", a.id))
+        q = await enviar(campos)
+        pagina = Pagina(q.text, p.clave)
+        assert pagina.total("marcados") == 1
+        assert pagina.total("a_vincular") == 1
+        assert not pagina.fila(a.nombre).marcado
+        assert pagina.fila(b.nombre).marcado
+        assert "Quitar este del lote" in pagina.visible
 
     async def test_pack_y_especial_no_se_marcan_y_avisan_del_orden_de_lectura(self, entorno):
         serie = await serie_de_prueba(entorno, "Flash", 1987)
@@ -458,3 +477,43 @@ class TestSinCodigosInternosDeFormato:
         p = await abrir(serie)
         assert "ya existe en la serie como otra edición" in p.visible
         assert not re.search(r"\b(single_issue|trade_paperback|omnibus|graphic_novel|manga_tankobon)\b", p.visible)
+
+
+class TestBorradorGuardado:
+    async def test_guardar_y_reanudar_sin_aplicar_nada(self, entorno):
+        """#725: guardar es explícito; al abrir se ofrece reanudar y solo entonces se reevalúa."""
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
+        p = await abrir(serie)
+        q = await accionar(p, "marcar_todos")
+        assert q.token is not None
+
+        async with cliente() as c:
+            guardado = await c.post(
+                f"{RUTA}/guardar", content=urlencode(q.formulario() + [("salir", "0")]),
+                headers={"HX-Request": "true", "Content-Type": "application/x-www-form-urlencoded"})
+        assert guardado.status_code == 200, guardado.text
+        assert "Borrador guardado" in Pagina(guardado.text).visible
+
+        async with cliente() as c:
+            apertura = await c.get(RUTA, params={"clave": q.clave, "series_id": str(serie)})
+            assert "Hay una revisión guardada" in Pagina(apertura.text).visible
+            assert "No se ha aplicado nada" in Pagina(apertura.text).visible
+            reabierta = await c.get(f"{RUTA}/reabrir", params={"clave": q.clave, "series_id": str(serie)})
+        assert reabierta.status_code == 200, reabierta.text
+        pagina = Pagina(reabierta.text, q.clave)
+        assert "Revisión reanudada" in pagina.visible
+        assert len(nombres_marcados(pagina)) == 2
+        assert pagina.token is not None
+
+    async def test_guardar_y_salir_no_aplica_ni_deja_token(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, "Flash 01 (1987).cbz")
+        p = await abrir(serie)
+        q = await accionar(p, "marcar_todos")
+        async with cliente() as c:
+            r = await c.post(f"{RUTA}/guardar",
+                             content=urlencode(q.formulario() + [("salir", "1")]),
+                             headers={"HX-Request": "true", "Content-Type": "application/x-www-form-urlencoded"})
+            assert r.status_code == 204
+            assert r.headers.get("HX-Redirect", "").startswith("/ui/pendientes/carpetas")

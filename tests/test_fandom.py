@@ -576,3 +576,135 @@ def test_titulo_base_acota_titulos_hostiles():
     # El comportamiento normal no cambia.
     assert titulo_base("Batman Vol 1") == "Batman"
     assert titulo_base("Batman Archives Vol 1 (Collected)") == "Batman Archives"
+
+
+def test_issues_de_valor_de_arc():
+    """La plantilla de arco declara sus números con {{c|…}}; los tomos ({{co|…}}) no cuentan."""
+    from zascarr.services.fandom import issues_de_valor_de_arc
+
+    valor = ('* {{c|Batman Vol 1 404}} -- "Chapter One: Who I Am"\n'
+             '* {{c|Batman Vol 1 405}} -- "Chapter Two"\n'
+             "* {{co|Batman: Year One (Collected)}}\n"
+             "* [[Batman Vol 1 406|Batman #406]]")
+    assert issues_de_valor_de_arc(valor) == [
+        "Batman Vol 1 404", "Batman Vol 1 405", "Batman Vol 1 406"]
+    assert issues_de_valor_de_arc(None) == []
+
+
+# ── SCR1: caché HTTP condicional en el cliente real ───────────────────────────────────────────
+# Se prueban AC-06 (missingtitle negativo / maxlag no cacheado) y AC-11 (fuente apagada antes
+# de la caché). La caché es la falsa de `test_cache_http`; el reloj es el de esa suite.
+
+def _cliente_cache(monkeypatch, handler, cache, *, robots=None, **encendidas):
+    """Cliente Fandom con la caché falsa inyectada y el `MockTransport` dado."""
+    from tests.test_cache_http import CacheHttpFalsa  # noqa: F401 — documenta el contrato
+
+    _ajustes(monkeypatch, **encendidas)
+    return FandomClient("dc.fandom.com", transporte=httpx.MockTransport(handler),
+                        cortesia=CortesiaProceso(), cache=cache, robots=robots)
+
+
+async def test_missingtitle_se_cachea_negativo_y_no_repite(monkeypatch):
+    from tests.test_cache_http import CacheHttpFalsa, Reloj
+    from zascarr.utils.robots import GestorRobots
+
+    peticiones: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        peticiones.append(str(request.url))
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nDisallow:\n")
+        return httpx.Response(200, json={"error": {"code": "missingtitle", "info": "x"}})
+
+    cache = CacheHttpFalsa()
+    reloj = Reloj()
+    cliente = _cliente_cache(monkeypatch, handler, cache,
+                             robots=GestorRobots(reloj=reloj))
+    try:
+        assert await cliente.get_volume("No Existe Vol 1") is None
+        assert await cliente.get_volume("No Existe Vol 1") is None
+    finally:
+        await cliente.__aexit__()
+    assert len([u for u in peticiones if "/api.php" in u]) == 1   # la 2.ª sale de la negativa
+    filas = [f for f in cache.filas.values() if "/api.php" in f.url_canonical]
+    assert len(filas) == 1 and filas[0].is_negative and filas[0].status_code == 200
+    assert filas[0].body_zlib                     # conserva el JSON de `missingtitle`
+
+
+async def test_maxlag_no_se_cachea(monkeypatch):
+    from tests.test_cache_http import CacheHttpFalsa, Reloj
+    from zascarr.utils.robots import GestorRobots
+
+    peticiones: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        peticiones.append(str(request.url))
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nDisallow:\n")
+        return httpx.Response(200, json={"error": {"code": "maxlag", "lag": 12}},
+                              headers={"retry-after": "1"})
+
+    reloj = Reloj()
+    cortesia = CortesiaProceso(reloj=reloj, dormir=reloj.dormir)
+    cache = CacheHttpFalsa()
+    _ajustes(monkeypatch)
+    cliente = FandomClient("dc.fandom.com", transporte=httpx.MockTransport(handler),
+                           cortesia=cortesia, reloj=reloj, dormir=reloj.dormir,
+                           cache=cache, robots=GestorRobots(reloj=reloj))
+    try:
+        with pytest.raises(FandomMaxLagError):
+            await cliente.get_volume("Batman Vol 1")
+        reloj.t += 60                              # pasa el bloqueo compartido por maxlag
+        with pytest.raises(FandomMaxLagError):
+            await cliente.get_volume("Batman Vol 1")
+    finally:
+        await cliente.__aexit__()
+    # Ningún fallo lógico se cachea: dos llamadas al API = dos peticiones (no hay fila /api.php).
+    assert len([u for u in peticiones if "/api.php" in u]) == 2
+    assert not [f for f in cache.filas.values() if "/api.php" in f.url_canonical]
+
+
+async def test_404_de_la_api_se_recuerda_y_se_relanza(monkeypatch):
+    from tests.test_cache_http import CacheHttpFalsa, Reloj
+    from zascarr.utils.robots import GestorRobots
+
+    peticiones: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        peticiones.append(str(request.url))
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nDisallow:\n")
+        return httpx.Response(404)
+
+    cache = CacheHttpFalsa()
+    reloj = Reloj()
+    cliente = _cliente_cache(monkeypatch, handler, cache,
+                             robots=GestorRobots(reloj=reloj))
+    try:
+        for _ in range(2):
+            with pytest.raises(RespuestaNoTransitoria) as exc:
+                await cliente.get_volume("Batman Vol 1")
+            assert exc.value.codigo == 404
+    finally:
+        await cliente.__aexit__()
+    assert len([u for u in peticiones if "/api.php" in u]) == 1   # 2.ª desde la negativa
+
+
+async def test_fuente_apagada_con_cache_no_lee_ni_pide(monkeypatch):
+    from tests.test_cache_http import CacheHttpFalsa
+
+    peticiones = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal peticiones
+        peticiones += 1
+        return httpx.Response(200, json={})
+
+    cache = CacheHttpFalsa()
+    cliente = _cliente_cache(monkeypatch, handler, cache, fandom_dc_enabled=False)
+    try:
+        with pytest.raises(FuenteApagada):
+            await cliente.get_volume("Batman Vol 1")
+    finally:
+        await cliente.__aexit__()
+    assert peticiones == 0 and cache.leidas == 0      # ni socket ni lectura de caché

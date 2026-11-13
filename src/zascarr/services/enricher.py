@@ -133,6 +133,25 @@ _COMIC_VINE_TRADITIONS = {ComicTradition.AMERICAN, ComicTradition.BRITISH}
 _YEAR_TOLERANCE = 1
 
 
+def _paginas_de_volumen(candidatos: list[str], titulo_norm: str) -> list[str]:
+    """Páginas que son volúmenes («X Vol N») cuyo título base coincide, sin repetir.
+
+    La búsqueda de MediaWiki ordena por relevancia: con «Batman» a secas delante salen fichas
+    de personaje («Bruce Wayne (Earth-One)») y números («Batman Vol 1 1»), no el volumen. Un
+    volumen se reconoce porque su título base pierde el sufijo «Vol N»; el resto se descarta.
+    """
+    paginas: list[str] = []
+    for page in candidatos:
+        base = titulo_base(page)
+        if base == page:          # sin «Vol N» final: personaje, número, recopilatorio…
+            continue
+        if normalize_title(base) != titulo_norm:
+            continue
+        if page not in paginas:
+            paginas.append(page)
+    return paginas
+
+
 def _fecha_iso(texto: str | None) -> date | None:
     """Fecha ISO `YYYY-MM-DD` de Comic Vine, o None si falta o no es válida."""
     if not texto:
@@ -276,16 +295,28 @@ class EnrichmentService:
             # getattr con default: los Settings reales siempre tienen el campo (config.py),
             # pero los dobles de prueba de otros módulos no lo declaran.
             dc_activa = bool(getattr(settings, "fandom_dc_enabled", False))
+            marvel_activa = bool(getattr(settings, "fandom_marvel_enabled", False))
+            # SCR1: los clientes REALES de Fandom comparten una caché HTTP condicional en
+            # Postgres (sesión corta propia por operación). Si el test inyectó el cliente, no
+            # se construye; los dobles no declaran `fandom_*_enabled` ⇒ ninguna prueba existente
+            # llega aquí. Imports locales para no cargar la caché si Fandom está apagada.
+            necesita_cache = ((dc_activa and self._injected_fandom_dc is None)
+                              or (marvel_activa and self._injected_fandom_marvel is None))
+            cache_http = None
+            if necesita_cache:
+                from zascarr.database import async_session_factory
+                from zascarr.utils.cache_http import CacheHttp
+
+                cache_http = CacheHttp(async_session_factory)
             fandom_dc_client = self._injected_fandom_dc if dc_activa else None
             if fandom_dc_client is None and dc_activa:
                 fandom_dc_client = await stack.enter_async_context(
-                    FandomClient("dc.fandom.com"))
-            marvel_activa = bool(getattr(settings, "fandom_marvel_enabled", False))
+                    FandomClient("dc.fandom.com", cache=cache_http))
             fandom_marvel_client = (
                 self._injected_fandom_marvel if marvel_activa else None)
             if fandom_marvel_client is None and marvel_activa:
                 fandom_marvel_client = await stack.enter_async_context(
-                    FandomClient("marvel.fandom.com"))
+                    FandomClient("marvel.fandom.com", cache=cache_http))
             await self._enrich_series_batch(
                 cv_client, anilist_client, tebeosfera_client, limit, report,
                 fandom_dc_client=fandom_dc_client, fandom_marvel_client=fandom_marvel_client,
@@ -662,26 +693,30 @@ class EnrichmentService:
         solo títulos base exactos y se desambigua por el año que declara la ficha del volumen.
         Como máximo se abren dos fichas (el ritmo lo marca `cortesia.py`, 1,5 s por wiki).
         """
-        candidatos = await client.search_series(series.title, limit=10)
         norm = normalize_title(series.title)
-        paginas: list[str] = []
-        for page in candidatos:
-            if normalize_title(titulo_base(page)) != norm:
-                continue
-            if page not in paginas:
-                paginas.append(page)
+        # Buscar con el sufijo «Vol»: es la forma de que los volúmenes salgan delante frente a
+        # las fichas de personaje (verificado en vivo: «Batman» no devuelve «Batman Vol 1»).
+        paginas = _paginas_de_volumen(
+            await client.search_series(f"{series.title} Vol", limit=10), norm)[:4]
+        if not paginas:
+            # Respaldo para títulos cuyo página no sigue la convención «X Vol N».
+            paginas = _paginas_de_volumen(
+                await client.search_series(series.title, limit=10), norm)[:4]
         if not paginas:
             return None
         volumenes = []
-        for page in paginas[:2]:
-            # Si la serie ya tiene portada, la consulta `imageinfo` sobra: es tráfico y
-            # espera de cortesía que no hace falta (R-10 de la ficha de benchmark).
-            volumen = await client.get_volume(page, incluir_portada=not series.cover_url)
+        for page in paginas:
+            # Sin portada para desambiguar (el `imageinfo` solo se pide para la elegida).
+            volumen = await client.get_volume(page, incluir_portada=False)
             if volumen is not None:
                 volumenes.append(volumen)
         if not volumenes:
             return None
         elegido = self._pick_by_year(volumenes, series.start_year, lambda v: v.start_year)
+        if elegido is not None and not series.cover_url:
+            completo = await client.get_volume(elegido.page_title, incluir_portada=True)
+            if completo is not None:
+                elegido = completo
         return SeriesMatch(
             source_id=elegido.page_title,
             description=elegido.description,

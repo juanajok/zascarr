@@ -74,19 +74,19 @@ async def test_escanear_crea_propuesta_y_no_repite():
                            return_value=_settings()), \
                      patch("zascarr.services.upgrades.buscar_mejoras",
                            AsyncMock(return_value=resultado)):
-                    assert await escanear_mejoras(s) == 1
-                    assert await escanear_mejoras(s) == 0
+                    assert (await escanear_mejoras(s)).creadas == 1
+                    assert (await escanear_mejoras(s)).creadas == 0
                 await s.refresh(issue)
                 assert issue.upgrade_scanned_at is not None
                 propuestas = (await s.execute(select(UpgradeProposal))).scalars().all()
                 assert len(propuestas) == 1
                 assert propuestas[0].status == "pendiente"
                 assert propuestas[0].candidate_tier == 3
-                filas = await listar_mejoras(s)
-                assert len(filas) == 1 and filas[0].candidate_label == "alta"
+                pagina = await listar_mejoras(s)
+                assert len(pagina.filas) == 1 and pagina.filas[0].candidate_label == "alta"
                 assert await descartar_mejora(s, propuestas[0].id)
                 await s.commit()
-                assert await listar_mejoras(s) == []
+                assert (await listar_mejoras(s)).filas == []
                 # P0: descartar y reescanear el mismo número no debe romper el lote.
                 issue.upgrade_scanned_at = datetime.now(UTC) - timedelta(hours=25)
                 await s.commit()
@@ -96,7 +96,7 @@ async def test_escanear_crea_propuesta_y_no_repite():
                            return_value=_settings()), \
                      patch("zascarr.services.upgrades.buscar_mejoras",
                            AsyncMock(return_value=resultado)):
-                    assert await escanear_mejoras(s) == 0
+                    assert (await escanear_mejoras(s)).creadas == 0
                 assert len((await s.execute(select(UpgradeProposal))).scalars().all()) == 1
         finally:
             await motor.dispose()
@@ -134,7 +134,7 @@ async def test_un_fallo_de_red_no_marca_el_numero_como_escaneado():
                            return_value=_settings()), \
                      patch("zascarr.services.upgrades.buscar_mejoras",
                            AsyncMock(return_value=fallo)):
-                    assert await escanear_mejoras(s) == 0
+                    assert (await escanear_mejoras(s)).creadas == 0
                 await s.refresh(issue)
                 assert issue.upgrade_scanned_at is None
         finally:

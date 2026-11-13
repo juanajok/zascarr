@@ -164,6 +164,7 @@ def _contexto() -> dict:
         "webhook_incluir_nombres": s.webhook_incluir_nombres,
         "quality_profile": getattr(s, "quality_profile", "equilibrado"),
         "upgrade_scan_interval_minutes": getattr(s, "upgrade_scan_interval_minutes", 360),
+        "upgrade_scan_batch": getattr(s, "upgrade_scan_batch", 3),
         "cortesia": texto_politica_ajustes(s),
     }
 
@@ -272,6 +273,7 @@ async def guardar_calidad(
     request: Request,
     quality_profile: str = Form(default="equilibrado"),
     upgrade_scan_interval_minutes: str = Form(default="360"),
+    upgrade_scan_batch: str = Form(default="3"),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """BL-D2/D3: perfil legible de calidad y cadencia del escaneo de mejoras."""
@@ -283,9 +285,16 @@ async def guardar_calidad(
         intervalo = 360
     if intervalo not in (0, 180, 360, 720, 1440):
         intervalo = 360
+    try:
+        lote = int(upgrade_scan_batch)
+    except (TypeError, ValueError):
+        lote = 3
+    if lote not in (1, 3, 5, 10):
+        lote = 3
     await RuntimeSettingsService(db).save({
         "quality_profile": quality_profile,
         "upgrade_scan_interval_minutes": intervalo,
+        "upgrade_scan_batch": lote,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Calidad"})
 

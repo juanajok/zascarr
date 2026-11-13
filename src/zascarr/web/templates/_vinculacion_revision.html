@@ -19,6 +19,31 @@
   <input type="hidden" name="pagina_hasta" value="{{ r.pagina.hasta }}">
   <input type="hidden" name="borradores" value="{{ borradores_json }}">
 
+  <div class="vinc-borrador-acciones" role="group" aria-label="Guardar la revisión">
+    <button type="button" class="btn ghost sm"
+            hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/guardar') }}"
+            hx-vals='{"salir": "0"}'
+            hx-include="closest form" hx-target="#revision" hx-swap="outerHTML">Guardar borrador</button>
+    <button type="button" class="btn ghost sm"
+            hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/guardar') }}"
+            hx-vals='{"salir": "1"}'
+            hx-include="closest form">Guardar y salir</button>
+  </div>
+
+  {% if borrador_guardado %}
+  <div class="vinc-borrador-guardado" role="status">
+    <p><strong>Hay una revisión guardada.</strong> {{ borrador_guardado.total_marcados }} archivo{{ "s" if borrador_guardado.total_marcados != 1 }} marcado{{ "s" if borrador_guardado.total_marcados != 1 }}. No se ha aplicado nada.</p>
+    <button type="button" class="btn ghost sm"
+            hx-get="/ui/pendientes/carpetas/asistente/vinculacion/reabrir?clave={{ r.clave | urlencode }}&amp;series_id={{ s.series_id }}"
+            hx-target="#revision" hx-swap="outerHTML">Reanudar revisión</button>
+    <button type="button" class="btn ghost sm"
+            hx-post="/ui/pendientes/carpetas/asistente/vinculacion/descartar"
+            hx-vals='{"clave": {{ r.clave | tojson }}, "series_id": {{ s.series_id | tojson }}}'
+            hx-target="#revision" hx-swap="outerHTML"
+            hx-confirm="¿Descartar el borrador guardado? No se vincula nada.">Descartar borrador</button>
+  </div>
+  {% endif %}
+
   <section class="card" aria-labelledby="vinc-contexto">
     <h2 id="vinc-contexto" class="titulo-frase">{{ r.clave }}</h2>
     <dl class="carpeta-datos">
@@ -152,7 +177,12 @@
       {% if otros_motivos %}<p class="caption vinc-motivos">Otros motivos: {{ otros_motivos | join(", ") }}.</p>{% endif %}
       {% endif %}
       {% if a.repetido_con %}
-      <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
+      <div class="vinc-conflicto">
+        <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
+        {% if a.marcado %}
+        <button type="submit" name="quitar" value="{{ a.id }}" class="btn ghost sm">Quitar este del lote</button>
+        {% endif %}
+      </div>
       {% endif %}
       {% if a.issue_existente %}
       <p class="caption vinc-existente">La serie ya tiene esta publicación sin archivos: se reutilizaría, no se crea una nueva.</p>

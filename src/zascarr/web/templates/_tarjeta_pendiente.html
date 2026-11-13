@@ -4,15 +4,16 @@
   <div class="pending-card" id="card-{{ c.file.id }}">
     <div class="pending-body">
       {% if aviso %}{{ ui.aviso(aviso.tipo, aviso.texto) }}{% endif %}
-      <div class="filename" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
-      <div class="detected">Detectado: {{ c.detected }}</div>
-      {#- #689 deuda 6 (el PO revierte U12): la portada usa `ui.portada`, como en la Biblioteca, DEBAJO del nombre.
-          El marcador va siempre (ocupa 2:3 y las tarjetas de una fila se alinean); la `<img>` solo se pide cuando
-          el servidor sabe que la extensión tiene extractor, así que una ausencia conocida no lanza un 404. Sin
-          ningún manejador de error: si la portada no llega, se ve el marcador. -#}
+      {#- #689 deuda 6 (el PO revierte U12): la portada usa `ui.portada`, como en la Biblioteca, y va ARRIBA
+          del nombre para que todas las tarjetas de una fila la empiecen a la misma altura (el nombre ocupa una o
+          dos líneas y la bajaba a saltos). El marcador va siempre; la `<img>` solo se pide cuando el servidor
+          sabe que la extensión tiene extractor, así que una ausencia conocida no lanza un 404. Sin manejador de
+          error: si la portada no llega, se ve el marcador. -#}
       {{ ui.portada(c.suggestion.title if c.suggestion else c.detected, c.file.id,
                     ("/ui/pendientes/" ~ c.file.id ~ "/portada") if c.con_portada else none,
                     clase="portada-pendiente", carga="lazy") }}
+      <div class="filename" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
+      <div class="detected">Detectado: {{ c.detected }}</div>
       {% if c.motivo %}
       <div class="detected motivo">{{ c.motivo }}</div>
       {% endif %}
@@ -36,16 +37,29 @@
                   title="Mueve el archivo a la carpeta de esta serie en tu biblioteca y le cambia el nombre.">Ver antes de organizar</button>
         </form>
         <div id="previa-{{ c.file.id }}" class="asignar-previa" aria-live="polite"></div>
+        <form class="assign-form vincular-form"
+              hx-post="/ui/pendientes/{{ c.file.id }}/vincular"
+              hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">
+          <input type="hidden" name="series_id" value="{{ c.suggestion.series_id }}">
+          <label class="sr" for="nv-{{ c.file.id }}">Número para vincular «{{ c.file.file_name }}»</label>
+          <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4"
+                 id="nv-{{ c.file.id }}" value="{{ c.suggestion.issue_number }}">
+          <p class="efecto-asignacion">Vincular no mueve ni renombra: solo funciona si esa publicación ya existe en la serie.</p>
+          <button type="submit" class="btn ghost sm">Vincular en su sitio</button>
+        </form>
       </div>
       {% endif %}
-      <label class="sr" for="q-{{ c.file.id }}">Serie de «{{ c.file.file_name }}»</label>
-      <input type="search" class="series-search" placeholder="Buscar serie…"
-             name="q" id="q-{{ c.file.id }}"
-             hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
-             hx-trigger="input changed delay:400ms, search"
-             hx-target="#resultados-{{ c.file.id }}"
-             hx-swap="innerHTML">
-      <div id="resultados-{{ c.file.id }}" class="series-results"></div>
+      <details class="elegir-otra-serie">
+        <summary>Elegir otra serie</summary>
+        <label class="sr" for="q-{{ c.file.id }}">Serie de «{{ c.file.file_name }}»</label>
+        <input type="search" class="series-search" placeholder="Buscar serie…"
+               name="q" id="q-{{ c.file.id }}"
+               hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
+               hx-trigger="input changed delay:400ms, search"
+               hx-target="#resultados-{{ c.file.id }}"
+               hx-swap="innerHTML">
+        <div id="resultados-{{ c.file.id }}" class="series-results"></div>
+      </details>
       <button type="button" class="btn-ignorar"
               hx-post="/ui/pendientes/{{ c.file.id }}/ignorar"
               hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML"

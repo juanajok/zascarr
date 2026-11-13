@@ -255,82 +255,18 @@ h1, h2, h3 {
   border-radius: 2px;
 }
 
-/* ── 3. CABECERA / NAVEGACIÓN ────────────────────────────────────────────── */
-.topnav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  padding: 12px clamp(14px, 3vw, 32px);
-  background: var(--paper);
-  border-bottom: var(--border-panel) solid var(--ink);
-  position: relative;
-  z-index: 1;
-}
-
-.topnav a {
-  color: var(--ink-soft);
-  text-decoration: none;
-  font-size: var(--text-didascalia);
-  font-weight: 700;
-  padding: var(--space-2) 14px;
-  border: var(--border-chip) solid transparent;
-  border-radius: var(--radius-panel);
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.topnav a.brand {
-  font-family: var(--font-display);
-  font-size: var(--text-numero-paso);
-  letter-spacing: .05em;
-  text-transform: uppercase;
-  color: var(--ink);
-  margin-right: var(--space-2);
-}
+/* ── 3. MARCA, CIERRE DE SESIÓN Y SHELL ──────────────────────────────────── */
 
 /* Marca: el estallido «¡ZAS!» (static/brand). Va como fondo del ::before para no tocar el HTML;
    el nombre lo sigue diciendo el texto del enlace, así que la imagen es decorativa. */
-.topnav a.brand::before {
-  content: "";
-  width: 28px; height: 28px;
-  margin-right: 10px;
-  flex: none;
-  background: url("/static/brand/zascarr-icono.svg") center / contain no-repeat;
-}
-
-.topnav a:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-}
-
-.topnav a[aria-current="page"] {
-  background: var(--ink);
-  color: var(--paper);
-}
 
 /* A6: "Cerrar sesión" es un <button> dentro de un <form> (POST, no un
    enlace GET) pero debe verse como el resto de la navegación. */
 .nav-logout { margin: 0; margin-left: auto; }
-.topnav .btn-logout {
-  background: none;
-  color: var(--ink-soft);
-  font: inherit;
-  text-decoration: none;
-  font-size: var(--text-didascalia);
-  font-weight: 700;
-  padding: var(--space-2) 14px;
-  border: var(--border-chip) solid transparent;
-  border-radius: var(--radius-panel);
-  min-height: 40px;
-  cursor: pointer;
-}
-.topnav .btn-logout:hover { border-color: var(--ink); color: var(--ink); }
 
 /* ── 3b. SHELL (V3): barra lateral en escritorio, barra inferior en móvil ─────
    El MISMO marcado (templates/_componentes.html::menu, datos en web/menu.py) se presenta distinto
-   según el ancho. Las reglas de `.topnav` (sección 3) se conservan: se retiran en V14. ─────── */
+   según el ancho. Las reglas de `.topnav` se retiraron en V14 (#750). ───────────────────────── */
 .skip {
   position: absolute; left: 8px; top: -64px; z-index: 100;
   background: var(--yellow); color: var(--on-yellow);
@@ -741,9 +677,6 @@ button[type="submit"].neutro {
 }
 /* #689 deuda 6: `ui.portada` reserva el 2:3 (el PO revierte U12) para que las tarjetas de una fila
    se alineen aunque la portada falte o tarde; el marcador va debajo de la <img>, sin `onerror=`. */
-/* Compatibilidad hasta la V14 (lo exige test_web_componentes): la tarjeta ya no usa `.cover`,
-   usa `ui.portada` con `.portada-pendiente`. */
-.pending-card .cover { display: block; width: min(100%, 120px); height: auto; margin: 0 auto; }
 
 .pending-card .portada-pendiente {
   width: min(100%, 120px);
@@ -833,12 +766,6 @@ button[type="submit"].btn-sugerencia {
 }
 .audit-detail { font-size: var(--text-secundario); color: var(--ink-faint); margin-top: 2px; }
 .audit-resumen { margin: 6px 0 0; padding-left: 18px; font-size: var(--text-didascalia); }
-.audit-ok {
-  border: var(--border-panel) solid var(--ok);
-  background: var(--ok-bg);
-  border-radius: var(--radius-panel);
-  padding: var(--space-3) 14px; margin: 20px 0; font-weight: 600;
-}
 .audit-adoptar { border-color: var(--ok); }
 
 /* ── 11. LISTA DE DESEOS (D1) ────────────────────────────────────────────── */
@@ -930,21 +857,6 @@ button[type="submit"].btn-sugerencia {
 .series-fuentes .legal-notice { margin-top: var(--space-2); }
 
 .filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: var(--space-3); }
-.filter-bar-secondary { margin-bottom: var(--space-5); }
-.filter-search-box { position: relative; min-width: 200px; }
-.filter-search-box .series-results {
-  position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
-  margin-top: var(--space-1);
-  background: var(--paper); border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
-}
-/* Vacío no se ve: con el borde puesto, cada buscador sin escribir dejaba una barra negra de 6 px
-   bajo el campo (caso real, 2026-10-20). */
-.filter-search-box .series-results:empty { display: none; }
-.filter-search-box .series-results:not(:empty) { padding: 6px; }
-.filter-search-box .series-list a {
-  display: flex; align-items: center; min-height: 40px; padding: 6px var(--space-2); color: var(--ink); text-decoration: none; font-size: var(--text-secundario);
-}
-.filter-search-box .series-list a:hover { background: var(--yellow); color: var(--on-yellow); }
 
 .library-grid {
   display: grid;
@@ -1180,11 +1092,7 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 16. RESPONSIVE ──────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .topnav { gap: var(--space-1); padding: 10px var(--space-3); }
-  .topnav a { font-size: var(--text-secundario); padding: 7px 10px; }
-  .topnav a.brand { font-size: var(--text-titulo-bloque); }
   /* A 18 px la versión completa se empasta: la de 16 px tiene la Z grande y menos contorno. */
-  .topnav a.brand::before { width: 18px; height: 18px; background-image: url("/static/brand/zascarr-favicon.svg"); }
 
   .content { padding: var(--space-4) var(--space-3) 48px; }
   .metrics-grid { grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -1229,12 +1137,6 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 16a2. AJUSTES (D11) — conectar Comic Vine/Prowlarr/Transmission/
    aMule desde la UI, mismos tokens que el resto ────────────────────── */
-/* V2: `.ajustes-grid` se mantiene definida por el contrato de compatibilidad (no se retira
-   antes de V14), aunque Ajustes ya usa la página de 12 columnas `.ajustes-pagina`. */
-.ajustes-grid {
-  display: grid; gap: var(--gutter);
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
 
 /* Ajustes como PÁGINA DE TEBEO: una sola rejilla de 12 columnas donde cada viñeta ocupa un
    span fijo (8+4 · 4+4+4 · 6+6). Todos los bordes caen en los mismos carriles y las viñetas de
@@ -1481,19 +1383,6 @@ button[disabled], .btn[disabled] {
 .aviso.amber { background: var(--amber-bg); }
 .aviso.info  { background: var(--info-bg); }
 
-/* Estado grande de una pantalla («Todo bien», «Atención»…). */
-.hero-state {
-  display: flex; gap: 18px; align-items: center;
-  padding: 20px; margin-bottom: 18px;
-  border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
-  background: var(--paper-2); box-shadow: var(--shadow-ink);
-}
-.hero-state .big { font-size: var(--text-hero-grande); line-height: 1; }
-.hero-state.ok    { background: var(--ok-bg); }
-.hero-state.warn  { background: var(--warn-bg); }
-.hero-state.amber { background: var(--amber-bg); }
-.hero-state.info  { background: var(--info-bg); }
-
 /* Progreso: <progress class="progress"> nativo (rol y valor accesibles sin JS ni ARIA a mano). */
 progress.progress {
   appearance: none; -webkit-appearance: none;
@@ -1506,21 +1395,6 @@ progress.progress::-webkit-progress-bar { background: var(--paper-2); }
 progress.progress::-webkit-progress-value { background: var(--yellow); border-right: var(--border-panel) solid var(--ink); }
 progress.progress::-moz-progress-bar { background: var(--yellow); }
 
-/* Aviso temporal: se desvanece SOLO por CSS (sin JS). El estado definitivo siempre está visible
-   en la propia página; con «reducir movimiento» (sección 17) la animación se desactiva y el
-   aviso se queda, que es lo seguro. */
-.toast {
-  padding: var(--space-3) var(--space-4); margin: var(--space-3) 0;
-  border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
-  background: var(--caption-bg); color: var(--ink);
-  box-shadow: var(--shadow-ink-sm);
-  animation: toast-sale 8s ease-in forwards;
-}
-@keyframes toast-sale {
-  0%, 85% { opacity: 1; max-height: 12rem; }
-  100%    { opacity: 0; max-height: 0; padding: 0; margin: 0; border-width: 0; visibility: hidden; }
-}
-
 /* ── 17. MOTION ──────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1529,7 +1403,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
     scroll-behavior: auto !important;
   }
 }
-
 
 /* ── Pendientes por carpeta (rebanada 1b, solo lectura) ─────────────────────
    Solo maquetación: los colores salen de los componentes (chip, aviso, card), ya comprobados. */
@@ -1562,6 +1435,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .asistente-form label { font-size: var(--text-secundario); font-weight: 700; }
 .asistente-form input[type="text"], .asistente-form input[type="search"] { width: 100%; max-width: 32rem; }
 .carpeta-accion { margin: 0 0 10px; }
+.carpeta-accion-principal { border: var(--border-control) solid var(--ink); font-weight: 700; }
+.carpeta-avanzado { margin: 0 0 10px; }
+.carpeta-avanzado summary { cursor: pointer; }
 
 /* Revisión de selección y números (#119). La revisión pendiente se avisa y el lote anterior deja de usarse. */
 .vinculacion-lista { list-style: none; padding: 0; margin: 0 0 var(--gutter); display: grid; gap: var(--space-3); }
@@ -1582,6 +1458,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vinc-grupo ul { margin: 6px 0 0; padding-left: 20px; }
 
 /* U20: marcar/desmarcar todos y detalle plegado de las explicaciones de página */
+.vinc-borrador-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 var(--gutter); }
+.vinc-borrador-guardado {
+  margin: 0 0 var(--gutter);
+  padding: 10px 12px;
+  border: var(--border-chip) solid var(--ink-faint);
+  border-radius: var(--radius-panel);
+  background: var(--paper-2);
+}
+.vinc-borrador-guardado p { margin: 0 0 8px; }
 .vinc-barra {
   position: sticky;
   top: 8px;
@@ -1648,9 +1533,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="submit"]):not([type="button"]),
   select:not([hidden]):not([multiple]):not([size]), textarea:not([hidden]):not([data-u16]) {
     font-size: var(--text-cuerpo); min-height: 44px;
-  }
-  button:not([hidden]):not([data-u16]), .btn:not([hidden]), summary:not([hidden]), .pend-paginas a:not([hidden]),
-  .back-link:not([hidden]), .page-link:not([hidden]), .topnav a.brand:not([hidden]), .side .brand:not([hidden]) { min-height: 44px; }
+  }button:not([hidden]):not([data-u16]), .btn:not([hidden]), summary:not([hidden]), .pend-paginas a:not([hidden]), .back-link:not([hidden]), .page-link:not([hidden]), .side .brand:not([hidden]) { min-height: 44px; }
   .metric-detail a { display: inline-block; min-height: 24px; }
 }
 
@@ -1733,7 +1616,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
    Cada filtro activo es un chip (no interactivo) más un enlace «Quitar»:
    texto y no solo color, 40 px de alto y foco visible heredado. */
 .resumen-biblioteca { margin-bottom: 14px; }
-.recuento-biblioteca { margin: 0 0 var(--space-2); }
 .filtros-activos {
   display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
   margin: 0 0 var(--space-2); padding: 0; list-style: none;
@@ -1858,19 +1740,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 
 /* ── BL-IT02 (#284): vista compacta de la biblioteca ──────────────────────── */
-.library-vistas {
-  display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
-  margin: 0 0 var(--space-3);
-}
-.library-vista {
-  display: inline-flex; align-items: center; min-height: 40px;
-  padding: 6px var(--space-3); border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel);
-  color: var(--ink); font-size: var(--text-secundario); font-weight: 700; text-decoration: none;
-}
-.library-vista:hover, .library-vista:focus-visible {
-  background: var(--yellow); color: var(--on-yellow);
-}
-.library-vista-actual { background: var(--ink); color: var(--paper); }
 .library-lista {
   width: 100%; border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
   border-collapse: separate; border-spacing: 0; overflow: hidden; background: var(--paper);
@@ -1907,9 +1776,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 
 /* En táctil/estrecho, el selector es un control de 44 px como el resto. */
-@media (max-width: 860px), (pointer: coarse) {
-  .library-vista { min-height: 44px; }
-}
 
 /* ── #128: plan de enriquecimiento por campo ─────────────────────────────── */
 .series-enriquecimiento { margin: 14px 0 var(--space-1); }
@@ -1979,7 +1845,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
    puntos) se añade aquí (lo comprueba test_web_componentes). Va al FINAL del fichero: con la misma
    especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
 
-
 /* ── BL-ETQ1a (#403): etiquetas en la ficha ───────────────────────────────── */
 .series-etiquetas { margin: 14px 0 6px; }
 .series-etiquetas h2 { margin: 0 0 2px; }
@@ -2021,8 +1886,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   border-radius: var(--radius-panel); padding: 6px;
 }
 
-
-
 /* #129 A: asociar fuente (solo lectura, 360 px sin desbordes) */
 .asociar-form { max-width: 640px; }
 .asociar-form fieldset { border: 0; padding: 0; margin: var(--space-3) 0; }
@@ -2045,8 +1908,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .discrepancia { border-left: var(--border-panel) solid var(--amber-t); padding-left: 10px; }
 .discrepancia-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 6px 0; align-items: center; }
 
-
-
 /* #447: ficha de serie y de número (solo lectura) */
 .ficha-serie-datos, .ficha-serie-datos ~ section, .issue-header { margin-top: 18px; }
 .ficha-sinopsis { max-width: 70ch; line-height: 1.6; overflow-wrap: anywhere; }
@@ -2062,14 +1923,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .issue-archivos li { margin: 6px 0; overflow-wrap: anywhere; }
 .contador-numero { font-variant-numeric: tabular-nums; }
 .archivos-numero-titulo a { display: inline-flex; align-items: center; min-height: 40px; padding: var(--space-1) 6px; }
-.tabla-ficha { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 10px 0; }
-.tabla-ficha caption { text-align: left; font-weight: 700; margin-bottom: 6px; }
-.tabla-ficha th, .tabla-ficha td { text-align: left; vertical-align: top; padding: 6px; border-bottom: var(--border-line) solid var(--linea); overflow-wrap: anywhere; font-size: var(--text-secundario); }
 @media (max-width: 480px) {
   .ficha-serie-meta > div, .ficha-autores > div { grid-template-columns: 1fr; gap: 2px; }
   .issue-header { grid-template-columns: 1fr; }
 }
-
 
 /* #478: conversión CBR→CBZ (vista previa y resultado). */
 .conversion-previa, .conversion-resultado { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
@@ -2179,8 +2036,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .lectura-estados label { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 6px 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-pill); white-space: nowrap; cursor: pointer; }
 .lectura-estados label:has(input:checked) { border-color: var(--ink); background: var(--paper-2); font-weight: 800; }
 .lectura-estados input { width: 24px; height: 24px; margin-right: var(--space-1); }
-.lectura-nota { flex-basis: 100%; }
-.lectura-nota summary { min-height: 40px; display: flex; align-items: center; }
 .tu-lectura { margin-top: 18px; }
 @media (max-width: 480px) { .lectura-control form { align-items: stretch; } }
 
@@ -2198,7 +2053,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .comicinfo-campos { margin: 0; padding-left: 1.2rem; }
 .comicinfo-previa form { display: grid; gap: var(--space-2); justify-items: start; }
 
-
 /* #480: el resultado de ComicInfo tiene que leerse como un cierre, no como texto suelto. */
 .comicinfo-resultado-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .comicinfo-espera { font-weight: 700; }
@@ -2208,7 +2062,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   border-radius: 50%; animation: conversion-giro .8s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) { .comicinfo-espera::before { animation: none; } }
-
 
 /* MIT-M7 130-b: declarar el significado de una carpeta. */
 .declaracion-form { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; max-width: 46rem; }
@@ -2229,7 +2082,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .declaracion-chips { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
 .declaracion-card h3 { margin: 0 0 6px; }
 
-
 /* MIT-M7 131-b: correspondencias y propuestas. */
 .correspondencias-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-3); }
 /* CNV5-3: propuestas de fuentes en la vista previa de ComicInfo. */
@@ -2239,7 +2091,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .comicinfo-fuente-campo label { display: block; margin: var(--space-1) 0; overflow-wrap: anywhere; }
 .comicinfo-opcion { padding-left: var(--space-2); }
 .comicinfo-avisos { display: grid; gap: 6px; overflow-wrap: anywhere; }
-
 
 /* BL-INF/#132-b: inventario de decisiones reutilizables. */
 .decisiones-filtros { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 14px 0 18px; }
@@ -2253,18 +2104,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .decision-resumen { border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); padding: 10px var(--space-3); margin: var(--space-3) 0; }
 .decision-historial { font-size: var(--text-secundario); }
 
-
 /* BL-R5 (#234): formulario de identificador en Descubrir. */
 .identificador-form { margin: 10px 0 14px; }
 .identificador-form form { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: end; }
 .identificador-form label { display: grid; gap: var(--space-1); font-weight: 600; }
 .identificador-form input { flex: 1 1 22rem; min-width: 0; }
 
-
 /* BL-R6 (#235): varias copias/variantes y otras ediciones en la ficha del número. */
 .otras-ediciones { margin-top: 10px; }
 .otras-ediciones ul { font-size: var(--text-secundario); }
-
 
 /* BL-R7 (#236): vistas de trabajo predefinidas. */
 .vistas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 14px; margin: var(--space-4) 0 20px; }
@@ -2495,14 +2343,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .nota-borrar { margin-top: var(--space-2); }
 .exportar-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 
-
 /* #183 H1: candidatas locales para elegir publicación. */
 .vinc-candidatas { margin: 10px 0; padding: 10px; border: var(--border-chip) solid var(--linea); border-radius: var(--radius-panel); }
 .vinc-candidatas legend { font-weight: 700; padding: 0 var(--space-1); }
 .vinc-candidatas-lista { list-style: none; padding: 0; display: grid; gap: var(--space-2); }
 .vinc-candidata { border: var(--border-line) solid var(--linea); border-radius: 6px; padding: var(--space-2); overflow-wrap: anywhere; }
 .vinc-candidata.elegida { border-color: var(--cyan-t); background: var(--info-bg); }
-.vinc-candidata-titulo { font-weight: 700; margin: 0 0 var(--space-1); }
 .vinc-eleccion { font-weight: 700; }
 /* Panel de indexers de Prowlarr: lista compacta, no un muro de categorías. */
 .prowlarr-indexers-lista { list-style: none; margin: var(--space-2) 0 10px; padding: 0; max-height: 20rem; overflow: auto; border: var(--border-chip) solid var(--paper-2); border-radius: var(--radius-panel); background: var(--paper); }
@@ -2512,7 +2358,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .prowlarr-indexer-nombre { overflow-wrap: anywhere; }
 .prowlarr-indexer-cats { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; justify-content: flex-end; flex: 0 1 auto; }
 .prowlarr-indexer-cats .caption { white-space: nowrap; }
-
 
 /* BL-INF5 (#591): formularios de edición manual. */
 .edicion-form { display: grid; gap: 14px; max-width: 48rem; }
@@ -2526,17 +2371,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .edicion-manuales ul { list-style: none; padding: 0; display: grid; gap: var(--space-2); }
 .inline-desbloquear { display: inline; margin-left: 6px; }
 
-
-
 /* BL-C4 (#151): sagas en orden de lectura. */
 .arcos-lista, .arco-orden { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: var(--space-2); }
 .arco-fila, .arco-orden li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); padding: var(--space-2) 10px; border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
 .arco-posicion { min-width: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-
 /* BL-C4 (#151): gestión manual de sagas. */
 .arco-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 10px 0 var(--space-4); }
-.arco-anadir { margin: 18px 0; padding: var(--space-3) 14px; border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
 .arco-controles { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
 
 /* #264 B: apartar copias idénticas desde Duplicados. */
@@ -2563,7 +2404,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .mejoras-lista { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: var(--space-2); }
 .mejora-fila { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 10px; border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
 .ruta-exportacion { overflow-wrap: anywhere; word-break: break-word; }
-
 
 /* BL-D3 (#154): mejoras de edición. */
 .mejoras-escanear { margin: var(--space-3) 0; }
@@ -2599,6 +2439,26 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .coleccion-portada { width: 96px; }
   .coleccion-checkgrid { grid-template-columns: 1fr; }
 }
+
+.coleccion-filtros { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) auto; gap: 12px; align-items: end; margin: 10px 0 12px; }
+.coleccion-filtro { display: grid; gap: 4px; min-width: 0; }
+.coleccion-filtro label { font-weight: 600; }
+.coleccion-filtro input, .coleccion-filtro select { min-height: 44px; width: 100%; }
+.coleccion-filtro-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.coleccion-filtro-acciones .btn { min-height: 44px; }
+.coleccion-contador { margin: 4px 0 10px; font-weight: 600; }
+@media (max-width: 760px) {
+  .coleccion-filtros { grid-template-columns: 1fr 1fr; }
+  .coleccion-filtro-acciones { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .coleccion-filtros { grid-template-columns: 1fr; }
+  .coleccion-filtro-acciones { grid-column: auto; }
+}
+
+.coleccion-paginacion { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 12px; }
+.coleccion-paginacion .btn, .coleccion-paginacion [aria-disabled="true"] { min-height: 44px; }
+.coleccion-paginacion [aria-disabled="true"] { opacity: .55; cursor: default; }
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
