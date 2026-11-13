@@ -489,7 +489,7 @@ class TestEstructura:
         assert not problemas, "texto por debajo de 14 px o sin poder comprobarse:\n  " + "\n  ".join(problemas)
 
     @pytest.mark.parametrize("selector", [
-        ".topnav a", ".series-search", ".issue-input", ".search-input",
+        ".series-search", ".issue-input", ".search-input",
         ".politica-form select", '.ajustes-card input[type="text"]',
         '.login-form input[type="text"]', ".page-link", ".back-link",
         ".issue-chip", ".archivos-numero-titulo a", ".lectura-estados label",
@@ -691,10 +691,10 @@ class TestColorMixSoloDondeSeDeclara:
             (".series-results li", "border-bottom")]
 
     def test_los_estados_de_la_hoja_usan_su_token(self):
-        """Los tres fondos que eran mezclas (`.suggestion`, `.audit-ok`, `.legal-notice-info`)."""
+        """Los fondos que eran mezclas (`.suggestion`, `.aviso.ok`, `.legal-notice-info`)."""
         fondos = {sel: valor for sel, prop, valor in declaraciones() if prop == "background"}
         assert fondos[".suggestion"] == "var(--ok-bg)"
-        assert fondos[".audit-ok"] == "var(--ok-bg)"
+        assert fondos[".aviso.ok"] == "var(--ok-bg)"
         assert fondos[".legal-notice-info"] == "var(--info-bg)"
 
     @pytest.mark.parametrize("propiedad", [
