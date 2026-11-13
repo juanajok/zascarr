@@ -1,10 +1,45 @@
 # B20: Exportación de colección → carpeta compatible con Kavita
 
-**Estado:** diseño fijado, pendiente de implementación
+**Estado:** fases 1 y 2 implementadas (núcleo + parche ComicInfo opcional)
 **Origen:** análisis de la biblioteca real de TV del coleccionista (Sonarr, 2026-09-26) — la carpeta de serie es la unidad portable
 **Relación:** el **formato de exportación** es el contrato de lectura de los futuros consumidores de la exportación. Con B14 la relación es **conceptual, no de dependencia**: B20 crea carpetas de DESTINO para Kavita, mientras B14 analiza carpetas de ORIGEN durante la adopción — la exportación no aporta contexto a los ficheros planos originales.
 
+## 0. Corte de la primera entrega (#149, 2026-11-13)
+
+Esta entrega implementa el **núcleo sin parche** y usa las colecciones de
+#155. Decisiones fijadas:
+
+- **Raíz única**: `export_path` (config, default `/media/export`). El host la
+  monta con `HOST_EXPORT_DIR` (`${HOST_EXPORT_DIR:-/media/data/export}:/media/export`).
+  No se acepta una raíz por petición.
+- Se rechaza una raíz que sea symlink, que contenga `..` o que esté dentro de
+  biblioteca, descargas, incoming o una carpeta compartida.
+- `patch_comicinfo=true` se rechaza con error claro (422 en API; mensaje en
+  UI): **fase 2**, no se toca ningún archivo.
+- Materialización automática: `os.link` y `copy` si `EXDEV`; nunca `move`.
+  Una fila por issue con archivo disponible; los desaparecidos se omiten.
+- Manifiesto `_zascarr_manifest.json` atómico (versión 1) y `ImportRun` con
+  `details.kind="export"` y contadores; sin migración.
+- Sin fuentes, calidad ni scheduler en esta entrega.
+- **Revisión SecOps/QA (task-190):** todo el I/O de materialización y
+  manifiesto va en `asyncio.to_thread`; la copia usa un temporal único y se
+  publica en exclusiva (nunca `os.replace` sobre un destino de usuario); los
+  archivos de origen symlink o desaparecidos se omiten y reportan; las
+  carpetas de serie con el mismo nombre se desambiguan (`[2]`) y se reportan;
+  el manifiesto conserva las entradas `skip` (hash igual) para ser idempotente
+  y completo, y el modo global es `hardlink`, `copy` o `mixed`.
+
 ## 1. Objetivo
+
+### Fase 2 (task-201)
+
+`patch_comicinfo=true` está disponible: cada CBZ se materializa **siempre como
+copia privada** (nunca hardlink), se parchea el `ComicInfo.xml` de esa copia
+con el plan/fusión de B6 y se publica con `os.link` sin pisar. El original
+conserva bytes, tamaño y mtime. CBR/CB7/PDF/EPUB viajan sin parche y se
+registran con `patch_status="no_escribible"`. El manifiesto y el run llevan
+`patched`/`patch_status` por archivo y `patch_comicinfo` global. La UI ofrece
+la casilla y avisa de que se copia; la API acepta `patch_comicinfo: true`.
 
 Volcar una colección de la biblioteca canónica de ZascArr a un árbol nuevo, legible por Kavita, **sin modificar el origen**. La biblioteca canónica sigue siendo la única fuente de verdad; la exportación es una vista derivada.
 
@@ -79,7 +114,7 @@ Consecuencias:
 
 ## 7. Superficie
 
-- **API**: `POST /api/v1/collections/{id}/export` con body `{root, patch_comicinfo}`. Respuesta: `run_id`.
+- **API**: `POST /api/export/collections/{id}` con body explícito `{patch_comicinfo: false}`. La raíz es siempre `export_path` (`/media/export`); en fase 1 `patch_comicinfo=true` devuelve 422. Respuesta: `run_id` y resumen.
 - **Run auditable**: cada exportación crea un `import_runs` con `run_type='export'` y detalle por archivo — visible en Historial como cualquier otra operación, con su "Registro de auditoría".
 - **UI**: botón "Exportar a Kavita" en el menú ⋮ de la tarjeta de colección (misma familia que "Exportar CSV", que ya existe). Sin scheduler: acción manual, sin tarea nocturna en la Pi.
 

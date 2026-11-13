@@ -28,7 +28,7 @@
     <input id="etiqueta-nueva" name="etiqueta" type="text" maxlength="64"
            autocomplete="off" placeholder="noir, aventuras…"
            hx-get="/ui/series/{{ series.id }}/etiquetas/sugerir"
-           hx-trigger="keyup changed delay:300ms"
+           hx-trigger="input changed delay:300ms, search"
            hx-target="#sugerencias-etiqueta" hx-sync="this:replace">
     <button class="btn ghost" type="submit">Añadir</button>
   </form>

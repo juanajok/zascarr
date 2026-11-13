@@ -12,7 +12,7 @@
     {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=%s" % (series.id, portada_version), "series-cover") }}
   </span>
   <div>
-    <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle" style="display:inline">({{ series.start_year }})</span>{% endif %}</h1>
+    <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle anio-titulo">({{ series.start_year }})</span>{% endif %}</h1>
     {% if series.publisher %}<p class="series-meta">{{ series.publisher.name }}</p>{% endif %}
     {% if series.genres %}
     <p class="series-meta">{{ series.genres|map(attribute="name")|join(", ") }}</p>
@@ -72,6 +72,7 @@
   <dl class="ficha-serie-meta">
     <div><dt>{{ textos_ficha.editorial }}</dt><dd>{% if series.publisher %}{{ series.publisher.name }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos_ficha.inicio }}</dt><dd>{% if series.start_year %}{{ series.start_year }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
+    <div><dt>Referencia</dt><dd>{% if series.reference_name %}{{ series.reference_name }}{% else %}{{ series.title }}{% endif %}</dd></div>
     {% if series.end_year %}<div><dt>{{ textos_ficha.fin }}</dt><dd>{{ series.end_year }}</dd></div>{% endif %}
   </dl>
   <h3>{{ textos_ficha.autores }}</h3>

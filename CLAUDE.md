@@ -155,6 +155,14 @@ como marco permanente.
    validada, redirecciones a mano y tope de tamaño. Un token firmado garantiza integridad,
    **no** seguridad de una URL externa. Ver `docs/design/hallazgo-h1-cover-url.md`.
 
+8. **Una fusión que toque «qué exige la contraseña actual» espera la pasada final de seguridad**
+   (decidido el 2026-11-12, a propuesta de SecOps tras #508, cuyos dos últimos commits se
+   fusionaron sin ella): una PR que modifique `services/seguridad.py`, `web/ajustes.py` o
+   `services/reautenticacion.py` no se fusiona hasta que SecOps haya dictaminado **el SHA final**
+   (el que se fusiona), aunque ya hubiera dictaminado uno anterior. Aplica también a los
+   commits añadidos después de la revisión. Las pruebas estáticas de esa regla (quién llama a
+   qué) son una red contra descuidos, no sustituyen a la pasada.
+
 ## 6. UX
 
 - **Todo en español llano para el coleccionista**: el dashboard y las

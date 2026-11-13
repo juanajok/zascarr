@@ -380,6 +380,16 @@ class TaggerService:
             return _Contexto({}, set())
         return _contexto_de(*row)
 
+    async def deseados_para(self, file: File) -> tuple[dict[str, str | None], set[str]]:
+        """Valores deseados y tags bloqueados de un File, SIN escribir ni planificar.
+
+        Lo usa la exportación B20 fase 2 para parchear una copia privada con la
+        misma precedencia de B6. Carga relaciones con `selectinload` y aplica el
+        filtro de Summary existente.
+        """
+        ctx = _filtrar_resumen(await self._contexto(file), file)
+        return dict(ctx.deseados), set(ctx.bloqueados)
+
     # ── el único cálculo del plan ───────────────────────────────────────────
 
     async def planificar(

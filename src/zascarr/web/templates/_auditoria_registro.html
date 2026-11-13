@@ -224,10 +224,12 @@
     <li><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> tebeos nuevos mirados{% if reg.ya_registrados %}
       (otros <strong>{{ reg.ya_registrados }}</strong> ya estaban registrados y no se han tocado){% endif %}</li>
     <li><strong>{{ reg.anadidos }}</strong> añadidos al catálogo:
+      {%- if reg.registrados %}
       <strong>{{ reg.registrados }}</strong> con serie sugerida (falta confirmar número y edición: <em>no están
-      clasificados</em> y todavía no aparecen en «Por revisar») y <strong>{{ reg.sin_identificar }}</strong> sin
+      clasificados</em> y todavía no aparecen en «Por revisar») y{% endif %}
+      <strong>{{ reg.sin_identificar }}</strong> sin
       identificar, que te esperan en <a href="/ui/pendientes">Por revisar</a> para que los asignes tú</li>
-    <li><strong>{{ reg.repetidos }}</strong> repetidos (mismo contenido que otro ya registrado): no se añaden dos veces</li>
+    <li><strong>{{ reg.repetidos }}</strong> {{ "repetido" if reg.repetidos == 1 else "repetidos" }} (mismo contenido que otro ya registrado): no se añaden dos veces</li>
     {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
     {% if reg.ilegibles %}<li><strong>{{ reg.ilegibles }}</strong> {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} que no se
       {{ "ha" if reg.ilegibles == 1 else "han" }} podido leer: puede haber tebeos sin ver</li>{% endif %}

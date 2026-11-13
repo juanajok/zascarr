@@ -7,6 +7,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Alineación de las pantallas nuevas con el sistema de diseño (2026-11-13).** Calidad pasa a
+  Descargas; los títulos-frase usan `.titulo-frase`; acciones de descarte con `.btn-ignorar`;
+  filas de Sagas/Mejoras como viñetas de 3 px; botones con verbo y objeto. Detalle:
+  `docs/design/ui-auditoria-sistema-diseno-2026-11-13.md`.
 - **Miniatura de portada endurecida (BL-INF9, #603).** Presupuesto y concurrencia acotados
   (`wait_for` + semáforo global de 2 generaciones), consulta corta que libera la conexión de BD
   antes de esperar el lock, tope de píxeles específico para miniaturas (6/12 Mpx) y caché
@@ -67,6 +71,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Perfil de calidad y mejoras de edición (BL-D2/D3, #154).** Ajustes → Calidad elige
+  «solo lo mejor / equilibrado / lo que haya» y cada cuánto buscar mejoras. Un escaneo
+  acotado guarda propuestas en `upgrade_proposals` (migración 0034); Biblioteca → Mejoras
+  las lista, «Descargar esta edición» confirma con token firmado y «Descartar» las retira.
+  En la ficha de un número sigue estando «Buscar una edición mejor». No sustituye ni borra
+  archivos; la nueva edición se importa junto a la actual.
 - **Sagas en orden de lectura y gestión manual (BL-C4, #151).** Biblioteca → «Sagas en orden»:
   lista de arcos y ficha que respeta `story_arc_issues.reading_order` para crossovers. Ahora
   también se pueden **crear, editar y eliminar** sagas, **añadir/quitar números** y
