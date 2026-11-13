@@ -166,7 +166,8 @@ class TestCss:
 
     def test_el_marcador_aguanta_sin_cqw(self):
         d = next(d for s, d in _reglas() if s == ".portada-marca")
-        assert d.index("font-size: 2.6rem") < d.index("46cqw")                       # respaldo antes de la unidad nueva
+        assert d.index("font-size: var(--text-portada-marca-respaldo)") < d.index(
+            "font-size: var(--text-portada-marca)")                                    # respaldo antes de la unidad nueva
 
     def test_con_contraste_alto_el_marcador_es_papel_liso(self):
         bloque = re.search(r"@media \(prefers-contrast: more\), \(forced-colors: active\)\s*\{(.*?)\n\}",

@@ -87,7 +87,7 @@ def test_css_de_barra_compacta_y_44_px():
     from pathlib import Path
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     assert ".barra-biblioteca {" in css
-    assert "border: 3px solid var(--ink);" in css
+    assert "border: var(--border-panel) solid var(--ink);" in css
     assert "background: var(--paper-2);" in css
     assert ".barra-busqueda { flex: 1 1 320px; max-width: 560px;" in css
     assert ".barra-acciones { display: flex; flex-wrap: wrap; align-items: center;" in css
@@ -143,7 +143,7 @@ def test_css_objetivos_tactiles_y_panel_ancho_completo():
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     assert ".barra-busqueda input[type=\"search\"] { width: 100%; min-height: 44px; }" in css
     assert ".barra-panel-campos .series-results a { min-height: 44px;" in css
-    assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px;" in css
+    assert ".faceta-etiqueta a { font-size: var(--text-secundario); min-height: 44px;" in css
     bloque_quitar = css.split(".quitar-filtro {", 1)[1].split("}", 1)[0]
     assert "min-height: 44px" in bloque_quitar and "min-width: 44px" in bloque_quitar
     assert ".barra-panel { min-width: 0; position: relative; }" in css
@@ -170,7 +170,7 @@ def test_css_panel_absoluto_tambien_en_movil_y_tactil_ancho():
     bloque = css.split("@media (max-width: 640px)", 1)[1].split("@media (max-width: 360px)", 1)[0]
     assert "position: fixed" in bloque and "bottom: 64px" in bloque
     assert "left: 0" in bloque and "right: 0" in bloque
-    assert ".faceta-etiqueta a { font-size: .875rem; min-height: 44px; min-width: 44px;" in css
+    assert ".faceta-etiqueta a { font-size: var(--text-secundario); min-height: 44px; min-width: 44px;" in css
     assert "min-width: 44px" in css.split(".quitar-filtro {", 1)[1][:200]
 
 
@@ -196,8 +196,8 @@ def test_barra_es_un_panel_con_busqueda_acotada_y_acciones_a_la_derecha():
     assert '<div class="barra-acciones">' in html
     assert 'class="contador-resumen" role="status"' in html
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
-    assert ".barra-biblioteca {" in css and "border: 3px solid var(--ink);" in css
-    assert "padding: 10px 12px;" in css
+    assert ".barra-biblioteca {" in css and "border: var(--border-panel) solid var(--ink);" in css
+    assert "padding: 10px var(--space-3);" in css
     assert "background: var(--paper-2);" in css
     assert ".barra-busqueda { flex: 1 1 320px; max-width: 560px;" in css
     assert ".barra-acciones { display: flex; flex-wrap: wrap; align-items: center;" in css
@@ -213,7 +213,7 @@ def test_summary_es_un_boton_con_chevron_y_estado_abierto():
     assert "m6 9 6 6 6-6" in html  # chevron-down de Lucide
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     assert ".barra-panel-boton {" in css
-    assert "border: 2px solid var(--ink);" in css
+    assert "border: var(--border-chip) solid var(--ink);" in css
     assert "border-radius: var(--radius-pill);" in css
     assert "box-shadow: var(--shadow-ink-sm);" in css
     assert ".barra-panel[open] > .barra-panel-boton { background: var(--ink); color: var(--paper); }" in css

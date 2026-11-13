@@ -57,10 +57,10 @@ class TestBotonSecundarioReal:
 class TestBordesDeFilas:
     def test_archivo_fila_separa_con_tinta_visible(self):
         cuerpo = regla(".archivo-fila")
-        assert "border-top: 1px solid var(--ink-faint)" in " ".join(cuerpo.split()), cuerpo
+        assert "border-top: var(--border-line) solid var(--ink-faint)" in " ".join(cuerpo.split()), cuerpo
         assert "var(--paper-2)" not in cuerpo
 
     def test_vinc_fila_usa_el_borde_del_sistema(self):
         cuerpo = " ".join(regla(".vinc-fila").split())
-        assert "border: 2px solid var(--ink)" in cuerpo, cuerpo
+        assert "border: var(--border-chip) solid var(--ink)" in cuerpo, cuerpo
         assert "currentColor" not in cuerpo
