@@ -5,9 +5,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
+from zascarr.models import StoryArc
 from zascarr.services.arcos import (
     agregar_numero,
     crear_arco,
@@ -18,10 +20,24 @@ from zascarr.services.arcos import (
     mover_numero,
     quitar_numero,
 )
+from zascarr.web.atribucion import atribucion_de_arco
 from zascarr.web.routes import crear_templates
 
 router = APIRouter(prefix="/ui/arcos", tags=["ui"])
 templates = crear_templates()
+
+
+async def _atribucion_del_arco(db: AsyncSession,
+                               arco_id: UUID) -> dict[str, str] | None:
+    """Atribución CC-BY-SA si el enricher creó la saga (`metadata_["fandom_dc"]` = página).
+
+    Se lee aparte porque `detalle_arco` (capa de servicios) no devuelve el JSONB; una saga
+    manual no tiene la clave y no se atribuye. Nunca enlaza una imagen: solo texto.
+    """
+    metadata = (await db.execute(
+        select(StoryArc.metadata_).where(StoryArc.id == arco_id)
+    )).scalar_one_or_none()
+    return atribucion_de_arco(metadata)
 
 
 def _respuesta(request: Request, plantilla: str, contexto: dict) -> HTMLResponse:
@@ -86,6 +102,7 @@ async def arco(arco_id: UUID, request: Request, guardado: str = Query(default=""
         raise HTTPException(status_code=404, detail="Arco no encontrado")
     return _respuesta(request, "arco.html", {
         "arco": detalle,
+        "atribucion_fandom": await _atribucion_del_arco(db, arco_id),
         "aviso": {
             "creada": "Saga creada.", "guardada": "Saga guardada.",
             "numero": "Número añadido a la saga.",
@@ -164,7 +181,9 @@ async def anadir_numero(arco_id: UUID, request: Request,
         if detalle is None:
             raise HTTPException(status_code=404, detail="Arco no encontrado")
         return _respuesta(request, "arco.html", {
-            "arco": detalle, "errores": resultado.errores,
+            "arco": detalle,
+            "atribucion_fandom": await _atribucion_del_arco(db, arco_id),
+            "errores": resultado.errores,
             "valores": {"serie": serie, "numero": numero, "orden": orden},
         })
     await db.commit()

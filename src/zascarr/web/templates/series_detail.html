@@ -2,6 +2,7 @@
 {% block title %}{{ series.title }} — ZascArr{% endblock %}
 {% block content %}
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
+{% from "_atribucion_fandom.html" import aviso_de_atribucion %}
 {% if volver %}<a href="{{ volver }}" class="back-link">← Volver a la biblioteca</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
 
 <div class="series-header">
@@ -46,6 +47,7 @@
     <details class="series-fuentes">
       <summary>Fuentes y atribución</summary>
       {{ legal_disclaimer("metadata") }}
+      {{ aviso_de_atribucion(atribucion_fandom, "esta ficha", true) }}
     </details>
   </div>
 </div>
