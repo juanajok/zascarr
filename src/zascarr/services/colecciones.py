@@ -306,7 +306,7 @@ async def series_sin_coleccion(db: AsyncSession, *, q: str = "",
     filtros = _filtro_disponibles(q, tradicion)
     filas = (await db.execute(
         select(Series).where(*filtros)
-        .order_by(Series.sort_title, Series.title).limit(200)
+        .order_by(Series.sort_title, Series.title)
     )).scalars().all()
     return [SerieDeColeccion(
         str(s.id), s.title, s.start_year,
