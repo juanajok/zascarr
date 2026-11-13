@@ -172,12 +172,17 @@ async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
     """
     from zascarr.database import async_session_factory
     from zascarr.services.enricher import EnrichmentService
+    from zascarr.utils.cache_http import purgar_cache
 
     while True:
         try:
             async with async_session_factory() as session:
                 report = await EnrichmentService(session).enrich_pending(limit=batch_size)
                 await session.commit()
+            # SCR1: purga las filas caducadas de `http_cache` (nunca por `fresh_until`: eso
+            # destruiría el ETag y el cuerpo que hacen posible el 304). `purgar_cache` ya
+            # contiene el try/except: un fallo de purga no tumba el ciclo.
+            await purgar_cache()
             if report.total_enriched or report.errors:
                 logger.info(
                     "enricher.cycle_done",
