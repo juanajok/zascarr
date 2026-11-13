@@ -164,7 +164,7 @@ def _backup_status() -> tuple[str, str]:
     error = state.get("error")
     # FR-34 (SecOps B-3): nunca se pinta una cadena libre del fichero por un endpoint público; un
     # código que no está en el mapa sale como «causa desconocida».
-    # `error` puede venir como lista o diccionario (no hashable): solo una cadena se busca en el mapa.
+    # `error` puede ser una lista o un dict (no hashable): solo una cadena se busca en el mapa.
     causa = "causa desconocida"
     if isinstance(error, str):
         causa = _BACKUP_ERRORES.get(error, causa)
