@@ -26,7 +26,7 @@
 | # | Decisión |
 |---|---|
 | **D-1** | **Un solo espacio de nombres visible: `etiqueta`.** La columna `namespace` y su `CHECK` se crean (con `('etiqueta')` como único valor de 0022) para poder ampliarlos más adelante con otra migración. La persona **no escribe prefijos**: el token es el nombre (`noir`, `space-opera`) y `-noir` excluye. Desaparecen la ambigüedad entre espacios (FR-09, segunda mitad de AC-09) y los ejemplos `tema:`/`motivo:`, que se leen como el nombre sin prefijo. |
-| **D-2** | **Español, escrito a mano** por el coleccionista en el MVP. El idioma de lo que traigan las fuentes se decide en BL-ETQ4. |
+| **D-2** | **Español, escrito a mano** por el coleccionista en el MVP. El idioma de lo que traigan las fuentes se decide en BL-ETQ4. **Ratificada en ETQ4 (2026-11-13):** los tags de la fuente entran en `etiqueta` en su idioma, con `source` visible y `weight=rank`; las manuales en español se conservan y la traducción/alias quedan para ETQ5. |
 | **D-3** | **Público/edad fuera de etiquetas**: un campo estructurado, en otra historia si hace falta. Nunca un espacio de nombres de texto. |
 | **D-4** | **Exportar a ComicInfo/Kavita, fuera del MVP** (BL-ETQ6, NO APTO hasta ampliar el contrato B6). |
 | **D-5** | **Alias e implicaciones solo manuales y confirmados** (BL-ETQ5); nunca automáticos desde fuentes. |
@@ -459,17 +459,18 @@ caracteres y pruebas de ida/vuelta; mientras, el veredicto de seguridad es **NO 
 |---|---|---|---|---|---|
 | **BL-ETQ1a** Etiquetar una serie | §7.1, §7.4–§7.5, ficha (añadir, quitar, crear), sugerencias de la ficha, migración **0022**, pruebas, docs | benchmark + esta spec + D-1/D-6 | 1 PR (#403) | M | sin datos si D-6 se rechaza (ya ratificada); validación y autoescape |
 | **BL-ETQ1b** Filtrar Biblioteca | §7.2–§7.4 (filtro, facetas, sugerencias), `SeriesService.list_series`, fragmento compuesto sobre `#rejilla`, pruebas | **BL-ETQ1a fusionada** + BL-IT01 (#283) | 1 PR (#431) | M | paginación que pierde `etiquetas`; coste de facetas |
-| **BL-ETQ2** ComicInfo de lectura | `<Tags>`/`<Genre>`, `source='comicinfo_xml'`, `Series.genres` desde fichero, topes, `oculta` | ETQ1a | 1 PR | M | volumen de `<Tags>` (ALTO §11); cobertura real desconocida (NOT RUN) |
+| **BL-ETQ2** ComicInfo de lectura | `<Tags>`/`<Genre>`, `source='comicinfo_xml'`, `Series.genres` desde fichero, topes, `oculta` | ETQ1a | 1 PR (#544) | M | volumen de `<Tags>` (ALTO §11); cobertura real desconocida (NOT RUN) |
 | **BL-ETQ3** Identidad estructurada | poblado de `genres`/`characters` desde fuentes (campos nuevos en la misma petición) + backfill acotado | ETQ1a (contrato) | 1 PR (#671) | M–L | duplicidad con BL-ETQ4 si se decide mal D-1; rate limits intactos |
 | **BL-ETQ4** Enriquecimiento de tags | mapeo de fuentes a `etiqueta` con `weight=rank`, precedencia, caché H2 | ETQ1a, ETQ3, **D-1/D-2** | 1 PR | M | idioma de tags (D-2); fragmentación; no pisar manual |
 | **BL-ETQ5** Alias / implicaciones / reglas | tablas de alias/padres, validación de ciclos, reglas propuestas, `regla` en `MetadataSource` (si se aprueba) | ETQ1a, ETQ4 | 1 PR | L | ciclos, fusión silenciosa, coste de CTE; ¿quién cura? (D-5) |
 | **BL-ETQ6** Export ComicInfo/Kavita | extender B6 + escritura de `<Tags>` + B20 | ETQ1a, contrato B6 | 1 PR (no autorizada antes de extender B6) | L | corromper CBZ / pisar ajeno; **NO APTO** hasta B6 |
 
-Reglas del reparto: **BL-ETQ1a (#403)** y **BL-ETQ1b (#431)** están fusionadas y desplegadas;
-**BL-ETQ2 ya tiene tarjeta (#538)** por decisión del PO, sin implementar. BL-ETQ3…6 quedan
-**propuestas** al PO, sin tarjeta, y no empiezan sin su decisión. Una historia = una PR; la ficha de
-benchmark de una fase nueva se abre si toca modelo/ficheros. Orden recomendado: 1a → 1b → 2 → 3 → 4
-→ 5 → 6, con 3 en paralelo a 2 si conviene (comparten clientes, no plantillas).
+Reglas del reparto: **BL-ETQ1a (#403)**, **BL-ETQ1b (#431)** y **BL-ETQ2 (#538, PR #544)**
+están fusionadas y desplegadas; **BL-ETQ3 (#565, PR #671)** y **BL-ETQ4 (#697, PR #699)** están
+fusionadas y pendientes de despliegue. BL-ETQ5…6 quedan **propuestas** al PO, sin tarjeta, y no
+empiezan sin su decisión. Una historia = una PR; la ficha de benchmark de una fase nueva se abre si
+toca modelo/ficheros. Orden recomendado: 1a → 1b → 2 → 3 → 4 → 5 → 6, con 3 en paralelo a 2 si
+conviene (comparten clientes, no plantillas).
 
 ## 10. Decisiones abiertas del PO y DoR
 

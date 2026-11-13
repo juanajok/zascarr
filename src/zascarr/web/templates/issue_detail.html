@@ -14,6 +14,11 @@
     <p class="series-intro">Todo lo que ZascArr sabe de este número.</p>
     {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
     <p><a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar">Editar el número</a></p>
+    {% if ficha.archivos %}
+    <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/mejorar" class="inline-desbloquear">
+      <button type="submit" class="btn ghost sm">Buscar una edición mejor</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 {% include "_nota_numero.html" %}
@@ -28,6 +33,7 @@
   <h2 id="issue-datos-titulo" class="titulo-frase">Datos del número</h2>
   <dl class="ficha-serie-meta">
     <div><dt>{{ textos.serie }}</dt><dd><a href="/ui/series/{{ series.id }}">{{ series.title }}</a></dd></div>
+    <div><dt>Referencia</dt><dd>{% if series.reference_name %}{{ series.reference_name }}{% else %}{{ series.title }}{% endif %}{% if issue.number_key %} #{{ issue.number_key }}{% elif issue.title %} — {{ issue.title }}{% endif %}</dd></div>
     <div><dt>{{ textos.editorial }}</dt><dd>{% if ficha.editorial %}{{ ficha.editorial }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos.formato }}</dt><dd>{% if ficha.formato %}{{ ficha.formato }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos.publicacion }}</dt><dd>{% if ficha.fecha_larga %}{{ ficha.fecha_larga }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>

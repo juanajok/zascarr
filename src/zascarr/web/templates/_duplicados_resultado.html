@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Resultado de apartar copias — ZascArr{% endblock %}
+{% block content %}
+<h1>Resultado de apartar copias</h1>
+{% if error_deshacer %}
+<p class="audit-why" role="alert">No se pudo deshacer: {{ error_deshacer }}</p>
+{% endif %}
+{% if resultado_deshacer %}
+<p class="audit-why" role="status">
+  {% if resultado_deshacer.estado == 'deshecha' %}Se ha deshecho el apartado.{% else %}No se ha deshecho: {{ resultado_deshacer.motivo | motivo_apartado }}.{% endif %}
+</p>
+{% endif %}
+{% if resultados %}
+{% for r in resultados %}
+<section class="audit-block">
+  {% if r.error is defined %}
+  <p class="audit-why" role="alert">No se pudo completar este grupo: {{ r.error }}</p>
+  {% else %}
+  <h2>Apartado {{ loop.index }}</h2>
+  {% if r.estado in ('cancelada', 'rechazada') or (r.estado == 'confirmada' and r.total_archivos == 0) %}
+  <p class="audit-why" role="status"><strong>No se ha apartado nada.</strong>
+    {% if r.motivo %}{{ r.motivo | motivo_apartado }}{% else %}Ninguna copia se pudo mover.{% endif %}
+  </p>
+  {% else %}
+  <p>Estado: <strong>{% if r.estado == 'confirmada' %}Listo{% elif r.estado == 'deshecha' %}Deshecho{% else %}No completado{% endif %}</strong> · {{ r.total_archivos }} archivo(s) · {{ r.total_bytes | tamano }}</p>
+  {% endif %}
+  {% for g in r.grupos %}
+  <div class="audit-item">
+    <div class="audit-detail">
+      {% if g.estado == 'movido' %}Apartado: {{ g.movidos }} archivo(s).
+      {% elif g.estado == 'rechazado' %}No se ha apartado: {{ g.motivo | motivo_apartado }}.
+      {% elif g.estado == 'error' %}Error: no se ha completado; no se anuncia como éxito.
+      {% else %}{{ g.estado }}.{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% if r.estado == 'confirmada' %}
+  <form method="post" action="/ui/auditoria/duplicados/deshacer" class="duplicados-deshacer">
+    <input type="hidden" name="operacion" value="{{ r.operacion }}">
+    <button type="submit" class="btn ghost sm">Deshacer el apartado</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</section>
+{% endfor %}
+{% endif %}
+<p class="audit-detail">Las copias apartadas están en
+  <code>{{ cuarentena.ruta | ruta_visible }}</code> y ocupan {{ cuarentena.bytes | tamano }}
+  ({{ cuarentena.archivos }} archivos). No se borran automáticamente.</p>
+<p><a class="btn ghost" href="/ui/auditoria">Volver a Duplicados</a></p>
+{% endblock %}

@@ -184,7 +184,8 @@ def _acciones_protegidas() -> set[tuple[str, str, str]]:
 class TestLaAceptacionProtegeLoMismo:
 
     def test_las_acciones_de_riesgo_protegidas_son_las_de_siempre(self):
-        """U17 no toca `require_legal_acknowledgment`: protege exactamente estas seis acciones (POST de Deseados y de la API)."""
+        """Las acciones de red/descarga siguen protegidas; D3 añade la búsqueda de mejora
+        y su confirmación de descarga (ambas tocan Prowlarr/Transmission)."""
         assert _acciones_protegidas() == {
             ("wishlist", "POST", "/ui/wishlist/anadir"),
             ("wishlist", "POST", "/ui/wishlist/{item_id}/reintentar"),
@@ -192,6 +193,12 @@ class TestLaAceptacionProtegeLoMismo:
             ("wishlist", "POST", "/ui/wishlist/{item_id}/enviar-candidato"),
             ("wishlist", "POST", "/wishlist"),
             ("wishlist", "POST", "/wishlist/{item_id}/search"),
+            ("series", "POST",
+             "/ui/series/{series_id}/numero/{issue_id}/mejorar"),
+            ("series", "POST",
+             "/ui/series/{series_id}/numero/{issue_id}/mejorar/descargar"),
+            ("mejoras", "POST", "/ui/mejoras/escanear"),
+            ("mejoras", "POST", "/ui/mejoras/{propuesta_id}/descargar"),
         }
 
     def test_ni_el_asistente_ni_el_texto_legal_estan_protegidos(self):

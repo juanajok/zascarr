@@ -1,5 +1,4 @@
-/* =============================================================================
-   ZascArr — Sistema de diseño "papel y tinta"
+/* ======================================================================   ZascArr — Sistema de diseño "papel y tinta"
    -----------------------------------------------------------------------------
    Lenguaje visual del tebeo, adaptado de sonarr-comics-template.html:
      · papel y tinta con acentos CMYK (cyan/magenta/yellow)
@@ -705,7 +704,10 @@ button[type="submit"].neutro {
   height: auto;
   margin: 0 auto;
 }
-.pending-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.pending-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+/* «Ignorar» va siempre al pie: en una fila de tarjetas los botones quedan alineados aunque el nombre, lo
+   detectado o la portada midan distinto. */
+.pending-body > .btn-ignorar { margin-top: auto; }
 /* U12: el nombre se lee ENTERO: se parte si no cabe (también uno largo y sin espacios), nunca se recorta. */
 .filename {
   font-size: .875rem;
@@ -742,6 +744,10 @@ button[type="submit"].btn-sugerencia {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .series-name { font-size: .88rem; flex: 1; font-weight: 600; }
+/* El formulario de «especial sin número» vive dentro de una tarjeta de 200 px: sus campos ocupan el ancho
+   disponible en vez de su tamaño natural, que los sacaba de la tarjeta. */
+.especial-form .series-name { flex-basis: 100%; }
+.especial-input { width: 100%; min-width: 0; }
 .no-results { color: var(--ink-faint); font-size: .875rem; }
 
 /* ── 10bis. REVISIÓN DE BIBLIOTECA (B16) ─────────────────────────────────── */
@@ -854,6 +860,10 @@ button[type="submit"].btn-sugerencia {
 .back-link:hover { color: var(--cyan-t); }
 
 .series-header { display: flex; gap: 22px; margin-bottom: 24px; flex-wrap: wrap; }
+/* Los datos van a la derecha de la portada: sin base propia, su texto largo los mandaba debajo incluso a
+   1280 px. Bajan solo cuando no caben (y en el móvil, por la regla de ≤ 860 px). */
+.series-header > div { flex: 1 1 20rem; min-width: 0; }
+.anio-titulo { display: inline; }
 .portada.series-cover {
   width: 140px;
   border: 3px solid var(--ink); border-radius: var(--radius-panel);
@@ -862,6 +872,8 @@ button[type="submit"].btn-sugerencia {
 .series-meta { color: var(--ink-soft); font-size: .9rem; margin: 2px 0; }
 .series-intro { margin: 0 0 6px; font-weight: 600; }
 .series-acciones { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 10px 0 0; }
+/* Fila de enlaces secundarios bajo la frase de entrada (p. ej. las otras formas de revisar). */
+.acciones-fila { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin: 4px 0 16px; }
 .series-fuentes, .politica-detalles { margin-top: 8px; }
 .politica-detalles code { font-size: .875rem; }
 .series-fuentes summary, .politica-detalles summary {
@@ -2449,14 +2461,44 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* BL-C4 (#151): sagas en orden de lectura. */
 .arcos-lista, .arco-orden { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
-.arco-fila, .arco-orden li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 8px 10px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); background: var(--paper); }
+.arco-fila, .arco-orden li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 8px 10px; border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
 .arco-posicion { min-width: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 
 /* BL-C4 (#151): gestión manual de sagas. */
 .arco-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 16px; }
-.arco-anadir { margin: 18px 0; padding: 12px 14px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); }
+.arco-anadir { margin: 18px 0; padding: 12px 14px; border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
 .arco-controles { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+
+/* #264 B: apartar copias idénticas desde Duplicados. */
+.duplicados-apartar { margin-top: 22px; }
+.duplicados-form { display: grid; gap: 14px; margin: 12px 0; }
+.duplicado-grupo { border: 2px solid var(--ink); border-radius: var(--radius-panel); padding: 10px 12px 12px; margin: 0; min-width: 0; }
+.duplicado-grupo legend { font-weight: 800; padding: 0 4px; }
+.duplicado-copia { display: flex; align-items: flex-start; gap: 8px; min-height: 44px; padding: 6px 0; cursor: pointer; }
+.duplicado-copia input[type="radio"] { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.duplicado-copia-datos { display: grid; gap: 2px; min-width: 0; }
+.duplicado-ruta { font-family: var(--font-body); overflow-wrap: anywhere; }
+.duplicado-preview { border-top: 2px dashed var(--paper-2); padding-top: 8px; margin-top: 8px; }
+.duplicados-operaciones { list-style: none; padding: 0; display: grid; gap: 8px; }
+.duplicados-operaciones li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.duplicados-deshacer { display: inline-flex; margin: 0; }
+@media (max-width: 480px) {
+  .duplicado-grupo { padding: 8px; }
+  .duplicados-operaciones li { display: grid; }
+  .duplicados-form .btn { width: 100%; }
+}
+
+/* BL-D3 (#154): propuestas de mejor edición. */
+.mejora-actual { margin: 12px 0; }
+.mejoras-lista { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+.mejora-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
+.ruta-exportacion { overflow-wrap: anywhere; word-break: break-word; }
+
+
+/* BL-D3 (#154): mejoras de edición. */
+.mejoras-escanear { margin: 12px 0; }
+.mejora-acciones { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,

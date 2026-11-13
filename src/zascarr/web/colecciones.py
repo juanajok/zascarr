@@ -19,6 +19,11 @@ from zascarr.services.colecciones import (
     quitar_serie,
     series_sin_coleccion,
 )
+from zascarr.services.exportacion_kavita import (
+    ExportacionError,
+    exportar_coleccion,
+    historial_exportaciones,
+)
 from zascarr.web.routes import crear_templates
 
 router = APIRouter(prefix="/ui/colecciones", tags=["ui"])
@@ -81,6 +86,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
     return _respuesta(request, "coleccion_detalle.html", {
         "coleccion": c, "politicas": POLITICAS,
         "series": await series_sin_coleccion(db),
+        "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": {}, "aviso": {
             "guardada": "Colección guardada.",
             "asignada": "Serie añadida a la colección.",
@@ -112,6 +118,41 @@ async def borrar(coleccion_id: UUID, db: AsyncSession = Depends(get_db)):
     await borrar_coleccion(db, coleccion_id)
     await db.commit()
     return _redirigir("/ui/colecciones?guardado=borrada")
+
+
+@router.post("/{coleccion_id}/exportar")
+async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = Form("0"),
+                   copiar: str = Form("0"), confirmo: str = Form("0"),
+                   db: AsyncSession = Depends(get_db)):
+    c = await detalle_coleccion(db, coleccion_id)
+    if c is None:
+        return _redirigir("/ui/colecciones")
+    if confirmo != "1":
+        return _respuesta(request, "coleccion_detalle.html", {
+            "coleccion": c, "politicas": POLITICAS,
+            "series": await series_sin_coleccion(db),
+            "exportaciones": await historial_exportaciones(db, coleccion_id),
+            "errores": {"general": "Marca la confirmación antes de exportar."}, "aviso": "",
+        })
+    try:
+        resumen = await exportar_coleccion(
+            db, coleccion_id, patch_comicinfo=patch_comicinfo == "1",
+            copiar=copiar == "1")
+        await db.commit()
+        return _respuesta(request, "coleccion_detalle.html", {
+            "coleccion": c, "politicas": POLITICAS,
+            "series": await series_sin_coleccion(db),
+            "exportaciones": await historial_exportaciones(db, coleccion_id),
+            "errores": {}, "exportacion": resumen, "aviso": "",
+        })
+    except ExportacionError as exc:
+        error = str(exc)
+    return _respuesta(request, "coleccion_detalle.html", {
+        "coleccion": c, "politicas": POLITICAS,
+        "series": await series_sin_coleccion(db),
+        "exportaciones": await historial_exportaciones(db, coleccion_id),
+        "errores": {"general": error}, "aviso": "",
+    })
 
 
 @router.post("/{coleccion_id}/series")

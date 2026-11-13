@@ -46,6 +46,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -75,6 +76,11 @@ CATALOG_ALIASES: dict[str, str] = {
     # y la etiqueta humana confirman el título canónico.
     "horizontes lejanos": "Las aventuras del Capitán Torrezno",
     "forever evil a r g u s": "Forever Evil: A.R.G.U.S",
+    # Subtítulos que el catálogo guarda con dos puntos y que llegan como
+    # alternativa de un nombre «Serie - Subtítulo». Son alias de título, no
+    # una regla de identidad.
+    "supergirl woman of tomorrow": "Supergirl: Woman of Tomorrow",
+    "lazarus x 66": "Lazarus: X+66",
 }
 
 # B15: valor con el que se persiste una grapa suelta (models.IssueFormat.
@@ -213,6 +219,8 @@ class SeriesHit:
     title: str
     start_year: int | None
     score: float         # 1.0 si exacto tras normalizar; similarity() si trgm
+    #: Volumen/edición declarado en la serie, para desempatar por carpeta.
+    volume: int | None = None
 
 
 @dataclass(frozen=True)
@@ -266,12 +274,12 @@ class SeriesMatcher:
         # nunca hacía exact-match con un archivo sin tilde ("Nausicaa") — H1
         # del peer review v2.
         exact = await self.db.execute(sa.text("""
-            SELECT id, title, start_year, 1.0::float AS score
+            SELECT id, title, start_year, volume, 1.0::float AS score
             FROM series
             WHERE title_norm = :norm
                OR f_title_norm(COALESCE(sort_title, '')) = :norm
         """), {"norm": norm})
-        hits = [SeriesHit(UUID(str(r.id)), r.title, r.start_year, r.score)
+        hits = [SeriesHit(UUID(str(r.id)), r.title, r.start_year, r.score, r.volume)
                 for r in exact]
 
         # ── Fuzzy si no hay exacto ───────────────────────────────────────────
@@ -279,7 +287,7 @@ class SeriesMatcher:
 
         if not hits:
             fuzzy = await self.db.execute(sa.text("""
-                SELECT id, title, start_year,
+                SELECT id, title, start_year, volume,
                        similarity(title_norm, :norm) AS score
                 FROM series
                 WHERE title_norm % :norm
@@ -287,7 +295,7 @@ class SeriesMatcher:
                 LIMIT 5
             """), {"norm": norm})
             hits = [
-                SeriesHit(UUID(str(r.id)), r.title, r.start_year, r.score)
+                SeriesHit(UUID(str(r.id)), r.title, r.start_year, r.score, r.volume)
                 for r in fuzzy
                 if r.score >= SIMILARITY_THRESHOLD
             ]
@@ -302,14 +310,14 @@ class SeriesMatcher:
             if base:
                 por_id = {str(h.series_id): h for h in hits}
                 base_rows = await self.db.execute(sa.text("""
-                    SELECT id, title, start_year
+                    SELECT id, title, start_year, volume
                     FROM series
                     WHERE title_norm LIKE :prefijo
                 """), {"prefijo": base + " %"})
                 for r in base_rows:
                     if _base_title(r.title) == base:
                         por_id[str(r.id)] = SeriesHit(
-                            UUID(str(r.id)), r.title, r.start_year, 1.0)
+                            UUID(str(r.id)), r.title, r.start_year, 1.0, r.volume)
                 hits = sorted(por_id.values(), key=lambda h: (-h.score, h.title))
 
         if len(hits) <= 1:
@@ -353,14 +361,14 @@ class SeriesMatcher:
         if not pattern:
             return None
         row = (await self.db.execute(sa.text("""
-            SELECT s.id, s.title, s.start_year
+            SELECT s.id, s.title, s.start_year, s.volume
             FROM local_aliases la
             JOIN series s ON s.id = la.series_id
             WHERE la.pattern_norm = :pattern AND la.estado = 'activo'
         """), {"pattern": pattern})).first()
         if not row:
             return None
-        return SeriesHit(UUID(str(row.id)), row.title, row.start_year, 1.0)
+        return SeriesHit(UUID(str(row.id)), row.title, row.start_year, 1.0, row.volume)
 
     async def find_issue(self, series_id: UUID, number: str,
                           formato_esperado: str | None = None) -> tuple[UUID | None, bool]:
@@ -445,6 +453,10 @@ class SeriesMatcher:
             if extracted:
                 title, number, year = extracted
 
+        volumen_carpeta = _volumen_en_carpeta(triage.path) if volume is None else None
+        if volume is None:
+            volume = volumen_carpeta
+
         if not title or not number:
             return MatchResult(
                 MatchStatus.UNSORTED,
@@ -516,6 +528,8 @@ class SeriesMatcher:
             hit = good[0]
 
         status = MatchStatus.DIRECT if hit.score == 1.0 else MatchStatus.FUZZY
+        if volumen_carpeta is not None and volumen_carpeta == volume:
+            notas.append(f"desempatado por la carpeta: {hit.title}")
         return await self._resolve(hit, number, good, status, notas, formato_esperado,
                                    nombre=triage.path.name)
 
@@ -573,13 +587,32 @@ class SeriesMatcher:
             )
         return MatchResult(status, hit.series_id, issue_id, hit.score, candidates, notes)
 
-def _volume_matches(hit: SeriesHit, volume: int) -> bool:
-    """Heurística conservadora de desambiguación por volumen.
+_VOLUMEN_EN_CARPETA = re.compile(
+    r"\b(?:vol(?:umen)?|v|tomo)\.?\s*(\d+)\b", re.IGNORECASE)
 
-    Por ahora solo comprueba si el volumen aparece explícito en el título
-    (ej. "Batman Vol. 2"). Cuando el enricher almacene el volumen en
-    series.metadata, esta función se refactoriza para leer ese campo.
+
+def _volumen_en_carpeta(path: Path) -> int | None:
+    """El volumen declarado por la carpeta, si lo hay («Vol. 4», «Tomo 2»).
+
+    Se miran los ancestros de más cercano a más lejano; la primera carpeta
+    con un volumen explícito manda. No inventa: sin carpeta o sin marcador,
+    devuelve None.
     """
+    for parte in reversed(path.parts[:-1]):
+        m = _VOLUMEN_EN_CARPETA.search(parte)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _volume_matches(hit: SeriesHit, volume: int) -> bool:
+    """El volumen de la serie coincide con el volumen de la carpeta.
+
+    Primero usa `Series.volume` (dato persistido); si no está, cae al título
+    («Batman Vol. 2»). Es solo un desempate entre candidatos ya encontrados.
+    """
+    if hit.volume is not None:
+        return hit.volume == volume
     title_lower = hit.title.lower()
     vol_patterns = [
         rf"\bvol\.?\s*{volume}\b",

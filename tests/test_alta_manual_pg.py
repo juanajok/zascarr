@@ -305,7 +305,11 @@ class TestUS03ConfirmarYEntregar:
     async def test_sin_carpeta_no_se_inventa_un_grupo_ni_se_redirige(self, entorno):
         r, _ = await crear("Flash", "american", anio="1987")
         t = r.text
-        assert "no hay ninguna vinculación pendiente" in visible(t) and "/vinculacion?" not in t
+        assert "/vinculacion?" not in t
+        # Sin carpeta de origen, el siguiente paso es traer sus archivos del disco (revisión UX de 2026-11-12).
+        async with entorno.banco.fabrica() as s:
+            sid = str((await s.execute(text("SELECT id FROM series"))).scalar_one())
+        assert f'href="/ui/pendientes/carpetas?serie={sid}"' in t and "Añadir números del disco" in visible(t)
 
     async def test_el_grupo_sale_del_token_firmado_no_de_lo_que_reenvia_el_navegador(self, entorno):
         carpeta = await sembrar_flash(entorno.banco, 2)
