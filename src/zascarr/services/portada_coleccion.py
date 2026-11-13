@@ -37,6 +37,10 @@ ALTO = 900
 CARPETA = "colecciones"
 MAXIMO = 4
 VERSION = 1
+#: Límites defensivos al componer: un JPEG de portada real mide pocos cientos de KB y
+#: 600×900; no se decodifica nada mayor ni se sigue un symlink dentro de `covers/`.
+MAX_BYTES = MAX_BYTES_PORTADA_PREVIA
+MAX_PIXELES = 40_000_000
 #: Fondo neutro de las celdas vacías del mosaico (no es una imagen de nadie).
 FONDO = (232, 226, 214)
 
@@ -76,28 +80,44 @@ def ruta_sidecar(collection_id: UUID | str) -> Path:
     return _covers() / CARPETA / f"{collection_id}.json"
 
 
+def _ruta_de_cache_valida(covers: Path, ruta: Path) -> bool:
+    try:
+        if ruta.is_symlink() or not ruta.is_file():
+            return False
+        raiz = covers.resolve()
+        return ruta.resolve().is_relative_to(raiz)
+    except OSError:
+        return False
+
+
 def portada_cacheada(covers: Path, series_id: UUID | str) -> Path | None:
-    """Primera portada de serie ya cacheada, en el orden v3 → externa → legado."""
+    """Primera portada de serie ya cacheada, en el orden v3 → externa → legado.
+
+    No sigue symlinks ni sale de `covers/`; una ruta así no cuenta como portada.
+    """
     for ruta in (
         covers / CACHE_VERSION / f"{series_id}.jpg",
         covers / CARPETA_EXTERNA / f"{series_id}.jpg",
         covers / f"{series_id}.jpg",
     ):
-        if ruta.is_file():
+        if _ruta_de_cache_valida(covers, ruta):
             return ruta
     return None
 
 
 def _leer_jpeg(path: Path) -> bytes | None:
     try:
-        datos = path.read_bytes()
-        if len(datos) > MAX_BYTES_PORTADA_PREVIA:
+        with path.open("rb") as fh:
+            datos = fh.read(MAX_BYTES + 1)
+        if len(datos) > MAX_BYTES:
             return None
         with Image.open(io.BytesIO(datos)) as img:
             if img.format != "JPEG":
                 return None
+            if img.width <= 0 or img.height <= 0 or img.width * img.height > MAX_PIXELES:
+                return None
         return datos
-    except (OSError, ValueError):
+    except (OSError, ValueError, Image.DecompressionBombError):
         return None
 
 
@@ -111,10 +131,13 @@ def componer_mosaico(rutas: list[Path]) -> bytes:
     imagenes: list[Image.Image] = []
     for ruta in rutas[:MAXIMO]:
         try:
-            with Image.open(ruta) as img:
+            datos = _leer_jpeg(ruta)
+            if datos is None:
+                continue
+            with Image.open(io.BytesIO(datos)) as img:
                 img.load()
                 imagenes.append(img.convert("RGB").copy())
-        except (OSError, ValueError):
+        except (OSError, ValueError, Image.DecompressionBombError):
             continue
     if not imagenes:
         raise ValueError("sin portadas")
@@ -249,9 +272,15 @@ async def elegir_portada(db: AsyncSession, collection_id: UUID,
 
 
 async def borrar_cache(collection_id: UUID | str) -> None:
-    """Best-effort al borrar la colección; nunca falla el borrado."""
-    for ruta in (ruta_cache(collection_id), ruta_sidecar(collection_id)):
-        try:
-            await asyncio.to_thread(ruta.unlink, missing_ok=True)
-        except OSError:
-            logger.warning("portada_coleccion.borrar_cache_falló")
+    """Best-effort al borrar la colección; nunca falla el borrado.
+
+    Bajo el mismo lock que la composición: no se borra mientras otra petición
+    está escribiendo el mosaico (ni al revés).
+    """
+    lock = _LOCKS.setdefault(str(collection_id), asyncio.Lock())
+    async with lock:
+        for ruta in (ruta_cache(collection_id), ruta_sidecar(collection_id)):
+            try:
+                await asyncio.to_thread(ruta.unlink, missing_ok=True)
+            except OSError:
+                logger.warning("portada_coleccion.borrar_cache_falló")

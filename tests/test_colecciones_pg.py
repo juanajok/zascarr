@@ -276,3 +276,28 @@ async def test_portada_sin_covers_404_y_borrado_limpia_cache(db, tmp_path, monke
     assert (tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.jpg").exists()
     assert await borrar_coleccion(db, c.coleccion.id)
     assert not (tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.jpg").exists()
+
+
+async def test_migracion_0034_columna_y_fk_existen(db):
+    col = (await db.execute(text(
+        "SELECT is_nullable FROM information_schema.columns "
+        "WHERE table_name='collections' AND column_name='cover_series_id'"))).scalar()
+    assert col == "YES"
+    fk = (await db.execute(text(
+        "SELECT confdeltype FROM pg_constraint "
+        "WHERE conname='fk_collections_cover_series_id'"))).scalar()
+    assert fk in ("n", b"n")      # ON DELETE SET NULL
+
+
+async def test_override_invalido_conserva_la_eleccion(db, tmp_path, monkeypatch):
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Conserva", description="", auto_search="heredar")
+    s = await serie(db, "Uno", collection=c.coleccion)
+    _jpeg_serie(tmp_path, s.id)
+    assert (await pc.elegir_portada(db, c.coleccion.id, s.id)).ok
+    otra = await serie(db, "Fuera")
+    assert not (await pc.elegir_portada(db, c.coleccion.id, otra.id)).ok
+    await db.flush()
+    assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id
+    assert not (await pc.elegir_portada(db, c.coleccion.id, uuid4())).ok
+    assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id

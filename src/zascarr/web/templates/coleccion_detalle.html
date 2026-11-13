@@ -6,10 +6,10 @@
 {{ ui.aviso("warn", "La colección ya no existe.") }}
 {% else %}
 <div class="coleccion-cabecera">
-  <div class="coleccion-portada">{{ ui.portada(coleccion.name, coleccion.id, "/ui/colecciones/" ~ coleccion.id ~ "/portada", clase="portada-coleccion") }}</div>
+  <div class="coleccion-portada">{{ ui.portada(coleccion.name, coleccion.id, coleccion.portada_url if coleccion.tiene_portada else none, clase="portada-coleccion") }}</div>
   <div>
     <h1>{{ coleccion.name }}</h1>
-{% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
+{% if aviso %}{{ ui.aviso("ok", aviso, foco=true) }}{% endif %}
 {% if errores %}
 {% for campo, mensaje in errores.items() %}{{ ui.aviso("warn", mensaje, foco=loop.first) }}{% endfor %}
 {% endif %}
@@ -19,7 +19,11 @@
   <summary>Elegir portada</summary>
   <p class="caption">La portada automática se compone con las portadas ya guardadas de tus series. También puedes elegir una serie miembro.</p>
   {% if coleccion.cover_series_id and not coleccion.cover_series_valida %}
-  {{ ui.aviso("warn", "La serie elegida ya no pertenece a esta colección. Se usa la automática hasta que elijas otra.") }}
+  {% if coleccion.cover_series_title %}
+  {{ ui.aviso("warn", "La serie elegida todavía no tiene una portada guardada. Se usa la automática hasta que la tenga; tu elección no se ha borrado.") }}
+  {% else %}
+  {{ ui.aviso("warn", "La serie elegida ya no pertenece a esta colección. Se usa la automática hasta que elijas otra; tu elección no se ha borrado.") }}
+  {% endif %}
   {% endif %}
   <form method="post" action="/ui/colecciones/{{ coleccion.id }}/portada">
     <fieldset>
