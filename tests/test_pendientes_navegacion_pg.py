@@ -387,7 +387,7 @@ class TestPaginaPosteriorVaciada:
 
 
 class TestEnlaceACarpetas:
-    """Bloqueante 2: el criterio 5 pide «Verlos por carpeta (N)» y N no existía. N = número de CARPETAS ÚTILES,
+    """Bloqueante 2: el criterio 5 pide «Revisar por carpeta (N)» y N no existía. N = número de CARPETAS ÚTILES,
     con la misma definición que la propia pantalla de carpetas: los grupos sin contexto son sueltos y no cuentan.
     El recuento agrupa todos los pendientes en memoria (~100 ms con 1.322, medido) y por eso NO bloquea la lista:
     se pide al cargarse."""
@@ -400,9 +400,11 @@ class TestEnlaceACarpetas:
     async def test_la_lista_no_espera_al_recuento_y_el_enlace_ya_funciona_sin_el(self, entorno):
         await sembrar(entorno, 3)
         t = (await pedir()).t
-        m = re.search(r'<a class="[^"]*pend-carpetas[^"]*"([^>]*)>\s*Verlos por carpeta\s*</a>', t)
+        m = re.search(r'<a class="[^"]*pend-carpetas[^"]*"([^>]*)>\s*Revisar por carpeta\s*</a>', t)
         assert m, "falta el enlace a carpetas"
         assert 'href="/ui/pendientes/carpetas"' in m.group(1)
+        assert 'class="btn primary pend-carpetas"' in t
+        assert "Empieza por carpeta: resuelves varios archivos con una sola decisión." in t
         assert 'hx-get="/ui/pendientes/carpetas/recuento"' in m.group(1) and 'hx-trigger="load"' in m.group(1)
         assert "carpetas)" not in html.unescape(t)               # la lista no lo calcula
 
@@ -411,14 +413,14 @@ class TestEnlaceACarpetas:
             await archivos(entorno, f"{carpeta.split('/')[1]} 01.cbz", f"{carpeta.split('/')[1]} 02.cbz",
                            carpeta=carpeta, en_disco=False)
         estado, texto = await self._fragmento()
-        assert estado == 200 and texto == "Verlos por carpeta (3 carpetas)"
+        assert estado == 200 and texto == "Revisar por carpeta (3 carpetas)"
         from zascarr.services.revision_carpetas import RevisionCarpetas
         async with entorno.banco.fabrica() as s:
             assert (await RevisionCarpetas(s).carpetas(limite=1)).totales.carpetas_utiles == 3
 
     async def test_una_sola_carpeta_va_en_singular(self, entorno):
         await sembrar(entorno, 3)
-        assert await self._fragmento() == (200, "Verlos por carpeta (1 carpeta)")
+        assert await self._fragmento() == (200, "Revisar por carpeta (1 carpeta)")
 
     async def test_sin_pendientes_no_hay_enlace_ni_fragmento(self, entorno):
         assert "pend-carpetas" not in (await pedir()).t

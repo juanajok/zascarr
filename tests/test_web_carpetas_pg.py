@@ -386,7 +386,7 @@ class TestU13aCarpetasUtilesYSueltos:
             r = await c.get("/ui/pendientes/carpetas/recuento")
         texto = " ".join(htmllib.unescape(re.sub(r"<[^>]+>", " ", r.text)).split())
         assert r.status_code == 200
-        assert texto == "Verlos por carpeta (1 carpeta)"
+        assert texto == "Revisar por carpeta (1 carpeta)"
 
     async def test_una_pagina_que_ya_no_existe_tiene_salida(self, banco):
         await banco.sembrar(*(archivo(f"Comics/G{i}/Cosa 01.cbz") for i in range(5)))
