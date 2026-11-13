@@ -1,6 +1,7 @@
 """#720: vincular en su sitio no mueve, no renombra y exige que el Issue ya exista."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -14,7 +15,11 @@ from zascarr.models import ComicTradition, File, FileFormat, Issue, IssueFormat,
 from zascarr.services import vinculacion_en_sitio
 from zascarr.services.vinculacion_en_sitio import vincular_en_sitio
 
-pytestmark = pytest.mark.asyncio
+URL = os.environ.get("TEST_DATABASE_URL")
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Postgres real)"),
+]
 
 
 @pytest.fixture
