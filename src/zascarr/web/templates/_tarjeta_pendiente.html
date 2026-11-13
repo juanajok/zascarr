@@ -6,12 +6,13 @@
       {% if aviso %}{{ ui.aviso(aviso.tipo, aviso.texto) }}{% endif %}
       <div class="filename" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
       <div class="detected">Detectado: {{ c.detected }}</div>
-      {#- U12: la portada va DEBAJO del nombre. Sin extractor (CBR, PDF…) no se pinta nada: ni `<img>`, ni petición.
-          Con extractor la disponibilidad es desconocida: si falla, la imagen mide 0 px (sin `aspect-ratio`) y no
-          deja hueco; no hace falta ningún manejador de error. -#}
-      {% if c.con_portada %}
-      <img class="cover" src="/ui/pendientes/{{ c.file.id }}/portada" alt="" loading="lazy" decoding="async">
-      {% endif %}
+      {#- #689 deuda 6 (el PO revierte U12): la portada usa `ui.portada`, como en la Biblioteca, DEBAJO del nombre.
+          El marcador va siempre (ocupa 2:3 y las tarjetas de una fila se alinean); la `<img>` solo se pide cuando
+          el servidor sabe que la extensión tiene extractor, así que una ausencia conocida no lanza un 404. Sin
+          ningún manejador de error: si la portada no llega, se ve el marcador. -#}
+      {{ ui.portada(c.suggestion.title if c.suggestion else c.detected, c.file.id,
+                    ("/ui/pendientes/" ~ c.file.id ~ "/portada") if c.con_portada else none,
+                    clase="portada-pendiente", carga="lazy") }}
       {% if c.motivo %}
       <div class="detected motivo">{{ c.motivo }}</div>
       {% endif %}
