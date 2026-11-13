@@ -102,6 +102,16 @@ class Settings(BaseSettings):
     fandom_marvel_enabled: bool = Field(default=False)
     fandom_marvel_rate_limit: float = 1.5
 
+    # ── Guías y órdenes de lectura (SCR3) ───────────────────────────
+    # Comic Book Reading Orders y Continuity Guide: HTML público con `sitemap.xml`, leído
+    # solo para referencias fácticas (serie, número, orden), nunca su prosa. Apagadas por
+    # defecto (ADR 0013); ritmo conservador propio (2,5 s y 3,5 s) porque son sitios
+    # editoriales pequeños. Lo que se cachea es la guía/sitemap en `http_cache` (SCR1).
+    reading_orders_enabled: bool = Field(default=False)
+    reading_orders_rate_limit: float = 2.5
+    continuity_guide_enabled: bool = Field(default=False)
+    continuity_guide_rate_limit: float = 3.5
+
     # ── GCD / Grand Comics Database (descubrimiento, C0) ─────────────
     # API pública real en /api/ (verificado en vivo 2026-09-25, ver
     # docs/adr/0002-enricher-scope.md), sin clave, anónima. Su propia
