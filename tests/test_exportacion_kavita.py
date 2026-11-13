@@ -91,3 +91,25 @@ def test_extension_no_admitida_se_omite_y_no_se_inventa():
     ], Path("/export"), folder="Grapas")
     assert [Path(a.destino_relativo).suffix for a in plan.archivos] == [".cbz"]
     assert any("extensión no admitida" in x for x in plan.omitidos)
+
+
+def test_copiar_deshace_un_hardlink_previo(tmp_path):
+    """Regresión QA: «Copiar» debe aislar aunque el destino ya sea un hardlink."""
+    from zascarr.services.exportacion_kavita import _materializar
+
+    source = tmp_path / "biblioteca" / "Flash 001.cbz"
+    source.parent.mkdir()
+    source.write_bytes(b"contenido")
+    root = tmp_path / "export"
+    root.mkdir()
+    plan = plan_export([fuente(source_path=str(source), size_bytes=source.stat().st_size)],
+                       root, folder="Grapas")
+    _materializar(plan, root)
+    destino = root / plan.archivos[0].destino_relativo
+    assert destino.stat().st_ino == source.stat().st_ino
+    relativo = plan.archivos[0].destino_relativo
+    _materializar(
+        plan, root, copiar=True,
+        previos={relativo: {"sha256": plan.archivos[0].sha256, "mode": "hardlink"}})
+    assert destino.stat().st_ino != source.stat().st_ino
+    assert destino.read_bytes() == source.read_bytes()
