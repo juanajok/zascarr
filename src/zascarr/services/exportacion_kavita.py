@@ -182,6 +182,26 @@ def _leer_manifiesto(plan: PlanExportacion, root: Path) -> dict[str, dict]:
     }
 
 
+def _parchear_copia(temp: Path, datos: tuple[dict, set[str], dict]) -> tuple[bool, str]:
+    """Parchea un CBZ temporal con el plan de B6. Nunca toca el original."""
+    deseados, bloqueados, propio = datos
+    try:
+        xml = leer_comicinfo(temp)
+        campos = plan_comicinfo(
+            leer_campos(parsear(xml) if xml else None), deseados, propio)
+        campos = [
+            CampoPlan(c.tag, Accion.BLOQUEADO, c.actual, c.nuevo)
+            if c.accion is Accion.CAMBIA and c.tag in bloqueados else c
+            for c in campos
+        ]
+        if not hay_cambios(campos):
+            return False, "sin_cambios"
+        reescribir_con_xml(temp, fusionar_xml(xml, campos))
+        return True, "aplicado"
+    except ComicInfoInvalidoError:
+        return False, "invalido"
+
+
 def _materializar(
     plan: PlanExportacion, root: Path, *, copiar: bool = False,
     previos: dict[str, dict] | None = None,
@@ -250,6 +270,39 @@ def _materializar(
                         "patch_status": previo.get("patch_status", "sin_parche"),
                     })
                     continue
+                if patch_comicinfo and es_cbz and not previo.get("patched"):
+                    datos = datos_parche.get(accion.file_id)
+                    if datos is not None:
+                        fd, temp = tempfile.mkstemp(
+                            prefix=f".{destino.name}.", dir=str(destino.parent))
+                        os.close(fd)
+                        try:
+                            shutil.copy2(accion.source_path, temp)
+                            patched, patch_status = _parchear_copia(Path(temp), datos)
+                            sha_parcheado = _sha256(Path(temp))
+                            with open(temp, "rb+") as f:
+                                os.fsync(f.fileno())
+                            os.replace(temp, destino)
+                            _fsync_directorio(destino.parent)
+                            modos.add("copy")
+                            copiados += accion.size_bytes
+                            entradas.append({
+                                "dest": relativo, "sha256": sha_parcheado,
+                                "issue_id": accion.issue_id, "file_id": accion.file_id,
+                                "mode": "copy", "status": "ok", "patched": patched,
+                                "patch_status": patch_status,
+                            })
+                            continue
+                        finally:
+                            Path(temp).unlink(missing_ok=True)
+                if patch_comicinfo and not es_cbz and previo.get("patch_status") != "no_escribible":
+                    entradas.append({
+                        "dest": relativo, "sha256": sha_destino,
+                        "issue_id": accion.issue_id, "file_id": accion.file_id,
+                        "mode": modo_previo or "skip", "status": "skip",
+                        "patched": False, "patch_status": "no_escribible",
+                    })
+                    continue
                 # «Copiar» también deshace un hardlink previo: si el destino
                 # comparte inodo con el origen, se sustituye por una copia
                 # privada. Solo con contenido idéntico (si hubiera deriva, ya
@@ -315,33 +368,14 @@ def _materializar(
                 os.close(fd)
                 try:
                     shutil.copy2(accion.source_path, temp)
+                    patched = False
                     if patch_comicinfo:
                         if es_cbz:
                             datos = datos_parche.get(accion.file_id)
                             if datos is None:
                                 patch_status = "sin_datos"
                             else:
-                                deseados, bloqueados, propio = datos
-                                try:
-                                    xml = leer_comicinfo(Path(temp))
-                                    campos = plan_comicinfo(
-                                        leer_campos(parsear(xml) if xml else None),
-                                        deseados, propio)
-                                    campos = [
-                                        CampoPlan(c.tag, Accion.BLOQUEADO, c.actual, c.nuevo)
-                                        if c.accion is Accion.CAMBIA and c.tag in bloqueados
-                                        else c
-                                        for c in campos
-                                    ]
-                                    if hay_cambios(campos):
-                                        nuevo = fusionar_xml(xml, campos)
-                                        reescribir_con_xml(Path(temp), nuevo)
-                                        patched = True
-                                        patch_status = "aplicado"
-                                    else:
-                                        patch_status = "sin_cambios"
-                                except ComicInfoInvalidoError:
-                                    patch_status = "invalido"
+                                patched, patch_status = _parchear_copia(Path(temp), datos)
                         else:
                             patch_status = "no_escribible"
                     sha_parcheado = _sha256(Path(temp))

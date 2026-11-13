@@ -262,3 +262,48 @@ async def test_reexportar_conserva_modo_copy_en_skip(db, tmp_path, monkeypatch):
     import json
     manifiesto = json.loads(next((tmp_path / "export").rglob("_zascarr_manifest.json")).read_text())
     assert manifiesto["files"][0]["mode"] == "copy" and manifiesto["files"][0]["status"] == "skip"
+
+
+async def test_hardlink_previo_se_convierte_en_copia_parcheada(db, tmp_path, monkeypatch):
+    import json
+    ajustes(tmp_path, monkeypatch)
+    coleccion, _ = await sembrar(db, tmp_path)
+    origen = next((tmp_path / "lib").glob("*.cbz"))
+    antes = (hashlib.sha256(origen.read_bytes()).hexdigest(), origen.stat().st_mtime_ns)
+    await svc.exportar_coleccion(db, coleccion.id)          # fase 1: hardlink
+    destino = next((tmp_path / "export").rglob("*.cbz"))
+    assert destino.stat().st_ino == origen.stat().st_ino
+    resumen = await svc.exportar_coleccion(db, coleccion.id, patch_comicinfo=True)
+    assert resumen.materializados == 1 and resumen.parcheados == 1
+    assert destino.stat().st_ino != origen.stat().st_ino
+    assert (hashlib.sha256(origen.read_bytes()).hexdigest(), origen.stat().st_mtime_ns) == antes
+    manifiesto = json.loads(next((tmp_path / "export").rglob("_zascarr_manifest.json")).read_text())
+    assert manifiesto["files"][0]["patched"] is True
+
+
+async def test_deriva_impide_convertir_hardlink_en_parcheado(db, tmp_path, monkeypatch):
+    ajustes(tmp_path, monkeypatch)
+    coleccion, _ = await sembrar(db, tmp_path)
+    await svc.exportar_coleccion(db, coleccion.id)
+    destino = next((tmp_path / "export").rglob("*.cbz"))
+    destino.write_bytes(b"editado")
+    resumen = await svc.exportar_coleccion(db, coleccion.id, patch_comicinfo=True)
+    assert resumen.deriva == 1 and destino.read_bytes() == b"editado"
+
+
+async def test_cbr_existente_con_patch_queda_no_escribible(db, tmp_path, monkeypatch):
+    ajustes(tmp_path, monkeypatch)
+    coleccion, serie = await sembrar(db, tmp_path)
+    cbr = tmp_path / "lib" / "Flash 2.cbr"
+    cbr.write_bytes(b"rar")
+    from zascarr.models import Issue
+    issue = Issue(id=uuid4(), series_id=serie.id, issue_number="2", title="Dos")
+    db.add(issue)
+    await db.flush()
+    db.add(File(id=uuid4(), issue_id=issue.id, file_path=str(cbr), file_name=cbr.name,
+                file_format=FileFormat.CBR, file_size_bytes=3))
+    await db.flush()
+    await svc.exportar_coleccion(db, coleccion.id)           # existente sin parche
+    resumen = await svc.exportar_coleccion(db, coleccion.id, patch_comicinfo=True)
+    cbr_export = [a for a in resumen.archivos if a.get("dest", "").endswith(".cbr")]
+    assert cbr_export and cbr_export[0]["patch_status"] == "no_escribible"
