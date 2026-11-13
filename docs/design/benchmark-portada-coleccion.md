@@ -18,7 +18,7 @@ propia y sin hotlinking.
 | Hecho comprobado | Evidencia |
 |---|---|
 | `Collection` solo tiene `id`, `name`, `description`, `auto_search`, timestamps y la relación `series`. **No hay `cover`, `cover_url` ni `metadata`**. | `src/zascarr/models/__init__.py:475-495` |
-| La migración que creó `collections` no añadió imagen; el head real es **0033** y la siguiente libre es **0036** (0034 y 0035 se ocuparon después). | `alembic/versions/20261112_0031_colecciones.py:26-49`; `alembic/versions/` (último: `20261112_0033_apartado_operaciones.py`) |
+| La migración que creó `collections` no añadió imagen; el head real es **0033** y la siguiente libre es **0035** (0034 se ocupó después). | `alembic/versions/20261112_0031_colecciones.py:26-49`; `alembic/versions/` (último: `20261112_0033_apartado_operaciones.py`) |
 | El DTO de listado no lleva imagen y la lista pinta solo nombre, nº de series, política y descripción en un `<li>` de texto. | `src/zascarr/services/colecciones.py:22-28,114-123`; `src/zascarr/web/templates/colecciones.html:24-33` |
 | El detalle pinta el nombre y la lista de series; tampoco hay imagen ni panel de portada. | `src/zascarr/web/templates/coleccion_detalle.html:8,81-90` |
 | No hay endpoint `/ui/colecciones/.../portada` ni clase/plantilla de portada de colección. | `src/zascarr/web/colecciones.py` (rutas en `:49-185`); grep de `portada`/`cover` en `web/templates/coleccion*.html` |
@@ -209,7 +209,7 @@ panel «Elegir portada» de serie (BL-INF6) sin abrir un endpoint de subida. **N
 porque exige migración y una pantalla nueva, y el collage ya cubre el caso por defecto.
 
 **Datos.** `collections.cover_series_id UUID NULL REFERENCES series(id) ON DELETE SET NULL` (migración
-**0036**, aditiva y reversible; el head actual es 0034). Alternativa equivalente si se prefiere
+**0035**, aditiva y reversible; el head actual es 0034). Alternativa equivalente si se prefiere
 uniformidad con serie: `collections.metadata JSONB` con `{"portada": {"tipo":"serie","series_id":…,"fecha":…}}`;
 se recomienda `cover_series_id` por ser tipado y barato, y porque no hay más metadata de colección.
 Sin `UNIQUE`: una colección solo tiene un `cover_series_id`.
@@ -250,7 +250,7 @@ miembro (A + alternativa); **C** subida local; **D** URL/proveedor remoto/hotlin
 | Coste Pi (20) | **5** — cero | **4** — ≤4 lecturas + 1 composición perezosa | **4** — igual + 1 lectura de serie | **2** — validar/decodificar/escribir | **1** — red y proveedor |
 | Fallback/robustez (15) | **2** — solo marcador | **4** — marcador y caché; sin elegida huérfana | **5** — override → collage → marcador | **4** — archivo → collage, más errores de subida | **2** — depende del proveedor |
 | UX/expresividad (20) | **1** — ninguna | **4** — identidad visual, sin control | **5** — control explícito | **5** — arte propio | **4** — arte del proveedor |
-| Simplicidad/riesgo (15) | **5** — nada | **4** — caché/huella, sin migración | **2** — migración 0036 + panel | **1** — endpoint mutante, validación, borrado | **1** — red/SSRF |
+| Simplicidad/riesgo (15) | **5** — nada | **4** — caché/huella, sin migración | **2** — migración 0035 + panel | **1** — endpoint mutante, validación, borrado | **1** — red/SSRF |
 | Coherencia con el repo (10) | **3** — hueco visual | **5** — local-first, `.portada`, sin migración | **4** — patrón BL-INF6; migración pequeña | **2** — no hay subida de serie | **1** — hotlink prohibido |
 | **Total ponderado /5** | **3,55** | **4,30** | **4,25** | **3,35** | **1,75** |
 
@@ -285,14 +285,14 @@ revisa solo si el PO pide arte no-miembro; D se descarta.
    estar” si las series no se han visitado.
 3. **Override como referencia, no como bytes.** Komga guarda bytes y Plex/Kavita suben arte; en
    ZascArr elegir `cover_series_id` sigue la portada de esa serie cuando cambia (sin re-subir ni
-   duplicar), y el fallback es automático. Coste: migración 0036; riesgo: una serie elegida que
+   duplicar), y el fallback es automático. Coste: migración 0035; riesgo: una serie elegida que
    abandona la colección exige fallback/aviso.
 
 ## 11. Contradicciones y riesgos con el repo
 
 | # | Hecho / riesgo | Evidencia y consecuencia |
 |---|---|---|
-| 1 | `Collection` no tiene campo de imagen ni `metadata`; la portada principal no puede persistirse | `models:475-495`; la opción A **no necesita** persistencia; la B necesita migración 0036 |
+| 1 | `Collection` no tiene campo de imagen ni `metadata`; la portada principal no puede persistirse | `models:475-495`; la opción A **no necesita** persistencia; la B necesita migración 0035 |
 | 2 | La lista usa `<li class="arco-fila">` de texto, no una tarjeta con `.portada`; añadir imagen cambia maquetación | `colecciones.html:25-33`; hay que diseñar la fila/card (móvil y escritorio) sin romper el presupuesto de texto |
 | 3 | El detalle tiene ya una sección de exportación (#B20/Kavita) y no tiene hueco de cabecera para portada | `coleccion_detalle.html:8,31-81`; la portada va junto al `h1`, sin desplazar la acción principal |
 | 4 | La portada de serie solo se genera al pedirla; una colección que dispare su cascada multiplicaría extracciones | `series.py:1242-1340`; A usa solo caché existente, no la cascada |
