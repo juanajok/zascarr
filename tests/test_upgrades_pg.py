@@ -165,3 +165,40 @@ async def test_reclamar_propuesta_impide_doble_descarga():
                 assert propuesta.status == "descargada"
         finally:
             await motor.dispose()
+
+
+@pytest.mark.asyncio
+async def test_conciliar_propuesta_cuando_importa_el_archivo():
+    from zascarr.models import FileFormat
+    from zascarr.services.upgrades import historial_mejoras, reconciliar_mejora_importada
+    async with bd_efimera(TEST_DATABASE_URL) as url:
+        alembic(url, "upgrade", "head")
+        motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
+        fab = async_sessionmaker(motor, expire_on_commit=False)
+        try:
+            async with fab() as s:
+                serie = Series(id=uuid4(), title="Batman")
+                s.add(serie)
+                await s.flush()
+                issue = Issue(id=uuid4(), series_id=serie.id, issue_number="1", volume=1)
+                s.add(issue)
+                await s.flush()
+                file_id = uuid4()
+                s.add(File(id=file_id, issue_id=issue.id, file_path="/l/x.cbz",
+                           file_name="x.cbz", file_format=FileFormat.CBZ,
+                           is_missing=False))
+                propuesta = UpgradeProposal(
+                    id=uuid4(), issue_id=issue.id, current_tier=1,
+                    candidate_title="Batman 001 (Digital)", candidate_indexer="idx",
+                    candidate_url="magnet:?xt=1", candidate_size_bytes=1,
+                    candidate_seeders=1, candidate_tier=3, status="descargada")
+                s.add(propuesta)
+                await s.commit()
+                assert await reconciliar_mejora_importada(s, issue.id, file_id)
+                await s.commit()
+                await s.refresh(propuesta)
+                assert propuesta.status == "importada" and propuesta.file_id == file_id
+                historial = await historial_mejoras(s)
+                assert historial and historial[0].estado_label == "Importada en tu biblioteca"
+        finally:
+            await motor.dispose()
