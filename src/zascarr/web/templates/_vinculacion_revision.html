@@ -152,7 +152,12 @@
       {% if otros_motivos %}<p class="caption vinc-motivos">Otros motivos: {{ otros_motivos | join(", ") }}.</p>{% endif %}
       {% endif %}
       {% if a.repetido_con %}
-      <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
+      <div class="vinc-conflicto">
+        <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
+        {% if a.marcado %}
+        <button type="submit" name="quitar" value="{{ a.id }}" class="btn ghost sm">Quitar este del lote</button>
+        {% endif %}
+      </div>
       {% endif %}
       {% if a.issue_existente %}
       <p class="caption vinc-existente">La serie ya tiene esta publicación sin archivos: se reutilizaría, no se crea una nueva.</p>

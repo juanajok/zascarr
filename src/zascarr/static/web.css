@@ -1562,6 +1562,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .asistente-form label { font-size: var(--text-secundario); font-weight: 700; }
 .asistente-form input[type="text"], .asistente-form input[type="search"] { width: 100%; max-width: 32rem; }
 .carpeta-accion { margin: 0 0 10px; }
+.carpeta-accion-principal { border: var(--border-control) solid var(--ink); font-weight: 700; }
+.carpeta-avanzado { margin: 0 0 10px; }
+.carpeta-avanzado summary { cursor: pointer; }
 
 /* Revisión de selección y números (#119). La revisión pendiente se avisa y el lote anterior deja de usarse. */
 .vinculacion-lista { list-style: none; padding: 0; margin: 0 0 var(--gutter); display: grid; gap: var(--space-3); }
