@@ -111,11 +111,21 @@ async def test_reexportar_es_idempotente_y_no_rehace(db, tmp_path, monkeypatch):
 async def test_deriva_no_pisa_el_destino_editado(db, tmp_path, monkeypatch):
     ajustes(tmp_path, monkeypatch)
     coleccion, _ = await sembrar(db, tmp_path)
-    await svc.exportar_coleccion(db, coleccion.id)
+    await svc.exportar_coleccion(db, coleccion.id, copiar=True)
     destino = next((tmp_path / "export").rglob("*.cbz"))
     destino.write_bytes(b"editado a mano")
     resumen = await svc.exportar_coleccion(db, coleccion.id)
     assert resumen.deriva == 1 and destino.read_bytes() == b"editado a mano"
+
+
+async def test_copiar_aislado_fuerza_copy_y_no_es_hardlink(db, tmp_path, monkeypatch):
+    ajustes(tmp_path, monkeypatch)
+    coleccion, _ = await sembrar(db, tmp_path)
+    resumen = await svc.exportar_coleccion(db, coleccion.id, copiar=True)
+    assert resumen.materializados == 1 and resumen.modo == "copy"
+    destino = next((tmp_path / "export").rglob("*.cbz"))
+    original = next((tmp_path / "lib").glob("*.cbz"))
+    assert destino.stat().st_ino != original.stat().st_ino
 
 
 async def test_fallback_a_copia_si_exdev(db, tmp_path, monkeypatch):
@@ -123,8 +133,10 @@ async def test_fallback_a_copia_si_exdev(db, tmp_path, monkeypatch):
     coleccion, _ = await sembrar(db, tmp_path)
     original = os.link
 
-    def link_exdev(*a, **k):
-        raise OSError(errno.EXDEV, "cross-device")
+    def link_exdev(src, dest, *a, **k):
+        if str(tmp_path / "lib") in str(src):
+            raise OSError(errno.EXDEV, "cross-device")
+        return original(src, dest, *a, **k)
     monkeypatch.setattr(svc.os, "link", link_exdev)
     resumen = await svc.exportar_coleccion(db, coleccion.id)
     assert resumen.materializados == 1 and resumen.bytes_copiados > 0

@@ -19,6 +19,7 @@ router = APIRouter(prefix="/export", tags=["exportacion"])
 
 class ExportacionBody(BaseModel):
     patch_comicinfo: bool = False
+    copiar: bool = False
 
 
 @router.post("/collections/{collection_id}")
@@ -28,7 +29,8 @@ async def exportar(collection_id: UUID, body: ExportacionBody | None = None,
     peticion = body or ExportacionBody()
     try:
         resumen = await exportar_coleccion(
-            db, collection_id, patch_comicinfo=peticion.patch_comicinfo)
+            db, collection_id, patch_comicinfo=peticion.patch_comicinfo,
+            copiar=peticion.copiar)
     except ParcheComicInfoNoDisponibleError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ExportacionError as exc:
@@ -47,5 +49,6 @@ async def exportar(collection_id: UUID, body: ExportacionBody | None = None,
             "bytes_copiados": resumen.bytes_copiados,
             "saltados": resumen.saltados,
             "modo": resumen.modo,
+            "carpetas_colisionadas": resumen.carpetas_colisionadas,
         },
     }

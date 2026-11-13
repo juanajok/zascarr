@@ -121,13 +121,21 @@ async def borrar(coleccion_id: UUID, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{coleccion_id}/exportar")
 async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = Form("0"),
+                   copiar: str = Form("0"), confirmo: str = Form("0"),
                    db: AsyncSession = Depends(get_db)):
     c = await detalle_coleccion(db, coleccion_id)
     if c is None:
         return _redirigir("/ui/colecciones")
+    if confirmo != "1":
+        return _respuesta(request, "coleccion_detalle.html", {
+            "coleccion": c, "politicas": POLITICAS,
+            "series": await series_sin_coleccion(db),
+            "errores": {"general": "Marca la confirmación antes de exportar."}, "aviso": "",
+        })
     try:
         resumen = await exportar_coleccion(
-            db, coleccion_id, patch_comicinfo=patch_comicinfo == "1")
+            db, coleccion_id, patch_comicinfo=patch_comicinfo == "1",
+            copiar=copiar == "1")
         await db.commit()
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,

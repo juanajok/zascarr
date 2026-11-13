@@ -32,18 +32,20 @@
   <p class="caption">Con enlace, editar la exportación con otra herramienta puede afectar al archivo original; si quieres aislamiento total, exporta a otro disco (se copiará).</p>
   <form method="post" action="/ui/colecciones/{{ coleccion.id }}/exportar">
     <input type="hidden" name="patch_comicinfo" value="0">
-    <button class="btn primary" type="submit">Exportar esta colección</button>
+    <label><input type="checkbox" name="copiar" value="1"> Copiar en vez de enlazar (aislado; ocupa espacio)</label>
+    <label><input type="checkbox" name="confirmo" value="1" required> Entiendo que la biblioteca no se mueve ni se modifica.</label>
+    <button class="btn" type="submit">Exportar esta colección</button>
   </form>
 </details>
 {% if exportacion %}
-<div class="tarjeta" role="status">
+<div class="tarjeta" role="status" tabindex="-1" autofocus>
   <p><strong>Exportación terminada.</strong> {{ exportacion.materializados }} archivos preparados en
     <code>{{ exportacion.destino }}</code>.</p>
-  <p class="caption">Nuevos: {{ exportacion.materializados }} · ya estaban: {{ exportacion.saltados }} · omitidos: {{ exportacion.omitidos }} · colisiones: {{ exportacion.colisiones }} · deriva: {{ exportacion.deriva }} · errores: {{ exportacion.errores }} · copiados: {{ exportacion.bytes_copiados }} bytes · modo: {{ exportacion.modo }}.</p>
+  <p class="caption">Nuevos: {{ exportacion.materializados }} · ya estaban: {{ exportacion.saltados }} · omitidos: {{ exportacion.omitidos }} · colisiones: {{ exportacion.colisiones }} · deriva: {{ exportacion.deriva }} · errores: {{ exportacion.errores }} · copiados: {{ exportacion.bytes_copiados }} bytes · modo: {{ exportacion.modo }} · carpetas desambiguadas: {{ exportacion.carpetas_colisionadas }}.</p>
   {% if exportacion.errores or exportacion.deriva %}
   <p class="caption">La exportación terminó parcialmente: lo que se preparó está bien y lo demás se ha dejado como estaba. Vuelve a intentarlo cuando quieras.</p>
   {% endif %}
-  <p class="caption">Registro de la operación: <a href="/api/operaciones">operaciones</a> (run {{ exportacion.run_id }}).</p>
+  <p class="caption">La exportación queda registrada para auditoría.</p>
 </div>
 {% endif %}
 
