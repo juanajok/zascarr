@@ -103,3 +103,28 @@ def test_escanear_sin_prowlarr_explica_el_motivo_sin_json():
     assert r.status_code == 200
     assert "Prowlarr no está activo." in r.text
     assert "Búsqueda de mejoras terminada" not in r.text
+
+
+def test_guardar_lote_de_escaneo_valida_y_guarda():
+    c = _cliente()
+    guardar = AsyncMock()
+    try:
+        with patch("zascarr.web.ajustes.RuntimeSettingsService.save", guardar):
+            r = c.post("/ui/ajustes/guardar/calidad",
+                       data={"quality_profile": "equilibrado",
+                             "upgrade_scan_interval_minutes": "360",
+                             "upgrade_scan_batch": "10"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert guardar.await_args.args[0]["upgrade_scan_batch"] == 10
+    # Un valor fuera de la lista segura vuelve a 3, nunca a un número arbitrario.
+    guardar.reset_mock()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.ajustes.RuntimeSettingsService.save", guardar):
+            c.post("/ui/ajustes/guardar/calidad",
+                   data={"upgrade_scan_batch": "9999"})
+    finally:
+        _cerrar()
+    assert guardar.await_args.args[0]["upgrade_scan_batch"] == 3
