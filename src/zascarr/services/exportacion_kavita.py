@@ -223,6 +223,36 @@ def _materializar(
                         "mode": modo_previo or "skip", "status": "drift",
                     })
                     continue
+                # «Copiar» también deshace un hardlink previo: si el destino
+                # comparte inodo con el origen, se sustituye por una copia
+                # privada. Solo con contenido idéntico (si hubiera deriva, ya
+                # se habría salido arriba sin tocar nada).
+                if copiar:
+                    try:
+                        mismo_inodo = (destino.stat().st_ino
+                                       == Path(accion.source_path).stat().st_ino)
+                    except OSError:
+                        mismo_inodo = False
+                    if mismo_inodo or modo_previo == "hardlink":
+                        fd, temp = tempfile.mkstemp(
+                            prefix=f".{destino.name}.", dir=str(destino.parent))
+                        os.close(fd)
+                        try:
+                            shutil.copy2(accion.source_path, temp)
+                            with open(temp, "rb+") as f:
+                                os.fsync(f.fileno())
+                            os.replace(temp, destino)
+                            _fsync_directorio(destino.parent)
+                        finally:
+                            Path(temp).unlink(missing_ok=True)
+                        modos.add("copy")
+                        copiados += accion.size_bytes
+                        entradas.append({
+                            "dest": relativo, "sha256": sha_fuente,
+                            "issue_id": accion.issue_id, "file_id": accion.file_id,
+                            "mode": "copy", "status": "ok",
+                        })
+                        continue
                 modo_skip = modo_previo or "skip"
                 if modo_skip in {"hardlink", "copy"}:
                     modos.add(modo_skip)
