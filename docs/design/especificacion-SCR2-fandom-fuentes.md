@@ -401,3 +401,33 @@ separa de las guías externas de SCR3. La prioridad en el enricher (SCR2, últim
 | Versión | Fecha | Qué cambia |
 |---|---|---|
 | v0.1 | 2026-11-13 | Primera especificación contra el árbol de trabajo (`main` 17a5995e + cambios sin commitear). Cobertura por nivel, 20 criterios, 10 huecos, 10 riesgos y 10 decisiones (3 del estudio + 7 derivadas). No autoriza fusión. |
+
+
+---
+
+## Verificación en vivo de aceptación (2026-11-13, tras fusionar #734)
+
+Ejecutada con Postgres 15 real, app arrancada y solo **DC Database** encendida (Comic Vine apagada para
+probar el respaldo). Serie de prueba `Batman` (1940) con números `1` y `404`:
+
+| Capacidad | Resultado observado |
+|---|---|
+| Serie | `fandom_dc_slug = Batman Vol 1`, años 1940–2011, 715 números, portada CDN y descripción |
+| Número #1 | página `Batman Vol 1 1`, fecha de **venta** 1940-04-25, sinopsis y 9 créditos |
+| Número #404 | fecha de **venta** 1986-10-21 (portada 1987-02), sinopsis, portada y 7 créditos |
+| Arcos | 8 arcos de DC; «Batman: Year One» enlaza el 404 local con `reading_order = 1` |
+| Portada | `/ui/series/{id}/portada` → 200 JPEG 600×834, cacheada en `covers/externa/` (sin hotlink) |
+| Atribución | ficha de serie y de número con enlace al artículo y a CC-BY-SA 3.0 |
+
+Hallazgos corregidos en esta pasada (sin ellos la aceptación no se cumplía):
+
+1. **Búsqueda por título**: `Batman` trae fichas de personaje; se busca `«<título> Vol»` y se filtran
+   páginas que no son volúmenes (`_paginas_de_volumen`).
+2. **Arcos**: los números vienen en el parámetro `Issues` de `Storyline Template` como `{{c|X Vol N}}`;
+   se leen de ahí (`issues_de_valor_de_arc`), con la sección `Issues` y los enlaces como respaldos.
+3. **Portadas**: los CDN tras Cloudflare devuelven 403 sin `User-Agent` y `Referer`; la descarga con IP
+   fijada los manda ya (`utils/url_portada.py`).
+
+Límites que se mantienen: los arcos de Marvel usan otra plantilla no verificada en vivo; los anuales
+con convención de título distinta siguen cayendo en la caché negativa de 30 días; SCR1 (caché HTTP y
+`robots.txt`) no está incluida.
