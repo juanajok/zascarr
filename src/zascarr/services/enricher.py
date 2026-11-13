@@ -45,6 +45,14 @@ no declara género y no se inventa; GCD no tiene cliente aquí. Los
 `story_arc_credits` se piden y se documentan, pero NO se persisten: `StoryArc`
 no tiene una relación inequívoca serie↔arco en el modelo actual y AC-22 no pide
 crear una relación nueva.
+
+AC-23 (#697, D-2 ratificada el 2026-11-13): AniList pide además
+`tags { name rank }` en la MISMA petición y el enricher los aplica a
+`series_tags` en el espacio `etiqueta`, con `source='anilist'` y `weight=rank`
+real (0–100). Las etiquetas manuales en español se conservan y una fila
+`oculta` no resucita; no se traducen ni se crean alias (ETQ5). El backfill
+reutiliza la caché negativa H2 y el espaciado de AniList, sin toggles nuevos
+ni migración.
 """
 from __future__ import annotations
 
@@ -54,6 +62,7 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import exists, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -68,11 +77,14 @@ from zascarr.models import (
     IssueCreator,
     MetadataSource,
     Series,
+    Tag,
     issue_characters,
     series_genres,
+    series_tags,
 )
-from zascarr.services.anilist import AniListClient
+from zascarr.services.anilist import AniListClient, AniListTag
 from zascarr.services.comic_vine import ComicVineClient, CVCredit
+from zascarr.services.etiquetas import NAMESPACE, EtiquetaInvalida, validar_nombre
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 
@@ -141,6 +153,16 @@ def _nombres_limpios(valores: list[str], *, maximo: int) -> list[str]:
     return salida
 
 
+async def _tags_por_norm(db: AsyncSession, normalizados: tuple[str, ...]) -> dict[str, Tag]:
+    """Tags existentes del espacio `etiqueta` por `name_norm`."""
+    if not normalizados:
+        return {}
+    filas = await db.execute(
+        select(Tag).where(Tag.namespace == NAMESPACE, Tag.name_norm.in_(normalizados))
+    )
+    return {tag.name_norm: tag for tag in filas.scalars().all()}
+
+
 def puede_enlazarse_con_comic_vine(series: Series, comic_vine_activo: bool) -> bool:
     """¿Puede el enriquecedor enlazar esta serie con Comic Vine? Es LA condición de `_enrich_series_batch` (sin
     identidad externa elegida, `metadata_source` distinto de `manual`, tradición con Comic Vine como fuente y la fuente
@@ -182,6 +204,8 @@ class SeriesMatch:
     count_of_issues: int | None = None
     #: Géneros declarados por la fuente en la MISMA búsqueda (vacío si no los declara).
     genres: list[str] = field(default_factory=list)
+    #: ETQ4: tags de tema con su relevancia real (AniList); vacío en las demás fuentes.
+    tags: list[AniListTag] = field(default_factory=list)
 
 
 class EnrichmentService:
@@ -220,6 +244,7 @@ class EnrichmentService:
             )
             await self._enrich_issues_batch(cv_client, limit, report)
             await self._backfill_generos_anilist(anilist_client, limit, report)
+            await self._backfill_tags_anilist(anilist_client, limit, report)
             await self._backfill_personajes_cv(cv_client, limit, report)
         return report
 
@@ -257,6 +282,36 @@ class EnrichmentService:
             series.metadata_ = {**(series.metadata_ or {}), "etq3_generos_intentado": True}
             if detalle is not None:
                 await self._aplicar_generos(series, detalle.genres)
+            await self.db.flush()
+
+    async def _backfill_tags_anilist(self, client: AniListClient | None, limit: int,
+                                     report: EnrichmentReport) -> None:
+        """ETQ4: aplica los tags de AniList a series ya identificadas.
+
+        Acotado por `limit`, idempotente y solo para filas no manuales. La marca
+        `etq4_tags_intentado` evita repetir la petición cada ciclo aunque la
+        fuente no devuelva tags; no hay migración.
+        """
+        if client is None:
+            return
+        filas = (await self.db.execute(
+            select(Series)
+            .where(Series.anilist_id.is_not(None))
+            .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
+            .where(~Series.locked_fields.contains(["tags"]))
+            .where(~Series.metadata_.has_key("etq4_tags_intentado"))
+            .limit(limit)
+        )).scalars().all()
+        for series in filas:
+            try:
+                detalle = await client.get_manga(int(series.anilist_id))
+            except Exception:
+                logger.exception("enricher.tags_backfill_failed", series=series.title)
+                report.errors.append(f"serie {series.title}: error pidiendo etiquetas")
+                continue
+            series.metadata_ = {**(series.metadata_ or {}), "etq4_tags_intentado": True}
+            if detalle is not None:
+                await self._aplicar_tags(series, detalle.tags)
             await self.db.flush()
 
     async def _backfill_personajes_cv(self, client: ComicVineClient | None, limit: int,
@@ -392,6 +447,7 @@ class EnrichmentService:
                 series.enrichment_attempted_at = datetime.now(UTC)
                 self._apply_series_match(series, match, id_field, source_value)
             await self._aplicar_generos(series, match.genres)
+            await self._aplicar_tags(series, match.tags)
             await self.db.flush()
             report.series_enriched.append(series.title)
             logger.info("enricher.series_enriched", series=series.title,
@@ -466,7 +522,8 @@ class EnrichmentService:
             return None
         return SeriesMatch(source_id=chosen.anilist_id, description=chosen.description,
                            cover_url=chosen.cover_url, count_of_issues=chosen.chapters,
-                           genres=list(chosen.genres))
+                           genres=list(chosen.genres),
+                           tags=list(getattr(chosen, "tags", []) or []))
 
     async def _find_tebeosfera_match(
         self, client: TebeosferaClient, series: Series
@@ -559,6 +616,66 @@ class EnrichmentService:
             await self.db.flush()
             report.issues_enriched.append(label)
             logger.info("enricher.issue_enriched", issue=label, cv_id=match.cv_id)
+
+    async def _aplicar_tags(self, series: Series, tags: list[AniListTag]) -> int:
+        """ETQ4 (AC-23): aplica los tags de AniList con `source='anilist'` y `weight=rank`.
+
+        Idempotente y conservador: no pisa una fila `manual`, no resucita una
+        `oculta=true` y no cambia el `source` de una fila que ya existe. Los
+        nombres inválidos o de más de 64 caracteres se ignoran.
+        """
+        if not tags or "tags" in (series.locked_fields or []):
+            return 0
+
+        validos: dict[str, tuple[str, int | None]] = {}
+        for tag in tags:
+            try:
+                nombre, normalizado = validar_nombre(tag.name)
+            except EtiquetaInvalida:
+                continue
+            validos.setdefault(normalizado, (nombre, tag.rank))
+        if not validos:
+            return 0
+
+        existentes = await _tags_por_norm(self.db, tuple(validos))
+        faltan = [
+            {"name": nombre, "namespace": NAMESPACE}
+            for normalizado, (nombre, _rank) in validos.items()
+            if normalizado not in existentes
+        ]
+        if faltan:
+            await self.db.execute(
+                pg_insert(Tag).values(faltan).on_conflict_do_nothing(
+                    constraint="uq_tags_namespace_name_norm"
+                )
+            )
+            existentes = await _tags_por_norm(self.db, tuple(validos))
+
+        ids = tuple(tag.id for tag in existentes.values())
+        filas = (await self.db.execute(
+            select(series_tags.c.tag_id)
+            .where(series_tags.c.series_id == series.id, series_tags.c.tag_id.in_(ids))
+        )).scalars().all()
+        ya = set(filas)
+
+        nuevas = [
+            {
+                "series_id": series.id,
+                "tag_id": tag.id,
+                "source": MetadataSource.ANILIST.value,
+                "weight": validos[normalizado][1],
+                "oculta": False,
+            }
+            for normalizado, tag in existentes.items()
+            if tag.id not in ya
+        ]
+        if nuevas:
+            await self.db.execute(
+                pg_insert(series_tags).values(nuevas).on_conflict_do_nothing(
+                    index_elements=["series_id", "tag_id"]
+                )
+            )
+        return len(nuevas)
 
     async def _aplicar_generos(self, series: Series, generos: list[str]) -> int:
         """Puebla `Series.genres` solo si está vacío, no bloqueado y no es manual.
