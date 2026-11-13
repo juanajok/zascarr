@@ -31,6 +31,7 @@ class ColeccionResumen:
     auto_search: str
     series: int
     tiene_portada: bool = False
+    portada_url: str = ""
 
 
 ETIQUETAS_POLITICA = {
@@ -121,6 +122,24 @@ def _politica(valor: str) -> CollectionAutoSearch | None:
         return None
 
 
+def _portada_url_de(coleccion: Collection, filas: list[Series], covers: Path) -> tuple[bool, str]:
+    rutas = {str(s.id): portada_cacheada(covers, s.id) for s in filas}
+    sobre_cache = (coleccion.cover_series_id is not None
+                   and rutas.get(str(coleccion.cover_series_id)) is not None)
+    hay = any(ruta is not None for ruta in rutas.values())
+    partes = []
+    for s in filas:
+        ruta = rutas[str(s.id)]
+        try:
+            st = ruta.stat() if ruta is not None else None
+            partes.append(f"{s.id}:{st.st_mtime_ns if st else 0}:{st.st_size if st else 0}")
+        except OSError:
+            partes.append(f"{s.id}:0:0")
+    huella = hashlib.sha1("|".join(partes).encode()).hexdigest()[:12]
+    base = str(coleccion.cover_series_id) if sobre_cache else "auto"
+    return sobre_cache or hay, f"/ui/colecciones/{coleccion.id}/portada?v={base}-{huella}"
+
+
 async def listar_colecciones(db: AsyncSession) -> list[ColeccionResumen]:
     filas = (await db.execute(
         select(Collection, func.count(Series.id))
@@ -135,11 +154,13 @@ async def listar_colecciones(db: AsyncSession) -> list[ColeccionResumen]:
             Series.collection_id.is_not(None)))).scalars().all()
         for s in series:
             por_coleccion.setdefault(str(s.collection_id), []).append(s)
-    return [ColeccionResumen(
-        str(c.id), c.name, c.description, c.auto_search.value, int(n or 0),
-        tiene_portada=any(portada_cacheada(covers, s.id) is not None
-                          for s in por_coleccion.get(str(c.id), [])))
-        for c, n in filas]
+    resumen = []
+    for c, n in filas:
+        tiene, url = _portada_url_de(c, por_coleccion.get(str(c.id), []), covers)
+        resumen.append(ColeccionResumen(
+            str(c.id), c.name, c.description, c.auto_search.value, int(n or 0),
+            tiene_portada=tiene, portada_url=url))
+    return resumen
 
 
 async def detalle_coleccion(db: AsyncSession, coleccion_id: UUID) -> DetalleColeccion | None:
@@ -152,21 +173,8 @@ async def detalle_coleccion(db: AsyncSession, coleccion_id: UUID) -> DetalleCole
     )).scalars().all()
     sobre = next((s for s in filas if s.id == coleccion.cover_series_id), None)
     covers = Path(get_settings().covers_cache_path)
-    rutas_por_serie: dict[str, Path | None] = {
-        str(s.id): portada_cacheada(covers, s.id) for s in filas}
-    sobre_cache = sobre is not None and rutas_por_serie.get(str(sobre.id)) is not None
-    hay_mosaico = any(ruta is not None for ruta in rutas_por_serie.values())
-    partes = []
-    for s in filas:
-        ruta = rutas_por_serie[str(s.id)]
-        try:
-            st = ruta.stat() if ruta is not None else None
-            partes.append(f"{s.id}:{st.st_mtime_ns if st else 0}:{st.st_size if st else 0}")
-        except OSError:
-            partes.append(f"{s.id}:0:0")
-    huella = hashlib.sha1("|".join(partes).encode()).hexdigest()[:12]
-    portada_url = (f"/ui/colecciones/{coleccion.id}/portada"
-                   f"?v={str(coleccion.cover_series_id) if sobre_cache else 'auto'}-{huella}")
+    tiene, portada_url = _portada_url_de(coleccion, filas, covers)
+    sobre_cache = tiene and sobre is not None and portada_cacheada(covers, sobre.id) is not None
     return DetalleColeccion(
         str(coleccion.id), coleccion.name, coleccion.description, coleccion.auto_search.value,
         [SerieDeColeccion(
@@ -178,7 +186,7 @@ async def detalle_coleccion(db: AsyncSession, coleccion_id: UUID) -> DetalleCole
          for s in filas],
         cover_series_id=str(coleccion.cover_series_id) if coleccion.cover_series_id else None,
         cover_series_title=sobre.title if sobre else None,
-        cover_series_valida=sobre_cache, tiene_portada=sobre_cache or hay_mosaico,
+        cover_series_valida=sobre_cache, tiene_portada=tiene,
         portada_url=portada_url)
 
 

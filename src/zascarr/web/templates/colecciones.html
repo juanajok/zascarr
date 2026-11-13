@@ -25,7 +25,7 @@
 <ul class="arcos-lista">
   {% for c in colecciones %}
   <li class="coleccion-fila tarjeta">
-    <div class="coleccion-portada">{{ ui.portada(c.name, c.id, ("/ui/colecciones/" ~ c.id ~ "/portada") if c.tiene_portada else none, clase="portada-coleccion", carga="lazy") }}</div>
+    <div class="coleccion-portada">{{ ui.portada(c.name, c.id, c.portada_url if c.tiene_portada else none, clase="portada-coleccion", carga="lazy") }}</div>
     <div>
       <a href="/ui/colecciones/{{ c.id }}">{{ c.name }}</a>
       <span class="muted">{{ c.series }} {{ "serie" if c.series == 1 else "series" }} · {{ politicas.get(c.auto_search, c.auto_search) }}</span>

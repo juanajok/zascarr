@@ -35,14 +35,16 @@ def test_lista_muestra_colecciones_y_politica():
     try:
         with patch("zascarr.web.colecciones.listar_colecciones", AsyncMock(return_value=[
                 ColeccionResumen("c1", "Grapas", "En curso", "incluir", 2,
-                                 tiene_portada=True)])):
+                                 tiene_portada=True,
+                                 portada_url="/ui/colecciones/c1/portada?v=auto-abc")])):
             r = c.get("/ui/colecciones")
     finally:
         _cerrar()
     assert r.status_code == 200
     assert "Grapas" in r.text and "Buscar faltantes de todas" in r.text
     assert "No buscar automáticamente" in r.text and "(heredar)" not in r.text
-    assert "/ui/colecciones/c1/portada" in r.text
+    assert "/ui/colecciones/c1/portada?v=auto-abc" in r.text
+    assert "?v=" in r.text
     assert "Nueva colección" in r.text
 
 
