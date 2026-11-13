@@ -111,9 +111,9 @@ parse roto prohíben 15 min sin repedir), `:157-173` (singleflight por origen), 
 Sonda (f): `Crawl-delay: 4` ⇒ la cortesía duerme 4 s; 403 permite; 429/500/503 ⇒
 `AccesoProhibidoPorRobots`.
 
-### (g) Migración 0037 encadenada desde 0036 y downgrade que borra tabla/índices — **PASA**
+### (g) Migración 0038 encadenada desde 0036 y downgrade que borra tabla/índices — **PASA**
 
-`alembic/versions/20261113_0037_http_cache.py`: `revision="0037"`, `down_revision="0036"`
+`alembic/versions/20261113_0038_http_cache.py`: `revision="0037"`, `down_revision="0037"`
 (l. 18-19); `upgrade` crea `http_cache` con sus 13 columnas, `UNIQUE uq_http_cache_url_hash` e
 índices `ix_http_cache_domain`/`ix_http_cache_retain_until` (l. 24-43); `downgrade` borra los dos
 índices y la tabla (l. 46-49). Cadena comprobada con `alembic.script.ScriptDirectory`: `heads =
@@ -178,7 +178,7 @@ quiere reiniciarlo desde Ajustes en una historia futura.
 
 **O5 — Alcance de Postgres en esta verificación.** La suite completa se ejecutó **sin**
 `TEST_DATABASE_URL` (2271 skips esperados) porque el entorno del encargo no la aporta; la validación
-real con Postgres se hizo focalizada en la migración 0037 + `CacheHttp` (2 passed), que es lo que
+real con Postgres se hizo focalizada en la migración 0038 + `CacheHttp` (2 passed), que es lo que
 pedía el encargo. El resto de pruebas `_pg` no se ejecutó aquí.
 
 ---
@@ -187,7 +187,7 @@ pedía el encargo. El resto de pruebas `_pg` no se ejecutó aquí.
 
 **APTO.** SCR1 cumple los criterios (a)-(i): suite completa verde dos veces con contadores idénticos
 (6676 passed / 2271 skipped), suites de SCR1 aisladas verdes (68 passed + 2 skips de Postgres),
-migración 0037 y `CacheHttp` validados contra Postgres real (2 passed), `ruff` y `ruff --select S`
+migración 0038 y `CacheHttp` validados contra Postgres real (2 passed), `ruff` y `ruff --select S`
 limpios, `protego` como única dependencia nueva y pruebas existentes intactas.
 **Bloqueantes: ninguno.** Recomendaciones no bloqueantes: O1 (prueba del cableado de caché en el
 enricher) y O3 (sacar los fakes a un helper).
@@ -198,8 +198,20 @@ enricher) y O3 (sacar los fakes a un helper).
 
 12 ficheros, **+1906 / −12** (las 12 supresiones son líneas modificadas de `fandom.py`/`enricher.py`,
 no pruebas):
-`pyproject.toml`, `alembic/versions/20261113_0037_http_cache.py`, `src/zascarr/main.py`,
+`pyproject.toml`, `alembic/versions/20261113_0038_http_cache.py`, `src/zascarr/main.py`,
 `src/zascarr/models/__init__.py`, `src/zascarr/services/enricher.py`, `src/zascarr/services/fandom.py`,
 `src/zascarr/utils/cache_http.py`, `src/zascarr/utils/robots.py`, `tests/test_cache_http.py`,
 `tests/test_fandom.py`, `tests/test_migracion_http_cache_pg.py`, `tests/test_robots.py`.
 `git diff HEAD~1 HEAD --numstat -- tests/`: **0 eliminaciones** en pruebas (solo adiciones).
+
+
+---
+
+## Nota post-fusión: renumeración de la migración (2026-11-13)
+
+Al desplegar se detectó que **`0037` estaba duplicada** (otra historia —`borradores_revision`— la
+ocupó en paralelo y `main` quedó con dos cabezas). La migración de esta historia se renumeró a
+**`0038`** (`revision="0038"`, `down_revision="0037"`), sin cambios de SQL; la cadena queda
+`0036 → 0037 (borradores) → 0038 (http_cache)`. Las referencias a `0037` en el cuerpo de este
+informe deben leerse como la revisión `0038` de `http_cache`. Añadida la regresión
+`tests/test_migraciones_cadena.py` (revisiones únicas, una sola cabeza y cadena lineal).

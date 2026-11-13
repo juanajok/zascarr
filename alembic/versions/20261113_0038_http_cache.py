@@ -1,4 +1,4 @@
-"""Caché HTTP condicional en PostgreSQL (SCR1, migración 0037).
+"""Caché HTTP condicional en PostgreSQL (SCR1, migración 0038).
 
 Tabla `http_cache`: una fila por URL canónica y método. Guarda la respuesta positiva
 comprimida (zlib, ≤2 MiB) con sus validadores (`etag`/`last_modified`) y dos horizontes:
@@ -15,8 +15,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0037"
-down_revision = "0036"
+revision = "0038"
+down_revision = "0037"
 branch_labels = None
 depends_on = None
 
