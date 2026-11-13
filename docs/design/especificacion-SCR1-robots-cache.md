@@ -9,7 +9,7 @@
 ## 1. Resumen
 
 (a) `utils/robots.py`: evaluador RFC 9309 con `protego` (estado por origen en memoria + cuerpo 200 en `http_cache`). (b) `utils/cache_http.py` + tabla
-`http_cache` (migración **0037**): caché condicional `zlib`, dos horizontes (`fresh_until`/`retain_until`), negativa corta y *singleflight*. (c)
+`http_cache` (migración **0038**): caché condicional `zlib`, dos horizontes (`fresh_until`/`retain_until`), negativa corta y *singleflight*. (c)
 `services/fandom.py` usa `pedir_con_cache` en su único punto de red, `_api()` (725); sin `cache` inyectada se comporta como hoy. En vivo, `robots.txt` de
 Fandom responde **403** ⇒ «sin restricciones» (RFC 9309 §2.3.1.3): SCR1 **no cambia el tráfico de Fandom** (robots rinde en SCR3).
 
@@ -26,9 +26,9 @@ Fandom responde **403** ⇒ «sin restricciones» (RFC 9309 §2.3.1.3): SCR1 **n
 `pyproject.toml` → `dependencies`: `"protego>=0.7,<1"`. Verificado en PyPI (2026-11-13): 0.7.0, BSD-3-Clause, wheel `py3-none-any`,
 `requires-python >=3.10` y **sin dependencias** ⇒ aarch64 sin compilar. SCR1 no toca `config.py` ni `.env`.
 
-## 4. Tabla `http_cache` + migración 0037
+## 4. Tabla `http_cache` + migración 0038
 
-`alembic/versions/20261113_0037_http_cache.py` (`revision="0037"`, `down_revision="0036"`), aditiva y reversible como `0036`; modelo `HttpCache(Base)` en
+`alembic/versions/20261113_0038_http_cache.py` (`revision="0038"`, `down_revision="0037"`), aditiva y reversible como `0036`; modelo `HttpCache(Base)` en
 `models/__init__.py` (junto a `ImportRun`) que mapee **exactamente** la migración.
 
 ```
@@ -121,7 +121,7 @@ test existente llega ahí). `main.py`: `_enrichment_loop` purga una vez por cicl
 | AC-05 | 429/5xx/red **no** crean fila y una 2.ª llamada vuelve a la red (`test_transitorios`) |
 | AC-06 | `missingtitle` (HTTP 200) se cachea negativo; `maxlag` no (2.ª llamada a red y `FandomMaxLagError`) (`test_fandom_cache.py`) |
 | AC-07 | Robots: 200 aplica `Disallow` y `Crawl-delay` eleva `intervalo_min_s`; 403/404 permite y cachea 12 h; 429/5xx/red prohíbe 15 min sin repedir (`test_robots.py`) |
-| AC-08 | Migración 0037: de `0036` a head aparecen tabla, UNIQUE e índices; `downgrade 0036` los quita; el ORM inserta/lee (`test_migracion_http_cache_pg.py`) |
+| AC-08 | Migración 0038: de `0036` a head aparecen tabla, UNIQUE e índices; `downgrade 0036` los quita; el ORM inserta/lee (`test_migracion_http_cache_pg.py`) |
 | AC-09 | Cuerpo > 2 MiB no se persiste y `_api` sigue devolviendo `None`; `purgar()` borra solo `retain_until < now` (`test_cuerpo_grande`, `test_cache_http_pg::test_purga`) |
 | AC-10 | `?b=2&a=1` y `?a=1&b=2` dan el mismo `url_hash`; `api_key` sale `REDACTADO`; `bypass_cache` va a red y reescribe (`test_canonica`, `test_bypass`) |
 | AC-11 | Fuente apagada ⇒ `FuenteApagada` sin leer caché, sin robots y sin petición; imports en cualquier orden sin ciclo (`test_cache_http`, `test_fandom_cache`) |
@@ -139,7 +139,7 @@ CRG con `Allow: /` y `Crawl-delay`, Continuity Guide), sin red. `tests/test_fand
 
 ## 11. Plan por cortes (builder)
 
-1. **Corte 0 — esquema:** `protego` en `pyproject.toml`; migración 0037; `HttpCache` en `models/__init__.py`; `test_migracion_http_cache_pg.py` (AC-08). *Puerta:* ida/vuelta en `_pg`, suite intacta.
+1. **Corte 0 — esquema:** `protego` en `pyproject.toml`; migración 0038; `HttpCache` en `models/__init__.py`; `test_migracion_http_cache_pg.py` (AC-08). *Puerta:* ida/vuelta en `_pg`, suite intacta.
 2. **Corte 1 — primitivas:** `cache_http.py` (hash/canónica, compresión, `PoliticaCacheDominio`, `CacheHttp` con sesión corta, upsert y `purgar`) + tests unitarios y `test_cache_http_pg.py`.
 3. **Corte 2 — `pedir_con_cache`:** hit, stale+304, negativa, singleflight, bypass, clasificador y `AccesoProhibidoPorRobots`; `_cache_falsa.py` y `test_cache_http.py` (AC-01 a AC-05, AC-09, AC-10).
 4. **Corte 3 — robots:** `utils/robots.py` + `tests/test_robots.py` (AC-07) + promover `Candados` a público.
