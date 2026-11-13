@@ -2612,6 +2612,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .coleccion-filtro-acciones { grid-column: auto; }
 }
 
+.coleccion-paginacion { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 12px; }
+.coleccion-paginacion .btn, .coleccion-paginacion [aria-disabled="true"] { min-height: 44px; }
+.coleccion-paginacion [aria-disabled="true"] { opacity: .55; cursor: default; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
