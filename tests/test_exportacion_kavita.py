@@ -82,3 +82,12 @@ def test_carpetas_de_serie_colisionadas_se_desambiguan():
     carpetas = {Path(a.destino_relativo).parts[1] for a in plan.archivos}
     assert len(carpetas) == 2
     assert plan.carpetas_colision
+
+
+def test_extension_no_admitida_se_omite_y_no_se_inventa():
+    plan = plan_export([
+        fuente(source_path="/lib/Flash 1.txt"),
+        fuente(file_id="f2", issue_id="i2", numero="2", source_path="/lib/Flash 2.cbz"),
+    ], Path("/export"), folder="Grapas")
+    assert [Path(a.destino_relativo).suffix for a in plan.archivos] == [".cbz"]
+    assert any("extensión no admitida" in x for x in plan.omitidos)

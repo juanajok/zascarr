@@ -202,6 +202,7 @@ def _materializar(
             if modo == "hardlink":
                 try:
                     os.link(accion.source_path, destino)
+                    _fsync_directorio(destino.parent)
                 except FileExistsError:
                     colisiones += 1
                     continue
@@ -266,6 +267,7 @@ def _escribir_manifiesto(plan: PlanExportacion, root: Path, collection: Collecti
             f.flush()
             os.fsync(f.fileno())
         os.replace(temp, destino)
+        _fsync_directorio(carpeta)
     finally:
         Path(temp).unlink(missing_ok=True)
     return destino

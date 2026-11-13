@@ -137,10 +137,13 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
             db, coleccion_id, patch_comicinfo=patch_comicinfo == "1",
             copiar=copiar == "1")
         await db.commit()
+        incidencias = resumen.errores or resumen.deriva or resumen.colisiones
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,
             "series": await series_sin_coleccion(db), "errores": {},
-            "exportacion": resumen, "aviso": "Exportación terminada.",
+            "exportacion": resumen,
+            "aviso": ("Exportación terminada con incidencias." if incidencias
+                      else "Exportación terminada."),
         })
     except ParcheComicInfoNoDisponibleError as exc:
         error = str(exc)

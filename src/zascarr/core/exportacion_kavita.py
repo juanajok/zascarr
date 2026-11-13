@@ -62,9 +62,9 @@ class PlanExportacion:
         return sum(a.size_bytes for a in self.archivos)
 
 
-def _extension(source_path: str) -> str:
+def _extension(source_path: str) -> str | None:
     sufijo = Path(source_path).suffix.lower()
-    return sufijo if sufijo in EXTENSIONES else (sufijo if sufijo else ".cbz")
+    return sufijo if sufijo in EXTENSIONES else None
 
 
 def _numero(numero: str | None) -> str:
@@ -75,13 +75,16 @@ def _numero(numero: str | None) -> str:
 
 
 def nombre_de_archivo(serie: str, numero: str | None, titulo: str | None,
-                      source_path: str) -> str:
+                      source_path: str) -> str | None:
     """Nombre canónico de la exportación, saneado y de un solo nivel."""
     cabecera = sanitize_segment(serie)
     n = _numero(numero)
     subtitulo = sanitize_segment(titulo or serie)
+    extension = _extension(source_path)
+    if extension is None:
+        return None
     base = f"{cabecera} {n} - {subtitulo}" if n else f"{cabecera} - {subtitulo}"
-    return sanitize_segment(base) + _extension(source_path)
+    return sanitize_segment(base) + extension
 
 
 def _fuente_de_issue(archivos: list[ArchivoFuente]) -> ArchivoFuente | None:
@@ -134,6 +137,9 @@ def plan_export(collection_files: list[ArchivoFuente], root: str | Path, *,
         carpeta = carpetas_por_serie.get(fuente.series_id) or sanitize_segment(fuente.series_title)
         nombre = nombre_de_archivo(fuente.series_title, fuente.numero, fuente.issue_title,
                                    fuente.source_path)
+        if nombre is None:
+            plan.omitidos.append(f"{issue_id}: extensión no admitida")
+            continue
         relativo = f"{nombre_carpeta}/{carpeta}/{nombre}"
         if relativo.casefold() in usados:
             plan.colisiones.append(relativo)
