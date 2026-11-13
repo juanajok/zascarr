@@ -39,8 +39,9 @@ prioridad en el enricher según la decisión del PO. El PO, además, lo pidió �
 arcos/orden de lectura».
 
 **Qué hay hoy en el árbol.** Un cliente MediaWiki real (`services/fandom.py`) que solo usa
-`/api.php`, con `missingtitle` y `maxlag` tratados; una cadena de respaldo para `american`/`british`
-(Comic Vine → DC Database → Marvel Database) con emparejamiento exacto por título; enriquecimiento de
+`/api.php`, con `missingtitle` y `maxlag` tratados; una cadena de fuentes para `american`/`british`
+(Comic Vine → DC Database → Marvel Database) con emparejamiento exacto por título —**ratificada por el
+PO el 2026-11-13: Comic Vine prevalece sobre Fandom, que queda como respaldo**—; enriquecimiento de
 número (fecha, sinopsis, título de historia, créditos, portada) **solo para series identificadas por
 Fandom**; y arcos de **DC Database** volcados a `story_arcs`/`story_arc_issues.reading_order`, que la
 vista ya existente `/ui/arcos` muestra sola. `LEGAL.md` tiene fila nueva; el hash de
@@ -85,7 +86,7 @@ importa guías externas y no decide el modelo de producto de las órdenes de lec
 | E-1 | El cliente no raspa HTML: solo `/api.php`, con `format=json`, `formatversion=2`, `redirects=1`, `maxlag=5` | `services/fandom.py:459-492` | Lectura de código |
 | E-2 | `missingtitle` en HTTP 200 → `None`; `maxlag` → bloqueo compartido y excepción transitoria | `fandom.py:71-73, 477-492, 629-640`; tests `test_missingtitle_es_none`, `test_maxlag_lanza_y_bloquea_cortesia` | 21 tests de `tests/test_fandom.py` **aprobados** |
 | E-3 | La portada se resuelve por `imageinfo` (`iiprop=url`) y el host `static.wikia.nocookie.net` está en la lista blanca y con intervalo propio | `fandom.py:516-529`; `utils/url_portada.py:50-56`; `utils/cortesia.py:130-131` | Lectura + test del cliente |
-| E-4 | Cadena de fuentes para `american`/`british`: Comic Vine → DC → Marvel; el resto mantiene su fuente única | `enricher.py:541-556`; test `test_cadena_de_fuentes_american_con_fandom` | Test aprobado |
+| E-4 | Cadena de fuentes para `american`/`british`: Comic Vine → DC → Marvel (ratificado: CV prevalece); el resto mantiene su fuente única | `enricher.py:541-556`; test `test_cadena_de_fuentes_american_con_fandom` | Test aprobado |
 | E-5 | **El ORM no mapea las columnas de 0034.** `getattr(Series, "fandom_dc_slug")` → ausente; `Issue` idem | `models/__init__.py` (solo enum en `:282-287`); migración `alembic/versions/20261113_0034_fandom_slugs.py:23-37` | Comprobado con el intérprete del venv de pruebas |
 | E-6 | Consecuencia de E-5: cualquier `enrich_pending()` falla antes de tocar la BD, porque el `SELECT` de series usa esas columnas | `enricher.py:415-416` | `PYTHONPATH=src .tmp-test-venv/bin/python -m pytest tests/test_enricher.py -q` → **17 failed, 36 passed**; el fallo es `AttributeError` en `enricher.py:415` (no se ejecutó la suite completa: la corre QA) |
 | E-7 | El enricher crea arcos y enlaces de lectura con la marca `metadata_["fandom_arcos_intentado"]` para no releer la ficha | `enricher.py:874-989` | Lectura de código; **sin prueba** |
@@ -115,7 +116,7 @@ reverificado aquí.
 |---|---|---|---|
 | Identidad por wiki (`fandom_dc_slug`, `fandom_marvel_slug`) | **Falta [B]** | Migración 0034 sí; ORM no (`models/__init__.py`); el enricher ya las usa | E-5/E-6: el ciclo del enricher entero cae; QA no puede pasar |
 | Búsqueda y emparejamiento conservador (título base normalizado exacto; año ±1) | **Parcial** | `enricher.py:641-675`; `_pick_by_year` `:678-687` | Con un único candidato exacto se acepta **sin mirar el año** (`_pick_by_year` devuelve el primero si `len == 1` o no hay año destino): puede atar «Batman» a otro volumen; no hay prueba de integración |
-| Cadena CV → DC → Marvel para `american`/`british` | **Hecho** (decisión del PO pendiente ratificar) | `enricher.py:542-556,445-500` | Fandom nunca es fuente primaria; un fallo transitorio de CV hace gastar 2 búsquedas más; orden DC→Marvel fijo (una serie Marvel no-CV gasta una búsqueda en DC) |
+| Cadena CV → DC → Marvel para `american`/`british` | **Hecho y ratificado** (PO, 2026-11-13: Comic Vine prevalece; Fandom, respaldo) | `enricher.py:542-556,445-500` | Fandom nunca es fuente primaria; un fallo transitorio de CV hace gastar 2 búsquedas más; orden DC→Marvel fijo (una serie Marvel no-CV gasta una búsqueda en DC) |
 | Marcar intento solo cuando se han probado todas las fuentes de la tradición; no marcar si fallo transitorio | **Hecho** | `enricher.py:493-500` | Un error de payload desconocido (`FandomPayloadError`) se trata como transitorio y **reintenta cada ciclo para siempre** (no entra en la negativa de 30 días) |
 | Sinopsis, portada, `total_issues`, `start_year`/`end_year` | **Parcial** | `enricher.py:558-579,641-675`; `fandom.py:543-579` | `total_issues` de Marvel solo si la plantilla de volumen lo declara (no verificado en vivo); `description` sale del primer párrafo y puede ser `None`; `start_year`/`end_year` solo rellenan huecos (no corrigen un año mal puesto en el alta) |
 | Portada: URL por `imageinfo` + caché local en `covers/externa/` | **Parcial** | `enricher.py:570`, `web/series.py:1355-1356`; host/intervalo en `url_portada.py:50-56`, `cortesia.py:122-131` | El gate «fuente apagada no recibe portadas» no aplica a este CDN (E-15): con Fandom apagado se puede seguir descargando una portada suya; no hay prueba del flujo completo |
@@ -346,7 +347,7 @@ fusión van marcados `[B]`.
 
 | # | Decisión | Estado en el árbol | Recomendación de la spec |
 |---|---|---|---|
-| D-1 | **Prioridad de Fandom en el enricher** (§8.2): ¿solo rellena huecos tras Metron/Comic Vine/GCD, o puede ser fuente primaria de serie? | El código ya eligió **respaldo**: cadena CV → DC → Marvel (`enricher.py:542-556`). No hay opción configurable | Ratificar la cadena como comportamiento de SCR2; si el PO quiere «primaria», es un cambio de contrato (y de coste) que debe entrar en esta historia, no después |
+| D-1 | **Prioridad de Fandom en el enricher** (§8.2): ¿solo rellena huecos tras Metron/Comic Vine/GCD, o puede ser fuente primaria de serie? | El código ya eligió **respaldo**: cadena CV → DC → Marvel (`enricher.py:542-556`). No hay opción configurable | **Decidido por el PO (2026-11-13): Comic Vine prevalece sobre Fandom; Fandom queda como respaldo** (y fuente de los arcos de DC). No se añade opción configurable en SCR2 |
 | D-2 | **Modelo de producto de las órdenes de lectura** (§8.1): ¿listas seguidas que marcan «tengo / me falta → wishlist», o solo consulta? Determina si hacen falta `ReadingOrder`/`ReadingOrderItem` (SCR3) | SCR2 **no** crea modelo nuevo: reutiliza `story_arcs`/`story_arc_issues.reading_order` de BL-C4; SCR3 no está | Aprobar «construir sobre lo propio» para esta historia y dejar la decisión de `ReadingOrder` para SCR3, sin bloquear SCR2 |
 | D-3 | **Comic Book Herald** (§8.3): ¿se descarta para el MVP o se contacta al autor? | No implementado. Dato nuevo: el informe de Fase 0 verificó que `/feed/` responde 200 aunque el WAF bloquee `robots.txt`/`wp-json` | Mantener en cuarentena hasta que el PO decida; no entra en SCR2 |
 
