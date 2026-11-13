@@ -2482,6 +2482,11 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .mejora-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); }
 .ruta-exportacion { overflow-wrap: anywhere; word-break: break-word; }
 
+
+/* BL-D3 (#154): mejoras de edición. */
+.mejoras-escanear { margin: 12px 0; }
+.mejora-acciones { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

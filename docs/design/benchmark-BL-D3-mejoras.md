@@ -23,19 +23,24 @@ una mejora y que nada se sustituya sin confirmación.
 descartar por ahora el escaneo en segundo plano (requiere D2 y persistencia de propuestas); usar una
 puntuación conservadora y explícita.
 
-## Rebanada implementada
+## Implementado
 
+- **D2:** selector legible en Ajustes («solo lo mejor / equilibrado / lo que haya») que fija el
+  objetivo de calidad; se guarda como override en caliente. La cadencia del escaneo también se
+  elige (3/6/12/24 h o desactivado).
 - `services/calidad.py`: puntuación de archivos (`source_tag`, `width_px`, `quality`) y de títulos
-  de release; un candidato solo se propone si es **del mismo número y serie** y su puntuación es
-  **estrictamente mayor**.
-- En la ficha del número, **«Buscar una edición mejor»**: consulta Prowlarr (misma puerta legal),
-  muestra la calidad actual y los candidatos; **«Descargar esta edición»** confirma un token firmado.
+  de release; un candidato solo se propone si es **del mismo número y serie** y supera el objetivo
+  del perfil.
+- **Escaneo periódico acotado** (`services/upgrades.py` + bucle): coge un lote pequeño de números
+  con archivo, respeta un cooldown de 24 h por número y guarda **propuestas** en
+  `upgrade_proposals` (migración 0034). No descarga solo.
+- **Biblioteca → Mejoras**: lista de propuestas; **«Descargar esta edición»** confirma el envío con
+  token firmado y **«Descartar»** retira la propuesta.
+- En la ficha del número sigue estando **«Buscar una edición mejor»** bajo demanda.
 - No se borra, mueve ni sustituye ningún archivo: la descarga, si llega, se importa como otro
   archivo del número. La UI lo dice.
-- Sin migración.
 
-## Pendiente / no incluido
+## Fuera de alcance
 
-- Perfil de calidad del coleccionista (D2) y **escaneo periódico** que ofrezca mejoras sin que el
-  usuario abra el número. Esta rebanada es bajo demanda.
-- Sustitución automática del archivo anterior: explícitamente fuera de alcance.
+- Sustitución automática del archivo anterior: explícitamente fuera; el coleccionista decide qué
+  archivo conservar desde la ficha.

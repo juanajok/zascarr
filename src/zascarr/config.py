@@ -91,6 +91,17 @@ class Settings(BaseSettings):
     # del proceso, no por instancia del cliente (utils/cortesia.py).
     tebeosfera_rate_limit: float = 2.5
 
+    # ── Fandom: DC Database y Marvel Database ────────────────────────
+    # Dos wikis MediaWiki con API oficial en /api.php (verificado en vivo 2026-11-13:
+    # MediaWiki 1.43.10, errores lógicos en HTTP 200). Se consumen por el wikitext de sus
+    # plantillas, nunca por el HTML público. Texto CC-BY-SA 3.0 (la UI enlaza artículo y
+    # licencia); portadas *fair use* cacheadas en local. Apagadas por defecto (ADR 0013);
+    # 1,5 s entre peticiones por proceso y por wiki.
+    fandom_dc_enabled: bool = Field(default=False)
+    fandom_dc_rate_limit: float = 1.5
+    fandom_marvel_enabled: bool = Field(default=False)
+    fandom_marvel_rate_limit: float = 1.5
+
     # ── GCD / Grand Comics Database (descubrimiento, C0) ─────────────
     # API pública real en /api/ (verificado en vivo 2026-09-25, ver
     # docs/adr/0002-enricher-scope.md), sin clave, anónima. Su propia
@@ -221,6 +232,13 @@ class Settings(BaseSettings):
     # automáticas. Es un ajuste propio: `max_concurrent_downloads` no cambia (sigue acotando lo
     # manual del ciclo y `check_completions`).
     politica_busquedas_por_hora: int = Field(default=2, ge=0, le=10)
+    # BL-D2/D3: perfil de calidad y escaneo de mejoras. "mejor" solo propone
+    # calidad alta; "equilibrado", media o alta; "cualquiera" no propone.
+    quality_profile: str = Field(
+        default="equilibrado", pattern="^(mejor|equilibrado|cualquiera)$")
+    #: 0 desactiva el escaneo de mejoras. El primer pase espera un intervalo.
+    upgrade_scan_interval_minutes: int = Field(default=360, ge=0)
+    upgrade_scan_batch: int = Field(default=3, ge=0, le=20)
 
     # ── Enricher (Comic Vine) ────────────────────────────────────────
     # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el
