@@ -11,11 +11,12 @@
   {#- Criterio 5: el acceso a las carpetas se ve como ACCIÓN, con su recuento y qué cuenta (carpetas). -#}
   {#- El recuento se pide al cargarse (agrupar todos los pendientes cuesta; no bloquea la lista). Sin él, el enlace
       funciona igual. -#}
-  <a class="btn ghost pend-carpetas" href="/ui/pendientes/carpetas"
-     hx-get="/ui/pendientes/carpetas/recuento" hx-trigger="load" hx-swap="outerHTML">Verlos por carpeta</a>
+  <a class="btn primary pend-carpetas" href="/ui/pendientes/carpetas"
+     hx-get="/ui/pendientes/carpetas/recuento" hx-trigger="load" hx-swap="outerHTML">Revisar por carpeta</a>
   <a class="btn ghost" href="/ui/pendientes/sueltos">Ver los archivos sueltos</a>
   {% endif %}
 </div>
+{% if cards %}<p class="pend-recomendacion">Empieza por carpeta: resuelves varios archivos con una sola decisión.</p>{% endif %}
 {% if not cards %}
 <p class="empty">Nada pendiente — todo lo importado se ha podido clasificar.</p>
 {% else %}
