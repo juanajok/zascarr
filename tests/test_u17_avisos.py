@@ -59,7 +59,7 @@ def visible(t: str) -> str:
 
 class TestParrafoNoEsRotulo:
 
-    @pytest.mark.parametrize("selector", [".caption", ".legal-notice-warn"])
+    @pytest.mark.parametrize("selector", [".caption", ".aviso.warn"])
     def test_el_texto_largo_no_va_en_mayusculas_ni_girado(self, selector):
         """La didascalia pintaba en mayúsculas y girada (`rotate(-1.2deg)`) párrafos enteros: el aviso legal, los avisos de Estado y
         las notas de la ficha de serie. Un texto de más de una línea va en caja normal."""
@@ -151,12 +151,14 @@ class TestFraseVisibleConEnlace:
     def test_es_una_frase_visible_con_enlace_a_aviso_legal(self, tipo):
         h = macro(tipo)
         assert re.search(r'<a href="/legal">Aviso legal</a>', h), f"{tipo}: falta el enlace a «Aviso legal»"
-        assert "<details" not in h and "hidden" not in h and 'class="sr"' not in h      # no se pliega ni se oculta
+        # El aviso de `ui.aviso` marca su icono con `aria-hidden` (decorativo): eso no lo oculta.
+        assert "<details" not in h and not re.search(r'\shidden(?=[\s=>])', h)
+        assert 'class="sr"' not in h
         assert len(visible(h).split()) >= 8                                             # es una frase, no solo un enlace
 
     def test_la_frase_de_ajustes_se_ve_en_la_pantalla_y_no_esta_plegada(self):
         t = TestClient(app).get("/ui/ajustes").text
-        m = re.search(r'<aside class="legal-notice[^"]*">.*?</aside>', t, re.S)
+        m = re.search(r'<div class="aviso warn"[^>]*>.*?</div>', t, re.S)
         assert m and '<a href="/legal">Aviso legal</a>' in m.group(0)
         antes = t[:m.start()]
         assert antes.count("<details") == antes.count("</details>")                    # el aviso no cae dentro de un <details>

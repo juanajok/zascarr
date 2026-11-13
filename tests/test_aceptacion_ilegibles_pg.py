@@ -473,7 +473,7 @@ class TestPantallaDeAceptacion:
             html = await _get(c)
 
         assert html.index('hx-post="/ui/auditoria/adoptar"') < html.index('hx-post="/ui/auditoria/aceptar-ilegibles"')
-        assert re.search(r'<button type="button" class="btn-primary"[^>]*hx-post="/ui/auditoria/adoptar"', html)
+        assert re.search(r'<button type="button" class="btn primary"[^>]*hx-post="/ui/auditoria/adoptar"', html)
         aceptar = re.search(r"<button type=\"submit\"[^>]*>Registrar de todos modos", html)
         assert aceptar and "btn-secondary" not in aceptar.group(0)
 

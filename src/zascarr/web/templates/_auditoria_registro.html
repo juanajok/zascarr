@@ -3,7 +3,7 @@
     en cuanto termina (el fragmento final ya no lleva `hx-trigger`). -#}
 {% import "_componentes.html" as ui %}
 {%- macro boton(texto) -%}
-<button type="button" class="btn-primary" hx-post="/ui/auditoria/adoptar"
+<button type="button" class="btn primary" hx-post="/ui/auditoria/adoptar"
         hx-target="#registro" hx-swap="outerHTML" hx-disable="this">{{ texto }}</button>
 {%- endmacro -%}
 
@@ -96,7 +96,7 @@
     fuente de internet y no se vincula nada solo por el nombre de su carpeta.</p>
   <form hx-post="/ui/auditoria/registrar-nuevos" hx-target="#registro" hx-swap="outerHTML" hx-disable="find button">
     <input type="hidden" name="huella" value="{{ inc.huella }}">
-    <button type="submit" class="btn-primary">Registrar los {{ inc.nuevos }} archivos sin registrar</button>
+    <button type="submit" class="btn primary">Registrar los {{ inc.nuevos }} archivos sin registrar</button>
   </form>
   {% elif inc.recorrido_completo and inc.en_disco %}
   {{ ui.aviso("ok", "No hay archivos sin registrar: todo lo que hay en la carpeta ya está registrado.") }}
