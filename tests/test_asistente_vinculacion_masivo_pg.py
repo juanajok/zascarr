@@ -100,6 +100,23 @@ class TestMarcarTodos:
         assert "3 marcados · 3 listos" in q.visible
         assert "Revisar y vincular" in q.visible
 
+    async def test_quitar_un_archivo_del_conflicto_deja_el_otro_listo(self, entorno):
+        """#722: el conflicto se resuelve en la fila, sin salir ni recordar nombres."""
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, "Flash 01 (1987).cbz", "Flash 01 (copia).cbz")
+        p = await abrir(serie)
+        a, b = p.filas
+        assert a.nombre != b.nombre
+        campos = p.formulario(marcar=(a.nombre, b.nombre))
+        campos.append(("quitar", a.id))
+        q = await enviar(campos)
+        pagina = Pagina(q.text, p.clave)
+        assert pagina.total("marcados") == 1
+        assert pagina.total("a_vincular") == 1
+        assert not pagina.fila(a.nombre).marcado
+        assert pagina.fila(b.nombre).marcado
+        assert "Quitar este del lote" in pagina.visible
+
     async def test_pack_y_especial_no_se_marcan_y_avisan_del_orden_de_lectura(self, entorno):
         serie = await serie_de_prueba(entorno, "Flash", 1987)
         await archivos(entorno, "Flash 01 (1987).cbz", "Flash v2 001-002.cbr",
