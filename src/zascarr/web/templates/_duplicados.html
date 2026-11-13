@@ -32,7 +32,7 @@
     <button type="submit" class="btn">Ver vista previa</button>
   </form>
   {% else %}
-  <p class="audit-ok">Ahora mismo no hay copias idénticas en el último informe.</p>
+  {{ ui.aviso("info", "Ahora mismo no hay copias idénticas en el último informe.") }}
   {% endif %}
 
   <h3>Copias apartadas</h3>

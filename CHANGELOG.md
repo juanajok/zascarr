@@ -7,6 +7,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Deuda pequeña del sistema de diseño (2026-11-13, #689).** Los avisos de auditoría y de
+  duplicados pasan a `ui.aviso` (icono, `role` y borde de tinta, en vez de `.audit-ok` a mano);
+  se corrige el `btn-secondary` inexistente (ahora `.btn.ghost`); las filas de archivo separan con
+  tinta visible (`--ink-faint`, no `--paper-2` sobre viñeta) y las filas de vinculación usan el
+  borde de 2 px del sistema en vez de `1px solid currentColor`.
 - **Alineación de las pantallas nuevas con el sistema de diseño (2026-11-13).** Calidad pasa a
   Descargas; los títulos-frase usan `.titulo-frase`; acciones de descarte con `.btn-ignorar`;
   filas de Sagas/Mejoras como viñetas de 3 px; botones con verbo y objeto. Detalle:
