@@ -80,8 +80,15 @@ resolver_grupo() {
 }
 
 sustituir() {
-    sed -e "s#@ZASCARR_DATA_DIR@#${DATA_DIR}#g" -e "s#@GRUPO@#${GRUPO}#g" \
-        -e "s#@BACKUP_STATUS_DIR@#${BACKUP_STATUS_DIR}#g" "$1"
+    # Sustitución con expansión de bash (no `sed`): ningún carácter de la ruta hace de delimitador ni de `&`.
+    shopt -u patsub_replacement 2>/dev/null || true
+    local texto
+    texto="$(cat "$1"; printf x)"
+    texto="${texto%x}"
+    texto="${texto//@ZASCARR_DATA_DIR@/${DATA_DIR}}"
+    texto="${texto//@GRUPO@/${GRUPO}}"
+    texto="${texto//@BACKUP_STATUS_DIR@/${BACKUP_STATUS_DIR}}"
+    printf '%s' "${texto}"
 }
 
 # Copia `origen` (ya sustituido si es una unidad) a `destino` solo si cambia. Devuelve 0 si cambió algo.

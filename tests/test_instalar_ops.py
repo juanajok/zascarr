@@ -149,3 +149,45 @@ def test_las_unidades_cumplen_fr29_y_fr01():
         assert linea in sock, linea
     assert (REPO / "deploy/systemd/zascarr-ops.tmpfiles.conf").read_text().strip() == "d /run/zascarr-ops 0700 root root -"
     assert os.access(SCRIPT, os.R_OK)
+
+
+def test_la_carpeta_del_canal_es_0750(entorno):
+    _correr(entorno, "--yes")
+    assert stat.S_IMODE((entorno["datos"] / "ops").stat().st_mode) == 0o750
+
+
+def test_sin_systemctl_aborta_antes_de_crear_nada(entorno):
+    (entorno["bin"] / "systemctl").unlink()
+    r = _correr(entorno, "--yes")
+    assert r.returncode == 1 and "systemctl" in r.stderr
+    assert not entorno["datos"].exists() and not (entorno["tmp"] / "units").exists()
+
+
+def test_python_viejo_aborta_antes_de_crear_nada(entorno):
+    (entorno["bin"] / "python3").unlink()
+    falso = entorno["bin"] / "python3"
+    falso.write_text("#!/bin/bash\nexit 1\n")
+    falso.chmod(0o755)
+    r = _correr(entorno, "--yes")
+    assert r.returncode == 1 and "3.9" in r.stderr and not entorno["datos"].exists()
+
+
+def test_sin_root_y_sin_pruebas_pide_sudo_y_no_escribe(entorno):
+    env_extra = {"ZASCARR_PRUEBAS": ""}
+    r = _correr(entorno, "--yes", env_extra=env_extra)
+    if os.geteuid() != 0:
+        assert r.returncode == 1 and "sudo" in r.stderr
+    assert not (entorno["tmp"] / "units").exists() and not (entorno["tmp"] / "lib").exists()
+
+
+def test_los_destinos_de_pruebas_no_valen_sin_zascarr_pruebas(entorno):
+    """El override de destinos solo existe con ZASCARR_PRUEBAS=1; sin él, `--dry-run` muestra los fijos."""
+    r = _correr(entorno, "--dry-run", env_extra={"ZASCARR_PRUEBAS": ""})
+    assert "/usr/local/lib/zascarr/zascarr-ops" in r.stdout and str(entorno["tmp"] / "lib") not in r.stdout
+    assert "/etc/systemd/system/zascarr-ops.socket" in r.stdout
+
+
+def test_una_clave_que_aparece_durante_la_instalacion_no_se_pisa(entorno):
+    """`mv -n`: si otra ejecución creó la clave entre la comprobación y el `mv`, no se sobrescribe."""
+    texto = SCRIPT.read_text()
+    assert "mv -n" in texto and "mv -f" not in texto
