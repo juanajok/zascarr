@@ -367,3 +367,105 @@ SecOps sobre el **SHA final** por CLAUDE.md §5.8 (el cambio toca `src/zascarr/w
 Quedan como tickets menores independientes: m-1, m-2, m-3, m-5 y la deuda RES-3 (tope de bytes en
 `utils/peticiones.py`). Evidencia reproducible: mediciones de §6.2 con el venv de pruebas y
 `httpx.MockTransport` (sin red), topes de §6.3 con los parsers instrumentados y la suite de §6.4.
+
+---
+
+## 7. Dictamen final de fusión (SHA 48c2920b)
+
+**Fecha:** 2026-11-13, 15:08–15:22 (Europe/Madrid). **Tarea:** task-11. **PR:** #734 (`feat/fandom-fuentes` → `main`).
+**Árbol:** *checkout* en el SHA exacto. Este dictamen se añade al informe con posterioridad al SHA: es solo
+documentación (no se ha tocado código ni se han hecho commits; este informe es el único fichero modificado
+en el árbol de trabajo).
+
+### 7.1 SHA verificado
+
+* `git rev-parse HEAD` → **`48c2920b7a2306fc52faac550f73c317db298f0d`**.
+* `gh pr view 734 --json number,state,mergeable,headRefOid,baseRefName` →
+  `{"baseRefName":"main","headRefOid":"48c2920b7a2306fc52faac550f73c317db298f0d","mergeable":"MERGEABLE","number":734,"state":"OPEN"}`.
+* Base del rebase: `2c69a9bd2fa02e73e70400cd3e9cd0a9a7f67445`.
+* Delta: `git diff 2c69a9bd..48c2920b --stat` → **29 ficheros, +3334/−73**; 4 commits
+  (`b95ffadc`, `39223ccc`, `2f8071c3`, `48c2920b`).
+* **Este dictamen aplica solo a ese SHA.** Cualquier commit añadido o rebase posterior exige repetirlo
+  (CLAUDE.md §5.8).
+
+### 7.2 Superficie §5.8: `web/ajustes.py` y `templates/ajustes.html`
+
+**Hallazgo del delta:** la PR, tal como está rebasada, **no modifica** `src/zascarr/web/ajustes.py`,
+`src/zascarr/web/templates/ajustes.html`, `src/zascarr/config.py` ni
+`src/zascarr/services/runtime_settings.py`: `git diff --quiet 2c69a9bd..48c2920b -- <fichero>` es cierto
+para los cuatro (idénticos a la base). El motivo es que la base `2c69a9bd` **ya contiene** los dos toggles
+Fandom y los campos de configuración: el blame de `web/ajustes.py:128-129` apunta al commit `28d45a52e`
+(«feat(d3): perfil de calidad…», 2026-11-13 13:01), que arrastró esa parte de SCR2 a `main`. Es una
+**observación de proceso sobre `main`, no un cambio de esta PR** (los toggles quedan inertes sin el cliente
+Fandom; conviene que Lead/PO conozca su origen). Por eso el disparador de §5.8 no se materializa en el delta
+neto; aun así se revisa el estado del fichero en el SHA por ser la superficie que la regla protege:
+
+* Toggles: `web/ajustes.py:302-303` son dos `Form(default=False)` explícitos dentro de `guardar_fuentes`; se
+  persisten con `RuntimeSettingsService.save({...})` (`:313-314`) y sus campos están en
+  `OVERRIDABLE_FIELDS["fuentes"]` (`services/runtime_settings.py:44-47`). Sin mass assignment desde el body.
+* Flujo de contraseña/sesión: **sin cambios**. Las líneas de `COOKIE_NAME`/`SESSION_MAX_AGE`/
+  `crear_cookie_sesion` del fichero son preexistentes (idénticas a `main`) y la PR no las toca;
+  `services/seguridad.py` y `services/reautenticacion.py` no aparecen en el delta.
+* Secretos: **ninguno nuevo** (Fandom no requiere credenciales; los indicadores
+  `*_password_configurada`/`auth_password_configurada` existentes no cambian).
+
+### 7.3 Resto de la superficie de seguridad (delta completo)
+
+| Área | Evidencia en el SHA | Resultado |
+|---|---|---|
+| Red/SSRF | `url_portada.py:50-55` (CDN en la allowlist); `services/fandom.py` solo `/api.php`, host fijo, `urlencode`, `follow_redirects=False`, `maxlag=5`; descargas de `imageinfo` únicamente por `descargar_imagen` | Sin cambio de política (§3 #1-3); el CDN entra en la allowlist existente |
+| Cortesía / `maxlag` | `cortesia.py:240-244` (1,5 s × 2 intentos por wiki), `:259-263` (origen lógico `fandom` apagado solo si ambas wikis lo están); `maxlag` comparte bloqueo con tope de 1 h | Correcto (§3 #10-12) |
+| Legal / atribución | `LEGAL.md:107` fila CC-BY-SA; `legal_version` = hash del fichero (base `cad93d00f1436e60` → SHA `77e66dcf43b13b5a`: la aceptación anterior se invalida sola); doble enlace artículo + CC-BY-SA 3.0 en `web/atribucion.py:16-48` y plantillas; portadas no etiquetadas y sin hotlinking | Correcto (§3 #6-8) |
+| Apagado por defecto | `config.py:100-103` (`False`/`1.5`, ya en la base); Ajustes y `runtime_settings` | Correcto (§3 #4-5) |
+| Dependencias | `git diff 2c69a9bd..48c2920b -- pyproject.toml` vacío; `services/fandom.py` usa stdlib + `httpx` + `structlog` ya presentes | Sin dependencias nuevas |
+| Migración 0034 | Solo `add_column` + `create_unique_constraint`; `downgrade` revierte columnas y constraints; sin tocar datos ni tipos | Aditiva y reversible |
+| Logs y datos | Código nuevo loguea códigos/nombres de página, nunca URLs ni payloads (§3 #9); `comic_vine.py` (nuevo `store_date`) y `enricher.py` (`_fecha_iso` con `date.fromisoformat`) son cambios de datos, sin red nueva ni entradas de usuario | Correcto |
+| Grep de superficie sensible en el delta | `os.environ`/contraseñas/secretos: sin coincidencias relevantes (solo `FakeSession` de tests) | Correcto |
+
+### 7.4 M-1 re-verificado en este SHA (sigue cerrado)
+
+Medido sobre el árbol del SHA (Python 3.14, venv de pruebas):
+
+* `fecha_inglesa("A"×20.000)` → **0,37 ms**; `×1.000.000` → **0,36 ms** (antes: 6.220 ms / horas).
+* `limpiar_markup("<"×200.000)` → **3,2 ms**; `"["×200.000` → **48,0 ms**; `seccion("="×200.000)` →
+  **1,3 ms**; `titulo_base("a" + " "×40.000 + "b")` → **0,002 ms**.
+* `_RE_FECHA_EN` ya no existe en el SHA; `MAX_CUERPO_API`/`MAX_WIKITEXT`/`MAX_TEXTO_FECHA`/
+  `MAX_TITULO_PAGINA` presentes (`fandom.py:68,71,75,79`); las fechas válidas se siguen reconociendo.
+* `pytest tests/test_fandom.py tests/test_enricher.py` → **86 passed**. Detalle y comparativa completa en §6.
+
+### 7.5 Regresión focal
+
+```
+PYTHONPATH=src .tmp-test-venv/bin/python -m pytest -q tests/test_web*.py \
+    tests/test_seguridad.py tests/test_legal.py tests/test_runtime_settings.py
+→ 1287 passed, 107 skipped in 23.39 s
+```
+(Los 107 *skips* son los esperados sin `TEST_DATABASE_URL` y dependencias de entorno, como en §1 del
+informe de QA.)
+
+```
+ruff check src/                → All checks passed!
+ruff check --select S src/     → All checks passed!
+```
+Gate de CI de ruff (`ci.yml:115,118`) **verde**. `tests/test_enricher.py` tiene 16 hallazgos de ruff
+(E501/I001/UP017) **idénticos en la base y en el SHA**: son deuda pre-existente, `tests/` no está en el gate
+de CI y la PR no los introduce.
+
+### 7.6 Veredicto: **FAVORABLE**
+
+**Favorable a fusionar el SHA `48c2920b7a2306fc52faac550f73c317db298f0d` en `main` (`2c69a9bd`).**
+
+* **0 bloqueantes:** sin SSRF nuevo, sin cambios en contraseña/sesión, sin secretos ni dependencias nuevas,
+  migración aditiva/reversible, fuentes apagadas por defecto, `legal_version` por hash y atribución
+  CC-BY-SA 3.0 completa.
+* **M-1 cerrado** y re-verificado en este SHA (§7.4).
+* **Regresión de seguridad/web verde** y gates de ruff de CI verdes (§7.5).
+* **Observaciones no bloqueantes (no condicionan la fusión):** (a) `main` ya contenía los toggles Fandom
+  desde `28d45a52e` —observación de proceso, ver §7.2—; (b) deuda de lint pre-existente en
+  `tests/test_enricher.py`; (c) siguen abiertos los menores m-1, m-2, m-3 y m-5 y la deuda RES-3 (§6.6),
+  ya documentados como tickets independientes.
+* **Condición de vigencia:** cualquier commit o rebase posterior invalida este dictamen y exige repetirlo
+  sobre el nuevo SHA (§5.8).
+
+**Comentario en el PR #734:** publicado el 2026-11-13 con este veredicto y el SHA citado —
+<https://github.com/juanajok/zascarr/pull/734#issuecomment-6855377310>.
