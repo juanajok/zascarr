@@ -235,13 +235,15 @@ def con_sesion():
 # ── 1. datos del menú ─────────────────────────────────────────────────────────────────────
 URLS_DE_SIEMPRE = {
     "inicio": "/ui/", "revisar": "/ui/pendientes", "biblioteca": "/ui/biblioteca",
-    "colecciones": "/ui/colecciones", "duplicados": "/ui/auditoria",
+    "colecciones": "/ui/colecciones", "mejoras": "/ui/mejoras",
+    "duplicados": "/ui/auditoria",
     "descubrir": "/ui/descubrir", "deseados": "/ui/wishlist",
     "estado": "/estado", "ajustes": "/ui/ajustes",
 }
 ETIQUETAS = {
     "inicio": "Inicio", "revisar": "Por revisar", "biblioteca": "Biblioteca",
-    "colecciones": "Colecciones", "duplicados": "Duplicados", "descubrir": "Descubrir",
+    "colecciones": "Colecciones", "mejoras": "Mejoras",
+    "duplicados": "Duplicados", "descubrir": "Descubrir",
     "deseados": "Deseados", "estado": "Estado", "ajustes": "Ajustes",
 }
 
@@ -257,7 +259,8 @@ class TestDatosDelMenu:
         assert GRUPOS == ("Mi colección", "Añadir", "Sistema")
         por_grupo = {g: [e.etiqueta for e in ENTRADAS if e.grupo == g] for g in GRUPOS}
         assert por_grupo == {
-            "Mi colección": ["Inicio", "Por revisar", "Biblioteca", "Colecciones", "Duplicados"],
+            "Mi colección": ["Inicio", "Por revisar", "Biblioteca", "Mejoras",
+                             "Colecciones", "Duplicados"],
             "Añadir": ["Descubrir", "Deseados"],
             "Sistema": ["Estado", "Ajustes"],
         }
@@ -272,7 +275,7 @@ class TestDatosDelMenu:
     def test_la_barra_inferior_tiene_cuatro_entradas_y_mas_guarda_el_resto(self):
         principales = [e.clave for e in ENTRADAS if e.movil_principal]
         assert principales == ["inicio", "revisar", "deseados", "estado"]
-        assert len([e for e in ENTRADAS if not e.movil_principal]) == 5
+        assert len([e for e in ENTRADAS if not e.movil_principal]) == 6
 
     def test_solo_las_entradas_principales_llevan_contador(self):
         """Las secundarias salen dos veces en el DOM (barra y «Más»): un `id` de contador duplicado
@@ -285,6 +288,7 @@ class TestDatosDelMenu:
         ("/ui/", "inicio"), ("/ui", "inicio"), ("/ui/pendientes", "revisar"),
         ("/ui/pendientes/abc/portada", "revisar"), ("/ui/biblioteca", "biblioteca"),
         ("/ui/biblioteca?page=2", "biblioteca"), ("/ui/series/123", "biblioteca"),
+        ("/ui/mejoras", "mejoras"), ("/ui/mejoras/abc", "mejoras"),
         ("/ui/auditoria", "duplicados"), ("/ui/descubrir", "descubrir"),
         ("/ui/wishlist", "deseados"), ("/estado", "estado"), ("/ui/ajustes", "ajustes"),
     ])
