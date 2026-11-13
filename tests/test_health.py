@@ -590,3 +590,20 @@ class TestDiscoNoMedible:
             body = client.get("/api/health").json()
         assert body["checks"]["disk"] == "warning" and body["status"] == "degraded"
         assert "disk" in body["warnings"]
+
+
+def test_fuentes_de_metadatos_incluyen_las_fuentes_nuevas(monkeypatch):
+    """AC-17 (SCR2): las fuentes de enriquecimiento nuevas aparecen en /api/health.
+
+    Fandom se consulta en el ciclo del enricher, así que su estado debe verse aquí; con
+    los valores por defecto (ADR 0013) sale «disabled» y no como fallo.
+    """
+    s = get_settings()
+    monkeypatch.setattr(s, "fandom_dc_enabled", False)
+    monkeypatch.setattr(s, "fandom_marvel_enabled", False)
+    with _fake_db_client() as client:
+        r = client.get("/api/health")
+    assert r.status_code == 200
+    fuentes = r.json()["fuentes"]
+    assert fuentes["fandom_dc"] == "disabled"
+    assert fuentes["fandom_marvel"] == "disabled"

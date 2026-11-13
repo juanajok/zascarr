@@ -223,3 +223,22 @@ Modificados: `src/zascarr/LEGAL.md`, `config.py`, `models/__init__.py`, `service
 Nuevos: `src/zascarr/services/fandom.py`, `tests/test_fandom.py`,
 `alembic/versions/20261113_0034_fandom_slugs.py` (y los documentos de benchmark/spec de los otros roles).
 Lint: `ruff check` sobre los 14 ficheros del cambio → **All checks passed!** (ruff 0.17.5).
+
+
+---
+
+## Nota de cierre post-fusión (2026-11-13, tras desplegar)
+
+Al fusionar todo en `main`, la migración **0034 quedó duplicada** (otra historia —BL-D3,
+`upgrade_proposals`— usó el mismo número en paralelo), lo que rompía `alembic upgrade head`
+con «Multiple head revisions». La resolución de `main` la renumeró a **0036** (`0034 mejoras`
+→ `0035 portada` → `0036 fandom`), sin cambiar el SQL.
+
+Verificación de esta sesión, con Postgres real y la app arrancada:
+- `alembic upgrade head` desde 0033 aplica 0034→0035→0036; `alembic current` = 0036.
+- `\d series` / `\d issues`: `fandom_dc_slug`/`fandom_marvel_slug` con `UNIQUE`;
+  `alembic downgrade 0035` las retira y `upgrade head` las repone.
+- `/api/health` servido por la app real: añade `fandom_dc`/`fandom_marvel` como «disabled»
+  (AC-17, corregido en PR posterior) y `db: ok`.
+- Añadida regresión `tests/test_migracion_fandom_pg.py` (upgrade desde 0035, columnas, UNIQUE
+  y downgrade) para cerrar AC-01/AC-06 «sin Postgres real».
