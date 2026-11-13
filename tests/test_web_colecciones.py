@@ -13,10 +13,17 @@ from zascarr.main import app
 from zascarr.services.colecciones import (
     ColeccionResumen,
     DetalleColeccion,
+    PaginaSeriesDisponibles,
     ResultadoColeccion,
     SerieDeColeccion,
 )
 from zascarr.services.portada_coleccion import CandidataPortada, ResultadoEleccion, ResultadoPortada
+
+
+def _pagina(*series):
+    filas = list(series)
+    return PaginaSeriesDisponibles(
+        filas, len(filas), 1, 1, 1 if filas else 0, len(filas))
 
 
 def _cliente():
@@ -57,8 +64,8 @@ def test_detalle_muestra_series_y_selector():
                                    "No buscar automáticamente")])
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
-                 SerieDeColeccion("s2", "Batman", 1940, "ninguno")])), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion", AsyncMock(
+                 return_value=_pagina(SerieDeColeccion("s2", "Batman", 1940, "ninguno")))), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[
                  CandidataPortada("s1", "Flash", True)])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[
@@ -156,7 +163,8 @@ def test_panel_elegir_portada_post():
     c = _cliente()
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=_pagina())), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.elegir_portada", AsyncMock(
@@ -175,7 +183,8 @@ def test_panel_uuid_invalido_no_llama_a_elegir():
     llamada = AsyncMock()
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=_pagina())), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.elegir_portada", llamada):
@@ -194,7 +203,8 @@ def test_aviso_portada_tras_elegir_y_fallback_sin_img():
     c = _cliente()
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=_pagina())), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
             r = c.get(f"/ui/colecciones/{cid}?guardado=portada")
@@ -213,9 +223,10 @@ def test_multiseleccion_muestra_checkboxes_y_redirige():
     c = _cliente()
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
-                 SerieDeColeccion(s1, "Flash", 1987, "ninguno"),
-                 SerieDeColeccion(s2, "Batman", 1940, "ninguno")])), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion", AsyncMock(
+                 return_value=_pagina(
+                     SerieDeColeccion(s1, "Flash", 1987, "ninguno"),
+                     SerieDeColeccion(s2, "Batman", 1940, "ninguno")))), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.asignar_series", AsyncMock(
@@ -239,8 +250,8 @@ def test_multiseleccion_uuid_invalido_no_llama_al_servicio():
     llamada = AsyncMock()
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
-                 SerieDeColeccion(valida, "Flash", 1987, "ninguno")])), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion", AsyncMock(
+                 return_value=_pagina(SerieDeColeccion(valida, "Flash", 1987, "ninguno")))), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.asignar_series", llamada):
@@ -260,8 +271,8 @@ def test_filtros_y_seleccion_oculta_en_plantilla():
     c = _cliente()
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
-                 SerieDeColeccion(visible, "Flash", 1987, "ninguno")])), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion", AsyncMock(
+                 return_value=_pagina(SerieDeColeccion(visible, "Flash", 1987, "ninguno")))), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
             r = c.get(f"/ui/colecciones/{cid}", params=[
@@ -282,10 +293,58 @@ def test_filtro_sin_resultados_ofrece_limpiar():
     c = _cliente()
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=_pagina())), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
             r = c.get(f"/ui/colecciones/{cid}", params={"q": "nada"})
     finally:
         _cerrar()
     assert "No hay series con esos filtros" in r.text and "Limpiar filtros" in r.text
+
+
+def test_paginacion_conserva_seleccion_y_limpiar_es_boton():
+    cid = uuid4()
+    sid = str(uuid4())
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    pagina = PaginaSeriesDisponibles(
+        [SerieDeColeccion(sid, "Flash", 1987, "ninguno")], 45, 2, 3, 41, 41)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=pagina)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}", params=[
+                ("q", "flash"), ("pagina", "2"), ("serie_ids", sid)])
+    finally:
+        _cerrar()
+    assert "41–41 de 45 series disponibles" in r.text
+    assert "Página 2 de 3" in r.text
+    assert "Anterior" in r.text and "Siguiente" in r.text
+    assert "serie_ids=" + sid in r.text
+    assert 'type="submit" name="limpiar" value="1"' in r.text
+    assert "autofocus" in r.text
+
+
+def test_limpiar_filtros_conserva_la_seleccion_en_el_servidor():
+    cid = uuid4()
+    sid = str(uuid4())
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    c = _cliente()
+    llamada = AsyncMock(return_value=_pagina())
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion", llamada), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}", params=[
+                ("q", "flash"), ("tradicion", "manga"), ("limpiar", "1"),
+                ("serie_ids", sid)])
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    kwargs = llamada.await_args.kwargs
+    assert kwargs["q"] == "" and kwargs["tradicion"] == ""
+    assert f'name="serie_ids" value="{sid}"' in r.text

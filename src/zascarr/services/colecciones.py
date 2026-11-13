@@ -252,23 +252,62 @@ async def borrar_coleccion(db: AsyncSession, coleccion_id: UUID) -> bool:
     return True
 
 
-async def series_sin_coleccion(db: AsyncSession, *, q: str = "",
-                               tradicion: str = "") -> list[SerieDeColeccion]:
-    """Series sin colección, con filtros tolerantes a acentos y artículos.
+@dataclass(frozen=True)
+class PaginaSeriesDisponibles:
+    series: list[SerieDeColeccion]
+    total: int
+    pagina: int
+    paginas: int
+    desde: int
+    hasta: int
 
-    `q` se normaliza con el MISMO normalizador que el matcher (`title_norm`);
-    `tradicion` solo filtra si es un valor conocido. Orden estable y tope 200.
-    """
-    stmt = select(Series).where(Series.collection_id.is_(None))
+
+def _filtro_disponibles(q: str, tradicion: str):
+    filtros = [Series.collection_id.is_(None)]
     texto = (q or "").strip()[:120]
     if texto:
         normalizado = normalize_title(texto)
         if normalizado:
-            stmt = stmt.where(Series.title_norm.like(f"%{normalizado}%"))
+            filtros.append(Series.title_norm.like(f"%{normalizado}%"))
     if tradicion in {t.value for t in ComicTradition}:
-        stmt = stmt.where(Series.tradition == ComicTradition(tradicion))
+        filtros.append(Series.tradition == ComicTradition(tradicion))
+    return filtros
+
+
+async def pagina_series_sin_coleccion(
+    db: AsyncSession, *, q: str = "", tradicion: str = "",
+    pagina: int = 1, por_pagina: int = 40,
+) -> PaginaSeriesDisponibles:
+    filtros = _filtro_disponibles(q, tradicion)
+    total = int((await db.execute(
+        select(func.count()).select_from(Series).where(*filtros))).scalar_one())
+    paginas = max(1, (total + por_pagina - 1) // por_pagina)
+    pagina = min(max(1, pagina), paginas)
+    desde = (pagina - 1) * por_pagina
     filas = (await db.execute(
-        stmt.order_by(Series.sort_title, Series.title).limit(200))).scalars().all()
+        select(Series).where(*filtros)
+        .order_by(Series.sort_title, Series.title).offset(desde).limit(por_pagina)
+    )).scalars().all()
+    series = [SerieDeColeccion(
+        str(s.id), s.title, s.start_year,
+        (s.wishlist_policy or WishlistPolicy.NONE.value),
+        etiqueta_politica(s.wishlist_policy),
+        politica_efectiva_de(s.wishlist_policy, None),
+        etiqueta_politica(politica_efectiva_de(s.wishlist_policy, None)))
+        for s in filas]
+    return PaginaSeriesDisponibles(
+        series=series, total=total, pagina=pagina, paginas=paginas,
+        desde=desde + 1 if total else 0, hasta=min(desde + por_pagina, total))
+
+
+async def series_sin_coleccion(db: AsyncSession, *, q: str = "",
+                               tradicion: str = "") -> list[SerieDeColeccion]:
+    """Series sin colección (máx. 200) con los mismos filtros que la paginación."""
+    filtros = _filtro_disponibles(q, tradicion)
+    filas = (await db.execute(
+        select(Series).where(*filtros)
+        .order_by(Series.sort_title, Series.title).limit(200)
+    )).scalars().all()
     return [SerieDeColeccion(
         str(s.id), s.title, s.start_year,
         (s.wishlist_policy or WishlistPolicy.NONE.value),

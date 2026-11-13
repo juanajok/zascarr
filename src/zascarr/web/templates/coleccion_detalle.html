@@ -10,6 +10,7 @@
 {% set seleccion_oculta = seleccion_oculta|default([]) %}
 {% set q = q|default("") %}
 {% set tradicion = tradicion|default("") %}
+{% set pagina = pagina|default(none) %}
 <header class="coleccion-cabecera coleccion-panel">
   <div class="coleccion-portada">{{ ui.portada(coleccion.name, coleccion.id, coleccion.portada_url if coleccion.tiene_portada else none, clase="portada-coleccion") }}</div>
   <div class="coleccion-cabecera-texto">
@@ -65,10 +66,14 @@
         </div>
         <div class="coleccion-filtro-acciones">
           <button class="btn" type="submit">Filtrar</button>
-          <a class="btn ghost" href="/ui/colecciones/{{ coleccion.id }}">Limpiar filtros</a>
+          <button class="btn ghost" type="submit" name="limpiar" value="1">Limpiar filtros</button>
         </div>
       </div>
-      <p class="coleccion-contador" role="status">{{ series|length }} {{ "serie disponible" if series|length == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
+      {% if pagina %}
+      <p class="coleccion-contador" role="status" tabindex="-1" autofocus>{{ pagina.desde }}–{{ pagina.hasta }} de {{ pagina.total }} {{ "serie disponible" if pagina.total == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
+      {% else %}
+      <p class="coleccion-contador" role="status" tabindex="-1" autofocus>{{ series|length }} {{ "serie disponible" if series|length == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
+      {% endif %}
       {% for sid in seleccion_oculta %}
       <input type="hidden" name="serie_ids" value="{{ sid }}">
       {% endfor %}
@@ -93,6 +98,21 @@
       {% if seleccion_oculta and not series %}
       <button class="btn" type="submit" formaction="/ui/colecciones/{{ coleccion.id }}/series"
               formmethod="post">Añadir series seleccionadas</button>
+      {% endif %}
+      {% if pagina and pagina.paginas > 1 %}
+      <nav class="coleccion-paginacion" aria-label="Páginas de series disponibles">
+        {% if pagina.pagina > 1 %}
+        <a class="btn ghost" href="{{ url_anterior }}">← Anterior</a>
+        {% else %}
+        <span class="btn ghost" aria-disabled="true">← Anterior</span>
+        {% endif %}
+        <span>Página {{ pagina.pagina }} de {{ pagina.paginas }}</span>
+        {% if pagina.pagina < pagina.paginas %}
+        <a class="btn ghost" href="{{ url_siguiente }}">Siguiente →</a>
+        {% else %}
+        <span class="btn ghost" aria-disabled="true">Siguiente →</span>
+        {% endif %}
+      </nav>
       {% endif %}
     </fieldset>
   </form>
