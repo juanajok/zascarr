@@ -10,9 +10,10 @@ existe de BL-C4:
 Reglas:
 - **Solo lectura de la biblioteca** (`Series`, `Issue`): no se crean series ni números, no se
   toca `files`, wishlist ni el disco. Las únicas escrituras son el arco y sus enlaces.
-- **Idempotente**: re-ejecutar la misma guía actualiza el orden, añade los enlaces nuevos y
-  quita los que ya no declara; nunca duplica. Se busca el arco por título (patrón de
-  `enricher._upsert_arc`).
+- **Idempotente por identidad de guía**: el arco se busca por `metadata_["origen"]` +
+  `metadata_["url"]` (JSONB), no por título. Si la guía cambia de título se actualiza esa
+  misma fila; si no existe, se crea. **Nunca** se adopta un arco de otra fuente (Fandom,
+  manual u otra guía) aunque coincida el título: su metadata y sus enlaces no se tocan.
 - Match conservador: título normalizado exacto (`Series.title_norm`), desempate por `volumen`
   y por `anio_volumen` (±1). **Nunca** se usa `anio_numero` para desempatar series. Si sigue
   siendo ambiguo, el ítem se descarta con contador y log (no se inventa).
@@ -23,6 +24,7 @@ Reglas:
 """
 from __future__ import annotations
 
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -52,6 +54,8 @@ MAX_ENLACES = 1_000
 MAX_ENTRADAS = 5_000
 #: Tolerancia de año para desempatar series (spec §4: ±1; el año del número no se usa).
 TOLERANCIA_ANIO = 1
+#: Cota del título externo al imprimirlo en una terminal (SecOps c-2).
+MAX_TITULO_TERMINAL = 200
 
 TipoMotivo = str
 
@@ -67,6 +71,19 @@ class ResultadoReconciliacion:
     enlazados: int
     omitidos: int
     motivos: tuple[tuple[str, int], ...] = ()
+
+
+def texto_para_terminal(texto: str, maximo: int = MAX_TITULO_TERMINAL) -> str:
+    """Sanea un texto externo para consola: sin controles C0/ESC/BEL ni formato Unicode.
+
+    El título lo controla la fuente; sin esto una guía comprometida podría inyectar
+    secuencias ANSI/OSC al ejecutar el script manual (SecOps c-2).
+    """
+    seguro = "".join(
+        caracter for caracter in texto
+        if caracter.isprintable() and unicodedata.category(caracter) != "Cf"
+    )
+    return " ".join(seguro.split())[:maximo]
 
 
 def titulo_de_guia(guia: GuiaLeida) -> str:
@@ -127,23 +144,48 @@ async def _buscar_serie(db: AsyncSession,
     return (serie, "") if serie is not None else (None, "ambiguo")
 
 
-async def _buscar_issue(db: AsyncSession, serie: Series, numero: str) -> Issue | None:
-    return (await db.execute(
+async def _buscar_issue(db: AsyncSession, serie: Series, numero: str,
+                        item: ReadingOrderItem) -> tuple[Issue | None, str]:
+    """(issue, motivo): el UNIQUE real es (series_id, issue_number, volume).
+
+    Si hay varias filas con ese número, se desempata por el volumen del ítem; si sigue
+    habiendo más de una, se devuelve `ambiguo` y no se elige a ciegas (SecOps c-3).
+    """
+    candidatas = list((await db.execute(
         select(Issue).where(Issue.series_id == serie.id, Issue.issue_number == numero)
-    )).scalars().first()
+    )).scalars().all())
+    if not candidatas:
+        return None, ""
+    if len(candidatas) == 1:
+        return candidatas[0], ""
+    if item.volumen is not None:
+        por_volumen = [issue for issue in candidatas
+                       if getattr(issue, "volume", None) == item.volumen]
+        if len(por_volumen) == 1:
+            return por_volumen[0], ""
+    return None, "ambiguo"
 
 
 async def _upsert_arco(db: AsyncSession, titulo: str,
                        guia: GuiaLeida) -> tuple[StoryArc, bool]:
-    """Arco de la guía (lo crea si no existe). Clave: título, como `_upsert_arc` del enricher."""
+    """Arco de la guía, por `metadata_["origen"]` + `metadata_["url"]` (identidad, no título).
+
+    Nunca se busca ni se adopta por título: un arco de Fandom/manual/otra guía con el mismo
+    título es otro arco y no se toca (SecOps C-1). Si la guía cambia de título, se actualiza
+    esa fila (misma URL) en vez de duplicar.
+    """
     metadata = {"origen": guia.sitio, "url": guia.url}
     fila = (await db.execute(
-        select(StoryArc).where(StoryArc.title == titulo)
+        select(StoryArc).where(
+            StoryArc.metadata_["origen"].astext == guia.sitio,
+            StoryArc.metadata_["url"].astext == guia.url,
+        )
     )).scalars().first()
     if fila is None:
         fila = StoryArc(id=uuid4(), title=titulo, metadata_=metadata)
         db.add(fila)
         return fila, True
+    fila.title = titulo                  # la identidad es origen+URL: el título puede cambiar
     fila.metadata_ = {**(fila.metadata_ or {}), **metadata}
     return fila, False
 
@@ -152,9 +194,9 @@ async def reconciliar_guia(db: AsyncSession,
                            guia: GuiaLeida) -> ResultadoReconciliacion:
     """Cruza una guía leída con la biblioteca y deja el arco y su orden actualizados.
 
-    Orden de consultas (determinista para los dobles de prueba): (1) `StoryArc` por título;
-    (2) por entrada, `Series` por `title_norm`; (3) por número, `Issue` de esa serie;
-    (4) enlaces actuales de `StoryArcIssue`. No hace `commit` (lo decide el llamador).
+    Orden de consultas (determinista para los dobles de prueba): (1) `StoryArc` por
+    `metadata_` origen+URL; (2) por entrada, `Series` por `title_norm`; (3) por número,
+    `Issue` de esa serie; (4) enlaces actuales de `StoryArcIssue`. No hace `commit`.
     """
     titulo = titulo_de_guia(guia)
     motivo: Counter[str] = Counter()
@@ -188,20 +230,23 @@ async def reconciliar_guia(db: AsyncSession,
                         orden=entrada.orden, motivo=motivo_serie)
             continue
         encontrados = 0
+        ambiguo = False
         for numero in numeros:
             if len(enlazados) >= MAX_ENLACES:
                 motivo["tope"] += 1
                 break
-            issue = await _buscar_issue(db, serie, numero)
+            issue, motivo_issue = await _buscar_issue(db, serie, numero, item)
             if issue is None:
+                ambiguo = ambiguo or motivo_issue == "ambiguo"
                 continue
             enlazados.append((issue, entrada.orden))
             encontrados += 1
         if encontrados == 0:
             omitidos += 1
-            motivo["numero_no_encontrado"] += 1
+            clave = "ambiguo" if ambiguo else "numero_no_encontrado"
+            motivo[clave] += 1
             logger.info("lecturas.item_descartado", sitio=guia.sitio,
-                        orden=entrada.orden, motivo="numero_no_encontrado")
+                        orden=entrada.orden, motivo=clave)
 
     # (4) Enlaces actuales: actualizar orden, añadir nuevos y quitar los que ya no constan.
     existentes = {

@@ -441,3 +441,20 @@ def test_validacion_comun_de_url_no_acepta_esquemas_ni_recursos():
     assert not url_de_sitio_valida("http://www.continuityguide.net/planetx", hosts)
     assert not url_de_sitio_valida("https://www.continuityguide.net/x.jpg", hosts)
     assert not url_de_sitio_valida("https://www.continuityguide.net/../x", hosts)
+
+
+def test_c1_porcentaje_codificado_no_esquiva_la_validacion():
+    """SecOps c-1: `%2e%2e` (y doble codificación) equivale a `..` para el servidor."""
+    ro = ReadingOrdersExtractor(CacheHttpFalsa())
+    assert not ro._url_del_sitio(
+        "https://comicbookreadingorders.com/dc/events/x%2e%2e/y/")
+    assert not ro._url_del_sitio(
+        "https://comicbookreadingorders.com/dc/events/%2e%2e/%2e%2e/etc")
+    assert not ro._url_del_sitio(
+        "https://comicbookreadingorders.com/dc/events/x%252e%252e/y/")
+    assert not ro._url_del_sitio("https://comicbookreadingorders.com/%61pi/guia")
+
+    cg = ContinuityGuideExtractor(CacheHttpFalsa())
+    assert not cg._url_del_sitio("https://www.continuityguide.net/%2e%2e/x")
+    assert not cg._url_del_sitio("https://www.continuityguide.net/%61pi/guia")
+    assert cg._url_del_sitio("https://www.continuityguide.net/planetx")
