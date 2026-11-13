@@ -499,8 +499,11 @@ class TestBorradorGuardado:
             apertura = await c.get(RUTA, params={"clave": q.clave, "series_id": str(serie)})
             assert "Hay una revisión guardada" in Pagina(apertura.text).visible
             assert "No se ha aplicado nada" in Pagina(apertura.text).visible
-            reabierta = await c.get(f"{RUTA}/reabrir", params={"clave": q.clave, "series_id": str(serie)})
+            reabierta = await c.get(f"{RUTA}/reabrir", params={"clave": q.clave, "series_id": str(serie)},
+                                    headers={"HX-Request": "true"})
         assert reabierta.status_code == 200, reabierta.text
+        assert "<html" not in reabierta.text.lower()
+        assert 'id="revision"' in reabierta.text
         pagina = Pagina(reabierta.text, q.clave)
         assert "Revisión reanudada" in pagina.visible
         assert len(nombres_marcados(pagina)) == 2
