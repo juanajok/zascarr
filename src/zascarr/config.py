@@ -139,6 +139,10 @@ class Settings(BaseSettings):
     # (ver docker-compose.yml); los discos en sí se configuran en .env con
     # HOST_LIBRARY_DIR / HOST_DOWNLOADS_DIR / HOST_AMULE_INCOMING_DIR.
     library_path: Path = Field(default=Path("/media/library"))
+    # B20: raíz de exportación a Kavita. Siempre la ruta del contenedor; la
+    # ruta del host se monta ahí con HOST_EXPORT_DIR (docker-compose/.env).
+    export_path: Path = Field(default=Path("/media/export"))
+    host_export_dir: str = Field(default="")
     # Ruta REAL de la biblioteca en el host (HOST_LIBRARY_DIR del .env). No se usa para
     # acceder a nada (eso es `library_path`): solo para MOSTRARLE a la persona dónde está
     # su archivo (utils/ruta_visible.py).

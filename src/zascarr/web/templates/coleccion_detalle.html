@@ -25,6 +25,24 @@
   <p class="caption">«Como cada serie» respeta el «Qué buscar» de cada serie. «Buscar faltantes» lo fuerza aunque la serie no busque por su cuenta. «No buscar» lo veta y retira los deseos automáticos pendientes. La búsqueda manual no se toca.</p>
   <button class="btn primary" type="submit">Guardar colección</button>
 </form>
+<h2>Exportar a Kavita</h2>
+<details class="politica-detalles">
+  <summary>Preparar una carpeta para Kavita</summary>
+  <p class="caption">Crea una copia legible por Kavita en la carpeta de exportación. No mueve ni toca la biblioteca: los archivos siguen donde están. El parche de ComicInfo todavía no está disponible (fase 2).</p>
+  <form method="post" action="/ui/colecciones/{{ coleccion.id }}/exportar">
+    <input type="hidden" name="patch_comicinfo" value="0">
+    <button class="btn primary" type="submit">Exportar esta colección</button>
+  </form>
+</details>
+{% if exportacion %}
+<div class="tarjeta" role="status">
+  <p><strong>Exportación terminada.</strong> {{ exportacion.materializados }} archivos preparados en
+    <code>{{ exportacion.destino }}</code>.</p>
+  <p class="caption">Omitidos: {{ exportacion.omitidos }} · colisiones: {{ exportacion.colisiones }} · deriva: {{ exportacion.deriva }} · errores: {{ exportacion.errores }} · copiados: {{ exportacion.bytes_copiados }} bytes.</p>
+  <p class="caption">Registro de la operación: <a href="/api/operaciones">operaciones</a> (run {{ exportacion.run_id }}).</p>
+</div>
+{% endif %}
+
 <details class="politica-detalles">
   <summary>Borrar esta colección</summary>
   <p class="caption">Las series seguirán en tu biblioteca, sin colección. No se borra ninguna serie ni archivo.</p>
