@@ -19,7 +19,7 @@
         <button type="submit" class="primary">{{ "Comprobar el resultado" if fallo.codigo == "resultado_incierto" else "Reintentar" }}</button>
       </form>
       {% endif %}
-      {% if not fallo.repetible %}<a class="btn-primary" href="{{ volver }}/archivos/{{ file_id }}/deshacer">Abrir de nuevo</a>{% endif %}
+      {% if not fallo.repetible %}<a class="btn primary" href="{{ volver }}/archivos/{{ file_id }}/deshacer">Abrir de nuevo</a>{% endif %}
       <a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>
     </div>
   </section>
@@ -42,8 +42,8 @@
     <p>No se ha movido ni borrado nada. Para vincularlo de nuevo, ve a «Por revisar».</p>
     {% endif %}
     <div class="vinc-acciones">
-      {% if r.resultado in ("deshecho", "ya_deshecho") %}<a class="btn-primary" href="/ui/pendientes">Ir a «Por revisar»</a>{% else %}
-      <a class="btn-primary" href="{{ volver }}/archivos/{{ file_id }}/deshacer">Abrir de nuevo</a>{% endif %}
+      {% if r.resultado in ("deshecho", "ya_deshecho") %}<a class="btn primary" href="/ui/pendientes">Ir a «Por revisar»</a>{% else %}
+      <a class="btn primary" href="{{ volver }}/archivos/{{ file_id }}/deshacer">Abrir de nuevo</a>{% endif %}
       <a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>
     </div>
   </section>

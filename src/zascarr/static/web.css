@@ -437,11 +437,9 @@ html { scroll-padding-bottom: 96px; }
 .empty { color: var(--ink-faint); font-style: italic; }
 
 /* ── 5. BOTONES ──────────────────────────────────────────────────────────── */
-/* Sin `button[type="submit"]` aquí: con su especificidad (0,1,1) el fondo base ganaba a `.btn-primary`
-   (0,1,0), que solo salía amarillo porque la regla amarilla también nombraba los envíos. */
+/* V14 (#750): las plantillas usan `.btn.primary`; el alias `.btn-primary` se retiró. */
 button,
 .btn,
-.btn-primary,
 .btn-ignorar,
 .btn-reintentar,
 .series-result-item button {
@@ -471,7 +469,6 @@ button,
 button:where(:not([disabled])):hover,
 button[type="submit"]:where(:not([disabled])):hover,
 .btn:where(:not([disabled])):hover,
-.btn-primary:where(:not([disabled])):hover,
 .series-result-item button:where(:not([disabled])):hover {
   transform: translate(-2px, -2px);
   box-shadow: var(--shadow-ink-hover);
@@ -479,8 +476,7 @@ button[type="submit"]:where(:not([disabled])):hover,
 
 button:where(:not([disabled])):active,
 button[type="submit"]:where(:not([disabled])):active,
-.btn:where(:not([disabled])):active,
-.btn-primary:where(:not([disabled])):active {
+.btn:where(:not([disabled])):active {
   transform: translate(1px, 1px);
   box-shadow: var(--shadow-ink-active);
 }
@@ -489,7 +485,6 @@ button[type="submit"]:where(:not([disabled])):active,
    `type="submit"`: Ajustes enseñaba siete «Guardar» amarillos y una lista de resultados, uno por fila.
    Un envío es neutro salvo que lleve `.primary` (revisión visual, 2026-10-20). */
 button.primary,
-.btn-primary,
 .btn.primary {
   --btn-bg: var(--yellow);
   /* V1: en oscuro --ink es CLARO: sobre el amarillo daba 1,2:1. El par fijo es --on-yellow. */
@@ -542,8 +537,7 @@ button[type="submit"].neutro {
 /* ── 7. DIDASCALIA (cajita amarilla de narración) ───────────────────────── */
 /* U17: un TEXTO (de más de una línea) va en caja normal: sin mayúsculas, sin giro y sin espaciado de rótulo. Antes, `.caption`
    pintaba así párrafos enteros —el aviso legal, los avisos de Estado, las notas de la ficha— y costaba leerlos. */
-.caption,
-.legal-notice-warn {
+.caption {
   display: block;
   background: var(--caption-bg);
   border: var(--border-chip) solid var(--ink);
@@ -902,10 +896,6 @@ button[type="submit"].btn-sugerencia {
 .legal-notice { font-size: var(--text-secundario); color: var(--ink-faint); }
 .legal-notice a { color: inherit; text-decoration: underline; }
 .legal-notice-footer { text-align: center; margin: 0; }
-.legal-notice-warn {
-  display: block; margin: var(--space-3) 0;
-  background: var(--caption-bg); color: var(--ink);
-}
 .legal-notice-info {
   display: block; border-radius: var(--radius-panel); padding: 10px 14px; margin: var(--space-3) 0;
   background: var(--info-bg);
@@ -1314,7 +1304,7 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 16c. COMPONENTES (V2) ───────────────────────────────────────────────────
    Piezas reutilizables con los nombres de la maqueta (docs/design/maqueta-ui.html), sobre los
-   tokens ya comprobados de V1. Las clases actuales (.btn-primary, .empty-state…)
+   tokens ya comprobados de V1. Las clases heredadas (.empty-state…)
    SIGUEN funcionando: se retiran en V14, no antes. Las macros que las emiten viven en
    templates/_componentes.html; el estado→aspecto, en web/componentes.py. */
 

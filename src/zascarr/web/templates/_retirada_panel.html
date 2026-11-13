@@ -47,7 +47,7 @@
     <p>La serie no reaparece sola: ZascArr no da de alta series automáticamente. Para volver a tenerla, búscala o dala de alta de nuevo.</p>
     {% endif %}
     <div class="vinc-acciones">
-      {% if r.resultado in ("retirada", "ya_retirada") %}<a class="btn-primary" href="/ui/pendientes">Ir a «Por revisar»</a>{% endif %}
+      {% if r.resultado in ("retirada", "ya_retirada") %}<a class="btn primary" href="/ui/pendientes">Ir a «Por revisar»</a>{% endif %}
       {% if serie and serie.existe %}<a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>{% endif %}
       <a class="btn ghost sm" href="/ui/biblioteca">Volver a la biblioteca</a>
     </div>

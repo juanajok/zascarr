@@ -1394,6 +1394,8 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 - **Dependencias.** V3 a V12.
 
 **V14 — Cierre: limpieza, documentación y trazabilidad (P2, S)**
+**F3a (2026-11-13):** los botones usan `button.primary`/`.btn.primary` (alias `.btn-primary` retirado, 8 plantillas) y los avisos legales de Deseados/Ajustes pasan a `ui.aviso("warn")` (con enlace y negritas conservados). Reglas de ambos alias retiradas; la auditoría de clases sigue en 0. Queda F3b (`.issue-chip` y `.estado-dot`), F4 y F5.
+
 **Avance V14 (2026-11-13):** F1 y F2 hechas. `scripts/auditar_css.py` audita clases usadas frente a
 reglas (con lista blanca para lo dinámico y soporte de prefijos/ternarios Jinja) y la CI lo ejecuta
 con `--strict`; se retiraron las reglas sin uso (`.topnav`, `.hero-state`, `.toast`, `.audit-ok`,

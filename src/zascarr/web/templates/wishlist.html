@@ -12,10 +12,8 @@
 {% endif %}
 
 {% if aviso_legal_pendiente %}
-<aside class="legal-notice legal-notice-warn">
-  <strong>Aviso legal pendiente.</strong> Las búsquedas automáticas están en
-  pausa hasta que lo aceptes. <a href="/ui/legal">Aceptarlo ahora</a>.
-</aside>
+{% call ui.aviso("warn") %}<strong>Aviso legal pendiente.</strong> Las búsquedas automáticas están en
+  pausa hasta que lo aceptes. <a href="/ui/legal">Aceptarlo ahora</a>.{% endcall %}
 {% endif %}
 {{ legal_disclaimer("wishlist") }}
 
