@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Colecciones</h1>
 <p class="subtitle">Agrupa series y decide si ZascArr busca sus números que faltan. Una serie puede estar en una sola colección.</p>
-{% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
+{% if aviso %}{{ ui.aviso("ok", aviso, foco=true) }}{% endif %}
 {% if errores %}
 {% for campo, mensaje in errores.items() %}{{ ui.aviso("warn", mensaje) }}{% endfor %}
 {% endif %}
