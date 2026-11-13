@@ -47,7 +47,7 @@ Fandom**; y arcos de **DC Database** volcados a `story_arcs`/`story_arc_issues.r
 vista ya existente `/ui/arcos` muestra sola. `LEGAL.md` tiene fila nueva; el hash de
 `services/legal.py` versiona la aceptación sin paso manual.
 
-**Qué falta, y es bloqueante.** La migración 0035 añade `fandom_dc_slug`/`fandom_marvel_slug` a
+**Qué falta, y es bloqueante.** La migración 0036 añade `fandom_dc_slug`/`fandom_marvel_slug` a
 `series` e `issues`, pero **el ORM no las mapea** en `models/__init__.py` (solo añade los valores del
 enum). El enricher consulta esas columnas en su primer `SELECT` (`enricher.py:415-416`), así que
 **todo ciclo de enriquecimiento revienta** con `AttributeError`, tenga o no Fandom encendida. Verificado: `tests/test_enricher.py` da **17 fallos y 36 aprobados**; los 21 tests de
@@ -98,8 +98,8 @@ importa guías externas y no decide el modelo de producto de las órdenes de lec
 | E-13 | El plan de enriquecimiento por campo (#128) no consulta Fandom: solo CV/AniList/Tebeosfera | `services/enriquecimiento_plan.py:254-272,347-354` | Lectura de código |
 | E-14 | `/api/health` no lista las fuentes Fandom en `fuentes` (B8 solo cubre CV/AniList/Tebeosfera/GCD) | `api/health.py:464-469` | Lectura de código |
 | E-15 | El CDN de portadas no está en `HOST_DE_FUENTE_PARA_PORTADAS`: apagar Fandom **no** corta la descarga de una portada suya ya guardada | `utils/cortesia.py:135-153`; gate en `utils/url_portada.py:249-250` | Lectura de código |
-| E-16 | `tests/test_fandom.py` no cubre el servicio; `test_enricher.py` no tiene casos Fandom; no hay prueba de la migración 0035 ni de los defaults nuevos | `tests/test_fandom.py`; `tests/test_enricher.py`; `tests/test_fuentes_apagadas_por_defecto.py:11` (`CAMPOS` de cuatro); `tests/test_migracion_fuentes_pg.py` (solo 0020) | Lectura + ejecución de E-6 |
-| E-17 | La documentación citada por el código no está en `main`/`feat/fandom-fuentes` | `fandom.py:3,15`; docstring de la migración 0035 | `git ls-tree` y búsqueda en `docs/` |
+| E-16 | `tests/test_fandom.py` no cubre el servicio; `test_enricher.py` no tiene casos Fandom; no hay prueba de la migración 0036 ni de los defaults nuevos | `tests/test_fandom.py`; `tests/test_enricher.py`; `tests/test_fuentes_apagadas_por_defecto.py:11` (`CAMPOS` de cuatro); `tests/test_migracion_fuentes_pg.py` (solo 0020) | Lectura + ejecución de E-6 |
+| E-17 | La documentación citada por el código no está en `main`/`feat/fandom-fuentes` | `fandom.py:3,15`; docstring de la migración 0036 | `git ls-tree` y búsqueda en `docs/` |
 
 **No ejecutado en esta revisión:** suite completa, tráfico real, peticiones en vivo nuevas, migración
 sobre Postgres (no hay `TEST_DATABASE_URL` configurada para esta revisión). Los datos «en vivo» que se
@@ -293,7 +293,7 @@ fusión van marcados `[B]`.
 
 ## 5. Huecos reales (sin inflarlos)
 
-1. **La migración 0035 va por delante del ORM.** Es el único hueco que hoy rompe el enricher entero;
+1. **La migración 0036 va por delante del ORM.** Es el único hueco que hoy rompe el enricher entero;
    los demás son cobertura o cumplimiento. No es un fallo de diseño del cliente.
 2. **Anuales y especiales sin página estándar.** La página del número se construye como
    «`<volumen> <número>`»; la convención de anuales de DC Database es un volumen propio

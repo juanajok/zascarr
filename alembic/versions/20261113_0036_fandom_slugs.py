@@ -1,7 +1,7 @@
 """Fandom (DC/Marvel Database) como fuente: columnas de identidad por wiki.
 
-Revision ID: 0034
-Revises: 0033
+Revision ID: 0036
+Revises: 0035
 
 Fase 2 del estudio `docs/estudio-scraping-fuentes-v2.md`: las dos wikis de Fandom
 identifican sus páginas por título («Batman Vol 1», «Batman Vol 1 404»), que es un
@@ -15,8 +15,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0035"
-down_revision = "0034"
+revision = "0036"
+down_revision = "0035"
 branch_labels = None
 depends_on = None
 

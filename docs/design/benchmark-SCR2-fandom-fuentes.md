@@ -8,7 +8,7 @@
 >   apunta a `8f90aa4b` y **no** contiene estos cambios; los documentos de referencia (estudio,
 >   anexos, informe Fase 0) solo existen en `docs/scraping-v2` (`db200c35`), no en `main`.
 > - **Alcance:** `services/fandom.py`, cadena del `enricher` (serie/número/arcos), `config.py`,
->   `cortesia.py`, `url_portada.py`, migración 0035, Ajustes y `LEGAL.md`. **Fuera:** Fase 3
+>   `cortesia.py`, `url_portada.py`, migración 0036, Ajustes y `LEGAL.md`. **Fuera:** Fase 3
 >   (guías de lectura) y foro CRG. **Caducidad:** 2027-01-12 o antes si cambia MediaWiki/estudio.
 
 ## 0. Resultado en una línea
@@ -46,7 +46,7 @@ Pausa de 2,2 s entre peticiones; todas `HTTP 200`, `application/json`, sin `ETag
 
 1. **Bloqueante — el ORM no mapea las columnas de 0035.** La migración añade `fandom_dc_slug`/`fandom_marvel_slug` a `series` e `issues`, pero `models/__init__.py` solo añade los valores del enum (`:285-286`). `hasattr(Series, "fandom_dc_slug") is False` y `enricher.py:415` lo usa en el `SELECT` incondicional de `_enrich_series_batch`: hoy **todo** ciclo de enriquecimiento falla con `AttributeError` (con cualquier fuente encendida, no solo Fandom). Los 21 tests de `tests/test_fandom.py` pasan porque solo prueban el cliente y `_sources_for`, nunca el `EnrichmentService` contra el ORM.
 2. **Fecha DC semánticamente invertida.** `fecha_de_parametros` combina `Day` (día de venta marcado GCD) con `Month`/`Year` (fecha de **portada**): Batman #404 devuelve `1987-02-21`. Los parámetros de publicación (`Pubmonth=10`, `Pubyear=1986`) darían `1986-10-21`; solo se usan como respaldo si falta `Month`/`Year`. Si `Issue.release_date` significa salida a la venta (es el único escritor hoy), la prioridad está invertida. El fixture del test fija `Month=5` (en vivo es `2`) y espera `1987-05-21`: la prueba no cubre el caso real.
-3. **Documentos citados ausentes en la rama.** `fandom.py:3,15`, la migración 0035 y el docstring del enricher remiten a `docs/estudio-scraping-fuentes-v2.md` (y su Anexo C), que no está en `main`/`feat/fandom-fuentes`. Hay que fusionar la rama de docs o corregir referencias antes de la fusión.
+3. **Documentos citados ausentes en la rama.** `fandom.py:3,15`, la migración 0036 y el docstring del enricher remiten a `docs/estudio-scraping-fuentes-v2.md` (y su Anexo C), que no está en `main`/`feat/fandom-fuentes`. Hay que fusionar la rama de docs o corregir referencias antes de la fusión.
 4. **Fase 1 no implementada.** No existen `utils/cache_http.py` ni `utils/robots.py`; el cliente no evalúa `robots.txt` ni cachea respuestas HTTP y se apoya en la caché negativa de BD. La secuencia del estudio (Fase 1 antes de Fase 2) no se cumple: el PO debe ratificarlo o bloquear.
 5. **Atribución incompleta.** `LEGAL.md` exige enlace al artículo y a la licencia CC-BY-SA 3.0, pero la UI muestra un aviso genérico (ni Fandom ni enlaces) y `procedencia.NOMBRE_DE_FUENTE` no conoce las fuentes Fandom. El CDN tampoco está en `HOST_DE_FUENTE_PARA_PORTADAS`: apagar Fandom no corta sus portadas (contradice AC-12/ADR 0013).
 6. **Coste por serie mayor de lo que sugiere el estudio.** `get_volume` hace 2–3 peticiones (wikitext + `displaytitle` si faltan años + `imageinfo`, siempre, aunque ya haya portada) y `_find_fandom_match` abre hasta 2 candidatos: peor caso ~7 peticiones/serie a 1,5 s. No bloquea la Pi, pero condicionar `imageinfo` a «falta portada» es una mejora barata.
