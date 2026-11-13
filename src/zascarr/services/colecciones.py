@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.models import Collection, CollectionAutoSearch, Series, WishlistPolicy
+from zascarr.services.portada_coleccion import VERSION as PORTADA_VERSION
 from zascarr.services.portada_coleccion import portada_cacheada
 
 MAX_NOMBRE = 120
@@ -137,7 +138,8 @@ def _portada_url_de(coleccion: Collection, filas: list[Series], covers: Path) ->
             partes.append(f"{s.id}:0:0")
     huella = hashlib.sha256("|".join(partes).encode()).hexdigest()[:12]
     base = str(coleccion.cover_series_id) if sobre_cache else "auto"
-    return sobre_cache or hay, f"/ui/colecciones/{coleccion.id}/portada?v={base}-{huella}"
+    return (sobre_cache or hay,
+            f"/ui/colecciones/{coleccion.id}/portada?v={base}-{huella}-m{PORTADA_VERSION}")
 
 
 async def listar_colecciones(db: AsyncSession) -> list[ColeccionResumen]:

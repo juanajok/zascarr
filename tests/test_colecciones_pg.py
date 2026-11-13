@@ -323,3 +323,23 @@ async def test_asignar_series_es_atomico(db):
     assert ya.collection_id == c2.coleccion.id                         # ninguna cambió
     assert not (await asignar_series(db, c1.coleccion.id, [])).ok
     assert not (await asignar_series(db, c1.coleccion.id, [uuid4()])).ok
+
+
+async def test_sidecar_de_version_anterior_se_regenera_y_url_lleva_version(
+        db, tmp_path, monkeypatch):
+    import json
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Version", description="", auto_search="heredar")
+    s = await serie(db, "Uno", collection=c.coleccion)
+    _jpeg_serie(tmp_path, s.id)
+    primera = await pc.obtener_portada(db, c.coleccion.id)
+    assert primera is not None
+    sidecar = tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.json"
+    datos = json.loads(sidecar.read_text())
+    datos["version"] = 1
+    sidecar.write_text(json.dumps(datos))
+    segunda = await pc.obtener_portada(db, c.coleccion.id)
+    assert segunda is not None
+    assert json.loads(sidecar.read_text())["version"] == 2
+    det = await detalle_coleccion(db, c.coleccion.id)
+    assert det is not None and "-m2" in det.portada_url

@@ -32,7 +32,7 @@
         <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>
       </div>
       <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
-        <button class="btn ghost sm" type="submit">Quitar</button>
+        <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar serie</button>
       </form>
     </li>
     {% endfor %}
@@ -54,7 +54,7 @@
         </label>
         {% endfor %}
       </div>
-      <button class="btn" type="submit">Añadir seleccionadas</button>
+      <button class="btn" type="submit">Añadir series seleccionadas</button>
     </fieldset>
   </form>
   {% else %}
@@ -63,7 +63,7 @@
 </section>
 
 <section class="coleccion-panel">
-  <h2>Datos y política</h2>
+  <h2>Datos y búsqueda</h2>
   <form method="post" action="/ui/colecciones/{{ coleccion.id }}/editar" class="formulario">
     <label for="name">Nombre</label>
     <input id="name" name="name" maxlength="120" required value="{{ valores.name if valores else coleccion.name }}">
@@ -156,7 +156,8 @@
   {% endif %}
 </section>
 
-<section class="coleccion-panel coleccion-panel-peligro">
+<section class="coleccion-panel">
+  <h2>Borrar colección</h2>
   <details class="politica-detalles">
     <summary>Borrar esta colección</summary>
     <p class="caption">Las series seguirán en tu biblioteca, sin colección. No se borra ninguna serie ni archivo.</p>

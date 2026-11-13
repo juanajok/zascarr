@@ -222,7 +222,7 @@ def test_multiseleccion_muestra_checkboxes_y_redirige():
                  return_value=ResultadoColeccion(True))):
             r = c.get(f"/ui/colecciones/{cid}")
             assert r.status_code == 200
-            assert 'name="serie_ids"' in r.text and "Añadir seleccionadas" in r.text
+            assert 'name="serie_ids"' in r.text and "Añadir series seleccionadas" in r.text
             assert 'name="serie_ids" value="' + s1 + '"' in r.text
             r2 = c.post(f"/ui/colecciones/{cid}/series",
                         data={"serie_ids": [s1, s2]}, follow_redirects=False)

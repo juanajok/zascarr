@@ -36,7 +36,7 @@ ANCHO = 600
 ALTO = 900
 CARPETA = "colecciones"
 MAXIMO = 4
-VERSION = 1
+VERSION = 2
 #: Límites defensivos al componer: un JPEG de portada real mide pocos cientos de KB y
 #: 600×900; no se decodifica nada mayor ni se sigue un symlink dentro de `covers/`.
 MAX_BYTES = MAX_BYTES_PORTADA_PREVIA
