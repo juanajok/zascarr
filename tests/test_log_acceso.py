@@ -387,6 +387,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "guardado",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
     "desde",
+    # #155: filtros del alta de series y selección de candidatas (estado de la vista).
+    "serie_ids", "tradicion",
 })
 
 
