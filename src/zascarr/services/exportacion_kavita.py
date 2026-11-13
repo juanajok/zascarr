@@ -359,3 +359,29 @@ async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
         deriva=deriva, errores=errores, bytes_copiados=copiados, archivos=archivos,
         saltados=saltados, modo=modo,
         carpetas_colisionadas=len(plan.carpetas_colision))
+
+
+async def historial_exportaciones(
+    db: AsyncSession, collection_id: UUID, limit: int = 20,
+) -> list[dict]:
+    """Últimas exportaciones de esta colección (`ImportRun.details.kind=export`)."""
+    filas = (await db.execute(
+        select(ImportRun)
+        .where(ImportRun.details["kind"].astext == "export")
+        .where(ImportRun.details["collection_id"].astext == str(collection_id))
+        .order_by(ImportRun.started_at.desc())
+        .limit(limit)
+    )).scalars().all()
+    salida = []
+    for run in filas:
+        d = run.details or {}
+        archivos = d.get("archivos") or []
+        salida.append({
+            "run_id": str(run.id),
+            "fecha": run.started_at.isoformat() if run.started_at else "",
+            "materializados": sum(1 for a in archivos if a.get("status") == "ok"),
+            "saltados": int(d.get("saltados", 0)),
+            "errores": int(run.error_count or 0),
+            "modo": d.get("mode", ""),
+        })
+    return salida

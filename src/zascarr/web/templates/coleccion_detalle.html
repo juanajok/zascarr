@@ -8,7 +8,7 @@
 <h1>{{ coleccion.name }}</h1>
 {% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
 {% if errores %}
-{% for campo, mensaje in errores.items() %}{{ ui.aviso("warn", mensaje) }}{% endfor %}
+{% for campo, mensaje in errores.items() %}{{ ui.aviso("warn", mensaje, foco=loop.first) }}{% endfor %}
 {% endif %}
 <form method="post" action="/ui/colecciones/{{ coleccion.id }}/editar" class="tarjeta formulario">
   <h2>Datos y política</h2>
@@ -29,7 +29,7 @@
 <details class="politica-detalles">
   <summary>Preparar una carpeta para Kavita</summary>
   <p class="caption">Crea una copia legible por Kavita en la carpeta de exportación. No mueve ni toca la biblioteca: los archivos siguen donde están. Se enlazan sin gastar espacio cuando se puede; si no, se copian. El parche de ComicInfo todavía no está disponible (fase 2).</p>
-  <p class="caption">Con enlace, editar la exportación con otra herramienta puede afectar al archivo original; si quieres aislamiento total, exporta a otro disco (se copiará).</p>
+  <p class="caption"><strong>ZascArr no mueve ni modifica tu biblioteca.</strong> Pero sin marcar «Copiar», los archivos se enlazan (mismo inodo): si otra herramienta edita la exportación, también puede cambiar el original. Marca «Copiar» para aislarlo.</p>
   <form method="post" action="/ui/colecciones/{{ coleccion.id }}/exportar">
     <input type="hidden" name="patch_comicinfo" value="0">
     <label><input type="checkbox" name="copiar" value="1"> Copiar en vez de enlazar (aislado; ocupa espacio)</label>
@@ -51,8 +51,19 @@
   {% if exportacion.errores or exportacion.deriva %}
   <p class="caption">La exportación terminó con incidencias: lo que se preparó está bien y lo demás se ha dejado como estaba. Vuelve a intentarlo cuando quieras.</p>
   {% endif %}
-  <p class="caption">La exportación queda registrada para auditoría.</p>
+  <p class="caption">La exportación queda registrada para auditoría: <a href="#exportaciones">ver historial ({{ exportacion.run_id[:8] }})</a>.</p>
 </div>
+{% endif %}
+{% if exportaciones %}
+<h2 id="exportaciones">Exportaciones</h2>
+<ul class="arcos-lista">
+  {% for e in exportaciones %}
+  <li class="arco-fila">
+    <span class="muted">{{ e.fecha }} · {{ e.materializados }} nuevos · {{ e.saltados }} ya estaban · {{ e.errores }} incidencias · {{ e.modo }}</span>
+    <code class="ruta-exportacion">{{ e.run_id }}</code>
+  </li>
+  {% endfor %}
+</ul>
 {% endif %}
 
 <details class="politica-detalles">
