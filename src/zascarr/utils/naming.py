@@ -846,7 +846,12 @@ def parse_comic_filename(
 
     series = _limpiar_titulo_serie(working)
     if len(partes_subtitulo) > 1:
-        alternativa = _limpiar_titulo_serie(serie_completa)
+        # «corregido», «actualizado»… son marcas de release, no parte del
+        # título de la serie completa que se usa como alternativa de matching.
+        sin_marcas = re.sub(
+            r"\b(?:corregido|corregida|actualizado|actualizada)\b", " ",
+            serie_completa, flags=re.IGNORECASE)
+        alternativa = _limpiar_titulo_serie(sin_marcas)
         if alternativa and alternativa != series:
             result.series_alternativa = alternativa
 
