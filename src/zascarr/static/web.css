@@ -2597,12 +2597,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-descripcion { margin: 0 0 var(--space-2); color: var(--ink-soft); max-width: 62ch; }
 .coleccion-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; }
 .coleccion-series-lista { list-style: none; margin: 0 0 var(--space-3); padding: 0; }
-.coleccion-serie-fila { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: var(--border-line) solid var(--paper-2); }
+.coleccion-serie-fila { position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: var(--border-line) solid var(--paper-2); }
 .coleccion-serie-fila:last-child { border-bottom: 0; }
 .coleccion-alta-grupo { border: 0; padding: 0; margin: 0; }
 .coleccion-alta-grupo legend { font-weight: 700; margin-bottom: var(--space-1); }
 .coleccion-checkgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-2); margin: 10px 0; }
-.coleccion-check { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: var(--space-2) 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); cursor: pointer; }
+.coleccion-check { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: var(--space-2) 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); cursor: pointer; }
 .coleccion-check:hover { background: var(--yellow); color: var(--on-yellow); }
 .coleccion-check:focus-within { outline: 3px solid var(--cyan-t); outline-offset: 2px; }
 .coleccion-check input { width: 24px; height: 24px; flex-shrink: 0; }
@@ -2631,6 +2631,27 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-paginacion { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 12px; }
 .coleccion-paginacion .btn, .coleccion-paginacion [aria-disabled="true"] { min-height: 44px; }
 .coleccion-paginacion [aria-disabled="true"] { opacity: .55; cursor: default; }
+
+.coleccion-previa {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  width: 108px;
+  z-index: 30;
+  pointer-events: none;
+  background: var(--paper-2);
+  border: 3px solid var(--ink);
+  border-radius: var(--radius-panel);
+  padding: 4px;
+  box-shadow: var(--shadow-ink-sm);
+}
+.coleccion-check:hover .coleccion-previa,
+.coleccion-check:focus-within .coleccion-previa,
+.coleccion-serie-fila:hover .coleccion-previa,
+.coleccion-serie-fila:focus-within .coleccion-previa { display: block; }
+.coleccion-previa .portada { width: 100%; }
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
