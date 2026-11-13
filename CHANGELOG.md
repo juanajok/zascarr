@@ -7,6 +7,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **V14 F3a: botones principales y avisos legales con los componentes (2026-11-13, #750).**
+  Las 8 plantillas que usaban el alias `.btn-primary` pasan a `.btn.primary` y los avisos legales de
+  Deseados y Ajustes, a `ui.aviso("warn")` (mismo texto, enlace y negritas; ahora con icono y
+  `role="alert"`). Se retiran las reglas del alias y las de `.legal-notice-warn`; la auditoría de
+  clases sigue en 0 reglas sin uso.
 - **D3: conciliación de la descarga importada e historial (2026-11-13).** Cuando el archivo de
   una propuesta enviada se importa, la propuesta pasa a «importada» y se liga a su `File`
   (sin tocar el archivo). Mejoras muestra un historial reciente con el estado de las últimas

@@ -962,7 +962,7 @@ class TestRevisionVisual:
         """Con la sombra dura desplazada, una caja de aviso parecía algo que pulsar."""
         import re
         css = re.sub(r"/\*.*?\*/", "", _css(), flags=re.S)
-        regla = css[css.index(".caption,\n.legal-notice-warn {"):]
+        regla = css[css.index(".caption {"):]
         regla = regla[:regla.index("}")]
         assert "box-shadow" not in regla
 

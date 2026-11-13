@@ -386,14 +386,14 @@ class TestCssDeLosComponentes:
     def test_existe_el_componente(self, selector):
         assert selector in _lista_de_selectores()
 
-    def test_btn_primary_comparte_regla_con_el_nombre_antiguo(self):
-        regla = next(s for s in _selectores() if ".btn.primary" in s and ".btn-primary" in s)
+    def test_el_boton_principal_gana_con_su_intencion(self):
+        regla = next(s for s in _selectores() if s.strip() == "button.primary, .btn.primary")
         assert "button.primary" in regla
 
     def test_un_envio_no_es_principal_por_serlo(self):
         """Revisión visual (2026-10-20): cualquier `type="submit"` salía amarillo y Ajustes enseñaba
         siete «Guardar» principales. El amarillo es opt-in con `.primary`."""
-        regla = next(s for s in _selectores() if ".btn.primary" in s and ".btn-primary" in s)
+        regla = next(s for s in _selectores() if s.strip() == "button.primary, .btn.primary")
         assert 'button[type="submit"]' not in regla
 
     def test_el_boton_pequeno_conserva_los_40_px(self):
@@ -445,7 +445,7 @@ CLASES_ANTERIORES_A_V2 = (
     "ajustes-actions", "ajustes-card", "ajustes-desc", "ajustes-error",
     "ajustes-hint", "ajustes-ok", "assign-form", "audit-adoptar", "audit-block", "audit-count",
     "audit-detail", "audit-item", "audit-path", "audit-resumen", "audit-why",
-    "back-link", "brand", "btn", "btn-ignorar", "btn-logout", "btn-primary", "btn-reintentar",
+    "back-link", "brand", "btn", "btn-ignorar", "btn-logout", "btn-reintentar",
     "btn-sugerencia", "candidato-detalle", "candidato-fila", "candidato-titulo",
     "candidatos-lista", "candidatos-vacio", "candidatos-wishlist", "caption", "content",
     "dashboard", "detected", "discover", "discover-desc",
@@ -459,7 +459,7 @@ CLASES_ANTERIORES_A_V2 = (
     "htmx-indicator", "htmx-request",
     "issue-chip", "issue-grid", "issue-input", "issue-missing", "issue-present",
     "legal-checkbox", "legal-form", "legal-full", "legal-notice", "legal-notice-footer",
-    "legal-notice-info", "legal-notice-warn", "library-card", "library-card-body",
+    "legal-notice-info", "library-card", "library-card-body",
     "library-card-meta", "library-card-title", "library-grid", "login-content", "login-error",
     "login-form", "metric-card", "metric-delta", "metric-detail", "metric-label",
     "metric-value", "metric-warning", "metrics-grid", "nav-logout", "no-results",
