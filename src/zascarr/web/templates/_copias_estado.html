@@ -1,7 +1,11 @@
-{#- #copia-estado: lo único que se sondea. Con copia en marcha se vuelve a pedir cada 5 s; si no, no hay sondeo. -#}
+{#- #copia-estado: lo único que se sondea. Con copia en marcha se vuelve a pedir cada 5 s; si no, no hay sondeo.
+    `foco`: al pasar a «en marcha» el botón se deshabilita y el foco se lleva aquí (si no, se perdería). -#}
 <div id="copia-estado" data-estado="{{ v.estado }}"
+     {% if foco %}tabindex="-1" autofocus{% endif %}
      {% if v.en_marcha %}hx-get="/ui/copias/estado" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
-  {% if mensaje_pedir %}<p><strong>{{ mensaje_pedir }}</strong></p>{% endif %}
-  {% if not mensaje_pedir or v.en_marcha %}<p>{{ v.mensaje }}</p>{% endif %}
+  {% if mensaje_pedir %}{{ ui.aviso("amber", mensaje_pedir, rol="") }}{% endif %}
+  {% if not mensaje_pedir or v.en_marcha %}
+    {% if v.nivel %}{{ ui.aviso(v.nivel, v.mensaje, rol="") }}{% else %}<p>{{ v.mensaje }}</p>{% endif %}
+  {% endif %}
   {% if v.nocturna_omitida %}<p class="muted">{{ v.nocturna_omitida }}</p>{% endif %}
 </div>

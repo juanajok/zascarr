@@ -1,10 +1,10 @@
 <div id="copia-accion"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
   {% if v.boton %}
-  <form hx-post="/ui/copias/pedir" hx-target="#copia-estado" hx-swap="outerHTML" hx-disable="find button">
+  <form hx-post="/ui/copias/pedir" hx-target="#copia-estado" hx-swap="outerHTML">
     <button id="boton-copia" type="submit" class="btn"
             aria-describedby="copia-garantia{% if not v.habilitado %} copia-estado{% endif %}"
             {% if not v.habilitado %}disabled{% endif %}>Hacer una copia ahora</button>
-    <span id="copia-garantia" class="caption">No toca tus tebeos: solo copia lo que ZascArr tiene anotado.</span>
+    <span id="copia-garantia" class="muted">No toca tus tebeos: solo copia lo que ZascArr tiene anotado.</span>
   </form>
   {% endif %}
 </div>

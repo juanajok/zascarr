@@ -146,7 +146,7 @@ CAUSAS_COPIA: dict[str, str] = {
     "empty": "La copia salió mal y se descartó. Prueba otra vez; si se repite, avisa a quien instaló ZascArr.",
     "not_found": "La copia salió mal y se descartó. Prueba otra vez; si se repite, avisa a quien instaló ZascArr.",
     "verify_failed": "La copia salió mal y se descartó. Prueba otra vez; si se repite, avisa a quien instaló ZascArr.",
-    "manifest_failed": "La copia se hizo, pero no se pudo anotar. Avisa a quien instaló ZascArr.",
+    "manifest_failed": "No se pudo anotar en el registro de copias. Avisa a quien instaló ZascArr.",
     "precondition_failed": "ZascArr no pudo preparar la copia. Avisa a quien instaló ZascArr.",
     "unexpected": GENERICA,
 }
@@ -182,14 +182,25 @@ def _leer_json(ruta: str) -> dict | None:
     return valor if isinstance(valor, dict) else None
 
 
+#: Épocas aceptadas de los ficheros del host: de 1970 al año 2100. Una cifra enorme no debe tumbar el formateo ni
+#: dejar «en marcha» para siempre (SecOps F-6).
+EPOCA_MAX = 4_102_444_800
+TOLERANCIA_RELOJ_S = 300
+
+
 def _epoch(valor: object) -> int | None:
-    return valor if isinstance(valor, int) and not isinstance(valor, bool) and valor >= 0 else None
+    if isinstance(valor, int) and not isinstance(valor, bool) and 0 <= valor <= EPOCA_MAX:
+        return valor
+    return None
 
 
 def hora_llana(epoch: int, ahora: int) -> str:
     """«hoy a las 10:35», «ayer a las 23:10» o «el 4 de noviembre a las 23:10», en la zona del SERVIDOR (`TZ`)."""
-    fecha = datetime.fromtimestamp(epoch).astimezone()
-    hoy = datetime.fromtimestamp(ahora).astimezone().date()
+    try:
+        fecha = datetime.fromtimestamp(epoch).astimezone()
+        hoy = datetime.fromtimestamp(ahora).astimezone().date()
+    except (OverflowError, OSError, ValueError):
+        return "en una fecha que no se puede leer"
     hora = f"{fecha:%H:%M}"
     dias = (hoy - fecha.date()).days
     if dias == 0:
@@ -200,7 +211,10 @@ def hora_llana(epoch: int, ahora: int) -> str:
 
 
 def _dia_llano(epoch: int) -> str:
-    fecha = datetime.fromtimestamp(epoch).astimezone()
+    try:
+        fecha = datetime.fromtimestamp(epoch).astimezone()
+    except (OverflowError, OSError, ValueError):
+        return "(fecha ilegible)"
     return f"{fecha.day} de {MESES[fecha.month - 1]}"
 
 
@@ -232,6 +246,7 @@ class VistaCopias:
     boton: bool = True                 # ¿hay botón?
     habilitado: bool = True
     en_marcha: bool = False
+    nivel: str = ""                    # tipo de aviso de la interfaz: ok, amber, warn o vacío (texto llano)
     nocturna_omitida: str = ""
     extra: dict = field(default_factory=dict)
 
@@ -254,40 +269,53 @@ def resolver_estado(settings: Settings, ahora: int | None = None, disponible: bo
     ops = _leer_json(settings.ops_status_file) or {}
     omitida = _leer_json(settings.omitida_file) or {}
     pedida = _epoch(ops.get("pedida_epoch"))
+    if pedida is not None and pedida > ahora + TOLERANCIA_RELOJ_S:
+        pedida = None                      # una petición «del futuro» no deja la copia en marcha para siempre
     ultimo_intento = _epoch(estado.get("last_attempt_at_epoch")) or 0
     omitida_epoch = _epoch(omitida.get("omitida_epoch"))
 
     if pedida is not None:
         if omitida_epoch is not None and omitida_epoch >= pedida and ultimo_intento < pedida:
-            return VistaCopias(EstadoCopia.NO_ARRANCO, MSG_NO_ARRANCO)
+            return VistaCopias(EstadoCopia.NO_ARRANCO, MSG_NO_ARRANCO, nivel="amber")
         if ultimo_intento < pedida:
             if ahora - pedida <= SIN_NOTICIAS_TRAS_S:
                 return VistaCopias(EstadoCopia.EN_MARCHA, MSG_EN_MARCHA, habilitado=False, en_marcha=True)
-            return VistaCopias(EstadoCopia.SIN_NOTICIAS, MSG_SIN_NOTICIAS)
+            return VistaCopias(EstadoCopia.SIN_NOTICIAS, MSG_SIN_NOTICIAS, nivel="amber")
         return _resultado(estado, pedida_hecha=True, ahora=ahora)
 
     vista = _resultado(estado, pedida_hecha=False, ahora=ahora)
     if omitida_epoch is not None and omitida_epoch > ultimo_intento:
-        vista = VistaCopias(vista.estado, vista.mensaje, vista.detalle,
+        vista = VistaCopias(vista.estado, vista.mensaje, vista.detalle, nivel=vista.nivel,
                             nocturna_omitida=f"La copia de la noche del {_dia_llano(omitida_epoch)} se omitió: había otra tarea en marcha.")
     return vista
 
 
+def _frase(principio: str, causa: str) -> str:
+    """«<principio>. <causa>», salvo que la causa ya empiece por «La copia»: entonces va sola (no se repite)."""
+    return causa if causa.startswith("La copia") else f"{principio}. {causa}"
+
+
 def _resultado(estado: dict, pedida_hecha: bool, ahora: int) -> VistaCopias:
     situacion = estado.get("status")
+    error = estado.get("error")
     intento = _epoch(estado.get("last_attempt_at_epoch"))
     cuando = hora_llana(intento, ahora) if intento else ""
-    causa = causa_de(estado.get("error"))
+    causa = causa_de(error)
+    if situacion == "failed" and error == "manifest_failed":
+        situacion = "degraded"             # la copia existe y es válida: solo falta anotarla (no es un fallo)
+        causa = CAUSAS_COPIA["manifest_failed"]
     if situacion == "ok" and (pedida_hecha or intento):
         return VistaCopias(EstadoCopia.HECHA if pedida_hecha else EstadoCopia.DIARIO,
-                           f"Copia hecha {cuando} y comprobada.")
+                           f"Copia hecha {cuando} y comprobada.", nivel="ok")
     if situacion == "degraded":
+        if error == "manifest_failed":
+            return VistaCopias(EstadoCopia.CON_AVISO if pedida_hecha else EstadoCopia.DIARIO,
+                               f"Copia hecha {cuando}, con un aviso: {causa[0].lower() + causa[1:]}", nivel="amber")
         return VistaCopias(EstadoCopia.CON_AVISO if pedida_hecha else EstadoCopia.DIARIO,
-                           f"Copia hecha, con un aviso: {causa}" if pedida_hecha
-                           else f"La última copia ({cuando}) se hizo con un aviso: {causa}")
+                           _frase("Copia hecha, con un aviso", causa), nivel="amber")
     if situacion == "failed":
         return VistaCopias(EstadoCopia.FALLO if pedida_hecha else EstadoCopia.DIARIO,
-                           f"La copia falló: {causa}" if pedida_hecha else f"La última copia ({cuando}) falló: {causa}")
+                           _frase("La copia falló", causa), nivel="warn")
     return VistaCopias(EstadoCopia.DIARIO, "Todavía no hay ninguna copia anotada.")
 
 

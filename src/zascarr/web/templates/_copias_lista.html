@@ -1,16 +1,9 @@
-<div id="copias-lista"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+{#- El listado se recambia por piezas (`#copias-n`, `#copias-items`) para no cerrar el <details> abierto. -#}
+<div id="copias-lista">
   {% if v.estado != "no_activado" %}
   <details>
-    <summary>Copias guardadas{% if copias is not none %} ({{ copias | length }}){% endif %}</summary>
-    {% if copias is none %}
-      <p class="muted">Aún no hay lista de copias.</p>
-    {% else %}
-      <ul>
-        {% for c in copias %}
-        <li>{{ c.fecha }} · {{ c.tamano }} · también en el disco de respaldo: {{ "sí" if c.fuera_del_disco else "no" }}</li>
-        {% endfor %}
-      </ul>
-    {% endif %}
+    <summary>Copias guardadas {% include "_copias_n.html" %}</summary>
+    {% include "_copias_items.html" %}
   </details>
   {% endif %}
 </div>

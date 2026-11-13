@@ -256,24 +256,42 @@ def cliente(ajustes, monkeypatch):
     return TestClient(app), ajustes
 
 
-def test_estado_en_marcha_sondea_y_sin_marcha_no(cliente):
+def test_estado_en_marcha_sondea_y_no_recambia_el_boton_ni_el_listado(cliente):
     c, a = cliente
     r = c.get("/ui/copias/estado")
     assert r.status_code == 200 and 'hx-trigger="every 5s"' not in r.text
     _escribir(a, "ops-status.json", {"schema": 1, "pedida_epoch": int(time.time()) - 30})
     r = c.get("/ui/copias/estado")
     assert 'hx-trigger="every 5s"' in r.text and "Copia en marcha" in r.text
-    assert "disabled" in r.text                                            # el botón, por hx-swap-oob
-    assert "Copias guardadas" not in r.text                               # el sondeo no recambia el listado
+    assert 'id="copia-accion"' not in r.text                        # el botón ya está deshabilitado: no se recambia
+    assert "copias-items" not in r.text and "<details" not in r.text   # el sondeo no toca el listado
     assert r.headers["cache-control"] == "no-store"
 
 
-def test_el_fragmento_no_lleva_la_zona_aria_live_y_el_boton_se_enlaza(cliente):
+def test_al_terminar_el_sondeo_recambia_boton_y_listado_por_piezas_sin_cerrar_el_details(cliente):
     c, a = cliente
-    _escribir(a, "ops-status.json", {"schema": 1, "pedida_epoch": int(time.time()) - 30})
+    _escribir(a, "ops-status.json", {"schema": 1, "pedida_epoch": int(time.time()) - 60})
+    _escribir(a, "status.json", {"status": "ok", "last_attempt_at_epoch": int(time.time()) - 5})
+    _escribir(a, "copias.json", {"schema": 1, "copias": [{"creada_epoch": int(time.time()) - 5, "bytes": 1024, "fuera_del_disco": False}]})
     t = c.get("/ui/copias/estado").text
-    assert "aria-live" not in t                                           # la zona vive fuera de lo recambiado
-    assert 'id="boton-copia"' in t and 'aria-describedby="copia-garantia copia-estado"' in t
+    assert 'hx-trigger="every 5s"' not in t
+    assert 'id="copia-accion" hx-swap-oob="outerHTML"' in t and "disabled" not in t
+    assert 'id="copias-n" hx-swap-oob="outerHTML"' in t and 'id="copias-items" hx-swap-oob="outerHTML"' in t
+    assert "<details" not in t and "aria-live" not in t                # nunca se recambia el <details> ni la zona viva
+
+
+def test_pedir_acepta_deshabilita_el_boton_y_lleva_el_foco_al_estado(cliente, monkeypatch):
+    c, a = cliente
+
+    async def aceptar(s):
+        _escribir(a, "ops-status.json", {"schema": 1, "pedida_epoch": int(time.time())})
+        return CodigoOps.ACEPTADA
+
+    monkeypatch.setattr(ops_host, "pedir_copia", aceptar)
+    t = c.post("/ui/copias/pedir").text
+    assert 'id="copia-estado"' in t and 'tabindex="-1" autofocus' in t
+    assert 'id="boton-copia"' in t and "disabled" in t and 'aria-describedby="copia-garantia copia-estado"' in t
+    assert "aria-live" not in t
 
 
 def test_pedir_acepta_envia_una_peticion_y_dice_en_marcha(cliente, monkeypatch):
@@ -313,6 +331,7 @@ def test_cada_rechazo_se_dice_en_llano_sin_el_codigo(cliente, monkeypatch, codig
     monkeypatch.setattr(ops_host, "pedir_copia", AsyncMock(return_value=codigo))
     r = c.post("/ui/copias/pedir")
     assert texto in r.text and codigo.value not in r.text
+    assert 'id="copia-accion"' not in r.text and 'autofocus' not in r.text      # el botón sigue habilitado y con el foco
 
 
 def test_sin_auxiliar_no_hay_boton_y_pedir_no_hace_nada(ajustes, monkeypatch):
@@ -367,8 +386,91 @@ def test_estado_pinta_el_bloque_con_la_zona_aria_live_fuera(cliente, monkeypatch
     t = r.text
     assert r.status_code == 200
     assert "ZascArr guarda una copia de tus datos cada noche. Puedes hacer una ahora." in t
-    assert "Copias guardadas (1)" in t and "también en el disco de respaldo: sí" in t
-    assert "Para quien instaló ZascArr" in t and "sudo bash scripts/instalar_ops.sh" in t
+    assert "Copias guardadas" in t and '<span id="copias-n">(1)</span>' in t and "también en el disco de respaldo: sí" in t
+    bloque = t[t.index('<section id="copias"'):]
+    bloque = bloque[:bloque.index("</section>")]
+    assert "Más información" in bloque and "Para quien instaló ZascArr" not in bloque and "sudo bash" not in bloque   # ya está activado
     # la zona aria-live contiene #copia-estado: lo recambiado queda dentro y la zona no se recambia
     assert t.index('id="copia-anuncio" aria-live="polite"') < t.index('id="copia-estado"')
     assert "primary" not in t[t.index('id="boton-copia"') - 120:t.index('id="boton-copia"') + 80]   # el botón es neutro
+
+
+def test_sin_auxiliar_el_detalle_dice_como_activarlo(ajustes, monkeypatch):
+    from zascarr.main import app
+
+    monkeypatch.setattr(ops_host, "auxiliar_disponible", lambda s: False)
+    r = TestClient(app).get("/ui/copias/estado")
+    assert "no está activado" in r.text
+    v = ops_host.resolver_estado(ajustes.s, AHORA, disponible=False)
+    html = web_copias_bloque(v)
+    assert "Para quien instaló ZascArr" in html and "sudo bash scripts/instalar_ops.sh" in html
+
+
+def web_copias_bloque(v):
+    from zascarr.web.copias import templates
+
+    return templates.get_template("_copias_bloque.html").render(v=v, copias=None, mensaje_pedir="", foco=False, oob_accion=False, oob=False)
+
+
+# ── F-6 (SecOps): épocas desmesuradas ────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("campo,fichero", [("last_attempt_at_epoch", "status.json"), ("omitida_epoch", "omitida.json"),
+                                          ("pedida_epoch", "ops-status.json")])
+def test_una_epoca_enorme_no_tumba_el_estado_ni_deja_en_marcha(ajustes, campo, fichero):
+    _escribir(ajustes, fichero, {"status": "ok", campo: 10**20, "schema": 1})
+    v = ops_host.resolver_estado(ajustes.s, AHORA, True)
+    assert v.estado not in (EstadoCopia.EN_MARCHA,) and v.habilitado
+
+
+def test_pedida_muy_en_el_futuro_no_deja_la_copia_en_marcha(ajustes):
+    _escribir(ajustes, "ops-status.json", {"schema": 1, "pedida_epoch": AHORA + 10_000})
+    v = ops_host.resolver_estado(ajustes.s, AHORA, True)
+    assert not v.en_marcha and v.habilitado
+
+
+def test_el_formateo_de_horas_no_falla_con_cifras_absurdas():
+    assert isinstance(ops_host.hora_llana(10**20, AHORA), str)
+    assert isinstance(ops_host._dia_llano(10**20), str)
+
+
+def test_las_rutas_no_dan_500_con_epocas_enormes(cliente):
+    c, a = cliente
+    _escribir(a, "status.json", {"status": "ok", "last_attempt_at_epoch": 10**20})
+    _escribir(a, "omitida.json", {"omitida_epoch": 10**20})
+    _escribir(a, "copias.json", {"schema": 1, "copias": [{"creada_epoch": 10**20, "bytes": 5, "fuera_del_disco": True}]})
+    assert c.get("/ui/copias/estado").status_code == 200
+    assert c.post("/ui/copias/pedir").status_code == 200
+
+
+# ── textos de resultado (UX) ─────────────────────────────────────────────────────────────────────
+def test_el_fallo_no_repite_ni_se_contradice(ajustes):
+    _escribir(ajustes, "ops-status.json", {"schema": 1, "pedida_epoch": AHORA - 600})
+    _escribir(ajustes, "status.json", {"status": "failed", "error": "verify_failed", "last_attempt_at_epoch": AHORA - 300})
+    m = ops_host.resolver_estado(ajustes.s, AHORA, True).mensaje
+    assert m == ops_host.CAUSAS_COPIA["verify_failed"] and "falló" not in m
+    _escribir(ajustes, "status.json", {"status": "failed", "error": "disk_full", "last_attempt_at_epoch": AHORA - 300})
+    v = ops_host.resolver_estado(ajustes.s, AHORA, True)
+    assert v.mensaje.startswith("La copia falló. No hay sitio") and v.nivel == "warn"
+
+
+def test_manifest_failed_no_es_un_fallo_la_copia_es_valida(ajustes):
+    _escribir(ajustes, "ops-status.json", {"schema": 1, "pedida_epoch": AHORA - 600})
+    _escribir(ajustes, "status.json", {"status": "failed", "error": "manifest_failed", "last_attempt_at_epoch": AHORA - 300})
+    v = ops_host.resolver_estado(ajustes.s, AHORA, True)
+    assert v.estado == EstadoCopia.CON_AVISO and v.nivel == "amber"
+    assert v.mensaje.startswith("Copia hecha ") and "con un aviso: no se pudo anotar en el registro de copias. Avisa a quien instaló ZascArr." in v.mensaje
+    assert "falló" not in v.mensaje
+
+
+def test_el_resultado_usa_el_componente_de_aviso_con_glifo(cliente):
+    c, a = cliente
+    _escribir(a, "status.json", {"status": "failed", "error": "disk_full", "last_attempt_at_epoch": int(time.time()) - 5})
+    t = c.get("/ui/copias/estado").text
+    assert "aviso warn" in t and 'aria-hidden="true">!</span>' in t
+    assert 'role="alert"' not in t                                       # la zona aria-live ya lo anuncia
+    assert 'class="caption"' not in t
+
+
+def test_las_epocas_se_acotan_al_ano_2100():
+    assert ops_host._epoch(10**20) is None and ops_host._epoch(ops_host.EPOCA_MAX + 1) is None
+    assert ops_host._epoch(ops_host.EPOCA_MAX) == ops_host.EPOCA_MAX and ops_host._epoch(0) == 0
+    assert ops_host._epoch(-1) is None and ops_host._epoch(True) is None and ops_host._epoch("5") is None
