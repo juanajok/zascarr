@@ -6,10 +6,10 @@ de facto para ellas y, a diferencia de GCD/Tebeosfera, tiene API pública
 sin necesidad de scraping ni API key.
 
 Alcance deliberado: solo enriquece a nivel de SERIE (título, sinopsis,
-portada, número de capítulos). AniList no tiene un concepto de "issue"
-equivalente al de Comic Vine — sus datos de autoría/staff son de serie
-completa, no por capítulo — así que el enricher no intenta usar esta
-fuente para Issue.metadata_source individual (ver enricher.py).
+portada, número de capítulos, géneros y tags de tema). AniList no tiene un
+concepto de "issue" equivalente al de Comic Vine — sus datos de autoría/staff
+son de serie completa, no por capítulo — así que el enricher no intenta usar
+esta fuente para Issue.metadata_source individual (ver enricher.py).
 
 Rate limit: AniList ha tenido temporadas en modo degradado (30 req/min en
 vez de los 90 habituales); el intervalo por defecto es conservador y,
@@ -51,6 +51,7 @@ query ($search: String, $perPage: Int) {
       chapters
       volumes
       genres
+      tags { name rank }
     }
   }
 }
@@ -68,9 +69,18 @@ query ($id: Int) {
     chapters
     volumes
     genres
+    tags { name rank }
   }
 }
 """
+
+
+@dataclass(frozen=True)
+class AniListTag:
+    """Un tag de tema de AniList. `rank` es su relevancia real (0–100)."""
+
+    name: str
+    rank: int | None = None
 
 
 @dataclass
@@ -84,6 +94,7 @@ class AniListResult:
     chapters: int | None = None
     volumes: int | None = None
     genres: list[str] = field(default_factory=list)
+    tags: list[AniListTag] = field(default_factory=list)
     site_url: str | None = None
     raw: dict | None = None
 
@@ -144,9 +155,35 @@ def _parse_media(item: dict) -> AniListResult:
         chapters=item.get("chapters"),
         volumes=item.get("volumes"),
         genres=_textos(item.get("genres")),
+        tags=_parse_tags(item.get("tags")),
         site_url=f"https://anilist.co/manga/{item['id']}",
         raw=item,
     )
+
+
+def _parse_tags(valor) -> list[AniListTag]:
+    """Tags de tema de AniList (`[{name, rank}]`), sin duplicados y con rank acotado.
+
+    `rank` es la relevancia que declara AniList (0–100). Si faltara o no fuera
+    numérico, se deja `None` en vez de inventar un peso.
+    """
+    salida: list[AniListTag] = []
+    vistos: set[str] = set()
+    for item in valor or []:
+        if not isinstance(item, dict):
+            continue
+        nombre = str(item.get("name") or "").strip()
+        if not nombre or nombre.casefold() in vistos:
+            continue
+        try:
+            rank = int(item.get("rank"))
+        except (TypeError, ValueError):
+            rank = None
+        if rank is not None:
+            rank = max(0, min(100, rank))
+        vistos.add(nombre.casefold())
+        salida.append(AniListTag(name=nombre, rank=rank))
+    return salida
 
 
 def _textos(valor) -> list[str]:
