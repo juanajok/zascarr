@@ -1,6 +1,7 @@
 """#155/BL-D6: UI de colecciones (servicio sustituido, sin BD)."""
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -54,7 +55,7 @@ def test_detalle_muestra_series_y_selector():
              patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[
                  SerieDeColeccion("s2", "Batman", 1940, "ninguno")])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[
-                 {"run_id": "run123456789", "fecha": "2026-11-13T10:00:00+00:00",
+                 {"run_id": "run123456789", "fecha": datetime(2026, 11, 13, 10, 0, tzinfo=UTC),
                   "materializados": 2, "saltados": 0, "errores": 0, "modo": "hardlink"}])):
             cid = uuid4()
             r = c.get(f"/ui/colecciones/{cid}")
