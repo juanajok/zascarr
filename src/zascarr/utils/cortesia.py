@@ -106,13 +106,16 @@ NOMBRES_DE_FUENTE: dict[str, str] = {
     "gcd": "GCD",
     "metron": "Metron",
     "open_library": "Open Library",
+    "fandom_dc": "DC Database",
+    "fandom_marvel": "Marvel Database",
     "foro": "Foro",
     "portada": "Portadas",
 }
 
 #: Las fuentes que el snapshot lista SIEMPRE, aunque estén apagadas (§6.1).
 FUENTES_DECLARADAS: tuple[str, ...] = (
-    "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library", "foro", "portada")
+    "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library",
+    "fandom_dc", "fandom_marvel", "foro", "portada")
 
 #: Intervalo del nivel host para las portadas (su URL no lleva fuente; §3.1 y §14.2).
 #: Se aplica por origen normalizado; los subdominios del CDN de Comic Vine heredan su intervalo.
@@ -123,6 +126,8 @@ INTERVALO_PORTADA_POR_HOST: tuple[tuple[str, float], ...] = (
     ("tebeosfera.com", 2.5),
     ("comics.org", 2.0),
     ("openlibrary.org", 1.0),
+    # CDN de portadas de Fandom (DC/Marvel Database): una portada cada 1 s como mínimo.
+    ("static.wikia.nocookie.net", 1.0),
 )
 INTERVALO_PORTADA_DESCONOCIDO_S = 2.5
 
@@ -135,6 +140,9 @@ HOST_DE_FUENTE_PARA_PORTADAS: tuple[tuple[str, str], ...] = (
     ("comics.org", "gcd"),
     ("metron.cloud", "metron"),
     ("openlibrary.org", "open_library"),
+    # El CDN es común a DC Database y Marvel Database: se mapea a un origen lógico «fandom»
+    # que solo cuenta como apagado si lo están las DOS fuentes (AC-12, D-7 del benchmark).
+    ("static.wikia.nocookie.net", "fandom"),
 )
 
 
@@ -229,6 +237,11 @@ def politica_de(fuente: str, ajustes=None, *, host: str | None = None) -> Politi
         return PoliticaFuente(fuente, nombre, float(getattr(s, "metron_rate_limit", 3.0)), 2, 2)
     if fuente == "open_library":
         return PoliticaFuente(fuente, nombre, float(getattr(s, "open_library_rate_limit", 1.0)), 2, 2)
+    if fuente in ("fandom_dc", "fandom_marvel"):
+        # API de MediaWiki (abierta, sin clave): 1,5 s por wiki y 2 intentos; el ritmo se
+        # comparte en todo el proceso.
+        return PoliticaFuente(
+            fuente, nombre, float(getattr(s, f"{fuente}_rate_limit", 1.5)), 2, 3)
     if fuente == "foro":
         return PoliticaFuente(fuente, nombre, float(s.forum_rate_limit), 2, 3)
     if fuente == "portada":
@@ -243,6 +256,11 @@ def fuente_habilitada(fuente: str, ajustes=None) -> bool:
         return True
     if fuente == "foro":
         return bool(getattr(s, "forum_enabled", False) and getattr(s, "forum_url", ""))
+    if fuente == "fandom":
+        # Origen lógico del CDN de portadas, común a las dos wikis: solo está apagado si lo
+        # están las dos (mismo criterio que la decisión D-7 del benchmark de SCR2).
+        return bool(getattr(s, "fandom_dc_enabled", False)
+                    or getattr(s, "fandom_marvel_enabled", False))
     atributo = f"{fuente}_enabled"
     return bool(getattr(s, atributo, False))
 

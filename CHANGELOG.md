@@ -88,6 +88,16 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   las lista, «Descargar esta edición» confirma con token firmado y «Descartar» las retira.
   En la ficha de un número sigue estando «Buscar una edición mejor». No sustituye ni borra
   archivos; la nueva edición se importa junto a la actual.
+
+- **DC Database y Marvel Database (Fandom) como fuentes (SCR2, #703).** Dos wikis MediaWiki
+  consumidas solo por su API `/api.php` (wikitext de sus plantillas), en tres niveles: serie
+  (años, descripción, portada, nº de números), número (fecha de venta, sinopsis, créditos y
+  portada) y arcos declarados por DC Database con sus números en
+  `story_arc_issues.reading_order`. Apagadas por defecto (ADR 0013), 1,5 s por wiki y bloqueo
+  `maxlag`; atribución CC-BY-SA 3.0 con doble enlace en ficha de serie, número y saga. Migración
+  `0034` (columnas `fandom_*_slug`). Ficha: `docs/design/benchmark-SCR2-fandom-fuentes.md`;
+  spec, QA y seguridad: `especificacion-SCR2-fandom-fuentes.md`, `informe-qa-SCR2-fandom-2026-11-13.md`
+  y `secops-SCR2-fandom-2026-11-13.md`.
 - **Sagas en orden de lectura y gestión manual (BL-C4, #151).** Biblioteca → «Sagas en orden»:
   lista de arcos y ficha que respeta `story_arc_issues.reading_order` para crossovers. Ahora
   también se pueden **crear, editar y eliminar** sagas, **añadir/quitar números** y

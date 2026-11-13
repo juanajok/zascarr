@@ -96,6 +96,21 @@ def test_ficha_de_numero_404_y_no_store():
     assert ok.status_code == 200 and ok.headers["cache-control"] == "no-store"
 
 
+def test_ficha_de_numero_atribuye_a_fandom_con_articulo_y_licencia():
+    """SCR2 (AC-03/AC-16): un número traído de una wiki enlaza su página y la licencia."""
+    serie = _serie()
+    issue = _issue(series_id=serie.id, metadata_source="fandom_dc",
+                   fandom_dc_slug="Thorgal Vol 1 3")
+    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie]),
+                                      FakeExecResult([])])) as client:
+        r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
+    assert r.status_code == 200
+    assert 'href="https://dc.fandom.com/wiki/Thorgal_Vol_1_3"' in r.text
+    assert 'href="https://creativecommons.org/licenses/by-sa/3.0/"' in r.text
+    assert "DC Database" in r.text and "Creative Commons BY-SA 3.0" in r.text
+    assert "La portada no está incluida en esa licencia." in r.text
+
+
 def test_ficha_de_numero_parcial_sin_autores_ni_archivos():
     serie = _serie()
     issue = _issue(series_id=serie.id, credits=[], files=[])

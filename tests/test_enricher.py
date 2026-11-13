@@ -10,6 +10,7 @@ para el método bajo prueba.
 """
 from __future__ import annotations
 
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -712,6 +713,35 @@ class TestEnrichIssuesBatchH2H3:
         assert issue.comic_vine_id == 99          # no estaba en locked_fields
         assert issue.synopsis == "sinopsis"
         assert report.issues_enriched == ["Batman #1"]
+
+    @pytest.mark.asyncio
+    async def test_release_date_es_la_fecha_de_venta(self):
+        """PO 2026-11-13: `release_date` = fecha de venta; `store_date` manda sobre portada."""
+        series = make_series("Batman", comic_vine_id=10)
+        issue = Issue(id=uuid4(), series_id=series.id, issue_number="1")
+        client = AsyncMock()
+        client.find_issue.return_value = CVIssueResult(
+            cv_id=99, cover_date="1987-02-01", store_date="1986-10-21")
+        session = FakeSession([
+            FakeExecResult([(issue, series)]),
+            FakeExecResult([]),
+        ])
+        await EnrichmentService(db=session)._enrich_issues_batch(client, 10, EnrichmentReport())
+        assert issue.release_date == date(1986, 10, 21)
+
+    @pytest.mark.asyncio
+    async def test_release_date_cae_a_portada_si_no_hay_fecha_de_venta(self):
+        series = make_series("Batman", comic_vine_id=10)
+        issue = Issue(id=uuid4(), series_id=series.id, issue_number="1")
+        client = AsyncMock()
+        client.find_issue.return_value = CVIssueResult(
+            cv_id=99, cover_date="1987-02-01", store_date=None)
+        session = FakeSession([
+            FakeExecResult([(issue, series)]),
+            FakeExecResult([]),
+        ])
+        await EnrichmentService(db=session)._enrich_issues_batch(client, 10, EnrichmentReport())
+        assert issue.release_date == date(1987, 2, 1)
 
     @pytest.mark.asyncio
     async def test_campo_bloqueado_no_se_sobrescribe(self):
