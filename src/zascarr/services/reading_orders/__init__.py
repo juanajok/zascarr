@@ -13,9 +13,10 @@ referencia, sección y enlace); nunca la prosa del autor. Un fallo esperable dev
 `[]` con log estructurado, nunca una excepción al orquestador.
 
 La normalización de cada referencia a `(serie, año, número/rango)` vive en
-`services/reading_order_resolver.py` (puro). El encendido de las fuentes en config/Ajustes y
-las filas de `LEGAL.md` son la integración de la spec §5, fuera de esta entrega: mientras no
-existan sus flags, las fuentes se consideran apagadas y el extractor devuelve vacío.
+`services/reading_order_resolver.py` (puro) y la reconciliación con la biblioteca (sobre
+`story_arcs`, sin modelo nuevo) en `services/reconciliacion_lecturas.py`. Las fuentes se
+estrenan **apagadas** (ADR 0013) y se encienden en Ajustes; con la fuente apagada el
+extractor devuelve vacío sin tocar la red.
 """
 from __future__ import annotations
 
@@ -26,14 +27,21 @@ from zascarr.services.reading_orders.comun import (
     MAX_CUERPO_SITEMAP,
     MAX_GUIAS,
     MAX_LOCS,
+    MAX_REFERENCIA,
+    MAX_SECCION,
+    MAX_TITULO_GUIA,
+    MAX_URL_ITEM,
     POLITICA_CACHE_GUIA,
     POLITICA_CACHE_SITEMAP,
     ExtractorGuias,
     GuiaLeida,
     GuiaResumen,
     RawReadingEntry,
+    entrada_de_guia,
     parsear_sitemap,
     politica_de_sitio,
+    url_de_item,
+    url_de_sitio_valida,
 )
 from zascarr.services.reading_orders.continuity_guide import ContinuityGuideExtractor
 
@@ -43,6 +51,10 @@ __all__ = [
     "MAX_CUERPO_SITEMAP",
     "MAX_GUIAS",
     "MAX_LOCS",
+    "MAX_REFERENCIA",
+    "MAX_SECCION",
+    "MAX_TITULO_GUIA",
+    "MAX_URL_ITEM",
     "POLITICA_CACHE_GUIA",
     "POLITICA_CACHE_SITEMAP",
     "ContinuityGuideExtractor",
@@ -51,6 +63,9 @@ __all__ = [
     "GuiaResumen",
     "RawReadingEntry",
     "ReadingOrdersExtractor",
+    "entrada_de_guia",
     "parsear_sitemap",
     "politica_de_sitio",
+    "url_de_item",
+    "url_de_sitio_valida",
 ]

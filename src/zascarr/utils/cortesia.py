@@ -108,6 +108,8 @@ NOMBRES_DE_FUENTE: dict[str, str] = {
     "open_library": "Open Library",
     "fandom_dc": "DC Database",
     "fandom_marvel": "Marvel Database",
+    "reading_orders": "Comic Book Reading Orders",
+    "continuity_guide": "Continuity Guide",
     "foro": "Foro",
     "portada": "Portadas",
 }
@@ -115,7 +117,8 @@ NOMBRES_DE_FUENTE: dict[str, str] = {
 #: Las fuentes que el snapshot lista SIEMPRE, aunque estén apagadas (§6.1).
 FUENTES_DECLARADAS: tuple[str, ...] = (
     "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library",
-    "fandom_dc", "fandom_marvel", "foro", "portada")
+    "fandom_dc", "fandom_marvel", "reading_orders", "continuity_guide",
+    "foro", "portada")
 
 #: Intervalo del nivel host para las portadas (su URL no lleva fuente; §3.1 y §14.2).
 #: Se aplica por origen normalizado; los subdominios del CDN de Comic Vine heredan su intervalo.
@@ -242,6 +245,12 @@ def politica_de(fuente: str, ajustes=None, *, host: str | None = None) -> Politi
         # comparte en todo el proceso.
         return PoliticaFuente(
             fuente, nombre, float(getattr(s, f"{fuente}_rate_limit", 1.5)), 2, 3)
+    if fuente in ("reading_orders", "continuity_guide"):
+        # SCR3: guías editoriales pequeñas; 1 intento (un fallo no se reintenta en bucle) y
+        # 3 redirecciones como máximo (siempre del mismo origen). Ritmo configurable.
+        defecto = 2.5 if fuente == "reading_orders" else 3.5
+        return PoliticaFuente(
+            fuente, nombre, float(getattr(s, f"{fuente}_rate_limit", defecto)), 1, 3)
     if fuente == "foro":
         return PoliticaFuente(fuente, nombre, float(s.forum_rate_limit), 2, 3)
     if fuente == "portada":

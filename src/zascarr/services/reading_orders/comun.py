@@ -19,10 +19,12 @@ Contrato de red:
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
+from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
 import structlog
@@ -37,7 +39,7 @@ from zascarr.utils.cache_http import (
 from zascarr.utils.cortesia import (
     CortesiaEnEspera,
     FuenteApagada,
-    PoliticaFuente,
+    politica_de,
 )
 from zascarr.utils.peticiones import ErrorDePeticion, ReintentosAgotados, RespuestaNoTransitoria
 from zascarr.utils.robots import (
@@ -57,6 +59,15 @@ MAX_CUERPO_SITEMAP = MAX_CUERPO
 #: Topes de la spec §2: no se procesan sitemaps gigantes ni se aceptan más guías que estas.
 MAX_LOCS = 10_000
 MAX_GUIAS = 2_000
+#: Cotas de campos (SecOps m-5): lo que se acepta de una guía externa y se persiste/muestra.
+MAX_REFERENCIA = 2_000            # = MAX_REFERENCIA del resolver
+MAX_SECCION = 200
+MAX_TITULO_GUIA = 500             # = StoryArc.title / Series.title (String(500))
+MAX_URL_ITEM = 500
+#: Extensiones que no son guías (imágenes, estáticos): defensa común para las dos fuentes.
+_RE_RECURSO = re.compile(
+    r"\.(?:jpe?g|png|gif|webp|avif|svg|ico|css|js|json|xml|pdf|zip|txt|woff2?)$",
+    re.IGNORECASE)
 
 #: Caché de una guía: 14 días fresca, +60 de revalidación (la matriz del estudio §5.3).
 POLITICA_CACHE_GUIA = PoliticaCacheDominio(
@@ -73,21 +84,99 @@ POLITICA_CACHE_SITEMAP = PoliticaCacheDominio(
     codigos_negativos=frozenset({404, 410}),
 )
 
-#: Política de cortesía por defecto de las dos fuentes nuevas (config/Ajustes llegan en la
-#: integración §5; aquí se leen si existen y, si no, se usan estos valores de la spec §2).
-POLITICAS_DE_FUENTE = {
-    "reading_orders": ("Comic Book Reading Orders", 2.5),
-    "continuity_guide": ("Continuity Guide", 3.5),
-}
+def politica_de_sitio(sitio: str, ajustes=None):
+    """`PoliticaFuente` del sitio desde `config.py`/`cortesia.py` (única fuente de verdad)."""
+    return politica_de(sitio, ajustes if ajustes is not None else get_settings())
 
 
-def politica_de_sitio(sitio: str, ajustes=None) -> PoliticaFuente:
-    """`PoliticaFuente` del sitio, con los valores de config si ya existen o los de la spec."""
-    nombre, intervalo_defecto = POLITICAS_DE_FUENTE[sitio]
-    ajustes = ajustes if ajustes is not None else get_settings()
-    intervalo = float(getattr(ajustes, f"{sitio}_rate_limit", intervalo_defecto))
-    return PoliticaFuente(fuente=sitio, nombre=nombre, intervalo_min_s=intervalo,
-                          max_intentos=1, max_redirecciones=3)
+def _ruta_decodificada(ruta: str) -> str:
+    """Decodifica `%xx` repetidamente (hasta 3 pasadas) para no validar sobre el texto crudo.
+
+    `%2e%2e` (y su doble codificación) es `..` para el servidor: comprobarlo solo en crudo
+    dejaba pasar rutas de escape (SecOps c-1).
+    """
+    actual = ruta
+    for _ in range(3):
+        siguiente = unquote(actual)
+        if siguiente == actual:
+            break
+        actual = siguiente
+    return actual
+
+
+def url_de_sitio_valida(url: str, hosts_permitidos: tuple[str, ...], *,
+                        rutas_prohibidas: tuple[str, ...] = (),
+                        exigir_pagina: bool = False) -> bool:
+    """Validación común de una URL de guía (SecOps m-3/c-1), antes de pedir nada.
+
+    Solo `https`, host de la allowlist, **sin userinfo**, puerto 443/por defecto, **sin
+    query**, sin `..` (tampoco codificado) ni caracteres de control, sin extensión de recurso
+    y (si `exigir_pagina`) con una ruta de página (no la raíz). Las rutas prohibidas y la
+    extensión se comprueban sobre la ruta YA decodificada.
+    """
+    try:
+        partes = urlsplit(url)
+        puerto = partes.port
+    except ValueError:
+        return False
+    if partes.scheme != "https" or (partes.hostname or "").lower() not in hosts_permitidos:
+        return False
+    if partes.username is not None or partes.password is not None or "@" in partes.netloc:
+        return False
+    if puerto not in (None, 443):
+        return False
+    if partes.query:
+        return False
+    ruta = partes.path
+    if not ruta.startswith("/"):
+        return False
+    decodificada = _ruta_decodificada(ruta)
+    for candidata in (ruta, decodificada):
+        if ".." in candidata or any(ord(c) < 32 for c in candidata):
+            return False
+        minuscula = candidata.lower()
+        if any(minuscula.startswith(prohibida) for prohibida in rutas_prohibidas):
+            return False
+        if _RE_RECURSO.search(candidata):
+            return False
+    if exigir_pagina:
+        return (decodificada != "/"
+                and bool(re.fullmatch(r"/[A-Za-z0-9][A-Za-z0-9._~/-]*", decodificada)))
+    return True
+
+
+def url_de_item(base: str, href: str | None) -> str | None:
+    """Enlace «Read» de un ítem: solo http(s), sin credenciales y acotado (SecOps m-2)."""
+    if not href or not href.strip():
+        return None
+    try:
+        absoluta = urljoin(base, href.strip())
+        partes = urlsplit(absoluta)
+        puerto = partes.port
+    except ValueError:
+        return None
+    if partes.scheme not in ("http", "https") or not partes.hostname:
+        return None
+    if partes.username is not None or partes.password is not None:
+        return None
+    if puerto not in (None, 80, 443):
+        return None
+    if len(absoluta) > MAX_URL_ITEM:
+        return None
+    return absoluta
+
+
+def entrada_de_guia(orden: int, referencia: str, seccion: str | None,
+                    href: str | None, base_url: str) -> RawReadingEntry | None:
+    """Construye una entrada ya saneada (cotas + enlace http(s)) o `None` si no vale."""
+    texto = " ".join(referencia.split())
+    if not texto or len(texto) > MAX_REFERENCIA:
+        return None
+    seccion_limpia = None
+    if seccion:
+        seccion_limpia = " ".join(seccion.split())[:MAX_SECCION] or None
+    return RawReadingEntry(orden=orden, referencia=texto, seccion=seccion_limpia,
+                           item_url=url_de_item(base_url, href))
 
 
 def _texto(elementos) -> str | None:
@@ -137,7 +226,10 @@ def parsear_sitemap(contenido: bytes, filtro: Callable[[str], bool],
     sitemaps con `<url>` o con `<loc>` sueltos.
     """
     parser = etree.XMLParser(resolve_entities=False, no_network=True, recover=True)
-    raiz = etree.fromstring(contenido, parser=parser)
+    try:
+        raiz = etree.fromstring(contenido, parser=parser)
+    except (etree.XMLSyntaxError, ValueError):
+        return []                        # m-4: XML vacío/roto ⇒ [], nunca excepción
     if raiz is None:
         return []
     guias: list[GuiaResumen] = []
@@ -277,7 +369,18 @@ class ExtractorGuias:
         except Exception:
             logger.warning("reading_orders.parse_fallido", sitio=self.sitio, motivo="html")
             return None
-        if guia is None or not guia.entradas:
+        if guia is None:
+            logger.warning("reading_orders.parse_fallido", sitio=self.sitio,
+                           motivo="sin_entradas")
+            return None
+        # m-5: cotas de campos + renumerado contiguo 1..N (orden de lectura).
+        validas = [entrada for entrada in guia.entradas
+                   if entrada.referencia and len(entrada.referencia) <= MAX_REFERENCIA]
+        entradas = tuple(replace(entrada, orden=indice + 1)
+                         for indice, entrada in enumerate(validas))
+        titulo = (guia.titulo or "").strip()[:MAX_TITULO_GUIA] or None
+        guia = replace(guia, titulo=titulo, entradas=entradas)
+        if not guia.entradas:
             logger.warning("reading_orders.parse_fallido", sitio=self.sitio,
                            motivo="sin_entradas")
             return None
@@ -311,12 +414,19 @@ __all__ = [
     "MAX_CUERPO_SITEMAP",
     "MAX_GUIAS",
     "MAX_LOCS",
+    "MAX_REFERENCIA",
+    "MAX_SECCION",
+    "MAX_TITULO_GUIA",
+    "MAX_URL_ITEM",
     "POLITICA_CACHE_GUIA",
     "POLITICA_CACHE_SITEMAP",
     "ExtractorGuias",
     "GuiaLeida",
     "GuiaResumen",
     "RawReadingEntry",
+    "entrada_de_guia",
     "parsear_sitemap",
     "politica_de_sitio",
+    "url_de_item",
+    "url_de_sitio_valida",
 ]

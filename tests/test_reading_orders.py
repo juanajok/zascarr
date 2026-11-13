@@ -20,11 +20,13 @@ from tests.test_cache_http import CacheHttpFalsa, Reloj
 from zascarr.services.reading_orders import (
     MAX_CUERPO,
     MAX_GUIAS,
+    MAX_REFERENCIA,
     ContinuityGuideExtractor,
     RawReadingEntry,
     ReadingOrdersExtractor,
     parsear_sitemap,
 )
+from zascarr.services.reading_orders.comun import url_de_item, url_de_sitio_valida
 from zascarr.utils.cache_http import reiniciar_candados_para_pruebas
 from zascarr.utils.cortesia import CortesiaProceso
 from zascarr.utils.robots import GestorRobots
@@ -91,7 +93,12 @@ def fuentes_encendidas(monkeypatch):
 
 @pytest.fixture
 def fuentes_apagadas(monkeypatch):
-    ajustes = SimpleNamespace()          # sin flags: las fuentes se estrenan apagadas
+    # El default REAL de config.py: las fuentes se estrenan apagadas (ADR 0013).
+    from zascarr.config import Settings
+
+    ajustes = Settings(_env_file=None)
+    assert ajustes.reading_orders_enabled is False
+    assert ajustes.continuity_guide_enabled is False
     monkeypatch.setattr("zascarr.config.get_settings", lambda: ajustes)
     monkeypatch.setattr("zascarr.services.reading_orders.comun.get_settings",
                         lambda: ajustes)
@@ -361,3 +368,93 @@ def test_filtro_del_sitemap_cg_excluye_imagenes_y_query():
         "https://images.squarespace-cdn.com/content/v1/abc/card1.jpg")
     assert not extractor._filtrar_sitemap(
         "https://www.continuityguide.net/planetx?format=json")
+
+
+# ── SecOps m-2/m-3/m-4 (condiciones de la entrega 2) ────────────────────────────────────────
+
+def test_m4_parsear_sitemap_con_xml_vacio_o_roto_devuelve_lista():
+    filtro = lambda _url: True  # noqa: E731
+    assert parsear_sitemap(b"", filtro) == []
+    assert parsear_sitemap(b"no es xml", filtro) == []
+    assert parsear_sitemap(b"<urlset>", filtro) == []
+
+
+def test_m2_url_de_item_solo_http_y_sin_credenciales():
+    base = "https://comicbookreadingorders.com/dc/events/x-reading-order/"
+    assert url_de_item(base, "javascript:alert(1)") is None
+    assert url_de_item(base, "data:text/html,x") is None
+    assert url_de_item(base, "mailto:a@b.c") is None
+    assert url_de_item(base, "https://user:pass@evil.example/x") is None
+    assert url_de_item(base, "https://" + "a" * 600) is None
+    assert url_de_item(base, "https://www.dcuniverseinfinite.com/x") == (
+        "https://www.dcuniverseinfinite.com/x")
+    assert url_de_item(base, "//www.marvel.com/unlimited") == "https://www.marvel.com/unlimited"
+
+
+def test_m3_url_del_sitio_rechaza_userinfo_puertos_y_paginas_no_validas():
+    ro = ReadingOrdersExtractor(CacheHttpFalsa())
+    assert ro._url_del_sitio(RO_GUIA)
+    assert not ro._url_del_sitio(
+        "https://user:pass@comicbookreadingorders.com/dc/events/x-reading-order/")
+    assert not ro._url_del_sitio(
+        "https://comicbookreadingorders.com:8443/dc/events/x-reading-order/")
+    assert not ro._url_del_sitio(
+        "https://comicbookreadingorders.com/api/guia")
+    assert not ro._url_del_sitio(RO_GUIA + "?x=1")
+
+    cg = ContinuityGuideExtractor(CacheHttpFalsa())
+    assert cg._url_del_sitio(CG_GUIA)
+    assert not cg._url_del_sitio("https://www.continuityguide.net/")
+    assert not cg._url_del_sitio("https://www.continuityguide.net/api/guia")
+    assert not cg._url_del_sitio("https://user:pass@www.continuityguide.net/planetx")
+    assert not cg._url_del_sitio("https://www.continuityguide.net:8443/planetx")
+    assert not cg._url_del_sitio("https://www.continuityguide.net/planetx?format=json")
+    assert not cg._url_del_sitio("https://www.continuityguide.net/imagen.jpg")
+
+
+async def test_m5_entradas_largas_y_enlaces_peligrosos_se_descartan_y_renumeran(fuentes_encendidas):
+    html = f"""<html><body><main><h1>Guía</h1><ol class="issues">
+      <li class="issue"><div class="issue-main"><span class="issue-title">X-Men #1</span></div>
+        <a class="read-link" href="javascript:alert(1)">Read</a></li>
+      <li class="issue"><div class="issue-main"><span class="issue-title">X-Men #2</span></div>
+        <a class="read-link" href="data:text/html,x">Read</a></li>
+      <li class="issue"><div class="issue-main"><span class="issue-title">{'A' * (MAX_REFERENCIA + 10)}</span></div></li>
+      <li class="issue"><div class="issue-main"><span class="issue-title">X-Men #3</span></div>
+        <a class="read-link" href="//www.marvel.com/unlimited">Read</a></li>
+    </ol></main></body></html>"""
+    mundo = Mundo({"crisis-on-infinite-earths": html.encode()})
+    reloj, cache = Reloj(), CacheHttpFalsa()
+    extractor = _extractor(ReadingOrdersExtractor, mundo, cache, reloj)
+    async with extractor:
+        guia = await extractor.leer_guia(RO_GUIA)
+    assert guia is not None
+    assert [e.referencia for e in guia.entradas] == ["X-Men #1", "X-Men #2", "X-Men #3"]
+    assert [e.orden for e in guia.entradas] == [1, 2, 3]      # renumerado contiguo
+    assert guia.entradas[0].item_url is None and guia.entradas[1].item_url is None
+    assert guia.entradas[2].item_url == "https://www.marvel.com/unlimited"
+    assert guia.titulo is not None and len(guia.titulo) <= 500
+
+
+def test_validacion_comun_de_url_no_acepta_esquemas_ni_recursos():
+    hosts = ("www.continuityguide.net",)
+    assert url_de_sitio_valida("https://www.continuityguide.net/planetx", hosts)
+    assert not url_de_sitio_valida("http://www.continuityguide.net/planetx", hosts)
+    assert not url_de_sitio_valida("https://www.continuityguide.net/x.jpg", hosts)
+    assert not url_de_sitio_valida("https://www.continuityguide.net/../x", hosts)
+
+
+def test_c1_porcentaje_codificado_no_esquiva_la_validacion():
+    """SecOps c-1: `%2e%2e` (y doble codificación) equivale a `..` para el servidor."""
+    ro = ReadingOrdersExtractor(CacheHttpFalsa())
+    assert not ro._url_del_sitio(
+        "https://comicbookreadingorders.com/dc/events/x%2e%2e/y/")
+    assert not ro._url_del_sitio(
+        "https://comicbookreadingorders.com/dc/events/%2e%2e/%2e%2e/etc")
+    assert not ro._url_del_sitio(
+        "https://comicbookreadingorders.com/dc/events/x%252e%252e/y/")
+    assert not ro._url_del_sitio("https://comicbookreadingorders.com/%61pi/guia")
+
+    cg = ContinuityGuideExtractor(CacheHttpFalsa())
+    assert not cg._url_del_sitio("https://www.continuityguide.net/%2e%2e/x")
+    assert not cg._url_del_sitio("https://www.continuityguide.net/%61pi/guia")
+    assert cg._url_del_sitio("https://www.continuityguide.net/planetx")

@@ -9,7 +9,7 @@ para que el resolver lo trate como año del número) y el `a.read-link`.
 from __future__ import annotations
 
 import re
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 import structlog
 from lxml.html import HTMLParser, document_fromstring
@@ -19,6 +19,8 @@ from zascarr.services.reading_orders.comun import (
     GuiaLeida,
     RawReadingEntry,
     _texto,
+    entrada_de_guia,
+    url_de_sitio_valida,
 )
 
 logger = structlog.get_logger()
@@ -45,18 +47,9 @@ class ReadingOrdersExtractor(ExtractorGuias):
         return SITEMAP
 
     def _url_del_sitio(self, url: str) -> bool:
-        try:
-            partes = urlsplit(url)
-        except ValueError:
-            return False
-        if partes.scheme != "https":
-            return False
-        if (partes.hostname or "").lower() not in HOSTS_PERMITIDOS:
-            return False
-        ruta = partes.path.lower()
-        if not ruta.startswith("/") or any(ruta.startswith(p) for p in RUTAS_PROHIBIDAS):
-            return False
-        return not partes.query          # las guías no usan query (el sitemap tampoco)
+        # SecOps m-3: https, host allowlist, sin userinfo, puerto 443, sin query ni recursos.
+        return url_de_sitio_valida(url, HOSTS_PERMITIDOS,
+                                   rutas_prohibidas=RUTAS_PROHIBIDAS)
 
     def _filtrar_sitemap(self, url: str) -> bool:
         if not self._url_del_sitio(url):
@@ -101,10 +94,11 @@ class ReadingOrdersExtractor(ExtractorGuias):
             enlaces = hijo.xpath(
                 ".//a[contains(concat(' ', normalize-space(@class), ' '), "
                 "' read-link ')][@href]/@href")
-            item_url = urljoin(url, enlaces[0]) if enlaces else None
-            entradas.append(RawReadingEntry(
-                orden=len(entradas) + 1, referencia=referencia,
-                seccion=seccion, item_url=item_url))
+            entrada = entrada_de_guia(
+                orden=len(entradas) + 1, referencia=referencia, seccion=seccion,
+                href=enlaces[0] if enlaces else None, base_url=url)
+            if entrada is not None:           # cotas + enlace solo http(s) (m-2/m-5)
+                entradas.append(entrada)
         if not entradas:
             return None
         return GuiaLeida(sitio=self.sitio, url=url, titulo=titulo,

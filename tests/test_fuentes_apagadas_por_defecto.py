@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 from zascarr.config import Settings, get_settings
 from zascarr.main import app
 
-CAMPOS = ("comicvine_enabled", "anilist_enabled", "tebeosfera_enabled", "gcd_enabled")
+CAMPOS = ("comicvine_enabled", "anilist_enabled", "tebeosfera_enabled", "gcd_enabled",
+          "fandom_dc_enabled", "fandom_marvel_enabled",
+          "reading_orders_enabled", "continuity_guide_enabled")
 
 
 @pytest.fixture

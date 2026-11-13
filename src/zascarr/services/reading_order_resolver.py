@@ -32,6 +32,14 @@ from zascarr.core.matcher import normalize_title
 
 #: Techo de expansión de un rango de números (spec §3).
 MAX_RANGO = 100
+#: Cotas de entrada y de campos (SecOps m-1/m-5): una referencia real ocupa <100 caracteres.
+MAX_REFERENCIA = 2_000
+MAX_GRUPOS = 64
+MAX_TITULO_SERIE = 500              # = Series.title (String(500))
+MAX_AVISOS = 10
+MAX_AVISO = 120
+MAX_NUMERO = 32
+MAX_DIGITOS_ENTERO = 9              # muy por debajo del límite de `int()` (4.300 dígitos)
 
 TipoEntrega = Literal["issue", "annual", "special", "tpb", "volume"]
 Confianza = Literal["alta", "media", "baja"]
@@ -75,16 +83,30 @@ def _normalizar(texto: str) -> str:
 
 
 def _grupos_finales(texto: str) -> tuple[str, list[str]]:
-    """Parte `texto` en (resto, grupos `(...)` del final en orden de aparición)."""
+    """Parte `texto` en (resto, grupos `(...)` del final en orden de aparición).
+
+    Escaneo desde el final con índices (lineal; M-1 de SecOps): la versión anterior quitaba
+    los grupos uno a uno con `search` + slicing sobre el resto, O(n²) con `(a)(a)(a)…`.
+    También hay tope de grupos (`MAX_GRUPOS`) y la entrada ya viene acotada.
+    """
+    cierre = len(texto.rstrip())
     grupos: list[str] = []
-    resto = texto.strip()
-    while True:
-        coincidencia = _RE_GRUPO_FINAL.search(resto)
-        if coincidencia is None:
+    while cierre > 0 and len(grupos) < MAX_GRUPOS:
+        if texto[cierre - 1] != ")":
             break
-        grupos.insert(0, coincidencia.group(1).strip())
-        resto = resto[:coincidencia.start()].strip()
-    return resto, grupos
+        inicio = texto.rfind("(", 0, cierre - 1)
+        if inicio < 0:
+            break
+        interior = texto[inicio + 1:cierre - 1]
+        if "(" in interior or ")" in interior:
+            break
+        grupos.append(interior.strip())
+        indice = inicio - 1
+        while indice >= 0 and texto[indice].isspace():
+            indice -= 1
+        cierre = indice + 1
+    grupos.reverse()
+    return texto[:cierre].strip(), grupos
 
 
 def _limpiar_titulo(texto: str) -> str | None:
@@ -95,7 +117,7 @@ def _limpiar_titulo(texto: str) -> str | None:
 
 
 def _anio_y_avisos(grupos: list[str]) -> tuple[int | None, list[str], bool]:
-    """(año, avisos, hay_grupo_no_reconocido) de una lista de paréntesis."""
+    """(año, avisos, hay_grupo_no_reconocido) de una lista de paréntesis, con cotas."""
     anio: int | None = None
     avisos: list[str] = []
     no_reconocido = False
@@ -103,27 +125,41 @@ def _anio_y_avisos(grupos: list[str]) -> tuple[int | None, list[str], bool]:
         if _RE_ANIO.fullmatch(grupo):
             anio = int(grupo)
             continue
-        avisos.append(grupo.lower())
+        if len(avisos) < MAX_AVISOS:      # m-5: número y longitud de avisos acotados
+            avisos.append(grupo.lower()[:MAX_AVISO])
         if not _RE_MARCADOR_RECONOCIDO.fullmatch(grupo):
             no_reconocido = True
     return anio, avisos, no_reconocido
 
 
-def _extraer_volumen(texto: str) -> tuple[str, int | None]:
-    """Quita `Vol. N` del texto y lo devuelve (texto, N)."""
+def _entero_acotado(valor: str, *, digitos: int = MAX_DIGITOS_ENTERO) -> int | None:
+    """`int(valor)` solo si es razonablemente corto (m-1: `int()` lanza a partir de 4.300)."""
+    if not valor.isdigit() or len(valor) > digitos:
+        return None
+    return int(valor)
+
+
+def _extraer_volumen(texto: str) -> tuple[str, int | None] | None:
+    """Quita `Vol. N` y devuelve (texto, N); `None` si el número no es razonable (m-1)."""
     coincidencia = _RE_VOL.search(texto)
     if coincidencia is None:
         return texto, None
+    volumen = _entero_acotado(coincidencia.group(1))
+    if volumen is None:
+        return None
     resto = (texto[:coincidencia.start()] + " " + texto[coincidencia.end():]).strip()
-    return resto, int(coincidencia.group(1))
+    return resto, volumen
 
 
 def _parsear_numero(texto: str) -> tuple[str, str | None] | None:
-    """`1`, `1-6`, `0.1`, `1/2`, `12.NOW`, `1A` → (inicio, fin|None)."""
+    """`1`, `1-6`, `0.1`, `1/2`, `12.NOW`, `1A` → (inicio, fin|None), con cotas (m-1/m-5)."""
     coincidencia = _RE_NUMERO.match(texto)
     if coincidencia is None:
         return None
-    return coincidencia.group(1), coincidencia.group(2)
+    inicio, fin = coincidencia.group(1), coincidencia.group(2)
+    if len(inicio) > MAX_NUMERO or (fin is not None and len(fin) > MAX_NUMERO):
+        return None
+    return inicio, fin
 
 
 def _con_numero(izquierda: str, derecha: str) -> ReadingOrderItem | None:
@@ -137,9 +173,12 @@ def _con_numero(izquierda: str, derecha: str) -> ReadingOrderItem | None:
 
     titulo_texto, grupos_izquierda = _grupos_finales(izquierda)
     anio_volumen, avisos_izquierda, no_reconocido_izquierda = _anio_y_avisos(grupos_izquierda)
-    titulo_texto, volumen = _extraer_volumen(titulo_texto)
+    extraido = _extraer_volumen(titulo_texto)
+    if extraido is None:
+        return None
+    titulo_texto, volumen = extraido
     titulo = _limpiar_titulo(titulo_texto)
-    if titulo is None:
+    if titulo is None or len(titulo) > MAX_TITULO_SERIE:
         return None
 
     if _RE_ANUAL.search(titulo):
@@ -173,7 +212,10 @@ def _sin_numero(texto: str) -> ReadingOrderItem | None:
         return None                       # «Vol. 1-3» no es un rango de volúmenes (límite)
     resto, grupos = _grupos_finales(texto)
     anio_volumen, avisos, no_reconocido = _anio_y_avisos(grupos)
-    resto, volumen = _extraer_volumen(resto)
+    extraido = _extraer_volumen(resto)
+    if extraido is None:
+        return None
+    resto, volumen = extraido
     es_tpb = _RE_TPB.search(resto) is not None
     if es_tpb:
         resto = _RE_TPB.sub(" ", resto)
@@ -183,7 +225,7 @@ def _sin_numero(texto: str) -> ReadingOrderItem | None:
     else:
         return None
     titulo = _limpiar_titulo(resto)
-    if titulo is None:
+    if titulo is None or len(titulo) > MAX_TITULO_SERIE:
         return None
     return ReadingOrderItem(
         titulo_serie=titulo,
@@ -202,6 +244,8 @@ def parsear_referencia(texto: str) -> ReadingOrderItem | None:
     """Convierte una referencia de guía en `ReadingOrderItem`, o `None` si no es una referencia."""
     if not texto or not texto.strip():
         return None
+    if len(texto) > MAX_REFERENCIA:      # m-5: una referencia real ocupa <100 caracteres
+        return None
     normalizado = _normalizar(texto)
     if "#" in normalizado:
         izquierda, derecha = normalizado.split("#", 1)
@@ -219,6 +263,8 @@ def expandir_rango(item: ReadingOrderItem) -> list[str] | None:
         return None
     if not (item.numero_inicio.isdigit() and item.numero_fin.isdigit()):
         return None
+    if len(item.numero_inicio) > MAX_DIGITOS_ENTERO or len(item.numero_fin) > MAX_DIGITOS_ENTERO:
+        return None                       # m-1: nunca pasar de 4.300 dígitos a `int()`
     inicio, fin = int(item.numero_inicio), int(item.numero_fin)
     if fin < inicio or (fin - inicio + 1) > MAX_RANGO:
         return None
@@ -235,7 +281,13 @@ def clave_de_serie(item: ReadingOrderItem) -> str:
 
 
 __all__ = [
+    "MAX_AVISO",
+    "MAX_AVISOS",
+    "MAX_GRUPOS",
+    "MAX_NUMERO",
     "MAX_RANGO",
+    "MAX_REFERENCIA",
+    "MAX_TITULO_SERIE",
     "Confianza",
     "ReadingOrderItem",
     "TipoEntrega",
