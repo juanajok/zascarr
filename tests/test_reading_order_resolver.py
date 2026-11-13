@@ -126,3 +126,41 @@ def test_el_modulo_es_puro_sin_httpx_ni_sqlalchemy():
     assert "import httpx" not in fuente
     assert "import sqlalchemy" not in fuente
     assert "from sqlalchemy" not in fuente
+
+
+# ── SecOps M-1 / m-1 / m-5 (condiciones de la entrega 2) ─────────────────────────────────────
+
+def test_m1_grupos_finales_consecutivos_es_lineal():
+    """M-1: `(a)(a)(a)…` ya no es cuadrático; 100k grupos muy por debajo de 1 s."""
+    import time
+
+    for grupos in (2_000, 16_000, 100_000):
+        texto = "X-Men #1" + "(a)" * grupos
+        inicio = time.perf_counter()
+        assert parsear_referencia(texto) is None
+        transcurrido = time.perf_counter() - inicio
+        assert transcurrido < 1.0, f"{grupos} grupos: {transcurrido:.3f} s"
+
+
+def test_m1_entrada_larga_se_rechaza_antes_de_parsear():
+    assert len("X" * resolver.MAX_REFERENCIA + " #1") > resolver.MAX_REFERENCIA
+    assert parsear_referencia("X" * resolver.MAX_REFERENCIA + " #1") is None
+
+
+def test_m1_volumen_y_numero_gigantes_no_lanzan():
+    """m-1: `int()` lanza a partir de 4.300 dígitos; aquí se acota antes y se devuelve None."""
+    assert parsear_referencia("X Vol. " + "9" * 5_000 + " #1") is None
+    assert parsear_referencia("X-Men #" + "9" * 5_000) is None
+    gigante = ReadingOrderItem("X-Men", numero_inicio="9" * 5_000, numero_fin="9" * 5_000)
+    assert expandir_rango(gigante) is None
+    enorme = ReadingOrderItem("X-Men", numero_inicio="1", numero_fin="9" * 5_000)
+    assert expandir_rango(enorme) is None
+
+
+def test_m5_avisos_y_titulo_tienen_cota():
+    item = parsear_referencia("Batman #1" + "".join(f"(aviso {i})" for i in range(20)))
+    assert item is not None
+    assert len(item.avisos) <= resolver.MAX_AVISOS
+    assert all(len(aviso) <= resolver.MAX_AVISO for aviso in item.avisos)
+    # Un título de serie por encima de Series.title(500) no se devuelve (no se puede persistir).
+    assert parsear_referencia("A" * 600 + " #1") is None

@@ -46,6 +46,10 @@ def test_las_fuentes_nuevas_y_el_token_estan_en_ajustes(monkeypatch):
     assert 'name="metron_enabled"' in r.text
     assert 'name="open_library_enabled"' in r.text
     assert 'name="metron_token"' in r.text and "Metron" in r.text
+    # SCR3: las dos guías de lectura son fuentes más, apagadas por defecto.
+    assert 'name="reading_orders_enabled"' in r.text
+    assert 'name="continuity_guide_enabled"' in r.text
+    assert "Comic Book Reading Orders" in r.text and "Continuity Guide" in r.text
 
 
 def test_guardar_fuentes_incluye_las_dos_nuevas(monkeypatch):
@@ -61,6 +65,23 @@ def test_guardar_fuentes_incluye_las_dos_nuevas(monkeypatch):
     assert r.status_code == 200
     valores = guardar.await_args.args[0]
     assert valores["metron_enabled"] is True and valores["open_library_enabled"] is True
+
+
+def test_guardar_fuentes_incluye_las_guias_de_lectura(monkeypatch):
+    guardar = AsyncMock()
+    monkeypatch.setattr("zascarr.web.ajustes.RuntimeSettingsService",
+                        lambda _db: SimpleNamespace(save=guardar))
+    c = _cliente()
+    try:
+        r = c.post("/ui/ajustes/guardar/fuentes", data={
+            "reading_orders_enabled": "true", "continuity_guide_enabled": "true"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    valores = guardar.await_args.args[0]
+    assert valores["reading_orders_enabled"] is True
+    assert valores["continuity_guide_enabled"] is True
+    assert valores["comicvine_enabled"] is False
 
 
 def test_guardar_token_de_metron(monkeypatch):

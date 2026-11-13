@@ -472,6 +472,11 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             if getattr(settings, "fandom_dc_enabled", False) else "disabled",
             "fandom_marvel": "enabled"
             if getattr(settings, "fandom_marvel_enabled", False) else "disabled",
+            # SCR3: guías de lectura (solo referencias fácticas); apagadas por defecto.
+            "reading_orders": "enabled"
+            if getattr(settings, "reading_orders_enabled", False) else "disabled",
+            "continuity_guide": "enabled"
+            if getattr(settings, "continuity_guide_enabled", False) else "disabled",
         },
         # A11: seguridad aparte de la salud técnica (ver estado_de_seguridad).
         "seguridad": estado_de_seguridad(settings),

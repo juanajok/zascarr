@@ -127,6 +127,8 @@ def _contexto() -> dict:
         "open_library_enabled": bool(getattr(s, "open_library_enabled", False)),
         "fandom_dc_enabled": bool(getattr(s, "fandom_dc_enabled", False)),
         "fandom_marvel_enabled": bool(getattr(s, "fandom_marvel_enabled", False)),
+        "reading_orders_enabled": bool(getattr(s, "reading_orders_enabled", False)),
+        "continuity_guide_enabled": bool(getattr(s, "continuity_guide_enabled", False)),
         "metron_token_configurado": bool(getattr(s, "metron_token", "")),
         "fuentes_heredadas": s.fuentes_heredadas,
         "prowlarr_url": s.prowlarr_url,
@@ -310,6 +312,8 @@ async def guardar_fuentes(
     open_library_enabled: bool = Form(default=False),
     fandom_dc_enabled: bool = Form(default=False),
     fandom_marvel_enabled: bool = Form(default=False),
+    reading_orders_enabled: bool = Form(default=False),
+    continuity_guide_enabled: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     await RuntimeSettingsService(db).save({
@@ -321,6 +325,8 @@ async def guardar_fuentes(
         "open_library_enabled": open_library_enabled,
         "fandom_dc_enabled": fandom_dc_enabled,
         "fandom_marvel_enabled": fandom_marvel_enabled,
+        "reading_orders_enabled": reading_orders_enabled,
+        "continuity_guide_enabled": continuity_guide_enabled,
         # Guardar es tomar la decisión (aunque sea confirmar el estado actual): deja de ser
         # «heredado».
         "fuentes_heredadas": False,

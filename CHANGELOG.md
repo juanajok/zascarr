@@ -144,6 +144,17 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   resto del vocabulario queda en el autocompletado. Se siembra una vez (migración 0039), sin
   asignar nada; las fuentes y ComicInfo siguen aportando sus tags con procedencia. Ficha:
   `docs/design/benchmark-pool-etiquetas-inicial.md`.
+
+- **Guías y órdenes de lectura (SCR3, entrega 2).** Extractores de Comic Book Reading
+  Orders y Continuity Guide (solo referencias fácticas, `use=reference`, nunca la prosa;
+  CG sin `?format=json`) y `reading_order_resolver` puro; reconciliación con la colección
+  reutilizando **`story_arcs` / `story_arc_issues.reading_order`** (sin modelo nuevo ni
+  migración), idempotente y solo lectura de la biblioteca. Fuentes apagadas por defecto
+  (`reading_orders_enabled`/`continuity_guide_enabled` en Ajustes), cortesía 2,5/3,5 s,
+  descargas por la caché/robots de SCR1 y enlace a la guía original en la ficha del arco.
+  Disparador manual: `scripts/reconciliar-lecturas.py --fuente … --url …`.
+  Spec: `docs/design/especificacion-SCR3-lecturas.md`.
+
 - **Caché HTTP condicional y `robots.txt` (SCR1, Fase 1).** Tabla `http_cache` (migración
   `0038`) con dos horizontes (`fresh_until` para servir sin red, `retain_until` para revalidar
   con `304`), cuerpos comprimidos con zlib ≤2 MiB, negativas cortas (`404`/`410` y

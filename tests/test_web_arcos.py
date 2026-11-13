@@ -73,6 +73,36 @@ def test_detalle_de_saga_atribuye_a_fandom_con_articulo_y_licencia():
     assert "DC Database" in r.text and "Creative Commons BY-SA 3.0" in r.text
 
 
+def test_detalle_de_saga_muestra_la_fuente_de_la_guia():
+    """SCR3: una saga reconciliada de una guía enlaza su fuente (texto, no hotlinking)."""
+    detalle = DetalleArco("a1", "Crisis on Infinite Earths", None, False, [], 0)
+    url = ("https://comicbookreadingorders.com/dc/events/"
+           "crisis-on-infinite-earths-reading-order/")
+    c = _cliente(metadata={"origen": "reading_orders", "url": url})
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{uuid4()}")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert f'href="{url}"' in r.text
+    assert 'rel="noopener noreferrer"' in r.text
+    assert "Comic Book Reading Orders" in r.text and "Guía de lectura" in r.text
+
+
+def test_detalle_de_saga_no_pinta_una_url_de_fuente_peligrosa():
+    """SecOps m-2: un `metadata_` manipulado con javascript:/data: no se pinta."""
+    detalle = DetalleArco("a1", "Crisis", None, False, [], 0)
+    for url in ("javascript:alert(1)", "data:text/html,x"):
+        c = _cliente(metadata={"origen": "reading_orders", "url": url})
+        try:
+            with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+                r = c.get(f"/ui/arcos/{uuid4()}")
+        finally:
+            _cerrar()
+        assert "Guía de lectura" not in r.text and "javascript:alert" not in r.text
+
+
 def test_detalle_de_saga_manual_no_atribuye_a_fandom():
     detalle = DetalleArco("a1", "Saga mía", None, False, [], 0)
     c = _cliente()
@@ -119,3 +149,26 @@ def test_formularios_crud_y_redirecciones(monkeypatch):
         assert r.status_code == 303
     finally:
         _cerrar()
+
+
+def test_c4_fuente_de_guia_valida_host_esquema_y_rutas():
+    """SecOps c-4: la fuente se valida con la allowlist/validación del extractor."""
+    from zascarr.web.arcos import fuente_de_guia
+
+    buena = ("https://comicbookreadingorders.com/dc/events/"
+             "crisis-on-infinite-earths-reading-order/")
+    assert fuente_de_guia({"origen": "reading_orders", "url": buena}) is not None
+    assert fuente_de_guia({"origen": "continuity_guide",
+                           "url": "https://www.continuityguide.net/planetx"}) is not None
+    assert fuente_de_guia({"origen": "reading_orders",
+                           "url": "https://evil.example/dc/events/x-reading-order/"}) is None
+    assert fuente_de_guia({"origen": "continuity_guide",
+                           "url": "https://www.continuityguide.net/%2e%2e/x"}) is None
+    assert fuente_de_guia({"origen": "continuity_guide",
+                           "url": "https://www.continuityguide.net/planetx?format=json"}) is None
+    con_credenciales = ("https://user:pass@comicbookreadingorders.com"
+                        "/dc/events/x-reading-order/")
+    assert fuente_de_guia({"origen": "reading_orders",
+                           "url": con_credenciales}) is None
+    assert fuente_de_guia({"origen": "fandom_dc",
+                           "url": "https://dc.fandom.com/wiki/Batman"}) is None
