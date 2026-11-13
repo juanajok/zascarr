@@ -2642,7 +2642,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   z-index: 30;
   pointer-events: none;
   background: var(--paper-2);
-  border: 3px solid var(--ink);
+  border: var(--border-panel) solid var(--ink);
   border-radius: var(--radius-panel);
   padding: 4px;
   box-shadow: var(--shadow-ink-sm);
