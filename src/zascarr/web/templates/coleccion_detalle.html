@@ -91,7 +91,7 @@
               formmethod="post">Añadir series seleccionadas</button>
       {% elif q or tradicion %}
       {{ ui.estado_vacio("No hay series con esos filtros", "Prueba con otro título o tradición, o limpia los filtros.") }}
-      <p><a class="btn ghost" href="/ui/colecciones/{{ coleccion.id }}">Limpiar filtros</a></p>
+      <p><a class="btn ghost" href="{{ url_limpiar }}">Limpiar filtros</a></p>
       {% else %}
       <p class="caption">No quedan series sin colección.</p>
       {% endif %}
