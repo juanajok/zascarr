@@ -8,9 +8,9 @@
   <div id="copia-anuncio" aria-live="polite">{% include "_copias_estado.html" %}</div>
   {% include "_copias_lista.html" %}
   <details>
-    <summary>Para quien instaló ZascArr</summary>
-    <p>Para activarlo, en el equipo donde corre ZascArr: <code>sudo bash scripts/instalar_ops.sh</code>.
-      Sin contraseña en ZascArr, <strong>cualquiera que pueda abrir ZascArr</strong> puede pedir una copia.
+    <summary>{{ "Para quien instaló ZascArr" if v.estado == "no_activado" else "Más información" }}</summary>
+    <p>{% if v.estado == "no_activado" %}Para activarlo, en el equipo donde corre ZascArr: <code>sudo bash scripts/instalar_ops.sh</code>.
+      {% endif %}Sin contraseña en ZascArr, <strong>cualquiera que pueda abrir ZascArr</strong> puede pedir una copia.
       Una copia solo ocupa disco; no cambia nada más.</p>
   </details>
 </section>
