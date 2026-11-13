@@ -27,11 +27,15 @@
 
 <section class="coleccion-panel" id="series">
   <h2>Series</h2>
+  <div class="coleccion-series-layout">
+  <div class="coleccion-series-col">
   {% if coleccion.series %}
   <ul class="coleccion-series-lista">
     {% for s in coleccion.series %}
-    <li class="coleccion-serie-fila">
-      <span class="coleccion-previa" aria-hidden="true">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-previa", carga="lazy") }}</span>
+    <li class="coleccion-serie-fila"
+        hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
+        hx-target="#previa-serie" hx-swap="innerHTML"
+        hx-trigger="mouseenter, focusin" hx-sync="this:replace">
       <div>
         <a href="/ui/series/{{ s.id }}">{{ s.title }}</a>
         <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>
@@ -81,12 +85,14 @@
       {% if series %}
       <div class="coleccion-checkgrid">
         {% for s in series %}
-        <label class="coleccion-check" for="serie-{{ s.id }}">
+        <label class="coleccion-check" for="serie-{{ s.id }}"
+               hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
+               hx-target="#previa-serie" hx-swap="innerHTML"
+               hx-trigger="mouseenter, focusin" hx-sync="this:replace">
           <input type="checkbox" id="serie-{{ s.id }}" name="serie_ids" value="{{ s.id }}"
                  {% if s.id in seleccion %}checked{% endif %}>
           <span>{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</span>
-          <span class="coleccion-previa" aria-hidden="true">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-previa", carga="lazy") }}</span>
-        </label>
+            </label>
         {% endfor %}
       </div>
       <button class="btn" type="submit" formaction="/ui/colecciones/{{ coleccion.id }}/series"
@@ -113,6 +119,11 @@
       {% endif %}
     </fieldset>
   </form>
+  </div>
+  <aside id="previa-serie" class="coleccion-previa-panel" aria-live="polite">
+    <p class="caption">Pasa el ratón o toca una serie para ver su portada.</p>
+  </aside>
+  </div>
 </section>
 
 <section class="coleccion-panel">

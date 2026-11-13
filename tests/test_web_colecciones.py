@@ -79,9 +79,13 @@ def test_detalle_muestra_series_y_selector():
     assert "Flash" in r.text and "Batman" in r.text
     assert "Elegir portada" in r.text and "Usar la automática" in r.text
     assert "/portada" in r.text
-    assert r.text.count("coleccion-previa") >= 2
-    assert "/ui/series/s1/portada" in r.text
-    assert "/ui/series/s2/portada" in r.text
+    assert 'id="previa-serie"' in r.text
+    assert 'hx-get="/ui/colecciones/' in r.text and '/previa/s1"' in r.text
+    assert '/previa/s2"' in r.text
+    assert "Pasa el ratón o toca una serie" in r.text
+    # Sin imágenes masivas: la portada de cada serie se pide solo al fragmento.
+    assert 'src="/ui/series/s1/portada"' not in r.text
+    assert 'src="/ui/series/s2/portada"' not in r.text
     assert "Guardada: Buscar los números que faltan" in r.text
     assert "Efectiva: No buscar automáticamente" in r.text
     assert "No buscar automáticamente" in r.text
@@ -353,3 +357,31 @@ def test_limpiar_filtros_conserva_la_seleccion_en_el_servidor():
     kwargs = llamada.await_args.kwargs
     assert kwargs["q"] == "" and kwargs["tradicion"] == ""
     assert f'name="serie_ids" value="{sid}"' in r.text
+
+
+def test_endpoint_previa_200_y_404():
+    from types import SimpleNamespace
+    cid, sid = uuid4(), uuid4()
+    coleccion = SimpleNamespace(id=cid, name="Grapas")
+    serie = SimpleNamespace(id=sid, title="Flash", start_year=1987)
+
+    async def get(_modelo, clave):
+        if clave == cid:
+            return coleccion
+        if clave == sid:
+            return serie
+        return None
+
+    async def _db():
+        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(), get=get)
+    app.dependency_overrides[get_db] = _db
+    try:
+        r = TestClient(app).get(f"/ui/colecciones/{cid}/previa/{sid}")
+        assert r.status_code == 200
+        assert f"/ui/series/{sid}/portada" in r.text
+        assert "Flash" in r.text and "1987" in r.text
+        assert r.headers["cache-control"] == "no-store"
+        r404 = TestClient(app).get(f"/ui/colecciones/{cid}/previa/{uuid4()}")
+        assert r404.status_code == 404
+    finally:
+        _cerrar()
