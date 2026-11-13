@@ -98,6 +98,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
             "guardada": "Colección guardada.",
             "asignada": "Serie añadida a la colección.",
             "quitada": "Serie quitada de la colección; sigue en tu biblioteca.",
+            "portada": "Portada actualizada.",
         }.get(guardado, ""),
     })
 
@@ -143,10 +144,18 @@ async def portada(coleccion_id: UUID, request: Request,
 @router.post("/{coleccion_id}/portada")
 async def cambiar_portada(request: Request, coleccion_id: UUID,
                           series_id: str = Form(""), db: AsyncSession = Depends(get_db)):
-    try:
-        elegida = UUID(series_id) if series_id.strip() else None
-    except ValueError:
-        elegida = None
+    elegida = None
+    if series_id.strip():
+        try:
+            elegida = UUID(series_id)
+        except ValueError:
+            c = await detalle_coleccion(db, coleccion_id)
+            return _respuesta(request, "coleccion_detalle.html", {
+                "coleccion": c, "politicas": POLITICAS,
+                "series": await series_sin_coleccion(db),
+                "candidatas_portada": await candidatas_portada(db, coleccion_id),
+                "exportaciones": await historial_exportaciones(db, coleccion_id),
+                "errores": {"portada": "La serie elegida no es válida."}, "aviso": ""})
     r = await elegir_portada(db, coleccion_id, elegida)
     if not r.ok:
         c = await detalle_coleccion(db, coleccion_id)

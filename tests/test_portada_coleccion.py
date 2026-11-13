@@ -48,3 +48,13 @@ def test_huella_cambia_con_miembro_y_portada(tmp_path):
     assert h1 != h2
     _jpeg(covers / "v3" / f"{sid}.jpg", (9, 9, 9))
     assert pc._huella([serie], covers) != h1
+
+
+def test_symlink_en_covers_no_cuenta_como_portada(tmp_path):
+    sid = uuid4()
+    fuera = tmp_path / "fuera.jpg"
+    _jpeg(fuera, (1, 2, 3))
+    enlace = tmp_path / "covers" / "v3" / f"{sid}.jpg"
+    enlace.parent.mkdir(parents=True)
+    enlace.symlink_to(fuera)
+    assert pc.portada_cacheada(tmp_path / "covers", sid) is None

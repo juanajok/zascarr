@@ -34,7 +34,8 @@ def test_lista_muestra_colecciones_y_politica():
     c = _cliente()
     try:
         with patch("zascarr.web.colecciones.listar_colecciones", AsyncMock(return_value=[
-                ColeccionResumen("c1", "Grapas", "En curso", "incluir", 2)])):
+                ColeccionResumen("c1", "Grapas", "En curso", "incluir", 2,
+                                 tiene_portada=True)])):
             r = c.get("/ui/colecciones")
     finally:
         _cerrar()
@@ -162,3 +163,41 @@ def test_panel_elegir_portada_post():
         assert r.status_code == 303 and "guardado=portada" in r.headers["location"]
     finally:
         _cerrar()
+
+
+def test_panel_uuid_invalido_no_llama_a_elegir():
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    c = _cliente()
+    llamada = AsyncMock()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.elegir_portada", llamada):
+            r = c.post(f"/ui/colecciones/{cid}/portada", data={"series_id": "no-uuid"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "no es válida" in r.text
+    llamada.assert_not_awaited()
+
+
+def test_aviso_portada_tras_elegir_y_fallback_sin_img():
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [],
+                               tiene_portada=False,
+                               portada_url=f"/ui/colecciones/{cid}/portada?v=auto")
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}?guardado=portada")
+    finally:
+        _cerrar()
+    assert "Portada actualizada." in r.text
+    assert "autofocus" in r.text
+    # Sin portada cacheada no se emite un <img> que daría 404.
+    assert f'src="/ui/colecciones/{cid}/portada' not in r.text
