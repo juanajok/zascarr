@@ -6,6 +6,7 @@ un `ImportRun` auditable. El parche ComicInfo es fase 2 y se rechaza aquí.
 """
 from __future__ import annotations
 
+import asyncio
 import errno
 import hashlib
 import json
@@ -55,6 +56,8 @@ class ResumenExportacion:
     errores: int
     bytes_copiados: int
     archivos: list[dict] = field(default_factory=list)
+    saltados: int = 0
+    modo: str = "hardlink"
 
 
 def _sha256(path: Path) -> str:
@@ -70,8 +73,11 @@ def _resolver_raiz(settings) -> Path:
     crudo = str(root)
     if ".." in Path(crudo).parts:
         raise ExportacionError("La ruta de exportación no puede contener «..».")
-    if root.is_symlink():
-        raise ExportacionError("La raíz de exportación no puede ser un symlink.")
+    actual = root
+    while actual != actual.parent:
+        if actual.is_symlink():
+            raise ExportacionError("La raíz de exportación no puede contener symlinks.")
+        actual = actual.parent
     resuelta = root.resolve()
     prohibidas = [
         getattr(settings, "library_path", None),
@@ -125,20 +131,29 @@ def _plan(collection: Collection, fuentes: list[ArchivoFuente], root: Path) -> P
     return plan_export(fuentes, root, folder=collection.name)
 
 
-def _modo_para(src: Path, parent: Path) -> str:
-    try:
-        return "hardlink" if src.stat().st_dev == parent.stat().st_dev else "copy"
-    except OSError:
-        return "copy"
+def _marcar_fuentes(fuentes: list[ArchivoFuente]) -> list[ArchivoFuente]:
+    """Fuera del bucle async: comprueba symlinks/fuentes inexistentes."""
+    salida: list[ArchivoFuente] = []
+    for f in fuentes:
+        ruta = Path(f.source_path)
+        try:
+            raro = ruta.is_symlink() or not ruta.exists()
+        except OSError:
+            raro = True
+        salida.append(f if not raro else type(f)(**{**f.__dict__, "is_missing": True}))
+    return salida
 
 
-def _materializar(plan: PlanExportacion, root: Path) -> tuple[list[dict], int, int, int, int, int]:
-    materializados: list[dict] = []
+def _materializar(
+    plan: PlanExportacion, root: Path,
+) -> tuple[list[dict], int, int, int, int, int, str]:
+    entradas: list[dict] = []
     omitidos = len(plan.omitidos) + len(plan.colisiones)
     colisiones = len(plan.colisiones)
     deriva = 0
     errores = 0
     copiados = 0
+    modos: set[str] = set()
     # Preflight: suma de lo que necesitará copia forzada por filesystem distinto.
     previstos: list[tuple[object, Path, str]] = []
     for accion in plan.archivos:
@@ -159,9 +174,13 @@ def _materializar(plan: PlanExportacion, root: Path) -> tuple[list[dict], int, i
     for accion, destino, modo in previstos:
         try:
             if destino.exists():
-                if accion.sha256 and _sha256(destino) == accion.sha256:
-                    continue
-                if not accion.sha256 and _sha256(destino) == _sha256(Path(accion.source_path)):
+                sha_destino = _sha256(destino)
+                if sha_destino == (accion.sha256 or _sha256(Path(accion.source_path))):
+                    entradas.append({
+                        "dest": accion.destino_relativo.replace("\\", "/"),
+                        "sha256": sha_destino, "issue_id": accion.issue_id,
+                        "file_id": accion.file_id, "mode": "skip", "status": "skip",
+                    })
                     continue
                 deriva += 1
                 continue
@@ -178,28 +197,35 @@ def _materializar(plan: PlanExportacion, root: Path) -> tuple[list[dict], int, i
                 if libre < accion.size_bytes:
                     raise EspacioInsuficienteError(
                         "No hay espacio suficiente para copiar la exportación.")
-                temp = destino.with_name(destino.name + ".zascarr-tmp")
+                # Temporal único en el mismo directorio; se publica con link
+                # (falla si el destino apareció) para no sobrescribir jamás.
+                fd, temp = tempfile.mkstemp(prefix=f".{destino.name}.", dir=str(destino.parent))
+                os.close(fd)
                 try:
                     shutil.copy2(accion.source_path, temp)
-                    os.replace(temp, destino)
+                    # Publicación sin pisar: crear el destino en exclusiva y
+                    # copiar el temporal ya verificado. No se usa `os.replace`.
+                    fd = os.open(destino, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+                    with os.fdopen(fd, "wb") as salida, Path(temp).open("rb") as entrada:
+                        shutil.copyfileobj(entrada, salida)
+                    shutil.copystat(accion.source_path, destino)
                 finally:
-                    temp.unlink(missing_ok=True)
+                    Path(temp).unlink(missing_ok=True)
                 copiados += accion.size_bytes
             sha = accion.sha256 or _sha256(destino)
-            materializados.append({
+            modos.add(modo)
+            entradas.append({
                 "dest": accion.destino_relativo.replace("\\", "/"),
-                "sha256": sha,
-                "issue_id": accion.issue_id,
-                "file_id": accion.file_id,
-                "mode": modo,
+                "sha256": sha, "issue_id": accion.issue_id,
+                "file_id": accion.file_id, "mode": modo, "status": "ok",
             })
         except EspacioInsuficienteError:
             raise
         except Exception:
             errores += 1
             logger.exception("exportacion_kavita.materializar_falló", destino=str(destino))
-    return materializados, omitidos, colisiones, deriva, errores, copiados
-
+    modo_global = "mixed" if len(modos) > 1 else (next(iter(modos)) if modos else "hardlink")
+    return entradas, omitidos, colisiones, deriva, errores, copiados, modo_global
 
 def _escribir_manifiesto(plan: PlanExportacion, root: Path, collection: Collection,
                          files: list[dict], modo: str) -> Path:
@@ -239,37 +265,39 @@ async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
     if collection.auto_search is None:  # defensa: la columna es NOT NULL
         raise ExportacionError("La colección no es válida.")
     settings = get_settings()
-    root = _resolver_raiz(settings)
-    root.mkdir(parents=True, exist_ok=True)
+    root = await asyncio.to_thread(_resolver_raiz, settings)
+    await asyncio.to_thread(root.mkdir, parents=True, exist_ok=True)
     try:
         fuentes = await _filas(db, collection)
     except Exception as exc:
         raise ExportacionError(f"No se pudo leer la colección: {exc}") from exc
-    fuentes = [
-        f if f.is_missing or Path(f.source_path).exists() else
-        type(f)(**{**f.__dict__, "is_missing": True})
-        for f in fuentes
-    ]
-    plan = _plan(collection, fuentes, root)
-    (root / plan.folder).mkdir(parents=True, exist_ok=True)
-    archivos, omitidos, colisiones, deriva, errores, copiados = _materializar(plan, root)
-    modo = "copy" if copiados else "hardlink"
-    manifiesto = _escribir_manifiesto(plan, root, collection, archivos, modo)
+    fuentes = await asyncio.to_thread(_marcar_fuentes, fuentes)
+    plan = await asyncio.to_thread(_plan, collection, fuentes, root)
+    await asyncio.to_thread((root / plan.folder).mkdir, parents=True, exist_ok=True)
+    (archivos, omitidos, colisiones, deriva, errores,
+     copiados, modo) = await asyncio.to_thread(_materializar, plan, root)
+    manifiesto = await asyncio.to_thread(
+        _escribir_manifiesto, plan, root, collection, archivos, modo)
     ahora = datetime.now(UTC)
+    materializados_ok = sum(1 for a in archivos if a.get("status") == "ok")
+    saltados = sum(1 for a in archivos if a.get("status") == "skip")
     run = ImportRun(
         id=uuid4(), started_at=ahora, finished_at=ahora,
-        files_scanned=len(fuentes), imported_count=len(archivos),
-        duplicate_count=omitidos, error_count=errores + deriva,
+        files_scanned=len(fuentes), imported_count=materializados_ok,
+        duplicate_count=saltados, unsorted_count=omitidos,
+        error_count=errores + deriva,
         details={
             "kind": "export", "collection_id": str(collection.id),
             "collection_name": collection.name, "root": str(root),
             "manifest": str(manifiesto), "archivos": archivos,
             "omitidos": plan.omitidos, "colisiones": plan.colisiones,
             "deriva": deriva, "bytes_copiados": copiados, "mode": modo,
+            "saltados": saltados,
         })
     db.add(run)
     await db.flush()
     return ResumenExportacion(
         run_id=str(run.id), collection_id=str(collection.id), destino=str(root / plan.folder),
-        materializados=len(archivos), omitidos=omitidos, colisiones=colisiones,
-        deriva=deriva, errores=errores, bytes_copiados=copiados, archivos=archivos)
+        materializados=materializados_ok, omitidos=omitidos, colisiones=colisiones,
+        deriva=deriva, errores=errores, bytes_copiados=copiados, archivos=archivos,
+        saltados=saltados, modo=modo)

@@ -45,5 +45,7 @@ async def exportar(collection_id: UUID, body: ExportacionBody | None = None,
             "deriva": resumen.deriva,
             "errores": resumen.errores,
             "bytes_copiados": resumen.bytes_copiados,
+            "saltados": resumen.saltados,
+            "modo": resumen.modo,
         },
     }
