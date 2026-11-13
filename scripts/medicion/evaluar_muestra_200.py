@@ -52,11 +52,22 @@ def _parser(rows: list[dict]) -> dict:
     c = Counter()
     for r in rows:
         p = _parse_row(r)
-        serie = _canon_serie(p.series) == _canon_serie(r["serie_real"])
+        # Una serie «Serie - Subtítulo» expone las dos formas: la corta
+        # (`series`) y la completa (`series_alternativa`). El parser acierta
+        # si cualquiera de las dos coincide con la etiqueta; la forma corta
+        # sigue siendo la clave de búsqueda del matcher.
+        serie = (_canon_serie(p.series) == _canon_serie(r["serie_real"])
+                 or bool(p.series_alternativa
+                         and _canon_serie(p.series_alternativa)
+                         == _canon_serie(r["serie_real"])))
         numero = _norm_num(p.issue_number) == _norm_num(r["numero_real"])
         c["serie"] += serie
         c["numero"] += numero
         c["ambos"] += serie and numero
+        c["serie_por_alternativa"] += bool(
+            p.series_alternativa
+            and _canon_serie(p.series_alternativa) == _canon_serie(r["serie_real"])
+            and _canon_serie(p.series) != _canon_serie(r["serie_real"]))
         if p.issue_number and not r["numero_real"]:
             c["numero_en_tipo_sin_numero"] += 1
     return dict(c)
