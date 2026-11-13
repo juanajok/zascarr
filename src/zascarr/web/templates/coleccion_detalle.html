@@ -5,130 +5,166 @@
 {% if not coleccion %}
 {{ ui.aviso("warn", "La colección ya no existe.") }}
 {% else %}
-<div class="coleccion-cabecera">
+{% set errores = errores|default({}) %}
+{% set seleccion = seleccion|default([]) %}
+<header class="coleccion-cabecera coleccion-panel">
   <div class="coleccion-portada">{{ ui.portada(coleccion.name, coleccion.id, coleccion.portada_url if coleccion.tiene_portada else none, clase="portada-coleccion") }}</div>
-  <div>
+  <div class="coleccion-cabecera-texto">
     <h1>{{ coleccion.name }}</h1>
-{% if aviso %}{{ ui.aviso("ok", aviso, foco=true) }}{% endif %}
-{% if errores %}
-{% for campo, mensaje in errores.items() %}{{ ui.aviso("warn", mensaje, foco=loop.first) }}{% endfor %}
-{% endif %}
-  </div>
-</div>
-<details class="politica-detalles">
-  <summary>Elegir portada</summary>
-  <p class="caption">La portada automática se compone con las portadas ya guardadas de tus series. También puedes elegir una serie miembro.</p>
-  {% if coleccion.cover_series_id and not coleccion.cover_series_valida %}
-  {% if coleccion.cover_series_title %}
-  {{ ui.aviso("warn", "La serie elegida todavía no tiene una portada guardada. Se usa la automática hasta que la tenga; tu elección no se ha borrado.") }}
-  {% else %}
-  {{ ui.aviso("warn", "La serie elegida ya no pertenece a esta colección. Se usa la automática hasta que elijas otra; tu elección no se ha borrado.") }}
-  {% endif %}
-  {% endif %}
-  <form method="post" action="/ui/colecciones/{{ coleccion.id }}/portada">
-    <fieldset>
-      <legend>Portada</legend>
-      <label><input type="radio" name="series_id" value="" {% if not coleccion.cover_series_id or not coleccion.cover_series_valida %}checked{% endif %}> Usar la automática (mosaico)</label>
-      {% for cand in candidatas_portada|default([]) %}
-      <label><input type="radio" name="series_id" value="{{ cand.series_id }}"
-        {% if coleccion.cover_series_id == cand.series_id and cand.tiene_portada %}checked{% endif %}
-        {% if not cand.tiene_portada %}disabled{% endif %}>
-        Portada de {{ cand.title }}{% if not cand.tiene_portada %} (todavía sin portada guardada){% endif %}</label>
-      {% endfor %}
-    </fieldset>
-    <button class="btn" type="submit">Usar esta portada</button>
-  </form>
-</details>
-<form method="post" action="/ui/colecciones/{{ coleccion.id }}/editar" class="tarjeta formulario">
-  <h2>Datos y política</h2>
-  <label for="name">Nombre</label>
-  <input id="name" name="name" maxlength="120" required value="{{ valores.name if valores else coleccion.name }}">
-  <label for="description">Descripción (opcional)</label>
-  <input id="description" name="description" maxlength="500" value="{{ valores.description if valores else (coleccion.description or '') }}">
-  <label for="auto_search">Auto-búsqueda</label>
-  <select id="auto_search" name="auto_search">
-    {% for valor, etiqueta in politicas.items() %}
-    <option value="{{ valor.value }}" {% if (valores.auto_search if valores else coleccion.auto_search) == valor.value %}selected{% endif %}>{{ etiqueta }}</option>
-    {% endfor %}
-  </select>
-  <p class="caption">«Como cada serie» respeta el «Qué buscar» de cada serie. «Buscar faltantes» lo fuerza aunque la serie no busque por su cuenta. «No buscar» lo veta y retira los deseos automáticos pendientes. La búsqueda manual no se toca.</p>
-  <button class="btn primary" type="submit">Guardar colección</button>
-</form>
-<h2>Exportar a Kavita</h2>
-<details class="politica-detalles">
-  <summary>Preparar una carpeta para Kavita</summary>
-  <p class="caption">Crea una copia legible por Kavita en la carpeta de exportación. No mueve ni toca la biblioteca: los archivos siguen donde están. Se enlazan sin gastar espacio cuando se puede; si no, se copian. Los CBZ que se actualizan se copian siempre.</p>
-  <p class="caption"><strong>ZascArr no mueve ni modifica tu biblioteca.</strong> Pero sin marcar «Copiar», los archivos se enlazan (mismo inodo): si otra herramienta edita la exportación, también puede cambiar el original. Marca «Copiar» para aislarlo.</p>
-  <form method="post" action="/ui/colecciones/{{ coleccion.id }}/exportar">
-    <label><input type="checkbox" name="patch_comicinfo" value="1"> Actualizar ComicInfo en los CBZ (se prepara una copia privada; el original no se toca)</label>
-    <label><input type="checkbox" name="copiar" value="1"> Copiar en vez de enlazar (aislado; ocupa espacio)</label>
-    <label><input type="checkbox" name="confirmo" value="1" required> Entiendo que ZascArr no mueve ni modifica la biblioteca; sin «Copiar», una herramienta podría modificar el original de los archivos enlazados. Los CBZ que se actualizan se copian siempre.</label>
-    <button class="btn" type="submit">Exportar esta colección</button>
-  </form>
-</details>
-{% if exportacion %}
-<div class="tarjeta" role="status" tabindex="-1" autofocus>
-  <p><strong>{{ "Exportación terminada con incidencias." if (exportacion.errores or exportacion.deriva or exportacion.colisiones) else "Exportación terminada." }}</strong> {{ exportacion.materializados }} archivos preparados en
-    <code class="ruta-exportacion">{{ exportacion.destino }}</code>.</p>
-  <details class="politica-detalles">
-    <summary>Detalles de la exportación</summary>
-    <p class="caption">Nuevos: {{ exportacion.materializados }} · ya estaban: {{ exportacion.saltados }} · omitidos: {{ exportacion.omitidos }} · colisiones: {{ exportacion.colisiones }} · deriva: {{ exportacion.deriva }} · errores: {{ exportacion.errores }} · copiados: {{ exportacion.bytes_copiados }} bytes · carpetas desambiguadas: {{ exportacion.carpetas_colisionadas }}.</p>
-    <p class="caption">Forma de preparar los archivos:
-      {% if exportacion.modo == "hardlink" %}enlace (no gasta espacio){% elif exportacion.modo == "copy" %}copia (aislada){% else %}mixta{% endif %}.
-      {% if exportacion.parcheados %}ComicInfo actualizado en {{ exportacion.parcheados }} CBZ.{% endif %}
-      {% if exportacion.patch_no_escribible %}{{ exportacion.patch_no_escribible }} archivos que no se pueden actualizar viajan sin parche.{% endif %}
+    {% if coleccion.description %}<p class="coleccion-descripcion">{{ coleccion.description }}</p>{% endif %}
+    <p class="coleccion-chips">
+      {{ ui.chip("neutro", coleccion.series | length ~ " " ~ ("serie" if coleccion.series | length == 1 else "series")) }}
+      {{ ui.chip("info", politicas.get(coleccion.auto_search, coleccion.auto_search)) }}
     </p>
-  </details>
-  {% if exportacion.parcheados or exportacion.patch_no_escribible %}
-  <p class="caption">ComicInfo: {{ exportacion.parcheados }} CBZ parcheados sobre copia privada; {{ exportacion.patch_no_escribible }} formatos que no se pueden actualizar viajaron sin parche.</p>
-  {% endif %}
-  {% if exportacion.errores or exportacion.deriva %}
-  <p class="caption">La exportación terminó con incidencias: lo que se preparó está bien y lo demás se ha dejado como estaba. Vuelve a intentarlo cuando quieras.</p>
-  {% endif %}
-  <p class="caption">La exportación queda registrada para auditoría: <a href="#exportaciones">ver historial ({{ exportacion.run_id[:8] }})</a>.</p>
-</div>
-{% endif %}
-{% if exportaciones %}
-<h2 id="exportaciones">Exportaciones</h2>
-<ul class="arcos-lista">
-  {% for e in exportaciones %}
-  <li class="arco-fila">
-    <span class="muted">{{ e.fecha|fecha_llana }} · {{ e.materializados }} nuevos · {{ e.saltados }} ya estaban · {{ e.errores }} incidencias · {% if e.modo == "hardlink" %}enlace{% elif e.modo == "copy" %}copia{% elif e.modo == "mixed" %}mixta{% else %}{{ e.modo }}{% endif %}</span>
-    <code class="ruta-exportacion">{{ e.run_id }}</code>
-  </li>
-  {% endfor %}
-</ul>
-{% endif %}
+    {% if aviso %}{{ ui.aviso("ok", aviso, foco=true) }}{% endif %}
+    {% if errores %}{% for campo, mensaje in errores.items() %}{{ ui.aviso("warn", mensaje, foco=loop.first) }}{% endfor %}{% endif %}
+  </div>
+</header>
 
-<details class="politica-detalles">
-  <summary>Borrar esta colección</summary>
-  <p class="caption">Las series seguirán en tu biblioteca, sin colección. No se borra ninguna serie ni archivo.</p>
-  <form method="post" action="/ui/colecciones/{{ coleccion.id }}/borrar">
-    <button class="btn ghost" type="submit">Sí, borrar la colección</button>
+<section class="coleccion-panel" id="series">
+  <h2>Series</h2>
+  {% if coleccion.series %}
+  <ul class="coleccion-series-lista">
+    {% for s in coleccion.series %}
+    <li class="coleccion-serie-fila">
+      <div>
+        <a href="/ui/series/{{ s.id }}">{{ s.title }}</a>
+        <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>
+      </div>
+      <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
+        <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar serie</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {{ ui.estado_vacio("Esta colección está vacía", "Añade series de la lista de abajo.") }}
+  {% endif %}
+  {% if series %}
+  <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series" class="coleccion-alta">
+    <fieldset class="coleccion-alta-grupo">
+      <legend>Añadir series sin colección</legend>
+      <p class="caption">Marca una o varias. Se añaden todas o ninguna.</p>
+      <div class="coleccion-checkgrid">
+        {% for s in series %}
+        <label class="coleccion-check" for="serie-{{ s.id }}">
+          <input type="checkbox" id="serie-{{ s.id }}" name="serie_ids" value="{{ s.id }}"
+                 {% if s.id in (seleccion|default([])) %}checked{% endif %}>
+          <span>{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <button class="btn" type="submit">Añadir series seleccionadas</button>
+    </fieldset>
   </form>
-</details>
-<h2>Series ({{ coleccion.series | length }})</h2>
-{% if coleccion.series %}
-<ul class="arcos-lista">
-  {% for s in coleccion.series %}
-  <li class="arco-fila">
-    <a href="/ui/series/{{ s.id }}">{{ s.title }}</a>
-    <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>
-    <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
-      <button class="btn ghost sm" type="submit">Quitar de la colección</button>
+  {% else %}
+  <p class="caption">No quedan series sin colección.</p>
+  {% endif %}
+</section>
+
+<section class="coleccion-panel">
+  <h2>Datos y búsqueda</h2>
+  <form method="post" action="/ui/colecciones/{{ coleccion.id }}/editar" class="formulario">
+    <label for="name">Nombre</label>
+    <input id="name" name="name" maxlength="120" required value="{{ valores.name if valores else coleccion.name }}">
+    <label for="description">Descripción (opcional)</label>
+    <input id="description" name="description" maxlength="500" value="{{ valores.description if valores else (coleccion.description or '') }}">
+    <label for="auto_search">Auto-búsqueda</label>
+    <select id="auto_search" name="auto_search">
+      {% for valor, etiqueta in politicas.items() %}
+      <option value="{{ valor.value }}" {% if (valores.auto_search if valores else coleccion.auto_search) == valor.value %}selected{% endif %}>{{ etiqueta }}</option>
+      {% endfor %}
+    </select>
+    <p class="caption">«Como cada serie» respeta el «Qué buscar» de cada serie. «Buscar faltantes» lo fuerza aunque la serie no busque por su cuenta. «No buscar» lo veta y retira los deseos automáticos pendientes. La búsqueda manual no se toca.</p>
+    <button class="btn primary" type="submit">Guardar colección</button>
+  </form>
+</section>
+
+<section class="coleccion-panel">
+  <h2>Portada</h2>
+  <details class="politica-detalles" {% if errores.get("portada") %}open{% endif %}>
+    <summary>Elegir portada</summary>
+    <p class="caption">La automática se compone con las portadas ya guardadas de tus series. También puedes elegir una serie miembro.</p>
+    {% if coleccion.cover_series_id and not coleccion.cover_series_valida %}
+    {% if coleccion.cover_series_title %}
+    {{ ui.aviso("warn", "La serie elegida todavía no tiene una portada guardada. Se usa la automática hasta que la tenga; tu elección no se ha borrado.") }}
+    {% else %}
+    {{ ui.aviso("warn", "La serie elegida ya no pertenece a esta colección. Se usa la automática hasta que elijas otra; tu elección no se ha borrado.") }}
+    {% endif %}
+    {% endif %}
+    <form method="post" action="/ui/colecciones/{{ coleccion.id }}/portada">
+      <fieldset>
+        <legend>Portada de la colección</legend>
+        <label><input type="radio" name="series_id" value="" {% if not coleccion.cover_series_id or not coleccion.cover_series_valida %}checked{% endif %}> Usar la automática (mosaico)</label>
+        {% for cand in candidatas_portada|default([]) %}
+        <label><input type="radio" name="series_id" value="{{ cand.series_id }}"
+          {% if coleccion.cover_series_id == cand.series_id and cand.tiene_portada %}checked{% endif %}
+          {% if not cand.tiene_portada %}disabled{% endif %}>
+          Portada de {{ cand.title }}{% if not cand.tiene_portada %} (todavía sin portada guardada){% endif %}</label>
+        {% endfor %}
+      </fieldset>
+      <button class="btn" type="submit">Usar esta portada</button>
     </form>
-  </li>
-  {% endfor %}
-</ul>
-{% else %}{{ ui.estado_vacio("Esta colección está vacía", "Añade series de la lista de abajo.") }}{% endif %}
-{% if series %}
-<form method="post" action="/ui/colecciones/{{ coleccion.id }}/series" class="tarjeta formulario">
-  <label for="serie_id">Añadir una serie sin colección</label>
-  <select id="serie_id" name="serie_id" required>
-    {% for s in series %}<option value="{{ s.id }}">{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</option>{% endfor %}
-  </select>
-  <button class="btn" type="submit">Añadir a la colección</button>
-</form>
-{% endif %}
+  </details>
+</section>
+
+<section class="coleccion-panel">
+  <h2>Exportar a Kavita</h2>
+  <details class="politica-detalles">
+    <summary>Preparar una carpeta para Kavita</summary>
+    <p class="caption">Crea una copia legible por Kavita en la carpeta de exportación. No mueve ni toca la biblioteca: los archivos siguen donde están. Se enlazan sin gastar espacio cuando se puede; si no, se copian. Los CBZ que se actualizan se copian siempre.</p>
+    <p class="caption"><strong>ZascArr no mueve ni modifica tu biblioteca.</strong> Pero sin marcar «Copiar», los archivos se enlazan (mismo inodo): si otra herramienta edita la exportación, también puede cambiar el original. Marca «Copiar» para aislarlo.</p>
+    <form method="post" action="/ui/colecciones/{{ coleccion.id }}/exportar">
+      <label><input type="checkbox" name="patch_comicinfo" value="1"> Actualizar ComicInfo en los CBZ (se prepara una copia privada; el original no se toca)</label>
+      <label><input type="checkbox" name="copiar" value="1"> Copiar en vez de enlazar (aislado; ocupa espacio)</label>
+      <label><input type="checkbox" name="confirmo" value="1" required> Entiendo que ZascArr no mueve ni modifica la biblioteca; sin «Copiar», una herramienta podría modificar el original de los archivos enlazados. Los CBZ que se actualizan se copian siempre.</label>
+      <button class="btn" type="submit">Exportar esta colección</button>
+    </form>
+  </details>
+  {% if exportacion %}
+  <div class="tarjeta" role="status" tabindex="-1" autofocus>
+    <p><strong>{{ "Exportación terminada con incidencias." if (exportacion.errores or exportacion.deriva or exportacion.colisiones) else "Exportación terminada." }}</strong> {{ exportacion.materializados }} archivos preparados en
+      <code class="ruta-exportacion">{{ exportacion.destino }}</code>.</p>
+    <details class="politica-detalles">
+      <summary>Detalles de la exportación</summary>
+      <p class="caption">Nuevos: {{ exportacion.materializados }} · ya estaban: {{ exportacion.saltados }} · omitidos: {{ exportacion.omitidos }} · colisiones: {{ exportacion.colisiones }} · deriva: {{ exportacion.deriva }} · errores: {{ exportacion.errores }} · copiados: {{ exportacion.bytes_copiados }} bytes · carpetas desambiguadas: {{ exportacion.carpetas_colisionadas }}.</p>
+      <p class="caption">Forma de preparar los archivos:
+        {% if exportacion.modo == "hardlink" %}enlace (no gasta espacio){% elif exportacion.modo == "copy" %}copia (aislada){% else %}mixta{% endif %}.
+        {% if exportacion.parcheados %}ComicInfo actualizado en {{ exportacion.parcheados }} CBZ.{% endif %}
+        {% if exportacion.patch_no_escribible %}{{ exportacion.patch_no_escribible }} archivos que no se pueden actualizar viajan sin parche.{% endif %}
+      </p>
+    </details>
+    {% if exportacion.parcheados or exportacion.patch_no_escribible %}
+    <p class="caption">ComicInfo: {{ exportacion.parcheados }} CBZ parcheados sobre copia privada; {{ exportacion.patch_no_escribible }} formatos que no se pueden actualizar viajaron sin parche.</p>
+    {% endif %}
+    {% if exportacion.errores or exportacion.deriva %}
+    <p class="caption">La exportación terminó con incidencias: lo que se preparó está bien y lo demás se ha dejado como estaba. Vuelve a intentarlo cuando quieras.</p>
+    {% endif %}
+    <p class="caption">La exportación queda registrada para auditoría: <a href="#exportaciones">ver historial ({{ exportacion.run_id[:8] }})</a>.</p>
+  </div>
+  {% endif %}
+  {% if exportaciones %}
+  <h3 id="exportaciones">Exportaciones</h3>
+  <ul class="arcos-lista">
+    {% for e in exportaciones %}
+    <li class="arco-fila">
+      <span class="muted">{{ e.fecha|fecha_llana }} · {{ e.materializados }} nuevos · {{ e.saltados }} ya estaban · {{ e.errores }} incidencias · {% if e.modo == "hardlink" %}enlace{% elif e.modo == "copy" %}copia{% elif e.modo == "mixed" %}mixta{% else %}{{ e.modo }}{% endif %}</span>
+      <code class="ruta-exportacion">{{ e.run_id }}</code>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section class="coleccion-panel">
+  <h2>Borrar colección</h2>
+  <details class="politica-detalles">
+    <summary>Borrar esta colección</summary>
+    <p class="caption">Las series seguirán en tu biblioteca, sin colección. No se borra ninguna serie ni archivo.</p>
+    <form method="post" action="/ui/colecciones/{{ coleccion.id }}/borrar">
+      <button class="btn ghost" type="submit">Sí, borrar la colección</button>
+    </form>
+  </details>
+</section>
 {% endif %}
 {% endblock %}

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.database import get_db
 from zascarr.models import CollectionAutoSearch
 from zascarr.services.colecciones import (
-    asignar_serie,
+    asignar_series,
     borrar_coleccion,
     crear_coleccion,
     detalle_coleccion,
@@ -62,6 +62,7 @@ async def colecciones(request: Request, guardado: str = "", db: AsyncSession = D
             "guardada": "Colección guardada.",
             "borrada": "Colección eliminada. Sus series siguen en tu biblioteca, sin colección.",
             "asignada": "Serie añadida a la colección.",
+            "asignadas": "Series añadidas a la colección.",
             "quitada": "Serie quitada de la colección; sigue en tu biblioteca.",
         }.get(guardado, ""),
     })
@@ -97,6 +98,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
         "errores": {}, "aviso": {
             "guardada": "Colección guardada.",
             "asignada": "Serie añadida a la colección.",
+            "asignadas": "Series añadidas a la colección.",
             "quitada": "Serie quitada de la colección; sigue en tu biblioteca.",
             "portada": "Portada actualizada.",
         }.get(guardado, ""),
@@ -205,16 +207,35 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
 
 
 @router.post("/{coleccion_id}/series")
-async def asignar(request: Request, coleccion_id: UUID, serie_id: UUID = Form(...),
+async def asignar(request: Request, coleccion_id: UUID,
+                  serie_ids: list[str] = Form([]), serie_id: str = Form(""),
                   db: AsyncSession = Depends(get_db)):
-    r = await asignar_serie(db, coleccion_id, serie_id)
-    if not r.ok:
-        c = await detalle_coleccion(db, coleccion_id)
-        return _respuesta(request, "coleccion_detalle.html", {
-            "coleccion": c, "politicas": POLITICAS,
-            "series": await series_sin_coleccion(db), "errores": r.errores, "aviso": ""})
-    await db.commit()
-    return _redirigir(f"/ui/colecciones/{coleccion_id}?guardado=asignada")
+    crudos = [s for s in serie_ids if s.strip()]
+    if serie_id.strip():
+        crudos.append(serie_id)
+    elegidas: list[UUID] = []
+    invalidas = False
+    for crudo in crudos:
+        try:
+            elegidas.append(UUID(crudo))
+        except ValueError:
+            invalidas = True
+            break
+    if invalidas:
+        r_errores = {"serie": "Hay una serie elegida que no es válida. No se ha añadido ninguna."}
+    else:
+        r = await asignar_series(db, coleccion_id, elegidas)
+        if r.ok:
+            await db.commit()
+            return _redirigir(f"/ui/colecciones/{coleccion_id}?guardado=asignadas")
+        r_errores = r.errores
+    c = await detalle_coleccion(db, coleccion_id)
+    return _respuesta(request, "coleccion_detalle.html", {
+        "coleccion": c, "politicas": POLITICAS,
+        "series": await series_sin_coleccion(db),
+        "candidatas_portada": await candidatas_portada(db, coleccion_id),
+        "exportaciones": await historial_exportaciones(db, coleccion_id),
+        "seleccion": crudos, "errores": r_errores, "aviso": ""})
 
 
 @router.post("/{coleccion_id}/series/{serie_id}/quitar")
