@@ -59,7 +59,7 @@
   {% if informe %}
   {#- La fecha exacta da la procedencia; «hace…» dice si sigue valiendo sin hacer cuentas. Si es vieja,
       la forma de renovarla va al lado del dato, no en otra pantalla. -#}
-  <p class="procedencia muted">En tu disco había <b>{{ informe.archivos_leidos }}</b> el {{ informe.fecha|fecha_llana }}{% if v.informe_hace %} ({{ v.informe_hace }}){% endif %}.
+  <p class="procedencia muted">En tu disco había <b>{{ informe.archivos_leidos }}</b> {{ "tebeo" if informe.archivos_leidos == 1 else "tebeos" }} el {{ informe.fecha|fecha_llana }}{% if v.informe_hace %} ({{ v.informe_hace }}){% endif %}.
     {%- if v.copias_descartadas %} Al registrarlos dejamos fuera <b>{{ v.copias_descartadas }}</b> {{ "copia idéntica" if v.copias_descartadas == 1 else "copias idénticas" }}: el mismo archivo no se registra dos veces.{% endif %}
     {%- if v.informe_antiguo %} <a href="/ui/auditoria">Volver a mirar el disco</a>{% endif %}</p>
   {% elif d.total %}
