@@ -26,6 +26,7 @@ from zascarr.models import (
 )
 from zascarr.services.colecciones import (
     asignar_serie,
+    asignar_series,
     borrar_coleccion,
     crear_coleccion,
     detalle_coleccion,
@@ -307,3 +308,38 @@ async def test_override_invalido_conserva_la_eleccion(db, tmp_path, monkeypatch)
     assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id
     assert not (await pc.elegir_portada(db, c.coleccion.id, uuid4())).ok
     assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id
+
+
+async def test_asignar_series_es_atomico(db):
+    c1 = await crear_coleccion(db, name="Uno", description="", auto_search="heredar")
+    c2 = await crear_coleccion(db, name="Dos", description="", auto_search="heredar")
+    a = await serie(db, "A")
+    b = await serie(db, "B")
+    ya = await serie(db, "Ya", collection=c2.coleccion)
+    assert (await asignar_series(db, c1.coleccion.id, [a.id, b.id, a.id])).ok
+    assert a.collection_id == b.collection_id == c1.coleccion.id
+    assert not (await asignar_series(db, c1.coleccion.id, [a.id])).ok   # ya asignada
+    assert not (await asignar_series(db, c1.coleccion.id, [ya.id, b.id])).ok
+    assert ya.collection_id == c2.coleccion.id                         # ninguna cambió
+    assert not (await asignar_series(db, c1.coleccion.id, [])).ok
+    assert not (await asignar_series(db, c1.coleccion.id, [uuid4()])).ok
+
+
+async def test_sidecar_de_version_anterior_se_regenera_y_url_lleva_version(
+        db, tmp_path, monkeypatch):
+    import json
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Version", description="", auto_search="heredar")
+    s = await serie(db, "Uno", collection=c.coleccion)
+    _jpeg_serie(tmp_path, s.id)
+    primera = await pc.obtener_portada(db, c.coleccion.id)
+    assert primera is not None
+    sidecar = tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.json"
+    datos = json.loads(sidecar.read_text())
+    datos["version"] = 1
+    sidecar.write_text(json.dumps(datos))
+    segunda = await pc.obtener_portada(db, c.coleccion.id)
+    assert segunda is not None
+    assert json.loads(sidecar.read_text())["version"] == 2
+    det = await detalle_coleccion(db, c.coleccion.id)
+    assert det is not None and "-m2" in det.portada_url
