@@ -295,16 +295,28 @@ class EnrichmentService:
             # getattr con default: los Settings reales siempre tienen el campo (config.py),
             # pero los dobles de prueba de otros módulos no lo declaran.
             dc_activa = bool(getattr(settings, "fandom_dc_enabled", False))
+            marvel_activa = bool(getattr(settings, "fandom_marvel_enabled", False))
+            # SCR1: los clientes REALES de Fandom comparten una caché HTTP condicional en
+            # Postgres (sesión corta propia por operación). Si el test inyectó el cliente, no
+            # se construye; los dobles no declaran `fandom_*_enabled` ⇒ ninguna prueba existente
+            # llega aquí. Imports locales para no cargar la caché si Fandom está apagada.
+            necesita_cache = ((dc_activa and self._injected_fandom_dc is None)
+                              or (marvel_activa and self._injected_fandom_marvel is None))
+            cache_http = None
+            if necesita_cache:
+                from zascarr.database import async_session_factory
+                from zascarr.utils.cache_http import CacheHttp
+
+                cache_http = CacheHttp(async_session_factory)
             fandom_dc_client = self._injected_fandom_dc if dc_activa else None
             if fandom_dc_client is None and dc_activa:
                 fandom_dc_client = await stack.enter_async_context(
-                    FandomClient("dc.fandom.com"))
-            marvel_activa = bool(getattr(settings, "fandom_marvel_enabled", False))
+                    FandomClient("dc.fandom.com", cache=cache_http))
             fandom_marvel_client = (
                 self._injected_fandom_marvel if marvel_activa else None)
             if fandom_marvel_client is None and marvel_activa:
                 fandom_marvel_client = await stack.enter_async_context(
-                    FandomClient("marvel.fandom.com"))
+                    FandomClient("marvel.fandom.com", cache=cache_http))
             await self._enrich_series_batch(
                 cv_client, anilist_client, tebeosfera_client, limit, report,
                 fandom_dc_client=fandom_dc_client, fandom_marvel_client=fandom_marvel_client,
