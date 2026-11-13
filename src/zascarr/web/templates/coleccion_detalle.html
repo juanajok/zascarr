@@ -39,19 +39,11 @@
          aria-label="Lista"><span class="barra-vista-icono" aria-hidden="true">{{ icono("list") }}</span><span class="barra-vista-texto">Lista</span></a>
     </div>
   </div>
-  <div class="coleccion-series-layout">
-  <aside id="previa-serie" class="coleccion-previa-panel" aria-live="polite">
-    <p class="caption">Pasa el ratón o toca una serie para ver su portada.</p>
-  </aside>
-  <div class="coleccion-series-col">
   {% if coleccion.series %}
   {% if vista|default('lista') == "tarjetas" %}
   <div class="series-grid coleccion-series-grid">
     {% for s in coleccion.series %}
-    <article class="series-card coleccion-serie-card"
-             hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
-             hx-target="#previa-serie" hx-swap="innerHTML"
-             hx-trigger="mouseenter, focusin" hx-sync="this:replace">
+    <article class="series-card coleccion-serie-card">
       <div class="coleccion-serie-card-portada" aria-hidden="true">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-tarjeta", carga="lazy") }}</div>
       <a href="/ui/series/{{ s.id }}" class="series-title">{{ s.title }}</a>
       <span class="series-year">{{ s.start_year or "Año no consta" }}</span>
@@ -69,10 +61,7 @@
   {% else %}
   <ul class="coleccion-series-lista">
     {% for s in coleccion.series %}
-    <li class="coleccion-serie-fila"
-        hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
-        hx-target="#previa-serie" hx-swap="innerHTML"
-        hx-trigger="mouseenter, focusin" hx-sync="this:replace">
+    <li class="coleccion-serie-fila">
       <div>
         <a href="/ui/series/{{ s.id }}">{{ s.title }}</a>
         <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>
@@ -129,14 +118,15 @@
       {% if series %}
       <div class="coleccion-checkgrid">
         {% for s in series %}
-        <label class="coleccion-check" for="serie-{{ s.id }}"
+        <label class="coleccion-check chip-previa" for="serie-{{ s.id }}"
                hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
-               hx-target="#previa-serie" hx-swap="innerHTML"
-               hx-trigger="mouseenter, focusin" hx-sync="this:replace">
+               hx-target="#previa-{{ s.id }}" hx-swap="innerHTML"
+               hx-trigger="mouseenter delay:150ms, focusin delay:150ms">
           <input type="checkbox" id="serie-{{ s.id }}" name="serie_ids" value="{{ s.id }}"
                  {% if s.id in seleccion %}checked{% endif %}>
           <span>{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</span>
-            </label>
+          <span class="previa-numero" id="previa-{{ s.id }}" aria-hidden="true"></span>
+        </label>
         {% endfor %}
       </div>
       <button class="btn" type="submit" formaction="/ui/colecciones/{{ coleccion.id }}/series"
@@ -163,8 +153,6 @@
       {% endif %}
     </fieldset>
   </form>
-  </div>
-  </div>
 </section>
 
 <section class="coleccion-panel">
