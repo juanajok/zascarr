@@ -113,11 +113,24 @@ def minimo_px(valor: str) -> float | None:
     return n * 16 if u == "rem" else n if u == "px" else None
 
 
-def problemas_de_tamano(reglas, excepciones=None, no_comprobables=None, proporcionales=None) -> list[str]:
+def _resolver_tamano(valor: str, tokens: dict[str, str] | None) -> str:
+    """Resuelve `var(--text-*)` contra los tokens de :root (una sola capa)."""
+    v = " ".join(valor.split())
+    m = re.fullmatch(r"var\((--text-[\w-]+)\)", v)
+    if m and tokens and m.group(1) in tokens:
+        return " ".join(tokens[m.group(1)].split())
+    return v
+
+
+def problemas_de_tamano(reglas, excepciones=None, no_comprobables=None, proporcionales=None,
+                        tokens=None) -> list[str]:
     """Todo lo que incumple el mínimo de 14 px. Vacía = bien. No omite nada en silencio."""
     excepciones = EXCEPCIONES_DE_TAMANO if excepciones is None else excepciones
     no_comprobables = TAMANOS_NO_COMPROBABLES if no_comprobables is None else no_comprobables
     proporcionales = TAMANOS_PROPORCIONALES if proporcionales is None else proporcionales
+    if tokens is None:
+        css = _hoja()
+        tokens = _variables(re.search(r":root\s*\{(.*?)\n\}", css, re.S).group(1))
     problemas, usadas = [], set()
     for selector, motivo in {**excepciones_motivos(excepciones), **no_comprobables, **proporcionales}.items():
         if not motivo.strip():
@@ -126,6 +139,7 @@ def problemas_de_tamano(reglas, excepciones=None, no_comprobables=None, proporci
         v = d.get("font-size")
         if not v:
             continue
+        v = _resolver_tamano(v, tokens)
         if v.endswith("cqw"):
             if selector not in proporcionales:
                 problemas.append(f"{selector}: font-size {v!r} proporcional sin declarar")
@@ -509,7 +523,7 @@ class TestEstructura:
         """Sin texto, su relleno amarillo apenas contrasta con el papel (1,4:1): el borde de tinta
         (≥ 3:1, ver PARES_DE_TOKENS) es lo que los hace perceptibles."""
         punto = next(d for s, d in _reglas() if s == ".estado-dot")
-        assert punto["border"] == "2px solid var(--ink)"
+        assert punto["border"] == "var(--border-chip) solid var(--ink)"
 
     def test_el_estado_de_un_numero_no_depende_solo_del_color(self):
         css = _hoja()
