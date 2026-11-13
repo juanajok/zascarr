@@ -150,9 +150,12 @@ async def _upgrades_loop() -> None:
                     siguiente = ahora + intervalo * 60
                 if ahora >= siguiente:
                     async with async_session_factory() as db:
-                        creadas = await escanear_mejoras(db)
-                        if creadas:
-                            logger.info("upgrades.proposals_created", total=creadas)
+                        informe = await escanear_mejoras(db)
+                        if informe.revisados or informe.creadas or informe.fallidos:
+                            logger.info("upgrades.cycle_done",
+                                        revisados=informe.revisados,
+                                        creadas=informe.creadas,
+                                        fallidos=informe.fallidos)
                     siguiente = bucle.time() + intervalo * 60
             intervalo_previo = intervalo
         except Exception:

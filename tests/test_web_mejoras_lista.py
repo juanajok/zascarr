@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.services.legal import require_legal_acknowledgment
-from zascarr.services.upgrades import MejoraPendiente, PaginaMejoras
+from zascarr.services.upgrades import MejoraPendiente, PaginaMejoras, ResultadoEscaneo
 
 
 def _db():
@@ -62,15 +62,19 @@ def test_lista_de_mejoras_y_estado_vacio():
     assert vacia.status_code == 200 and "No hay mejoras pendientes" in vacia.text
 
 
-def test_escanear_ahora_redirige():
+def test_escanear_ahora_cuenta_lo_revisado():
     c = _cliente()
     try:
         with patch("zascarr.web.mejoras.motivo_sin_escaneo", return_value=None), \
-             patch("zascarr.web.mejoras.escanear_mejoras", AsyncMock(return_value=2)):
-            r = c.post("/ui/mejoras/escanear", follow_redirects=False)
+             patch("zascarr.web.mejoras.escanear_mejoras",
+                   AsyncMock(return_value=ResultadoEscaneo(3, 2, 0))), \
+             patch("zascarr.web.mejoras.listar_mejoras",
+                   AsyncMock(return_value=_pagina([]))):
+            r = c.post("/ui/mejoras/escanear")
     finally:
         _cerrar()
-    assert r.status_code == 303 and "guardado=escaneado" in r.headers["location"]
+    assert r.status_code == 200
+    assert "Revisados 3 números; 2 propuestas nuevas." in r.text
 
 
 def test_guardar_perfil_de_calidad():
