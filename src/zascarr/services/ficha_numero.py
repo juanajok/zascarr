@@ -32,7 +32,7 @@ TEXTOS = {
     "autores_numero": "Autores",
     "serie": "Serie",
     "formato": "Formato",
-    "fecha": "Fecha de portada",
+    "fecha": "Fecha de publicación",
     "paginas": "Páginas",
     "archivos": "Archivos",
     "procedencia": "De dónde sale cada dato",
