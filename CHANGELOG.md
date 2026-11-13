@@ -7,6 +7,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **V14: auditoría de clases y retirada del CSS muerto (2026-11-13, #750).** Nuevo
+  `scripts/auditar_css.py` (con lista blanca declarada para las clases que añaden htmx y el JS de
+  `/estado`, y comprensión de prefijos y ternarios Jinja) que se ejecuta en la CI con `--strict`.
+  Se retiran las reglas que ya no usaba ninguna plantilla: `.topnav` (14), `.hero-state` (6),
+  `.toast` (1), `.audit-ok`, `.ajustes-grid`, `.filter-bar-secondary`, `.filter-search-box`,
+  `.cover`, `.arco-anadir`, `.vinc-candidata-titulo`, `.lectura-nota`, `.library-vista*`,
+  `.tabla-ficha`, `.recuento-biblioteca` y `.hero-state .big`; la hoja baja de 934 a 892 reglas y
+  de 130.813 a 124.986 bytes. La lista de compatibilidad de V2 se reduce a las clases que siguen
+  vivas.
 - **D3: progreso del escaneo y acceso a Mejoras (2026-11-13).** «Buscar mejoras ahora»
   informa de cuántos números se revisaron, cuántas propuestas salieron y cuántos fallos se
   reintentarán; el ciclo periódico lo registra igual. Mejoras entra en el menú (Mi colección),

@@ -110,10 +110,16 @@ class TestIndex:
         assert "Franco-belga (BD)" in tarjeta and "franco_belgian" not in tarjeta
 
     def test_los_buscadores_vacios_no_pintan_su_borde(self):
-        """El desplegable vacío con borde dejaba una barra negra bajo «Buscar personaje / saga»."""
+        """El desplegable vacío con borde dejaba una barra negra bajo «Buscar personaje / saga».
+
+        V14 (#750) retiró `.filter-search-box` (ya sin uso); el mecanismo que lo sustituye es el
+        mismo: el borde se pinta solo cuando la lista tiene resultados (`:not(:empty)`).
+        """
         from zascarr.main import STATIC_DIR
         css = (STATIC_DIR / "web.css").read_text(encoding="utf-8")
-        assert ".filter-search-box .series-results:empty { display: none; }" in css
+        assert ".barra-panel-campos .series-results:not(:empty)" in css
+        assert "border: var(--border-chip) solid var(--ink)" in css.split(
+            ".barra-panel-campos .series-results:not(:empty)")[1].split("}")[0]
 
     def test_sin_editoriales_no_pinta_el_desplegable_vacio(self):
         """m4 de U18: sin editoriales no se ofrece un filtro que no filtra nada."""
