@@ -51,6 +51,10 @@ tomar_cerrojo_operaciones() {
             echo "Ejecuta con sudo: hace falta para tomar el cerrojo de ZascArr." >&2
             exit 1
         fi
+        # F-1 (SecOps): el fichero nace 0600 (umask 077 en una subshell, para no cambiar la del script) y se
+        # corrige si ya existía con otro modo.
+        ( umask 077; : >>"${ruta}" ) 2>/dev/null
+        chmod 600 "${ruta}" 2>/dev/null || true
         exec 9>"${ruta}" || { echo "Ejecuta con sudo: hace falta para tomar el cerrojo de ZascArr." >&2; exit 1; }
     fi
     if ! flock -n 9; then

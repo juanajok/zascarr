@@ -154,7 +154,12 @@ class TestScriptsSeDetienenAntesDeTocarNada:
         assert _dice_sudo(r), r.stderr
         # BL-OPS1 (FR-14): al fallar la preparación `backup.sh` deja `precondition_failed` en `status.json`, y eso
         # consulta la versión de Alembic con un `exec`; lo que NO puede hacer es volcar ni crear nada en la copia.
-        assert "run" not in _llamadas(arbol) and "pg_dump" not in _llamadas(arbol)
+        # Por líneas y palabras, no por subcadena: la ruta temporal del runner puede contener «run».
+        llamadas = _llamadas(arbol).splitlines()
+        assert not any("pg_dump" in linea for linea in llamadas)
+        assert not any("run" in linea.split() for linea in llamadas)
+        assert all("alembic_version" in linea for linea in llamadas if linea.split()[:1] == ["exec"]
+                   or " exec " in f" {linea} ")
         assert not arbol["backups"].exists() or not any(arbol["backups"].iterdir())
         estado = json.loads((arbol["backups"].parent / "estado" / "status.json").read_text())
         assert estado["status"] == "failed" and estado["error"] == "precondition_failed"

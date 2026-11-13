@@ -170,7 +170,9 @@ def test_el_hijo_hereda_el_cerrojo_del_padre_y_no_sale_75(tmp_path):
     """AC-33 (A-1 de SecOps): `update.sh` → `probar_restauracion.sh --dump`: el hijo, con el descriptor 9
     heredado de la MISMA ruta, hace `flock -n 9` idempotente y sigue."""
     lock = tmp_path / "ops.lock"
-    padre = (f'source "{SCRIPTS}/_cerrojo.sh"; tomar_cerrojo_operaciones || exit $?; {_hijo(lock)}')
+    # `; exit $?` tras el hijo: si el hijo fuera la última orden, `bash -c` lo ejecutaría con `exec`, el
+    # padre desaparecería y nadie retendría el cerrojo (la prueba pasaría aunque no hubiera herencia).
+    padre = (f'source "{SCRIPTS}/_cerrojo.sh"; tomar_cerrojo_operaciones || exit $?; {_hijo(lock)}; exit $?')
     r = _bash(padre, lock)
     assert r.returncode == 0 and "hijo rc=0" in r.stdout, r.stdout + r.stderr
 
@@ -178,17 +180,29 @@ def test_el_hijo_hereda_el_cerrojo_del_padre_y_no_sale_75(tmp_path):
 def test_con_el_descriptor_9_ajeno_el_hijo_toma_el_cerrojo_por_su_cuenta(tmp_path):
     lock = tmp_path / "ops.lock"
     ajeno = tmp_path / "otro_fichero"
-    padre = f'exec 9>"{ajeno}"; {_hijo(lock)}'
+    padre = f'exec 9>"{ajeno}"; {_hijo(lock)}; exit $?'
     r = _bash(padre, lock)
     assert "hijo rc=0" in r.stdout, r.stdout + r.stderr
 
 
 def test_con_el_cerrojo_de_otro_proceso_el_hijo_sale_75_aunque_tenga_descriptor_9(tmp_path):
     lock = tmp_path / "ops.lock"
-    padre = f'exec 9>"{tmp_path / "otro_fichero"}"; {_hijo(lock)}'
+    padre = f'exec 9>"{tmp_path / "otro_fichero"}"; {_hijo(lock)}; exit $?'
     with OtroProceso(lock):
         r = _bash(padre, lock)
     assert "hijo rc=75" in r.stdout and MENSAJE_OCUPADO in r.stderr
+
+
+@pytest.mark.parametrize("modo_previo", [None, 0o666])
+def test_el_fichero_del_cerrojo_es_0600(tmp_path, modo_previo):
+    """F-1 (SecOps): nace 0600 y, si ya existía con otro modo, se corrige."""
+    lock = tmp_path / "ops.lock"
+    if modo_previo is not None:
+        lock.write_text("")
+        lock.chmod(modo_previo)
+    r = _bash(f'source "{SCRIPTS}/_cerrojo.sh"; tomar_cerrojo_operaciones', lock)
+    assert r.returncode == 0, r.stderr
+    assert (lock.stat().st_mode & 0o777) == 0o600
 
 
 def test_el_cerrojo_se_suelta_al_terminar_quien_lo_tiene(tmp_path):
