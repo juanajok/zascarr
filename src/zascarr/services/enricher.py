@@ -3,18 +3,26 @@
 Enricher — completa metadatos de series e issues consultando fuentes externas.
 
 Fuentes activas: Comic Vine (grapa americana/British), AniList (manga/
-manhwa/manhua) y Tebeosfera (tebeo/franco_belgian — grapa/álbum en
-español, confirmado con búsquedas reales, no solo supuesto). GCD queda
-fuera a propósito: no tiene API pública ni una referencia de scraping ya
+manhwa/manhua), Tebeosfera (tebeo/franco_belgian — grapa/álbum en
+español, confirmado con búsquedas reales, no solo supuesto) y, desde la
+Fase 2 del estudio de fuentes externas, DC Database y Marvel Database
+(wikis de Fandom, API de MediaWiki en /api.php). GCD queda fuera a
+propósito: no tiene API pública ni una referencia de scraping ya
 identificada. El enum MetadataSource ya la contempla para cuando exista
 un cliente propio.
 
-Enrutado por Series.tradition: cada serie se enriquece con UNA sola fuente,
-la que le corresponde (nunca se prueban varias por si acaso — evitaría el
-mismo error que el peer review señaló en el matcher: adivinar en vez de
-aceptar solo lo inequívoco). Tradiciones sin fuente todavía (fumetti...)
-no se tocan: ninguna fuente activa las indexa con confianza, y es mejor
-no enriquecer que enriquecer con la fuente equivocada.
+Enrutado por Series.tradition: para american/british hay una CADENA de
+respaldo (Comic Vine → DC Database → Marvel Database): se usa la primera
+fuente que reconozca el título con coincidencia exacta, y solo si ninguna
+lo hace la serie queda como «intentada y sin match» (caché negativa H2).
+El resto de tradiciones sigue con una sola fuente. En todos los casos el
+emparejamiento es conservador: título normalizado exacto (+ año ±1), nunca
+adivinar el primer resultado de una búsqueda.
+
+Fandom aporta además, para las series que identifica: números (issue:
+fecha, sinopsis, créditos) desde la plantilla `Comic Template`, y arcos
+(`StoryArcs` de la plantilla de volumen de DC) con sus números en orden de
+lectura, que se guardan en `story_arcs`/`story_arc_issues.reading_order`.
 
 AniList y Tebeosfera enriquecen SOLO a nivel de serie (título, sinopsis,
 portada, nº de números/capítulos): ninguna de las dos tiene aquí un
@@ -58,7 +66,7 @@ from __future__ import annotations
 
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
 from sqlalchemy import exists, func, or_, select, update
@@ -77,6 +85,8 @@ from zascarr.models import (
     IssueCreator,
     MetadataSource,
     Series,
+    StoryArc,
+    StoryArcIssue,
     Tag,
     issue_characters,
     series_genres,
@@ -85,6 +95,13 @@ from zascarr.models import (
 from zascarr.services.anilist import AniListClient, AniListTag
 from zascarr.services.comic_vine import ComicVineClient, CVCredit
 from zascarr.services.etiquetas import NAMESPACE, EtiquetaInvalida, validar_nombre
+from zascarr.services.fandom import (
+    FandomArc,
+    FandomClient,
+    FandomMaxLagError,
+    referencia_de_issue,
+    titulo_base,
+)
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 
@@ -114,6 +131,16 @@ _COMIC_VINE_TRADITIONS = {ComicTradition.AMERICAN, ComicTradition.BRITISH}
 # Desambiguación por año como en matcher.py: ±1 absorbe discrepancias de
 # "año de la serie" vs "año del primer número" entre fuentes.
 _YEAR_TOLERANCE = 1
+
+
+def _fecha_iso(texto: str | None) -> date | None:
+    """Fecha ISO `YYYY-MM-DD` de Comic Vine, o None si falta o no es válida."""
+    if not texto:
+        return None
+    try:
+        return date.fromisoformat(texto)
+    except ValueError:
+        return None
 
 # H2 (peer review v2): antes, una serie/issue sin match entraba en el batch
 # en CADA ciclo para siempre, quemando rate limit de APIs externas en
@@ -206,6 +233,9 @@ class SeriesMatch:
     genres: list[str] = field(default_factory=list)
     #: ETQ4: tags de tema con su relevancia real (AniList); vacío en las demás fuentes.
     tags: list[AniListTag] = field(default_factory=list)
+    #: Fase 2: años que la fuente declara para la serie (hoy solo Fandom los aporta).
+    start_year: int | None = None
+    end_year: int | None = None
 
 
 class EnrichmentService:
@@ -220,11 +250,15 @@ class EnrichmentService:
 
     def __init__(self, db: AsyncSession, cv_client: ComicVineClient | None = None,
                  anilist_client: AniListClient | None = None,
-                 tebeosfera_client: TebeosferaClient | None = None):
+                 tebeosfera_client: TebeosferaClient | None = None,
+                 fandom_dc_client: FandomClient | None = None,
+                 fandom_marvel_client: FandomClient | None = None):
         self.db = db
-        self._injected_cv = cv_client                  # para tests
-        self._injected_anilist = anilist_client        # para tests
-        self._injected_tebeosfera = tebeosfera_client  # para tests
+        self._injected_cv = cv_client                      # para tests
+        self._injected_anilist = anilist_client            # para tests
+        self._injected_tebeosfera = tebeosfera_client      # para tests
+        self._injected_fandom_dc = fandom_dc_client        # para tests
+        self._injected_fandom_marvel = fandom_marvel_client  # para tests
 
     async def enrich_pending(self, limit: int = 20) -> EnrichmentReport:
         report = EnrichmentReport()
@@ -239,10 +273,27 @@ class EnrichmentService:
             tebeosfera_client = self._injected_tebeosfera if settings.tebeosfera_enabled else None
             if tebeosfera_client is None and settings.tebeosfera_enabled:
                 tebeosfera_client = await stack.enter_async_context(TebeosferaClient())
+            # getattr con default: los Settings reales siempre tienen el campo (config.py),
+            # pero los dobles de prueba de otros módulos no lo declaran.
+            dc_activa = bool(getattr(settings, "fandom_dc_enabled", False))
+            fandom_dc_client = self._injected_fandom_dc if dc_activa else None
+            if fandom_dc_client is None and dc_activa:
+                fandom_dc_client = await stack.enter_async_context(
+                    FandomClient("dc.fandom.com"))
+            marvel_activa = bool(getattr(settings, "fandom_marvel_enabled", False))
+            fandom_marvel_client = (
+                self._injected_fandom_marvel if marvel_activa else None)
+            if fandom_marvel_client is None and marvel_activa:
+                fandom_marvel_client = await stack.enter_async_context(
+                    FandomClient("marvel.fandom.com"))
             await self._enrich_series_batch(
-                cv_client, anilist_client, tebeosfera_client, limit, report
+                cv_client, anilist_client, tebeosfera_client, limit, report,
+                fandom_dc_client=fandom_dc_client, fandom_marvel_client=fandom_marvel_client,
             )
             await self._enrich_issues_batch(cv_client, limit, report)
+            await self._enrich_issues_fandom(
+                fandom_dc_client, fandom_marvel_client, limit, report)
+            await self._enrich_arcs_fandom(fandom_dc_client, limit, report)
             await self._backfill_generos_anilist(anilist_client, limit, report)
             await self._backfill_tags_anilist(anilist_client, limit, report)
             await self._backfill_personajes_cv(cv_client, limit, report)
@@ -347,12 +398,15 @@ class EnrichmentService:
 
     async def _enrich_series_batch(self, cv_client: ComicVineClient, anilist_client: AniListClient,
                                     tebeosfera_client: TebeosferaClient, limit: int,
-                                    report: EnrichmentReport) -> None:
-        # B8: excluir ANTES del LIMIT las tradiciones cuya fuente está
-        # desactivada (cliente None). Si no, p. ej. 20 mangas con AniList
-        # apagada acapararían el lote y dejarían sin turno a un tebeo activo.
+                                    report: EnrichmentReport, *,
+                                    fandom_dc_client: FandomClient | None = None,
+                                    fandom_marvel_client: FandomClient | None = None) -> None:
+        # B8: excluir ANTES del LIMIT las tradiciones cuyas fuentes están TODAS desactivadas
+        # (cliente None). Si no, p. ej. 20 mangas con AniList apagada acapararían el lote y
+        # dejarían sin turno a un tebeo activo. American/British tiene cadena de respaldo:
+        # solo se considera «desactivada» si los tres clientes de la cadena son None.
         desactivadas: list[ComicTradition] = []
-        if cv_client is None:
+        if cv_client is None and fandom_dc_client is None and fandom_marvel_client is None:
             desactivadas.extend(_COMIC_VINE_TRADITIONS)
         if anilist_client is None:
             desactivadas.extend(_ANILIST_TRADITIONS)
@@ -368,6 +422,8 @@ class EnrichmentService:
             # TÍTULO no prueba que sea la misma edición. Asociarle otra fuente es una acción
             # explícita y confirmada, no un emparejamiento automático.
             .where(Series.gcd_id.is_(None))
+            .where(Series.fandom_dc_slug.is_(None))
+            .where(Series.fandom_marvel_slug.is_(None))
             .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
             .where(or_(
                 Series.enrichment_attempted_at.is_(None),
@@ -378,54 +434,86 @@ class EnrichmentService:
             stmt = stmt.where(Series.tradition.not_in(desactivadas))
         pending = (await self.db.execute(stmt.limit(limit))).scalars().all()
 
+        clientes = {
+            MetadataSource.COMIC_VINE.value: cv_client,
+            MetadataSource.ANILIST.value: anilist_client,
+            MetadataSource.TEBEOSFERA.value: tebeosfera_client,
+            MetadataSource.FANDOM_DC.value: fandom_dc_client,
+            MetadataSource.FANDOM_MARVEL.value: fandom_marvel_client,
+        }
+
         for series in pending:
-            source = self._source_for(series.tradition)
-            if source is None:
-                # Tradición sin fuente (fumetti/other): no hay API que
-                # consultar, pero se marca el intento para que la caché
-                # negativa (H2) no la re-seleccione en cada ciclo y acapare
-                # el lote en detrimento de series sí enriquecibles (ADR-0002).
+            fuentes = self._sources_for(series.tradition)
+            if not fuentes:
+                # Tradición sin fuente (fumetti/other): no hay API que consultar, pero se
+                # marca el intento para que la caché negativa (H2) no la re-seleccione en
+                # cada ciclo y acapare el lote (ADR-0002).
                 series.enrichment_attempted_at = datetime.now(UTC)
                 continue
 
-            id_field, source_value, source_label = source
-            cliente = (
-                anilist_client if source_value == MetadataSource.ANILIST.value
-                else tebeosfera_client if source_value == MetadataSource.TEBEOSFERA.value
-                else cv_client
-            )
-            if cliente is None:
-                # B8: fuente desactivada → cero tráfico y no se marca el
-                # intento (no consume el plazo de reintento de 30 días).
-                continue
-            try:
-                if source_value == MetadataSource.ANILIST.value:
-                    match = await self._find_anilist_match(cliente, series)
-                elif source_value == MetadataSource.TEBEOSFERA.value:
-                    match = await self._find_tebeosfera_match(cliente, series)
-                else:
-                    match = await self._find_cv_series_match(cliente, series)
-            except (CortesiaEnEspera, FuenteApagada) as exc:
-                # AC-16: una fuente sin turno (espera o apagada) no es un fallo ni consume los
-                # 30 días de la caché negativa: se omite esa fuente en este ciclo.
-                logger.info("enricher.source_sin_turno", source=source_label,
-                            motivo=getattr(exc, "motivo", "apagada"))
-                continue
-            except Exception:
-                # No se marca enrichment_attempted_at: un fallo de red es
-                # transitorio y debe poder reintentarse en el próximo ciclo,
-                # no dentro de 30 días como un "no encontrado" genuino.
-                logger.exception(
-                    "enricher.series_lookup_failed", series=series.title, source=source_label
-                )
-                report.errors.append(f"serie '{series.title}': error consultando {source_label}")
-                continue
+            match: SeriesMatch | None = None
+            elegida: tuple[str, str, str] | None = None
+            hubo_cliente = False
+            error_transitorio = False
+            # Una fuente activa que no dio turno (espera de cortesía o maxlag) no se ha
+            # probado: marcar el intento consumiría sus 30 días sin haberla consultado.
+            fuente_sin_turno = False
+            for id_field, source_value, source_label in fuentes:
+                cliente = clientes.get(source_value)
+                if cliente is None:
+                    # B8: fuente desactivada → cero tráfico y no se marca el intento
+                    # (no consume el plazo de reintento de 30 días).
+                    continue
+                hubo_cliente = True
+                try:
+                    if source_value == MetadataSource.ANILIST.value:
+                        match = await self._find_anilist_match(cliente, series)
+                    elif source_value == MetadataSource.TEBEOSFERA.value:
+                        match = await self._find_tebeosfera_match(cliente, series)
+                    elif source_value in (MetadataSource.FANDOM_DC.value,
+                                          MetadataSource.FANDOM_MARVEL.value):
+                        match = await self._find_fandom_match(cliente, series)
+                    else:
+                        match = await self._find_cv_series_match(cliente, series)
+                except (CortesiaEnEspera, FuenteApagada) as exc:
+                    # AC-16: una fuente sin turno (espera o apagada) no es un fallo ni
+                    # consume los 30 días de la caché negativa: se omite esa fuente.
+                    fuente_sin_turno = True
+                    logger.info("enricher.source_sin_turno", source=source_label,
+                                motivo=getattr(exc, "motivo", "apagada"))
+                    continue
+                except FandomMaxLagError as exc:
+                    # La wiki pide bajar el ritmo (HTTP 200 + error): transitorio, no
+                    # consume la caché negativa; se prueba la fuente siguiente.
+                    fuente_sin_turno = True
+                    logger.info("enricher.source_maxlag", source=source_label,
+                                segundos=exc.retry_after_s)
+                    continue
+                except Exception:
+                    # No se marca enrichment_attempted_at: un fallo de red es transitorio
+                    # y debe poder reintentarse en el próximo ciclo.
+                    error_transitorio = True
+                    logger.exception(
+                        "enricher.series_lookup_failed", series=series.title,
+                        source=source_label)
+                    report.errors.append(
+                        f"serie '{series.title}': error consultando {source_label}")
+                    continue
+                if match is not None:
+                    elegida = (id_field, source_value, source_label)
+                    break
 
-            # H2: se marca el intento tanto si hay match como si no.
-            if match is None:
+            if not hubo_cliente:
+                continue
+            if match is None or elegida is None:
+                if error_transitorio or fuente_sin_turno:
+                    continue
+                # H2: se marca cuando se han probado todas las fuentes de la tradición y
+                # ninguna la reconoce.
                 series.enrichment_attempted_at = datetime.now(UTC)
                 report.series_no_match.append(series.title)
                 continue
+            id_field, source_value, source_label = elegida
 
             # H9 (#129 B): reclamar la identidad con un UPDATE condicional. Si otra
             # operación (p. ej. una asociación confirmada) ya la escribió, rowcount=0 y
@@ -466,6 +554,23 @@ class EnrichmentService:
         return None
 
     @staticmethod
+    def _sources_for(tradition: ComicTradition) -> list[tuple[str, str, str]]:
+        """Cadena ordenada de fuentes para una tradición.
+
+        American/British tiene respaldo (Comic Vine → DC Database → Marvel Database): se usa
+        la primera que reconozca el título. El resto mantiene su fuente única. Lista vacía si
+        la tradición no tiene ninguna fuente.
+        """
+        if tradition in _COMIC_VINE_TRADITIONS:
+            return [
+                ("comic_vine_id", MetadataSource.COMIC_VINE.value, "Comic Vine"),
+                ("fandom_dc_slug", MetadataSource.FANDOM_DC.value, "DC Database"),
+                ("fandom_marvel_slug", MetadataSource.FANDOM_MARVEL.value, "Marvel Database"),
+            ]
+        unica = EnrichmentService._source_for(tradition)
+        return [unica] if unica else []
+
+    @staticmethod
     def _apply_series_match(
         series: Series, match: SeriesMatch, id_field: str, source_value: str
     ) -> None:
@@ -481,6 +586,10 @@ class EnrichmentService:
             series.cover_url = match.cover_url
         if "total_issues" not in locked and not series.total_issues and match.count_of_issues:
             series.total_issues = match.count_of_issues
+        if "start_year" not in locked and series.start_year is None and match.start_year:
+            series.start_year = match.start_year
+        if "end_year" not in locked and series.end_year is None and match.end_year:
+            series.end_year = match.end_year
         if series.metadata_source is None:
             series.metadata_source = source_value
 
@@ -543,6 +652,44 @@ class EnrichmentService:
             return None
         return SeriesMatch(source_id=chosen.slug, description=chosen.description,
                            cover_url=chosen.cover_url, count_of_issues=chosen.count_of_issues)
+
+    async def _find_fandom_match(
+        self, client: FandomClient, series: Series
+    ) -> SeriesMatch | None:
+        """Coincidencia exacta del título base («Batman» ↔ «Batman Vol 1»), año ±1.
+
+        La wiki devuelve páginas de número y recopilatorios además de volúmenes: se comparan
+        solo títulos base exactos y se desambigua por el año que declara la ficha del volumen.
+        Como máximo se abren dos fichas (el ritmo lo marca `cortesia.py`, 1,5 s por wiki).
+        """
+        candidatos = await client.search_series(series.title, limit=10)
+        norm = normalize_title(series.title)
+        paginas: list[str] = []
+        for page in candidatos:
+            if normalize_title(titulo_base(page)) != norm:
+                continue
+            if page not in paginas:
+                paginas.append(page)
+        if not paginas:
+            return None
+        volumenes = []
+        for page in paginas[:2]:
+            # Si la serie ya tiene portada, la consulta `imageinfo` sobra: es tráfico y
+            # espera de cortesía que no hace falta (R-10 de la ficha de benchmark).
+            volumen = await client.get_volume(page, incluir_portada=not series.cover_url)
+            if volumen is not None:
+                volumenes.append(volumen)
+        if not volumenes:
+            return None
+        elegido = self._pick_by_year(volumenes, series.start_year, lambda v: v.start_year)
+        return SeriesMatch(
+            source_id=elegido.page_title,
+            description=elegido.description,
+            cover_url=elegido.cover_url,
+            count_of_issues=elegido.total_issues,
+            start_year=elegido.start_year,
+            end_year=elegido.end_year,
+        )
 
     @staticmethod
     def _pick_by_year(matches: list, target_year: int | None, year_of):
@@ -609,6 +756,13 @@ class EnrichmentService:
                 issue.synopsis = match.description
             if "cover_url" not in locked and not issue.cover_url:
                 issue.cover_url = match.image_url
+            if "release_date" not in locked and issue.release_date is None:
+                # Unificación del PO (2026-11-13): `release_date` = fecha de VENTA.
+                # Comic Vine expone `store_date` (venta) y `cover_date` (portada): se prefiere
+                # la primera y la portada queda solo como aproximación si no hay venta.
+                fecha = _fecha_iso(match.store_date) or _fecha_iso(match.cover_date)
+                if fecha is not None:
+                    issue.release_date = fecha
             if issue.metadata_source is None:
                 issue.metadata_source = MetadataSource.COMIC_VINE.value
             await self._apply_credits(issue, match.credits)
@@ -616,6 +770,247 @@ class EnrichmentService:
             await self.db.flush()
             report.issues_enriched.append(label)
             logger.info("enricher.issue_enriched", issue=label, cv_id=match.cv_id)
+
+    # ── Fandom: números y arcos (Fase 2 del estudio de fuentes externas) ─────
+
+    #: Arcos que se abren por serie y ciclo; el resto queda para el siguiente ciclo.
+    _MAX_ARCOS_POR_SERIE = 8
+
+    async def _enrich_issues_fandom(self, fandom_dc: FandomClient | None,
+                                    fandom_marvel: FandomClient | None, limit: int,
+                                    report: EnrichmentReport) -> None:
+        """Números de series identificadas por Fandom: fecha, sinopsis, créditos y portada.
+
+        La página del número en la wiki se llama «<volumen> <número>» («Batman Vol 1 404»).
+        Un número que la wiki no tenga (anuales o especiales con otra convención) se marca
+        como intentado y entra en la caché negativa de 30 días, igual que hace Comic Vine.
+        """
+        if fandom_dc is None and fandom_marvel is None:
+            return
+        rows = (await self.db.execute(
+            select(Issue, Series)
+            .join(Series, Issue.series_id == Series.id)
+            .where(or_(Series.fandom_dc_slug.is_not(None),
+                       Series.fandom_marvel_slug.is_not(None)))
+            .where(Series.comic_vine_id.is_(None))
+            .where(Issue.fandom_dc_slug.is_(None))
+            .where(Issue.fandom_marvel_slug.is_(None))
+            .where(Issue.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
+            .where(Issue.issue_number.is_not(None))
+            .where(or_(
+                Issue.enrichment_attempted_at.is_(None),
+                Issue.enrichment_attempted_at < datetime.now(UTC) - ENRICHMENT_RETRY_AFTER,
+            ))
+            .limit(limit)
+        )).all()
+
+        for issue, series in rows:
+            if series.fandom_dc_slug:
+                cliente, fuente, columna = (fandom_dc, MetadataSource.FANDOM_DC.value,
+                                            "fandom_dc_slug")
+                base = series.fandom_dc_slug
+            else:
+                cliente, fuente, columna = (fandom_marvel, MetadataSource.FANDOM_MARVEL.value,
+                                            "fandom_marvel_slug")
+                base = series.fandom_marvel_slug
+            if cliente is None:
+                continue  # B8: fuente apagada → no se marca el intento
+            page_title = f"{base} {issue.issue_number}"
+            label = f"{series.title} #{issue.issue_number}"
+            try:
+                detalle = await cliente.get_issue(page_title)
+            except (CortesiaEnEspera, FuenteApagada) as exc:
+                logger.info("enricher.source_sin_turno", source=fuente,
+                            motivo=getattr(exc, "motivo", "apagada"))
+                continue
+            except FandomMaxLagError as exc:
+                logger.info("enricher.source_maxlag", source=fuente,
+                            segundos=exc.retry_after_s)
+                continue
+            except Exception:
+                logger.exception("enricher.issue_fandom_failed", issue=label)
+                report.errors.append(f"issue {label}: error consultando {fuente}")
+                continue
+
+            issue.enrichment_attempted_at = datetime.now(UTC)  # H2
+            if detalle is None:
+                report.issues_no_match.append(label)
+                continue
+
+            locked = issue.locked_fields or []
+            if columna not in locked:
+                setattr(issue, columna, page_title)
+            if "title" not in locked and not issue.title and detalle.story_title:
+                issue.title = detalle.story_title
+            if "release_date" not in locked and issue.release_date is None and detalle.release_date:
+                issue.release_date = detalle.release_date
+            if "synopsis" not in locked and not issue.synopsis and detalle.synopsis:
+                issue.synopsis = detalle.synopsis
+            if "cover_url" not in locked and not issue.cover_url and detalle.cover_url:
+                issue.cover_url = detalle.cover_url
+            if issue.metadata_source is None:
+                issue.metadata_source = fuente
+            await self._apply_credits_fandom(issue, detalle.credits, fuente)
+            await self.db.flush()
+            report.issues_enriched.append(label)
+            logger.info("enricher.issue_enriched", issue=label, source=fuente)
+
+    async def _apply_credits_fandom(self, issue: Issue, creditos: dict[str, list[str]],
+                                    fuente: str) -> None:
+        """Créditos de Fandom → `IssueCreator`/`Creator` (solo si el número no tiene ninguno).
+
+        Igual que `_apply_credits` con Comic Vine: nunca se pisan créditos existentes, y el
+        creador se reutiliza por nombre sin robarle la identidad a otra fuente.
+        """
+        existing = (await self.db.execute(
+            select(IssueCreator).where(IssueCreator.issue_id == issue.id)
+        )).scalars().first()
+        if existing:
+            return
+        vistos: set[tuple[str, CreatorRole]] = set()
+        for rol_valor, nombres in creditos.items():
+            try:
+                rol = CreatorRole(rol_valor)
+            except ValueError:
+                continue
+            for nombre in nombres:
+                nombre = (nombre or "").strip()
+                if not nombre:
+                    continue
+                creador = await self._get_or_create_creator_fandom(nombre, fuente)
+                clave = (creador.id, rol)
+                if clave in vistos:
+                    continue
+                vistos.add(clave)
+                self.db.add(IssueCreator(issue_id=issue.id, creator_id=creador.id, role=rol))
+
+    async def _get_or_create_creator_fandom(self, nombre: str, fuente: str) -> Creator:
+        existente = (await self.db.execute(
+            select(Creator).where(Creator.name == nombre)
+        )).scalar_one_or_none()
+        if existente is not None:
+            return existente
+        creador = Creator(name=nombre, metadata_source=fuente)
+        self.db.add(creador)
+        await self.db.flush()
+        return creador
+
+    async def _enrich_arcs_fandom(self, client: FandomClient | None, limit: int,
+                                   report: EnrichmentReport) -> None:
+        """Arcos declarados por el volumen de DC Database, con sus números en orden.
+
+        Se limita por serie y ciclo (`_MAX_ARCOS_POR_SERIE`); la marca
+        `fandom_arcos_intentado` en `metadata_` evita volver a leer la misma ficha en cada
+        ciclo. Los números que no están en la biblioteca local se omiten sin error.
+        """
+        if client is None:
+            return
+        filas = (await self.db.execute(
+            select(Series)
+            .where(Series.fandom_dc_slug.is_not(None))
+            .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
+            .where(~Series.metadata_.has_key("fandom_arcos_intentado"))
+            .limit(limit)
+        )).scalars().all()
+
+        for series in filas:
+            try:
+                volumen = await client.get_volume(series.fandom_dc_slug)
+            except (CortesiaEnEspera, FuenteApagada) as exc:
+                logger.info("enricher.source_sin_turno", source="fandom_dc",
+                            motivo=getattr(exc, "motivo", "apagada"))
+                continue
+            except FandomMaxLagError as exc:
+                logger.info("enricher.source_maxlag", source="fandom_dc",
+                            segundos=exc.retry_after_s)
+                continue
+            except Exception:
+                logger.exception("enricher.arcos_fandom_failed", series=series.title)
+                report.errors.append(f"serie '{series.title}': error leyendo arcos")
+                continue
+            if volumen is None:
+                series.metadata_ = {**(series.metadata_ or {}),
+                                    "fandom_arcos_intentado": True}
+                await self.db.flush()
+                continue
+            completado = True
+            for pagina in volumen.story_arcs[:self._MAX_ARCOS_POR_SERIE]:
+                try:
+                    arco = await client.get_arc(pagina)
+                except (CortesiaEnEspera, FuenteApagada) as exc:
+                    logger.info("enricher.source_sin_turno", source="fandom_dc",
+                                motivo=getattr(exc, "motivo", "apagada"))
+                    completado = False
+                    break
+                except FandomMaxLagError as exc:
+                    logger.info("enricher.source_maxlag", source="fandom_dc",
+                                segundos=exc.retry_after_s)
+                    completado = False
+                    break
+                except Exception:
+                    logger.exception("enricher.arco_fandom_failed", arco=pagina)
+                    report.errors.append(f"arco '{pagina}': error consultando fandom_dc")
+                    completado = False
+                    continue
+                if arco is None or not arco.issues:
+                    # Un arco sin números declarados no se puede enlazar; no es un fallo.
+                    continue
+                await self._upsert_arc(arco)
+            if completado and len(volumen.story_arcs) <= self._MAX_ARCOS_POR_SERIE:
+                series.metadata_ = {**(series.metadata_ or {}),
+                                    "fandom_arcos_intentado": True}
+            await self.db.flush()
+
+    async def _upsert_arc(self, arco: FandomArc) -> None:
+        """Crea/actualiza el arco y enlaza sus números locales en orden de lectura."""
+        fila = (await self.db.execute(
+            select(StoryArc).where(StoryArc.title == arco.title[:500])
+        )).scalars().first()
+        if fila is None:
+            fila = StoryArc(
+                title=arco.title[:500],
+                description=arco.description,
+                metadata_={"origen": "fandom_dc", "fandom_dc": arco.page_title},
+            )
+            self.db.add(fila)
+            await self.db.flush()
+        else:
+            if not fila.description and arco.description:
+                fila.description = arco.description
+            fila.metadata_ = {**(fila.metadata_ or {}), "fandom_dc": arco.page_title}
+
+        existentes = {
+            enlace.issue_id: enlace
+            for enlace in (await self.db.execute(
+                select(StoryArcIssue).where(StoryArcIssue.story_arc_id == fila.id)
+            )).scalars().all()
+        }
+        orden = 0
+        for pagina in arco.issues:
+            referencia = referencia_de_issue(pagina)
+            if referencia is None:
+                continue
+            base, numero = referencia
+            serie = (await self.db.execute(
+                select(Series).where(Series.fandom_dc_slug == base)
+            )).scalars().first()
+            if serie is None:
+                continue
+            issue = (await self.db.execute(
+                select(Issue).where(Issue.series_id == serie.id,
+                                    Issue.issue_number == numero)
+            )).scalars().first()
+            if issue is None:
+                continue
+            orden += 1
+            enlace = existentes.get(issue.id)
+            if enlace is not None:
+                if enlace.reading_order != orden:
+                    enlace.reading_order = orden
+                continue
+            self.db.add(StoryArcIssue(story_arc_id=fila.id, issue_id=issue.id,
+                                      reading_order=orden))
+        await self.db.flush()
 
     async def _aplicar_tags(self, series: Series, tags: list[AniListTag]) -> int:
         """ETQ4 (AC-23): aplica los tags de AniList con `source='anilist'` y `weight=rank`.
