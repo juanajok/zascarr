@@ -163,7 +163,7 @@ class TestColisionDeEdiciones:
         assert r.status_code == 409
         assert "text/html" in r.headers["content-type"] and 'id="card-' in r.text
         assert "número compartido entre ediciones" in r.text
-        assert "detail" not in r.text                  # el 409 JSON de FastAPI no se pinta en la página
+        assert '"detail"' not in r.text                # el 409 JSON de FastAPI no se pinta en la página
 
     async def test_cliente_no_htmx_recibe_409_json(self, mundo, cliente_de):
         await self._sembrar_otra_edicion(mundo)
