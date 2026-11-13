@@ -36,7 +36,7 @@ def test_revisiones_unicas_una_cabeza_y_cadena_lineal():
         "usar el mismo número: rompe `alembic upgrade head`)")
 
     hijas = {down for _, down in migraciones.values() if down is not None}
-    for nombre, (rev, down) in migraciones.items():
+    for nombre, (_, down) in migraciones.items():
         if down is not None:
             assert down in revisiones, (
                 f"{nombre}: down_revision {down!r} no existe")
