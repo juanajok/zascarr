@@ -46,6 +46,14 @@
           <input type="checkbox" name="fandom_marvel_enabled" value="true" {% if fandom_marvel_enabled %}checked{% endif %}>
           Marvel Database (wikis de Fandom; serie y número; texto CC-BY-SA)
         </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="reading_orders_enabled" value="true" {% if reading_orders_enabled %}checked{% endif %}>
+          Comic Book Reading Orders (guías de lectura; solo referencias, sin prosa)
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="continuity_guide_enabled" value="true" {% if continuity_guide_enabled %}checked{% endif %}>
+          Continuity Guide (guías de lectura; solo referencias, sin prosa)
+        </label>
         {% if fuentes_heredadas %}
         <div id="aviso-fuentes-heredadas">
           {% call ui.aviso("amber") %}<strong>Encendidas por compatibilidad con tu instalación anterior.</strong>

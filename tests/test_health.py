@@ -607,3 +607,6 @@ def test_fuentes_de_metadatos_incluyen_las_fuentes_nuevas(monkeypatch):
     fuentes = r.json()["fuentes"]
     assert fuentes["fandom_dc"] == "disabled"
     assert fuentes["fandom_marvel"] == "disabled"
+    # SCR3: las guías de lectura también son fuentes y se ven aquí apagadas por defecto.
+    assert fuentes["reading_orders"] == "disabled"
+    assert fuentes["continuity_guide"] == "disabled"

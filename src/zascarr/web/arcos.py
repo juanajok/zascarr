@@ -1,6 +1,7 @@
 """BL-C4 (#151): pantallas de sagas y su CRUD manual."""
 from __future__ import annotations
 
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
@@ -20,6 +21,8 @@ from zascarr.services.arcos import (
     mover_numero,
     quitar_numero,
 )
+from zascarr.services.reconciliacion_lecturas import ORIGENES_DE_GUIA
+from zascarr.utils.cortesia import NOMBRES_DE_FUENTE
 from zascarr.web.atribucion import atribucion_de_arco
 from zascarr.web.routes import crear_templates
 
@@ -27,17 +30,39 @@ router = APIRouter(prefix="/ui/arcos", tags=["ui"])
 templates = crear_templates()
 
 
-async def _atribucion_del_arco(db: AsyncSession,
-                               arco_id: UUID) -> dict[str, str] | None:
-    """Atribución CC-BY-SA si el enricher creó la saga (`metadata_["fandom_dc"]` = página).
+async def _metadata_del_arco(db: AsyncSession, arco_id: UUID) -> dict:
+    """El JSONB del arco (lo necesita la atribución de Fandom y la fuente de la guía).
 
-    Se lee aparte porque `detalle_arco` (capa de servicios) no devuelve el JSONB; una saga
-    manual no tiene la clave y no se atribuye. Nunca enlaza una imagen: solo texto.
+    Se lee aparte porque `detalle_arco` (capa de servicios) no lo devuelve; una saga manual
+    no tiene claves y estas vistas no pintan nada.
     """
     metadata = (await db.execute(
         select(StoryArc.metadata_).where(StoryArc.id == arco_id)
     )).scalar_one_or_none()
-    return atribucion_de_arco(metadata)
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def fuente_de_guia(metadata: dict) -> dict[str, str] | None:
+    """Fuente de una guía reconciliada (SCR3): solo http(s), sin credenciales y acotada.
+
+    El enlace es de navegación del usuario (no se descarga), pero se valida igualmente para
+    que un `metadata_` manipulado no pinte un `javascript:` (SecOps m-2).
+    """
+    origen = metadata.get("origen")
+    url = metadata.get("url")
+    if origen not in ORIGENES_DE_GUIA or not isinstance(url, str):
+        return None
+    if len(url) > 500:
+        return None
+    try:
+        partes = urlsplit(url)
+    except ValueError:
+        return None
+    if partes.scheme not in ("http", "https") or not partes.hostname:
+        return None
+    if partes.username is not None or partes.password is not None:
+        return None
+    return {"url": url, "nombre": NOMBRES_DE_FUENTE.get(str(origen), str(origen))}
 
 
 def _respuesta(request: Request, plantilla: str, contexto: dict) -> HTMLResponse:
@@ -100,9 +125,11 @@ async def arco(arco_id: UUID, request: Request, guardado: str = Query(default=""
     detalle = await detalle_arco(db, arco_id)
     if detalle is None:
         raise HTTPException(status_code=404, detail="Arco no encontrado")
+    metadata = await _metadata_del_arco(db, arco_id)
     return _respuesta(request, "arco.html", {
         "arco": detalle,
-        "atribucion_fandom": await _atribucion_del_arco(db, arco_id),
+        "atribucion_fandom": atribucion_de_arco(metadata),
+        "fuente_guia": fuente_de_guia(metadata),
         "aviso": {
             "creada": "Saga creada.", "guardada": "Saga guardada.",
             "numero": "Número añadido a la saga.",
@@ -180,9 +207,11 @@ async def anadir_numero(arco_id: UUID, request: Request,
         detalle = await detalle_arco(db, arco_id)
         if detalle is None:
             raise HTTPException(status_code=404, detail="Arco no encontrado")
+        metadata = await _metadata_del_arco(db, arco_id)
         return _respuesta(request, "arco.html", {
             "arco": detalle,
-            "atribucion_fandom": await _atribucion_del_arco(db, arco_id),
+            "atribucion_fandom": atribucion_de_arco(metadata),
+            "fuente_guia": fuente_de_guia(metadata),
             "errores": resultado.errores,
             "valores": {"serie": serie, "numero": numero, "orden": orden},
         })

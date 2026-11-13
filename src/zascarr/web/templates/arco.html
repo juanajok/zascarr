@@ -7,6 +7,9 @@
 <h1 class="titulo-frase">{{ arco.title }}</h1>
 <p class="subtitle">Orden de lectura{% if arco.is_crossover %} · cruza varias series{% endif %}.</p>
 {% if arco.description %}<p>{{ arco.description }}</p>{% endif %}
+{% if fuente_guia %}
+<p class="muted">Guía de lectura: <a href="{{ fuente_guia.url }}" target="_blank" rel="noopener noreferrer">{{ fuente_guia.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>.</p>
+{% endif %}
 {{ aviso_de_atribucion(atribucion_fandom, "esta saga") }}
 <div class="arco-acciones">
   <a class="btn ghost sm" href="/ui/arcos/{{ arco.id }}/editar">Editar la saga</a>
