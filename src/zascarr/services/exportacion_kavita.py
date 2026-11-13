@@ -23,8 +23,22 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
+from zascarr.core.comicinfo_write import (
+    Accion,
+    CampoPlan,
+    ComicInfoInvalidoError,
+    fusionar_xml,
+    hay_cambios,
+    leer_campos,
+    parsear,
+)
+from zascarr.core.comicinfo_write import (
+    plan as plan_comicinfo,
+)
 from zascarr.core.exportacion_kavita import ArchivoFuente, PlanExportacion, plan_export
 from zascarr.models import Collection, File, ImportRun, Issue, Series
+from zascarr.services.tagger import TaggerService
+from zascarr.utils.cbz import leer_comicinfo, reescribir_con_xml
 
 logger = structlog.get_logger()
 
@@ -34,10 +48,6 @@ NOMBRE_MANIFIESTO = "_zascarr_manifest.json"
 
 class ExportacionError(RuntimeError):
     """Error en llano para la API/UI (no se ha tocado la biblioteca)."""
-
-
-class ParcheComicInfoNoDisponibleError(ExportacionError):
-    """El parche es fase 2: se rechaza antes de tocar nada."""
 
 
 class EspacioInsuficienteError(ExportacionError):
@@ -59,6 +69,8 @@ class ResumenExportacion:
     saltados: int = 0
     modo: str = "hardlink"
     carpetas_colisionadas: int = 0
+    parcheados: int = 0
+    patch_no_escribible: int = 0
 
 
 def _sha256(path: Path) -> str:
@@ -109,7 +121,7 @@ def _comprobar_sin_symlinks(destino: Path, root: Path) -> None:
         actual = actual.parent
 
 
-async def _filas(db: AsyncSession, collection: Collection) -> list[ArchivoFuente]:
+async def _filas(db: AsyncSession, collection: Collection) -> list[tuple[ArchivoFuente, File]]:
     filas = (await db.execute(
         select(Series, Issue, File)
         .join(Issue, Issue.series_id == Series.id)
@@ -117,15 +129,16 @@ async def _filas(db: AsyncSession, collection: Collection) -> list[ArchivoFuente
         .where(Series.collection_id == collection.id)
         .order_by(Series.sort_title, Issue.sort_order, Issue.issue_number, File.file_path)
     )).all()
-    salida: list[ArchivoFuente] = []
+    salida: list[tuple[ArchivoFuente, File]] = []
     for serie, issue, archivo in filas:
-        salida.append(ArchivoFuente(
+        salida.append((ArchivoFuente(
             file_id=str(archivo.id), issue_id=str(issue.id), series_id=str(serie.id),
             series_title=serie.title, numero=issue.issue_number,
             issue_title=issue.title, source_path=archivo.file_path,
             size_bytes=int(archivo.file_size_bytes or 0),
             sha256=archivo.sha256_hash, is_missing=bool(archivo.is_missing),
-            form=issue.format.value if hasattr(issue.format, "value") else str(issue.format)))
+            form=issue.format.value if hasattr(issue.format, "value") else str(issue.format)),
+            archivo))
     return salida
 
 
@@ -169,9 +182,31 @@ def _leer_manifiesto(plan: PlanExportacion, root: Path) -> dict[str, dict]:
     }
 
 
+def _parchear_copia(temp: Path, datos: tuple[dict, set[str], dict]) -> tuple[bool, str]:
+    """Parchea un CBZ temporal con el plan de B6. Nunca toca el original."""
+    deseados, bloqueados, propio = datos
+    try:
+        xml = leer_comicinfo(temp)
+        campos = plan_comicinfo(
+            leer_campos(parsear(xml) if xml else None), deseados, propio)
+        campos = [
+            CampoPlan(c.tag, Accion.BLOQUEADO, c.actual, c.nuevo)
+            if c.accion is Accion.CAMBIA and c.tag in bloqueados else c
+            for c in campos
+        ]
+        if not hay_cambios(campos):
+            return False, "sin_cambios"
+        reescribir_con_xml(temp, fusionar_xml(xml, campos))
+        return True, "aplicado"
+    except ComicInfoInvalidoError:
+        return False, "invalido"
+
+
 def _materializar(
     plan: PlanExportacion, root: Path, *, copiar: bool = False,
     previos: dict[str, dict] | None = None,
+    patch_comicinfo: bool = False,
+    datos_parche: dict[str, tuple[dict, set[str], dict]] | None = None,
 ) -> tuple[list[dict], int, int, int, int, int, str]:
     entradas: list[dict] = []
     omitidos = len(plan.omitidos)
@@ -181,6 +216,7 @@ def _materializar(
     copiados = 0
     modos: set[str] = set()
     previos = previos or {}
+    datos_parche = datos_parche or {}
     # Preflight: suma de lo que necesitará copia forzada por filesystem distinto.
     previstos: list[tuple[object, Path, str]] = []
     for accion in plan.archivos:
@@ -188,7 +224,9 @@ def _materializar(
         padre = destino.parent
         _comprobar_sin_symlinks(destino, root)
         padre.mkdir(parents=True, exist_ok=True)
-        modo = ("copy" if copiar or Path(accion.source_path).stat().st_dev != padre.stat().st_dev
+        es_cbz = Path(accion.source_path).suffix.lower() == ".cbz"
+        modo = ("copy" if copiar or (patch_comicinfo and es_cbz)
+                or Path(accion.source_path).stat().st_dev != padre.stat().st_dev
                 else "hardlink")
         previstos.append((accion, destino, modo))
     copias_previstas = sum(a.size_bytes for a, _d, m in previstos if m == "copy")
@@ -201,6 +239,11 @@ def _materializar(
     for accion, destino, modo in previstos:
         try:
             sha_fuente = _sha256(Path(accion.source_path))
+            es_cbz = Path(accion.source_path).suffix.lower() == ".cbz"
+            patched = False
+            patch_status = ("no_escribible" if patch_comicinfo and not es_cbz
+                            else "sin_parche")
+            sha_parcheado = sha_fuente
             relativo = accion.destino_relativo.replace("\\", "/")
             if destino.exists():
                 sha_destino = _sha256(destino)
@@ -213,6 +256,8 @@ def _materializar(
                         "dest": relativo, "sha256": sha_destino,
                         "issue_id": accion.issue_id, "file_id": accion.file_id,
                         "mode": modo_previo or "skip", "status": "drift",
+                        "patched": bool(previo.get("patched", False)),
+                        "patch_status": previo.get("patch_status", "sin_parche"),
                     })
                     continue
                 if esperado is None and sha_destino != sha_fuente:
@@ -221,6 +266,41 @@ def _materializar(
                         "dest": relativo, "sha256": sha_destino,
                         "issue_id": accion.issue_id, "file_id": accion.file_id,
                         "mode": modo_previo or "skip", "status": "drift",
+                        "patched": bool(previo.get("patched", False)),
+                        "patch_status": previo.get("patch_status", "sin_parche"),
+                    })
+                    continue
+                if patch_comicinfo and es_cbz and not previo.get("patched"):
+                    datos = datos_parche.get(accion.file_id)
+                    if datos is not None:
+                        fd, temp = tempfile.mkstemp(
+                            prefix=f".{destino.name}.", dir=str(destino.parent))
+                        os.close(fd)
+                        try:
+                            shutil.copy2(accion.source_path, temp)
+                            patched, patch_status = _parchear_copia(Path(temp), datos)
+                            sha_parcheado = _sha256(Path(temp))
+                            with open(temp, "rb+") as f:
+                                os.fsync(f.fileno())
+                            os.replace(temp, destino)
+                            _fsync_directorio(destino.parent)
+                            modos.add("copy")
+                            copiados += accion.size_bytes
+                            entradas.append({
+                                "dest": relativo, "sha256": sha_parcheado,
+                                "issue_id": accion.issue_id, "file_id": accion.file_id,
+                                "mode": "copy", "status": "ok", "patched": patched,
+                                "patch_status": patch_status,
+                            })
+                            continue
+                        finally:
+                            Path(temp).unlink(missing_ok=True)
+                if patch_comicinfo and not es_cbz and previo.get("patch_status") != "no_escribible":
+                    entradas.append({
+                        "dest": relativo, "sha256": sha_destino,
+                        "issue_id": accion.issue_id, "file_id": accion.file_id,
+                        "mode": modo_previo or "skip", "status": "skip",
+                        "patched": False, "patch_status": "no_escribible",
                     })
                     continue
                 # «Copiar» también deshace un hardlink previo: si el destino
@@ -250,7 +330,8 @@ def _materializar(
                         entradas.append({
                             "dest": relativo, "sha256": sha_fuente,
                             "issue_id": accion.issue_id, "file_id": accion.file_id,
-                            "mode": "copy", "status": "ok",
+                            "mode": "copy", "status": "ok", "patched": False,
+                            "patch_status": "sin_parche",
                         })
                         continue
                 modo_skip = modo_previo or "skip"
@@ -260,6 +341,8 @@ def _materializar(
                     "dest": relativo, "sha256": sha_destino,
                     "issue_id": accion.issue_id, "file_id": accion.file_id,
                     "mode": modo_skip, "status": "skip",
+                    "patched": bool(previo.get("patched", False)),
+                    "patch_status": previo.get("patch_status", "sin_parche"),
                 })
                 continue
             destino.parent.mkdir(parents=True, exist_ok=True)
@@ -285,6 +368,17 @@ def _materializar(
                 os.close(fd)
                 try:
                     shutil.copy2(accion.source_path, temp)
+                    patched = False
+                    if patch_comicinfo:
+                        if es_cbz:
+                            datos = datos_parche.get(accion.file_id)
+                            if datos is None:
+                                patch_status = "sin_datos"
+                            else:
+                                patched, patch_status = _parchear_copia(Path(temp), datos)
+                        else:
+                            patch_status = "no_escribible"
+                    sha_parcheado = _sha256(Path(temp))
                     with open(temp, "rb+") as f:
                         os.fsync(f.fileno())
                     try:
@@ -299,8 +393,10 @@ def _materializar(
             modos.add(modo)
             entradas.append({
                 "dest": accion.destino_relativo.replace("\\", "/"),
-                "sha256": sha_fuente, "issue_id": accion.issue_id,
-                "file_id": accion.file_id, "mode": modo, "status": "ok",
+                "sha256": sha_parcheado if modo == "copy" and patch_comicinfo else sha_fuente,
+                "issue_id": accion.issue_id, "file_id": accion.file_id,
+                "mode": modo, "status": "ok", "patched": patched,
+                "patch_status": patch_status,
             })
         except EspacioInsuficienteError:
             raise
@@ -311,7 +407,8 @@ def _materializar(
     return entradas, omitidos, colisiones, deriva, errores, copiados, modo_global
 
 def _escribir_manifiesto(plan: PlanExportacion, root: Path, collection: Collection,
-                         files: list[dict], modo: str) -> Path:
+                         files: list[dict], modo: str,
+                         patch_comicinfo: bool = False) -> Path:
     carpeta = root / plan.folder
     carpeta.mkdir(parents=True, exist_ok=True)
     destino = carpeta / NOMBRE_MANIFIESTO
@@ -322,6 +419,7 @@ def _escribir_manifiesto(plan: PlanExportacion, root: Path, collection: Collecti
         "collection_name": collection.name,
         "exported_at": datetime.now(UTC).isoformat(),
         "mode": modo,
+        "patch_comicinfo": bool(patch_comicinfo),
         "files": files,
     }
     fd, temp = tempfile.mkstemp(prefix=".zascarr_manifest.", dir=str(carpeta))
@@ -340,10 +438,6 @@ def _escribir_manifiesto(plan: PlanExportacion, root: Path, collection: Collecti
 async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
                              patch_comicinfo: bool = False,
                              copiar: bool = False) -> ResumenExportacion:
-    if patch_comicinfo:
-        raise ParcheComicInfoNoDisponibleError(
-            "El parche de ComicInfo todavía no está disponible: es la fase 2 de esta función. "
-            "Exporta sin parche; no se toca ningún archivo.")
     collection = await db.get(Collection, collection_id)
     if collection is None:
         raise ExportacionError("La colección ya no existe.")
@@ -353,21 +447,34 @@ async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
     root = await asyncio.to_thread(_resolver_raiz, settings)
     await asyncio.to_thread(root.mkdir, parents=True, exist_ok=True)
     try:
-        fuentes = await _filas(db, collection)
+        pares = await _filas(db, collection)
     except Exception as exc:
         raise ExportacionError(f"No se pudo leer la colección: {exc}") from exc
-    fuentes = await asyncio.to_thread(_marcar_fuentes, fuentes)
+    fuentes = await asyncio.to_thread(_marcar_fuentes, [a for a, _f in pares])
+    datos_parche: dict[str, tuple[dict, set[str], dict]] = {}
+    if patch_comicinfo:
+        tagger = TaggerService(db)
+        for archivo, file in pares:
+            if Path(archivo.source_path).suffix.lower() != ".cbz":
+                continue
+            deseados, bloqueados = await tagger.deseados_para(file)
+            datos_parche[archivo.file_id] = (
+                deseados, bloqueados, dict(file.metadata_ or {}).get("comicinfo_propio") or {})
     plan = await asyncio.to_thread(_plan, collection, fuentes, root)
     await asyncio.to_thread((root / plan.folder).mkdir, parents=True, exist_ok=True)
     previos = await asyncio.to_thread(_leer_manifiesto, plan, root)
     (archivos, omitidos, colisiones, deriva, errores,
      copiados, modo) = await asyncio.to_thread(
-        _materializar, plan, root, copiar=copiar, previos=previos)
+        _materializar, plan, root, copiar=copiar, previos=previos,
+        patch_comicinfo=patch_comicinfo, datos_parche=datos_parche)
     manifiesto = await asyncio.to_thread(
-        _escribir_manifiesto, plan, root, collection, archivos, modo)
+        _escribir_manifiesto, plan, root, collection, archivos, modo, patch_comicinfo)
     ahora = datetime.now(UTC)
     materializados_ok = sum(1 for a in archivos if a.get("status") == "ok")
     saltados = sum(1 for a in archivos if a.get("status") == "skip")
+    parcheados = sum(1 for a in archivos
+                     if a.get("patched") and a.get("status") == "ok")
+    no_escribible = sum(1 for a in archivos if a.get("patch_status") == "no_escribible")
     run = ImportRun(
         id=uuid4(), started_at=ahora, finished_at=ahora,
         files_scanned=len(fuentes), imported_count=materializados_ok,
@@ -388,7 +495,8 @@ async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
         materializados=materializados_ok, omitidos=omitidos, colisiones=colisiones,
         deriva=deriva, errores=errores, bytes_copiados=copiados, archivos=archivos,
         saltados=saltados, modo=modo,
-        carpetas_colisionadas=len(plan.carpetas_colision))
+        carpetas_colisionadas=len(plan.carpetas_colision),
+        parcheados=parcheados, patch_no_escribible=no_escribible)
 
 
 async def historial_exportaciones(

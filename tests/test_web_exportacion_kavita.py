@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.services.exportacion_kavita import (
-    ParcheComicInfoNoDisponibleError,
     ResumenExportacion,
 )
 
@@ -39,15 +38,18 @@ def test_api_exporta_y_devuelve_run():
     assert r.json()["run_id"] == "run1" and r.json()["resumen"]["materializados"] == 2
 
 
-def test_api_rechaza_parche_fase_2():
+def test_api_acepta_el_parche_en_copia_privada():
+    resumen = ResumenExportacion("run1", "c1", "/media/export/Grapas", 1, 0, 0, 0, 0, 0,
+                                 parcheados=1, patch_no_escribible=0)
     c = _cliente()
+    llamada = AsyncMock(return_value=resumen)
     try:
-        with patch("zascarr.api.exportacion.exportar_coleccion", AsyncMock(
-                side_effect=ParcheComicInfoNoDisponibleError("fase 2"))):
+        with patch("zascarr.api.exportacion.exportar_coleccion", llamada):
             r = c.post(f"/api/export/collections/{uuid4()}", json={"patch_comicinfo": True})
     finally:
         _cerrar()
-    assert r.status_code == 422 and "fase 2" in r.json()["detail"]
+    assert r.status_code == 200 and r.json()["resumen"]["parcheados"] == 1
+    assert llamada.await_args.kwargs["patch_comicinfo"] is True
 
 
 def test_ui_muestra_boton_y_resultado():
