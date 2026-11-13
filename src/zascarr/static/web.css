@@ -1545,9 +1545,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   gap: 8px 14px;
   margin: 0 0 var(--gutter);
   padding: 10px 12px;
-  border: 2px solid var(--linea);
+  border: 2px solid var(--ink-faint);
   border-radius: var(--radius-panel);
-  background: var(--panel);
+  background: var(--paper);
   font-size: .875rem;
   font-variant-numeric: tabular-nums;
 }
