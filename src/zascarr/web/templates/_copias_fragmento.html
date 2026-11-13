@@ -1,0 +1,5 @@
+{#- Respuesta de POST /ui/copias/pedir y de GET /ui/copias/estado: el estado (lo que se sondea) y, por `hx-swap-oob`,
+    el botón y, si toca, el listado. La zona aria-live (#copia-anuncio) NO va aquí: se queda fuera de lo recambiado. -#}
+{% include "_copias_estado.html" %}
+{% with oob = true %}{% include "_copias_accion.html" %}{% endwith %}
+{% if con_lista %}{% with oob = true %}{% include "_copias_lista.html" %}{% endwith %}{% endif %}
