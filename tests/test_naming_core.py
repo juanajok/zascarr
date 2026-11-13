@@ -387,7 +387,7 @@ def make_session_mock(series_hits: list[SeriesHit],
         else:  # find_series query
             rows = [
                 MagicMock(id=str(h.series_id), title=h.title,
-                          start_year=h.start_year, score=h.score)
+                          start_year=h.start_year, volume=h.volume, score=h.score)
                 for h in series_hits
             ]
             result_mock.__iter__ = MagicMock(return_value=iter(rows))
@@ -1801,3 +1801,36 @@ class TestRealWorldFilenames:
         assert result.volume == 2
         assert result.issue_number == ""
         assert result.edition_kind is None
+
+
+def test_parser_limpia_marcas_de_release_en_la_serie_alternativa():
+    from zascarr.utils.naming import parse_comic_filename
+
+    p = parse_comic_filename(
+        "Lazarus - X+66 (escaneo de Norma Aluci CRG)corregido.cbr")
+    assert p.series == "Lazarus"
+    assert p.series_alternativa == "Lazarus X+66"
+    assert "corregido" not in p.series_alternativa.lower()
+
+
+def test_parser_conserva_el_subtitulo_completo_como_alternativa():
+    from zascarr.utils.naming import parse_comic_filename
+
+    p = parse_comic_filename("Supergirl - Woman of Tomorrow 05.cbr")
+    assert p.series == "Supergirl"
+    assert p.subtitulo == "Woman of Tomorrow"
+    assert p.series_alternativa == "Supergirl Woman of Tomorrow"
+
+
+def test_el_volumen_de_la_carpeta_desempata_sin_inventar():
+    from pathlib import Path
+
+    from zascarr.core.matcher import SeriesHit, _volumen_en_carpeta, _volume_matches
+
+    ruta = Path("/lib/Comics/Catwoman Vol 04/Catwoman #16.cbr")
+    assert _volumen_en_carpeta(ruta) == 4
+    assert _volumen_en_carpeta(Path("/lib/Comics/Catwoman/Catwoman #16.cbr")) is None
+    assert _volume_matches(SeriesHit(uuid4(), "Catwoman Vol. 4", None, 1.0, 4), 4)
+    assert not _volume_matches(SeriesHit(uuid4(), "Catwoman Vol. 5", None, 1.0, 5), 4)
+    # Si no hay dato persistido, el título sigue siendo el fallback.
+    assert _volume_matches(SeriesHit(uuid4(), "Batman Vol. 2", None, 1.0), 2)
