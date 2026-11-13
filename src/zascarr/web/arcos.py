@@ -1,7 +1,6 @@
 """BL-C4 (#151): pantallas de sagas y su CRUD manual."""
 from __future__ import annotations
 
-from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
@@ -20,6 +19,19 @@ from zascarr.services.arcos import (
     listar_arcos,
     mover_numero,
     quitar_numero,
+)
+from zascarr.services.reading_orders.comicbookreadingorders import (
+    HOSTS_PERMITIDOS as RO_HOSTS,
+)
+from zascarr.services.reading_orders.comicbookreadingorders import (
+    RUTAS_PROHIBIDAS as RO_RUTAS,
+)
+from zascarr.services.reading_orders.comun import url_de_sitio_valida
+from zascarr.services.reading_orders.continuity_guide import (
+    HOSTS_PERMITIDOS as CG_HOSTS,
+)
+from zascarr.services.reading_orders.continuity_guide import (
+    RUTAS_PROHIBIDAS as CG_RUTAS,
 )
 from zascarr.services.reconciliacion_lecturas import ORIGENES_DE_GUIA
 from zascarr.utils.cortesia import NOMBRES_DE_FUENTE
@@ -42,25 +54,26 @@ async def _metadata_del_arco(db: AsyncSession, arco_id: UUID) -> dict:
     return metadata if isinstance(metadata, dict) else {}
 
 
-def fuente_de_guia(metadata: dict) -> dict[str, str] | None:
-    """Fuente de una guía reconciliada (SCR3): solo http(s), sin credenciales y acotada.
+#: Hosts y rutas que puede tener la fuente de cada guía (misma allowlist que los extractores).
+_HOSTS_DE_GUIA = {
+    "reading_orders": (RO_HOSTS, RO_RUTAS),
+    "continuity_guide": (CG_HOSTS, CG_RUTAS),
+}
 
-    El enlace es de navegación del usuario (no se descarga), pero se valida igualmente para
-    que un `metadata_` manipulado no pinte un `javascript:` (SecOps m-2).
+
+def fuente_de_guia(metadata: dict) -> dict[str, str] | None:
+    """Fuente de una guía reconciliada (SCR3), validada como cualquier URL de sitio.
+
+    El enlace es de navegación del usuario (no se descarga), pero se aplica la misma
+    allowlist/validación que usa el extractor para que un `metadata_` manipulado no pinte un
+    `javascript:` ni un host ajeno (SecOps m-2/c-4).
     """
     origen = metadata.get("origen")
     url = metadata.get("url")
-    if origen not in ORIGENES_DE_GUIA or not isinstance(url, str):
+    if origen not in ORIGENES_DE_GUIA or not isinstance(url, str) or len(url) > 500:
         return None
-    if len(url) > 500:
-        return None
-    try:
-        partes = urlsplit(url)
-    except ValueError:
-        return None
-    if partes.scheme not in ("http", "https") or not partes.hostname:
-        return None
-    if partes.username is not None or partes.password is not None:
+    hosts, rutas = _HOSTS_DE_GUIA[str(origen)]
+    if not url_de_sitio_valida(url, hosts, rutas_prohibidas=rutas, exigir_pagina=True):
         return None
     return {"url": url, "nombre": NOMBRES_DE_FUENTE.get(str(origen), str(origen))}
 
