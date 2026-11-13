@@ -101,9 +101,10 @@ jobs:
         run: python scripts/ci_postgres.py junit pg.xml
 
   lint:
-    name: ruff (informativo, no bloquea)
+    # 2026-11-13 (#211): el lint está en 0 en `src/` y en `--select S`, así que
+    # deja de ser informativo. Un fallo nuevo del lint bloquea como la suite.
+    name: ruff
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -112,9 +113,8 @@ jobs:
           cache: "pip"
       - run: pip install -e ".[dev]"
       - run: ruff check src/
-      # Reglas de seguridad de bandit (S), también informativas. `if: always()`
-      # porque el paso anterior ya falla hoy por errores preexistentes y, sin
-      # esto, GitHub saltaría este paso.
+      # Reglas de seguridad de bandit (S). `if: always()` para que las dos
+      # comprobaciones se ejecuten aunque la primera falle y se vea el detalle.
       - run: ruff check --select S src/
         if: always()
 
