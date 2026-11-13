@@ -50,14 +50,18 @@ def test_busqueda_muestra_tu_edicion_y_candidato_mejor():
         [MejoraCandidata(candidato, Calidad(3, "alta", "digital"))])
     c = _cliente(ficha)
     try:
+        buscar = AsyncMock(return_value=resultado)
         with patch("zascarr.web.series.cargar_ficha_numero", AsyncMock(return_value=ficha)), \
-             patch("zascarr.web.series.buscar_mejoras", AsyncMock(return_value=resultado)):
+             patch("zascarr.web.series.perfil_y_objetivo",
+                   return_value=("mejor", 3)), \
+             patch("zascarr.web.series.buscar_mejoras", buscar):
             r = c.post(f"/ui/series/{serie.id}/numero/{issue.id}/mejorar")
     finally:
         _cerrar()
     assert r.status_code == 200
     assert "Tu edición" in r.text and "Batman 001 (Digital)" in r.text
     assert "Descargar esta edición" in r.text
+    assert buscar.call_args.kwargs["min_tier"] == 3
 
 
 def test_confirmar_descarga_envia_el_candidato():

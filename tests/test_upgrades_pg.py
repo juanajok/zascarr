@@ -80,11 +80,11 @@ async def test_escanear_crea_propuesta_y_no_repite():
                 assert len(propuestas) == 1
                 assert propuestas[0].status == "pendiente"
                 assert propuestas[0].candidate_tier == 3
-                filas = await listar_mejoras(s)
-                assert len(filas) == 1 and filas[0].candidate_label == "alta"
+                pagina = await listar_mejoras(s)
+                assert len(pagina.filas) == 1 and pagina.filas[0].candidate_label == "alta"
                 assert await descartar_mejora(s, propuestas[0].id)
                 await s.commit()
-                assert await listar_mejoras(s) == []
+                assert (await listar_mejoras(s)).filas == []
                 # P0: descartar y reescanear el mismo número no debe romper el lote.
                 issue.upgrade_scanned_at = datetime.now(UTC) - timedelta(hours=25)
                 await s.commit()

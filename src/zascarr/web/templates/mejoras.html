@@ -33,6 +33,13 @@
   </li>
   {% endfor %}
 </ul>
+{% if pagina.paginas > 1 %}
+<nav class="pagination" aria-label="Páginas de mejoras">
+  {% if pagina.pagina > 1 %}<a class="page-link" href="/ui/mejoras?pagina={{ pagina.pagina - 1 }}">← Anteriores</a>{% endif %}
+  <span class="page-current">Página {{ pagina.pagina }} de {{ pagina.paginas }} · {{ pagina.total }} pendientes</span>
+  {% if pagina.pagina < pagina.paginas %}<a class="page-link" href="/ui/mejoras?pagina={{ pagina.pagina + 1 }}">Siguientes →</a>{% endif %}
+</nav>
+{% endif %}
 {% endif %}
 <p class="caption">No se sustituye ni borra ningún archivo: la edición descargada se importará junto a la actual.</p>
 {% endblock %}
