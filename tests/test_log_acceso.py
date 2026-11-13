@@ -348,7 +348,7 @@ class TestRotacionEfectivaConDockerCompose:
 #: se quita: sirve para que nadie dé por «sin datos» un parámetro nuevo sin haberlo mirado.)
 PARAMETROS_DE_QUERY = frozenset({
     "anio", "antes", "candidata", "character_id", "clave", "consulta", "cursor", "decision", "desplazamiento", "despues",
-    "limite", "next", "operacion", "page", "page_size", "personaje", "primero", "publisher_id", "q", "ref", "saga",
+    "limite", "limpiar", "next", "operacion", "page", "page_size", "personaje", "primero", "publisher_id", "q", "ref", "saga",
     "search", "serie_id", "serie",
     # BL-FILT1 (#397): filtro de «Pendientes por carpeta» (estado de la vista, no se registra).
     "nombre", "estado", "por_confirmar", "en_conflicto",
@@ -388,7 +388,7 @@ PARAMETROS_DE_QUERY = frozenset({
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
     "desde",
     # #155: filtros del alta de series y selección de candidatas (estado de la vista).
-    "serie_ids", "tradicion", "limpiar",
+    "serie_ids", "tradicion",
 })
 
 
