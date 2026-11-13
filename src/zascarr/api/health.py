@@ -466,6 +466,12 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "anilist":    "enabled" if settings.anilist_enabled else "disabled",
             "tebeosfera": "enabled" if settings.tebeosfera_enabled else "disabled",
             "gcd":        "enabled" if settings.gcd_enabled else "disabled",
+            # SCR2 (AC-17): las dos wikis de Fandom son fuentes de enriquecimiento y se
+            # consultan en el ciclo, así que su estado debe verse aquí, apagadas por defecto.
+            "fandom_dc": "enabled"
+            if getattr(settings, "fandom_dc_enabled", False) else "disabled",
+            "fandom_marvel": "enabled"
+            if getattr(settings, "fandom_marvel_enabled", False) else "disabled",
         },
         # A11: seguridad aparte de la salud técnica (ver estado_de_seguridad).
         "seguridad": estado_de_seguridad(settings),

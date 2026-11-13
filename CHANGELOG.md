@@ -101,7 +101,7 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   portada) y arcos declarados por DC Database con sus números en
   `story_arc_issues.reading_order`. Apagadas por defecto (ADR 0013), 1,5 s por wiki y bloqueo
   `maxlag`; atribución CC-BY-SA 3.0 con doble enlace en ficha de serie, número y saga. Migración
-  `0034` (columnas `fandom_*_slug`). Ficha: `docs/design/benchmark-SCR2-fandom-fuentes.md`;
+  `0036` (columnas `fandom_*_slug`). Ficha: `docs/design/benchmark-SCR2-fandom-fuentes.md`;
   spec, QA y seguridad: `especificacion-SCR2-fandom-fuentes.md`, `informe-qa-SCR2-fandom-2026-11-13.md`
   y `secops-SCR2-fandom-2026-11-13.md`.
 - **Sagas en orden de lectura y gestión manual (BL-C4, #151).** Biblioteca → «Sagas en orden»:
