@@ -41,6 +41,7 @@ from zascarr.services.revision_carpetas import (
     Suelto,
 )
 from zascarr.services.runtime_settings import RuntimeSettingsService
+from zascarr.services.vinculacion_en_sitio import vincular_en_sitio
 from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail, puede_tener_portada
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.contexto_carpetas import ContextoCarpetas
@@ -664,6 +665,27 @@ async def asignar(request: Request, file_id: UUID, series_id: UUID = Form(...),
     return templates.TemplateResponse(
         request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
         status_code=resp.status)
+
+
+@router.post("/{file_id}/vincular", response_class=HTMLResponse)
+async def vincular(
+    request: Request, file_id: UUID, series_id: UUID = Form(...),
+    issue_number: str = Form(...), db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Vincular EN SU SITIO: no mueve ni renombra; solo si el Issue ya existe (#720)."""
+    resultado = await vincular_en_sitio(db, file_id, series_id, issue_number)
+    if resultado.estado == "vinculado":
+        await db.commit()
+        return HTMLResponse(RECONTAR_MENU)
+    aviso = {"tipo": "warn", "texto": resultado.texto}
+    file = await db.get(File, file_id)
+    if not _es_htmx(request):
+        raise HTTPException(status_code=409, detail=resultado.texto)
+    if file is None:
+        return templates.TemplateResponse(
+            request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=409)
+    return templates.TemplateResponse(
+        request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso}, status_code=409)
 
 
 @router.post("/{file_id}/especial", response_class=HTMLResponse)
