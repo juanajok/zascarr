@@ -177,7 +177,7 @@ async def test_parche_comicinfo_se_rechaza(db, tmp_path, monkeypatch):
 
 async def test_fuente_symlink_se_omite_y_se_reporta(db, tmp_path, monkeypatch):
     ajustes(tmp_path, monkeypatch)
-    coleccion, _ = await sembrar(db, tmp_path)
+    coleccion, serie = await sembrar(db, tmp_path)
     coleccion_id = coleccion.id
     real = next((tmp_path / "lib").glob("*.cbz"))
     enlace = tmp_path / "lib" / "enlace.cbz"
@@ -185,7 +185,9 @@ async def test_fuente_symlink_se_omite_y_se_reporta(db, tmp_path, monkeypatch):
     from sqlalchemy import select, update
 
     from zascarr.models import File
-    fid = (await db.execute(select(File.id))).scalars().first()
+    fid = (await db.execute(
+        select(File.id).join(Issue, Issue.id == File.issue_id)
+        .where(Issue.series_id == serie.id))).scalars().first()
     await db.execute(update(File).where(File.id == fid).values(
         file_path=str(enlace), file_name=enlace.name))
     db.expire_all()
