@@ -469,3 +469,37 @@ de CI y la PR no los introduce.
 
 **Comentario en el PR #734:** publicado el 2026-11-13 con este veredicto y el SHA citado —
 <https://github.com/juanajok/zascarr/pull/734#issuecomment-6855377310>.
+
+---
+
+## 8. Addendum de vigencia (SHA 1f6a7790)
+
+**Fecha:** 2026-11-13. **Tarea:** task-12. **PR:** #734 (`feat/fandom-fuentes` → `main`).
+
+El commit **`1f6a7790971a17ced28e11348e2f6e8964130b68`** («docs(SCR2): dictamen final de fusión de SecOps
+sobre el SHA 48c2920b», 2026-11-13 15:11) es hijo de `48c2920b` y **solo añade documentación**: incorpora la
+§7 anterior al informe. Verificación de que no cambia nada ejecutable:
+
+```
+$ git diff --stat 48c2920b..1f6a7790
+ docs/design/secops-SCR2-fandom-2026-11-13.md | 102 +++++++++++++++++++++++++++
+ 1 file changed, 102 insertions(+)
+
+$ git diff --name-status 48c2920b..1f6a7790
+M	docs/design/secops-SCR2-fandom-2026-11-13.md
+```
+
+* `git diff --stat 48c2920b..1f6a7790 -- . ':(exclude)docs/design/secops-SCR2-fandom-2026-11-13.md'` →
+  **vacío**: ningún fichero de `src/` (código, configuración, plantillas) ni de `alembic/` cambia.
+* `git log --oneline 48c2920b..1f6a7790` → un único commit (`1f6a7790`).
+* `gh pr view 734` → `headRefOid = 1f6a7790971a17ced28e11348e2f6e8964130b68`, base `2c69a9bd…`,
+  `MERGEABLE`.
+
+**Veredicto:** el dictamen **FAVORABLE** de §7 **se extiende al SHA
+`1f6a7790971a17ced28e11348e2f6e8964130b68`**: la superficie ejecutable revisada (código, configuración,
+plantillas, migración y legal) es exactamente la de `48c2920b`, y las mediciones de M-1 y la regresión de
+§7.4-§7.5 siguen aplicando sin cambios. Se mantiene la condición de vigencia: cualquier commit o rebase
+posterior exige un nuevo dictamen (CLAUDE.md §5.8).
+
+**Comentario en el PR #734 con el SHA nuevo:** publicado el 2026-11-13 —
+<https://github.com/juanajok/zascarr/pull/734#issuecomment-6855412854>.
