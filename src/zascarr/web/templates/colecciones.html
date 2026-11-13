@@ -24,7 +24,7 @@
 {% if colecciones %}
 <ul class="arcos-lista">
   {% for c in colecciones %}
-  <li class="coleccion-fila tarjeta">
+  <li class="coleccion-fila">
     <div class="coleccion-portada">{{ ui.portada(c.name, c.id, c.portada_url if c.tiene_portada else none, clase="portada-coleccion", carga="lazy") }}</div>
     <div>
       <a href="/ui/colecciones/{{ c.id }}">{{ c.name }}</a>
