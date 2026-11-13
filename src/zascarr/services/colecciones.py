@@ -135,7 +135,7 @@ def _portada_url_de(coleccion: Collection, filas: list[Series], covers: Path) ->
             partes.append(f"{s.id}:{st.st_mtime_ns if st else 0}:{st.st_size if st else 0}")
         except OSError:
             partes.append(f"{s.id}:0:0")
-    huella = hashlib.sha1("|".join(partes).encode()).hexdigest()[:12]
+    huella = hashlib.sha256("|".join(partes).encode()).hexdigest()[:12]
     base = str(coleccion.cover_series_id) if sobre_cache else "auto"
     return sobre_cache or hay, f"/ui/colecciones/{coleccion.id}/portada?v={base}-{huella}"
 
