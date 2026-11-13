@@ -86,7 +86,7 @@
       {{ v.cota }}; puede tardar más, y puede que algún número no aparezca.
       {% if querer.numeros|length <= 12 %}
       <span class="politica-lista-corta">
-        {% for n in querer.numeros|sort %}<span class="issue-chip issue-missing">#{{ n }}</span>{% endfor %}
+        {% for n in querer.numeros|sort %}{{ ui.chip("neutro", "#" ~ n, clase="chip-falta") }}{% endfor %}
       </span>
       {% endif %}
     {% elif v.tipo == "faltan" %}

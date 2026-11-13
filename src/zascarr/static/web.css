@@ -564,25 +564,7 @@ button[type="submit"].neutro {
   transform: rotate(-1.2deg);
 }
 
-/* ── 8. PEGATINAS / BADGES ───────────────────────────────────────────────── */
-.issue-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-chip);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;   /* los números de una rejilla de grapas se alinean */
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  padding: 3px 10px;
-  border-radius: var(--radius-pill);
-  border: var(--border-chip) solid var(--ink);
-  background: var(--paper);
-  color: var(--ink-soft);
-  white-space: nowrap;
-}
+/* ── 8. (V14) Las viejas pegatinas `.issue-chip` se sustituyeron por `ui.chip`. ── */
 
 /* D9: motivo concreto de por qué una fila de la wishlist no avanza —
    texto discreto junto al badge de estado, no otro badge que compita
@@ -806,19 +788,9 @@ button[type="submit"].btn-sugerencia {
 .politica-lista-corta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
 .politica-aviso { color: var(--warn-t); }
 .politica-retirados-ahora { color: var(--ok-t); font-weight: 700; }
-.issue-chip.issue-present {
-  background: var(--ok-solid); color: var(--on-ok-solid); border-color: var(--ink);
-}
 /* V1: el estado no se transmite solo por color — «lo tienes» lleva ✓ y «te falta» borde
    discontinuo, aunque los dos colores se confundan. */
-.issue-chip.issue-present::before { content: "✓ "; }
 /* BL-INF10: lectura visible sin etiquetas; el texto `sr` lo dice también sin color. */
-.issue-chip.issue-present.issue-leido { background: var(--ink); color: var(--paper); }
-.issue-chip.issue-present.issue-leyendo { background: var(--amber-bg); color: var(--ink); }
-.issue-chip.issue-missing {
-  background: var(--paper); color: var(--ink-faint);
-  border-style: dashed;
-}
 
 /* ── 13. BIBLIOTECA (C1) ─────────────────────────────────────────────────── */
 .back-link {
@@ -1341,6 +1313,10 @@ button[disabled], .btn[disabled] {
 .chip.warn  { background: var(--warn-bg);  color: var(--warn-t); }
 .chip.amber { background: var(--amber-bg); color: var(--amber-t); }
 .chip.info  { background: var(--info-bg);  color: var(--cyan-t); }
+/* V14 (#750): «te falta» se dice con borde discontinuo, no solo con el color. */
+.chip-falta { border-style: dashed; }
+/* Un chip que además es enlace (número con ficha) no lleva el subrayado del enlace. */
+.chip-enlace { text-decoration: none; }
 
 /* Grupo: caja con cabecera (título + recuento). El contenido va directamente dentro. */
 .group {

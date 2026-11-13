@@ -7,6 +7,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **V14 F3b: los números de la ficha usan `ui.chip` (2026-11-13, #750).** Fuera `.issue-chip`,
+  `.issue-missing`, `.issue-present`, `.issue-leido` y `.issue-leyendo`: presente `ok` (✓), leyendo
+  `info`, leído `neutro`, y «te falta» `neutro` con `chip-falta` (borde discontinuo); los números
+  con ficha van en `.chip-enlace`. `.estado-dot` se conserva como excepción justificada: el sistema
+  de diseño lo documenta como componente actual del semáforo.
 - **V14 F3a: botones principales y avisos legales con los componentes (2026-11-13, #750).**
   Las 8 plantillas que usaban el alias `.btn-primary` pasan a `.btn.primary` y los avisos legales de
   Deseados y Ajustes, a `ui.aviso("warn")` (mismo texto, enlace y negritas; ahora con icono y

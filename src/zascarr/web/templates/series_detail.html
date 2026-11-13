@@ -217,7 +217,7 @@
 <h2>Te faltan</h2>
 <div class="issue-grid">
   {% for n in missing %}
-  <span class="issue-chip issue-missing">#{{ n }}</span>
+  {{ ui.chip("neutro", "#" ~ n, clase="chip-falta") }}
   {% endfor %}
 </div>
 {% elif huecos.computable and estado_coleccion.tipo != "no_completar" %}
@@ -232,13 +232,13 @@
   {% if enlace %}
   <span class="chip-previa">
     {% set lectura = lecturas.get(enlace.id) if lecturas else none %}
-    <a class="issue-chip issue-present{% if lectura and lectura.estado == "completed" %} issue-leido{% elif lectura and lectura.estado == "reading" %} issue-leyendo{% endif %}"
+    <a class="chip-enlace"
        href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}"
        hx-get="/ui/series/{{ series.id }}/numero/{{ enlace.id }}/previa"
-       hx-trigger="mouseenter delay:150ms, focusin delay:150ms" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">#{{ n }}{% if lectura and lectura.estado == "completed" %}<span class="sr"> leído</span>{% elif lectura and lectura.estado == "reading" %}<span class="sr"> leyendo</span>{% endif %}<span class="sr"> ver información del número {{ n }}</span></a>
+       hx-trigger="mouseenter delay:150ms, focusin delay:150ms" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">{% if lectura and lectura.estado == "completed" %}{{ ui.chip("neutro", "#" ~ n) }}<span class="sr"> leído</span>{% elif lectura and lectura.estado == "reading" %}{{ ui.chip("info", "#" ~ n) }}<span class="sr"> leyendo</span>{% else %}{{ ui.chip("ok", "#" ~ n) }}{% endif %}<span class="sr"> ver información del número {{ n }}</span></a>
     <span class="previa-numero" id="previa-{{ enlace.id }}" aria-hidden="true"></span>
   </span>
-  {% else %}<span class="issue-chip issue-present">#{{ n }}</span>{% endif %}
+  {% else %}{{ ui.chip("ok", "#" ~ n) }}<span class="sr"> ver información del número {{ n }}</span>{% endif %}
   {% endfor %}
 </div>
 {% endif %}

@@ -104,6 +104,11 @@ class TestChip:
     def test_acepta_numeros(self, env):
         assert texto(render(env, '{{ ui.chip("neutro", 0) }}')) == "0"
 
+    def test_la_clase_extra_anade_un_modificador_declarado(self, env):
+        """`clase` es solo el gancho del modificador (p. ej. `chip-falta`); el matiz lo pone el estado."""
+        html = render(env, '{{ ui.chip("neutro", "#1", clase="chip-falta") }}')
+        assert clases(parsear(html).elementos[0]) == {"chip", "chip-falta"}
+
 
 # ── aviso ─────────────────────────────────────────────────────────────────────────────────
 class TestAviso:
@@ -457,7 +462,7 @@ CLASES_ANTERIORES_A_V2 = (
     "estado-summary-detail", "estado-summary-label", "estado-warn",
     "estado-warnings", "estado-warnings-title", "filename", "filter-bar",
     "htmx-indicator", "htmx-request",
-    "issue-chip", "issue-grid", "issue-input", "issue-missing", "issue-present",
+    "issue-grid", "issue-input",
     "legal-checkbox", "legal-form", "legal-full", "legal-notice", "legal-notice-footer",
     "legal-notice-info", "library-card", "library-card-body",
     "library-card-meta", "library-card-title", "library-grid", "login-content", "login-error",

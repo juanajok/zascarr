@@ -492,7 +492,7 @@ class TestEstructura:
         ".series-search", ".issue-input", ".search-input",
         ".politica-form select", '.ajustes-card input[type="text"]',
         '.login-form input[type="text"]', ".page-link", ".back-link",
-        ".issue-chip", ".archivos-numero-titulo a", ".lectura-estados label",
+        ".archivos-numero-titulo a", ".lectura-estados label",
     ])
     def test_controles_con_altura_minima_de_40_px(self, selector):
         alturas = [d.get("min-height") for s, d in _reglas()
@@ -526,10 +526,13 @@ class TestEstructura:
         assert punto["border"] == "var(--border-chip) solid var(--ink)"
 
     def test_el_estado_de_un_numero_no_depende_solo_del_color(self):
+        """V14 (#750): el chip `ok` lleva ✓ (web/componentes.py) y «te falta» se dice con
+        `chip-falta`, borde discontinuo además del matiz neutro."""
         css = _hoja()
-        assert '.issue-chip.issue-present::before { content: "✓ "; }' in css
-        faltante = next(d for s, d in _reglas() if s == ".issue-chip.issue-missing")
+        assert ".chip-falta" in css
+        faltante = next(d for s, d in _reglas() if s == ".chip-falta")
         assert faltante.get("border-style") == "dashed"
+        assert ".issue-chip" not in css
 
 
 # ── 4. tema oscuro completo y alias conservado ────────────────────────────────────────────

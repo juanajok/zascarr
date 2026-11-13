@@ -113,6 +113,11 @@ def _clases_de_atributos(html: str) -> tuple[set[str], set[str]]:
     return salida, prefijos
 
 
+def _clases_por_argumento(html: str) -> set[str]:
+    """Clases que se pasan como argumento con nombre (`ui.chip(..., clase="chip-falta")`)."""
+    return set(re.findall(r'clase=["\']([a-z][a-z0-9-]*)["\']', html))
+
+
 def _clases_de_ui_portada(html: str) -> set[str]:
     """`ui.portada(titulo, clave, src, "clase", "lazy")`: solo el 4.º argumento es clase."""
     salida: set[str] = set()
@@ -182,6 +187,7 @@ def auditar(css: str | None = None, html_por_plantilla: dict[str, str] | None = 
         usadas.update(estaticas)
         prefijos.update(dinamicas)
         usadas.update(_clases_de_ui_portada(html))
+        usadas.update(_clases_por_argumento(html))
     if incluir_componentes:
         usadas.update(_clases_de_componentes())
     if incluir_python:
