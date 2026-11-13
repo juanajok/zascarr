@@ -206,3 +206,104 @@ async def test_ficha_usa_la_politica_efectiva_y_explica_la_coleccion(db):
     assert ctx_exc["politica_efectiva"] == WishlistPolicy.NONE
     assert ctx_exc["veredicto"]["tipo"] == "ninguno"
     assert "Excluye" in (ctx_exc["coleccion_causa"] or "")
+
+
+async def _portadas(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from zascarr.services import colecciones as colecciones_service
+    from zascarr.services import portada_coleccion as pc
+    def ajustes():
+        return SimpleNamespace(covers_cache_path=tmp_path / "covers")
+    monkeypatch.setattr(pc, "get_settings", ajustes)
+    monkeypatch.setattr(colecciones_service, "get_settings", ajustes)
+    return pc
+
+
+def _jpeg_serie(tmp_path, series_id, color=(20, 40, 60)):
+    from PIL import Image
+    ruta = tmp_path / "covers" / "v3" / f"{series_id}.jpg"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (300, 450), color).save(ruta, format="JPEG")
+    return ruta
+
+
+async def test_portada_mosaico_1_2_3_4_y_etag(db, tmp_path, monkeypatch):
+    import io
+
+    from PIL import Image
+    pc = await _portadas(tmp_path, monkeypatch)
+    for n in (1, 2, 3, 4):
+        r = await crear_coleccion(db, name=f"C{n}", description="", auto_search="heredar")
+        for i in range(n):
+            s = await serie(db, f"Serie {n}-{i}", collection=r.coleccion)
+            _jpeg_serie(tmp_path, s.id, (i * 40, 20, 30))
+        res = await pc.obtener_portada(db, r.coleccion.id)
+        assert res is not None and res.cacheable
+        with Image.open(io.BytesIO(res.datos)) as img:
+            assert (img.width, img.height) == (600, 900)
+        assert (tmp_path / "covers" / "colecciones" / f"{r.coleccion.id}.jpg").exists()
+        assert (tmp_path / "covers" / "colecciones" / f"{r.coleccion.id}.json").exists()
+        segunda = await pc.obtener_portada(db, r.coleccion.id)
+        assert segunda is not None and segunda.etag == res.etag
+
+
+async def test_portada_override_miembro_y_fallback(db, tmp_path, monkeypatch):
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Override", description="", auto_search="heredar")
+    s1 = await serie(db, "Uno", collection=c.coleccion)
+    s2 = await serie(db, "Dos", collection=c.coleccion)
+    r1 = _jpeg_serie(tmp_path, s1.id, (255, 0, 0))
+    _jpeg_serie(tmp_path, s2.id, (0, 255, 0))
+    d0 = await detalle_coleccion(db, c.coleccion.id)
+    assert (await pc.elegir_portada(db, c.coleccion.id, s1.id)).ok
+    d1 = await detalle_coleccion(db, c.coleccion.id)
+    assert d0 is not None and d1 is not None and d0.portada_url != d1.portada_url
+    res = await pc.obtener_portada(db, c.coleccion.id)
+    assert res is not None and res.datos == r1.read_bytes()
+    # Elegir una que no es miembro se rechaza y no cambia la elección.
+    otra = await serie(db, "Otra")
+    assert not (await pc.elegir_portada(db, c.coleccion.id, otra.id)).ok
+    # La elegida se va de la colección: cae al mosaico sin borrar la elección.
+    await quitar_serie(db, c.coleccion.id, s1.id)
+    res2 = await pc.obtener_portada(db, c.coleccion.id)
+    assert res2 is not None and res2.datos != r1.read_bytes()
+    assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s1.id
+    assert (await pc.elegir_portada(db, c.coleccion.id, None)).ok
+
+
+async def test_portada_sin_covers_404_y_borrado_limpia_cache(db, tmp_path, monkeypatch):
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Vacía", description="", auto_search="heredar")
+    s = await serie(db, "Sin portada", collection=c.coleccion)
+    assert await pc.obtener_portada(db, c.coleccion.id) is None
+    _jpeg_serie(tmp_path, s.id)
+    assert await pc.obtener_portada(db, c.coleccion.id) is not None
+    assert (tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.jpg").exists()
+    assert await borrar_coleccion(db, c.coleccion.id)
+    assert not (tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.jpg").exists()
+
+
+async def test_migracion_0035_columna_y_fk_existen(db):
+    col = (await db.execute(text(
+        "SELECT is_nullable FROM information_schema.columns "
+        "WHERE table_name='collections' AND column_name='cover_series_id'"))).scalar()
+    assert col == "YES"
+    fk = (await db.execute(text(
+        "SELECT confdeltype FROM pg_constraint "
+        "WHERE conname='fk_collections_cover_series_id'"))).scalar()
+    assert fk in ("n", b"n")      # ON DELETE SET NULL
+
+
+async def test_override_invalido_conserva_la_eleccion(db, tmp_path, monkeypatch):
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Conserva", description="", auto_search="heredar")
+    s = await serie(db, "Uno", collection=c.coleccion)
+    _jpeg_serie(tmp_path, s.id)
+    assert (await pc.elegir_portada(db, c.coleccion.id, s.id)).ok
+    otra = await serie(db, "Fuera")
+    assert not (await pc.elegir_portada(db, c.coleccion.id, otra.id)).ok
+    await db.flush()
+    assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id
+    assert not (await pc.elegir_portada(db, c.coleccion.id, uuid4())).ok
+    assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id

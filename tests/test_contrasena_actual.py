@@ -425,7 +425,7 @@ CLAVES_DE_ACCESO = {"auth_mode", "auth_username", "auth_password_hash", "auth_se
 #: ajustes en tiempo de ejecución (`ensure_secret_key`).
 ESCRIBEN_ACCESO = {"services/seguridad.py", "web/auth.py", "cli/seguridad.py", "services/runtime_settings.py"}
 #: `.save(...)` de Pillow, que no es el servicio de ajustes.
-SAVE_DE_IMAGENES = {"utils/cover.py", "utils/portada_rar.py"}
+SAVE_DE_IMAGENES = {"utils/cover.py", "utils/portada_rar.py", "services/portada_coleccion.py"}
 ESCRITOR_PRIVADO = {"_guardar_seguridad", "_comprobar_actual", "_comprobar_forma"}
 
 
