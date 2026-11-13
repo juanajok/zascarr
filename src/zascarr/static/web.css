@@ -1476,8 +1476,24 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vinc-barra-contexto { font-weight: 700; overflow-wrap: anywhere; }
 .vinc-barra .btn { margin-left: auto; }
 @media (max-width: 600px) {
-  .vinc-barra { position: static; }
-  .vinc-barra .btn { margin-left: 0; width: 100%; }
+  .vinc-barra { position: sticky; top: 0; z-index: 4; }
+  .vinc-barra .btn { margin-left: 0; width: 100%; min-height: 44px; }
+  .vinc-borrador-acciones { display: grid; grid-template-columns: 1fr; }
+  .vinc-borrador-acciones .btn { width: 100%; min-height: 44px; }
+}
+@media (max-width: 480px) {
+  .pending-grid { grid-template-columns: 1fr; }
+  .pending-body { padding: var(--space-3); }
+  .assign-form, .vincular-form { display: flex; flex-wrap: wrap; gap: 8px; }
+  .assign-form .issue-input, .vincular-form .issue-input { flex: 1 1 8rem; width: 100%; min-height: 44px; }
+  .assign-form button, .vincular-form button, .pending-body > .btn-ignorar { width: 100%; min-height: 44px; }
+  .vinc-fila { padding: 10px var(--space-2); }
+  .vinc-numero input[type="text"] { width: 100%; min-height: 44px; }
+  .vinc-masivo { display: grid; grid-template-columns: 1fr; }
+  .vinc-masivo .btn { width: 100%; min-height: 44px; }
+}
+@media (hover: none) {
+  .pending-card:hover, .library-card:hover { transform: none; box-shadow: none; }
 }
 .vinc-masivo { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 var(--gutter); }
 .vinc-alcance { margin: 6px 0; }

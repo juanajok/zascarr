@@ -55,6 +55,7 @@ from zascarr.models import (
 )
 from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.etiquetas_comicinfo import aplicar_comicinfo
+from zascarr.services.upgrades import reconciliar_mejora_importada
 from zascarr.utils.fs import listar_comics, safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
 
@@ -784,6 +785,13 @@ class Importer:
         )
         self._db.add(file_rec)
         await self._db.flush()
+        if result.issue_id is not None and not is_unsorted:
+            try:
+                await reconciliar_mejora_importada(
+                    self._db, result.issue_id, file_rec.id)
+            except Exception:  # noqa: BLE001 — la conciliación no tumba la importación
+                logger.warning("upgrade.reconciliacion_fallida",
+                               issue_id=str(result.issue_id))
 
         if is_unsorted:
             motivo = "; ".join(result.notes) or "sin match fiable"
