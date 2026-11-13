@@ -302,3 +302,136 @@ automáticamente, sin constante manual. La atribución visible se pinta en la vi
 | Red solo por SCR1/robots; sin SSRF; off ⇒ cero tráfico; script | §6, §2.3 c-1/c-2 |
 | `ruff` y regresión de pruebas | §7 |
 | Coherencia con QA | §7, §2.3 c-5 |
+
+---
+
+## 10. Addendum de vigencia (SHA 1cb3b5ad) — cierre de C-1/c-1..c-4
+
+**Fecha:** 2026-11-14 (00:39–00:50). **Tarea:** task-23 (ronda final). **PR:** #771.
+**SHA dictaminado:** **`1cb3b5addeb7e9fc8558c14012d14fd1a9763b5e`**, verificado: `git rev-parse HEAD` = ese
+SHA y `gh pr view 771` → `headRefOid = 1cb3b5addeb7e9fc8558c14012d14fd1a9763b5e`, base `main`,
+`state=OPEN`. **GitHub lo marca `mergeable=CONFLICTING` / `mergeStateStatus=DIRTY`**: la PR no es
+fusionable tal cual (ver §10.5).
+
+**Delta desde el dictamen anterior (`79955b76`):** 8 ficheros, **+553/−41**: este informe (§0-§9) ya
+commiteado, `scripts/reconciliar-lecturas.py`, `services/reading_orders/comun.py`,
+`services/reconciliacion_lecturas.py`, `web/arcos.py` y tres ficheros de tests. **`web/ajustes.py` y
+`templates/ajustes.html` NO cambian** (`git diff --name-only 79955b76..HEAD | grep ajustes` → vacío):
+se mantiene el dictamen §5.8 favorable de §4.2 (solo toggles de fuentes, sin contraseña/sesión, sin
+secretos, con la whitelist de `RuntimeSettingsService`).
+
+### 10.1 C-1 cerrado — identidad del arco por `metadata_` origen+URL
+
+`_upsert_arco` (`reconciliacion_lecturas.py:169-190`) consulta ahora:
+`StoryArc.metadata_["origen"].astext == guia.sitio` **y** `StoryArc.metadata_["url"].astext == guia.url`
+(JSONB, parametrizado); **nunca** por título. Si existe, actualiza el título en esa misma fila
+(identidad = URL) y fusiona metadata; si no, crea. No adopta arcos con otro origen o sin origen.
+Regresión: `test_c1_no_adopta_ni_toca_un_arco_de_otra_fuente_con_el_mismo_titulo`
+(`tests/test_reconciliacion_lecturas.py:257-279`) y `test_c1_la_identidad_es_la_url_y_un_titulo_nuevo_no_duplica`
+(`:280-293`). Sonda propia con el mismo doble de sesión del dictamen anterior: arco Fandom homónimo
+**intacto** (metadata y enlace `i-9` sin tocar, sin borrados), arco de la guía creado aparte; con título
+cambiado, `creado=False`, misma fila actualizada y **0 arcos nuevos**. **Cerrado.**
+
+### 10.2 c-1 cerrado — `%xx` en la validación de URL
+
+`_ruta_decodificada` (`comun.py:92-104`) decodifica `%xx` hasta 3 pasadas; `url_de_sitio_valida`
+(`:107-145`) comprueba `..`, controles, rutas prohibidas y extensión sobre **la ruta cruda y la
+decodificada**, y aplica el regex de página sobre la decodificada. Sonda: `%2e%2e`, doble codificación
+`%252e%252e`, `%61pi` (→ `/api/`) y `%2e%2e` en CG → **False**; guía válida → **True**; test
+`test_c1_porcentaje_codificado_no_esquiva_la_validacion` (`tests/test_reading_orders.py:446-462`).
+**Cerrado.**
+
+### 10.3 c-2 cerrado — salida saneada del script
+
+`texto_para_terminal` (`reconciliacion_lecturas.py:76-86`, cota `MAX_TITULO_TERMINAL=200` en `:58`)
+elimina caracteres no imprimibles (C0/ESC/BEL) y categoría Unicode `Cf`, y acota; el script lo usa
+(`scripts/reconciliar-lecturas.py:65`). Sonda con `ESC`, `BEL`, tabulador y `U+202E`: el resultado no
+contiene ninguno y 500 `A` → 200; tests `:316-331`. La web sigue escapando con Jinja (sin cambios).
+**Cerrado.**
+
+### 10.4 c-3 y c-4 cerrados
+
+* **c-3:** `_buscar_issue` (`reconciliacion_lecturas.py:147-167`) devuelve `(issue, motivo)`, desempata
+  por `Issue.volume` (columna `Integer`, `models/__init__.py:646`) y si sigue ambiguo **omite** el ítem
+  con `motivo="ambiguo"`; test `:294-313` (dos volúmenes: ambiguo sin volumen, `i-v2` con `Vol. 2`).
+* **c-4:** `fuente_de_guia` (`web/arcos.py:58-80`) usa la allowlist y las rutas de cada extractor
+  (`_HOSTS_DE_GUIA`) y `url_de_sitio_valida(..., exigir_pagina=True)`; sonda: host ajeno, userinfo,
+  `?format=json`, `%2e%2e` y origen no-guía → `None`, URLs válidas → enlace;
+  `test_c4_fuente_de_guia_valida_host_esquema_y_rutas` (`tests/test_web_arcos.py:154-176`).
+  **Cerrados.**
+
+### 10.5 Regresión y veredicto
+
+* **Suite completa (mi ejecución en este SHA):** **6.785 passed, 2.278 skipped** en 328,74 s — coincide
+  con el reporte del builder (6.785 passed / 0 failed). Focalizadas
+  `test_reconciliacion_lecturas.py test_reading_orders.py test_reading_order_resolver.py
+  test_web_arcos.py` → **82 passed**. `ruff check src/` y `--select S src/` → *All checks passed!*.
+  Sin cambios en `models/`, `alembic/` ni `pyproject.toml`.
+* **Sin hallazgos nuevos abiertos** de seguridad tras los fixes; C-1/c-1/c-2/c-3/c-4 **cerrados** con
+  código, pruebas y sondas propias. No hay contradicción con el informe de QA (que se generó sobre
+  `c8df218a`): los cambios son los que pedía el dictamen de SecOps y la suite sigue verde.
+* **Veredicto: FAVORABLE sobre el contenido del SHA `1cb3b5ad`** para §5.8: no hay cambios en
+  `web/ajustes.py` ni en el flujo de contraseña/sesión; los fixes de integridad confidencialidad/red
+  están cerrados; 0 bloqueantes y 0 condiciones de seguridad pendientes más allá de la vigencia.
+* **Condición de vigencia (operativa):** GitHub marca la PR #771 como **CONFLICTING / DIRTY**. No se
+  puede fusionar tal cual; **cualquier rebase produce un SHA distinto y este dictamen no cubre el SHA
+  rebasado**: habrá que repetir el dictamen §5.8 (o un addendum de vigencia si el árbol de código es
+  idéntico y solo cambia la base). Este addendum aplica solo a
+  `1cb3b5addeb7e9fc8558c14012d14fd1a9763b5e`.
+
+---
+
+## 11. Addendum de vigencia del rebase (SHA 907886e3)
+
+**Fecha:** 2026-11-14 (00:50–01:05). **Tarea:** task-23 (ronda de rebase). **PR:** #771.
+**SHA dictaminado:** **`907886e3de081f54146d4d4d203f53428d2f6432`**, verificado: `git rev-parse HEAD` =
+ese SHA y `gh pr view 771` → `headRefOid = 907886e3de081f54146d4d4d203f53428d2f6432`, base `main`,
+`state=OPEN`, `mergeable=MERGEABLE` (`mergeStateStatus=UNSTABLE`: checks en curso, la suite completa la
+está corriendo el Lead). SHA anterior dictaminado: `1cb3b5ad…` (favorable, §10).
+
+**Delta `1cb3b5ad..907886e3`:** 29 ficheros, **+914/−84**, y **todo** es lo que entró en `main`
+(pool inicial de etiquetas #772 + migración 0039, colecciones y sus pruebas) más la resolución del
+conflicto de `CHANGELOG.md` (solo adiciones: ambas partes conservadas). Comprobado con
+`git diff --name-only 1cb3b5ad..907886e3` (no aparece ningún fichero propio de SCR3 ni
+`web/ajustes.py`; tampoco `services/seguridad.py` ni `services/reautenticacion.py`).
+
+**Árbol de código de la PR idéntico al dictaminado.** Para todos los ficheros de SCR3, `git diff
+--quiet 1cb3b5ad..907886e3 -- <fichero>` es cierto (diff vacío): resolver, paquete `reading_orders`,
+`reconciliacion_lecturas.py`, `web/ajustes.py` y su plantilla, `web/arcos.py`, `arco.html`,
+`api/health.py`, `LEGAL.md`, `config.py`, `cortesia.py`, `scripts/reconciliar-lecturas.py` y los tests
+de la PR (incluidos `test_reconciliacion_lecturas.py`, `test_reading_orders.py`,
+`test_reading_order_resolver.py`, `test_web_arcos.py`, `test_web_ajustes_fuentes_nuevas.py`,
+`test_fuentes_apagadas_por_defecto.py`, `test_health.py`, `test_cortesia.py` y
+`test_web_estado_cortesia.py`). En particular, **`web/ajustes.py`, `services/runtime_settings.py` y
+`templates/ajustes.html` tienen diff vacío** frente al SHA dictaminado: siguen sin tocar
+contraseña/sesión, sin secretos y dentro de `OVERRIDABLE_FIELDS`. El dictamen §5.8 favorable se
+mantiene sin cambios.
+
+**Migraciones:** el rebase arrastra de `main` `20261113_0039_pool_etiquetas.py` (down_revision `0038`);
+**ninguno de los commits de la PR añade migración** (`git show --name-only` de `7876e59d`,
+`de8ba965`, `62cbbf33`, `907886e3` → sin `alembic/`). Cadena comprobada: **39 revisiones,
+heads=['0039'], bases=['0001']**, `0039 → 0038 → … → 0001` sin huecos.
+
+**Conflicto de `CHANGELOG.md`:** el diff de `1cb3b5ad..907886e3` en ese fichero son solo líneas
+**añadidas** (V14 F3b y «Pool inicial de 60 etiquetas» de `main`); las entradas de «Guías y órdenes de
+lectura (SCR3, entrega 2)» y sus viñetas siguen presentes, sin borrados. Ambas partes conservadas.
+
+**`LEGAL.md`:** sin cambios en el delta (`git diff --name-only 1cb3b5ad..907886e3 -- src/zascarr/LEGAL.md`
+vacío); su hash sigue siendo **`8a546cf5fd2ce242`** y `legal_version` no cambia respecto al dictamen
+anterior.
+
+**Regresión:** `ruff check src/` → *All checks passed!*; `ruff check --select S src/` → *All checks
+passed!*; focalizadas de la PR y superficies asociadas
+(`test_reconciliacion_lecturas`, `test_reading_orders`, `test_reading_order_resolver`,
+`test_web_arcos`, `test_web_ajustes_fuentes_nuevas`, `test_fuentes_apagadas_por_defecto`, `test_health`,
+`test_cortesia`, `test_web_estado_cortesia`) → **201 passed** en 11,35 s. La suite completa está en
+curso por el Lead; sobre el árbol de la PR (idéntico) la última pasada completa fue **6.785 passed,
+2.278 skipped**, y los cambios añadidos por el rebase son los de `main` ya fusionados + el CHANGELOG
+documental.
+
+**Veredicto: FAVORABLE para el SHA `907886e3de081f54146d4d4d203f53428d2f6432`.** No hay cambios de
+seguridad ni de comportamiento de la PR respecto a `1cb3b5ad`: los fixes C-1/c-1..c-4 y la integración
+§5 siguen cerrados, y §5.8 no cambia (diff vacío en Ajustes/runtime_settings, sin
+contraseña/sesión/secretos). Este addendum aplica **solo** a ese SHA; si un rebase o commit posterior
+cambia el árbol, se repetirá el dictamen (§5.8). El addendum de §10 y este §11 están en el árbol de
+trabajo sin commitear, a la espera de la PR documental.
