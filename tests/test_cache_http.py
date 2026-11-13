@@ -450,3 +450,34 @@ async def test_crawl_delay_de_robots_sube_el_intervalo_de_cortesia(fuente_encend
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cliente:
         await _pedir(cliente, cache, cortesia, reloj, fecha, robots=robots)
     assert any(espera == pytest.approx(4.0) for espera in reloj.dormidos)
+
+
+# ── SecOps M-1/M-2: credenciales y redacción ──────────────────────────────────────────────────
+
+async def test_con_credenciales_no_lee_ni_escribe_cache(fuente_encendida):
+    """M-1: la caché es por URL y no distingue quién pregunta; con credenciales no se usa."""
+    peticiones: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        peticiones.append(request)
+        return httpx.Response(200, content=b'{"ok":true}',
+                              headers={"content-type": "application/json"})
+
+    reloj, fecha, cortesia = _entorno()
+    cache = CacheHttpFalsa()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cliente:
+        primera = await _pedir(cliente, cache, cortesia, reloj, fecha,
+                               cabeceras={"Authorization": "Bearer secreto"})
+        segunda = await _pedir(cliente, cache, cortesia, reloj, fecha,
+                               cabeceras={"Authorization": "Bearer secreto"})
+    assert primera.content == segunda.content == b'{"ok":true}'
+    assert cache.leidas == 0 and cache.escrituras == []   # ni lectura ni escritura
+    assert len(peticiones) == 2                            # siempre red, nunca hit
+
+
+def test_canonica_redacta_parametros_sensibles():
+    """M-2: los nombres habituales de credenciales en query no llegan a `url_canonical`."""
+    _, canonica, _ = normalizar_y_hashear_url(
+        "GET", "https://x.example/api?api-key=SECRETO&client_secret=OTRO&a=1")
+    assert "SECRETO" not in canonica and "OTRO" not in canonica
+    assert canonica.count("REDACTADO") == 2
