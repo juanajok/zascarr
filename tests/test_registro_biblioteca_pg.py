@@ -759,9 +759,11 @@ class TestPantalla:
             r2 = await c.get("/ui/auditoria/registro")
         assert "<strong>8</strong> de <strong>8</strong> tebeos nuevos mirados" in r2.text
         assert "<strong>7</strong> añadidos al catálogo" in r2.text        # añadidos ≠ mirados (hay 1 repetido)
-        assert "<strong>1</strong> repetidos" in r2.text
-        # Los «con serie sugerida» NO están clasificados ni en «Por revisar»: el texto no debe sugerir lo contrario.
-        assert "con serie sugerida" in r2.text and "no están" in r2.text and "clasificados" in r2.text
+        assert "<strong>1</strong> repetido (" in r2.text                # singular (revisión UX 2026-11-12)
+        # Aquí no hay ninguno «con serie sugerida» y desde la revisión UX de 2026-11-12 un cero no se nombra. Cuando
+        # los hay, el texto sigue diciendo que NO están clasificados ni en «Por revisar» (lo fija
+        # test_revision_ux_2026_11::TestElResumenDelRegistroNoCuentaCeros).
+        assert "con serie sugerida" not in r2.text
         assert "reconocidos y" not in r2.text and "colocados" not in r2.text
         assert "Biblioteca registrada" in r2.text and "every 2s" not in r2.text    # y deja de consultarse
         assert 'hx-get="/ui/_nav/estado"' in r2.text                  # el menú recuenta «Por revisar» al terminar

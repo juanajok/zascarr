@@ -27,7 +27,10 @@
     <p class="muted">Si recargas o vuelves a esta pantalla, lo que consta de esta alta sigue disponible: <a href="{{ con_contexto('/ui/pendientes/carpetas/asistente/alta/resultado?clave=' ~ (grupo | urlencode) ~ '&series_id=' ~ r.serie.series_id ~ ('&operacion=' ~ r.deshacer.operacion_id if r.deshacer else '')) }}">enlace al estado de esta alta</a>.</p>
   </div>
   {% else %}
-  <p class="caption alta-sin-grupo">Esta alta no parte de ninguna carpeta, así que no hay ninguna vinculación pendiente.</p>
+  {#- Sin carpeta de origen no hay vinculación pendiente; el siguiente paso útil es traer sus archivos del disco
+      (el mismo enlace que «Añadir números del disco» de la ficha). -#}
+  <p class="alta-sin-grupo">Siguiente paso, si ya tienes sus tebeos en el disco:
+    <a class="btn ghost" href="/ui/pendientes/carpetas?serie={{ r.serie.series_id }}">Añadir números del disco</a></p>
   {% endif %}
   {% if r.deshacer %}
   <form hx-post="{{ con_contexto('/ui/descubrir/deshacer') }}" hx-target="closest .alta-paso" hx-swap="outerHTML">

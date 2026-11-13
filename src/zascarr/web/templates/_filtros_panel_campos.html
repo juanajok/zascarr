@@ -34,14 +34,14 @@
 <div class="filtro-campo">
   <label for="f-personaje">Personaje</label>
   <input type="search" placeholder="Buscar personaje…" id="f-personaje" name="personaje"
-         hx-get="/ui/biblioteca/buscar-personaje" hx-trigger="keyup changed delay:400ms"
+         hx-get="/ui/biblioteca/buscar-personaje" hx-trigger="input changed delay:400ms, search"
          hx-target="#resultados-personaje" hx-swap="innerHTML" hx-include="#filtros">
   <div id="resultados-personaje" class="series-results" aria-live="polite"></div>
 </div>
 <div class="filtro-campo">
   <label for="f-saga">Saga</label>
   <input type="search" placeholder="Buscar saga…" id="f-saga" name="saga"
-         hx-get="/ui/biblioteca/buscar-saga" hx-trigger="keyup changed delay:400ms"
+         hx-get="/ui/biblioteca/buscar-saga" hx-trigger="input changed delay:400ms, search"
          hx-target="#resultados-saga" hx-swap="innerHTML" hx-include="#filtros">
   <div id="resultados-saga" class="series-results" aria-live="polite"></div>
 </div>
@@ -49,7 +49,7 @@
   <label for="f-etiquetas">Etiquetas</label>
   <input type="search" id="f-etiquetas" name="etiquetas" value="{{ filtros.etiquetas }}"
          placeholder="Buscar por etiqueta…" autocomplete="off"
-         hx-get="/ui/biblioteca/etiquetas/sugerir" hx-trigger="keyup changed delay:300ms"
+         hx-get="/ui/biblioteca/etiquetas/sugerir" hx-trigger="input changed delay:300ms, search"
          hx-target="#sugerencias-etiquetas" hx-swap="innerHTML" hx-include="#filtros">
   <div id="sugerencias-etiquetas" class="series-results" aria-live="polite"></div>
 </div>

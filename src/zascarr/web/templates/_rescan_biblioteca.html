@@ -17,7 +17,7 @@
   </div>
   <form class="audit-lanzar" hx-post="/ui/auditoria/rescanear"
         hx-target="#rescan-biblioteca" hx-swap="outerHTML" hx-disable="find button">
-    <button type="submit" class="btn-primary" aria-describedby="rescan-aviso"
+    <button type="submit" aria-describedby="rescan-aviso"
             {% if estado_rescan.en_curso or estado_rescan.fase.value == "ocupado" %}disabled{% endif %}>
       {{ "Reescaneando…" if estado_rescan.en_curso else "Reescanear la biblioteca" }}
     </button>
