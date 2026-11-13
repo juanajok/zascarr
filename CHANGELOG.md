@@ -7,6 +7,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **D3: conciliación de la descarga importada e historial (2026-11-13).** Cuando el archivo de
+  una propuesta enviada se importa, la propuesta pasa a «importada» y se liga a su `File`
+  (sin tocar el archivo). Mejoras muestra un historial reciente con el estado de las últimas
+  propuestas: importada, enviada o descartada.
 - **D3: lote de escaneo configurable (2026-11-13).** Ajustes → Calidad permite elegir cuántos
   números revisa cada pasada (1/3/5/10); el valor se valida en servidor y se guarda como override
   en caliente. Cambio en `web/ajustes.py`: pendiente de dictamen de SecOps antes de fusionar.

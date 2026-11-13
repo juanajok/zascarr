@@ -37,7 +37,7 @@ def _fila():
         id=uuid4(), current_tier=1, candidate_tier=3,
         candidate_title="Batman 001 (Digital).cbz", candidate_indexer="idx",
         candidate_size_bytes=20_000_000, candidate_seeders=5,
-        candidate_url="magnet:?xt=1")
+        candidate_url="magnet:?xt=1", status="pendiente")
     return MejoraPendiente(propuesta, issue, serie)
 
 
@@ -49,10 +49,12 @@ def test_lista_de_mejoras_y_estado_vacio():
     c = _cliente()
     try:
         with patch("zascarr.web.mejoras.listar_mejoras",
-                   AsyncMock(return_value=_pagina([_fila()]))):
+                   AsyncMock(return_value=_pagina([_fila()]))), \
+             patch("zascarr.web.mejoras.historial_mejoras", AsyncMock(return_value=[])):
             r = c.get("/ui/mejoras")
         with patch("zascarr.web.mejoras.listar_mejoras",
-                   AsyncMock(return_value=_pagina([]))):
+                   AsyncMock(return_value=_pagina([]))), \
+             patch("zascarr.web.mejoras.historial_mejoras", AsyncMock(return_value=[])):
             vacia = c.get("/ui/mejoras")
     finally:
         _cerrar()
@@ -62,6 +64,19 @@ def test_lista_de_mejoras_y_estado_vacio():
     assert vacia.status_code == 200 and "No hay mejoras pendientes" in vacia.text
 
 
+def test_historial_reciente_muestra_estado():
+    c = _cliente()
+    try:
+        with patch("zascarr.web.mejoras.listar_mejoras",
+                   AsyncMock(return_value=_pagina([]))), \
+             patch("zascarr.web.mejoras.historial_mejoras",
+                   AsyncMock(return_value=[_fila()])):
+            r = c.get("/ui/mejoras")
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "Historial reciente (1)" in r.text
+
+
 def test_escanear_ahora_cuenta_lo_revisado():
     c = _cliente()
     try:
@@ -69,7 +84,8 @@ def test_escanear_ahora_cuenta_lo_revisado():
              patch("zascarr.web.mejoras.escanear_mejoras",
                    AsyncMock(return_value=ResultadoEscaneo(3, 2, 0))), \
              patch("zascarr.web.mejoras.listar_mejoras",
-                   AsyncMock(return_value=_pagina([]))):
+                   AsyncMock(return_value=_pagina([]))), \
+             patch("zascarr.web.mejoras.historial_mejoras", AsyncMock(return_value=[])):
             r = c.post("/ui/mejoras/escanear")
     finally:
         _cerrar()
@@ -96,7 +112,8 @@ def test_escanear_sin_prowlarr_explica_el_motivo_sin_json():
         with patch("zascarr.web.mejoras.motivo_sin_escaneo",
                    return_value="Prowlarr no está activo."), \
              patch("zascarr.web.mejoras.listar_mejoras",
-                   AsyncMock(return_value=_pagina([]))):
+                   AsyncMock(return_value=_pagina([]))), \
+             patch("zascarr.web.mejoras.historial_mejoras", AsyncMock(return_value=[])):
             r = c.post("/ui/mejoras/escanear")
     finally:
         _cerrar()
