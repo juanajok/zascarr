@@ -127,5 +127,5 @@ class TestLaMaquetacionNoSeRompe:
 
     def test_las_otras_formas_de_revisar_van_en_una_fila(self):
         t = (PLANTILLAS / "pendientes.html").read_text(encoding="utf-8")
-        assert '<nav class="acciones-fila" aria-label="Otras formas de revisar">' in t
+        assert '<div class="acciones-fila" role="group" aria-label="Otras formas de revisar">' in t
         assert "flex-wrap: wrap" in _regla(".acciones-fila")
