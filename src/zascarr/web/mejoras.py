@@ -42,7 +42,9 @@ async def _contexto(db: AsyncSession, *, aviso: str = "", error: str = "") -> di
     secret = get_settings().secret_key
     return {
         "mejoras": [
-            {"m": m, "token": crear_token_candidato(m.issue.id, m.candidato, secret)}
+            # El token se liga a la PROPUESTA, no al número (SecOps F-2).
+            {"m": m,
+             "token": crear_token_candidato(m.propuesta.id, m.candidato, secret)}
             for m in filas
         ],
         "aviso": aviso,
@@ -83,7 +85,11 @@ async def descargar(propuesta_id: UUID, request: Request, token: str = Form(...)
         return _respuesta(request, await _contexto(
             db, error="Esa propuesta ya no está disponible. Vuelve a la lista."))
     candidato = verificar_token_candidato(
-        token, mejora.issue.id, get_settings().secret_key)
+        token, propuesta_id, get_settings().secret_key)
+    # Doble ligadura (SecOps F-2): además de ser el token de ESTA propuesta, el enlace firmado
+    # debe ser el que la fila guarda; lo que se envía nunca sale de otro sitio.
+    if candidato is not None and candidato.download_url != mejora.propuesta.candidate_url:
+        candidato = None
     if candidato is None:
         return _respuesta(request, await _contexto(
             db, error="La oferta ha caducado. Vuelve a cargar la lista y elige de nuevo."))

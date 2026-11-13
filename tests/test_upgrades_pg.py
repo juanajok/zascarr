@@ -68,7 +68,9 @@ async def test_escanear_crea_propuesta_y_no_repite():
                     True, None,
                     [ArchivoActual("b1.cbz", Calidad(1, "básica", "1000 px"))],
                     [_candidato()])
-                with patch("zascarr.services.upgrades.get_settings",
+                with patch("zascarr.services.upgrades.is_acknowledged",
+                           AsyncMock(return_value=True)), \
+                     patch("zascarr.services.upgrades.get_settings",
                            return_value=_settings()), \
                      patch("zascarr.services.upgrades.buscar_mejoras",
                            AsyncMock(return_value=resultado)):
@@ -88,7 +90,9 @@ async def test_escanear_crea_propuesta_y_no_repite():
                 # P0: descartar y reescanear el mismo número no debe romper el lote.
                 issue.upgrade_scanned_at = datetime.now(UTC) - timedelta(hours=25)
                 await s.commit()
-                with patch("zascarr.services.upgrades.get_settings",
+                with patch("zascarr.services.upgrades.is_acknowledged",
+                           AsyncMock(return_value=True)), \
+                     patch("zascarr.services.upgrades.get_settings",
                            return_value=_settings()), \
                      patch("zascarr.services.upgrades.buscar_mejoras",
                            AsyncMock(return_value=resultado)):
@@ -124,7 +128,9 @@ async def test_un_fallo_de_red_no_marca_el_numero_como_escaneado():
                 await s.commit()
                 fallo = ResultadoMejoras(False, "Prowlarr caído", [], [],
                                          reintentable=True)
-                with patch("zascarr.services.upgrades.get_settings",
+                with patch("zascarr.services.upgrades.is_acknowledged",
+                           AsyncMock(return_value=True)), \
+                     patch("zascarr.services.upgrades.get_settings",
                            return_value=_settings()), \
                      patch("zascarr.services.upgrades.buscar_mejoras",
                            AsyncMock(return_value=fallo)):
