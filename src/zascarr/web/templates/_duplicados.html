@@ -1,0 +1,59 @@
+{% if duplicados %}
+<section class="audit-block duplicados-apartar" aria-labelledby="duplicados-apartar-titulo">
+  <h2 id="duplicados-apartar-titulo" class="titulo-frase">Apartar copias idénticas</h2>
+  <p class="audit-why">
+    Las copias de cada grupo tienen exactamente el mismo contenido. Elige <strong>una copia que se queda</strong>
+    en cada grupo: las demás se mueven a una cuarentena y se pueden devolver. <strong>No se borra nada.</strong>
+  </p>
+
+  {% if duplicados.grupos %}
+  <form method="post" action="/ui/auditoria/duplicados/previsualizar" class="duplicados-form">
+    {% for g in duplicados.grupos %}
+    <fieldset class="duplicado-grupo">
+      <legend>Grupo {{ loop.index }}: {{ g.size_bytes | tamano }} por copia</legend>
+      <p class="audit-detail">
+        Se liberarían <strong>{{ g.bytes_recuperables | tamano }}</strong> si se apartan todas menos una.
+        Ninguna copia viene marcada: decides tú.
+      </p>
+      {% for c in g.copias %}
+      <label class="duplicado-copia">
+        <input type="radio" name="keep_{{ g.sha256 }}" value="{{ c.ruta_rel }}">
+        <span class="duplicado-copia-datos">
+          <span class="duplicado-ruta">{{ c.ruta_rel }}</span>
+          <span class="audit-detail">
+            Carpeta: {{ c.carpeta }} · Modificado: {{ c.mtime }} ·
+            Catálogo: {{ c.catalogo }} · Nombre: {{ c.nombre }}
+          </span>
+        </span>
+      </label>
+      {% endfor %}
+    </fieldset>
+    {% endfor %}
+    <button type="submit" class="btn">Ver vista previa</button>
+  </form>
+  {% else %}
+  <p class="audit-ok">Ahora mismo no hay copias idénticas en el último informe.</p>
+  {% endif %}
+
+  <h3>Copias apartadas</h3>
+  <p class="audit-detail">
+    Se guardan en <code>{{ duplicados.cuarentena.ruta | ruta_visible }}</code> y ocupan
+    <strong>{{ duplicados.cuarentena.bytes | tamano }}</strong>
+    ({{ duplicados.cuarentena.archivos }} archivo{{ 's' if duplicados.cuarentena.archivos != 1 }}).
+    No se borran automáticamente; puedes deshacer un apartado mientras siga ahí.
+  </p>
+  {% if duplicados.operaciones %}
+  <ul class="duplicados-operaciones">
+    {% for op in duplicados.operaciones %}
+    <li>
+      <span>{{ op.creada }} · {{ op.grupos }} grupo{{ 's' if op.grupos != 1 }} · {{ op.bytes | tamano }}</span>
+      <form method="post" action="/ui/auditoria/duplicados/deshacer" class="duplicados-deshacer">
+        <input type="hidden" name="operacion" value="{{ op.id }}">
+        <button type="submit" class="btn ghost sm">Deshacer el apartado</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Vista previa de apartar copias — ZascArr{% endblock %}
+{% block content %}
+<h1>Vista previa de apartar copias</h1>
+<p class="subtitle">
+  Revisa lo que se va a apartar. <strong>No se borra nada</strong>: las copias se mueven a la cuarentena y se puede deshacer.
+</p>
+{% set p = previsualizacion %}
+{% if p.sin_eleccion %}
+<p class="audit-why" role="alert">No has elegido ninguna copia que se quede. No se ha preparado nada.</p>
+<p><a class="btn ghost" href="/ui/auditoria">Volver a Duplicados</a></p>
+{% else %}
+{% if p.rechazos %}
+<div class="audit-why" role="alert">
+  <p>Algunos grupos no se pueden preparar:</p>
+  <ul>{% for r in p.rechazos %}<li>{{ r.motivo }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if p.entradas %}
+<p>Se apartarán <strong>{{ p.archivos }}</strong> archivos y se liberarán
+  <strong>{{ p.bytes | tamano }}</strong>.</p>
+<form method="post" action="/ui/auditoria/duplicados/confirmar">
+  {% for item in p.entradas %}
+  <section class="duplicado-preview">
+    <h2>Grupo {{ loop.index }}</h2>
+    <p>Se apartan:</p>
+    <ul>{% for r in item.rutas_apartadas %}<li class="duplicado-ruta">{{ r }}</li>{% endfor %}</ul>
+    <p class="audit-detail">{{ item.catalogo_cambio }}</p>
+    <input type="hidden" name="token" value="{{ item.token }}">
+    <input type="hidden" name="grupos" value="{{ item.grupo_json }}">
+  </section>
+  {% endfor %}
+  <p class="audit-why"><strong>No se borra nada.</strong> Si hace falta, podrás deshacer el apartado.</p>
+  <button type="submit" class="btn-primary">Confirmar y apartar</button>
+  <a class="btn ghost" href="/ui/auditoria">Cancelar</a>
+</form>
+{% else %}
+<p class="audit-why" role="alert">No queda ningún grupo válido para apartar.</p>
+<p><a class="btn ghost" href="/ui/auditoria">Volver a Duplicados</a></p>
+{% endif %}
+<p class="audit-detail">La cuarentena está en <code>{{ p.cuarentena.ruta | ruta_visible }}</code> y ahora ocupa
+  {{ p.cuarentena.bytes | tamano }} ({{ p.cuarentena.archivos }} archivos).</p>
+{% endif %}
+{% endblock %}

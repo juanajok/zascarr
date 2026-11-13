@@ -28,6 +28,7 @@
   <h2 id="issue-datos-titulo" class="titulo-frase">Datos del número</h2>
   <dl class="ficha-serie-meta">
     <div><dt>{{ textos.serie }}</dt><dd><a href="/ui/series/{{ series.id }}">{{ series.title }}</a></dd></div>
+    <div><dt>Referencia</dt><dd>{% if series.reference_name %}{{ series.reference_name }}{% else %}{{ series.title }}{% endif %}{% if issue.number_key %} #{{ issue.number_key }}{% elif issue.title %} — {{ issue.title }}{% endif %}</dd></div>
     <div><dt>{{ textos.editorial }}</dt><dd>{% if ficha.editorial %}{{ ficha.editorial }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos.formato }}</dt><dd>{% if ficha.formato %}{{ ficha.formato }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos.publicacion }}</dt><dd>{% if ficha.fecha_larga %}{{ ficha.fecha_larga }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
