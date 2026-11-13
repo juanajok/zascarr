@@ -66,9 +66,24 @@ ZLIB_LEVEL = 6
 CABECERA_ESTADO = "x-zascarr-cache"
 #: Parámetros de query cuyo VALOR no se guarda en `url_canonical` (pueden ser credenciales).
 PARAMETROS_SENSIBLES = frozenset({
-    "api_key", "apikey", "key", "token", "access_token", "refresh_token",
-    "password", "sig", "signature",
+    "api_key", "apikey", "api-key", "key", "token", "access_token", "refresh_token",
+    "password", "sig", "signature", "client_secret", "client-secret", "session",
+    "sessionid", "auth", "jwt", "bearer",
 })
+
+#: Cabeceras que convierten una respuesta en NO compartible: la caché es por URL y no distingue
+#: quién pregunta (SecOps M-1 de SCR1). Hoy solo Fandom (sin credenciales) usa esta caché; el
+#: guard protege al foro y a SCR3 antes de que lleguen a este camino.
+CABECERAS_CON_CREDENCIALES = frozenset({
+    "authorization", "proxy-authorization", "cookie", "x-api-key",
+})
+
+
+def _trae_credenciales(cabeceras: dict | None) -> bool:
+    """¿La petición lleva credenciales del llamador? Si sí, no se lee ni se escribe caché."""
+    if not cabeceras:
+        return False
+    return any(str(clave).lower() in CABECERAS_CON_CREDENCIALES for clave in cabeceras)
 REDACTADO = "REDACTADO"
 
 
@@ -345,12 +360,13 @@ async def pedir_con_cache(
     if not permitir_apagada and not fuente_habilitada(politica.fuente):
         raise FuenteApagada(politica.fuente)
     url_hash, url_canonical, domain = normalizar_y_hashear_url(metodo, url, datos)
+    con_credenciales = _trae_credenciales(cabeceras)
     fila: FilaCache | None = None
 
     async def mirar_cache() -> httpx.Response | None:
         """Hit vigente, o None. Deja en `fila` la última leída (aunque sea stale)."""
         nonlocal fila
-        if bypass_cache:
+        if bypass_cache or con_credenciales:
             return None
         fila = await cache.leer(url_hash)
         if fila is None or ahora() >= fila.fresh_until:
@@ -363,7 +379,7 @@ async def pedir_con_cache(
         return respuesta
 
     candado: asyncio.Lock | None = None
-    if not bypass_cache:
+    if not bypass_cache and not con_credenciales:
         # 3) Singleflight: una sola petición por URL fría; el resto espera y relee.
         candado = candado_de_singleflight(url_hash)
         try:
@@ -406,7 +422,7 @@ async def pedir_con_cache(
                                                   politica_cache=politica_cache,
                                                   ahora=ahora)
             # 6) Negativa corta por código HTTP: se recuerda y se relanza tal cual.
-            if exc.codigo in politica_cache.codigos_negativos:
+            if exc.codigo in politica_cache.codigos_negativos and not con_credenciales:
                 await _guardar_negativa(cache, url_hash, url_canonical, domain,
                                         exc.codigo, politica_cache=politica_cache,
                                         ahora=ahora)
@@ -423,6 +439,9 @@ async def pedir_con_cache(
         if clasificacion not in ("ok", "negativo", "no_cachear"):
             clasificacion = "no_cachear"
         if clasificacion == "no_cachear":
+            return respuesta
+        if con_credenciales:
+            # M-1 (SecOps): una respuesta a una petición con credenciales no se comparte.
             return respuesta
 
         cuerpo = respuesta.content or b""
