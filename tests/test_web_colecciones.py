@@ -302,7 +302,7 @@ def test_filtro_sin_resultados_ofrece_limpiar():
     finally:
         _cerrar()
     assert "No hay series con esos filtros" in r.text and "Limpiar filtros" in r.text
-    assert f"serie_ids={sid}" in r.text
+    assert f"serie_ids={sid}" in r.text and "limpiar=1" in r.text
 
 
 def test_paginacion_conserva_seleccion_y_limpiar_es_boton():
