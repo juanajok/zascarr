@@ -81,6 +81,7 @@ from zascarr.services.etiquetas import (
     quitar_etiqueta,
     sugerencias_etiqueta,
 )
+from zascarr.services.etiquetas_iniciales import ideas_para_empezar
 from zascarr.services.ficha_numero import (
     ROLES_ES,
     cargar_ficha_numero,
@@ -711,9 +712,11 @@ async def panel_etiquetas(series_id: UUID, request: Request,
     """Panel perezoso de etiquetas de la ficha (BL-ETQ1a)."""
     series = await _serie_o_404(db, series_id)
     etiquetas = await etiquetas_de_serie(db, series.id)
+    iniciales = await ideas_para_empezar(db, series.id)
     respuesta = templates.TemplateResponse(
         request, "_etiquetas_serie.html",
-        {"series": series, "etiquetas": etiquetas, "mensaje": None, "error": None},
+        {"series": series, "etiquetas": etiquetas, "iniciales": iniciales,
+         "mensaje": None, "error": None},
     )
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
@@ -746,9 +749,11 @@ async def anadir_etiqueta_web(series_id: UUID, request: Request,
     except EtiquetaInvalida as exc:
         error = str(exc)
     etiquetas = await etiquetas_de_serie(db, series.id)
+    iniciales = await ideas_para_empezar(db, series.id)
     respuesta = templates.TemplateResponse(
         request, "_etiquetas_serie.html",
-        {"series": series, "etiquetas": etiquetas, "mensaje": mensaje, "error": error},
+        {"series": series, "etiquetas": etiquetas, "iniciales": iniciales,
+         "mensaje": mensaje, "error": error},
     )
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
@@ -766,9 +771,11 @@ async def quitar_etiqueta_web(series_id: UUID, request: Request,
     except EtiquetaInvalida as exc:
         error = str(exc)
     etiquetas = await etiquetas_de_serie(db, series.id)
+    iniciales = await ideas_para_empezar(db, series.id)
     respuesta = templates.TemplateResponse(
         request, "_etiquetas_serie.html",
-        {"series": series, "etiquetas": etiquetas, "mensaje": mensaje, "error": error},
+        {"series": series, "etiquetas": etiquetas, "iniciales": iniciales,
+         "mensaje": mensaje, "error": error},
     )
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta

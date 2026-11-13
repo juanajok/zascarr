@@ -3,6 +3,21 @@
   <p class="muted">Lo que tratan tus tebeos. Se guarda al momento; no toca los archivos.</p>
   {% if error %}{{ ui.aviso("warn", error) }}{% endif %}
   {% if mensaje %}{{ ui.aviso("ok", mensaje) }}{% endif %}
+  {% if iniciales %}
+  <div class="etiquetas-ideas">
+    <p class="rotulo">Ideas para empezar</p>
+    <div class="etiquetas-ideas-lista">
+      {% for tag in iniciales %}
+      <form method="post" action="/ui/series/{{ series.id }}/etiquetas"
+            hx-post="/ui/series/{{ series.id }}/etiquetas"
+            hx-target="#etiquetas-serie" hx-swap="outerHTML">
+        <input type="hidden" name="etiqueta" value="{{ tag.name }}">
+        <button type="submit" class="etiqueta-idea">{{ tag.name }}</button>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <div class="etiquetas-lista" aria-live="polite">
     {% if etiquetas %}
       {% for tag in etiquetas %}
