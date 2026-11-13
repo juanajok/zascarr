@@ -195,12 +195,6 @@ como marco permanente.
   Cifras que se comparan (contadores, números de grapa, métricas) con
   `font-variant-numeric: tabular-nums`. Ficha y forma de actualizar en
   `static/vendor/README.md`.
-- **Sistema de diseño publicado (2026-11-13).** [`docs/design/sistema-de-diseno-zascarr.pdf`](docs/design/sistema-de-diseno-zascarr.pdf)
-  es la referencia de marca, color, tipografía, forma, componentes, accesibilidad y voz para cualquier
-  pantalla o componente nuevo: tokens y macros (`ui.*`, `web/componentes.py`) mandan sobre el aspecto
-  heredado. Incluye la revisión de UI/UX de #689 con una **deuda abierta que no debe copiarse** en
-  pantallas nuevas (escala de texto sin tokens, grosores de borde literales, `btn-secondary` inexistente,
-  `.audit-ok` sin icono ni `role`, etc.). Antes de tocar una plantilla o `web.css`, leerlo.
 - **Iconos de la interfaz** (decidido el 2026-10-20): SVG de trazo de `web/iconos.py`
   (Lucide, ISC, con su aviso en el módulo), nunca caracteres de texto (⌂ ✎ ★…), que cada
   sistema dibuja distinto. Un icono nuevo se copia de `lucide-static` al diccionario.
@@ -250,8 +244,11 @@ como marco permanente.
     ni códigos internos en superficie (ver A2 y U20).
 - **Sistema de diseño:** las reglas de marca, color, tipografía, forma, trama, componentes y
   accesibilidad están en [`docs/design/sistema-de-diseno-zascarr.md`](docs/design/sistema-de-diseno-zascarr.md)
-  (diffeable; el PDF con las muestras, en `docs/design/sistema-de-diseno-zascarr.pdf`). Antes de
-  pintar una pantalla nueva, léelo: la deuda abierta de la última revisión no se copia.
+  (diffeable; el **PDF** con las muestras visuales, en `docs/design/sistema-de-diseno-zascarr.pdf`).
+  Es la referencia para cualquier pantalla o componente nuevo: los tokens y las macros (`ui.*`,
+  `web/componentes.py`) mandan sobre el aspecto heredado. Antes de pintar una pantalla o tocar
+  `web.css`, léelo: la **deuda abierta** de la última revisión (escala de texto sin tokens,
+  grosores de borde literales, clases inexistentes, avisos sin icono/`role`…) **no se copia**.
 
 ## 7. Base de datos
 
@@ -326,7 +323,7 @@ como marco permanente.
 | `docs/BACKLOG.md` | Prioridades P0-P2, historias, estimaciones y decisión de hecho/cierre con nota mecánica de cómo se logró cada historia |
 | `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis, 0012 credenciales del `.env`, 0015 lector de RAR con `unar` y riesgo aceptado; 0006–0010 en el propio directorio) |
 | `docs/design/ui-migracion.md` | Inventario de la UI (plantillas, rutas, contratos HTMX), maqueta frente a la realidad y estimaciones de la Épica V. **Consultar antes de tocar una plantilla o un contrato `hx-*`** |
-| `docs/design/sistema-de-diseno-zascarr.pdf` | **Sistema de diseño publicado** (versión 2026-11-13, 46 páginas): libro de marca, principios, color y tokens de los dos temas, tipografía, forma, trama, iconografía, maquetación, interacción/accesibilidad, cómo se usa y la revisión de UI/UX con su deuda abierta. **Consultar antes de tocar plantillas o CSS.** |
+| `docs/design/sistema-de-diseno-zascarr.md` (+ `.pdf`) | **Sistema de diseño publicado** (2026-11-13): libro de marca, principios, color y tokens de los dos temas, tipografía, forma, trama, iconografía, maquetación, interacción/accesibilidad, cómo se usa y la revisión de UI/UX con su deuda abierta. El `.md` es la referencia diffeable; el `.pdf`, las muestras visuales. **Consultar antes de tocar plantillas o CSS.** |
 | `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
 | `pyproject.toml` | Fuente única de metadatos del paquete (nombre, license, deps) |
 | `docs/design/benchmark-referencias.md` | Procedimiento y ficha para comparar referencias antes de features P0/P1 (ver §13) |
