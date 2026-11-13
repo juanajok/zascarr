@@ -178,6 +178,7 @@ async def test_parche_comicinfo_se_rechaza(db, tmp_path, monkeypatch):
 async def test_fuente_symlink_se_omite_y_se_reporta(db, tmp_path, monkeypatch):
     ajustes(tmp_path, monkeypatch)
     coleccion, _ = await sembrar(db, tmp_path)
+    coleccion_id = coleccion.id
     real = next((tmp_path / "lib").glob("*.cbz"))
     enlace = tmp_path / "lib" / "enlace.cbz"
     enlace.symlink_to(real)
@@ -187,7 +188,8 @@ async def test_fuente_symlink_se_omite_y_se_reporta(db, tmp_path, monkeypatch):
     fid = (await db.execute(select(File.id))).scalars().first()
     await db.execute(update(File).where(File.id == fid).values(
         file_path=str(enlace), file_name=enlace.name))
-    resumen = await svc.exportar_coleccion(db, coleccion.id)
+    db.expire_all()
+    resumen = await svc.exportar_coleccion(db, coleccion_id)
     assert resumen.materializados == 0 and resumen.omitidos >= 1
 
 
