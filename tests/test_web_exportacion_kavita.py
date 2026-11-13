@@ -68,3 +68,21 @@ def test_ui_muestra_boton_y_resultado():
         _cerrar()
     assert r.status_code == 200 and "Exportación terminada" in r.text
     assert colecciones.POLITICAS
+
+
+def test_ui_exige_confirmacion_antes_de_exportar():
+    from zascarr.services.colecciones import DetalleColeccion
+
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    c = _cliente()
+    llamada = AsyncMock()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.exportar_coleccion", llamada):
+            r = c.post(f"/ui/colecciones/{cid}/exportar", data={"patch_comicinfo": "0"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "Marca la confirmación" in r.text
+    llamada.assert_not_awaited()

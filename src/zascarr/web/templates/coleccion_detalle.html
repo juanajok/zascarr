@@ -39,11 +39,17 @@
 </details>
 {% if exportacion %}
 <div class="tarjeta" role="status" tabindex="-1" autofocus>
-  <p><strong>Exportación terminada.</strong> {{ exportacion.materializados }} archivos preparados en
-    <code>{{ exportacion.destino }}</code>.</p>
-  <p class="caption">Nuevos: {{ exportacion.materializados }} · ya estaban: {{ exportacion.saltados }} · omitidos: {{ exportacion.omitidos }} · colisiones: {{ exportacion.colisiones }} · deriva: {{ exportacion.deriva }} · errores: {{ exportacion.errores }} · copiados: {{ exportacion.bytes_copiados }} bytes · modo: {{ exportacion.modo }} · carpetas desambiguadas: {{ exportacion.carpetas_colisionadas }}.</p>
+  <p><strong>{{ "Exportación terminada con incidencias." if (exportacion.errores or exportacion.deriva or exportacion.colisiones) else "Exportación terminada." }}</strong> {{ exportacion.materializados }} archivos preparados en
+    <code class="ruta-exportacion">{{ exportacion.destino }}</code>.</p>
+  <details class="politica-detalles">
+    <summary>Detalles de la exportación</summary>
+    <p class="caption">Nuevos: {{ exportacion.materializados }} · ya estaban: {{ exportacion.saltados }} · omitidos: {{ exportacion.omitidos }} · colisiones: {{ exportacion.colisiones }} · deriva: {{ exportacion.deriva }} · errores: {{ exportacion.errores }} · copiados: {{ exportacion.bytes_copiados }} bytes · carpetas desambiguadas: {{ exportacion.carpetas_colisionadas }}.</p>
+    <p class="caption">Forma de preparar los archivos:
+      {% if exportacion.modo == "hardlink" %}enlace (no gasta espacio){% elif exportacion.modo == "copy" %}copia (aislada){% else %}mixta{% endif %}.
+    </p>
+  </details>
   {% if exportacion.errores or exportacion.deriva %}
-  <p class="caption">La exportación terminó parcialmente: lo que se preparó está bien y lo demás se ha dejado como estaba. Vuelve a intentarlo cuando quieras.</p>
+  <p class="caption">La exportación terminó con incidencias: lo que se preparó está bien y lo demás se ha dejado como estaba. Vuelve a intentarlo cuando quieras.</p>
   {% endif %}
   <p class="caption">La exportación queda registrada para auditoría.</p>
 </div>

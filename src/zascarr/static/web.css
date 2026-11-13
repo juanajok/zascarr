@@ -2489,3 +2489,4 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
 }
+.ruta-exportacion { overflow-wrap: anywhere; word-break: break-word; }

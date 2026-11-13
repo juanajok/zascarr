@@ -186,3 +186,13 @@ async def test_fuente_symlink_se_omite_y_se_reporta(db, tmp_path, monkeypatch):
         await db.execute(update(File).values(file_path=str(enlace), file_name=enlace.name))
     resumen = await svc.exportar_coleccion(db, coleccion.id)
     assert resumen.materializados == 0 and resumen.omitidos >= 1
+
+
+async def test_manifiesto_y_hardlink_hacen_fsync_del_directorio(db, tmp_path, monkeypatch):
+    ajustes(tmp_path, monkeypatch)
+    coleccion, _ = await sembrar(db, tmp_path)
+    llamadas: list[Path] = []
+    original = svc._fsync_directorio
+    monkeypatch.setattr(svc, "_fsync_directorio", lambda p: llamadas.append(p) or original(p))
+    await svc.exportar_coleccion(db, coleccion.id)
+    assert len(llamadas) >= 2
