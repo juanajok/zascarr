@@ -443,13 +443,15 @@ async def reabrir(
     guardado = await _leer_borrador(db, clave, series_id)
     if guardado is None:
         return await _revisar(request, db, clave, series_id, estado=Borrador(), cursor="", otros={},
-                              avisos=["No hay un borrador guardado o ha caducado."], pagina_completa=True)
+                              avisos=["No hay un borrador guardado o ha caducado."],
+                              pagina_completa="hx-request" not in request.headers)
     otros = leer_borradores(json.dumps(guardado.paginas, ensure_ascii=False))
     cursor = guardado.cursor if guardado.cursor in otros else (next(iter(otros), ""))
     estado = otros.pop(cursor, Borrador())
     return await _revisar(request, db, clave, series_id, estado=estado, cursor=cursor, otros=otros,
                           avisos=["Revisión reanudada. Nada se vincula hasta que lo confirmes."],
-                          pagina_completa=True, borrador_guardado=guardado)
+                          pagina_completa="hx-request" not in request.headers,
+                          borrador_guardado=guardado)
 
 
 @router.post("/guardar", response_class=HTMLResponse)
