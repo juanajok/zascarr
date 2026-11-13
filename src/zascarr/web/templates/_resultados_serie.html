@@ -18,6 +18,16 @@
               title="Mueve el archivo a la carpeta de esta serie en tu biblioteca y le cambia el nombre.">Ver antes de organizar</button>
     </form>
     <div id="previa-{{ file_id }}-{{ s.id }}" class="asignar-previa" aria-live="polite"></div>
+    <form class="assign-form vincular-form"
+          hx-post="/ui/pendientes/{{ file_id }}/vincular"
+          hx-target="#card-{{ file_id }}" hx-swap="outerHTML">
+      <input type="hidden" name="series_id" value="{{ s.id }}">
+      <label class="sr" for="nv-{{ file_id }}-{{ s.id }}">Número para vincular en «{{ s.title }}»</label>
+      <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4"
+             id="nv-{{ file_id }}-{{ s.id }}">
+      <p class="efecto-asignacion">Vincular no mueve ni renombra: solo funciona si esa publicación ya existe en la serie.</p>
+      <button type="submit" class="btn ghost sm">Vincular en su sitio</button>
+    </form>
     <form class="assign-form especial-form"
           hx-post="/ui/pendientes/{{ file_id }}/especial"
           hx-target="#card-{{ file_id }}" hx-swap="outerHTML">

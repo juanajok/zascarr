@@ -12,6 +12,9 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   Deseados y Ajustes, a `ui.aviso("warn")` (mismo texto, enlace y negritas; ahora con icono y
   `role="alert"`). Se retiran las reglas del alias y las de `.legal-notice-warn`; la auditoría de
   clases sigue en 0 reglas sin uso.
+- **D3: lote de escaneo configurable (2026-11-13).** Ajustes → Calidad permite elegir cuántos
+  números revisa cada pasada (1/3/5/10); el valor se valida en servidor y se guarda como override
+  en caliente. Cambio en `web/ajustes.py`: pendiente de dictamen de SecOps antes de fusionar.
 - **V14: auditoría de clases y retirada del CSS muerto (2026-11-13, #750).** Nuevo
   `scripts/auditar_css.py` (con lista blanca declarada para las clases que añaden htmx y el JS de
   `/estado`, y comprensión de prefijos y ternarios Jinja) que se ejecuta en la CI con `--strict`.
