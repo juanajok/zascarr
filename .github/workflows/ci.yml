@@ -117,6 +117,8 @@ jobs:
       # comprobaciones se ejecuten aunque la primera falle y se vea el detalle.
       - run: ruff check --select S src/
         if: always()
+      # V14 (#750): ninguna clase usada puede quedarse sin regla y no debe quedar CSS muerto.
+      - run: python scripts/auditar_css.py --strict
 
   pip-audit:
     name: pip-audit (informativo, no bloquea)

@@ -26,6 +26,11 @@ Por qué este módulo (Fase 2 del estudio `docs/estudio-scraping-fuentes-v2.md`)
   wikitext (`limpiar_markup`, `seccion`, enlaces, plantillas) es **lineal**: escaneo manual
   con `find`/`split`, nunca expresiones con retroceso sobre texto sin cierre.
 
+Caché y robots (SCR1): si el cliente recibe un `CacheHttp`, todo GET de `_api` pasa por
+`utils/cache_http.pedir_con_cache` (hit sin socket, 304, negativa corta y robots.txt). Sin
+caché inyectada el cliente se comporta como antes. Las portadas **no** pasan por aquí: las
+gobiernan `utils/url_portada.py` y la caché local `covers/externa/`.
+
 Licencia: el texto de Fandom es CC-BY-SA (atribución con enlace al artículo y a la licencia en
 la UI); las portadas son *fair use* editorial y se cachean en local sin etiquetarlas CC-BY-SA.
 """
@@ -35,13 +40,14 @@ import asyncio
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from urllib.parse import urlencode
 
 import httpx
 import structlog
 
 from zascarr.models import CreatorRole
+from zascarr.utils.cache_http import CacheHttp, PoliticaCacheDominio, pedir_con_cache
 from zascarr.utils.cortesia import (
     CortesiaProceso,
     PoliticaFuente,
@@ -50,6 +56,7 @@ from zascarr.utils.cortesia import (
     politica_de,
 )
 from zascarr.utils.peticiones import ErrorDePeticion, pedir_con_cortesia
+from zascarr.utils.robots import USER_AGENT, GestorRobots, gestor_robots_de_proceso
 
 logger = structlog.get_logger()
 
@@ -96,6 +103,37 @@ _PLANTILLAS = {
 _CODIGOS_INEXISTENTE = frozenset({
     "missingtitle", "invalidtitle", "pagecannotexist", "nosuchpage", "badtitle",
 })
+
+#: Caché HTTP condicional de `/api.php` (SCR1): 24 h fresca + 14 días de revalidación; una
+#: página inexistente (404/410) se recuerda 12 h. `missingtitle` llega en HTTP 200 y lo marca
+#: el clasificador de abajo como negativa conservando el cuerpo.
+_POLITICA_CACHE = PoliticaCacheDominio(
+    ttl_positivo=timedelta(hours=24),
+    margen_retencion_304=timedelta(days=14),
+    ttl_negativo=timedelta(hours=12),
+    codigos_negativos=frozenset({404, 410}),
+)
+
+
+def clasificar_respuesta_mediawiki(respuesta: httpx.Response) -> str:
+    """Clasifica una respuesta HTTP 200 de `/api.php` para la caché (SCR1).
+
+    `"ok"` → se guarda el cuerpo; `"negativo"` → `missingtitle` (se guarda el cuerpo para que
+    `_api` lo vuelva a interpretar en un hit, sin repedir); `"no_cachear"` → demasiado grande,
+    `maxlag`/error lógico o JSON ilegible: nunca se cachea un fallo.
+    """
+    if len(respuesta.content or b"") > MAX_CUERPO_API:
+        return "no_cachear"
+    try:
+        data = respuesta.json()
+    except ValueError:
+        return "no_cachear"
+    error = data.get("error") if isinstance(data, dict) else None
+    if not error:
+        return "ok"
+    if str(error.get("code") or "") in _CODIGOS_INEXISTENTE:
+        return "negativo"
+    return "no_cachear"
 
 #: Roles de las plantillas de issue → `CreatorRole`. Solo se mapea lo inequívoco; el resto
 #: de campos (colours, etc.) se ignora en vez de adivinar.
@@ -683,6 +721,8 @@ class FandomClient:
         reloj=time.monotonic,
         dormir=asyncio.sleep,
         espera_max_s: float = 30.0,
+        cache: CacheHttp | None = None,
+        robots: GestorRobots | None = None,
     ):
         if host not in FUENTES.values():
             raise ValueError(f"host Fandom desconocido: {host}")
@@ -694,6 +734,11 @@ class FandomClient:
         self._reloj = reloj
         self._dormir = dormir
         self._espera_max_s = espera_max_s
+        # SCR1: sin `cache` inyectada el cliente se comporta como antes (pruebas y clientes
+        # aislados); el enricher siempre la inyecta. `robots` se resuelve al singleton del
+        # proceso en el primer uso con caché.
+        self._cache = cache
+        self._robots = robots
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> FandomClient:
@@ -708,7 +753,8 @@ class FandomClient:
     def _cliente(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
-                transport=self._transporte, timeout=25.0, follow_redirects=False
+                transport=self._transporte, timeout=25.0, follow_redirects=False,
+                headers={"User-Agent": USER_AGENT},
             )
         return self._client
 
@@ -722,6 +768,12 @@ class FandomClient:
             self._cortesia = cortesia_de_proceso()
         return self._cortesia
 
+    def _robots_actual(self) -> GestorRobots:
+        """El gestor de robots inyectado o el singleton del proceso (mismo patrón que cortesía)."""
+        if self._robots is None:
+            self._robots = gestor_robots_de_proceso()
+        return self._robots
+
     async def _api(self, params: dict[str, str]) -> dict | None:
         """Una llamada a `/api.php`. Devuelve el JSON, o None si la página no existe."""
         base = {
@@ -732,13 +784,29 @@ class FandomClient:
             **params,
         }
         url = f"https://{self._host}/api.php?{urlencode(base)}"
-        respuesta = await pedir_con_cortesia(
-            self._cliente(), "GET", url,
-            politica=self._politica_actual(),
-            espera_max_s=self._espera_max_s,
-            cortesia=self._cortesia_actual(),
-            reloj=self._reloj, dormir=self._dormir,
-        )
+        if self._cache is None:
+            # Sin caché inyectada: exactamente el camino de siempre (modo pruebas/cliente
+            # aislado). AC-12 de la spec: los tests actuales pasan sin edits.
+            respuesta = await pedir_con_cortesia(
+                self._cliente(), "GET", url,
+                politica=self._politica_actual(),
+                espera_max_s=self._espera_max_s,
+                cortesia=self._cortesia_actual(),
+                reloj=self._reloj, dormir=self._dormir,
+            )
+        else:
+            # SCR1: robots.txt + caché condicional (hit/304/negativa) en el único punto de red.
+            respuesta = await pedir_con_cache(
+                self._cliente(), "GET", url,
+                politica=self._politica_actual(),
+                politica_cache=_POLITICA_CACHE,
+                cache=self._cache,
+                robots=self._robots_actual(),
+                espera_max_s=self._espera_max_s,
+                clasificar=clasificar_respuesta_mediawiki,
+                cortesia=self._cortesia_actual(),
+                reloj=self._reloj, dormir=self._dormir,
+            )
         # M-1 de SecOps: una respuesta desmedida no se parsea (el wikitext lo edita cualquiera).
         cuerpo = respuesta.content or b""
         if len(cuerpo) > MAX_CUERPO_API:
