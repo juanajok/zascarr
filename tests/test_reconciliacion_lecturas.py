@@ -245,3 +245,87 @@ def test_resultado_es_inmutable():
                                         enlazados=0, omitidos=0)
     with pytest.raises(AttributeError):
         resultado.titulo = "otro"
+
+
+# ── SecOps C-1/c-2/c-3 (addendum de la entrega 2) ───────────────────────────────────────────
+
+def _url_guia() -> str:
+    return ("https://comicbookreadingorders.com/dc/events/"
+            "crisis-on-infinite-earths-reading-order/")
+
+
+async def test_c1_no_adopta_ni_toca_un_arco_de_otra_fuente_con_el_mismo_titulo():
+    """C-1: la identidad es metadata origen+URL; un arco Fandom homónimo queda intacto."""
+    arco_fandom = _arco("arco-fandom", "Crisis on Infinite Earths",
+                        {"origen": "fandom_dc", "fandom_dc": "Crisis on Infinite Earths"})
+    metadata_original = dict(arco_fandom.metadata_)
+    enlace_fandom = _enlace("i-9", 4, arco_id="arco-fandom")
+    serie = _serie("s-dd", "Daredevil", start_year=1998)
+    issue = _issue("i-1", "s-dd", "1")
+    sesion = SesionFalsa([
+        Resultado([]),                  # no hay arco de ESTA guía (origen+url)
+        Resultado([serie]), Resultado([issue]),   # entrada reconciliada
+        Resultado([]),                  # enlaces del arco nuevo
+    ])
+    resultado = await reconciliar_guia(sesion, _guia("Daredevil (1998) #1"))
+    assert resultado.creado
+    arcos = [objeto for objeto in sesion.added if isinstance(objeto, StoryArc)]
+    assert len(arcos) == 1 and arcos[0].metadata_["origen"] == "reading_orders"
+    assert arcos[0].metadata_["url"] == _url_guia()
+    assert arco_fandom.metadata_ == metadata_original     # intacto, no se le fusiona nada
+    assert enlace_fandom.reading_order == 4              # su enlace no se toca
+    assert not [objeto for objeto in sesion.borrados]    # no se borran enlaces ajenos
+
+
+async def test_c1_la_identidad_es_la_url_y_un_titulo_nuevo_no_duplica():
+    """C-1: si la guía cambia de título, se actualiza la MISMA fila (identidad = URL)."""
+    arco = _arco("arco-guia", "Título viejo", {"origen": "reading_orders", "url": _url_guia()})
+    serie = _serie("s-dd", "Daredevil", start_year=1998)
+    issue = _issue("i-1", "s-dd", "1")
+    sesion = SesionFalsa([Resultado([arco]), Resultado([serie]), Resultado([issue]),
+                          Resultado([])])
+    resultado = await reconciliar_guia(sesion, _guia("Daredevil (1998) #1",
+                                                     titulo="Título nuevo"))
+    assert not resultado.creado
+    assert arco.title == "Título nuevo"
+    assert not [objeto for objeto in sesion.added if isinstance(objeto, StoryArc)]
+
+
+async def test_c3_numero_con_varios_volumenes_usa_el_del_item_o_es_ambiguo():
+    serie = _serie("s-dd", "Daredevil", start_year=1998)
+    issue_v1 = SimpleNamespace(id="i-v1", series_id="s-dd", issue_number="1", volume=1)
+    issue_v2 = SimpleNamespace(id="i-v2", series_id="s-dd", issue_number="1", volume=2)
+    sesion = SesionFalsa([
+        Resultado([]), Resultado([serie]),
+        Resultado([issue_v1, issue_v2]), Resultado([]),
+    ])
+    resultado = await reconciliar_guia(sesion, _guia("Daredevil (1998) #1"))
+    assert resultado.omitidos == 1 and dict(resultado.motivos)["ambiguo"] == 1
+    assert not [o for o in sesion.added if isinstance(o, StoryArcIssue)]
+
+    # Con el volumen del ítem sí se desempata (Vol. 2).
+    sesion = SesionFalsa([
+        Resultado([]), Resultado([serie]),
+        Resultado([issue_v1, issue_v2]), Resultado([]),
+    ])
+    resultado = await reconciliar_guia(sesion, _guia("Daredevil Vol. 2 (1998) #1"))
+    assert resultado.enlazados == 1 and resultado.omitidos == 0
+    assert [o.issue_id for o in sesion.added if isinstance(o, StoryArcIssue)] == ["i-v2"]
+
+
+def test_c2_texto_para_terminal_quita_controles_y_acota():
+    from zascarr.services.reconciliacion_lecturas import texto_para_terminal
+
+    sucio = "Guía \x1b[2J\x1b]52;c;x\x07 normal\tt\u202e"
+    limpio = texto_para_terminal(sucio)
+    assert "\x1b" not in limpio and "\x07" not in limpio and "\u202e" not in limpio
+    assert "\t" not in limpio and len(limpio) <= 200
+    assert len(texto_para_terminal("A" * 500)) == 200
+
+
+def test_c2_el_script_sanea_el_titulo_antes_de_imprimirlo():
+    from pathlib import Path as _Path
+
+    fuente = _Path(__file__).resolve().parents[1] / "scripts" / "reconciliar-lecturas.py"
+    texto = fuente.read_text(encoding="utf-8")
+    assert "texto_para_terminal(resultado.titulo)" in texto

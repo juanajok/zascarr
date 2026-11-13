@@ -24,7 +24,10 @@ from zascarr.services.reading_orders import (
     ContinuityGuideExtractor,
     ReadingOrdersExtractor,
 )
-from zascarr.services.reconciliacion_lecturas import leer_y_reconciliar
+from zascarr.services.reconciliacion_lecturas import (
+    leer_y_reconciliar,
+    texto_para_terminal,
+)
 from zascarr.utils.cache_http import CacheHttp
 
 FUENTES = {
@@ -57,7 +60,9 @@ async def _reconciliar(fuente: str, url: str) -> None:
         return
     motivos = ", ".join(f"{motivo}: {n}" for motivo, n in resultado.motivos) or "ninguno"
     estado = "creada" if resultado.creado else "actualizada"
-    print(f"Guía «{resultado.titulo}» {estado} en /ui/arcos.")
+    # El título viene del HTML de la guía: se sanea antes de escribir en la terminal
+    # (SecOps c-2: sin ESC/BEL/C0 ni formato Unicode).
+    print(f"Guía «{texto_para_terminal(resultado.titulo)}» {estado} en /ui/arcos.")
     print(f"Referencias enlazadas: {resultado.enlazados} · omitidas: "
           f"{resultado.omitidos} ({motivos}).")
 

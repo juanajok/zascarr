@@ -24,7 +24,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import timedelta
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
 import structlog
@@ -89,14 +89,30 @@ def politica_de_sitio(sitio: str, ajustes=None):
     return politica_de(sitio, ajustes if ajustes is not None else get_settings())
 
 
+def _ruta_decodificada(ruta: str) -> str:
+    """Decodifica `%xx` repetidamente (hasta 3 pasadas) para no validar sobre el texto crudo.
+
+    `%2e%2e` (y su doble codificación) es `..` para el servidor: comprobarlo solo en crudo
+    dejaba pasar rutas de escape (SecOps c-1).
+    """
+    actual = ruta
+    for _ in range(3):
+        siguiente = unquote(actual)
+        if siguiente == actual:
+            break
+        actual = siguiente
+    return actual
+
+
 def url_de_sitio_valida(url: str, hosts_permitidos: tuple[str, ...], *,
                         rutas_prohibidas: tuple[str, ...] = (),
                         exigir_pagina: bool = False) -> bool:
-    """Validación común de una URL de guía (SecOps m-3), antes de pedir nada.
+    """Validación común de una URL de guía (SecOps m-3/c-1), antes de pedir nada.
 
     Solo `https`, host de la allowlist, **sin userinfo**, puerto 443/por defecto, **sin
-    query**, sin `..` ni caracteres de control, sin extensión de recurso y (si `exigir_pagina`)
-    con una ruta de página (no la raíz). Rechaza también las rutas prohibidas del sitio.
+    query**, sin `..` (tampoco codificado) ni caracteres de control, sin extensión de recurso
+    y (si `exigir_pagina`) con una ruta de página (no la raíz). Las rutas prohibidas y la
+    extensión se comprueban sobre la ruta YA decodificada.
     """
     try:
         partes = urlsplit(url)
@@ -112,15 +128,20 @@ def url_de_sitio_valida(url: str, hosts_permitidos: tuple[str, ...], *,
     if partes.query:
         return False
     ruta = partes.path
-    if not ruta.startswith("/") or ".." in ruta or any(ord(c) < 32 for c in ruta):
+    if not ruta.startswith("/"):
         return False
-    minuscula = ruta.lower()
-    if any(minuscula.startswith(prohibida) for prohibida in rutas_prohibidas):
-        return False
-    if _RE_RECURSO.search(ruta):
-        return False
+    decodificada = _ruta_decodificada(ruta)
+    for candidata in (ruta, decodificada):
+        if ".." in candidata or any(ord(c) < 32 for c in candidata):
+            return False
+        minuscula = candidata.lower()
+        if any(minuscula.startswith(prohibida) for prohibida in rutas_prohibidas):
+            return False
+        if _RE_RECURSO.search(candidata):
+            return False
     if exigir_pagina:
-        return ruta != "/" and bool(re.fullmatch(r"/[A-Za-z0-9][A-Za-z0-9._~/-]*", ruta))
+        return (decodificada != "/"
+                and bool(re.fullmatch(r"/[A-Za-z0-9][A-Za-z0-9._~/-]*", decodificada)))
     return True
 
 
