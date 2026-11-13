@@ -80,7 +80,7 @@ class ArchivoActual:
 
 
 def filtrar_mejoras(resultados: list[SearchResult], archivos: list[File],
-                    numero: str, serie: str) -> list[MejoraCandidata]:
+                    numero: str, serie: str, *, min_tier: int = 1) -> list[MejoraCandidata]:
     """Solo candidatos del MISMO número/serie y con calidad estrictamente mejor."""
     if not archivos:
         return []
@@ -104,7 +104,7 @@ def filtrar_mejoras(resultados: list[SearchResult], archivos: list[File],
         if not serie_norm or normalize_series_name(parsed.series or "") != serie_norm:
             continue
         calidad = calidad_de_titulo(r.title)
-        if calidad.puntuacion <= actual:
+        if calidad.puntuacion < min_tier or calidad.puntuacion <= actual:
             continue
         vistos.add(r.download_url)
         mejores.append(MejoraCandidata(r, calidad))
@@ -125,7 +125,7 @@ class ResultadoMejoras:
     candidatos: list[MejoraCandidata]
 
 
-async def buscar_mejoras(db, serie, issue) -> ResultadoMejoras:
+async def buscar_mejoras(db, serie, issue, *, min_tier: int = 1) -> ResultadoMejoras:
     """Busca en Prowlarr candidatos del mismo número con calidad mejor. Solo lectura."""
     from sqlalchemy import select
 
@@ -156,7 +156,8 @@ async def buscar_mejoras(db, serie, issue) -> ResultadoMejoras:
     except Exception:
         return ResultadoMejoras(False, "No se pudo consultar Prowlarr.", actuales, [])
     candidatos = filtrar_mejoras(
-        resultados, list(archivos), str(issue.issue_number), serie.title)
+        resultados, list(archivos), str(issue.issue_number), serie.title,
+        min_tier=min_tier)
     if not candidatos:
         return ResultadoMejoras(False,
                                 "No se encontró una edición con calidad mejor que la tuya.",

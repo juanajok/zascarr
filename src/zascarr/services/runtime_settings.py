@@ -43,6 +43,7 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
     "fuentes": (
         "comicvine_enabled", "anilist_enabled", "tebeosfera_enabled", "gcd_enabled",
         "metron_enabled", "open_library_enabled",
+        "fandom_dc_enabled", "fandom_marvel_enabled",
     ),
     "prowlarr": (
         "prowlarr_url", "prowlarr_api_key", "prowlarr_enabled", "prowlarr_indexer_ids",
@@ -52,6 +53,8 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
         "transmission_password", "transmission_enabled",
     ),
     "amule": ("amule_url", "amule_password", "amule_enabled"),
+    # BL-D2/D3: perfil legible y cadencia del escaneo de mejoras.
+    "calidad": ("quality_profile", "upgrade_scan_interval_minutes", "upgrade_scan_batch"),
     # #488/BL-CNV6: carpetas declaradas compartidas (lista de rutas absolutas del contenedor).
     "compartidos": ("carpetas_compartidas",),
     # A6: auth_password_hash nunca llega aquí en claro — web/ajustes.py lo

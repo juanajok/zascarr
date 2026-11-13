@@ -652,6 +652,8 @@ class Issue(Base):
     metadata_source: Mapped[str|None]     = mapped_column(String(20))
     # H2/H3 (peer review v2): ver Series.enrichment_attempted_at / Creator.locked_fields.
     enrichment_attempted_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
+    # BL-D3 (#154): última pasada del escaneo de mejor edición para este número.
+    upgrade_scanned_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     locked_fields:   Mapped[list]         = mapped_column(ARRAY(String), default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -696,6 +698,38 @@ class StoryArcIssue(Base):
     reading_order: Mapped[int] = mapped_column(Integer, nullable=False)
     story_arc: Mapped["StoryArc"] = relationship(back_populates="arc_issues")
     issue:     Mapped["Issue"]    = relationship()
+
+
+class UpgradeProposal(Base):
+    """BL-D3 (#154): una edición mejor encontrada para un número que ya tienes.
+
+    Es una PROPUESTA: no sustituye ni borra archivos. El enlace se guarda para
+    poder confirmarlo; el token de descarga se firma aparte y caduca.
+    """
+    __tablename__ = "upgrade_proposals"
+    __table_args__ = (
+        UniqueConstraint("issue_id", "candidate_url"),
+        Index("ix_upgrade_proposals_issue_status", "issue_id", "status"),
+    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    issue_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), nullable=False)
+    file_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"))
+    current_tier: Mapped[int] = mapped_column(Integer, default=0)
+    candidate_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    candidate_indexer: Mapped[str] = mapped_column(String(100), nullable=False)
+    candidate_url: Mapped[str] = mapped_column(Text, nullable=False)
+    candidate_size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    candidate_seeders: Mapped[int] = mapped_column(Integer, default=0)
+    candidate_tier: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="pendiente",
+                                        server_default="pendiente", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    issue: Mapped["Issue"] = relationship()
+    file: Mapped["File|None"] = relationship()
 
 
 class Tag(Base):
