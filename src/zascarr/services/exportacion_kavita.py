@@ -58,6 +58,7 @@ class ResumenExportacion:
     archivos: list[dict] = field(default_factory=list)
     saltados: int = 0
     modo: str = "hardlink"
+    carpetas_colisionadas: int = 0
 
 
 def _sha256(path: Path) -> str:
@@ -92,10 +93,11 @@ def _resolver_raiz(settings) -> Path:
             objetivo = Path(p).resolve()
         except OSError:
             continue
-        if resuelta == objetivo or resuelta.is_relative_to(objetivo):
+        if (resuelta == objetivo or resuelta.is_relative_to(objetivo)
+                or objetivo.is_relative_to(resuelta)):
             raise ExportacionError(
-                "La raíz de exportación no puede estar dentro de la biblioteca, "
-                "descargas, incoming ni una carpeta compartida.")
+                "La raíz de exportación no puede estar dentro (ni ser padre) de la "
+                "biblioteca, descargas, incoming o una carpeta compartida.")
     return resuelta
 
 
@@ -144,11 +146,22 @@ def _marcar_fuentes(fuentes: list[ArchivoFuente]) -> list[ArchivoFuente]:
     return salida
 
 
+def _fsync_directorio(carpeta: Path) -> None:
+    try:
+        fd = os.open(carpeta, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def _materializar(
-    plan: PlanExportacion, root: Path,
+    plan: PlanExportacion, root: Path, *, copiar: bool = False,
 ) -> tuple[list[dict], int, int, int, int, int, str]:
     entradas: list[dict] = []
-    omitidos = len(plan.omitidos) + len(plan.colisiones)
+    omitidos = len(plan.omitidos)
     colisiones = len(plan.colisiones)
     deriva = 0
     errores = 0
@@ -161,7 +174,7 @@ def _materializar(
         padre = destino.parent
         _comprobar_sin_symlinks(destino, root)
         padre.mkdir(parents=True, exist_ok=True)
-        modo = ("copy" if Path(accion.source_path).stat().st_dev != padre.stat().st_dev
+        modo = ("copy" if copiar or Path(accion.source_path).stat().st_dev != padre.stat().st_dev
                 else "hardlink")
         previstos.append((accion, destino, modo))
     copias_previstas = sum(a.size_bytes for a, _d, m in previstos if m == "copy")
@@ -173,9 +186,10 @@ def _materializar(
                 f"faltan {copias_previstas - libre} bytes.")
     for accion, destino, modo in previstos:
         try:
+            sha_fuente = _sha256(Path(accion.source_path))
             if destino.exists():
                 sha_destino = _sha256(destino)
-                if sha_destino == (accion.sha256 or _sha256(Path(accion.source_path))):
+                if sha_destino == sha_fuente:
                     entradas.append({
                         "dest": accion.destino_relativo.replace("\\", "/"),
                         "sha256": sha_destino, "issue_id": accion.issue_id,
@@ -188,6 +202,9 @@ def _materializar(
             if modo == "hardlink":
                 try:
                     os.link(accion.source_path, destino)
+                except FileExistsError:
+                    colisiones += 1
+                    continue
                 except OSError as exc:
                     if exc.errno != errno.EXDEV:
                         raise
@@ -197,26 +214,27 @@ def _materializar(
                 if libre < accion.size_bytes:
                     raise EspacioInsuficienteError(
                         "No hay espacio suficiente para copiar la exportación.")
-                # Temporal único en el mismo directorio; se publica con link
-                # (falla si el destino apareció) para no sobrescribir jamás.
+                # Temporal único en el mismo directorio; se copia, se hace
+                # fsync y se publica con link (atómico y sin pisar).
                 fd, temp = tempfile.mkstemp(prefix=f".{destino.name}.", dir=str(destino.parent))
                 os.close(fd)
                 try:
                     shutil.copy2(accion.source_path, temp)
-                    # Publicación sin pisar: crear el destino en exclusiva y
-                    # copiar el temporal ya verificado. No se usa `os.replace`.
-                    fd = os.open(destino, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-                    with os.fdopen(fd, "wb") as salida, Path(temp).open("rb") as entrada:
-                        shutil.copyfileobj(entrada, salida)
-                    shutil.copystat(accion.source_path, destino)
+                    with open(temp, "rb+") as f:
+                        os.fsync(f.fileno())
+                    try:
+                        os.link(temp, destino)
+                    except FileExistsError:
+                        colisiones += 1
+                        continue
+                    _fsync_directorio(destino.parent)
                 finally:
                     Path(temp).unlink(missing_ok=True)
                 copiados += accion.size_bytes
-            sha = accion.sha256 or _sha256(destino)
             modos.add(modo)
             entradas.append({
                 "dest": accion.destino_relativo.replace("\\", "/"),
-                "sha256": sha, "issue_id": accion.issue_id,
+                "sha256": sha_fuente, "issue_id": accion.issue_id,
                 "file_id": accion.file_id, "mode": modo, "status": "ok",
             })
         except EspacioInsuficienteError:
@@ -254,7 +272,8 @@ def _escribir_manifiesto(plan: PlanExportacion, root: Path, collection: Collecti
 
 
 async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
-                             patch_comicinfo: bool = False) -> ResumenExportacion:
+                             patch_comicinfo: bool = False,
+                             copiar: bool = False) -> ResumenExportacion:
     if patch_comicinfo:
         raise ParcheComicInfoNoDisponibleError(
             "El parche de ComicInfo todavía no está disponible: es la fase 2 de esta función. "
@@ -275,7 +294,7 @@ async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
     plan = await asyncio.to_thread(_plan, collection, fuentes, root)
     await asyncio.to_thread((root / plan.folder).mkdir, parents=True, exist_ok=True)
     (archivos, omitidos, colisiones, deriva, errores,
-     copiados, modo) = await asyncio.to_thread(_materializar, plan, root)
+     copiados, modo) = await asyncio.to_thread(_materializar, plan, root, copiar=copiar)
     manifiesto = await asyncio.to_thread(
         _escribir_manifiesto, plan, root, collection, archivos, modo)
     ahora = datetime.now(UTC)
@@ -300,4 +319,5 @@ async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
         run_id=str(run.id), collection_id=str(collection.id), destino=str(root / plan.folder),
         materializados=materializados_ok, omitidos=omitidos, colisiones=colisiones,
         deriva=deriva, errores=errores, bytes_copiados=copiados, archivos=archivos,
-        saltados=saltados, modo=modo)
+        saltados=saltados, modo=modo,
+        carpetas_colisionadas=len(plan.carpetas_colision))

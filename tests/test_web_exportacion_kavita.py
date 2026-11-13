@@ -62,7 +62,8 @@ def test_ui_muestra_boton_y_resultado():
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
              patch("zascarr.web.colecciones.series_sin_coleccion", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.exportar_coleccion", AsyncMock(return_value=resumen)):
-            r = c.post(f"/ui/colecciones/{cid}/exportar", data={"patch_comicinfo": "0"})
+            r = c.post(f"/ui/colecciones/{cid}/exportar",
+                       data={"patch_comicinfo": "0", "confirmo": "1"})
     finally:
         _cerrar()
     assert r.status_code == 200 and "Exportación terminada" in r.text

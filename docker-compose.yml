@@ -133,6 +133,8 @@ services:
       - FORUM_USERNAME=${FORUM_USERNAME:-}
       - FORUM_PASSWORD=${FORUM_PASSWORD:-}
       - LIBRARY_PATH=/media/library
+      - EXPORT_PATH=${EXPORT_PATH:-/media/export}
+      - HOST_EXPORT_DIR=${HOST_EXPORT_DIR:-}
       # La ruta REAL de la biblioteca en el host: la app solo la usa para MOSTRARLA (la vista previa de «Desvincular»
       # dice dónde está el archivo en tu disco, no en el contenedor). Vacía = se enseña la ruta del contenedor.
       - HOST_LIBRARY_DIR=${HOST_LIBRARY_DIR:-}

@@ -69,6 +69,8 @@ def test_raiz_no_puede_estar_dentro_de_biblioteca_ni_ser_symlink(tmp_path):
         _resolver_raiz(ajustes(enlace))
     with pytest.raises(ExportacionError):
         _resolver_raiz(ajustes(tmp_path / ".." / "export"))
+    with pytest.raises(ExportacionError):
+        _resolver_raiz(ajustes(tmp_path))       # padre de la biblioteca
 
 
 def test_carpetas_de_serie_colisionadas_se_desambiguan():
