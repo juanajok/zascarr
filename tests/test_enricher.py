@@ -945,3 +945,16 @@ class TestH9RowcountCero:
         assert series.enrichment_attempted_at is None
         db.flush.assert_not_awaited()
         assert report.series_enriched == []
+
+
+def test_paginas_de_volumen_filtra_personajes_y_numeros():
+    """Verificado en vivo: buscar «Batman» devuelve personajes; solo valen los volúmenes."""
+    from zascarr.core.matcher import normalize_title
+    from zascarr.services.enricher import _paginas_de_volumen
+
+    norm = normalize_title("Batman")
+    candidatos = [
+        "Bruce Wayne (Earth-One)", "Batman Vol 1", "Batman Vol 1 1", "Batman Vol 2",
+        "Absolute Batman Vol 1", "Batman: The Court of Owls",
+    ]
+    assert _paginas_de_volumen(candidatos, norm) == ["Batman Vol 1", "Batman Vol 2"]

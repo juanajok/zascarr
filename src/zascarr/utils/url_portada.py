@@ -189,6 +189,10 @@ async def resolver_publica(host: str, puerto: int, resolutor: Resolutor) -> str:
 
 # ── 3-5. Conexión fijada, redirecciones y tamaño ──────────────────────────────────────────────
 
+#: Identificación del cliente en la descarga de portadas (regla de cortesía: UA honesto).
+USER_AGENT = "ZascArr/0.1 (+https://github.com/juanajok/zascarr)"
+
+
 def _cliente_por_defecto() -> httpx.AsyncClient:
     # `trust_env=False`: un proxy del entorno resolvería el nombre por su cuenta y anularía la dirección fijada.
     return httpx.AsyncClient(timeout=TIEMPO_TOTAL_S, follow_redirects=False, trust_env=False)
@@ -204,7 +208,14 @@ async def _pedir(cliente: httpx.AsyncClient, esquema: str, host: str, ip: str, p
     Devuelve (estado, destino, cuerpo): `destino` es `None` si NO es una redirección y, si lo es, el valor de
     `Location` (vacío si falta). Corta si el cuerpo supera `max_bytes`."""
     autoridad = _literal(ip) + (f":{puerto}" if puerto else "")
-    cabeceras = {"Host": host if not puerto else f"{host}:{puerto}", "Accept": "image/*"}
+    # UA identificado + Referer del propio origen: algunos CDN (Cloudflare/Fandom) devuelven 403
+    # a descargas sin identificarse o sin referencia del sitio; verificado en vivo el 2026-11-13.
+    cabeceras = {
+        "Host": host if not puerto else f"{host}:{puerto}",
+        "Accept": "image/*",
+        "User-Agent": USER_AGENT,
+        "Referer": f"{esquema}://{host}/",
+    }
     extensiones = {"sni_hostname": host} if esquema == "https" else {}
     async with cliente.stream("GET", f"{esquema}://{autoridad}{ruta}", headers=cabeceras,
                               extensions=extensiones) as r:

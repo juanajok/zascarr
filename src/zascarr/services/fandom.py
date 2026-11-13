@@ -83,10 +83,12 @@ _PLANTILLAS = {
     "dc.fandom.com": {
         "volume": "DC Database:Volume Template",
         "comic": "DC Database:Comic Template",
+        "arc": "DC Database:Storyline Template",
     },
     "marvel.fandom.com": {
         "volume": "Marvel Database:Volume Template",
         "comic": "Marvel Database:Comic Template",
+        "arc": "Marvel Database:Storyline Template",
     },
 }
 
@@ -496,6 +498,26 @@ def enlaces_de_issues(texto: str | None) -> list[str]:
             if referencia_de_issue(destino)]
 
 
+def issues_de_valor_de_arc(valor: str | None) -> list[str]:
+    """Números de un arco a partir del parámetro `Issues` de su plantilla.
+
+    En las wikis de Fandom ese valor es una lista con el número envuelto en la plantilla
+    `{{c|Batman Vol 1 404}}` (y, a veces, también como enlace `[[…]]`); los recopilatorios
+    usan otras plantillas (`{{co|…}}`) y no cuentan. Se devuelve en orden de lectura.
+    """
+    if not valor:
+        return []
+    encontrados: list[str] = []
+    for titulo in re.findall(r"\{\{c\s*\|\s*([^}|]+?)\s*(?:\||\}\})", valor):
+        titulo = titulo.strip()
+        if referencia_de_issue(titulo) and titulo not in encontrados:
+            encontrados.append(titulo)
+    for titulo in enlaces_de_issues(valor):
+        if titulo not in encontrados:
+            encontrados.append(titulo)
+    return encontrados
+
+
 def enlaces_de_pagina(texto: str | None) -> list[str]:
     """Destinos `[[X]]` de un valor de plantilla, en orden y sin repetir."""
     return _destinos_de_enlace(texto)
@@ -880,11 +902,17 @@ class FandomClient:
         wikitext = await self._wikitext(page_title)
         if wikitext is None:
             return None
-        issues = enlaces_de_issues(seccion(wikitext, "Issues"))
+        # 1) La plantilla del arco declara sus números en `Issues` ({{c|…}}), que es la vía
+        #    fiable: la página de «Batman: Year One» no tiene enlaces [[…]] en el wikitext.
+        prefijo = _PLANTILLAS[self._host].get("arc")
+        plantilla = extraer_plantilla(wikitext, prefijo) if prefijo else None
+        issues: list[str] = []
+        if plantilla is not None:
+            issues = issues_de_valor_de_arc(parametros_de_plantilla(plantilla).get("issues"))
         if not issues:
-            # Respaldo: todos los enlaces a números, en orden de aparición. Si el arco no
-            # declara sección propia, este orden es el del artículo (que suele ser el de
-            # lectura); si tampoco hay enlaces, no es un arco de números.
+            issues = enlaces_de_issues(seccion(wikitext, "Issues"))
+        if not issues:
+            # Respaldo: todos los enlaces a números, en orden de aparición.
             issues = enlaces_de_issues(wikitext)
         return FandomArc(
             page_title=page_title,

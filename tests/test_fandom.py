@@ -576,3 +576,16 @@ def test_titulo_base_acota_titulos_hostiles():
     # El comportamiento normal no cambia.
     assert titulo_base("Batman Vol 1") == "Batman"
     assert titulo_base("Batman Archives Vol 1 (Collected)") == "Batman Archives"
+
+
+def test_issues_de_valor_de_arc():
+    """La plantilla de arco declara sus números con {{c|…}}; los tomos ({{co|…}}) no cuentan."""
+    from zascarr.services.fandom import issues_de_valor_de_arc
+
+    valor = ('* {{c|Batman Vol 1 404}} -- "Chapter One: Who I Am"\n'
+             '* {{c|Batman Vol 1 405}} -- "Chapter Two"\n'
+             "* {{co|Batman: Year One (Collected)}}\n"
+             "* [[Batman Vol 1 406|Batman #406]]")
+    assert issues_de_valor_de_arc(valor) == [
+        "Batman Vol 1 404", "Batman Vol 1 405", "Batman Vol 1 406"]
+    assert issues_de_valor_de_arc(None) == []
