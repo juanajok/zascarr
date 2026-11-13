@@ -1953,9 +1953,8 @@ errores de ruff y 7 de mypy, ninguno descubierto hasta ahora porque nada los
 exigía.
 
 - **`.github/workflows/ci.yml` nuevo:** tres jobs en push/PR a `main` — suite
-  unitaria (bloqueante), `ruff check` (informativo, `continue-on-error`
-  hasta que se limpie el resto de la deuda de abajo, para no bloquear
-  merges con un lint que ya arrastraba 214 errores antes de este commit), y
+  unitaria (bloqueante), `ruff check` (entonces informativo con `continue-on-error`
+  hasta limpiar la deuda de abajo; desde el 2026-11-13 es bloqueante — ver cierre de #211), y
   build de la imagen Docker (bloqueante — habría cazado el bug P0 del
   `Dockerfile` de la 1.0.0 al instante).
 - **36 de los 214 errores de ruff eran falso positivo, no deuda real:**
@@ -1998,9 +1997,10 @@ exigía.
     (`64a6bbfc`) y `# noqa` con motivo donde el patrón es correcto; `S608` solo interpola
     constantes del código (`VIVAS`), nunca datos de la persona. Recuentos en
     `SECURITY.md` y en el histórico (`964e3e2c`).
-  - **Pendiente de decisión del responsable (no dentro de #211):** retirar
-    `continue-on-error: true` del job `ruff` de la CI (criterio 6 de la historia). Hasta que
-    se decida, el job sigue siendo informativo aunque esté en verde.
+  - **Decisión del responsable (2026-11-13):** se retira `continue-on-error: true` del job
+    `ruff`; pasa a llamarse `ruff` y a bloquear como la suite y Postgres. Las dos
+    comprobaciones (`ruff check src/` y `--select S`) siguen ejecutándose con `if: always()`
+    para ver el detalle si una falla. El cambio se hizo en PR aparte, como pedía el criterio 6.
 
 ## Deuda técnica registrada (integridad del hash de fichero, 2026-09-29)
 
