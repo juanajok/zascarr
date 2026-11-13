@@ -505,7 +505,7 @@ src/zascarr/
   utils/      # naming, portadas, ComicInfo
   LEGAL.md    # aviso legal (blindaje legal)
 alembic/      # migraciones (0001–0009)
-docs/         # backlog y ADRs
+docs/         # backlog, ADRs y diseño
 tests/        # suite de tests autosuficiente
 scripts/      # backup, VPN, Kavita
 bootstrap.sh  # instalación de un solo comando
@@ -518,6 +518,7 @@ docker-compose.yml
 - [`SECURITY.md`](SECURITY.md) — postura de seguridad y cómo reportar una vulnerabilidad.
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — backlog canónico del producto.
 - [`docs/adr/`](docs/adr/) — decisiones de arquitectura registradas.
+- [Sistema de diseño (PDF)](docs/design/sistema-de-diseno-zascarr.pdf) — guía de marca, componentes, accesibilidad y revisión de la UI (versión 2026-11-13, `main@76e7812`).
 - [`docs/TESTING_E2E.md`](docs/TESTING_E2E.md) / [`docs/TESTING_NFR_Zascarr.md`](docs/TESTING_NFR_Zascarr.md) — planes de testing end-to-end y no funcional.
 - [`src/zascarr/LEGAL.md`](src/zascarr/LEGAL.md) — aviso legal y marco de uso.
 - Docstrings de cada módulo — explican el *por qué* de las decisiones.

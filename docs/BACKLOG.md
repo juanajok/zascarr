@@ -31,6 +31,11 @@ benchmark, `docs/design/benchmark-<ID>-<tema>.md`, hecha según
 por idea, adoptar/adaptar/mejorar/construir sobre lo propio/descartar con versión y
 pruebas; ver CLAUDE.md §13). Un arreglo evidente de texto o CSS no requiere ficha.
 
+**Sistema de diseño:** la guía visual y de contenido vigente está publicada en
+[`docs/design/sistema-de-diseno-zascarr.pdf`](design/sistema-de-diseno-zascarr.pdf) (versión
+2026-11-13, `main@76e7812`); incluye la revisión de UI/UX de #689 y la deuda abierta que no debe
+copiarse en pantallas nuevas.
+
 ### Épica A — "Lo instalo yo solo"
 
 | ID | Historia | Aceptación | P | Est |
