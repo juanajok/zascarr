@@ -31,7 +31,7 @@
       <label><input type="radio" name="series_id" value="" {% if not coleccion.cover_series_id or not coleccion.cover_series_valida %}checked{% endif %}> Usar la automática (mosaico)</label>
       {% for cand in candidatas_portada|default([]) %}
       <label><input type="radio" name="series_id" value="{{ cand.series_id }}"
-        {% if coleccion.cover_series_id == cand.series_id %}checked{% endif %}
+        {% if coleccion.cover_series_id == cand.series_id and cand.tiene_portada %}checked{% endif %}
         {% if not cand.tiene_portada %}disabled{% endif %}>
         Portada de {{ cand.title }}{% if not cand.tiene_portada %} (todavía sin portada guardada){% endif %}</label>
       {% endfor %}

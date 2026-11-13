@@ -40,7 +40,7 @@ VERSION = 1
 #: Límites defensivos al componer: un JPEG de portada real mide pocos cientos de KB y
 #: 600×900; no se decodifica nada mayor ni se sigue un symlink dentro de `covers/`.
 MAX_BYTES = MAX_BYTES_PORTADA_PREVIA
-MAX_PIXELES = 40_000_000
+MAX_PIXELES = 4_000_000
 #: Fondo neutro de las celdas vacías del mosaico (no es una imagen de nadie).
 FONDO = (232, 226, 214)
 
