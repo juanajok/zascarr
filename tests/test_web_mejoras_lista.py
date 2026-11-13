@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.services.legal import require_legal_acknowledgment
-from zascarr.services.upgrades import MejoraPendiente
+from zascarr.services.upgrades import MejoraPendiente, PaginaMejoras
 
 
 def _db():
@@ -41,13 +41,18 @@ def _fila():
     return MejoraPendiente(propuesta, issue, serie)
 
 
+def _pagina(filas):
+    return PaginaMejoras(filas, len(filas), 1, 1)
+
+
 def test_lista_de_mejoras_y_estado_vacio():
     c = _cliente()
     try:
         with patch("zascarr.web.mejoras.listar_mejoras",
-                   AsyncMock(return_value=[_fila()])):
+                   AsyncMock(return_value=_pagina([_fila()]))):
             r = c.get("/ui/mejoras")
-        with patch("zascarr.web.mejoras.listar_mejoras", AsyncMock(return_value=[])):
+        with patch("zascarr.web.mejoras.listar_mejoras",
+                   AsyncMock(return_value=_pagina([]))):
             vacia = c.get("/ui/mejoras")
     finally:
         _cerrar()
@@ -86,7 +91,8 @@ def test_escanear_sin_prowlarr_explica_el_motivo_sin_json():
     try:
         with patch("zascarr.web.mejoras.motivo_sin_escaneo",
                    return_value="Prowlarr no está activo."), \
-             patch("zascarr.web.mejoras.listar_mejoras", AsyncMock(return_value=[])):
+             patch("zascarr.web.mejoras.listar_mejoras",
+                   AsyncMock(return_value=_pagina([]))):
             r = c.post("/ui/mejoras/escanear")
     finally:
         _cerrar()

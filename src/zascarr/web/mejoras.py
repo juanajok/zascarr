@@ -37,13 +37,15 @@ def _respuesta(request: Request, contexto: dict) -> HTMLResponse:
     return resp
 
 
-async def _contexto(db: AsyncSession, *, aviso: str = "", error: str = "") -> dict:
-    filas = await listar_mejoras(db)
+async def _contexto(db: AsyncSession, *, pagina: int = 1,
+                    aviso: str = "", error: str = "") -> dict:
+    datos = await listar_mejoras(db, pagina)
     secret = get_settings().secret_key
     return {
+        "pagina": datos,
         "mejoras": [
             {"m": m, "token": crear_token_candidato(m.issue.id, m.candidato, secret)}
-            for m in filas
+            for m in datos.filas
         ],
         "aviso": aviso,
         "error": error,
@@ -52,6 +54,7 @@ async def _contexto(db: AsyncSession, *, aviso: str = "", error: str = "") -> di
 
 @router.get("", response_class=HTMLResponse)
 async def mejoras(request: Request, guardado: str = Query(default=""),
+                  pagina: int = Query(default=1, ge=1),
                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     aviso = {
         "escaneado": "Búsqueda de mejoras terminada.",
@@ -61,7 +64,8 @@ async def mejoras(request: Request, guardado: str = Query(default=""),
     error = ""
     if guardado == "fallo":
         error = "No se pudo enviar la descarga. Revisa el cliente en Ajustes."
-    return _respuesta(request, await _contexto(db, aviso=aviso, error=error))
+    return _respuesta(request, await _contexto(
+        db, pagina=pagina, aviso=aviso, error=error))
 
 
 @router.post("/escanear", response_class=HTMLResponse,

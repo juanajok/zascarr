@@ -6,6 +6,7 @@ usa lo que consta (`source_tag`, `width_px`, `quality` y el título del release)
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from zascarr.models import File
@@ -40,9 +41,9 @@ def calidad_de_archivo(archivo: File | None) -> Calidad:
         puntos = 2
     elif fuente in ("scan", "c2c") or guardada in ("baja", "basica"):
         puntos = 1
-    if ancho >= 2400:
-        puntos = max(puntos, 3)
-    elif ancho >= 1600:
+    # La resolución alta no convierte un escaneo en digital: solo sube hasta
+    # «media». El nivel «alta» queda reservado a un origen digital declarado.
+    if ancho >= 1600:
         puntos = max(puntos, 2)
     elif ancho >= 900:
         puntos = max(puntos, 1)
@@ -58,11 +59,12 @@ def calidad_de_archivo(archivo: File | None) -> Calidad:
 def calidad_de_titulo(titulo: str) -> Calidad:
     """Calidad que declara el título de un release; desconocida si no declara nada."""
     t = (titulo or "").casefold()
-    if any(m in t for m in ("digital", "webrip", "web-dl", "dcp")):
+    # Límites de palabra: «Digitalizado» es un escaneo, no un digital.
+    if re.search(r"\b(digital|webrip|web-dl|dcp)\b", t):
         return Calidad(3, "alta", "digital")
-    if any(m in t for m in ("scan_hq", "c2c", "hd", "uhd", "4k", "1080")):
+    if re.search(r"\b(scan_hq|c2c|hd|uhd|4k|1080p?)\b", t):
         return Calidad(2, "media", "escaneo de alta calidad")
-    if any(m in t for m in ("scan", "escaneo")):
+    if re.search(r"\b(scan|escaneo|escaneado)\b", t):
         return Calidad(1, "básica", "escaneo")
     return Calidad(0, "sin datos", "el título no declara calidad")
 
@@ -79,9 +81,20 @@ class ArchivoActual:
     calidad: Calidad
 
 
+_VARIANTE = re.compile(
+    r"\b(variant|cover\s*[a-z]|2nd\s*print|reprint|sketch|pack|1\s*(de|of)\s*\d+)\b")
+_MAX_SIZE = 500 * 1024 * 1024
+
+
 def filtrar_mejoras(resultados: list[SearchResult], archivos: list[File],
-                    numero: str, serie: str, *, min_tier: int = 1) -> list[MejoraCandidata]:
-    """Solo candidatos del MISMO número/serie y con calidad estrictamente mejor."""
+                    numero: str, serie: str, *, min_tier: int = 1,
+                    volumen: int | None = None,
+                    anio: int | None = None) -> list[MejoraCandidata]:
+    """Solo candidatos del MISMO número/serie/volumen y mejor calidad.
+
+    No intenta adivinar el idioma (el release no lo declara de forma fiable),
+    pero descarta packs, variantes y etapas distintas de la misma cabecera.
+    """
     if not archivos:
         return []
     actual = max((calidad_de_archivo(a).puntuacion for a in archivos), default=0)
@@ -93,15 +106,21 @@ def filtrar_mejoras(resultados: list[SearchResult], archivos: list[File],
     vistos: set[str] = set()
     mejores: list[MejoraCandidata] = []
     for r in resultados:
-        if not r.download_url or r.download_url in vistos:
+        if not r.download_url or r.download_url in vistos or r.size_bytes > _MAX_SIZE:
             continue
         parsed = parse_comic_filename(r.title)
-        if parsed.edition_kind is not None:
+        if parsed.edition_kind is not None or parsed.is_pack:
+            continue
+        if _VARIANTE.search(r.title.casefold()):
             continue
         texto = (parsed.issue_number or "").strip()
         if not texto.isdigit() or int(texto) != numero_entero:
             continue
         if not serie_norm or normalize_series_name(parsed.series or "") != serie_norm:
+            continue
+        if volumen is not None and parsed.volume is not None and parsed.volume != volumen:
+            continue
+        if anio is not None and parsed.year is not None and abs(parsed.year - anio) > 5:
             continue
         calidad = calidad_de_titulo(r.title)
         if calidad.puntuacion < min_tier or calidad.puntuacion <= actual:
@@ -150,9 +169,11 @@ async def buscar_mejoras(db, serie, issue, *, min_tier: int = 1) -> ResultadoMej
         return ResultadoMejoras(False,
                                 "Prowlarr no está activo o le falta la URL o la clave de API.",
                                 actuales, [])
+    from zascarr.services.orchestrator import prowlarr_indexers_seleccionados
     try:
         resultados = await ProwlarrClient().search(
-            f"{serie.title} {issue.issue_number}", categories=[7030, 7020])
+            f"{serie.title} {issue.issue_number}", categories=[7030, 7020],
+            indexer_ids=prowlarr_indexers_seleccionados(ajustes))
     except (CortesiaEnEspera, FuenteApagada):
         return ResultadoMejoras(False, "Prowlarr no está disponible ahora mismo.",
                                 actuales, [], reintentable=True)
@@ -161,7 +182,8 @@ async def buscar_mejoras(db, serie, issue, *, min_tier: int = 1) -> ResultadoMej
                                 actuales, [], reintentable=True)
     candidatos = filtrar_mejoras(
         resultados, list(archivos), str(issue.issue_number), serie.title,
-        min_tier=min_tier)
+        min_tier=min_tier, volumen=getattr(issue, "volume", None),
+        anio=getattr(serie, "start_year", None))
     if not candidatos:
         return ResultadoMejoras(False,
                                 "No se encontró una edición con calidad mejor que la tuya.",

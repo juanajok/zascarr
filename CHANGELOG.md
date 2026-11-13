@@ -23,6 +23,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   con IP fijada manda ahora `User-Agent` propio y `Referer` del propio origen; verificado con la
   portada de Fandom (200, 768 KB; el endpoint sirve y cachea en `covers/externa/`).
 
+- **D3: perfil, identidad y escala de las mejoras (2026-11-13).** La búsqueda bajo demanda de
+  la ficha respeta el perfil de calidad; el clasificador ya no confunde «Digitalizado» con
+  digital, reserva «alta» al origen digital, y descarta packs, variantes, volúmenes y años de
+  otra etapa; el escaneo usa los indexers elegidos en Prowlarr y el tope de 500 MB. Mejoras
+  pagina de 20 en 20 con total pendiente. La oferta caducada se explica en la página, no como JSON.
 - **Tokens de tipografía, forma y espaciado (2026-11-13, #689).** `web.css` declara en `:root`
   la escala de texto del sistema (15 estilos + la excepción del móvil) y los tokens
   `--border-panel/control/chip/line` y `--space-1..6`; las 140 declaraciones `font-size`, los
