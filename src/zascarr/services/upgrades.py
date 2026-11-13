@@ -57,16 +57,17 @@ def motivo_sin_escaneo(settings=None) -> str | None:
     return None
 
 
-async def escanear_mejoras(db: AsyncSession, batch: int | None = None) -> int:
-    """Busca mejoras para un lote pequeño; devuelve cuántas propuestas nuevas creó."""
+async def escanear_mejoras(db: AsyncSession,
+                           batch: int | None = None) -> ResultadoEscaneo:
+    """Busca mejoras para un lote pequeño y devuelve qué se revisó y qué salió."""
     settings = get_settings()
     perfil, objetivo = perfil_y_objetivo(settings)
     if objetivo == 0 or not _prowlarr_listo(settings):
-        return 0
+        return ResultadoEscaneo(0, 0, 0)
     limite = batch if batch is not None else max(0, getattr(
         settings, "upgrade_scan_batch", 3))
     if limite <= 0:
-        return 0
+        return ResultadoEscaneo(0, 0, 0)
     ahora = datetime.now(UTC)
     corte = ahora - timedelta(hours=COOLDOWN_HORAS)
     issues = (await db.execute(
@@ -76,7 +77,10 @@ async def escanear_mejoras(db: AsyncSession, batch: int | None = None) -> int:
         ).order_by(Issue.upgrade_scanned_at.asc().nullsfirst(), Issue.id).limit(limite)
     )).scalars().all()
     creadas = 0
+    revisados = 0
+    fallidos = 0
     for issue in issues:
+        revisados += 1
         serie = await db.get(Series, issue.series_id)
         if serie is None:
             issue.upgrade_scanned_at = ahora
@@ -86,6 +90,7 @@ async def escanear_mejoras(db: AsyncSession, batch: int | None = None) -> int:
             # Fallo de red/cortesía: NO se sella el número; el siguiente ciclo lo reintenta.
             logger.warning("upgrades.search_failed", issue_id=str(issue.id),
                            motivo=resultado.error)
+            fallidos += 1
             continue
         issue.upgrade_scanned_at = ahora
         if not resultado.ok or not resultado.candidatos:
@@ -127,7 +132,14 @@ async def escanear_mejoras(db: AsyncSession, batch: int | None = None) -> int:
             # Carrera con otro escaneo: la propuesta ya existe; el lote sigue.
             logger.info("upgrades.proposal_duplicate", issue_id=str(issue.id))
     await db.commit()
-    return creadas
+    return ResultadoEscaneo(revisados, creadas, fallidos)
+
+
+@dataclass(frozen=True)
+class ResultadoEscaneo:
+    revisados: int
+    creadas: int
+    fallidos: int
 
 
 @dataclass(frozen=True)

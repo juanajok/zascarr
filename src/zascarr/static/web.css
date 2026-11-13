@@ -1458,6 +1458,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vinc-grupo ul { margin: 6px 0 0; padding-left: 20px; }
 
 /* U20: marcar/desmarcar todos y detalle plegado de las explicaciones de página */
+.vinc-borrador-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 var(--gutter); }
+.vinc-borrador-guardado {
+  margin: 0 0 var(--gutter);
+  padding: 10px 12px;
+  border: var(--border-chip) solid var(--ink-faint);
+  border-radius: var(--radius-panel);
+  background: var(--paper-2);
+}
+.vinc-borrador-guardado p { margin: 0 0 8px; }
 .vinc-barra {
   position: sticky;
   top: 8px;
@@ -2430,6 +2439,26 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .coleccion-portada { width: 96px; }
   .coleccion-checkgrid { grid-template-columns: 1fr; }
 }
+
+.coleccion-filtros { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) auto; gap: 12px; align-items: end; margin: 10px 0 12px; }
+.coleccion-filtro { display: grid; gap: 4px; min-width: 0; }
+.coleccion-filtro label { font-weight: 600; }
+.coleccion-filtro input, .coleccion-filtro select { min-height: 44px; width: 100%; }
+.coleccion-filtro-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.coleccion-filtro-acciones .btn { min-height: 44px; }
+.coleccion-contador { margin: 4px 0 10px; font-weight: 600; }
+@media (max-width: 760px) {
+  .coleccion-filtros { grid-template-columns: 1fr 1fr; }
+  .coleccion-filtro-acciones { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .coleccion-filtros { grid-template-columns: 1fr; }
+  .coleccion-filtro-acciones { grid-column: auto; }
+}
+
+.coleccion-paginacion { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 12px; }
+.coleccion-paginacion .btn, .coleccion-paginacion [aria-disabled="true"] { min-height: 44px; }
+.coleccion-paginacion [aria-disabled="true"] { opacity: .55; cursor: default; }
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
