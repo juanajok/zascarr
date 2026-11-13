@@ -105,7 +105,7 @@ async def test_reexportar_es_idempotente_y_no_rehace(db, tmp_path, monkeypatch):
     import json
     manifiesto = next((tmp_path / "export").rglob("_zascarr_manifest.json"))
     datos = json.loads(manifiesto.read_text(encoding="utf-8"))
-    assert datos["files"][0]["status"] == "skip" and datos["files"][0]["mode"] == "skip"
+    assert datos["files"][0]["status"] == "skip" and datos["files"][0]["mode"] == "hardlink"
 
 
 async def test_deriva_no_pisa_el_destino_editado(db, tmp_path, monkeypatch):
@@ -179,11 +179,12 @@ async def test_fuente_symlink_se_omite_y_se_reporta(db, tmp_path, monkeypatch):
     real = next((tmp_path / "lib").glob("*.cbz"))
     enlace = tmp_path / "lib" / "enlace.cbz"
     enlace.symlink_to(real)
-    from sqlalchemy import update
+    from sqlalchemy import select, update
 
     from zascarr.models import File
-    async with db.begin_nested():
-        await db.execute(update(File).values(file_path=str(enlace), file_name=enlace.name))
+    fid = (await db.execute(select(File.id))).scalars().first()
+    await db.execute(update(File).where(File.id == fid).values(
+        file_path=str(enlace), file_name=enlace.name))
     resumen = await svc.exportar_coleccion(db, coleccion.id)
     assert resumen.materializados == 0 and resumen.omitidos >= 1
 
@@ -196,3 +197,27 @@ async def test_manifiesto_y_hardlink_hacen_fsync_del_directorio(db, tmp_path, mo
     monkeypatch.setattr(svc, "_fsync_directorio", lambda p: llamadas.append(p) or original(p))
     await svc.exportar_coleccion(db, coleccion.id)
     assert len(llamadas) >= 2
+
+
+async def test_deriva_con_hardlink_usa_el_hash_esperado_del_manifiesto(db, tmp_path, monkeypatch):
+    ajustes(tmp_path, monkeypatch)
+    coleccion, _ = await sembrar(db, tmp_path)
+    await svc.exportar_coleccion(db, coleccion.id)
+    destino = next((tmp_path / "export").rglob("*.cbz"))
+    destino.write_bytes(b"editado por fuera")
+    resumen = await svc.exportar_coleccion(db, coleccion.id)
+    assert resumen.deriva == 1
+    import json
+    manifiesto = json.loads(next((tmp_path / "export").rglob("_zascarr_manifest.json")).read_text())
+    assert manifiesto["files"][0]["status"] == "drift"
+
+
+async def test_reexportar_conserva_modo_copy_en_skip(db, tmp_path, monkeypatch):
+    ajustes(tmp_path, monkeypatch)
+    coleccion, _ = await sembrar(db, tmp_path)
+    await svc.exportar_coleccion(db, coleccion.id, copiar=True)
+    resumen = await svc.exportar_coleccion(db, coleccion.id, copiar=True)
+    assert resumen.modo == "copy" and resumen.saltados == 1
+    import json
+    manifiesto = json.loads(next((tmp_path / "export").rglob("_zascarr_manifest.json")).read_text())
+    assert manifiesto["files"][0]["mode"] == "copy" and manifiesto["files"][0]["status"] == "skip"

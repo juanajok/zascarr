@@ -157,8 +157,21 @@ def _fsync_directorio(carpeta: Path) -> None:
         os.close(fd)
 
 
+def _leer_manifiesto(plan: PlanExportacion, root: Path) -> dict[str, dict]:
+    ruta = root / plan.folder / NOMBRE_MANIFIESTO
+    try:
+        datos = json.loads(ruta.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {
+        str(f.get("dest")): f for f in datos.get("files", [])
+        if isinstance(f, dict) and f.get("dest")
+    }
+
+
 def _materializar(
     plan: PlanExportacion, root: Path, *, copiar: bool = False,
+    previos: dict[str, dict] | None = None,
 ) -> tuple[list[dict], int, int, int, int, int, str]:
     entradas: list[dict] = []
     omitidos = len(plan.omitidos)
@@ -167,6 +180,7 @@ def _materializar(
     errores = 0
     copiados = 0
     modos: set[str] = set()
+    previos = previos or {}
     # Preflight: suma de lo que necesitará copia forzada por filesystem distinto.
     previstos: list[tuple[object, Path, str]] = []
     for accion in plan.archivos:
@@ -187,16 +201,36 @@ def _materializar(
     for accion, destino, modo in previstos:
         try:
             sha_fuente = _sha256(Path(accion.source_path))
+            relativo = accion.destino_relativo.replace("\\", "/")
             if destino.exists():
                 sha_destino = _sha256(destino)
-                if sha_destino == sha_fuente:
+                previo = previos.get(relativo) or {}
+                esperado = previo.get("sha256")
+                modo_previo = previo.get("mode")
+                if esperado is not None and sha_destino != esperado:
+                    deriva += 1
                     entradas.append({
-                        "dest": accion.destino_relativo.replace("\\", "/"),
-                        "sha256": sha_destino, "issue_id": accion.issue_id,
-                        "file_id": accion.file_id, "mode": "skip", "status": "skip",
+                        "dest": relativo, "sha256": sha_destino,
+                        "issue_id": accion.issue_id, "file_id": accion.file_id,
+                        "mode": modo_previo or "skip", "status": "drift",
                     })
                     continue
-                deriva += 1
+                if esperado is None and sha_destino != sha_fuente:
+                    deriva += 1
+                    entradas.append({
+                        "dest": relativo, "sha256": sha_destino,
+                        "issue_id": accion.issue_id, "file_id": accion.file_id,
+                        "mode": modo_previo or "skip", "status": "drift",
+                    })
+                    continue
+                modo_skip = modo_previo or "skip"
+                if modo_skip in {"hardlink", "copy"}:
+                    modos.add(modo_skip)
+                entradas.append({
+                    "dest": relativo, "sha256": sha_destino,
+                    "issue_id": accion.issue_id, "file_id": accion.file_id,
+                    "mode": modo_skip, "status": "skip",
+                })
                 continue
             destino.parent.mkdir(parents=True, exist_ok=True)
             if modo == "hardlink":
@@ -295,8 +329,10 @@ async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
     fuentes = await asyncio.to_thread(_marcar_fuentes, fuentes)
     plan = await asyncio.to_thread(_plan, collection, fuentes, root)
     await asyncio.to_thread((root / plan.folder).mkdir, parents=True, exist_ok=True)
+    previos = await asyncio.to_thread(_leer_manifiesto, plan, root)
     (archivos, omitidos, colisiones, deriva, errores,
-     copiados, modo) = await asyncio.to_thread(_materializar, plan, root, copiar=copiar)
+     copiados, modo) = await asyncio.to_thread(
+        _materializar, plan, root, copiar=copiar, previos=previos)
     manifiesto = await asyncio.to_thread(
         _escribir_manifiesto, plan, root, collection, archivos, modo)
     ahora = datetime.now(UTC)
