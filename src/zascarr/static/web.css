@@ -2472,39 +2472,18 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-serie-card { display: flex; flex-direction: column; align-items: stretch; }
 .coleccion-serie-card-portada { display: block; }
 .coleccion-serie-card .btn { margin: 0 var(--space-2) 10px; min-height: 44px; }
-.coleccion-series-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px;
-  grid-template-areas: "principal previa";
-  gap: 16px;
-  align-items: start;
+.coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty) {
+  display: block;
 }
-.coleccion-series-col { grid-area: principal; min-width: 0; }
-.coleccion-previa-panel {
-  grid-area: previa;
-  position: sticky;
-  top: 16px;
-  width: 132px;
-  padding: 8px;
-  background: var(--paper-2);
-  border: var(--border-panel) solid var(--ink);
-  border-radius: var(--radius-panel);
-}
-.coleccion-previa-panel .portada { width: 100%; }
-.coleccion-previa-titulo { margin: 8px 0 2px; font-weight: 700; overflow-wrap: anywhere; }
-.coleccion-previa-contenido .caption { margin: 0; }
-@media (max-width: 760px) {
-  .coleccion-series-layout { grid-template-columns: 1fr; grid-template-areas: "previa" "principal"; }
-  .coleccion-previa-panel {
-    position: sticky;
-    top: 0;
-    width: auto;
-    display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
-    gap: 10px;
-    align-items: start;
+@media (max-width: 860px), (pointer: coarse) {
+  .coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty) {
+    display: block;
+    width: 180px;
+    max-width: calc(100vw - 24px);
+    left: 0;
+    right: auto;
+    transform: none;
   }
-  .coleccion-previa-panel .portada { width: 72px; }
 }
 
 @media (prefers-contrast: more), (forced-colors: active) {
