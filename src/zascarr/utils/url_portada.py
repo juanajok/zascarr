@@ -50,6 +50,9 @@ from zascarr.utils.cortesia import (
 HOSTS_PERMITIDOS: tuple[str, ...] = (
     "comicvine.gamespot.com", "cbsistatic.com", "anilist.co", "tebeosfera.com", "comics.org",
     "covers.openlibrary.org",
+    # CDN de portadas de las dos wikis de Fandom (DC/Marvel Database). La URL viene de
+    # `action=query&prop=imageinfo`; `Special:FilePath` no se usa (redirige cross-origin).
+    "static.wikia.nocookie.net",
 )
 LONGITUD_MAXIMA_URL = 500
 MAX_SALTOS = 3

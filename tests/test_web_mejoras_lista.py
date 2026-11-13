@@ -60,7 +60,8 @@ def test_lista_de_mejoras_y_estado_vacio():
 def test_escanear_ahora_redirige():
     c = _cliente()
     try:
-        with patch("zascarr.web.mejoras.escanear_mejoras", AsyncMock(return_value=2)):
+        with patch("zascarr.web.mejoras.motivo_sin_escaneo", return_value=None), \
+             patch("zascarr.web.mejoras.escanear_mejoras", AsyncMock(return_value=2)):
             r = c.post("/ui/mejoras/escanear", follow_redirects=False)
     finally:
         _cerrar()
@@ -78,3 +79,17 @@ def test_guardar_perfil_de_calidad():
         _cerrar()
     assert r.status_code == 200
     assert "Calidad" in r.text
+
+
+def test_escanear_sin_prowlarr_explica_el_motivo_sin_json():
+    c = _cliente()
+    try:
+        with patch("zascarr.web.mejoras.motivo_sin_escaneo",
+                   return_value="Prowlarr no está activo."), \
+             patch("zascarr.web.mejoras.listar_mejoras", AsyncMock(return_value=[])):
+            r = c.post("/ui/mejoras/escanear")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Prowlarr no está activo." in r.text
+    assert "Búsqueda de mejoras terminada" not in r.text

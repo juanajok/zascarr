@@ -12,6 +12,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   se corrige el `btn-secondary` inexistente (ahora `.btn.ghost`); las filas de archivo separan con
   tinta visible (`--ink-faint`, no `--paper-2` sobre viñeta) y las filas de vinculación usan el
   borde de 2 px del sistema en vez de `1px solid currentColor`.
+- **D3: cadencia viva, escaneo idempotente y fallos honestos (2026-11-13).** El bucle lee la
+  cadencia y el perfil en cada vuelta (activar/desactivar ya no exige reiniciar); descartar o
+  descargar una propuesta y reescanear el mismo enlace ya no choca con la restricción única
+  (se comprueba cualquier estado y se usa savepoint); un fallo de Prowlarr no marca el número
+  como escaneado y «Buscar mejoras ahora» explica el motivo si no puede buscar. La descarga
+  se reclama de forma atómica para que un doble clic no envíe dos veces.
 - **Alineación de las pantallas nuevas con el sistema de diseño (2026-11-13).** Calidad pasa a
   Descargas; los títulos-frase usan `.titulo-frase`; acciones de descarte con `.btn-ignorar`;
   filas de Sagas/Mejoras como viñetas de 3 px; botones con verbo y objeto. Detalle:
@@ -82,6 +88,16 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   las lista, «Descargar esta edición» confirma con token firmado y «Descartar» las retira.
   En la ficha de un número sigue estando «Buscar una edición mejor». No sustituye ni borra
   archivos; la nueva edición se importa junto a la actual.
+
+- **DC Database y Marvel Database (Fandom) como fuentes (SCR2, #703).** Dos wikis MediaWiki
+  consumidas solo por su API `/api.php` (wikitext de sus plantillas), en tres niveles: serie
+  (años, descripción, portada, nº de números), número (fecha de venta, sinopsis, créditos y
+  portada) y arcos declarados por DC Database con sus números en
+  `story_arc_issues.reading_order`. Apagadas por defecto (ADR 0013), 1,5 s por wiki y bloqueo
+  `maxlag`; atribución CC-BY-SA 3.0 con doble enlace en ficha de serie, número y saga. Migración
+  `0034` (columnas `fandom_*_slug`). Ficha: `docs/design/benchmark-SCR2-fandom-fuentes.md`;
+  spec, QA y seguridad: `especificacion-SCR2-fandom-fuentes.md`, `informe-qa-SCR2-fandom-2026-11-13.md`
+  y `secops-SCR2-fandom-2026-11-13.md`.
 - **Sagas en orden de lectura y gestión manual (BL-C4, #151).** Biblioteca → «Sagas en orden»:
   lista de arcos y ficha que respeta `story_arc_issues.reading_order` para crossovers. Ahora
   también se pueden **crear, editar y eliminar** sagas, **añadir/quitar números** y
