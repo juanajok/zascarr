@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from sqlalchemy import exists, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +25,7 @@ logger = structlog.get_logger()
 
 OBJETIVO_POR_PERFIL = {"mejor": 3, "equilibrado": 2, "cualquiera": 0}
 COOLDOWN_HORAS = 24
-MAX_PROPUESTAS = 50
+POR_PAGINA = 20
 
 
 def perfil_y_objetivo(settings=None) -> tuple[str, int]:
@@ -156,16 +156,30 @@ class MejoraPendiente:
         )
 
 
-async def listar_mejoras(db: AsyncSession) -> list[MejoraPendiente]:
+@dataclass(frozen=True)
+class PaginaMejoras:
+    filas: list[MejoraPendiente]
+    total: int
+    pagina: int
+    paginas: int
+
+
+async def listar_mejoras(db: AsyncSession, pagina: int = 1) -> PaginaMejoras:
+    total = (await db.execute(
+        select(func.count()).select_from(UpgradeProposal)
+        .where(UpgradeProposal.status == "pendiente"))).scalar_one()
+    paginas = max(1, (total + POR_PAGINA - 1) // POR_PAGINA)
+    pagina = min(max(1, pagina), paginas)
     filas = (await db.execute(
         select(UpgradeProposal, Issue, Series)
         .join(Issue, Issue.id == UpgradeProposal.issue_id)
         .join(Series, Series.id == Issue.series_id)
         .where(UpgradeProposal.status == "pendiente")
         .order_by(UpgradeProposal.created_at.desc())
-        .limit(MAX_PROPUESTAS)
+        .offset((pagina - 1) * POR_PAGINA).limit(POR_PAGINA)
     )).all()
-    return [MejoraPendiente(p, i, s) for p, i, s in filas]
+    return PaginaMejoras([MejoraPendiente(p, i, s) for p, i, s in filas],
+                         total, pagina, paginas)
 
 
 async def obtener_mejora(db: AsyncSession, propuesta_id: UUID,
