@@ -164,6 +164,7 @@ from zascarr.services.tokens_revision import (
     crear_token_mantener,
     verificar_token_mantener,
 )
+from zascarr.services.upgrades import perfil_y_objetivo
 from zascarr.services.vinculacion import (
     ConflictoDeBloqueoError,
     ResultadoInciertoError,
@@ -1050,7 +1051,9 @@ async def buscar_mejora_numero(series_id: UUID, issue_id: UUID, request: Request
     ficha = await cargar_ficha_numero(db, series_id, issue_id)
     if ficha is None:
         raise HTTPException(status_code=404, detail="Número no encontrado")
-    resultado = await buscar_mejoras(db, ficha.serie, ficha.issue)
+    _perfil, objetivo = perfil_y_objetivo()
+    resultado = await buscar_mejoras(
+        db, ficha.serie, ficha.issue, min_tier=max(1, objetivo))
     secret = get_settings().secret_key
     filas = [{"mejora": m, "token": crear_token_candidato(issue_id, m.resultado, secret)}
              for m in resultado.candidatos]
@@ -1074,8 +1077,13 @@ async def descargar_mejora_numero(series_id: UUID, issue_id: UUID, request: Requ
         raise HTTPException(status_code=404, detail="Número no encontrado")
     candidato = verificar_token_candidato(token, issue_id, get_settings().secret_key)
     if candidato is None:
-        raise HTTPException(status_code=400,
-                            detail="Candidato no válido o caducado — vuelve a buscar")
+        respuesta = templates.TemplateResponse(request, "mejores_numero.html", {
+            "series": ficha.serie, "issue": ficha.issue, "resultado": None,
+            "filas": [], "mensaje": "La oferta ha caducado. Vuelve a buscar la edición.",
+            "exito": False,
+        })
+        respuesta.headers["Cache-Control"] = "no-store"
+        return respuesta
     exito, mensaje = await Orchestrator(db).enviar_candidato_de_mejora(candidato)
     respuesta = templates.TemplateResponse(request, "mejores_numero.html", {
         "series": ficha.serie, "issue": ficha.issue, "resultado": None,

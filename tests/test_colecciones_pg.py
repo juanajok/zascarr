@@ -32,6 +32,7 @@ from zascarr.services.colecciones import (
     detalle_coleccion,
     editar_coleccion,
     listar_colecciones,
+    pagina_series_sin_coleccion,
     quitar_serie,
     series_sin_coleccion,
 )
@@ -343,3 +344,29 @@ async def test_sidecar_de_version_anterior_se_regenera_y_url_lleva_version(
     assert json.loads(sidecar.read_text())["version"] == 2
     det = await detalle_coleccion(db, c.coleccion.id)
     assert det is not None and "-m2" in det.portada_url
+
+
+async def test_filtros_alta_por_titulo_normalizado_y_tradicion(db):
+    await serie(db, "Flash")
+    asterix = await serie(db, "Astérix el Galo", policy=WishlistPolicy.NONE)
+    manga = await serie(db, "Berserk", policy=WishlistPolicy.NONE)
+    async with db.begin_nested():
+        await db.execute(text("UPDATE series SET tradition='manga' WHERE id=:i"), {"i": manga.id})
+    await db.flush()
+    solo_asterix = await series_sin_coleccion(db, q="asterix")
+    assert [s.id for s in solo_asterix] == [str(asterix.id)]
+    assert [s.id for s in await series_sin_coleccion(db, q="ASTÉRIX")] == [str(asterix.id)]
+    assert {s.id for s in await series_sin_coleccion(db, tradicion="manga")} == {str(manga.id)}
+    assert await series_sin_coleccion(db, q="no existe") == []
+    assert len(await series_sin_coleccion(db, q="x" * 500)) == 0
+
+
+async def test_paginacion_real_de_series_disponibles(db):
+    for i in range(45):
+        await serie(db, f"PaginacionUnica {i:02d}")
+    p1 = await pagina_series_sin_coleccion(db, q="PaginacionUnica")
+    p2 = await pagina_series_sin_coleccion(db, q="PaginacionUnica", pagina=2)
+    assert p1.total == 45 and p1.pagina == 1 and len(p1.series) == 40
+    assert p1.desde == 1 and p1.hasta == 40 and p1.paginas == 2
+    assert p2.pagina == 2 and len(p2.series) == 5 and p2.desde == 41 and p2.hasta == 45
+    assert {s.id for s in p1.series}.isdisjoint({s.id for s in p2.series})

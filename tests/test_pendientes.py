@@ -145,6 +145,12 @@ class TestPendientesIndex:
         assert "La Patrulla-X" in r.text
         assert "62% de coincidencia" in r.text
         assert f'value="{sid}"' in r.text
+        assert "Vincular en su sitio" in r.text
+        assert f'hx-post="/ui/pendientes/{file.id}/vincular"' in r.text
+        assert "solo funciona si esa publicación ya existe" in r.text
+        # #723: la búsqueda manual no compite con la sugerencia; vive en un desplegable.
+        assert '<details class="elegir-otra-serie">' in r.text
+        assert "Elegir otra serie" in r.text
 
     def test_archivo_sin_candidatos_no_muestra_sugerencia(self):
         file = File(id=uuid4(), file_path="/lib/_Unsorted/algo.cbz", file_name="algo.cbz",

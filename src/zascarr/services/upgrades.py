@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from sqlalchemy import exists, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +26,7 @@ logger = structlog.get_logger()
 
 OBJETIVO_POR_PERFIL = {"mejor": 3, "equilibrado": 2, "cualquiera": 0}
 COOLDOWN_HORAS = 24
-MAX_PROPUESTAS = 50
+POR_PAGINA = 20
 
 
 def perfil_y_objetivo(settings=None) -> tuple[str, int]:
@@ -58,20 +58,21 @@ def motivo_sin_escaneo(settings=None) -> str | None:
     return None
 
 
-async def escanear_mejoras(db: AsyncSession, batch: int | None = None) -> int:
-    """Busca mejoras para un lote pequeño; devuelve cuántas propuestas nuevas creó."""
+async def escanear_mejoras(db: AsyncSession,
+                           batch: int | None = None) -> ResultadoEscaneo:
+    """Busca mejoras para un lote pequeño y devuelve qué se revisó y qué salió."""
     # El escaneo busca en Prowlarr por su cuenta cada cierto tiempo: es una acción de riesgo y
     # sin aviso legal aceptado no se hace (CLAUDE.md §5.2; hallazgo F-1 de SecOps sobre BL-D3).
     if not await is_acknowledged(db):
-        return 0
+        return ResultadoEscaneo(0, 0, 0)
     settings = get_settings()
     perfil, objetivo = perfil_y_objetivo(settings)
     if objetivo == 0 or not _prowlarr_listo(settings):
-        return 0
+        return ResultadoEscaneo(0, 0, 0)
     limite = batch if batch is not None else max(0, getattr(
         settings, "upgrade_scan_batch", 3))
     if limite <= 0:
-        return 0
+        return ResultadoEscaneo(0, 0, 0)
     ahora = datetime.now(UTC)
     corte = ahora - timedelta(hours=COOLDOWN_HORAS)
     issues = (await db.execute(
@@ -81,7 +82,10 @@ async def escanear_mejoras(db: AsyncSession, batch: int | None = None) -> int:
         ).order_by(Issue.upgrade_scanned_at.asc().nullsfirst(), Issue.id).limit(limite)
     )).scalars().all()
     creadas = 0
+    revisados = 0
+    fallidos = 0
     for issue in issues:
+        revisados += 1
         serie = await db.get(Series, issue.series_id)
         if serie is None:
             issue.upgrade_scanned_at = ahora
@@ -91,6 +95,7 @@ async def escanear_mejoras(db: AsyncSession, batch: int | None = None) -> int:
             # Fallo de red/cortesía: NO se sella el número; el siguiente ciclo lo reintenta.
             logger.warning("upgrades.search_failed", issue_id=str(issue.id),
                            motivo=resultado.error)
+            fallidos += 1
             continue
         issue.upgrade_scanned_at = ahora
         if not resultado.ok or not resultado.candidatos:
@@ -132,7 +137,14 @@ async def escanear_mejoras(db: AsyncSession, batch: int | None = None) -> int:
             # Carrera con otro escaneo: la propuesta ya existe; el lote sigue.
             logger.info("upgrades.proposal_duplicate", issue_id=str(issue.id))
     await db.commit()
-    return creadas
+    return ResultadoEscaneo(revisados, creadas, fallidos)
+
+
+@dataclass(frozen=True)
+class ResultadoEscaneo:
+    revisados: int
+    creadas: int
+    fallidos: int
 
 
 @dataclass(frozen=True)
@@ -161,16 +173,30 @@ class MejoraPendiente:
         )
 
 
-async def listar_mejoras(db: AsyncSession) -> list[MejoraPendiente]:
+@dataclass(frozen=True)
+class PaginaMejoras:
+    filas: list[MejoraPendiente]
+    total: int
+    pagina: int
+    paginas: int
+
+
+async def listar_mejoras(db: AsyncSession, pagina: int = 1) -> PaginaMejoras:
+    total = (await db.execute(
+        select(func.count()).select_from(UpgradeProposal)
+        .where(UpgradeProposal.status == "pendiente"))).scalar_one()
+    paginas = max(1, (total + POR_PAGINA - 1) // POR_PAGINA)
+    pagina = min(max(1, pagina), paginas)
     filas = (await db.execute(
         select(UpgradeProposal, Issue, Series)
         .join(Issue, Issue.id == UpgradeProposal.issue_id)
         .join(Series, Series.id == Issue.series_id)
         .where(UpgradeProposal.status == "pendiente")
         .order_by(UpgradeProposal.created_at.desc())
-        .limit(MAX_PROPUESTAS)
+        .offset((pagina - 1) * POR_PAGINA).limit(POR_PAGINA)
     )).all()
-    return [MejoraPendiente(p, i, s) for p, i, s in filas]
+    return PaginaMejoras([MejoraPendiente(p, i, s) for p, i, s in filas],
+                         total, pagina, paginas)
 
 
 async def obtener_mejora(db: AsyncSession, propuesta_id: UUID,

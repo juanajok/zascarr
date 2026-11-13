@@ -61,3 +61,9 @@ al cargar, sabiendo que **revierte U12** (el hueco 2:3 volvía a empujar los nom
 - Pruebas: los tres casos de portada de `tests/test_pendientes_tarjeta.py` se reescriben para el mecanismo
   nuevo (marcador sin petición; `<img>` con marcador debajo; 2:3 y 120 px); la verificación visual se hace
   en navegador real a 1280 y 375 px tras desplegar.
+
+**Corrección tras la primera puesta en pantalla (2026-11-13, misma deuda 6):** con la portada *debajo* del
+nombre, dentro de una fila las portadas empezaban a distinta altura (el nombre ocupa una o dos líneas), y el
+PO lo vio como tarjetas «descolocadas». La portada pasa **arriba** del nombre —como en la Biblioteca—: todas
+las tarjetas de una fila la empiezan a la misma altura, el nombre sigue entero debajo y el marcador conserva
+su 2:3. La prueba `test_la_portada_va_primero_para_que_la_fila_empiece_a_la_misma_altura` fija el orden.

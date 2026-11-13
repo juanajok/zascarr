@@ -7,10 +7,43 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **D3: lote de escaneo configurable (2026-11-13).** Ajustes → Calidad permite elegir cuántos
+  números revisa cada pasada (1/3/5/10); el valor se valida en servidor y se guarda como override
+  en caliente. Cambio en `web/ajustes.py`: pendiente de dictamen de SecOps antes de fusionar.
+- **V14: auditoría de clases y retirada del CSS muerto (2026-11-13, #750).** Nuevo
+  `scripts/auditar_css.py` (con lista blanca declarada para las clases que añaden htmx y el JS de
+  `/estado`, y comprensión de prefijos y ternarios Jinja) que se ejecuta en la CI con `--strict`.
+  Se retiran las reglas que ya no usaba ninguna plantilla: `.topnav` (14), `.hero-state` (6),
+  `.toast` (1), `.audit-ok`, `.ajustes-grid`, `.filter-bar-secondary`, `.filter-search-box`,
+  `.cover`, `.arco-anadir`, `.vinc-candidata-titulo`, `.lectura-nota`, `.library-vista*`,
+  `.tabla-ficha`, `.recuento-biblioteca` y `.hero-state .big`; la hoja baja de 934 a 892 reglas y
+  de 130.813 a 124.986 bytes. La lista de compatibilidad de V2 se reduce a las clases que siguen
+  vivas.
+- **D3: progreso del escaneo y acceso a Mejoras (2026-11-13).** «Buscar mejoras ahora»
+  informa de cuántos números se revisaron, cuántas propuestas salieron y cuántos fallos se
+  reintentarán; el ciclo periódico lo registra igual. Mejoras entra en el menú (Mi colección),
+  con entrada activa y acceso desde el panel «Más» en móvil.
 - **Portada de «Por revisar» con `ui.portada` (2026-11-13, #689 deuda 6).** Decisión del PO: se revierte
-  U12 y el marcador vuelve a reservar el 2:3 para que las tarjetas de una fila se alineen; la `<img>` solo se
+  U12 y el marcador vuelve a reservar el 2:3 y va **arriba del nombre** para que las tarjetas de una fila se alineen; la `<img>` solo se
   pide cuando la extensión tiene extractor (cero peticiones que darán 404) y sin `onerror`. Detalle:
   `docs/design/ui-auditoria-sistema-diseno-2026-11-13.md`.
+
+- **Fandom (SCR2): la búsqueda por título encontraba personajes, no volúmenes.** Verificado en vivo:
+  `Batman` devuelve fichas de personaje y números, así que el enricher no emparejaba. Ahora se busca
+  con el sufijo `Vol` y se descartan las páginas que no son volúmenes (`X Vol N`), con hasta 4
+  candidatas desambiguadas por año; la portada solo se pide para la elegida.
+- **Fandom (SCR2): los arcos de DC declaraban sus números con `{{c|…}}`, no con enlaces.** El
+  extractor lee la plantilla `Storyline Template` (y mantiene los respaldos de sección/enlaces); el
+  arco «Batman: Year One» ya enlaza su número 404 en `story_arc_issues.reading_order`.
+- **Portadas externas: 403 de Cloudflare en CDN que exigen identificación y referencia.** La descarga
+  con IP fijada manda ahora `User-Agent` propio y `Referer` del propio origen; verificado con la
+  portada de Fandom (200, 768 KB; el endpoint sirve y cachea en `covers/externa/`).
+
+- **D3: perfil, identidad y escala de las mejoras (2026-11-13).** La búsqueda bajo demanda de
+  la ficha respeta el perfil de calidad; el clasificador ya no confunde «Digitalizado» con
+  digital, reserva «alta» al origen digital, y descarta packs, variantes, volúmenes y años de
+  otra etapa; el escaneo usa los indexers elegidos en Prowlarr y el tope de 500 MB. Mejoras
+  pagina de 20 en 20 con total pendiente. La oferta caducada se explica en la página, no como JSON.
 - **Tokens de tipografía, forma y espaciado (2026-11-13, #689).** `web.css` declara en `:root`
   la escala de texto del sistema (15 estilos + la excepción del móvil) y los tokens
   `--border-panel/control/chip/line` y `--space-1..6`; las 140 declaraciones `font-size`, los
@@ -91,6 +124,16 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   anti-bots o de la red (VPN/proxy). Regresión con el `User-Agent` capturado y con ambos códigos.
 
 ### Añadido
+
+- **Caché HTTP condicional y `robots.txt` (SCR1, Fase 1).** Tabla `http_cache` (migración
+  `0038`) con dos horizontes (`fresh_until` para servir sin red, `retain_until` para revalidar
+  con `304`), cuerpos comprimidos con zlib ≤2 MiB, negativas cortas (`404`/`410` y
+  `missingtitle` de MediaWiki), `singleflight` por URL y `bypass_cache` para acciones manuales;
+  `429`/`5xx`/red nunca se cachean. `utils/robots.py` evalúa `robots.txt` con `protego`
+  (RFC 9309: 2xx 24 h, 4xx≠429 permite 12 h, 429/5xx/red prohíbe 15 min) y su `Crawl-delay`
+  solo sube el intervalo de cortesía. Integrado en la API de Fandom (sin caché inyectada el
+  cliente se comporta igual) y purga por ciclo del enricher. Dependencia nueva: `protego`
+  (BSD-3, Python puro). Spec: `docs/design/especificacion-SCR1-robots-cache.md`.
 
 - **Perfil de calidad y mejoras de edición (BL-D2/D3, #154).** Ajustes → Calidad elige
   «solo lo mejor / equilibrado / lo que haya» y cada cuánto buscar mejoras. Un escaneo

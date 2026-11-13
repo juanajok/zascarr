@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     PrimaryKeyConstraint,
     SmallInteger,
     String,
@@ -1145,6 +1146,35 @@ class ReadingList(Base):
     )
 
 
+class HttpCache(Base):
+    """Caché HTTP condicional del proceso (SCR1, migración 0037).
+
+    Una fila por URL canónica y método (`url_hash`), con dos horizontes: `fresh_until`
+    (se sirve sin red) y `retain_until` (hasta ahí se puede revalidar con ETag/Last-Modified;
+    después la purga la borra). `is_negative` marca una respuesta negativa corta (404/410 o
+    `missingtitle`): no guarda cuerpo. El cuerpo va comprimido en `body_zlib` (tope 2 MiB) y
+    `url_canonical` redacta credenciales. No la tocan las portadas (esas van por su caché local).
+    """
+
+    __tablename__ = "http_cache"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    url_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    url_canonical: Mapped[str] = mapped_column(Text, nullable=False)
+    domain: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    status_code: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(255))
+    is_negative: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false")
+    etag: Mapped[str | None] = mapped_column(Text)
+    last_modified: Mapped[str | None] = mapped_column(Text)
+    body_zlib: Mapped[bytes | None] = mapped_column(LargeBinary)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fresh_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    retain_until: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True)
+
+
 class ImportRun(Base):
     """Un ciclo de Importer.scan_and_import(). Persistido para poder
     responder "¿qué pasó en el ciclo de las 03:00?" desde una futura UI
@@ -1434,3 +1464,21 @@ class FieldProvenance(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     locked: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default=text("false"))
+
+
+class RevisionBorrador(Base):
+    """Borrador explícito de una revisión de carpeta (#725).
+
+    Solo guarda lo que la persona marcó/escribió; no es una selección válida
+    hasta que el asistente la reevalúa. Una fila por carpeta+serie, con
+    caducidad: no hay sesión ni estado global.
+    """
+    __tablename__ = "revision_borradores"
+    clave: Mapped[str] = mapped_column(String(500), primary_key=True)
+    series_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), primary_key=True)
+    datos: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    actualizado: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now())
+    caduca: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (Index("ix_revision_borradores_caduca", "caduca"),)

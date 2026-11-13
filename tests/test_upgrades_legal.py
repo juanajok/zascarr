@@ -19,7 +19,12 @@ from zascarr.main import app
 from zascarr.services.legal import require_legal_acknowledgment
 from zascarr.services.orchestrator import crear_token_candidato
 from zascarr.services.prowlarr import SearchResult
-from zascarr.services.upgrades import MejoraPendiente, escanear_mejoras
+from zascarr.services.upgrades import (
+    MejoraPendiente,
+    PaginaMejoras,
+    ResultadoEscaneo,
+    escanear_mejoras,
+)
 
 SECRETO = "secreto-de-prueba-f2"
 
@@ -48,7 +53,7 @@ async def test_escaneo_periodico_sin_aviso_legal_no_busca_nada():
     with patch("zascarr.services.upgrades.is_acknowledged", AsyncMock(return_value=False)), \
          patch("zascarr.services.upgrades.get_settings", return_value=_settings()), \
          patch("zascarr.services.upgrades.buscar_mejoras", buscar):
-        assert await escanear_mejoras(_DbQueNoSeToca()) == 0
+        assert await escanear_mejoras(_DbQueNoSeToca()) == ResultadoEscaneo(0, 0, 0)
     buscar.assert_not_called()
 
 
@@ -60,7 +65,8 @@ async def test_escaneo_con_aviso_aceptado_sigue_su_camino():
     db = SimpleNamespace(execute=leida, commit=AsyncMock())
     with patch("zascarr.services.upgrades.is_acknowledged", AsyncMock(return_value=True)), \
          patch("zascarr.services.upgrades.get_settings", return_value=_settings()):
-        assert await escanear_mejoras(db) == 0
+        resultado = await escanear_mejoras(db)
+    assert resultado.creadas == 0
     leida.assert_awaited()
 
 
@@ -99,7 +105,8 @@ def _descargar(fila, token, *, reclamar=None, enviar=None):
     c = _cliente()
     try:
         with patch("zascarr.web.mejoras.obtener_mejora", AsyncMock(return_value=fila)), \
-             patch("zascarr.web.mejoras.listar_mejoras", AsyncMock(return_value=[])), \
+             patch("zascarr.web.mejoras.listar_mejoras",
+                   AsyncMock(return_value=PaginaMejoras([], 0, 1, 1))), \
              patch("zascarr.web.mejoras.get_settings",
                    return_value=SimpleNamespace(secret_key=SECRETO)), \
              patch("zascarr.web.mejoras.reclamar_mejora", reclamar), \
@@ -160,7 +167,8 @@ def test_el_token_de_la_lista_se_liga_a_la_propuesta_no_al_numero():
     fila = _fila()
     c = _cliente()
     try:
-        with patch("zascarr.web.mejoras.listar_mejoras", AsyncMock(return_value=[fila])), \
+        with patch("zascarr.web.mejoras.listar_mejoras",
+                   AsyncMock(return_value=PaginaMejoras([fila], 1, 1, 1))), \
              patch("zascarr.web.mejoras.get_settings",
                    return_value=SimpleNamespace(secret_key=SECRETO)):
             r = c.get("/ui/mejoras")
