@@ -2461,13 +2461,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* BL-C4 (#151): sagas en orden de lectura. */
 .arcos-lista, .arco-orden { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
-.arco-fila, .arco-orden li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 8px 10px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); background: var(--paper); }
+.arco-fila, .arco-orden li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 8px 10px; border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
 .arco-posicion { min-width: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 
 /* BL-C4 (#151): gestión manual de sagas. */
 .arco-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 16px; }
-.arco-anadir { margin: 18px 0; padding: 12px 14px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); }
+.arco-anadir { margin: 18px 0; padding: 12px 14px; border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
 .arco-controles { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 
 /* #264 B: apartar copias idénticas desde Duplicados. */
@@ -2492,7 +2492,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 /* BL-D3 (#154): propuestas de mejor edición. */
 .mejora-actual { margin: 12px 0; }
 .mejoras-lista { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
-.mejora-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); }
+.mejora-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
 .ruta-exportacion { overflow-wrap: anywhere; word-break: break-word; }
 
 
