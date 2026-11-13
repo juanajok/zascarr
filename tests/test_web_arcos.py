@@ -12,9 +12,14 @@ from zascarr.main import app
 from zascarr.services.arcos import ArcoResumen, DetalleArco, FilaArco, PaginaArcos
 
 
-def _cliente():
+def _cliente(metadata=None):
+    """Cliente con una BD falsa: `execute` devuelve el `metadata_` del arco (o None)."""
+    async def _execute(_consulta):
+        return SimpleNamespace(scalar_one_or_none=lambda: metadata)
+
     async def _db():
-        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
+                              execute=_execute)
     app.dependency_overrides[get_db] = _db
     return TestClient(app)
 
@@ -53,6 +58,32 @@ def test_detalle_lista_en_orden_de_lectura():
     assert "En tu biblioteca" in r.text and "No disponible" in r.text
 
 
+def test_detalle_de_saga_atribuye_a_fandom_con_articulo_y_licencia():
+    """SCR2 (AC-03/AC-16): un arco creado por el enricher enlaza su página y la licencia."""
+    detalle = DetalleArco("a1", "Year One", None, False, [], 0)
+    c = _cliente(metadata={"origen": "fandom_dc", "fandom_dc": "Batman: Year One"})
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{uuid4()}")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert 'href="https://dc.fandom.com/wiki/Batman:_Year_One"' in r.text
+    assert 'href="https://creativecommons.org/licenses/by-sa/3.0/"' in r.text
+    assert "DC Database" in r.text and "Creative Commons BY-SA 3.0" in r.text
+
+
+def test_detalle_de_saga_manual_no_atribuye_a_fandom():
+    detalle = DetalleArco("a1", "Saga mía", None, False, [], 0)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{uuid4()}")
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "creativecommons.org" not in r.text
+
+
 def test_saga_sin_datos_muestra_estado_vacio():
     c = _cliente()
     try:
@@ -67,7 +98,6 @@ def test_saga_sin_datos_muestra_estado_vacio():
 def test_formularios_crud_y_redirecciones(monkeypatch):
     from zascarr.services.arcos import DetalleArco, ResultadoArco
 
-    serie = SimpleNamespace(id=uuid4())
     arco = SimpleNamespace(id=uuid4(), title="Saga", description=None,
                            is_crossover=False)
     detalle = DetalleArco(str(arco.id), "Saga", None, False, [], 0)

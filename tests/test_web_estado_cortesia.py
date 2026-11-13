@@ -72,9 +72,11 @@ class TestEndpoint:
         assert r.headers["cache-control"] == "no-store"
         datos = r.json()
         assert datos["coordinacion"] == "proceso"
+        # SCR2: las dos wikis de Fandom son fuentes declaradas y el snapshot las lista siempre
+        # (apagadas por defecto), igual que el resto de la allowlist.
         assert {f["fuente"] for f in datos["fuentes"]} == {
             "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library",
-            "foro", "portada"}
+            "fandom_dc", "fandom_marvel", "foro", "portada"}
         assert all("://" not in h["host"] for h in datos["hosts"])
         assert all(h["host"] in ("comicvine.gamespot.com", "cbsistatic.com") for h in datos["hosts"])
         texto = json.dumps(datos)

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{% if issue.issue_number %}Número {{ issue.issue_number }}{% else %}Número{% endif %} — {{ series.title }} — ZascArr{% endblock %}
 {% block content %}
+{% from "_atribucion_fandom.html" import aviso_de_atribucion %}
 <a class="back-link" href="/ui/series/{{ series.id }}">{{ textos.volver }}</a>
 <div class="issue-header">
   <div class="issue-portada">
@@ -41,6 +42,7 @@
     {% if issue.isbn %}<div><dt>{{ textos.isbn }}</dt><dd>{{ issue.isbn }}</dd></div>{% endif %}
   </dl>
 </section>
+{{ aviso_de_atribucion(atribucion_fandom, "este número", true) }}
 <section aria-labelledby="issue-sinopsis-titulo">
   <h2 id="issue-sinopsis-titulo">{{ textos.sinopsis }}</h2>
   {% if sinopsis_visible %}

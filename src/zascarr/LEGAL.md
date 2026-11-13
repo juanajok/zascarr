@@ -104,6 +104,7 @@ Algunas fuentes de metadatos usadas por ZascArr tienen licencias propias:
 | **Comic Vine** | Términos de uso propios; API con rate limits | Uso conforme a sus términos; no redistribución masiva |
 | **AniList** | API pública con términos de uso | Uso conforme a sus términos |
 | **Grand Comics Database (GCD)** | CC BY-SA 4.0; API REST pública en `/api/`, anónima, con límite por hora no especificado | Atribución + enlace de vuelta a la ficha de GCD (cumplido: enlace directo en cada resultado de `/ui/descubrir`); sin redistribución masiva, solo búsqueda puntual bajo demanda del coleccionista |
+| **DC Database y Marvel Database (Fandom)** | Texto de la comunidad bajo CC-BY-SA 3.0; las portadas son *fair use* editorial (no cubiertas por esa licencia); se consumen solo por su API oficial `/api.php`, apagadas por defecto y con 1,5 s entre peticiones por wiki | Atribución visible en la UI: enlace al artículo original **y** a la licencia CC-BY-SA 3.0. Las portadas se cachean en el disco del usuario solo para identificar su colección (sin hotlinking ni redistribución) y **no** se etiquetan como CC-BY-SA. Sin redistribución de textos ni de fichas |
 
 **ZascArr no redistribuye** contenido de estas fuentes. Todo metadato o portada se cachea localmente para el uso privado del usuario final.
 

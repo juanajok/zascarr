@@ -52,13 +52,17 @@ NOMBRE_DE_FUENTE = {
     MetadataSource.GCD.value: "GCD",
     MetadataSource.METRON.value: "Metron",
     MetadataSource.OPEN_LIBRARY.value: "Open Library",
+    # SCR2: las dos wikis de Fandom. Su texto es CC-BY-SA y la ficha enlaza el artículo y la
+    # licencia (ver `atribucion_fandom` en `web/series.py`).
+    MetadataSource.FANDOM_DC.value: "DC Database",
+    MetadataSource.FANDOM_MARVEL.value: "Marvel Database",
     MetadataSource.COMICINFO_XML.value: "el propio archivo",
     MetadataSource.MANUAL.value: "manual",
 }
 
 ID_FIELDS = (
     "comic_vine_id", "anilist_id", "tebeosfera_slug", "gcd_id",
-    "metron_id", "open_library_id",
+    "metron_id", "open_library_id", "fandom_dc_slug", "fandom_marvel_slug",
 )
 
 #: H8: una entrada activa con un campo desconocido o incompleta no se interpreta.
@@ -280,6 +284,8 @@ _FUENTE_DE_COLUMNA = {
     "anilist_id": MetadataSource.ANILIST.value,
     "tebeosfera_slug": MetadataSource.TEBEOSFERA.value,
     "gcd_id": MetadataSource.GCD.value,
+    "fandom_dc_slug": MetadataSource.FANDOM_DC.value,
+    "fandom_marvel_slug": MetadataSource.FANDOM_MARVEL.value,
 }
 
 
