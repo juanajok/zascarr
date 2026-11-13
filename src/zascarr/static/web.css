@@ -1,5 +1,4 @@
-/* =============================================================================
-   ZascArr — Sistema de diseño "papel y tinta"
+/* ======================================================================   ZascArr — Sistema de diseño "papel y tinta"
    -----------------------------------------------------------------------------
    Lenguaje visual del tebeo, adaptado de sonarr-comics-template.html:
      · papel y tinta con acentos CMYK (cyan/magenta/yellow)
@@ -2476,6 +2475,11 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .duplicados-operaciones li { display: grid; }
   .duplicados-form .btn { width: 100%; }
 }
+
+/* BL-D3 (#154): propuestas de mejor edición. */
+.mejora-actual { margin: 12px 0; }
+.mejoras-lista { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+.mejora-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); }
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
