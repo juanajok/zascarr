@@ -24,10 +24,13 @@
 {% if colecciones %}
 <ul class="arcos-lista">
   {% for c in colecciones %}
-  <li class="arco-fila">
-    <a href="/ui/colecciones/{{ c.id }}">{{ c.name }}</a>
-    <span class="muted">{{ c.series }} {{ "serie" if c.series == 1 else "series" }} · {{ politicas.get(c.auto_search, c.auto_search) }}</span>
-    {% if c.description %}<p class="caption">{{ c.description }}</p>{% endif %}
+  <li class="coleccion-fila">
+    <a href="/ui/colecciones/{{ c.id }}" class="coleccion-portada">{{ ui.portada(c.name, c.id, "/ui/colecciones/" ~ c.id ~ "/portada", clase="portada-coleccion", carga="lazy") }}</a>
+    <div>
+      <a href="/ui/colecciones/{{ c.id }}">{{ c.name }}</a>
+      <span class="muted">{{ c.series }} {{ "serie" if c.series == 1 else "series" }} · {{ politicas.get(c.auto_search, c.auto_search) }}</span>
+      {% if c.description %}<p class="caption">{{ c.description }}</p>{% endif %}
+    </div>
   </li>
   {% endfor %}
 </ul>

@@ -72,6 +72,9 @@ class DetalleColeccion:
     description: str | None
     auto_search: str
     series: list[SerieDeColeccion]
+    cover_series_id: str | None = None
+    cover_series_title: str | None = None
+    cover_series_valida: bool = False
 
 
 @dataclass
@@ -130,6 +133,7 @@ async def detalle_coleccion(db: AsyncSession, coleccion_id: UUID) -> DetalleCole
         select(Series).where(Series.collection_id == coleccion_id)
         .order_by(Series.sort_title, Series.title)
     )).scalars().all()
+    sobre = next((s for s in filas if s.id == coleccion.cover_series_id), None)
     return DetalleColeccion(
         str(coleccion.id), coleccion.name, coleccion.description, coleccion.auto_search.value,
         [SerieDeColeccion(
@@ -138,7 +142,10 @@ async def detalle_coleccion(db: AsyncSession, coleccion_id: UUID) -> DetalleCole
             etiqueta_politica(s.wishlist_policy),
             politica_efectiva_de(s.wishlist_policy, coleccion.auto_search),
             etiqueta_politica(politica_efectiva_de(s.wishlist_policy, coleccion.auto_search)))
-         for s in filas])
+         for s in filas],
+        cover_series_id=str(coleccion.cover_series_id) if coleccion.cover_series_id else None,
+        cover_series_title=sobre.title if sobre else None,
+        cover_series_valida=sobre is not None)
 
 
 async def crear_coleccion(db: AsyncSession, *, name: str, description: str,
@@ -195,6 +202,8 @@ async def borrar_coleccion(db: AsyncSession, coleccion_id: UUID) -> bool:
         return False
     await db.delete(coleccion)
     await db.flush()
+    from zascarr.services.portada_coleccion import borrar_cache
+    await borrar_cache(coleccion_id)      # best-effort; nunca impide borrar
     return True
 
 

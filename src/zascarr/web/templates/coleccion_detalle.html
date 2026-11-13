@@ -5,11 +5,36 @@
 {% if not coleccion %}
 {{ ui.aviso("warn", "La colección ya no existe.") }}
 {% else %}
-<h1>{{ coleccion.name }}</h1>
+<div class="coleccion-cabecera">
+  <div class="coleccion-portada">{{ ui.portada(coleccion.name, coleccion.id, "/ui/colecciones/" ~ coleccion.id ~ "/portada", clase="portada-coleccion") }}</div>
+  <div>
+    <h1>{{ coleccion.name }}</h1>
 {% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
 {% if errores %}
 {% for campo, mensaje in errores.items() %}{{ ui.aviso("warn", mensaje, foco=loop.first) }}{% endfor %}
 {% endif %}
+  </div>
+</div>
+<details class="politica-detalles">
+  <summary>Elegir portada</summary>
+  <p class="caption">La portada automática se compone con las portadas ya guardadas de tus series. También puedes elegir una serie miembro.</p>
+  {% if coleccion.cover_series_id and not coleccion.cover_series_valida %}
+  {{ ui.aviso("warn", "La serie elegida ya no pertenece a esta colección. Se usa la automática hasta que elijas otra.") }}
+  {% endif %}
+  <form method="post" action="/ui/colecciones/{{ coleccion.id }}/portada">
+    <fieldset>
+      <legend>Portada</legend>
+      <label><input type="radio" name="series_id" value="" {% if not coleccion.cover_series_id or not coleccion.cover_series_valida %}checked{% endif %}> Usar la automática (mosaico)</label>
+      {% for cand in candidatas_portada|default([]) %}
+      <label><input type="radio" name="series_id" value="{{ cand.series_id }}"
+        {% if coleccion.cover_series_id == cand.series_id %}checked{% endif %}
+        {% if not cand.tiene_portada %}disabled{% endif %}>
+        Portada de {{ cand.title }}{% if not cand.tiene_portada %} (todavía sin portada guardada){% endif %}</label>
+      {% endfor %}
+    </fieldset>
+    <button class="btn" type="submit">Usar esta portada</button>
+  </form>
+</details>
 <form method="post" action="/ui/colecciones/{{ coleccion.id }}/editar" class="tarjeta formulario">
   <h2>Datos y política</h2>
   <label for="name">Nombre</label>
