@@ -67,3 +67,15 @@ nombre, dentro de una fila las portadas empezaban a distinta altura (el nombre o
 PO lo vio como tarjetas «descolocadas». La portada pasa **arriba** del nombre —como en la Biblioteca—: todas
 las tarjetas de una fila la empiezan a la misma altura, el nombre sigue entero debajo y el marcador conserva
 su 2:3. La prueba `test_la_portada_va_primero_para_que_la_fila_empiece_a_la_misma_altura` fija el orden.
+
+## Deuda 3 (parcial) — clases heredadas retiradas (V14, #750)
+
+V14 retiró `.topnav`, `.hero-state`, `.toast`, `.audit-ok`, `.ajustes-grid`, `.filter-*`, `.cover`,
+`.library-vista*`, `.tabla-ficha`, `.recuento-biblioteca`, `.lectura-nota`, `.arco-anadir`,
+`.vinc-candidata-titulo`, `.btn-primary`, `.legal-notice-warn` y la familia `.issue-chip`
+(sustituida por `ui.chip`, con `chip-falta` para «te falta»).
+
+**Excepción documentada:** `.estado-dot` se conserva. No es un alias de V2: el sistema de diseño lo
+describe como el componente actual de los semáforos (glifos ✓ ! ? dibujados desde `static/iconos`).
+Retirarlo exigiría sustituir el semáforo por un chip o renombrarlo, y eso es una decisión de diseño
+aparte, no una limpieza mecánica.
