@@ -242,6 +242,10 @@ como marco permanente.
   - Resumen antes que listado. Las mayúsculas, solo en rótulos de ≤ 3 palabras.
   - Los textos explican la tarea, no el contrato: nada de «token», «lote»
     ni códigos internos en superficie (ver A2 y U20).
+- **Sistema de diseño:** las reglas de marca, color, tipografía, forma, trama, componentes y
+  accesibilidad están en [`docs/design/sistema-de-diseno-zascarr.md`](docs/design/sistema-de-diseno-zascarr.md)
+  (diffeable; el PDF con las muestras, en `docs/design/sistema-de-diseno-zascarr.pdf`). Antes de
+  pintar una pantalla nueva, léelo: la deuda abierta de la última revisión no se copia.
 
 ## 7. Base de datos
 
