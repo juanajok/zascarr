@@ -2,7 +2,7 @@
 {% block title %}Buscar una edición mejor — {{ series.title }} — ZascArr{% endblock %}
 {% block content %}
 <p><a class="back-link" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}">← Volver al número</a></p>
-<h1>Buscar una edición mejor</h1>
+<h1 class="titulo-frase">Buscar una edición mejor</h1>
 <p class="subtitle">ZascArr compara lo que ya tienes con lo que ofrecen tus fuentes. No sustituye ni borra nada sin que lo confirmes.</p>
 {% if mensaje %}{{ ui.aviso("ok" if exito else "amber", mensaje) }}{% endif %}
 {% if resultado %}

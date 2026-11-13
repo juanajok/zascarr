@@ -7,6 +7,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Alineación de las pantallas nuevas con el sistema de diseño (2026-11-13).** Calidad pasa a
+  Descargas; los títulos-frase usan `.titulo-frase`; acciones de descarte con `.btn-ignorar`;
+  filas de Sagas/Mejoras como viñetas de 3 px; botones con verbo y objeto. Detalle:
+  `docs/design/ui-auditoria-sistema-diseno-2026-11-13.md`.
 - **Miniatura de portada endurecida (BL-INF9, #603).** Presupuesto y concurrencia acotados
   (`wait_for` + semáforo global de 2 generaciones), consulta corta que libera la conexión de BD
   antes de esperar el lock, tope de píxeles específico para miniaturas (6/12 Mpx) y caché
