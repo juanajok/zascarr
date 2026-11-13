@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Buscar una edición mejor — {{ series.title }} — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}">← Volver al número</a></p>
+<h1>Buscar una edición mejor</h1>
+<p class="subtitle">ZascArr compara lo que ya tienes con lo que ofrecen tus fuentes. No sustituye ni borra nada sin que lo confirmes.</p>
+{% if mensaje %}{{ ui.aviso("ok" if exito else "amber", mensaje) }}{% endif %}
+{% if resultado %}
+  {% if resultado.actual %}
+  <section class="mejora-actual">
+    <h2>Tu edición</h2>
+    <ul>
+      {% for a in resultado.actual %}
+      <li>{{ a.nombre }} · {{ a.calidad.etiqueta }}{% if a.calidad.detalle %} · {{ a.calidad.detalle }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+  {% if filas %}
+  <p class="caption">Solo se ofrecen ediciones del mismo número y serie con calidad mejor. Al descargar, el archivo nuevo quedará junto al actual; ZascArr no borra el tuyo.</p>
+  <ul class="mejoras-lista">
+    {% for fila in filas %}
+    <li class="mejora-fila">
+      <strong>{{ fila.mejora.resultado.title }}</strong>
+      <span>{{ ui.chip("info", fila.mejora.calidad.etiqueta) }}</span>
+      <span class="muted">{{ fila.mejora.resultado.indexer }} · {{ (fila.mejora.resultado.size_bytes / 1048576) | round(1) }} MB · {{ fila.mejora.resultado.seeders }} semillas</span>
+      <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/mejorar/descargar" class="inline-desbloquear">
+        <input type="hidden" name="token" value="{{ fila.token }}">
+        <button type="submit" class="btn ghost sm">Descargar esta edición</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {{ ui.estado_vacio("No hay una edición mejor ahora", resultado.error or "Prueba más tarde o revisa las fuentes en Ajustes.") }}
+  {% endif %}
+{% endif %}
+<p class="caption">Solo se consultan metadatos y enlaces de descarga; no se modifica ningún archivo de tu biblioteca.</p>
+{% endblock %}

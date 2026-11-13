@@ -39,6 +39,7 @@ from zascarr.models import (
     WishlistStatus,
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
+from zascarr.services.calidad import buscar_mejoras
 from zascarr.services.coleccion import (
     ConflictoVersionError,
     cambiar_decision,
@@ -101,7 +102,7 @@ from zascarr.services.lectura import (
     lecturas_de_serie,
     marcar,
 )
-from zascarr.services.legal import is_acknowledged
+from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
 from zascarr.services.notas import (
     NotaInvalidaError as NotaColeccionInvalidaError,
 )
@@ -113,6 +114,11 @@ from zascarr.services.notas import (
     leer_numero,
     notas_de_serie,
     numero_existe,
+)
+from zascarr.services.orchestrator import (
+    Orchestrator,
+    crear_token_candidato,
+    verificar_token_candidato,
 )
 from zascarr.services.politica import (
     horas_minimas,
@@ -1031,6 +1037,49 @@ async def desbloquear_numero_campo(series_id: UUID, issue_id: UUID, campo: str,
     await db.commit()
     return RedirectResponse(
         f"/ui/series/{series_id}/numero/{issue_id}?guardado=desbloqueado", status_code=303)
+
+
+@router.post("/{series_id}/numero/{issue_id}/mejorar", response_class=HTMLResponse,
+             dependencies=[Depends(require_legal_acknowledgment)])
+async def buscar_mejora_numero(series_id: UUID, issue_id: UUID, request: Request,
+                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """BL-D3: busca candidatos de mejor calidad; no envía nada ni toca la biblioteca."""
+    ficha = await cargar_ficha_numero(db, series_id, issue_id)
+    if ficha is None:
+        raise HTTPException(status_code=404, detail="Número no encontrado")
+    resultado = await buscar_mejoras(db, ficha.serie, ficha.issue)
+    secret = get_settings().secret_key
+    filas = [{"mejora": m, "token": crear_token_candidato(issue_id, m.resultado, secret)}
+             for m in resultado.candidatos]
+    respuesta = templates.TemplateResponse(request, "mejores_numero.html", {
+        "series": ficha.serie, "issue": ficha.issue, "resultado": resultado,
+        "filas": filas, "mensaje": "", "exito": False,
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/numero/{issue_id}/mejorar/descargar",
+             response_class=HTMLResponse,
+             dependencies=[Depends(require_legal_acknowledgment)])
+async def descargar_mejora_numero(series_id: UUID, issue_id: UUID, request: Request,
+                                  token: str = Form(...),
+                                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """BL-D3: el coleccionista confirma una edición concreta; solo entonces se envía."""
+    ficha = await cargar_ficha_numero(db, series_id, issue_id)
+    if ficha is None:
+        raise HTTPException(status_code=404, detail="Número no encontrado")
+    candidato = verificar_token_candidato(token, issue_id, get_settings().secret_key)
+    if candidato is None:
+        raise HTTPException(status_code=400,
+                            detail="Candidato no válido o caducado — vuelve a buscar")
+    exito, mensaje = await Orchestrator(db).enviar_candidato_de_mejora(candidato)
+    respuesta = templates.TemplateResponse(request, "mejores_numero.html", {
+        "series": ficha.serie, "issue": ficha.issue, "resultado": None,
+        "filas": [], "mensaje": mensaje, "exito": exito,
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 @router.get("/{series_id}/numero/{issue_id}", response_class=HTMLResponse)

@@ -587,6 +587,20 @@ class Orchestrator:
             return settings.amule_enabled
         return False
 
+    async def enviar_candidato_de_mejora(self, candidate: SearchResult) -> tuple[bool, str]:
+        """BL-D3: envía la edición que el coleccionista confirmó. No toca la wishlist ni
+        sustituye archivos; el importador la dejará como archivo disponible del número."""
+        settings = get_settings()
+        backend = _detect_backend(candidate.download_url)
+        if not self._backend_enabled(backend, settings):
+            return False, "El cliente de descarga de ese enlace está desactivado en Ajustes."
+        ref = await self._send(backend, candidate)
+        if ref is None:
+            return False, "No se pudo enviar la descarga — revisa el cliente en Ajustes."
+        logger.info("orchestrator.upgrade_started", title=candidate.title,
+                    backend=backend.value)
+        return True, "Descarga enviada. Cuando llegue, el importador la añadirá al número."
+
     async def _forum_fallback(self, query: str) -> SearchResult | None:
         s = get_settings()
         # forum_url vacío por defecto a propósito (blindaje legal): es un
