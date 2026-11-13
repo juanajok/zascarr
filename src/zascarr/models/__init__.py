@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     PrimaryKeyConstraint,
     SmallInteger,
     String,
@@ -1143,6 +1144,35 @@ class ReadingList(Base):
     items: Mapped[list["ReadingListItem"]] = relationship(
         back_populates="reading_list", cascade="all, delete-orphan"
     )
+
+
+class HttpCache(Base):
+    """Caché HTTP condicional del proceso (SCR1, migración 0037).
+
+    Una fila por URL canónica y método (`url_hash`), con dos horizontes: `fresh_until`
+    (se sirve sin red) y `retain_until` (hasta ahí se puede revalidar con ETag/Last-Modified;
+    después la purga la borra). `is_negative` marca una respuesta negativa corta (404/410 o
+    `missingtitle`): no guarda cuerpo. El cuerpo va comprimido en `body_zlib` (tope 2 MiB) y
+    `url_canonical` redacta credenciales. No la tocan las portadas (esas van por su caché local).
+    """
+
+    __tablename__ = "http_cache"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    url_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    url_canonical: Mapped[str] = mapped_column(Text, nullable=False)
+    domain: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    status_code: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(255))
+    is_negative: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false")
+    etag: Mapped[str | None] = mapped_column(Text)
+    last_modified: Mapped[str | None] = mapped_column(Text)
+    body_zlib: Mapped[bytes | None] = mapped_column(LargeBinary)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fresh_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    retain_until: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True)
 
 
 class ImportRun(Base):

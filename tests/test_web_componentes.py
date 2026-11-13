@@ -370,8 +370,8 @@ def _lista_de_selectores() -> set[str]:
 class TestCssDeLosComponentes:
 
     @pytest.mark.parametrize("asp", [a.clase for a in ASPECTOS.values() if a.clase])
-    @pytest.mark.parametrize("base", [".chip", ".hero-state"])
-    def test_cada_matiz_existe_en_chip_y_hero_state(self, asp, base):
+    @pytest.mark.parametrize("base", [".chip"])
+    def test_cada_matiz_existe_en_chip(self, asp, base):
         assert f"{base}.{asp}" in _lista_de_selectores()
 
     @pytest.mark.parametrize("tipo", [t for t in TIPOS_AVISO if t != "nota"])
@@ -380,7 +380,7 @@ class TestCssDeLosComponentes:
 
     @pytest.mark.parametrize("selector", [
         ".btn.primary", ".btn.ghost", ".btn.sm", ".btn.ghost:hover", ".card", ".chip", ".group",
-        ".ghead", ".empty-state", ".aviso", ".hero-state", "progress.progress", ".toast",
+        ".ghead", ".empty-state", ".aviso", "progress.progress",
         ".caption", "button[disabled]",
     ])
     def test_existe_el_componente(self, selector):
@@ -405,10 +405,11 @@ class TestCssDeLosComponentes:
                     if " ".join(s.split()).startswith("button,") and "min-height" in d)
         assert "min-height: 40px" in base
 
-    def test_el_aviso_temporal_se_desactiva_con_reducir_movimiento(self):
+    def test_lo_animado_se_desactiva_con_reducir_movimiento(self):
+        """V14 retiró `.toast` (nunca se usó); las animaciones que quedan (conversión, previa)
+        siguen apagándose con `prefers-reduced-motion` por la regla global."""
         bloque = re.search(r"@media \(prefers-reduced-motion: reduce\)\s*\{(.*?)\n\}", CSS, re.S)
         assert bloque and "animation: none !important" in bloque.group(1)
-        assert "animation: toast-sale" in CSS and "@keyframes toast-sale" in CSS
 
     def test_las_tramas_se_apagan_con_contraste_alto(self):
         """Hueco real (2026-10-21): la trama de fondo seguía detrás del texto aunque el sistema
@@ -431,20 +432,23 @@ class TestCssDeLosComponentes:
         assert ":focus-visible" in CSS and "outline: 3px solid var(--cyan-t)" in CSS
 
 
-# ── compatibilidad: ninguna clase de antes desaparece ─────────────────────────────────────
+# ── compatibilidad: clases de antes que siguen vivas ─────────────────────────────────────
+# V14 (#750): se retiraron las que ya no usaba ninguna plantilla y no eran dinámicas:
+# ajustes-grid, audit-ok, cover, filter-bar-secondary, filter-search-box y topnav.
+# Esta lista queda como red para el resto hasta cerrar del todo la migración.
 # `wishlist-badge` se retiró a propósito: ya no la usa ninguna plantilla (las filas
 # de Deseados pintan `ui.chip`, deuda 6 de la revisión de diseño); sus reglas por
 # estado (`.estado-imported`…) con ella.
 # `cover-missing` se retiró a propósito con la portada de dos capas (ui.portada, sin `onerror=`); la
 # sustituye `.portada` (test_portada_marca.py).
 CLASES_ANTERIORES_A_V2 = (
-    "ajustes-actions", "ajustes-card", "ajustes-desc", "ajustes-error", "ajustes-grid",
+    "ajustes-actions", "ajustes-card", "ajustes-desc", "ajustes-error",
     "ajustes-hint", "ajustes-ok", "assign-form", "audit-adoptar", "audit-block", "audit-count",
-    "audit-detail", "audit-item", "audit-ok", "audit-path", "audit-resumen", "audit-why",
+    "audit-detail", "audit-item", "audit-path", "audit-resumen", "audit-why",
     "back-link", "brand", "btn", "btn-ignorar", "btn-logout", "btn-primary", "btn-reintentar",
     "btn-sugerencia", "candidato-detalle", "candidato-fila", "candidato-titulo",
     "candidatos-lista", "candidatos-vacio", "candidatos-wishlist", "caption", "content",
-    "cover", "dashboard", "detected", "discover", "discover-desc",
+    "dashboard", "detected", "discover", "discover-desc",
     "discovery-card", "discovery-card-actions", "discovery-card-body", "discovery-card-desc",
     "discovery-card-title", "discovery-list", "empty", "empty-state", "estado-bad",
     "estado-check-name", "estado-check-row", "estado-check-status", "estado-checks",
@@ -452,7 +456,7 @@ CLASES_ANTERIORES_A_V2 = (
     "estado-neutral", "estado-ok", "estado-summary",
     "estado-summary-detail", "estado-summary-label", "estado-warn",
     "estado-warnings", "estado-warnings-title", "filename", "filter-bar",
-    "filter-bar-secondary", "filter-search-box", "htmx-indicator", "htmx-request",
+    "htmx-indicator", "htmx-request",
     "issue-chip", "issue-grid", "issue-input", "issue-missing", "issue-present",
     "legal-checkbox", "legal-form", "legal-full", "legal-notice", "legal-notice-footer",
     "legal-notice-info", "legal-notice-warn", "library-card", "library-card-body",
@@ -465,7 +469,7 @@ CLASES_ANTERIORES_A_V2 = (
     "series-card", "series-cover", "series-grid", "series-header", "series-list",
     "series-meta", "series-name", "series-result-item", "series-results", "series-search",
     "series-title", "series-year", "site-footer", "subtitle", "suggestion", "suggestion-label",
-    "suggestion-score", "topnav", "view-all", "visible", "wishlist-list",
+    "suggestion-score", "view-all", "visible", "wishlist-list",
     "wishlist-motivo", "wishlist-row", "wishlist-title",
 )
 
