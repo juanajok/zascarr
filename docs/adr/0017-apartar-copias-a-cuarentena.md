@@ -139,7 +139,7 @@ apartado_grupos
 - **Retención:** la operación y sus grupos se conservan mientras la cuarentena pueda deshacerse;
   no se purgan automáticamente. Un `DELETE` de una operación deshecha solo lo decidirá una
   política de limpieza futura (D2), nunca esta historia.
-- **Migración:** `alembic/versions/0030_apartado_operaciones.py` (número propuesto; siguiente
+- **Migración:** `alembic/versions/0033_apartado_operaciones.py` (número propuesto; siguiente
   libre tras `0029`), aditiva y reversible; **no se aplica en este encargo**. No toca tablas
   existentes ni datos; los enums nuevos no reutilizan `asignacion_estado` (dominios distintos).
 
