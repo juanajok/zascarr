@@ -2507,6 +2507,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .coleccion-previa-panel .portada { width: 72px; }
 }
 
+
+/* Pool inicial de etiquetas (BL-ETQ): ideas para empezar. */
+.etiquetas-ideas { margin: 8px 0 12px; }
+.etiquetas-ideas-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.etiqueta-idea { font: inherit; padding: 4px 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-pill); background: var(--paper); color: var(--ink); cursor: pointer; }
+.etiqueta-idea:hover { background: var(--paper-2); }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

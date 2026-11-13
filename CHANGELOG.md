@@ -134,6 +134,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Pool inicial de 60 etiquetas (2026-11-13).** La ficha de una serie nueva ofrece hasta 12
+  ideas en español («superhéroes», «noir», «ciencia ficción»…) que se añaden con un clic; el
+  resto del vocabulario queda en el autocompletado. Se siembra una vez (migración 0039), sin
+  asignar nada; las fuentes y ComicInfo siguen aportando sus tags con procedencia. Ficha:
+  `docs/design/benchmark-pool-etiquetas-inicial.md`.
 - **Caché HTTP condicional y `robots.txt` (SCR1, Fase 1).** Tabla `http_cache` (migración
   `0038`) con dos horizontes (`fresh_until` para servir sin red, `retain_until` para revalidar
   con `304`), cuerpos comprimidos con zlib ≤2 MiB, negativas cortas (`404`/`410` y
