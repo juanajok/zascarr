@@ -12,7 +12,7 @@
     {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=%s" % (series.id, portada_version), "series-cover") }}
   </span>
   <div>
-    <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle" style="display:inline">({{ series.start_year }})</span>{% endif %}</h1>
+    <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle anio-titulo">({{ series.start_year }})</span>{% endif %}</h1>
     {% if series.publisher %}<p class="series-meta">{{ series.publisher.name }}</p>{% endif %}
     {% if series.genres %}
     <p class="series-meta">{{ series.genres|map(attribute="name")|join(", ") }}</p>

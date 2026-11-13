@@ -80,12 +80,12 @@ class TestIndexConBusquedaPrevia:
         r = TestClient(app).get("/ui/descubrir", params={"q": "Batman"})
         assert r.status_code == 200
         assert 'value="Batman"' in r.text
-        assert 'hx-trigger="keyup changed delay:400ms, load"' in r.text
+        assert 'hx-trigger="input changed delay:400ms, search, load"' in r.text
         assert 'hx-get="/ui/descubrir/buscar"' in r.text
 
     def test_sin_q_no_lanza_nada_al_cargar(self):
         r = TestClient(app).get("/ui/descubrir")
-        assert 'hx-trigger="keyup changed delay:400ms"' in r.text
+        assert 'hx-trigger="input changed delay:400ms, search"' in r.text
         assert ", load" not in r.text
         assert 'value="' not in r.text.split("series-search")[1].split(">")[0]
 
