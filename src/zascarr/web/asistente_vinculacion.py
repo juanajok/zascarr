@@ -429,6 +429,9 @@ async def revisar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
     otros = leer_borradores(str(f.get("borradores", "")))
     estado = leer_estado_de_la_pagina(f)
     estado.desde, estado.hasta = _entero(f.get("pagina_desde")), _entero(f.get("pagina_hasta"))
+    quitar = str(f.get("quitar", ""))
+    if _es_uuid(quitar):
+        estado.marcados = [i for i in estado.marcados if i != quitar]
 
     # Una acción masiva vale para la página que se ve; si a la vez se cambia de página, no se aplica.
     accion = str(f.get("accion", ""))
