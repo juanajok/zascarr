@@ -46,3 +46,18 @@
   después y solo admite los redondeos de la tabla; `tests/test_web_css_tokens.py` impide que
   vuelvan los literales (mordida comprobada). Suite completa y CI en verde; revisado en la Pi en
   claro/oscuro a 1280 y 375 px (Inicio, Biblioteca, Auditoría, Ajustes).
+
+## Deuda 6 — portada de «Por revisar» (decisión del PO, 2026-11-13)
+
+La revisión proponía usar `ui.portada` en las tarjetas de «Por revisar» para que una fila no cambie de alto
+al cargar, sabiendo que **revierte U12** (el hueco 2:3 volvía a empujar los nombres). El PO lo aprobó.
+
+- La tarjeta (`_tarjeta_pendiente.html`) pinta **siempre** el marcador de `ui.portada` (inicial + tinta) y la
+  `<img>` solo cuando el servidor sabe que la extensión tiene extractor: una ausencia conocida (CBR, PDF…)
+  no lanza ninguna petición `/portada`, y el marcador ocupa su 2:3 para alinear la fila.
+- `.portada-pendiente` acota el bloque a 120 px de ancho; `.cover` se conserva en la hoja por compatibilidad
+  hasta la V14.
+- Sin `onerror`: si la portada no llega, se ve el marcador, como en la Biblioteca.
+- Pruebas: los tres casos de portada de `tests/test_pendientes_tarjeta.py` se reescriben para el mecanismo
+  nuevo (marcador sin petición; `<img>` con marcador debajo; 2:3 y 120 px); la verificación visual se hace
+  en navegador real a 1280 y 375 px tras desplegar.

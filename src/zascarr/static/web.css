@@ -739,13 +739,17 @@ button[type="submit"].neutro {
   display: flex;
   flex-direction: column;
 }
-/* U12: SIN `aspect-ratio` y con `height: auto`: una portada que falla mide 0 px y no deja hueco (medido en
-   Chrome 154, docs/design/benchmark-U12-experimento); una que carga ocupa su alto natural, acotado en ancho. */
-.pending-card .cover {
-  display: block;
+/* #689 deuda 6: `ui.portada` reserva el 2:3 (el PO revierte U12) para que las tarjetas de una fila
+   se alineen aunque la portada falte o tarde; el marcador va debajo de la <img>, sin `onerror=`. */
+/* Compatibilidad hasta la V14 (lo exige test_web_componentes): la tarjeta ya no usa `.cover`,
+   usa `ui.portada` con `.portada-pendiente`. */
+.pending-card .cover { display: block; width: min(100%, 120px); height: auto; margin: 0 auto; }
+
+.pending-card .portada-pendiente {
   width: min(100%, 120px);
-  height: auto;
   margin: 0 auto;
+  border: var(--border-chip) solid var(--ink);
+  border-radius: var(--radius-panel);
 }
 .pending-body { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); flex: 1; }
 /* «Ignorar» va siempre al pie: en una fila de tarjetas los botones quedan alineados aunque el nombre, lo
