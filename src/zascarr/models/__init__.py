@@ -1434,3 +1434,21 @@ class FieldProvenance(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     locked: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default=text("false"))
+
+
+class RevisionBorrador(Base):
+    """Borrador explícito de una revisión de carpeta (#725).
+
+    Solo guarda lo que la persona marcó/escribió; no es una selección válida
+    hasta que el asistente la reevalúa. Una fila por carpeta+serie, con
+    caducidad: no hay sesión ni estado global.
+    """
+    __tablename__ = "revision_borradores"
+    clave: Mapped[str] = mapped_column(String(500), primary_key=True)
+    series_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), primary_key=True)
+    datos: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    actualizado: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now())
+    caduca: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (Index("ix_revision_borradores_caduca", "caduca"),)

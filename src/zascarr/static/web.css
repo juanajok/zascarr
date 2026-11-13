@@ -1585,6 +1585,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vinc-grupo ul { margin: 6px 0 0; padding-left: 20px; }
 
 /* U20: marcar/desmarcar todos y detalle plegado de las explicaciones de página */
+.vinc-borrador-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 var(--gutter); }
+.vinc-borrador-guardado {
+  margin: 0 0 var(--gutter);
+  padding: 10px 12px;
+  border: var(--border-chip) solid var(--ink-faint);
+  border-radius: var(--radius-panel);
+  background: var(--paper-2);
+}
+.vinc-borrador-guardado p { margin: 0 0 8px; }
 .vinc-barra {
   position: sticky;
   top: 8px;
