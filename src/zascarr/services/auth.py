@@ -309,6 +309,16 @@ def _respuesta_host_rechazado(request: Request) -> Response:
     return _respuesta_403(detalle, request)
 
 
+def _respuesta_basic_requerida_opds() -> Response:
+    """401 de la zona Basic de OPDS: sin redirección a /login (un e-reader no la sigue)."""
+    return Response(
+        "Autenticación necesaria: usa el usuario y la contraseña de ZascArr con HTTP Basic.",
+        status_code=401,
+        media_type="text/plain; charset=utf-8",
+        headers={"WWW-Authenticate": 'Basic realm="ZascArr"', "Cache-Control": "no-store"},
+    )
+
+
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ITERATIONS)
@@ -639,6 +649,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     status_code=503,
                     content={"detail": "Base de datos no disponible — consulta /api/health"},
                 )
+            if path == "/opds" or path.startswith("/opds/"):
+                return Response(
+                    "El catálogo OPDS no está disponible: la base de datos no está lista.",
+                    status_code=503, media_type="text/plain; charset=utf-8",
+                    headers={"Cache-Control": "no-store"},
+                )
             # Import tardío: web/ importa services/ al cargar; al revés sería un ciclo.
             from zascarr.web.errores import pagina_error
             return pagina_error(
@@ -677,6 +693,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except ColaDeVerificacionLlenaError:
             return _respuesta_cola_llena(request)
 
+        if path == "/opds" or path.startswith("/opds/"):
+            return _respuesta_basic_requerida_opds()
         if path.startswith("/api/"):
             return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="ZascArr"'})
 

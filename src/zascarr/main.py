@@ -376,6 +376,7 @@ def create_app() -> FastAPI:
     from zascarr.api.exportacion import router as exportacion_api_router
     from zascarr.api.health import router as health_router
     from zascarr.api.legal import router as legal_router
+    from zascarr.api.opds import router as opds_router
     from zascarr.api.operaciones import router as operaciones_router
     from zascarr.api.revision import router as revision_router
     from zascarr.api.series import router as series_router
@@ -421,6 +422,7 @@ def create_app() -> FastAPI:
     app.include_router(exportacion_api_router, prefix="/api")
     app.include_router(revision_router, prefix="/api")
     app.include_router(series_router, prefix="/api")
+    app.include_router(opds_router)
     app.include_router(wishlist_router, prefix="/api")
     app.include_router(auth_router)
     app.include_router(ui_router)
