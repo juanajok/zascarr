@@ -315,7 +315,8 @@ def _respuesta_basic_requerida_opds() -> Response:
         "Autenticación necesaria: usa el usuario y la contraseña de ZascArr con HTTP Basic.",
         status_code=401,
         media_type="text/plain; charset=utf-8",
-        headers={"WWW-Authenticate": 'Basic realm="ZascArr"', "Cache-Control": "no-store"},
+        headers={"WWW-Authenticate": 'Basic realm="ZascArr"', "Cache-Control": "no-store",
+                 "Vary": "Authorization"},
     )
 
 
@@ -623,11 +624,12 @@ def _respuesta_cola_llena(request: Request) -> Response:
     if request.url.path.startswith("/api/"):
         return JSONResponse(status_code=429, content={"detail": detalle},
                             headers={"Retry-After": "5"})
-    return Response(
-        detalle, status_code=429,
-        media_type="text/plain; charset=utf-8",
-        headers={"X-Content-Type-Options": "nosniff", "Retry-After": "5"},
-    )
+    headers = {"X-Content-Type-Options": "nosniff", "Retry-After": "5"}
+    if request.url.path == "/opds" or request.url.path.startswith("/opds/"):
+        headers["Cache-Control"] = "no-store"
+        headers["Vary"] = "Authorization"
+    return Response(detalle, status_code=429,
+                    media_type="text/plain; charset=utf-8", headers=headers)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

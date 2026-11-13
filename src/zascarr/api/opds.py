@@ -94,10 +94,10 @@ def _no_modificado(request: Request, etag: str) -> bool:
 def _respuesta(request: Request, cuerpo: bytes, actualizado: datetime | None, *, extra: str = "") -> Response:
     etag = _etag(actualizado, request, extra=extra)
     if _no_modificado(request, etag):
-        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "private, max-age=300"})
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "private, max-age=300", "Vary": "Authorization"})
     return Response(
         content=cuerpo,
-        headers={"Content-Type": _TIPO_NAV, "ETag": etag, "Cache-Control": "private, max-age=300"},
+        headers={"Content-Type": _TIPO_NAV, "ETag": etag, "Cache-Control": "private, max-age=300", "Vary": "Authorization"},
     )
 
 
@@ -109,7 +109,7 @@ def _xml_error(status: int, titulo: str, detalle: str) -> Response:
     ET.SubElement(raiz, _tag(ATOM, "summary")).text = detalle
     cuerpo = ET.tostring(raiz, encoding="utf-8", xml_declaration=True)
     return Response(content=cuerpo, status_code=status,
-                    headers={"Content-Type": _TIPO_XML, "Cache-Control": "no-store"})
+                    headers={"Content-Type": _TIPO_XML, "Cache-Control": "no-store", "Vary": "Authorization"})
 
 
 def _enlace(feed: ET.Element, rel: str, href: str, tipo: str | None = None) -> None:
@@ -171,7 +171,7 @@ def _entrada_issue(feed: ET.Element, issue: Issue, serie: Series) -> None:
     if issue.synopsis:
         ET.SubElement(entrada, _tag(ATOM, "summary")).text = issue.synopsis
     if issue.issue_number:
-        ET.SubElement(entrada, _tag(ATOM, "dc:identifier")).text = f"{serie.title} #{issue.issue_number}"
+        ET.SubElement(entrada, _tag(DC, "identifier")).text = f"{serie.title} #{issue.issue_number}"
     if issue.release_date:
         ET.SubElement(entrada, _tag(DC, "issued")).text = issue.release_date.isoformat()
     _enlace(entrada, "alternate", f"/ui/series/{serie.id}", "text/html")
