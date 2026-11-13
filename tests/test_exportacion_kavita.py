@@ -1,6 +1,7 @@
 """B20: planificación pura de la exportación a Kavita."""
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from zascarr.core.exportacion_kavita import (
@@ -110,6 +111,7 @@ def test_copiar_deshace_un_hardlink_previo(tmp_path):
     relativo = plan.archivos[0].destino_relativo
     _materializar(
         plan, root, copiar=True,
-        previos={relativo: {"sha256": plan.archivos[0].sha256, "mode": "hardlink"}})
+        previos={relativo: {"sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                                    "mode": "hardlink"}})
     assert destino.stat().st_ino != source.stat().st_ino
     assert destino.read_bytes() == source.read_bytes()
