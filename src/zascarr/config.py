@@ -186,6 +186,16 @@ class Settings(BaseSettings):
     # read-only. /api/health avisa de restauraciones atrasadas o fallidas (#334 B2).
     restore_status_file: str = Field(default="/run/backup-status/restore-status.json")
 
+    # BL-OPS1 (FR-18): «Hacer una copia ahora». El socket y la clave los crea
+    # `scripts/instalar_ops.sh` y el compose monta la carpeta `ops` de solo lectura; el
+    # estado del auxiliar (`ops-status.json`) y el listado de `backup.sh` (`copias.json`)
+    # van junto a `status.json`.
+    ops_socket_file: str = Field(default="/run/zascarr-ops/ops.sock")
+    ops_key_file: str = Field(default="/run/zascarr-ops/ops.key")
+    ops_status_file: str = Field(default="/run/backup-status/ops-status.json")
+    copias_file: str = Field(default="/run/backup-status/copias.json")
+    omitida_file: str = Field(default="/run/backup-status/omitida.json")
+
     # ── Orquestador ────────────────────────────────────────────────
     scan_interval_minutes: int = 60
     import_interval_minutes: int = 15

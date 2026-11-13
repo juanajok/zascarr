@@ -312,6 +312,9 @@ if (( OFFSITE_OK == 1 )); then
     aplicar_retencion "${BACKUP_OFFSITE_DIR}"
 fi
 
+# Listado para la interfaz (BL-OPS1, FR-16): después de la retención; nunca hace fallar la copia.
+escribir_copias_json "${BACKUP_DIR}" "${BACKUP_OFFSITE_DIR}" "${BACKUP_STATUS_DIR}" || true
+
 # ── Estado final ─────────────────────────────────────────────────────────────
 if (( OFFSITE_OK == 1 )) && [[ -z "${ANCHOR_ERROR}" ]]; then
     if ! escribir_estado "ok" "" "${DEST}" "${SHA}" "${BYTES}" true; then

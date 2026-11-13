@@ -389,6 +389,7 @@ def create_app() -> FastAPI:
     from zascarr.web.auth import router as auth_router
     from zascarr.web.colecciones import router as colecciones_ui_router
     from zascarr.web.contexto_declarado import router as contexto_declarado_router
+    from zascarr.web.copias import router as copias_ui_router
     from zascarr.web.correspondencias_contexto import router as correspondencias_contexto_router
     from zascarr.web.dashboard import router as dashboard_router
     from zascarr.web.decisiones_reutilizables import router as decisiones_router
@@ -427,6 +428,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_router)
     app.include_router(discovery_router)
     app.include_router(estado_router)
+    app.include_router(copias_ui_router)
     app.include_router(exportar_router)
     app.include_router(disponibilidad_router)
     app.include_router(legal_ui_router)

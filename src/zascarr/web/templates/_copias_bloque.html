@@ -1,0 +1,16 @@
+{#- Bloque «Copias de seguridad» de /estado (BL-OPS1). `#copia-anuncio` es la zona aria-live y no se recambia nunca. -#}
+<section id="copias" aria-labelledby="copias-titulo">
+  <h2 id="copias-titulo" class="seccion">Copias de seguridad</h2>
+  {% if v.estado != "no_activado" %}
+  <p>ZascArr guarda una copia de tus datos cada noche. Puedes hacer una ahora.</p>
+  {% endif %}
+  {% include "_copias_accion.html" %}
+  <div id="copia-anuncio" aria-live="polite">{% include "_copias_estado.html" %}</div>
+  {% include "_copias_lista.html" %}
+  <details>
+    <summary>Para quien instaló ZascArr</summary>
+    <p>Para activarlo, en el equipo donde corre ZascArr: <code>sudo bash scripts/instalar_ops.sh</code>.
+      Sin contraseña en ZascArr, <strong>cualquiera que pueda abrir ZascArr</strong> puede pedir una copia.
+      Una copia solo ocupa disco; no cambia nada más.</p>
+  </details>
+</section>

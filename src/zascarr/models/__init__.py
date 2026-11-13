@@ -1263,3 +1263,24 @@ class AliasImportado(Base):
                                               server_default=text("'{}'::jsonb"))
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
                                                 server_default=func.now())
+
+
+class OpsAccion(enum.StrEnum):
+    """Acciones que la app puede pedir al auxiliar del host (BL-OPS1, ADR 0018): lista cerrada."""
+
+    COPIA = "copia"
+
+
+class CodigoOps(enum.StrEnum):
+    """Códigos de respuesta del auxiliar del host (lista cerrada, repetida en `deploy/ops`)."""
+
+    ACEPTADA = "aceptada"
+    ESQUEMA_INVALIDO = "esquema_invalido"
+    FIRMA_INVALIDA = "firma_invalida"
+    CADUCADA = "caducada"
+    REPETIDA = "repetida"
+    ACCION_NO_DISPONIBLE = "accion_no_disponible"
+    DEMASIADO_PRONTO = "demasiado_pronto"
+    LIMITE_DIARIO = "limite_diario"
+    OPERACION_EN_CURSO = "operacion_en_curso"
+    NO_DISPONIBLE = "no_disponible"
