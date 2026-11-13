@@ -263,19 +263,44 @@ async def series_sin_coleccion(db: AsyncSession) -> list[SerieDeColeccion]:
         for s in filas]
 
 
-async def asignar_serie(db: AsyncSession, coleccion_id: UUID, serie_id: UUID) -> ResultadoColeccion:
+async def asignar_series(db: AsyncSession, coleccion_id: UUID,
+                         serie_ids: list[UUID]) -> ResultadoColeccion:
+    """Asigna VARIAS series de forma atómica: o todas o ninguna.
+
+    Valida pertenencia y disponibilidad de todas antes de escribir; duplicados
+    del formulario se colapsan. `asignar_serie` sigue siendo el envoltorio de una.
+    """
     coleccion = await db.get(Collection, coleccion_id)
     if coleccion is None:
         return ResultadoColeccion(False, {"general": "La colección ya no existe."})
-    serie = await db.get(Series, serie_id)
-    if serie is None:
-        return ResultadoColeccion(False, {"serie": "Esa serie no existe."})
-    if serie.collection_id is not None:
+    unicos: list[UUID] = []
+    vistos: set[UUID] = set()
+    for sid in serie_ids:
+        if sid not in vistos:
+            vistos.add(sid)
+            unicos.append(sid)
+    if not unicos:
+        return ResultadoColeccion(False, {"serie": "Elige al menos una serie."})
+    filas = (await db.execute(
+        select(Series).where(Series.id.in_(unicos)))).scalars().all()
+    por_id = {s.id: s for s in filas}
+    faltan = [str(sid) for sid in unicos if sid not in por_id]
+    if faltan:
         return ResultadoColeccion(False, {
-            "serie": "Esa serie ya pertenece a una colección. Quítala de allí primero."})
-    serie.collection_id = coleccion_id
+            "serie": "Alguna de las series elegidas ya no existe. No se ha añadido ninguna."})
+    ocupadas = [s.title for s in filas if s.collection_id is not None]
+    if ocupadas:
+        return ResultadoColeccion(False, {
+            "serie": "Estas series ya pertenecen a otra colección: "
+                     + ", ".join(ocupadas) + ". No se ha añadido ninguna."})
+    for serie in filas:
+        serie.collection_id = coleccion_id
     await db.flush()
     return ResultadoColeccion(True, coleccion=coleccion)
+
+
+async def asignar_serie(db: AsyncSession, coleccion_id: UUID, serie_id: UUID) -> ResultadoColeccion:
+    return await asignar_series(db, coleccion_id, [serie_id])
 
 
 async def quitar_serie(db: AsyncSession, coleccion_id: UUID, serie_id: UUID) -> bool:

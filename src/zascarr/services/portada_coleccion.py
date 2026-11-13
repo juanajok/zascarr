@@ -41,6 +41,8 @@ VERSION = 1
 #: 600×900; no se decodifica nada mayor ni se sigue un symlink dentro de `covers/`.
 MAX_BYTES = MAX_BYTES_PORTADA_PREVIA
 MAX_PIXELES = 4_000_000
+#: Separación interna entre celdas del mosaico (fondo neutro del lienzo).
+GAP = 6
 #: Fondo neutro de las celdas vacías del mosaico (no es una imagen de nadie).
 FONDO = (232, 226, 214)
 
@@ -144,13 +146,16 @@ def componer_mosaico(rutas: list[Path]) -> bytes:
     if len(imagenes) == 1:
         lienzo.paste(_celda(imagenes[0], ANCHO, ALTO), (0, 0))
     elif len(imagenes) == 2:
+        ancho = (ANCHO - GAP) // 2
         for i, img in enumerate(imagenes):
-            lienzo.paste(_celda(img, ANCHO // 2, ALTO), (i * (ANCHO // 2), 0))
+            lienzo.paste(_celda(img, ancho, ALTO), (i * (ancho + GAP), 0))
     else:
+        ancho = (ANCHO - GAP) // 2
+        alto = (ALTO - GAP) // 2
         for i, img in enumerate(imagenes[:4]):
-            x = (i % 2) * (ANCHO // 2)
-            y = (i // 2) * (ALTO // 2)
-            lienzo.paste(_celda(img, ANCHO // 2, ALTO // 2), (x, y))
+            x = (i % 2) * (ancho + GAP)
+            y = (i // 2) * (alto + GAP)
+            lienzo.paste(_celda(img, ancho, alto), (x, y))
     buf = io.BytesIO()
     lienzo.save(buf, format="JPEG", quality=85)
     return buf.getvalue()
