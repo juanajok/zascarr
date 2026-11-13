@@ -12,6 +12,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   se corrige el `btn-secondary` inexistente (ahora `.btn.ghost`); las filas de archivo separan con
   tinta visible (`--ink-faint`, no `--paper-2` sobre viñeta) y las filas de vinculación usan el
   borde de 2 px del sistema en vez de `1px solid currentColor`.
+- **D3: cadencia viva, escaneo idempotente y fallos honestos (2026-11-13).** El bucle lee la
+  cadencia y el perfil en cada vuelta (activar/desactivar ya no exige reiniciar); descartar o
+  descargar una propuesta y reescanear el mismo enlace ya no choca con la restricción única
+  (se comprueba cualquier estado y se usa savepoint); un fallo de Prowlarr no marca el número
+  como escaneado y «Buscar mejoras ahora» explica el motivo si no puede buscar. La descarga
+  se reclama de forma atómica para que un doble clic no envíe dos veces.
 - **Alineación de las pantallas nuevas con el sistema de diseño (2026-11-13).** Calidad pasa a
   Descargas; los títulos-frase usan `.titulo-frase`; acciones de descarte con `.btn-ignorar`;
   filas de Sagas/Mejoras como viñetas de 3 px; botones con verbo y objeto. Detalle:
