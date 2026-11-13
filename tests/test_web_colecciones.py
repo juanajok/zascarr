@@ -486,3 +486,22 @@ def test_vista_sin_cambio_vista_no_roba_el_foco():
     finally:
         _cerrar()
     assert "autofocus" not in r.text
+
+
+def test_cambio_vista_con_aviso_no_duplica_autofocus():
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=_pagina())), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}", params=[
+                ("vista", "tarjetas"), ("cambio_vista", "1"), ("guardado", "portada")])
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Portada actualizada." in r.text
+    assert r.text.count("autofocus") == 1
