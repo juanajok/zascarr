@@ -116,6 +116,7 @@ async def nueva(request: Request, name: str = Form(""), description: str = Form(
 
 @router.get("/{coleccion_id}", response_class=HTMLResponse)
 async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
+                  navegar: str = "",
                   q: str = Query(""), tradicion: str = Query(""),
                   serie_ids: list[str] = Query([]),
                   pagina: int = Query(1, ge=1), limpiar: str = Query(""),
@@ -138,12 +139,13 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
         "series": pagina_datos.series, "pagina": pagina_datos,
         "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
         "seleccion": seleccion, "seleccion_oculta": seleccion_oculta,
-        "foco_filtros": bool(q or tradicion or limpiar == "1" or pagina > 1),
+        "foco_filtros": bool(q or tradicion or limpiar == "1" or pagina > 1
+                            or navegar == "1"),
         "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
                                    max(1, pagina_datos.pagina - 1)),
         "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,
                                     min(pagina_datos.paginas, pagina_datos.pagina + 1)),
-        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1),
+        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1) + "&limpiar=1",
         "candidatas_portada": await candidatas_portada(db, coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": {}, "aviso": {
@@ -259,7 +261,7 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
 
 
 @router.post("/{coleccion_id}/series")
-async def asignar(request: Request, coleccion_id: UUID,
+async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
                   serie_ids: list[str] = Form([]), serie_id: str = Form(""),
                   q: str = Form(""), tradicion: str = Form(""),
                   pagina: int = Form(1), db: AsyncSession = Depends(get_db)):
@@ -299,13 +301,13 @@ async def asignar(request: Request, coleccion_id: UUID,
         "series": pagina_datos.series, "pagina": pagina_datos,
         "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
         "seleccion": seleccion,
-        "foco_filtros": bool(q or tradicion or pagina > 1),
+        "foco_filtros": bool(q or tradicion or pagina > 1 or navegar == "1"),
         "seleccion_oculta": [sid for sid in seleccion if sid not in visibles],
         "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
                                    max(1, pagina_datos.pagina - 1)),
         "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,
                                     min(pagina_datos.paginas, pagina_datos.pagina + 1)),
-        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1),
+        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1) + "&limpiar=1",
         "candidatas_portada": await candidatas_portada(db, coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": r_errores, "aviso": ""})

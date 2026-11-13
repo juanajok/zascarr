@@ -101,6 +101,7 @@
       {% endif %}
       {% if pagina and pagina.paginas > 1 %}
       <nav class="coleccion-paginacion" aria-label="Páginas de series disponibles">
+        <input type="hidden" name="navegar" value="1">
         <button class="btn ghost" type="submit" name="pagina" value="{{ pagina.pagina - 1 }}"
                 {% if pagina.pagina <= 1 %}disabled{% endif %}>← Anterior</button>
         <span>Página {{ pagina.pagina }} de {{ pagina.paginas }}</span>
