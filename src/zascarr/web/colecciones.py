@@ -87,6 +87,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
     return _respuesta(request, "coleccion_detalle.html", {
         "coleccion": c, "politicas": POLITICAS,
         "series": await series_sin_coleccion(db),
+        "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": {}, "aviso": {
             "guardada": "Colección guardada.",
             "asignada": "Serie añadida a la colección.",
