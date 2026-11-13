@@ -90,6 +90,7 @@ def _motivo_apartado(motivo: str | None) -> str:
         "destino_ocupado": "La cuarentena ya tiene esa ruta; no se ha sobrescrito nada.",
         "compensacion_fallida": "No se pudo devolver una copia ya movida; hace falta revisarlo.",
         "error_disco": "Hubo un problema de disco; la operación no se ha completado.",
+        "No se ha apartado nada: ninguna copia se pudo mover.": "Ninguna copia se pudo mover.",
     }.get(motivo or "", "No se ha completado la operación.")
 
 
@@ -454,7 +455,8 @@ async def _operaciones_apartadas(db: AsyncSession) -> list[dict]:
         resultado = await db.execute(
             select(ApartadoOperacion)
             .options(selectinload(ApartadoOperacion.grupos))
-            .where(ApartadoOperacion.estado == ApartadoEstado.CONFIRMADA)
+            .where(ApartadoOperacion.estado == ApartadoEstado.CONFIRMADA,
+                   ApartadoOperacion.total_archivos > 0)
             .order_by(ApartadoOperacion.creada.desc())
             .limit(10)
         )
