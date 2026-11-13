@@ -203,6 +203,10 @@ fi
 # por la retención, que es lo que acota su número.
 podar_refs_huerfanas "${UPDATE_REF}"
 
+# ── 9. «Hacer una copia ahora» (BL-OPS1, FR-27): se refresca solo si ya estaba instalado ─────────────
+# Informativo: un fallo aquí nunca estropea una actualización ya hecha.
+bash "${SCRIPT_DIR}/instalar_ops.sh" --refrescar || warn "No se pudo refrescar «Hacer una copia ahora» (la actualización sigue válida)."
+
 echo -e "\n${B}====================================${N}"
 echo -e "${G}${B}  Actualización completada${N}"
 echo -e "${B}====================================${N}\n"
