@@ -2641,11 +2641,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-series-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 132px;
+  grid-template-areas: "principal previa";
   gap: 16px;
   align-items: start;
 }
-.coleccion-series-col { min-width: 0; }
+.coleccion-series-col { grid-area: principal; min-width: 0; }
 .coleccion-previa-panel {
+  grid-area: previa;
   position: sticky;
   top: 16px;
   width: 132px;
@@ -2658,7 +2660,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-previa-titulo { margin: 8px 0 2px; font-weight: 700; overflow-wrap: anywhere; }
 .coleccion-previa-contenido .caption { margin: 0; }
 @media (max-width: 760px) {
-  .coleccion-series-layout { grid-template-columns: 1fr; }
+  .coleccion-series-layout { grid-template-columns: 1fr; grid-template-areas: "previa" "principal"; }
   .coleccion-previa-panel {
     position: sticky;
     top: 0;
