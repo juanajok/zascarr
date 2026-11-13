@@ -125,6 +125,8 @@ def _contexto() -> dict:
         "gcd_enabled": s.gcd_enabled,
         "metron_enabled": bool(getattr(s, "metron_enabled", False)),
         "open_library_enabled": bool(getattr(s, "open_library_enabled", False)),
+        "fandom_dc_enabled": bool(getattr(s, "fandom_dc_enabled", False)),
+        "fandom_marvel_enabled": bool(getattr(s, "fandom_marvel_enabled", False)),
         "metron_token_configurado": bool(getattr(s, "metron_token", "")),
         "fuentes_heredadas": s.fuentes_heredadas,
         "prowlarr_url": s.prowlarr_url,
@@ -160,6 +162,8 @@ def _contexto() -> dict:
         "webhook_token_configurado": bool(s.webhook_token),
         "webhook_chat_id": s.webhook_chat_id,
         "webhook_incluir_nombres": s.webhook_incluir_nombres,
+        "quality_profile": getattr(s, "quality_profile", "equilibrado"),
+        "upgrade_scan_interval_minutes": getattr(s, "upgrade_scan_interval_minutes", 360),
         "cortesia": texto_politica_ajustes(s),
     }
 
@@ -263,6 +267,29 @@ async def probar_avisos(
     })
 
 
+@router.post("/guardar/calidad", response_class=HTMLResponse)
+async def guardar_calidad(
+    request: Request,
+    quality_profile: str = Form(default="equilibrado"),
+    upgrade_scan_interval_minutes: str = Form(default="360"),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """BL-D2/D3: perfil legible de calidad y cadencia del escaneo de mejoras."""
+    if quality_profile not in ("mejor", "equilibrado", "cualquiera"):
+        quality_profile = "equilibrado"
+    try:
+        intervalo = int(upgrade_scan_interval_minutes)
+    except (TypeError, ValueError):
+        intervalo = 360
+    if intervalo not in (0, 180, 360, 720, 1440):
+        intervalo = 360
+    await RuntimeSettingsService(db).save({
+        "quality_profile": quality_profile,
+        "upgrade_scan_interval_minutes": intervalo,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Calidad"})
+
+
 @router.post("/guardar/fuentes", response_class=HTMLResponse)
 async def guardar_fuentes(
     request: Request,
@@ -272,6 +299,8 @@ async def guardar_fuentes(
     gcd_enabled: bool = Form(default=False),
     metron_enabled: bool = Form(default=False),
     open_library_enabled: bool = Form(default=False),
+    fandom_dc_enabled: bool = Form(default=False),
+    fandom_marvel_enabled: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     await RuntimeSettingsService(db).save({
@@ -281,6 +310,8 @@ async def guardar_fuentes(
         "gcd_enabled": gcd_enabled,
         "metron_enabled": metron_enabled,
         "open_library_enabled": open_library_enabled,
+        "fandom_dc_enabled": fandom_dc_enabled,
+        "fandom_marvel_enabled": fandom_marvel_enabled,
         # Guardar es tomar la decisión (aunque sea confirmar el estado actual): deja de ser
         # «heredado».
         "fuentes_heredadas": False,

@@ -122,6 +122,28 @@ async def _rescan_loop(interval_minutes: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
+async def _upgrades_loop(interval_minutes: int) -> None:
+    """BL-D3: escaneo acotado y periódico de mejoras de edición.
+
+    El primer pase espera un intervalo completo (no compite con el arranque).
+    Respeta el perfil D2; `cualquiera` y el escaneo desactivado no hacen nada.
+    """
+    from zascarr.database import async_session_factory
+    from zascarr.services.upgrades import escanear_mejoras
+
+    logger.info("upgrades.first_delayed", minutos=interval_minutes)
+    await asyncio.sleep(interval_minutes * 60)
+    while True:
+        try:
+            async with async_session_factory() as db:
+                creadas = await escanear_mejoras(db)
+                if creadas:
+                    logger.info("upgrades.proposals_created", total=creadas)
+        except Exception:
+            logger.exception("upgrades.cycle_failed")
+        await asyncio.sleep(interval_minutes * 60)
+
+
 async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
     """Job periódico del enricher (B4): completa metadatos vía Comic Vine.
 
@@ -330,6 +352,9 @@ async def lifespan(app: FastAPI):
         if settings.rescan_interval_minutes > 0:
             background_tasks.append(
                 asyncio.create_task(_rescan_loop(settings.rescan_interval_minutes)))
+        if settings.upgrade_scan_interval_minutes > 0 and settings.quality_profile != "cualquiera":
+            background_tasks.append(
+                asyncio.create_task(_upgrades_loop(settings.upgrade_scan_interval_minutes)))
 
     yield
 
@@ -401,6 +426,7 @@ def create_app() -> FastAPI:
     from zascarr.web.exportar import router as exportar_router
     from zascarr.web.legal import router as legal_ui_router
     from zascarr.web.library import router as library_router
+    from zascarr.web.mejoras import router as mejoras_ui_router
     from zascarr.web.navegacion import router as navegacion_router
     from zascarr.web.pendientes import router as pendientes_router
     from zascarr.web.retirada_serie import router as retirada_serie_ui_router
@@ -434,6 +460,7 @@ def create_app() -> FastAPI:
     app.include_router(legal_ui_router)
     app.include_router(navegacion_router)
     app.include_router(library_router)
+    app.include_router(mejoras_ui_router)
     app.include_router(arcos_ui_router)
     app.include_router(asistente_carpetas_router)
     app.include_router(asistente_vinculacion_router)

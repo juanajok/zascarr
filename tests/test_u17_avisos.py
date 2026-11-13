@@ -197,6 +197,8 @@ class TestLaAceptacionProtegeLoMismo:
              "/ui/series/{series_id}/numero/{issue_id}/mejorar"),
             ("series", "POST",
              "/ui/series/{series_id}/numero/{issue_id}/mejorar/descargar"),
+            ("mejoras", "POST", "/ui/mejoras/escanear"),
+            ("mejoras", "POST", "/ui/mejoras/{propuesta_id}/descargar"),
         }
 
     def test_ni_el_asistente_ni_el_texto_legal_estan_protegidos(self):

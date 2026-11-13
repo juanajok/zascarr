@@ -67,11 +67,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
-- **Propuesta de edición mejor (BL-D3, #154).** En la ficha de un número con archivo,
-  «Buscar una edición mejor» compara la calidad que consta (resolución/origen) con candidatos
-  reales de Prowlarr del mismo número y serie; solo enseña los estrictamente mejores y
-  «Descargar esta edición» confirma el envío con un token firmado. No sustituye ni borra
-  archivos. Sin migración; la calidad se deriva de lo que consta (D2 sigue pendiente).
+- **Perfil de calidad y mejoras de edición (BL-D2/D3, #154).** Ajustes → Calidad elige
+  «solo lo mejor / equilibrado / lo que haya» y cada cuánto buscar mejoras. Un escaneo
+  acotado guarda propuestas en `upgrade_proposals` (migración 0034); Biblioteca → Mejoras
+  las lista, «Descargar esta edición» confirma con token firmado y «Descartar» las retira.
+  En la ficha de un número sigue estando «Buscar una edición mejor». No sustituye ni borra
+  archivos; la nueva edición se importa junto a la actual.
 - **Sagas en orden de lectura y gestión manual (BL-C4, #151).** Biblioteca → «Sagas en orden»:
   lista de arcos y ficha que respeta `story_arc_issues.reading_order` para crossovers. Ahora
   también se pueden **crear, editar y eliminar** sagas, **añadir/quitar números** y
