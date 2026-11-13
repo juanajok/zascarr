@@ -110,6 +110,19 @@ def plan_export(collection_files: list[ArchivoFuente], root: str | Path, *,
     plan = PlanExportacion(folder=nombre_carpeta)
     usados: dict[str, str] = {}
     carpetas: dict[str, str] = {}
+    carpetas_por_serie: dict[str, str] = {}
+    for serie_id, titulo in {
+            a.series_id: a.series_title for a in collection_files}.items():
+        base = sanitize_segment(titulo)
+        candidata, n = base, 1
+        while (candidata.casefold() in carpetas
+               and carpetas[candidata.casefold()] != serie_id):
+            n += 1
+            candidata = f"{base} [{n}]"
+        if candidata != base:
+            plan.carpetas_colision.append(base)
+        carpetas[candidata.casefold()] = serie_id
+        carpetas_por_serie[serie_id] = candidata
     for issue_id in sorted(por_issue):
         archivos = por_issue[issue_id]
         fuente = _fuente_de_issue(archivos)
@@ -118,11 +131,7 @@ def plan_export(collection_files: list[ArchivoFuente], root: str | Path, *,
             continue
         if len(archivos) > 1:
             plan.omitidos.extend(a.file_id for a in archivos if a is not fuente)
-        carpeta = sanitize_segment(fuente.series_title)
-        if (carpeta.casefold() in {c.casefold() for c in carpetas}
-                and carpetas.get(carpeta) not in (None, fuente.series_id)):
-            plan.carpetas_colision.append(carpeta)
-        carpetas[carpeta] = fuente.series_id
+        carpeta = carpetas_por_serie.get(fuente.series_id) or sanitize_segment(fuente.series_title)
         nombre = nombre_de_archivo(fuente.series_title, fuente.numero, fuente.issue_title,
                                    fuente.source_path)
         relativo = f"{nombre_carpeta}/{carpeta}/{nombre}"

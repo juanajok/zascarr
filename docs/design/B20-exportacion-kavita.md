@@ -21,6 +21,13 @@ Esta entrega implementa el **núcleo sin parche** y usa las colecciones de
 - Manifiesto `_zascarr_manifest.json` atómico (versión 1) y `ImportRun` con
   `details.kind="export"` y contadores; sin migración.
 - Sin fuentes, calidad ni scheduler en esta entrega.
+- **Revisión SecOps/QA (task-190):** todo el I/O de materialización y
+  manifiesto va en `asyncio.to_thread`; la copia usa un temporal único y se
+  publica en exclusiva (nunca `os.replace` sobre un destino de usuario); los
+  archivos de origen symlink o desaparecidos se omiten y reportan; las
+  carpetas de serie con el mismo nombre se desambiguan (`[2]`) y se reportan;
+  el manifiesto conserva las entradas `skip` (hash igual) para ser idempotente
+  y completo, y el modo global es `hardlink`, `copy` o `mixed`.
 
 ## 1. Objetivo
 

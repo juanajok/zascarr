@@ -100,7 +100,12 @@ async def test_reexportar_es_idempotente_y_no_rehace(db, tmp_path, monkeypatch):
     antes = destino.stat().st_mtime_ns
     resumen = await svc.exportar_coleccion(db, coleccion.id)
     assert resumen.materializados == 0 and resumen.errores == 0
+    assert resumen.saltados == 1 and resumen.modo == "hardlink"
     assert destino.stat().st_mtime_ns == antes
+    import json
+    manifiesto = next((tmp_path / "export").rglob("_zascarr_manifest.json"))
+    datos = json.loads(manifiesto.read_text(encoding="utf-8"))
+    assert datos["files"][0]["status"] == "skip" and datos["files"][0]["mode"] == "skip"
 
 
 async def test_deriva_no_pisa_el_destino_editado(db, tmp_path, monkeypatch):
@@ -123,6 +128,7 @@ async def test_fallback_a_copia_si_exdev(db, tmp_path, monkeypatch):
     monkeypatch.setattr(svc.os, "link", link_exdev)
     resumen = await svc.exportar_coleccion(db, coleccion.id)
     assert resumen.materializados == 1 and resumen.bytes_copiados > 0
+    assert resumen.modo == "copy"
     destino = next((tmp_path / "export").rglob("*.cbz"))
     assert destino.read_bytes() == next((tmp_path / "lib").glob("*.cbz")).read_bytes()
     monkeypatch.setattr(svc.os, "link", original)
@@ -153,3 +159,18 @@ async def test_parche_comicinfo_se_rechaza(db, tmp_path, monkeypatch):
     with pytest.raises(svc.ParcheComicInfoNoDisponibleError):
         await svc.exportar_coleccion(db, coleccion.id, patch_comicinfo=True)
     assert not (tmp_path / "export").exists()
+
+
+async def test_fuente_symlink_se_omite_y_se_reporta(db, tmp_path, monkeypatch):
+    ajustes(tmp_path, monkeypatch)
+    coleccion, _ = await sembrar(db, tmp_path)
+    real = next((tmp_path / "lib").glob("*.cbz"))
+    enlace = tmp_path / "lib" / "enlace.cbz"
+    enlace.symlink_to(real)
+    from sqlalchemy import update
+
+    from zascarr.models import File
+    async with db.begin_nested():
+        await db.execute(update(File).values(file_path=str(enlace), file_name=enlace.name))
+    resumen = await svc.exportar_coleccion(db, coleccion.id)
+    assert resumen.materializados == 0 and resumen.omitidos >= 1

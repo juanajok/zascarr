@@ -69,3 +69,14 @@ def test_raiz_no_puede_estar_dentro_de_biblioteca_ni_ser_symlink(tmp_path):
         _resolver_raiz(ajustes(enlace))
     with pytest.raises(ExportacionError):
         _resolver_raiz(ajustes(tmp_path / ".." / "export"))
+
+
+def test_carpetas_de_serie_colisionadas_se_desambiguan():
+    plan = plan_export([
+        fuente(file_id="f1", issue_id="i1", series_id="s1", series_title="Flash"),
+        fuente(file_id="f2", issue_id="i2", series_id="s2", series_title="Flash",
+                numero="2", source_path="/lib/2.cbz"),
+    ], Path("/export"), folder="Grapas")
+    carpetas = {Path(a.destino_relativo).parts[1] for a in plan.archivos}
+    assert len(carpetas) == 2
+    assert plan.carpetas_colision
