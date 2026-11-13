@@ -363,9 +363,9 @@ async def test_filtros_alta_por_titulo_normalizado_y_tradicion(db):
 
 async def test_paginacion_real_de_series_disponibles(db):
     for i in range(45):
-        await serie(db, f"Disponible {i:02d}")
-    p1 = await pagina_series_sin_coleccion(db)
-    p2 = await pagina_series_sin_coleccion(db, pagina=2)
+        await serie(db, f"PaginacionUnica {i:02d}")
+    p1 = await pagina_series_sin_coleccion(db, q="PaginacionUnica")
+    p2 = await pagina_series_sin_coleccion(db, q="PaginacionUnica", pagina=2)
     assert p1.total == 45 and p1.pagina == 1 and len(p1.series) == 40
     assert p1.desde == 1 and p1.hasta == 40 and p1.paginas == 2
     assert p2.pagina == 2 and len(p2.series) == 5 and p2.desde == 41 and p2.hasta == 45
