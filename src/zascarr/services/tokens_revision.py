@@ -20,6 +20,7 @@ import base64
 import json
 import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -44,6 +45,9 @@ PROPOSITO_DESVINCULAR = "desvincular"
 PROPOSITO_ASOCIAR = "asociar_fuente"
 #: BL-SER1 (#303): retirar una serie de la biblioteca (sin tocar el disco).
 PROPOSITO_RETIRAR = "retirar_serie"
+#: BL-DUP1 (#264): apartar copias idénticas a cuarentena y deshacerlo.
+PROPOSITO_APARTAR = "apartar_duplicados"
+CONTEXTO_APARTADOS = "apartados"
 PROPOSITO_MANTENER = "mantener_lo_mio"
 #: La descripción que viaja en el token se recorta: no hace falta entera para dar de alta una serie.
 MAX_DESCRIPCION = 1000
@@ -1178,3 +1182,99 @@ def verificar_token_conversion(token: str, secret: str, *, ahora: float | None =
 
 #: Cota holgada: ruta de 1000 + hashes/UUIDs y la firma; el formulario la usa como máximo.
 MAX_TOKEN_CONVERSION = 4096
+
+
+# ── BL-DUP1 (#264): token de apartar/deshacer duplicados ─────────────────────────────────────
+
+MAX_GRUPOS_APARTAR = 20
+VERSION_TOKEN_APARTAR = 1
+
+
+@dataclass(frozen=True)
+class GrupoFirmado:
+    """Un grupo idéntico firmado. No llevan rutas completas: solo su digest."""
+    sha256: str
+    rutas_digest: str
+    keep_index: int
+    n_rutas: int
+
+
+@dataclass(frozen=True)
+class ApartarFirmada:
+    operacion: str
+    accion: str
+    grupos: tuple[GrupoFirmado, ...]
+    caduca: int
+
+
+def _hex_digest(valor: object) -> bool:
+    return isinstance(valor, str) and re.fullmatch(r"[0-9a-f]{64}", valor) is not None
+
+
+def crear_token_apartar(operacion: str | UUID, grupos: Sequence[GrupoFirmado], secret: str, *,
+                        accion: str = "apartar", ahora: float | None = None) -> str:
+    """Firma la intención de apartar (o deshacer) sin rutas completas."""
+    if accion not in ("apartar", "deshacer"):
+        raise ValueError("Acción de apartado desconocida")
+    if not uuid_texto(str(operacion)):
+        raise ValueError("Operación de apartado inválida")
+    if len(grupos) > MAX_GRUPOS_APARTAR:
+        raise ValueError("Demasiados grupos para una sola confirmación")
+    datos = {
+        "version": VERSION_TOKEN_APARTAR,
+        "operacion": str(operacion),
+        "accion": accion,
+        "grupos": [
+            {"sha256": g.sha256, "rutas_digest": g.rutas_digest,
+             "keep_index": g.keep_index, "n_rutas": g.n_rutas}
+            for g in grupos
+        ],
+    }
+    return crear_token(PROPOSITO_APARTAR, CONTEXTO_APARTADOS, datos, secret, ahora=ahora)
+
+
+def verificar_token_apartar(token: str, secret: str, *, ahora: float | None = None,
+                            ignorar_caducidad: bool = False) -> ApartarFirmada | None:
+    """Token válido de apartar/deshacer, o `None` si falta, manipuló o caducó."""
+    verificado = _verificar(token, PROPOSITO_APARTAR, CONTEXTO_APARTADOS, secret,
+                            ahora=ahora, ignorar_caducidad=ignorar_caducidad)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    if d.get("version") != VERSION_TOKEN_APARTAR or isinstance(d.get("version"), bool):
+        return None
+    if not uuid_texto(d.get("operacion")) or d.get("accion") not in ("apartar", "deshacer"):
+        return None
+    crudos = d.get("grupos")
+    if not isinstance(crudos, list) or len(crudos) > MAX_GRUPOS_APARTAR:
+        return None
+    if d.get("accion") == "apartar" and not crudos:
+        return None
+    grupos = []
+    for g in crudos:
+        if not isinstance(g, dict):
+            return None
+        if not _hex_digest(g.get("sha256")) or not _hex_digest(g.get("rutas_digest")):
+            return None
+        keep, n = g.get("keep_index"), g.get("n_rutas")
+        if not isinstance(keep, int) or isinstance(keep, bool) or not isinstance(n, int) or isinstance(n, bool):
+            return None
+        if n < 2 or not 0 <= keep < n:
+            return None
+        grupos.append(GrupoFirmado(g["sha256"], g["rutas_digest"], keep, n))
+    return ApartarFirmada(d["operacion"], d["accion"], tuple(grupos), caduca)
+
+
+#: Cota holgada para 20 grupos: 20 digests + UUID + firma; el formulario la usa como máximo.
+MAX_TOKEN_APARTAR = 16_384
+
+
+def uuid_texto(valor: object) -> bool:
+    """UUID canónico en texto, sin importar mayúsculas ni guiones."""
+    if not isinstance(valor, str):
+        return False
+    try:
+        UUID(valor)
+    except (ValueError, AttributeError, TypeError):
+        return False
+    return True

@@ -856,6 +856,23 @@ class AsignacionOperacion(Base):
     )
 
 
+class ApartadoEstado(enum.StrEnum):
+    """Estado persistido de una operación de apartar duplicados (ADR 0017, 0030)."""
+    EN_CURSO = "en_curso"
+    CONFIRMADA = "confirmada"
+    DESHECHA = "deshecha"
+    CANCELADA = "cancelada"
+
+
+class ApartadoGrupoEstado(enum.StrEnum):
+    """Estado por grupo; `rechazado`/`error` no se presentan como resueltos."""
+    PENDIENTE = "pendiente"
+    MOVIDO = "movido"
+    DESHECHO = "deshecho"
+    RECHAZADO = "rechazado"
+    ERROR = "error"
+
+
 class AltaEstado(enum.StrEnum):
     """Estado de una operación de alta de serie (migración 0018). `creada`: la confirmación
     creó la serie; `deshecha`: el deshacer la borró y esa operación **no puede volver a
@@ -906,6 +923,58 @@ class VinculacionOperacion(Base):
     token_hasta: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     creada: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ApartadoOperacion(Base):
+    """Comprobante durable de una operación de apartar copias idénticas (#264, ADR 0017).
+
+    `id` es a la vez el `operacion_id` del token. No guarda el token ni rutas
+    completas: el detalle por grupo vive en `apartado_grupos.detalle`."""
+    __tablename__ = "apartado_operaciones"
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    estado: Mapped[ApartadoEstado] = mapped_column(
+        Enum(ApartadoEstado, name="apartado_estado",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=ApartadoEstado.EN_CURSO,
+        server_default=ApartadoEstado.EN_CURSO.value)
+    token_hasta: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    creada: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    actualizada: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    total_grupos: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0")
+    total_archivos: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0")
+    total_bytes: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0")
+    resultado: Mapped[dict | None] = mapped_column(JSONB)
+    grupos: Mapped[list["ApartadoGrupo"]] = relationship(
+        back_populates="operacion", cascade="all, delete-orphan")
+
+
+class ApartadoGrupo(Base):
+    """Un grupo de contenido idéntico dentro de una operación de apartado."""
+    __tablename__ = "apartado_grupos"
+    __table_args__ = (
+        UniqueConstraint("operacion_id", "grupo_clave", name="uq_apartado_grupo_operacion_clave"),
+        Index("ix_apartado_grupos_operacion", "operacion_id"),
+        Index("ix_apartado_grupos_estado", "estado"),
+    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    operacion_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("apartado_operaciones.id", ondelete="CASCADE"),
+        nullable=False)
+    grupo_clave: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    estado: Mapped[ApartadoGrupoEstado] = mapped_column(
+        Enum(ApartadoGrupoEstado, name="apartado_grupo_estado",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=ApartadoGrupoEstado.PENDIENTE,
+        server_default=ApartadoGrupoEstado.PENDIENTE.value)
+    detalle: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    operacion: Mapped[ApartadoOperacion] = relationship(back_populates="grupos")
 
 
 class Wishlist(Base):
