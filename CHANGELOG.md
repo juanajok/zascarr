@@ -8,7 +8,7 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 ### Corregido
 
 - **Portada de «Por revisar» con `ui.portada` (2026-11-13, #689 deuda 6).** Decisión del PO: se revierte
-  U12 y el marcador vuelve a reservar el 2:3 para que las tarjetas de una fila se alineen; la `<img>` solo se
+  U12 y el marcador vuelve a reservar el 2:3 y va **arriba del nombre** para que las tarjetas de una fila se alineen; la `<img>` solo se
   pide cuando la extensión tiene extractor (cero peticiones que darán 404) y sin `onerror`. Detalle:
   `docs/design/ui-auditoria-sistema-diseno-2026-11-13.md`.
 
