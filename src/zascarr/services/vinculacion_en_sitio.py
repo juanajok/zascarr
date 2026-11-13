@@ -49,8 +49,13 @@ async def vincular_en_sitio(
             "fuera_de_biblioteca",
             "Este archivo aún no está en su sitio: usa Organizar para moverlo y renombrarlo.")
 
-    formato = EDITION_KIND_A_FORMAT.get(
-        parse_comic_filename(file.file_name).edition_kind, IssueFormat.SINGLE_ISSUE)
+    parsed = parse_comic_filename(file.file_name)
+    if parsed.is_pack:
+        return ResultadoVinculo(
+            "es_pack",
+            "Es un pack de varios números: no se vincula como una sola grapa. "
+            "Dejarlo para después.")
+    formato = EDITION_KIND_A_FORMAT.get(parsed.edition_kind, IssueFormat.SINGLE_ISSUE)
     filas = list((await db.execute(
         sa.select(Issue.id, Issue.format)
         .where(Issue.series_id == series_id,

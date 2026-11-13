@@ -59,6 +59,21 @@ async def test_vincular_en_sitio_enlaza_sin_tocar_el_archivo(banco):
     assert ruta.read_bytes() == b"contenido"
 
 
+async def test_vincular_en_sitio_rechaza_packs(banco):
+    ruta = banco.lib / "Comics" / "Flash" / "Flash 144-158.cbz"
+    ruta.write_bytes(b"x")
+    fid = uuid4()
+    async with banco.banco.fabrica() as s:
+        s.add(File(id=fid, file_path=str(ruta), file_name=ruta.name,
+                   file_format=FileFormat.CBZ, metadata_={"match_status": "direct"}))
+        await s.commit()
+    async with banco.banco.fabrica() as s:
+        r = await vincular_en_sitio(s, fid, banco.sid, "1")
+        assert r.estado == "es_pack"
+        assert "pack" in r.texto.lower()
+        assert (await s.get(File, fid)).issue_id is None
+
+
 async def test_vincular_en_sitio_rechaza_unsorted_y_numero_inexistente(banco):
     ruta = banco.lib / "_Unsorted" / "Flash 01.cbz"
     ruta.parent.mkdir()
