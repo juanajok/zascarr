@@ -1,6 +1,6 @@
 # SPEC: SCR1 — `robots.txt` (RFC 9309) y caché HTTP condicional en PostgreSQL — v0.1
 
-> **Estado:** spec para el builder (2026-11-13); no autoriza fusionar ni se ha tocado código, migraciones, `pyproject.toml` ni commit. **Base:** `main` en
+> **Estado:** implementada en PR [#756](https://github.com/juanajok/zascarr/pull/756) (merge `6a40350b`, 2026-11-13); esta spec queda como contrato de referencia. **Base:** `main` en
 > `c1e3dea9` (SCR2 fusionada y verificada); leídos y citados por línea `peticiones.py`, `cortesia.py`, `fandom.py`, `enricher.py`, `main.py`, `database.py`,
 > `tests/_pg.py`, `test_migracion_fandom_pg.py`, `test_fandom.py` y `pyproject.toml`. **Fuentes:** anexo C de `ANEXOS-IMPLEMENTACION-ZASCARR-V2.md`,
 > §5.2–5.3 del `estudio-scraping-fuentes-v2.md`, informes `fase0` y `secops-SCR2`; ADR 0018 sigue **Propuesto** (esta spec lo implementa, no lo aprueba) y
