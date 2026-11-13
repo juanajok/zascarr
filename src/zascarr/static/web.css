@@ -2499,6 +2499,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 /* BL-D3 (#154): mejoras de edición. */
 .mejoras-escanear { margin: 12px 0; }
 .mejora-acciones { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.coleccion-fila { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: start; padding: 8px 10px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); background: var(--paper); }
+.coleccion-fila .portada-coleccion { width: 88px; }
+.coleccion-cabecera { display: flex; gap: 16px; align-items: flex-start; }
+.coleccion-cabecera .coleccion-portada { width: 120px; flex-shrink: 0; }
+.coleccion-cabecera h1 { margin-top: 0; }
+@media (max-width: 480px) {
+  .coleccion-cabecera { flex-direction: column; }
+  .coleccion-cabecera .coleccion-portada { width: 96px; }
+}
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,

@@ -482,11 +482,16 @@ class Collection(Base):
         Enum(CollectionAutoSearch, name="collection_auto_search",
              values_callable=lambda e: [m.value for m in e]),
         default=CollectionAutoSearch.HEREDAR, nullable=False)
+    #: Portada elegida de una serie miembro; NULL = mosaico automático.
+    cover_series_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    series: Mapped[list["Series"]] = relationship(back_populates="collection")
+    series: Mapped[list["Series"]] = relationship(
+        back_populates="collection", foreign_keys="Series.collection_id")
+    cover_series: Mapped["Series|None"] = relationship(foreign_keys=[cover_series_id])
 
 
 class Series(Base):
@@ -524,7 +529,8 @@ class Series(Base):
     collection_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("collections.id", ondelete="SET NULL")
     )
-    collection: Mapped["Collection|None"] = relationship(back_populates="series")
+    collection: Mapped["Collection|None"] = relationship(
+        back_populates="series", foreign_keys=[collection_id])
     tradition: Mapped[ComicTradition] = mapped_column(
         Enum(
             ComicTradition,

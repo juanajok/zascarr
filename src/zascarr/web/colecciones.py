@@ -4,7 +4,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
@@ -24,6 +24,12 @@ from zascarr.services.exportacion_kavita import (
     exportar_coleccion,
     historial_exportaciones,
 )
+from zascarr.services.portada_coleccion import (
+    candidatas_portada,
+    elegir_portada,
+    obtener_portada,
+)
+from zascarr.utils.cover import cached_image_response
 from zascarr.web.routes import crear_templates
 
 router = APIRouter(prefix="/ui/colecciones", tags=["ui"])
@@ -86,11 +92,13 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
     return _respuesta(request, "coleccion_detalle.html", {
         "coleccion": c, "politicas": POLITICAS,
         "series": await series_sin_coleccion(db),
+        "candidatas_portada": await candidatas_portada(db, coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": {}, "aviso": {
             "guardada": "Colección guardada.",
             "asignada": "Serie añadida a la colección.",
             "quitada": "Serie quitada de la colección; sigue en tu biblioteca.",
+            "portada": "Portada actualizada.",
         }.get(guardado, ""),
     })
 
@@ -118,6 +126,47 @@ async def borrar(coleccion_id: UUID, db: AsyncSession = Depends(get_db)):
     await borrar_coleccion(db, coleccion_id)
     await db.commit()
     return _redirigir("/ui/colecciones?guardado=borrada")
+
+
+@router.get("/{coleccion_id}/portada")
+@router.get("/{coleccion_id}/portada.jpg")
+async def portada(coleccion_id: UUID, request: Request,
+                  db: AsyncSession = Depends(get_db)) -> Response:
+    resultado = await obtener_portada(db, coleccion_id)
+    if resultado is None:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    if not resultado.cacheable:
+        return Response(content=resultado.datos, media_type=resultado.content_type,
+                        headers={"Cache-Control": "no-store"})
+    return cached_image_response(request, resultado.datos, resultado.content_type, resultado.etag)
+
+
+@router.post("/{coleccion_id}/portada")
+async def cambiar_portada(request: Request, coleccion_id: UUID,
+                          series_id: str = Form(""), db: AsyncSession = Depends(get_db)):
+    elegida = None
+    if series_id.strip():
+        try:
+            elegida = UUID(series_id)
+        except ValueError:
+            c = await detalle_coleccion(db, coleccion_id)
+            return _respuesta(request, "coleccion_detalle.html", {
+                "coleccion": c, "politicas": POLITICAS,
+                "series": await series_sin_coleccion(db),
+                "candidatas_portada": await candidatas_portada(db, coleccion_id),
+                "exportaciones": await historial_exportaciones(db, coleccion_id),
+                "errores": {"portada": "La serie elegida no es válida."}, "aviso": ""})
+    r = await elegir_portada(db, coleccion_id, elegida)
+    if not r.ok:
+        c = await detalle_coleccion(db, coleccion_id)
+        return _respuesta(request, "coleccion_detalle.html", {
+            "coleccion": c, "politicas": POLITICAS,
+            "series": await series_sin_coleccion(db),
+            "candidatas_portada": await candidatas_portada(db, coleccion_id),
+            "exportaciones": await historial_exportaciones(db, coleccion_id),
+            "errores": r.errores, "aviso": ""})
+    await db.commit()
+    return _redirigir(f"/ui/colecciones/{coleccion_id}?guardado=portada")
 
 
 @router.post("/{coleccion_id}/exportar")
