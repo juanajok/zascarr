@@ -149,3 +149,26 @@ def test_formularios_crud_y_redirecciones(monkeypatch):
         assert r.status_code == 303
     finally:
         _cerrar()
+
+
+def test_c4_fuente_de_guia_valida_host_esquema_y_rutas():
+    """SecOps c-4: la fuente se valida con la allowlist/validación del extractor."""
+    from zascarr.web.arcos import fuente_de_guia
+
+    buena = ("https://comicbookreadingorders.com/dc/events/"
+             "crisis-on-infinite-earths-reading-order/")
+    assert fuente_de_guia({"origen": "reading_orders", "url": buena}) is not None
+    assert fuente_de_guia({"origen": "continuity_guide",
+                           "url": "https://www.continuityguide.net/planetx"}) is not None
+    assert fuente_de_guia({"origen": "reading_orders",
+                           "url": "https://evil.example/dc/events/x-reading-order/"}) is None
+    assert fuente_de_guia({"origen": "continuity_guide",
+                           "url": "https://www.continuityguide.net/%2e%2e/x"}) is None
+    assert fuente_de_guia({"origen": "continuity_guide",
+                           "url": "https://www.continuityguide.net/planetx?format=json"}) is None
+    con_credenciales = ("https://user:pass@comicbookreadingorders.com"
+                        "/dc/events/x-reading-order/")
+    assert fuente_de_guia({"origen": "reading_orders",
+                           "url": con_credenciales}) is None
+    assert fuente_de_guia({"origen": "fandom_dc",
+                           "url": "https://dc.fandom.com/wiki/Batman"}) is None
