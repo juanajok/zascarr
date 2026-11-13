@@ -64,9 +64,12 @@ def _filtros(q: str, tradicion: str) -> tuple[str, str]:
 
 
 def _url_ficha(cid: UUID, q: str, tradicion: str, seleccion: list[str],
-               pagina: int = 1, vista: str = "lista") -> str:
+               pagina: int = 1, vista: str = "lista",
+               cambio_vista: str = "") -> str:
     params: list[tuple[str, str]] = [("q", q), ("tradicion", tradicion),
                                      ("pagina", str(pagina)), ("vista", vista)]
+    if cambio_vista:
+        params.append(("cambio_vista", "1"))
     params += [("serie_ids", sid) for sid in seleccion]
     return f"/ui/colecciones/{cid}?{urlencode(params)}"
 
@@ -125,7 +128,8 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
                   q: str = Query(""), tradicion: str = Query(""),
                   serie_ids: list[str] = Query([]),
                   pagina: int = Query(1, ge=1), limpiar: str = Query(""),
-                  vista: str = Query("lista"), db: AsyncSession = Depends(get_db)):
+                  vista: str = Query("lista"), cambio_vista: str = Query(""),
+                  db: AsyncSession = Depends(get_db)):
     c = await detalle_coleccion(db, coleccion_id)
     if c is None:
         return _respuesta(request, "coleccion_detalle.html", {
@@ -135,7 +139,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
     if limpiar == "1":
         q, tradicion = "", ""
     vista = vista if vista in {"lista", "tarjetas"} else "lista"
-    foco_vista = bool(request.query_params.get("vista"))
+    foco_vista = cambio_vista == "1"
     seleccion = _seleccion_valida(serie_ids)
     pagina_datos = await pagina_series_sin_coleccion(
         db, q=q, tradicion=tradicion, pagina=pagina)
@@ -150,9 +154,9 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
         "foco_filtros": bool(q or tradicion or limpiar == "1" or pagina > 1
                             or navegar == "1"),
         "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                      pagina_datos.pagina, "lista"),
+                                      pagina_datos.pagina, "lista", "1"),
         "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                         pagina_datos.pagina, "tarjetas"),
+                                         pagina_datos.pagina, "tarjetas", "1"),
         "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
                                    max(1, pagina_datos.pagina - 1), vista),
         "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,
@@ -336,9 +340,9 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
         "foco_filtros": bool(q or tradicion or pagina > 1 or navegar == "1"),
         "seleccion_oculta": [sid for sid in seleccion if sid not in visibles],
         "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                      pagina_datos.pagina, "lista"),
+                                      pagina_datos.pagina, "lista", "1"),
         "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                         pagina_datos.pagina, "tarjetas"),
+                                         pagina_datos.pagina, "tarjetas", "1"),
         "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
                                    max(1, pagina_datos.pagina - 1), vista),
         "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,

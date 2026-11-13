@@ -417,8 +417,8 @@ def test_vista_tarjetas_con_portadas_y_enlaces_que_conservan_estado():
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
             r = c.get(f"/ui/colecciones/{cid}", params=[
-                ("vista", "tarjetas"), ("q", "flash"), ("pagina", "2"),
-                ("serie_ids", sid)])
+                ("vista", "tarjetas"), ("cambio_vista", "1"), ("q", "flash"),
+                ("pagina", "2"), ("serie_ids", sid)])
     finally:
         _cerrar()
     assert r.status_code == 200
@@ -432,6 +432,8 @@ def test_vista_tarjetas_con_portadas_y_enlaces_que_conservan_estado():
     assert 'id="series-titulo" tabindex="-1" autofocus' in r.text
     assert r.text.count("autofocus") == 1
     assert r.text.find('id="previa-serie"') < r.text.find('coleccion-series-col')
+    assert "cambio_vista=1" in r.text
+    assert r.text.count("cambio_vista=1") == 2
 
 
 def test_vista_invalida_cae_a_lista():
@@ -468,3 +470,19 @@ def test_quitar_conserva_estado_de_filtros_vista_y_seleccion():
     assert "q=flash" in destino and "tradicion=manga" in destino
     assert "pagina=2" in destino and "vista=tarjetas" in destino
     assert f"serie_ids={otro}" in destino
+
+
+def test_vista_sin_cambio_vista_no_roba_el_foco():
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=_pagina())), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}", params={"vista": "tarjetas"})
+    finally:
+        _cerrar()
+    assert "autofocus" not in r.text
