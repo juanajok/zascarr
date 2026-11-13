@@ -8,7 +8,7 @@
 {%- endmacro -%}
 
 {%- macro buscar(texto) -%}
-<button type="button" class="btn-secondary" hx-get="/ui/auditoria/nuevos"
+<button type="button" class="btn ghost" hx-get="/ui/auditoria/nuevos"
         hx-target="#registro" hx-swap="outerHTML" hx-disable="this">{{ texto }}</button>
 {%- endmacro -%}
 
@@ -99,7 +99,7 @@
     <button type="submit" class="btn-primary">Registrar los {{ inc.nuevos }} archivos sin registrar</button>
   </form>
   {% elif inc.recorrido_completo and inc.en_disco %}
-  <p class="audit-ok">No hay archivos sin registrar: todo lo que hay en la carpeta ya está registrado.</p>
+  {{ ui.aviso("ok", "No hay archivos sin registrar: todo lo que hay en la carpeta ya está registrado.") }}
   {% endif %}
   {% endif %}
 </section>
@@ -315,7 +315,7 @@
     <a href="/ui/pendientes">Por revisar</a>. En una colección grande puede tardar varios minutos.</p>
   {{ boton("Registrar los " ~ inv.nuevos ~ " tebeos nuevos") }}
   {% else %}
-  <p class="audit-ok">Todo lo que hay en la carpeta ya está registrado.</p>
+  {{ ui.aviso("ok", "Todo lo que hay en la carpeta ya está registrado.") }}
   {% endif %}
 </section>
 {% endif %}
