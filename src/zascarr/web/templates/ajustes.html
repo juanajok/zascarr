@@ -73,38 +73,6 @@
       </details>
     </fieldset>
 
-    <fieldset class="ajustes-card ajustes-card--ancha" id="calidad-ediciones">
-      <legend>Calidad de las ediciones</legend>
-      <p class="ajustes-desc">Cuando ya tienes un número, ZascArr puede avisarte si aparece una edición mejor.</p>
-      <form hx-post="/ui/ajustes/guardar/calidad" hx-target="#resultado-calidad" hx-swap="innerHTML">
-        <label class="legal-checkbox">
-          <input type="radio" name="quality_profile" value="mejor"
-                 {% if quality_profile == "mejor" %}checked{% endif %}>
-          Solo lo mejor (digital o alta resolución)
-        </label>
-        <label class="legal-checkbox">
-          <input type="radio" name="quality_profile" value="equilibrado"
-                 {% if quality_profile == "equilibrado" %}checked{% endif %}>
-          Equilibrado (acepta escaneos de alta calidad)
-        </label>
-        <label class="legal-checkbox">
-          <input type="radio" name="quality_profile" value="cualquiera"
-                 {% if quality_profile == "cualquiera" %}checked{% endif %}>
-          Lo que haya (no me avises de mejoras)
-        </label>
-        <label>Buscar mejoras
-          <select name="upgrade_scan_interval_minutes">
-            {% for valor, etiqueta in ((0, "Desactivado"), (180, "Cada 3 horas"), (360, "Cada 6 horas"), (720, "Cada 12 horas"), (1440, "Una vez al día")) %}
-            <option value="{{ valor }}" {% if upgrade_scan_interval_minutes == valor %}selected{% endif %}>{{ etiqueta }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <div class="ajustes-actions"><button type="submit">Guardar</button></div>
-      </form>
-      <div id="resultado-calidad" aria-live="polite"></div>
-      <p class="ajustes-hint">Las propuestas se ven en Biblioteca → Mejoras. Nunca se sustituye ni se borra un archivo sin que lo confirmes.</p>
-    </fieldset>
-
     <fieldset class="ajustes-card ajustes-card--estrecha">
       <legend>Comic Vine</legend>
       <p class="ajustes-desc">Datos de grapa americana y británica. Necesita una clave gratuita de Comic Vine.</p>
@@ -259,6 +227,38 @@
       <div id="prueba-amule" aria-live="polite"></div>
     </fieldset>
 
+
+    <fieldset class="ajustes-card ajustes-card--ancha" id="calidad-ediciones">
+      <legend>Calidad y mejoras</legend>
+      <p class="ajustes-desc">Cuando ya tienes un número, ZascArr puede avisarte si aparece una edición mejor.</p>
+      <form hx-post="/ui/ajustes/guardar/calidad" hx-target="#resultado-calidad" hx-swap="innerHTML">
+        <label class="legal-checkbox">
+          <input type="radio" name="quality_profile" value="mejor"
+                 {% if quality_profile == "mejor" %}checked{% endif %}>
+          Solo lo mejor (digital o alta resolución)
+        </label>
+        <label class="legal-checkbox">
+          <input type="radio" name="quality_profile" value="equilibrado"
+                 {% if quality_profile == "equilibrado" %}checked{% endif %}>
+          Equilibrado (acepta escaneos de alta calidad)
+        </label>
+        <label class="legal-checkbox">
+          <input type="radio" name="quality_profile" value="cualquiera"
+                 {% if quality_profile == "cualquiera" %}checked{% endif %}>
+          Lo que haya (no me avises de mejoras)
+        </label>
+        <label>Buscar mejoras
+          <select name="upgrade_scan_interval_minutes">
+            {% for valor, etiqueta in ((0, "Desactivado"), (180, "Cada 3 horas"), (360, "Cada 6 horas"), (720, "Cada 12 horas"), (1440, "Una vez al día")) %}
+            <option value="{{ valor }}" {% if upgrade_scan_interval_minutes == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="ajustes-actions"><button type="submit">Guardar</button></div>
+      </form>
+      <div id="resultado-calidad" aria-live="polite"></div>
+      <p class="ajustes-hint">Las propuestas se ven en Biblioteca → Mejoras. Nunca se sustituye ni se borra un archivo sin que lo confirmes.</p>
+    </fieldset>
 
     <fieldset class="ajustes-card ajustes-card--ancha" id="archivos-compartidos">
       <legend>Archivos compartidos</legend>
