@@ -1518,7 +1518,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* Revisión de selección y números (#119). La revisión pendiente se avisa y el lote anterior deja de usarse. */
 .vinculacion-lista { list-style: none; padding: 0; margin: 0 0 var(--gutter); display: grid; gap: 12px; }
-.vinc-fila { border: 1px solid currentColor; border-radius: var(--radius-panel); padding: 10px 12px; }
+.vinc-fila { border: 2px solid var(--ink); border-radius: var(--radius-panel); padding: 10px 12px; }
 .vinc-cab { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
 .vinc-cab .chip { white-space: normal; text-align: left; }
 .vinc-marca { display: flex; gap: 8px; align-items: center; font-weight: 700; overflow-wrap: anywhere; }
@@ -1593,7 +1593,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .archivos-numeros, .archivos-lista { list-style: none; margin: 0; padding: 0; }
 .archivos-numero { margin: 0 0 14px; }
 .archivos-numero-titulo { margin: 0 0 4px; font-size: 1rem; font-variant-numeric: tabular-nums; }
-.archivo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 0; border-top: 1px solid var(--paper-2); }
+.archivo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 0; border-top: 1px solid var(--ink-faint); }
 .archivo-fila .nombre-archivo { overflow-wrap: anywhere; font-weight: 600; }
 .archivo-razon { font-size: .875rem; }
 .desv-lista { margin: 8px 0 14px 1.2em; padding: 0; }

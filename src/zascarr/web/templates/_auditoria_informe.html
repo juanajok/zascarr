@@ -11,7 +11,7 @@
               and not informe.carpetas_repetidas and not informe.carpetas_vacias
               and not informe.no_reconocidos %}
 {% if nada %}
-<p class="audit-ok">Tu biblioteca está limpia: ni repetidos ni carpetas vacías. Puedes adoptarla con tranquilidad.</p>
+{{ ui.aviso("ok", "Tu biblioteca está limpia: ni repetidos ni carpetas vacías. Puedes adoptarla con tranquilidad.") }}
 {% endif %}
 
 {% if informe.carpetas_repetidas %}
