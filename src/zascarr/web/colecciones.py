@@ -32,6 +32,7 @@ from zascarr.services.portada_coleccion import (
     obtener_portada,
 )
 from zascarr.utils.cover import cached_image_response
+from zascarr.web.iconos import icono
 from zascarr.web.library import _TRADICION_LABEL
 from zascarr.web.routes import crear_templates
 
@@ -60,9 +61,9 @@ def _filtros(q: str, tradicion: str) -> tuple[str, str]:
 
 
 def _url_ficha(cid: UUID, q: str, tradicion: str, seleccion: list[str],
-               pagina: int = 1) -> str:
+               pagina: int = 1, vista: str = "lista") -> str:
     params: list[tuple[str, str]] = [("q", q), ("tradicion", tradicion),
-                                     ("pagina", str(pagina))]
+                                     ("pagina", str(pagina)), ("vista", vista)]
     params += [("serie_ids", sid) for sid in seleccion]
     return f"/ui/colecciones/{cid}?{urlencode(params)}"
 
@@ -75,6 +76,7 @@ POLITICAS = {
 
 
 def _respuesta(request: Request, plantilla: str, contexto: dict) -> HTMLResponse:
+    contexto.setdefault("icono", icono)
     resp = templates.TemplateResponse(request, plantilla, contexto)
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -120,7 +122,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
                   q: str = Query(""), tradicion: str = Query(""),
                   serie_ids: list[str] = Query([]),
                   pagina: int = Query(1, ge=1), limpiar: str = Query(""),
-                  db: AsyncSession = Depends(get_db)):
+                  vista: str = Query("lista"), db: AsyncSession = Depends(get_db)):
     c = await detalle_coleccion(db, coleccion_id)
     if c is None:
         return _respuesta(request, "coleccion_detalle.html", {
@@ -129,6 +131,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
     q, tradicion = _filtros(q, tradicion)
     if limpiar == "1":
         q, tradicion = "", ""
+    vista = vista if vista in {"lista", "tarjetas"} else "lista"
     seleccion = _seleccion_valida(serie_ids)
     pagina_datos = await pagina_series_sin_coleccion(
         db, q=q, tradicion=tradicion, pagina=pagina)
@@ -138,14 +141,18 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
         "coleccion": c, "politicas": POLITICAS,
         "series": pagina_datos.series, "pagina": pagina_datos,
         "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
-        "seleccion": seleccion, "seleccion_oculta": seleccion_oculta,
+        "seleccion": seleccion, "seleccion_oculta": seleccion_oculta, "vista": vista,
         "foco_filtros": bool(q or tradicion or limpiar == "1" or pagina > 1
                             or navegar == "1"),
+        "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
+                                      pagina_datos.pagina, "lista"),
+        "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,
+                                         pagina_datos.pagina, "tarjetas"),
         "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                   max(1, pagina_datos.pagina - 1)),
+                                   max(1, pagina_datos.pagina - 1), vista),
         "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                    min(pagina_datos.paginas, pagina_datos.pagina + 1)),
-        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1) + "&limpiar=1",
+                                    min(pagina_datos.paginas, pagina_datos.pagina + 1), vista),
+        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1, vista) + "&limpiar=1",
         "candidatas_portada": await candidatas_portada(db, coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": {}, "aviso": {
@@ -278,7 +285,8 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
 async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
                   serie_ids: list[str] = Form([]), serie_id: str = Form(""),
                   q: str = Form(""), tradicion: str = Form(""),
-                  pagina: int = Form(1), db: AsyncSession = Depends(get_db)):
+                  pagina: int = Form(1), vista: str = Form("lista"),
+                  db: AsyncSession = Depends(get_db)):
     crudos = [s for s in serie_ids if s.strip()]
     if serie_id.strip():
         crudos.append(serie_id)
@@ -297,7 +305,8 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
         if r.ok:
             await db.commit()
             q, tradicion = _filtros(q, tradicion)
-            consulta = {"guardado": "asignadas"}
+            vista = vista if vista in {"lista", "tarjetas"} else "lista"
+            consulta = {"guardado": "asignadas", "vista": vista}
             if q:
                 consulta["q"] = q
             if tradicion:
@@ -306,6 +315,7 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
         r_errores = r.errores
     c = await detalle_coleccion(db, coleccion_id)
     q, tradicion = _filtros(q, tradicion)
+    vista = vista if vista in {"lista", "tarjetas"} else "lista"
     seleccion = _seleccion_valida(crudos)
     pagina_datos = await pagina_series_sin_coleccion(
         db, q=q, tradicion=tradicion, pagina=pagina)
@@ -314,14 +324,18 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
         "coleccion": c, "politicas": POLITICAS,
         "series": pagina_datos.series, "pagina": pagina_datos,
         "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
-        "seleccion": seleccion,
+        "seleccion": seleccion, "vista": vista,
         "foco_filtros": bool(q or tradicion or pagina > 1 or navegar == "1"),
         "seleccion_oculta": [sid for sid in seleccion if sid not in visibles],
+        "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
+                                      pagina_datos.pagina, "lista"),
+        "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,
+                                         pagina_datos.pagina, "tarjetas"),
         "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                   max(1, pagina_datos.pagina - 1)),
+                                   max(1, pagina_datos.pagina - 1), vista),
         "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                    min(pagina_datos.paginas, pagina_datos.pagina + 1)),
-        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1) + "&limpiar=1",
+                                    min(pagina_datos.paginas, pagina_datos.pagina + 1), vista),
+        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1, vista) + "&limpiar=1",
         "candidatas_portada": await candidatas_portada(db, coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": r_errores, "aviso": ""})

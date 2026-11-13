@@ -26,10 +26,39 @@
 </header>
 
 <section class="coleccion-panel" id="series">
-  <h2>Series</h2>
+  <div class="coleccion-series-cabecera">
+    <h2>Series</h2>
+    <div class="barra-vista" role="group" aria-label="Vista de las series de la colección">
+      <a class="barra-vista-opcion{% if vista|default('lista') == 'tarjetas' %} barra-vista-opcion-actual{% endif %}"
+         href="{{ url_vista_tarjetas|default('/ui/colecciones/' ~ coleccion.id ~ '?vista=tarjetas') }}"
+         {% if vista|default('lista') == 'tarjetas' %}aria-current="page"{% endif %}
+         aria-label="Tarjetas"><span class="barra-vista-icono" aria-hidden="true">{{ icono("grid") }}</span><span class="barra-vista-texto">Tarjetas</span></a>
+      <a class="barra-vista-opcion{% if vista|default('lista') == 'lista' %} barra-vista-opcion-actual{% endif %}"
+         href="{{ url_vista_lista|default('/ui/colecciones/' ~ coleccion.id) }}"
+         {% if vista|default('lista') == 'lista' %}aria-current="page"{% endif %}
+         aria-label="Lista"><span class="barra-vista-icono" aria-hidden="true">{{ icono("list") }}</span><span class="barra-vista-texto">Lista</span></a>
+    </div>
+  </div>
   <div class="coleccion-series-layout">
   <div class="coleccion-series-col">
   {% if coleccion.series %}
+  {% if vista|default('lista') == "tarjetas" %}
+  <div class="series-grid coleccion-series-grid">
+    {% for s in coleccion.series %}
+    <article class="series-card coleccion-serie-card"
+             hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
+             hx-target="#previa-serie" hx-swap="innerHTML"
+             hx-trigger="mouseenter, focusin" hx-sync="this:replace">
+      <a href="/ui/series/{{ s.id }}" class="coleccion-serie-card-portada">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-tarjeta", carga="lazy") }}</a>
+      <a href="/ui/series/{{ s.id }}" class="series-title">{{ s.title }}</a>
+      <span class="series-year">{{ s.start_year or "Año no consta" }}</span>
+      <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
+        <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar de la colección</button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
   <ul class="coleccion-series-lista">
     {% for s in coleccion.series %}
     <li class="coleccion-serie-fila"
@@ -46,11 +75,13 @@
     </li>
     {% endfor %}
   </ul>
+  {% endif %}
   {% else %}
   {{ ui.estado_vacio("Esta colección está vacía", "Añade series de la lista de abajo.") }}
   {% endif %}
   {% set visibles = series|map(attribute="id")|list %}
   <form method="get" action="/ui/colecciones/{{ coleccion.id }}" class="coleccion-alta">
+    <input type="hidden" name="vista" value="{{ vista|default('lista') }}">
     <fieldset class="coleccion-alta-grupo">
       <legend>Añadir series sin colección</legend>
       <p class="caption">Filtra y marca una o varias. Se añaden todas o ninguna.</p>

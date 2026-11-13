@@ -385,3 +385,48 @@ def test_endpoint_previa_200_y_404():
         assert r404.status_code == 404
     finally:
         _cerrar()
+
+
+def test_vista_tarjetas_con_portadas_y_enlaces_que_conservan_estado():
+    cid, sid = uuid4(), uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [
+        SimpleNamespace(id=str(sid), title="Flash", start_year=1987,
+                        wishlist_policy_label="Buscar los números que faltan",
+                        politica_efectiva_label="No buscar automáticamente")])
+    pagina = PaginaSeriesDisponibles([], 45, 2, 3, 41, 41)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=pagina)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}", params=[
+                ("vista", "tarjetas"), ("q", "flash"), ("pagina", "2"),
+                ("serie_ids", sid)])
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert 'class="series-grid coleccion-series-grid"' in r.text
+    assert "series-card" in r.text and "Quitar de la colección" in r.text
+    assert f"/ui/series/{sid}/portada" in r.text
+    assert "vista=lista" in r.text and "q=flash" in r.text and "pagina=2" in r.text
+    assert f"serie_ids={sid}" in r.text
+    assert 'aria-current="page"' in r.text
+
+
+def test_vista_invalida_cae_a_lista():
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=_pagina())), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}", params={"vista": "inventada"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "series-grid" not in r.text
