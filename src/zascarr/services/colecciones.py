@@ -7,6 +7,7 @@ Sin fuentes, calidad ni ficheros: esta historia es solo agrupación y política.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import UUID
@@ -151,10 +152,21 @@ async def detalle_coleccion(db: AsyncSession, coleccion_id: UUID) -> DetalleCole
     )).scalars().all()
     sobre = next((s for s in filas if s.id == coleccion.cover_series_id), None)
     covers = Path(get_settings().covers_cache_path)
-    sobre_cache = sobre is not None and portada_cacheada(covers, sobre.id) is not None
-    hay_mosaico = any(portada_cacheada(covers, s.id) is not None for s in filas)
+    rutas_por_serie: dict[str, Path | None] = {
+        str(s.id): portada_cacheada(covers, s.id) for s in filas}
+    sobre_cache = sobre is not None and rutas_por_serie.get(str(sobre.id)) is not None
+    hay_mosaico = any(ruta is not None for ruta in rutas_por_serie.values())
+    partes = []
+    for s in filas:
+        ruta = rutas_por_serie[str(s.id)]
+        try:
+            st = ruta.stat() if ruta is not None else None
+            partes.append(f"{s.id}:{st.st_mtime_ns if st else 0}:{st.st_size if st else 0}")
+        except OSError:
+            partes.append(f"{s.id}:0:0")
+    huella = hashlib.sha1("|".join(partes).encode()).hexdigest()[:12]
     portada_url = (f"/ui/colecciones/{coleccion.id}/portada"
-                   f"?v={coleccion.cover_series_id if sobre_cache else 'auto'}")
+                   f"?v={str(coleccion.cover_series_id) if sobre_cache else 'auto'}-{huella}")
     return DetalleColeccion(
         str(coleccion.id), coleccion.name, coleccion.description, coleccion.auto_search.value,
         [SerieDeColeccion(

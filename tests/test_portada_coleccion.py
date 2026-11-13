@@ -58,3 +58,13 @@ def test_symlink_en_covers_no_cuenta_como_portada(tmp_path):
     enlace.parent.mkdir(parents=True)
     enlace.symlink_to(fuera)
     assert pc.portada_cacheada(tmp_path / "covers", sid) is None
+
+
+def test_imagen_demasiado_grande_no_se_decodifica(tmp_path):
+    ruta = tmp_path / "grande.jpg"
+    Image.new("RGB", (2200, 2000), (1, 2, 3)).save(ruta, format="JPEG")
+    assert ruta.stat().st_size > 0
+    assert pc._leer_jpeg(ruta) is None
+    import pytest
+    with pytest.raises(ValueError):
+        pc.componer_mosaico([ruta])

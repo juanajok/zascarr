@@ -211,9 +211,12 @@ async def test_ficha_usa_la_politica_efectiva_y_explica_la_coleccion(db):
 async def _portadas(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
+    from zascarr.services import colecciones as colecciones_service
     from zascarr.services import portada_coleccion as pc
-    monkeypatch.setattr(pc, "get_settings",
-                        lambda: SimpleNamespace(covers_cache_path=tmp_path / "covers"))
+    def ajustes():
+        return SimpleNamespace(covers_cache_path=tmp_path / "covers")
+    monkeypatch.setattr(pc, "get_settings", ajustes)
+    monkeypatch.setattr(colecciones_service, "get_settings", ajustes)
     return pc
 
 
@@ -252,7 +255,10 @@ async def test_portada_override_miembro_y_fallback(db, tmp_path, monkeypatch):
     s2 = await serie(db, "Dos", collection=c.coleccion)
     r1 = _jpeg_serie(tmp_path, s1.id, (255, 0, 0))
     _jpeg_serie(tmp_path, s2.id, (0, 255, 0))
+    d0 = await detalle_coleccion(db, c.coleccion.id)
     assert (await pc.elegir_portada(db, c.coleccion.id, s1.id)).ok
+    d1 = await detalle_coleccion(db, c.coleccion.id)
+    assert d0 is not None and d1 is not None and d0.portada_url != d1.portada_url
     res = await pc.obtener_portada(db, c.coleccion.id)
     assert res is not None and res.datos == r1.read_bytes()
     # Elegir una que no es miembro se rechaza y no cambia la elección.
