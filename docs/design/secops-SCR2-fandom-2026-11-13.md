@@ -3,7 +3,7 @@
 **Rol:** SecOps · **Tarea:** task-5 · **Repositorio:** `/mnt/Datos/Documentos/Repos/zascarr`
 **Árbol revisado:** *working tree* sobre `main` (`17a5995e`) con los cambios de SCR2 **sin commitear**
 (20 ficheros modificados + 5 nuevos: `services/fandom.py`, `web/atribucion.py`,
-`templates/_atribucion_fandom.html`, `tests/test_fandom.py`, `alembic/versions/20261113_0034_fandom_slugs.py`).
+`templates/_atribucion_fandom.html`, `tests/test_fandom.py`, `alembic/versions/20261113_0036_fandom_slugs.py`).
 La rama `feat/fandom-fuentes` no contiene estos cambios; **este informe no dictamina ningún SHA**.
 **Entorno:** `PYTHONPATH=src .tmp-test-venv/bin/python` (Python 3.14), sin `TEST_DATABASE_URL`.
 **Alcance:** SSRF/red, apagado por defecto, marco legal y atribución, logs, robustez de parseo (ReDoS),
@@ -199,7 +199,7 @@ refactorización futura.
 | 14 | **Parseo lineal en los helpers de plantilla** | `extraer_plantilla` (`fandom.py:130-147`), `_dividir_parametros` (`:150-182`), `parametros_de_plantilla` (`:185-195`) | 1 MB de anidamientos en 60-128 ms (ver §2.2); la página realista de 416 KB, en 44 ms |
 
 **Fuera del alcance de esta revisión (no evaluado aquí):** `/api/health` de fuentes Fandom (AC-17 de
-la spec), migración 0034 contra Postgres real, y tráfico en vivo a las wikis. No son de
+la spec), migración 0036 contra Postgres real, y tráfico en vivo a las wikis. No son de
 seguridad/legal o ya los cubre QA.
 
 ---
@@ -418,7 +418,7 @@ neto; aun así se revisa el estado del fichero en el SHA por ser la superficie q
 | Legal / atribución | `LEGAL.md:107` fila CC-BY-SA; `legal_version` = hash del fichero (base `cad93d00f1436e60` → SHA `77e66dcf43b13b5a`: la aceptación anterior se invalida sola); doble enlace artículo + CC-BY-SA 3.0 en `web/atribucion.py:16-48` y plantillas; portadas no etiquetadas y sin hotlinking | Correcto (§3 #6-8) |
 | Apagado por defecto | `config.py:100-103` (`False`/`1.5`, ya en la base); Ajustes y `runtime_settings` | Correcto (§3 #4-5) |
 | Dependencias | `git diff 2c69a9bd..48c2920b -- pyproject.toml` vacío; `services/fandom.py` usa stdlib + `httpx` + `structlog` ya presentes | Sin dependencias nuevas |
-| Migración 0034 | Solo `add_column` + `create_unique_constraint`; `downgrade` revierte columnas y constraints; sin tocar datos ni tipos | Aditiva y reversible |
+| Migración 0036 | Solo `add_column` + `create_unique_constraint`; `downgrade` revierte columnas y constraints; sin tocar datos ni tipos | Aditiva y reversible |
 | Logs y datos | Código nuevo loguea códigos/nombres de página, nunca URLs ni payloads (§3 #9); `comic_vine.py` (nuevo `store_date`) y `enricher.py` (`_fecha_iso` con `date.fromisoformat`) son cambios de datos, sin red nueva ni entradas de usuario | Correcto |
 | Grep de superficie sensible en el delta | `os.environ`/contraseñas/secretos: sin coincidencias relevantes (solo `FakeSession` de tests) | Correcto |
 
@@ -503,3 +503,16 @@ posterior exige un nuevo dictamen (CLAUDE.md §5.8).
 
 **Comentario en el PR #734 con el SHA nuevo:** publicado el 2026-11-13 —
 <https://github.com/juanajok/zascarr/pull/734#issuecomment-6855412854>.
+
+
+---
+
+## Nota de mantenimiento post-fusión (2026-11-13)
+
+Tras la fusión, la resolución de `main` renumeró la migración de Fandom de `0034` a **`0036`**
+(había colisión con la migración de BL-D3; cadena `0034 mejoras` → `0035 portada` → `0036 fandom`).
+El cambio es **solo de identificador y `down_revision`**, no de SQL: el dictamen de seguridad no
+se ve afectado en su sustancia, pero por CLAUDE.md §5.8 cualquier cambio posterior al SHA dictaminado
+exige pasada sobre el SHA final. Verificado además con Postgres real en la sesión de despliegue
+(`upgrade` desde 0033, columnas+UNIQUE, `downgrade`/`upgrade`) y añadida la regresión
+`tests/test_migracion_fandom_pg.py`.
