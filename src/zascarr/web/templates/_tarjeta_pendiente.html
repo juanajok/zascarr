@@ -37,14 +37,17 @@
         <div id="previa-{{ c.file.id }}" class="asignar-previa" aria-live="polite"></div>
       </div>
       {% endif %}
-      <label class="sr" for="q-{{ c.file.id }}">Serie de «{{ c.file.file_name }}»</label>
-      <input type="search" class="series-search" placeholder="Buscar serie…"
-             name="q" id="q-{{ c.file.id }}"
-             hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
-             hx-trigger="input changed delay:400ms, search"
-             hx-target="#resultados-{{ c.file.id }}"
-             hx-swap="innerHTML">
-      <div id="resultados-{{ c.file.id }}" class="series-results"></div>
+      <details class="elegir-otra-serie">
+        <summary>Elegir otra serie</summary>
+        <label class="sr" for="q-{{ c.file.id }}">Serie de «{{ c.file.file_name }}»</label>
+        <input type="search" class="series-search" placeholder="Buscar serie…"
+               name="q" id="q-{{ c.file.id }}"
+               hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
+               hx-trigger="input changed delay:400ms, search"
+               hx-target="#resultados-{{ c.file.id }}"
+               hx-swap="innerHTML">
+        <div id="resultados-{{ c.file.id }}" class="series-results"></div>
+      </details>
       <button type="button" class="btn-ignorar"
               hx-post="/ui/pendientes/{{ c.file.id }}/ignorar"
               hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML"

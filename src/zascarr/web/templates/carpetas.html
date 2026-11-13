@@ -163,21 +163,24 @@
 
   <p class="carpeta-accion">
     {% if serie_actual %}
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ g.clave | urlencode }}&amp;series_id={{ serie_actual.id }}{{ contexto_query }}">Preparar los archivos de esta carpeta para esta serie</a>
+    <a class="btn ghost sm carpeta-accion-principal" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ g.clave | urlencode }}&amp;series_id={{ serie_actual.id }}{{ contexto_query }}">Preparar los archivos de esta carpeta para esta serie</a>
     <small>No se asigna nada hasta que confirmes; el archivo no se mueve.</small>
     {% else %}
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ g.clave | urlencode }}{{ contexto_query }}">Elegir la serie de esta carpeta</a>
+    <a class="btn ghost sm carpeta-accion-principal" href="/ui/pendientes/carpetas/asistente?clave={{ g.clave | urlencode }}{{ contexto_query }}">Elegir la serie de esta carpeta</a>
     <small>No se crea ni se asigna nada hasta que confirmes.</small>
     {% endif %}
   </p>
 
-  <p class="carpeta-accion">
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas/contexto/propuesta?clave={{ g.clave | urlencode }}">Ver propuesta de contexto</a>
-  </p>
-  <p class="carpeta-accion">
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas/declarar?clave={{ g.clave | urlencode }}">Declarar esta carpeta</a>
-    <small>No crea series, no mueve archivos, no vincula nada; solo orienta próximas interpretaciones. No cambia lo ya decidido.</small>
-  </p>
+  <details class="carpeta-avanzado">
+    <summary>Más opciones de esta carpeta</summary>
+    <p class="carpeta-accion">
+      <a class="btn ghost sm" href="/ui/pendientes/carpetas/contexto/propuesta?clave={{ g.clave | urlencode }}">Ver propuesta de contexto</a>
+    </p>
+    <p class="carpeta-accion">
+      <a class="btn ghost sm" href="/ui/pendientes/carpetas/declarar?clave={{ g.clave | urlencode }}">Declarar esta carpeta</a>
+      <small>No crea series, no mueve archivos, no vincula nada; solo orienta próximas interpretaciones. No cambia lo ya decidido.</small>
+    </p>
+  </details>
 
   <details class="carpeta-detalle">
     <summary>Ver datos y observaciones</summary>
