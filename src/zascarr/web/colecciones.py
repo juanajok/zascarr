@@ -1,6 +1,7 @@
 """#155/BL-D6: UI de colecciones y su política de auto-búsqueda."""
 from __future__ import annotations
 
+from pathlib import Path
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import Collection, CollectionAutoSearch, ComicTradition, Series
 from zascarr.services.colecciones import (
@@ -30,6 +32,7 @@ from zascarr.services.portada_coleccion import (
     candidatas_portada,
     elegir_portada,
     obtener_portada,
+    portada_cacheada,
 )
 from zascarr.utils.cover import cached_image_response
 from zascarr.web.iconos import icono
@@ -132,6 +135,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
     if limpiar == "1":
         q, tradicion = "", ""
     vista = vista if vista in {"lista", "tarjetas"} else "lista"
+    foco_vista = bool(request.query_params.get("vista"))
     seleccion = _seleccion_valida(serie_ids)
     pagina_datos = await pagina_series_sin_coleccion(
         db, q=q, tradicion=tradicion, pagina=pagina)
@@ -142,6 +146,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
         "series": pagina_datos.series, "pagina": pagina_datos,
         "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
         "seleccion": seleccion, "seleccion_oculta": seleccion_oculta, "vista": vista,
+        "foco_vista": foco_vista,
         "foco_filtros": bool(q or tradicion or limpiar == "1" or pagina > 1
                             or navegar == "1"),
         "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
@@ -209,10 +214,13 @@ async def previa_serie(request: Request, coleccion_id: UUID, serie_id: UUID,
     """Fragmento HTMX con la portada local de una serie; no toca disco ni red."""
     coleccion = await db.get(Collection, coleccion_id)
     serie = await db.get(Series, serie_id) if coleccion is not None else None
-    if coleccion is None or serie is None:
+    if (coleccion is None or serie is None
+            or serie.collection_id != coleccion_id):
         return HTMLResponse("", status_code=404, headers={"Cache-Control": "no-store"})
+    cache = portada_cacheada(Path(get_settings().covers_cache_path), serie.id)
+    portada_src = f"/ui/series/{serie.id}/portada" if cache is not None else None
     resp = templates.TemplateResponse(
-        request, "_previa_serie.html", {"serie": serie})
+        request, "_previa_serie.html", {"serie": serie, "portada_src": portada_src})
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
@@ -342,7 +350,16 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
 
 
 @router.post("/{coleccion_id}/series/{serie_id}/quitar")
-async def quitar(coleccion_id: UUID, serie_id: UUID, db: AsyncSession = Depends(get_db)):
+async def quitar(coleccion_id: UUID, serie_id: UUID, q: str = Form(""),
+                 tradicion: str = Form(""), pagina: int = Form(1),
+                 vista: str = Form("lista"), serie_ids: list[str] = Form([]),
+                 db: AsyncSession = Depends(get_db)):
     await quitar_serie(db, coleccion_id, serie_id)
     await db.commit()
-    return _redirigir(f"/ui/colecciones/{coleccion_id}?guardado=quitada")
+    q, tradicion = _filtros(q, tradicion)
+    vista = vista if vista in {"lista", "tarjetas"} else "lista"
+    consulta: list[tuple[str, str]] = [
+        ("guardado", "quitada"), ("q", q), ("tradicion", tradicion),
+        ("pagina", str(max(1, pagina))), ("vista", vista)]
+    consulta += [("serie_ids", sid) for sid in _seleccion_valida(serie_ids)]
+    return _redirigir(f"/ui/colecciones/{coleccion_id}?{urlencode(consulta)}")

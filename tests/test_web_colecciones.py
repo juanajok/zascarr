@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -363,7 +364,8 @@ def test_endpoint_previa_200_y_404():
     from types import SimpleNamespace
     cid, sid = uuid4(), uuid4()
     coleccion = SimpleNamespace(id=cid, name="Grapas")
-    serie = SimpleNamespace(id=sid, title="Flash", start_year=1987)
+    serie = SimpleNamespace(id=sid, title="Flash", start_year=1987,
+                            collection_id=cid)
 
     async def get(_modelo, clave):
         if clave == cid:
@@ -376,12 +378,25 @@ def test_endpoint_previa_200_y_404():
         yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(), get=get)
     app.dependency_overrides[get_db] = _db
     try:
-        r = TestClient(app).get(f"/ui/colecciones/{cid}/previa/{sid}")
-        assert r.status_code == 200
-        assert f"/ui/series/{sid}/portada" in r.text
-        assert "Flash" in r.text and "1987" in r.text
-        assert r.headers["cache-control"] == "no-store"
-        r404 = TestClient(app).get(f"/ui/colecciones/{cid}/previa/{uuid4()}")
+        with patch("zascarr.web.colecciones.portada_cacheada", return_value=Path("/covers/x.jpg")):
+            r = TestClient(app).get(f"/ui/colecciones/{cid}/previa/{sid}")
+            assert r.status_code == 200
+            assert f"/ui/series/{sid}/portada" in r.text
+            assert "Flash" in r.text and "1987" in r.text
+            assert r.headers["cache-control"] == "no-store"
+        with patch("zascarr.web.colecciones.portada_cacheada", return_value=None):
+            fallback = TestClient(app).get(f"/ui/colecciones/{cid}/previa/{sid}")
+            assert fallback.status_code == 200
+            assert "src=" not in fallback.text and "<img" not in fallback.text
+        serie_ajena = SimpleNamespace(id=sid, title="Otra", start_year=2000,
+                                      collection_id=uuid4())
+        async def _db_ajena():
+            yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
+                                  get=AsyncMock(side_effect=[coleccion, serie_ajena]))
+        app.dependency_overrides[get_db] = _db_ajena
+        assert TestClient(app).get(
+            f"/ui/colecciones/{cid}/previa/{sid}").status_code == 404
+        r404 = TestClient(app).get(f"/ui/colecciones/{uuid4()}/previa/{sid}")
         assert r404.status_code == 404
     finally:
         _cerrar()
@@ -413,6 +428,10 @@ def test_vista_tarjetas_con_portadas_y_enlaces_que_conservan_estado():
     assert "vista=lista" in r.text and "q=flash" in r.text and "pagina=2" in r.text
     assert f"serie_ids={sid}" in r.text
     assert 'aria-current="page"' in r.text
+    assert '<div class="coleccion-serie-card-portada"' in r.text
+    assert 'id="series-titulo" tabindex="-1" autofocus' in r.text
+    assert r.text.count("autofocus") == 1
+    assert r.text.find('id="previa-serie"') < r.text.find('coleccion-series-col')
 
 
 def test_vista_invalida_cae_a_lista():
@@ -430,3 +449,22 @@ def test_vista_invalida_cae_a_lista():
         _cerrar()
     assert r.status_code == 200
     assert "series-grid" not in r.text
+
+
+def test_quitar_conserva_estado_de_filtros_vista_y_seleccion():
+    cid, sid, otro = uuid4(), uuid4(), uuid4()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.quitar_serie", AsyncMock(return_value=True)):
+            r = c.post(f"/ui/colecciones/{cid}/series/{sid}/quitar", data={
+                "q": "flash", "tradicion": "manga", "pagina": "2",
+                "vista": "tarjetas", "serie_ids": [str(otro)]},
+                follow_redirects=False)
+    finally:
+        _cerrar()
+    assert r.status_code == 303
+    destino = r.headers["location"]
+    assert "guardado=quitada" in destino
+    assert "q=flash" in destino and "tradicion=manga" in destino
+    assert "pagina=2" in destino and "vista=tarjetas" in destino
+    assert f"serie_ids={otro}" in destino

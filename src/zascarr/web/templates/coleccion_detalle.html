@@ -27,7 +27,7 @@
 
 <section class="coleccion-panel" id="series">
   <div class="coleccion-series-cabecera">
-    <h2>Series</h2>
+    <h2 id="series-titulo"{% if foco_vista|default(false) %} tabindex="-1" autofocus{% endif %}>Series</h2>
     <div class="barra-vista" role="group" aria-label="Vista de las series de la colección">
       <a class="barra-vista-opcion{% if vista|default('lista') == 'tarjetas' %} barra-vista-opcion-actual{% endif %}"
          href="{{ url_vista_tarjetas|default('/ui/colecciones/' ~ coleccion.id ~ '?vista=tarjetas') }}"
@@ -40,6 +40,9 @@
     </div>
   </div>
   <div class="coleccion-series-layout">
+  <aside id="previa-serie" class="coleccion-previa-panel" aria-live="polite">
+    <p class="caption">Pasa el ratón o toca una serie para ver su portada.</p>
+  </aside>
   <div class="coleccion-series-col">
   {% if coleccion.series %}
   {% if vista|default('lista') == "tarjetas" %}
@@ -49,10 +52,15 @@
              hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
              hx-target="#previa-serie" hx-swap="innerHTML"
              hx-trigger="mouseenter, focusin" hx-sync="this:replace">
-      <a href="/ui/series/{{ s.id }}" class="coleccion-serie-card-portada">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-tarjeta", carga="lazy") }}</a>
+      <div class="coleccion-serie-card-portada" aria-hidden="true">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-tarjeta", carga="lazy") }}</div>
       <a href="/ui/series/{{ s.id }}" class="series-title">{{ s.title }}</a>
       <span class="series-year">{{ s.start_year or "Año no consta" }}</span>
       <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
+        <input type="hidden" name="q" value="{{ q|default('') }}">
+        <input type="hidden" name="tradicion" value="{{ tradicion|default('') }}">
+        <input type="hidden" name="pagina" value="{{ pagina.pagina if pagina else 1 }}">
+        <input type="hidden" name="vista" value="{{ vista|default('lista') }}">
+        {% for sid in seleccion|default([]) %}<input type="hidden" name="serie_ids" value="{{ sid }}">{% endfor %}
         <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar de la colección</button>
       </form>
     </article>
@@ -70,6 +78,11 @@
         <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>
       </div>
       <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
+        <input type="hidden" name="q" value="{{ q|default('') }}">
+        <input type="hidden" name="tradicion" value="{{ tradicion|default('') }}">
+        <input type="hidden" name="pagina" value="{{ pagina.pagina if pagina else 1 }}">
+        <input type="hidden" name="vista" value="{{ vista|default('lista') }}">
+        {% for sid in seleccion|default([]) %}<input type="hidden" name="serie_ids" value="{{ sid }}">{% endfor %}
         <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar serie</button>
       </form>
     </li>
@@ -106,9 +119,9 @@
         </div>
       </div>
       {% if pagina %}
-      <p class="coleccion-contador" role="status"{% if foco_filtros %} tabindex="-1" autofocus{% endif %}>{{ pagina.desde }}–{{ pagina.hasta }} de {{ pagina.total }} {{ "serie disponible" if pagina.total == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
+      <p class="coleccion-contador" role="status"{% if foco_filtros and not foco_vista|default(false) %} tabindex="-1" autofocus{% endif %}>{{ pagina.desde }}–{{ pagina.hasta }} de {{ pagina.total }} {{ "serie disponible" if pagina.total == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
       {% else %}
-      <p class="coleccion-contador" role="status"{% if foco_filtros %} tabindex="-1" autofocus{% endif %}>{{ series|length }} {{ "serie disponible" if series|length == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
+      <p class="coleccion-contador" role="status"{% if foco_filtros and not foco_vista|default(false) %} tabindex="-1" autofocus{% endif %}>{{ series|length }} {{ "serie disponible" if series|length == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
       {% endif %}
       {% for sid in seleccion_oculta %}
       <input type="hidden" name="serie_ids" value="{{ sid }}">
@@ -151,9 +164,6 @@
     </fieldset>
   </form>
   </div>
-  <aside id="previa-serie" class="coleccion-previa-panel" aria-live="polite">
-    <p class="caption">Pasa el ratón o toca una serie para ver su portada.</p>
-  </aside>
   </div>
 </section>
 
