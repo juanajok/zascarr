@@ -467,10 +467,10 @@ caracteres y pruebas de ida/vuelta; mientras, el veredicto de seguridad es **NO 
 
 Reglas del reparto: **BL-ETQ1a (#403)**, **BL-ETQ1b (#431)** y **BL-ETQ2 (#538, PR #544)**
 están fusionadas y desplegadas; **BL-ETQ3 (#565)** está fusionada (PR #671) y pendiente de
-despliegue. BL-ETQ4…6 quedan **propuestas** al PO, sin tarjeta, y no empiezan sin su decisión. Una
-historia = una PR; la ficha de benchmark de una fase nueva se abre si toca modelo/ficheros. Orden
-recomendado: 1a → 1b → 2 → 3 → 4 → 5 → 6, con 3 en paralelo a 2 si conviene (comparten clientes, no
-plantillas).
+despliegue; **BL-ETQ4 ya tiene tarjeta (#697)** por decisión del PO, sin implementar. BL-ETQ5…6
+quedan **propuestas** al PO, sin tarjeta, y no empiezan sin su decisión. Una historia = una PR; la
+ficha de benchmark de una fase nueva se abre si toca modelo/ficheros. Orden recomendado: 1a → 1b →
+2 → 3 → 4 → 5 → 6, con 3 en paralelo a 2 si conviene (comparten clientes, no plantillas).
 
 ## 10. Decisiones abiertas del PO y DoR
 
