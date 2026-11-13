@@ -18,6 +18,7 @@ from zascarr.services import auth as auth_mod
 from zascarr.services.auth import hash_password
 
 ATOM = "{http://www.w3.org/2005/Atom}"
+DC = "{http://purl.org/dc/terms/}"
 TIPO = "application/atom+xml;profile=opds-catalog;kind=navigation"
 
 
@@ -86,6 +87,7 @@ def test_raiz_es_feed_de_navegacion_valido():
         r = c.get("/opds")
     assert r.status_code == 200
     assert r.headers["content-type"] == TIPO
+    assert r.headers["vary"] == "Authorization"
     feed = _parse(r)
     assert feed.tag == ATOM + "feed"
     titulos = [e.findtext(ATOM + "title") for e in feed.findall(ATOM + "entry")]
@@ -104,6 +106,7 @@ def test_series_paginadas_escapado_autores_y_sin_descargas():
     ])) as c:
         r = c.get("/opds/series?page=1")
     assert r.status_code == 200
+    assert r.headers["vary"] == "Authorization"
     assert "Batman &amp; Robin &lt;X&gt;" in r.text
     feed = _parse(r)
     entrada = feed.find(ATOM + "entry")
@@ -146,6 +149,11 @@ def test_detalle_serie_con_y_sin_numeros():
     with use_fake_session(session) as c:
         r = c.get(f"/opds/series/{s.id}")
     assert r.status_code == 200
+    feed = ET.fromstring(r.content)
+    entrada = feed.find(ATOM + "entry")
+    assert entrada is not None
+    assert entrada.findtext(ATOM + "title") == "Serie #1"
+    assert entrada.findtext(DC + "identifier") == "Serie #1"
     assert "#1" in r.text
 
 
@@ -179,6 +187,7 @@ def test_etag_y_304():
         r2 = c.get("/opds/series", headers={"If-None-Match": etag})
     assert r2.status_code == 304
     assert r2.content == b""
+    assert r2.headers["vary"] == "Authorization"
 
 
 def test_404_xml():
@@ -200,6 +209,7 @@ def test_auth_basic_401_y_200_sin_redireccion(monkeypatch):
     assert r.status_code == 401
     assert r.headers["www-authenticate"] == 'Basic realm="ZascArr"'
     assert r.headers["cache-control"] == "no-store"
+    assert r.headers["vary"] == "Authorization"
     assert "location" not in r.headers
     with use_fake_session(FakeSession([R(scalar=datetime(2026, 1, 2, tzinfo=UTC))])) as c:
         r = c.get("/opds", auth=("", "secreta"))
@@ -216,3 +226,24 @@ def test_auth_basic_mala_401(monkeypatch):
         r = c.get("/opds", auth=("", "mala"), follow_redirects=False)
     assert r.status_code == 401
     assert "location" not in r.headers
+
+def test_429_de_opds_no_se_cachea_y_api_no_cambia(monkeypatch):
+    settings = get_settings().model_copy(update={
+        "auth_mode": "password", "auth_password_hash": hash_password("secreta"),
+        "secret_key": "s429", "auth_session_version": 0,
+    })
+    monkeypatch.setattr(auth_mod, "get_settings", lambda: settings)
+
+    async def llena(_usuario, _password, _settings):
+        raise auth_mod.ColaDeVerificacionLlenaError
+
+    monkeypatch.setattr(auth_mod, "intentar_credenciales", llena)
+    with use_fake_session(FakeSession([])) as c:
+        opds = c.get("/opds", auth=("", "secreta"), follow_redirects=False)
+        api = c.get("/api/series", auth=("", "secreta"), follow_redirects=False)
+    assert opds.status_code == 429
+    assert opds.headers["cache-control"] == "no-store"
+    assert opds.headers["vary"] == "Authorization"
+    assert api.status_code == 429
+    assert "no-store" not in api.headers.get("cache-control", "")
+    assert "vary" not in api.headers

@@ -130,6 +130,11 @@ modo que títulos con `& < > " '` quedan escapados por el serializador.
   bibliotecas reales (#664).
 - **Autenticación:** se reutiliza el middleware existente en vez de duplicar
   PBKDF2/retraso; así una credencial válida de OPDS comparte caché con `/api`.
+- **Basic sobre HTTP:** Basic viaja en base64, **no cifrado**. Solo es aceptable
+  en una LAN de confianza; para exponer ZascArr fuera de ella hace falta proxy
+  inverso con TLS y `BASE_URL`/`ALLOWED_HOSTS` (ADR 0004 y `SECURITY.md`).
+  Las respuestas OPDS llevan `Vary: Authorization` para que ninguna caché
+  compartida sirva un feed autenticado a otra credencial.
 
 ## 11. Trazabilidad
 
