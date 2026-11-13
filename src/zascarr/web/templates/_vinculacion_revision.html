@@ -33,6 +33,13 @@
     {% for av in r.avisos_de_grupo %}{{ ui.aviso("amber", av.texto) }}{% endfor %}
   </section>
 
+  <div class="vinc-barra" role="status" aria-live="polite" aria-label="Progreso de la revisión">
+    <span class="vinc-barra-contexto">{{ r.clave }}</span>
+    <span>Página {{ r.pagina.desde }}–{{ r.pagina.hasta }} de {{ r.pagina.en_el_grupo }}</span>
+    <span><strong>{{ n_marcados }}</strong> marcado{{ "s" if n_marcados != 1 }} · <strong>{{ n_incluidos }}</strong> listo{{ "s" if n_incluidos != 1 }}{% if n_bloqueados %} · {{ n_bloqueados }} bloqueado{{ "s" if n_bloqueados != 1 }}{% endif %}</span>
+    {% if n_incluidos %}<a class="btn primary sm" href="#vinc-lote">Revisar y vincular</a>{% endif %}
+  </div>
+
   {% if pendientes %}
   <section class="card" aria-labelledby="vinc-borradores">
     <h3 id="vinc-borradores" class="titulo-frase">Trabajo guardado en otras páginas</h3>
