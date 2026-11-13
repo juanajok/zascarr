@@ -6,10 +6,12 @@
     web/componentes.py, no la plantilla que las usa.
     Con autoescape: el texto que se pasa se escapa; para incluir enlaces usa la forma `call`. -#}
 
-{#- chip(estado, texto): etiqueta de estado. `estado` ∈ neutro | ok | warn | amber | info. -#}
-{% macro chip(estado, texto) -%}
+{#- chip(estado, texto, clase=""): etiqueta de estado. `estado` ∈ neutro | ok | warn | amber | info.
+    `clase` añade un modificador declarado en la hoja (p. ej. `chip-falta` para el borde discontinuo
+    de un número que te falta). El matiz lo sigue decidiendo `estado`, no la plantilla. -#}
+{% macro chip(estado, texto, clase="") -%}
 {%- set a = aspecto(estado) -%}
-<span class="chip{% if a.clase %} {{ a.clase }}{% endif %}">{% if a.icono %}<span aria-hidden="true">{{ a.icono }}</span> {% endif %}{{ texto }}</span>
+<span class="chip{% if a.clase %} {{ a.clase }}{% endif %}{% if clase %} {{ clase }}{% endif %}">{% if a.icono %}<span aria-hidden="true">{{ a.icono }}</span> {% endif %}{{ texto }}</span>
 {%- endmacro %}
 
 {#- aviso(tipo, texto) o {% call aviso(tipo) %}…{% endcall %}. `tipo` ∈ nota | info | ok | amber | warn.

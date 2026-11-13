@@ -1394,6 +1394,13 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 - **Dependencias.** V3 a V12.
 
 **V14 — Cierre: limpieza, documentación y trazabilidad (P2, S)**
+**F3b (2026-11-13):** los números de la ficha de serie y de la política dejan `.issue-chip` y usan
+`ui.chip`: presente `ok` (✓), leyendo `info`, leído `neutro` y «te falta» `neutro` + `chip-falta`
+(borde discontinuo), con el texto `sr` de leído/leyendo. La ficha enlaza los números con
+`.chip-enlace` (sin subrayado) y la rejilla conserva `.issue-grid`. **Excepción documentada:**
+`.estado-dot` **se conserva** porque el sistema de diseño publicado lo describe como el componente
+actual de los semáforos (glifos ✓ ! ? sobre `static/iconos`), no como alias de V2; retirarlo obligaría
+a sustituir el semáforo por otra cosa. 
 **F3a (2026-11-13):** los botones usan `button.primary`/`.btn.primary` (alias `.btn-primary` retirado, 8 plantillas) y los avisos legales de Deseados/Ajustes pasan a `ui.aviso("warn")` (con enlace y negritas conservados). Reglas de ambos alias retiradas; la auditoría de clases sigue en 0. Queda F3b (`.issue-chip` y `.estado-dot`), F4 y F5.
 
 **Avance V14 (2026-11-13):** F1 y F2 hechas. `scripts/auditar_css.py` audita clases usadas frente a
