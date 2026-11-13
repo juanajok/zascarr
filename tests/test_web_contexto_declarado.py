@@ -231,7 +231,7 @@ def test_aviso_de_error_recibe_foco(monkeypatch):
 def test_pequeno_texto_de_opcion_a_14_px():
     from pathlib import Path
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
-    assert "font-size: .875rem" in css.split(".declaracion-opcion small", 1)[1][:120]
+    assert "font-size: var(--text-secundario)" in css.split(".declaracion-opcion small", 1)[1][:140]
 
 
 def test_confirmacion_recuerda_la_seleccion_al_volver(monkeypatch):

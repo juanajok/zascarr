@@ -27,7 +27,7 @@ class TestBarraInferior:
         assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in SIN_COMENTARIOS
 
     def test_la_etiqueta_se_reduce_con_el_ancho(self):
-        assert re.search(r"\.nav-enlace \{[^}]*font-size: clamp\(", CSS, re.S)
+        assert re.search(r"\.nav-enlace \{[^}]*font-size: var\(--text-nav-movil\)", CSS, re.S)
 
 
 class TestZoomYObjetivos:
@@ -35,7 +35,7 @@ class TestZoomYObjetivos:
         """Safari en iOS amplía la página al enfocar un campo de menos de 16 px; los campos medían 14,4 px (14 en Ajustes)."""
         b = _bloque_movil()
         campos = re.search(r"input:not.*?\{(.*?)\}", b, re.S).group(1)
-        assert "font-size: 1rem" in campos and "min-height: 44px" in campos
+        assert "font-size: var(--text-cuerpo)" in campos and "min-height: 44px" in campos
         assert "select:not" in b and "textarea:not" in b
 
     def test_botones_y_resumenes_miden_44px(self):
