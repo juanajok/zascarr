@@ -41,5 +41,18 @@
 </nav>
 {% endif %}
 {% endif %}
+{% if historial %}
+<details class="mejora-historial">
+  <summary>Historial reciente ({{ historial | length }})</summary>
+  <ul class="mejoras-lista">
+    {% for fila in historial %}
+    <li class="mejora-fila">
+      <span>{{ fila.serie.title }} #{{ fila.issue.issue_number or "(sin número)" }} · {{ fila.estado_label }}</span>
+      <span class="muted">{{ fila.propuesta.candidate_title }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
 <p class="caption">No se sustituye ni borra ningún archivo: la edición descargada se importará junto a la actual.</p>
 {% endblock %}

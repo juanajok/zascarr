@@ -58,7 +58,7 @@
     {% for av in r.avisos_de_grupo %}{{ ui.aviso("amber", av.texto) }}{% endfor %}
   </section>
 
-  <div class="vinc-barra" role="status" aria-live="polite" aria-label="Progreso de la revisión">
+  <div class="vinc-barra" role="status" aria-live="polite" aria-atomic="true" aria-label="Progreso de la revisión">
     <span class="vinc-barra-contexto">{{ r.clave }}</span>
     <span>Página {{ r.pagina.desde }}–{{ r.pagina.hasta }} de {{ r.pagina.en_el_grupo }}</span>
     <span><strong>{{ n_marcados }}</strong> marcado{{ "s" if n_marcados != 1 }} · <strong>{{ n_incluidos }}</strong> listo{{ "s" if n_incluidos != 1 }}{% if n_bloqueados %} · {{ n_bloqueados }} bloqueado{{ "s" if n_bloqueados != 1 }}{% endif %}</span>
@@ -81,7 +81,7 @@
 
   <p class="vinculacion-pendiente" role="status">Actualizando la revisión… Hasta que termine, no se puede vincular.</p>
 
-  {% if accion %}<div class="vinc-accion-resultado" role="status" data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto) }}</div>{% endif %}
+  {% if accion %}<div class="vinc-accion-resultado" role="status" aria-atomic="true" data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto) }}</div>{% endif %}
 
   {% if r.archivos %}
   <div class="vinc-masivo" role="group" aria-label="Marcar varios a la vez">

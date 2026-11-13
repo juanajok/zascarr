@@ -149,6 +149,15 @@ class MejoraPendiente:
     serie: Series
 
     @property
+    def estado_label(self) -> str:
+        return {
+            "descargada": "Enviada; esperando importación",
+            "importada": "Importada en tu biblioteca",
+            "descartada": "Descartada",
+            "enviando": "Enviando",
+        }.get(self.propuesta.status, self.propuesta.status)
+
+    @property
     def current_label(self) -> str:
         return NIVELES.get(self.propuesta.current_tier, "sin datos")
 
@@ -224,6 +233,39 @@ async def devolver_mejora(db: AsyncSession, propuesta_id: UUID) -> bool:
     if propuesta is None or propuesta.status != "enviando":
         return False
     propuesta.status = "pendiente"
+    await db.flush()
+    return True
+
+
+async def historial_mejoras(db: AsyncSession, limite: int = 10) -> list[MejoraPendiente]:
+    filas = (await db.execute(
+        select(UpgradeProposal, Issue, Series)
+        .join(Issue, Issue.id == UpgradeProposal.issue_id)
+        .join(Series, Series.id == Issue.series_id)
+        .where(UpgradeProposal.status.in_(("descargada", "importada", "descartada")))
+        .order_by(UpgradeProposal.updated_at.desc())
+        .limit(max(1, min(limite, 50)))
+    )).all()
+    return [MejoraPendiente(p, i, s) for p, i, s in filas]
+
+
+async def reconciliar_mejora_importada(db: AsyncSession, issue_id: UUID,
+                                       file_id: UUID) -> bool:
+    """Cuando llega el archivo, la propuesta enviada pasa a importada y se liga a él.
+
+    No crea ni modifica archivos; solo actualiza la propuesta si había una descarga
+    pendiente para ese número.
+    """
+    propuesta = (await db.execute(
+        select(UpgradeProposal).where(
+            UpgradeProposal.issue_id == issue_id,
+            UpgradeProposal.status.in_(("descargada", "enviando")))
+        .order_by(UpgradeProposal.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    if propuesta is None:
+        return False
+    propuesta.status = "importada"
+    propuesta.file_id = file_id
     await db.flush()
     return True
 
