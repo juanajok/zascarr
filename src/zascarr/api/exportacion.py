@@ -8,11 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
-from zascarr.services.exportacion_kavita import (
-    ExportacionError,
-    ParcheComicInfoNoDisponibleError,
-    exportar_coleccion,
-)
+from zascarr.services.exportacion_kavita import ExportacionError, exportar_coleccion
 
 router = APIRouter(prefix="/export", tags=["exportacion"])
 
@@ -31,8 +27,6 @@ async def exportar(collection_id: UUID, body: ExportacionBody | None = None,
         resumen = await exportar_coleccion(
             db, collection_id, patch_comicinfo=peticion.patch_comicinfo,
             copiar=peticion.copiar)
-    except ParcheComicInfoNoDisponibleError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ExportacionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await db.commit()
@@ -50,5 +44,7 @@ async def exportar(collection_id: UUID, body: ExportacionBody | None = None,
             "saltados": resumen.saltados,
             "modo": resumen.modo,
             "carpetas_colisionadas": resumen.carpetas_colisionadas,
+            "parcheados": resumen.parcheados,
+            "patch_no_escribible": resumen.patch_no_escribible,
         },
     }

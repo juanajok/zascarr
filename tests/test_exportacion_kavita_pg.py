@@ -4,6 +4,7 @@ from __future__ import annotations
 import errno
 import hashlib
 import os
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -56,7 +57,8 @@ async def sembrar(db, tmp_path: Path, *, archivos=("Flash 1",)):
     lib.mkdir()
     for i, nombre in enumerate(archivos, start=1):
         ruta = lib / f"{nombre}.cbz"
-        ruta.write_bytes(b"contenido " + str(i).encode())
+        with zipfile.ZipFile(ruta, "w") as zf:
+            zf.writestr("001.jpg", b"imagen " + str(i).encode())
         issue = Issue(id=uuid4(), series_id=serie.id, issue_number=str(i), title="El origen",
                       format=IssueFormat.SINGLE_ISSUE)
         db.add(issue)
@@ -167,12 +169,45 @@ async def test_coleccion_vacia_escribe_manifiesto(db, tmp_path, monkeypatch):
     assert (tmp_path / "export" / "Grapas" / "_zascarr_manifest.json").exists()
 
 
-async def test_parche_comicinfo_se_rechaza(db, tmp_path, monkeypatch):
+async def test_parche_comicinfo_sobre_copia_privada_y_original_intacto(db, tmp_path, monkeypatch):
+    import json
     ajustes(tmp_path, monkeypatch)
     coleccion, _ = await sembrar(db, tmp_path)
-    with pytest.raises(svc.ParcheComicInfoNoDisponibleError):
-        await svc.exportar_coleccion(db, coleccion.id, patch_comicinfo=True)
-    assert not (tmp_path / "export").exists()
+    origen = next((tmp_path / "lib").glob("*.cbz"))
+    antes = (hashlib.sha256(origen.read_bytes()).hexdigest(), origen.stat().st_size,
+             origen.stat().st_mtime_ns)
+    resumen = await svc.exportar_coleccion(db, coleccion.id, patch_comicinfo=True)
+    destino = next((tmp_path / "export").rglob("*.cbz"))
+    assert resumen.materializados == 1 and resumen.parcheados == 1
+    assert resumen.modo == "copy"
+    assert destino.stat().st_ino != origen.stat().st_ino
+    assert (hashlib.sha256(origen.read_bytes()).hexdigest(), origen.stat().st_size,
+            origen.stat().st_mtime_ns) == antes
+    with zipfile.ZipFile(destino) as zf:
+        assert "ComicInfo.xml" in zf.namelist()
+    manifiesto = json.loads(next((tmp_path / "export").rglob("_zascarr_manifest.json")).read_text())
+    assert manifiesto["patch_comicinfo"] is True
+    assert manifiesto["files"][0]["patched"] is True
+    assert manifiesto["files"][0]["patch_status"] == "aplicado"
+    segundo = await svc.exportar_coleccion(db, coleccion.id, patch_comicinfo=True)
+    assert segundo.saltados == 1 and segundo.parcheados == 0
+
+
+async def test_patch_no_escribible_en_cbr(db, tmp_path, monkeypatch):
+    ajustes(tmp_path, monkeypatch)
+    coleccion, serie = await sembrar(db, tmp_path)
+    cbr = tmp_path / "lib" / "Flash 2.cbr"
+    cbr.write_bytes(b"rar")
+    from zascarr.models import Issue
+    issue = Issue(id=uuid4(), series_id=serie.id, issue_number="2", title="Dos")
+    db.add(issue)
+    await db.flush()
+    db.add(File(id=uuid4(), issue_id=issue.id, file_path=str(cbr), file_name=cbr.name,
+                file_format=FileFormat.CBR, file_size_bytes=3))
+    await db.flush()
+    resumen = await svc.exportar_coleccion(db, coleccion.id, patch_comicinfo=True)
+    assert resumen.patch_no_escribible == 1
+    assert any(a.get("patch_status") == "no_escribible" for a in resumen.archivos)
 
 
 async def test_fuente_symlink_se_omite_y_se_reporta(db, tmp_path, monkeypatch):

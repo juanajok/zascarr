@@ -21,7 +21,6 @@ from zascarr.services.colecciones import (
 )
 from zascarr.services.exportacion_kavita import (
     ExportacionError,
-    ParcheComicInfoNoDisponibleError,
     exportar_coleccion,
     historial_exportaciones,
 )
@@ -146,8 +145,6 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
             "exportaciones": await historial_exportaciones(db, coleccion_id),
             "errores": {}, "exportacion": resumen, "aviso": "",
         })
-    except ParcheComicInfoNoDisponibleError as exc:
-        error = str(exc)
     except ExportacionError as exc:
         error = str(exc)
     return _respuesta(request, "coleccion_detalle.html", {
