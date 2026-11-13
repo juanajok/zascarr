@@ -2480,6 +2480,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .mejora-actual { margin: 12px 0; }
 .mejoras-lista { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
 .mejora-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 2px solid var(--paper-2); border-radius: var(--radius-panel); }
+.ruta-exportacion { overflow-wrap: anywhere; word-break: break-word; }
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
@@ -2489,4 +2490,3 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
 }
-.ruta-exportacion { overflow-wrap: anywhere; word-break: break-word; }
