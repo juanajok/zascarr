@@ -3,12 +3,16 @@
 Casos 9–15 de la ficha `docs/design/benchmark-U12-pendientes-escala.md`. Sin Postgres: la lista se alimenta con la
 sesión falsa del resto de pruebas de Por revisar; la verificación en NAVEGADOR a 375 px está en `docs/design/ui-u12/`.
 
-Los tres casos de portada (decisión de producto del revisor de #213):
-  · AUSENCIA CONOCIDA: la extensión no tiene extractor → ni `<img>`, ni petición `/portada`, ni bloque;
-  · DISPONIBILIDAD DESCONOCIDA: es `.cbz`/`.zip` → `<img loading="lazy" alt="">` sin `aspect-ratio` y sin `onerror`:
-    si falla, mide 0 px y no deja hueco;
-  · DISPONIBLE: va DEBAJO del nombre, que no queda fuera del primer pantallazo.
-Rechazado: devolver 200 con un SVG, y abrir o hacer `stat` de archivos al renderizar.
+Los tres casos de portada (decisión de producto del revisor de #213, **revisada** por el PO el 2026-11-13 al
+cerrar la deuda 6 y 7 de la revisión del sistema de diseño): la tarjeta usa `ui.portada` como la Biblioteca:
+  · AUSENCIA CONOCIDA (CBR, PDF…): marcador con su inicial; **ni `<img>` ni petición `/portada`** (no se pide lo
+    que el servidor ya sabe que dará 404);
+  · DISPONIBILIDAD DESCONOCIDA (`.cbz`/`.zip`): marcador debajo y `<img loading="lazy" alt="">` encima, sin
+    `onerror`; si falla se ve el marcador;
+  · DISPONIBLE: va DEBAJO del nombre.
+El marcador reserva el 2:3, así que las tarjetas de una fila se alinean aunque la portada falte o tarde (esto
+**revierte U12**: el hueco vuelve a propósito). Rechazado: devolver 200 con un SVG y abrir/hacer `stat` de
+archivos al renderizar.
 """
 from __future__ import annotations
 
@@ -53,9 +57,11 @@ class TestAusenciaConocida:
     @pytest.mark.parametrize("nombre,formato", [
         ("Flash 01.cbr", FileFormat.CBR), ("Flash 02.cb7", FileFormat.CB7),
         ("Flash 03.pdf", FileFormat.PDF), ("Flash 04.epub", FileFormat.EPUB)])
-    def test_sin_extractor_no_hay_img_ni_peticion_ni_bloque(self, nombre, formato):
+    def test_sin_extractor_hay_marcador_pero_no_img_ni_peticion(self, nombre, formato):
         t = _tarjetas(_archivo(nombre, formato))[nombre]
-        assert "<img" not in t and "/portada" not in t and 'class="cover' not in t
+        assert 'class="portada ' in t and "portada-marca" in t     # marcador con su inicial
+        assert "<img" not in t and "/portada" not in t             # ni petición que dará 404
+        assert "onerror" not in t
         assert nombre in t                                         # el resto de la tarjeta sigue
 
     def test_el_predicado_es_el_mismo_que_el_del_extractor(self, tmp_path: Path):
@@ -85,16 +91,17 @@ class TestDisponibilidadDesconocida:
     def test_un_cbz_pide_la_portada_con_carga_diferida_y_sin_onerror(self):
         t = _tarjetas(_archivo("Flash 01.cbz", FileFormat.CBZ))["Flash 01.cbz"]
         img = re.search(r"<img[^>]*>", t, re.S).group(0)
-        assert 'loading="lazy"' in img and 'alt=""' in img and 'class="cover"' in img
+        assert 'loading="lazy"' in img and 'alt=""' in img
+        assert "portada-marca" in t                     # el marcador va debajo
         assert "onerror" not in t and "cover-missing" not in t
 
-    def test_la_regla_de_la_portada_no_reserva_espacio(self):
-        """Medido en Chrome 154 (docs/design/benchmark-U12-experimento): con `aspect-ratio` una imagen rota ocupa su
-        bloque; sin él y con `height: auto` mide 0 px. Esta prueba fija el mecanismo, no el resultado en el navegador."""
-        reglas = [d for s, d in _reglas() if s.strip() == ".pending-card .cover"]
-        assert reglas, "no hay regla para la portada de la tarjeta"
-        for d in reglas:
-            assert "aspect-ratio" not in d and d.get("height") == "auto", d
+    def test_la_portada_reserva_el_2_3_y_las_filas_se_alinean(self):
+        """El PO revirtió U12 (#689 deuda 6): `ui.portada` reserva el 2:3 y la tarjeta lo acota a 120 px.
+        Esta prueba fija el mecanismo; el resultado en navegador se comprueba a 1280 y 375 px."""
+        portada = [d for s, d in _reglas() if s.strip() == ".portada"]
+        assert portada and portada[0].get("aspect-ratio") == "2 / 3", portada
+        tarjeta = [d for s, d in _reglas() if s.strip() == ".pending-card .portada-pendiente"]
+        assert tarjeta and "120px" in tarjeta[0].get("width", ""), tarjeta
         assert not any("cover-missing" in s and "pending-card" in s for s, _ in _reglas())
 
     def test_ninguna_plantilla_de_pendientes_usa_onerror(self):
@@ -108,13 +115,13 @@ class TestPortadaBajoElNombre:
 
     def test_el_nombre_va_antes_que_la_portada_en_el_orden_de_lectura(self):
         t = _tarjetas(_archivo("Flash 01.cbz", FileFormat.CBZ))["Flash 01.cbz"]
-        assert t.index('class="filename"') < t.index("<img")
+        assert t.index('class="filename"') < t.index('class="portada ')
 
     def test_la_portada_tiene_un_tope_de_ancho_para_no_empujar_las_acciones(self):
-        reglas = [d for s, d in _reglas() if s.strip() == ".pending-card .cover"]
-        assert reglas and all("max-width" in d or "width" in d for d in reglas)
+        reglas = [d for s, d in _reglas() if s.strip() == ".pending-card .portada-pendiente"]
+        assert reglas
         ancho = reglas[0].get("width", "") + reglas[0].get("max-width", "")
-        assert "120px" in ancho or "40%" in ancho, ancho
+        assert "120px" in ancho, ancho
 
 
 # ── 12. Nombre íntegro ────────────────────────────────────────────────────────────────────────
