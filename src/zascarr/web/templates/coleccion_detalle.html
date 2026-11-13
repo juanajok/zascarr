@@ -70,9 +70,9 @@
         </div>
       </div>
       {% if pagina %}
-      <p class="coleccion-contador" role="status" tabindex="-1" autofocus>{{ pagina.desde }}–{{ pagina.hasta }} de {{ pagina.total }} {{ "serie disponible" if pagina.total == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
+      <p class="coleccion-contador" role="status"{% if foco_filtros %} tabindex="-1" autofocus{% endif %}>{{ pagina.desde }}–{{ pagina.hasta }} de {{ pagina.total }} {{ "serie disponible" if pagina.total == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
       {% else %}
-      <p class="coleccion-contador" role="status" tabindex="-1" autofocus>{{ series|length }} {{ "serie disponible" if series|length == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
+      <p class="coleccion-contador" role="status"{% if foco_filtros %} tabindex="-1" autofocus{% endif %}>{{ series|length }} {{ "serie disponible" if series|length == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
       {% endif %}
       {% for sid in seleccion_oculta %}
       <input type="hidden" name="serie_ids" value="{{ sid }}">
@@ -101,17 +101,11 @@
       {% endif %}
       {% if pagina and pagina.paginas > 1 %}
       <nav class="coleccion-paginacion" aria-label="Páginas de series disponibles">
-        {% if pagina.pagina > 1 %}
-        <a class="btn ghost" href="{{ url_anterior }}">← Anterior</a>
-        {% else %}
-        <span class="btn ghost" aria-disabled="true">← Anterior</span>
-        {% endif %}
+        <button class="btn ghost" type="submit" name="pagina" value="{{ pagina.pagina - 1 }}"
+                {% if pagina.pagina <= 1 %}disabled{% endif %}>← Anterior</button>
         <span>Página {{ pagina.pagina }} de {{ pagina.paginas }}</span>
-        {% if pagina.pagina < pagina.paginas %}
-        <a class="btn ghost" href="{{ url_siguiente }}">Siguiente →</a>
-        {% else %}
-        <span class="btn ghost" aria-disabled="true">Siguiente →</span>
-        {% endif %}
+        <button class="btn ghost" type="submit" name="pagina" value="{{ pagina.pagina + 1 }}"
+                {% if pagina.pagina >= pagina.paginas %}disabled{% endif %}>Siguiente →</button>
       </nav>
       {% endif %}
     </fieldset>

@@ -325,7 +325,7 @@ def test_paginacion_conserva_seleccion_y_limpiar_es_boton():
     assert "41–41 de 45 series disponibles" in r.text
     assert "Página 2 de 3" in r.text
     assert "Anterior" in r.text and "Siguiente" in r.text
-    assert "serie_ids=" + sid in r.text
+    assert 'name="pagina" value="1"' in r.text
     assert 'type="submit" name="limpiar" value="1"' in r.text
     assert "autofocus" in r.text
 
