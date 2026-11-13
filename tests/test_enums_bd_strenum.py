@@ -95,6 +95,8 @@ MIEMBROS = {
         "TEBEOSFERA": "tebeosfera",
         "METRON": "metron",
         "OPEN_LIBRARY": "open_library",
+        "FANDOM_DC": "fandom_dc",
+        "FANDOM_MARVEL": "fandom_marvel",
         "COMICINFO_XML": "comicinfo_xml",
         "MANUAL": "manual",
     },

@@ -282,6 +282,8 @@ class MetadataSource(enum.StrEnum):
     TEBEOSFERA    = "tebeosfera"
     METRON        = "metron"
     OPEN_LIBRARY  = "open_library"
+    FANDOM_DC     = "fandom_dc"
+    FANDOM_MARVEL = "fandom_marvel"
     COMICINFO_XML = "comicinfo_xml"
     MANUAL        = "manual"
 
@@ -574,6 +576,11 @@ class Series(Base):
     # las demás fuentes (ADR 0002); una serie usa como mucho una en la práctica.
     metron_id:       Mapped[int|None] = mapped_column(BigInteger, unique=True)
     open_library_id: Mapped[str|None] = mapped_column(String(64), unique=True)
+    # Fandom (SCR2, migración 0034): DC Database y Marvel Database identifican sus
+    # páginas por título de wiki («Batman Vol 1»), un slug de texto como el de
+    # Tebeosfera. Columnas paralelas por fuente (mismo principio que las demás).
+    fandom_dc_slug:     Mapped[str|None] = mapped_column(String(255), unique=True)
+    fandom_marvel_slug: Mapped[str|None] = mapped_column(String(255), unique=True)
     cover_url:       Mapped[str|None] = mapped_column(String(500))
     metadata_:       Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None] = mapped_column(String(20))
@@ -653,6 +660,9 @@ class Issue(Base):
     metron_id:       Mapped[int|None]     = mapped_column(BigInteger, unique=True)
     anilist_id:      Mapped[int|None]     = mapped_column(BigInteger, unique=True)
     tebeosfera_slug: Mapped[str|None]     = mapped_column(String(255), unique=True)
+    # Fandom (SCR2, migración 0034): título de la página del número en su wiki.
+    fandom_dc_slug:     Mapped[str|None] = mapped_column(String(255), unique=True)
+    fandom_marvel_slug: Mapped[str|None] = mapped_column(String(255), unique=True)
     sort_order:      Mapped[float|None]   = mapped_column(Float)
     metadata_:       Mapped[dict]         = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None]     = mapped_column(String(20))

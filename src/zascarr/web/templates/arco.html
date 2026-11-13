@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ arco.title }} en orden — ZascArr{% endblock %}
 {% block content %}
+{% from "_atribucion_fandom.html" import aviso_de_atribucion %}
 <p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
 {% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
 <h1 class="titulo-frase">{{ arco.title }}</h1>
 <p class="subtitle">Orden de lectura{% if arco.is_crossover %} · cruza varias series{% endif %}.</p>
 {% if arco.description %}<p>{{ arco.description }}</p>{% endif %}
+{{ aviso_de_atribucion(atribucion_fandom, "esta saga") }}
 <div class="arco-acciones">
   <a class="btn ghost sm" href="/ui/arcos/{{ arco.id }}/editar">Editar la saga</a>
   <a class="btn btn-ignorar sm" href="/ui/arcos/{{ arco.id }}/eliminar">Eliminar la saga</a>

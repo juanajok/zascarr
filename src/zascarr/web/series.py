@@ -192,6 +192,7 @@ from zascarr.utils.portada_rar import (
     portada_de_rar,
 )
 from zascarr.web.asistente_vinculacion import FORMATOS_LEGIBLES
+from zascarr.web.atribucion import atribucion_fandom
 from zascarr.web.retorno import volver_segura
 from zascarr.web.routes import crear_templates
 
@@ -537,6 +538,8 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "archivos_por_numero": archivos,
         "formatos_legibles": FORMATOS_LEGIBLES,
         "procedencia": procedencia_de_serie(series),
+        # SCR2: doble enlace visible (artículo + CC-BY-SA 3.0) cuando la identifica Fandom.
+        "atribucion_fandom": atribucion_fandom(series),
         "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
         "aviso_guardado": {
@@ -1098,6 +1101,8 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
     sinopsis_visible, sinopsis_resto = partir_sinopsis(ficha.sinopsis)
     respuesta = templates.TemplateResponse(request, "issue_detail.html", {
         "series": ficha.serie, "issue": ficha.issue, "ficha": ficha,
+        # SCR2: doble enlace visible (artículo + CC-BY-SA 3.0) si el número lo trajo Fandom.
+        "atribucion_fandom": atribucion_fandom(ficha.issue),
         "autores": autores, "textos": TEXTOS_FICHA,
         "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
         "lectura": await lectura_de(db, issue_id), "textos_lectura": TEXTOS_LECTURA,
@@ -1443,6 +1448,11 @@ def _nombre_de_fuente(series: Series) -> str:
     if not series.metadata_source:
         return "una fuente externa"
     return NOMBRE_DE_FUENTE.get(str(series.metadata_source), "una fuente externa")
+
+
+#: SCR2: la atribución legal (artículo + licencia CC-BY-SA 3.0) vive en `web/atribucion.py`,
+#: compartida con la ficha de número y las sagas. Se reexporta desde aquí para no romper a
+#: quien ya la importaba de este módulo.
 
 
 def _archivo_mas_nuevo_que_la_cache(ruta: Path, cache: Path, mtime_ns: int | None) -> bool:
