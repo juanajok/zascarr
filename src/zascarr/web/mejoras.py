@@ -74,8 +74,12 @@ async def escanear(request: Request, db: AsyncSession = Depends(get_db)) -> Resp
     motivo = motivo_sin_escaneo()
     if motivo:
         return _respuesta(request, await _contexto(db, error=motivo))
-    await escanear_mejoras(db)
-    return RedirectResponse("/ui/mejoras?guardado=escaneado", status_code=303)
+    informe = await escanear_mejoras(db)
+    aviso = (f"Revisados {informe.revisados} números; "
+             f"{informe.creadas} propuestas nuevas.")
+    if informe.fallidos:
+        aviso += f" {informe.fallidos} no se pudieron consultar y se reintentarán."
+    return _respuesta(request, await _contexto(db, aviso=aviso))
 
 
 @router.post("/{propuesta_id}/descargar", response_class=HTMLResponse,
