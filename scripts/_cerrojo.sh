@@ -47,13 +47,12 @@ tomar_cerrojo_operaciones() {
     if (( heredado == 0 )); then
         # Se prueba la apertura en una subshell con el error de bash silenciado: un `exec` con la redirección
         # fallida no siempre aborta, y el mensaje crudo ("Permiso denegado") no es para la persona.
-        if ! ( : >>"${ruta}" ) 2>/dev/null; then
+        # F-1 (SecOps): única creación del fichero, ya 0600 (umask 077 solo en la subshell); si ya existía con
+        # otro modo, el `chmod` posterior lo corrige.
+        if ! ( umask 077; : >>"${ruta}" ) 2>/dev/null; then
             echo "Ejecuta con sudo: hace falta para tomar el cerrojo de ZascArr." >&2
             exit 1
         fi
-        # F-1 (SecOps): el fichero nace 0600 (umask 077 en una subshell, para no cambiar la del script) y se
-        # corrige si ya existía con otro modo.
-        ( umask 077; : >>"${ruta}" ) 2>/dev/null
         chmod 600 "${ruta}" 2>/dev/null || true
         exec 9>"${ruta}" || { echo "Ejecuta con sudo: hace falta para tomar el cerrojo de ZascArr." >&2; exit 1; }
     fi

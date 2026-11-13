@@ -205,6 +205,15 @@ def test_el_fichero_del_cerrojo_es_0600(tmp_path, modo_previo):
     assert (lock.stat().st_mode & 0o777) == 0o600
 
 
+def test_el_fichero_nace_0600_sin_depender_del_chmod(tmp_path):
+    """F-1 (SecOps, pasada bc6ea02): con umask 022 y un `chmod` que no hace nada, el fichero ya nace 0600
+    (no hay ventana en la que otro proceso lo abra con 0644 y retenga el cerrojo)."""
+    lock = tmp_path / "ops.lock"
+    r = _bash(f'umask 022; chmod() {{ :; }}; source "{SCRIPTS}/_cerrojo.sh"; tomar_cerrojo_operaciones', lock)
+    assert r.returncode == 0, r.stderr
+    assert (lock.stat().st_mode & 0o777) == 0o600
+
+
 def test_el_cerrojo_se_suelta_al_terminar_quien_lo_tiene(tmp_path):
     lock = tmp_path / "ops.lock"
     r = _bash(f'source "{SCRIPTS}/_cerrojo.sh"; tomar_cerrojo_operaciones', lock)
