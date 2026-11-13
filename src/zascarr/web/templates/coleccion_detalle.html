@@ -33,7 +33,7 @@
   <form method="post" action="/ui/colecciones/{{ coleccion.id }}/exportar">
     <input type="hidden" name="patch_comicinfo" value="0">
     <label><input type="checkbox" name="copiar" value="1"> Copiar en vez de enlazar (aislado; ocupa espacio)</label>
-    <label><input type="checkbox" name="confirmo" value="1" required> Entiendo que la biblioteca no se mueve ni se modifica.</label>
+    <label><input type="checkbox" name="confirmo" value="1" required> Entiendo que ZascArr no mueve ni modifica la biblioteca; sin «Copiar», otra herramienta podría modificar el original.</label>
     <button class="btn" type="submit">Exportar esta colección</button>
   </form>
 </details>
@@ -59,7 +59,7 @@
 <ul class="arcos-lista">
   {% for e in exportaciones %}
   <li class="arco-fila">
-    <span class="muted">{{ e.fecha }} · {{ e.materializados }} nuevos · {{ e.saltados }} ya estaban · {{ e.errores }} incidencias · {{ e.modo }}</span>
+    <span class="muted">{{ e.fecha|fecha_llana }} · {{ e.materializados }} nuevos · {{ e.saltados }} ya estaban · {{ e.errores }} incidencias · {% if e.modo == "hardlink" %}enlace{% elif e.modo == "copy" %}copia{% elif e.modo == "mixed" %}mixta{% else %}{{ e.modo }}{% endif %}</span>
     <code class="ruta-exportacion">{{ e.run_id }}</code>
   </li>
   {% endfor %}

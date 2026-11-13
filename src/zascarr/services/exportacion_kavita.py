@@ -378,7 +378,7 @@ async def historial_exportaciones(
         archivos = d.get("archivos") or []
         salida.append({
             "run_id": str(run.id),
-            "fecha": run.started_at.isoformat() if run.started_at else "",
+            "fecha": run.started_at,
             "materializados": sum(1 for a in archivos if a.get("status") == "ok"),
             "saltados": int(d.get("saltados", 0)),
             "errores": int(run.error_count or 0),
