@@ -123,7 +123,7 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 ### Añadido
 
 - **Caché HTTP condicional y `robots.txt` (SCR1, Fase 1).** Tabla `http_cache` (migración
-  `0037`) con dos horizontes (`fresh_until` para servir sin red, `retain_until` para revalidar
+  `0038`) con dos horizontes (`fresh_until` para servir sin red, `retain_until` para revalidar
   con `304`), cuerpos comprimidos con zlib ≤2 MiB, negativas cortas (`404`/`410` y
   `missingtitle` de MediaWiki), `singleflight` por URL y `bypass_cache` para acciones manuales;
   `429`/`5xx`/red nunca se cachean. `utils/robots.py` evalúa `robots.txt` con `protego`
