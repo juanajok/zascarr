@@ -7,6 +7,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Tokens de tipografía, forma y espaciado (2026-11-13, #689).** `web.css` declara en `:root`
+  la escala de texto del sistema (15 estilos + la excepción del móvil) y los tokens
+  `--border-panel/control/chip/line` y `--space-1..6`; las 140 declaraciones `font-size`, los
+  130 grosores de borde y los 335 huecos exactos usan tokens. Sin cambios visuales salvo dos
+  redondeos subpíxel declarados. Detalle: `docs/design/especificacion-tokens-css.md` y
+  `docs/design/ui-auditoria-sistema-diseno-2026-11-13.md`.
 - **Deuda pequeña del sistema de diseño (2026-11-13, #689).** Los avisos de auditoría y de
   duplicados pasan a `ui.aviso` (icono, `role` y borde de tinta, en vez de `.audit-ok` a mano);
   se corrige el `btn-secondary` inexistente (ahora `.btn.ghost`); las filas de archivo separan con
