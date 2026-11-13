@@ -284,7 +284,7 @@ async def test_portada_sin_covers_404_y_borrado_limpia_cache(db, tmp_path, monke
     assert not (tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.jpg").exists()
 
 
-async def test_migracion_0034_columna_y_fk_existen(db):
+async def test_migracion_0035_columna_y_fk_existen(db):
     col = (await db.execute(text(
         "SELECT is_nullable FROM information_schema.columns "
         "WHERE table_name='collections' AND column_name='cover_series_id'"))).scalar()
