@@ -254,6 +254,13 @@
             {% endfor %}
           </select>
         </label>
+        <label>Números por pasada
+          <select name="upgrade_scan_batch">
+            {% for valor in (1, 3, 5, 10) %}
+            <option value="{{ valor }}" {% if upgrade_scan_batch == valor %}selected{% endif %}>{{ valor }}</option>
+            {% endfor %}
+          </select>
+        </label>
         <div class="ajustes-actions"><button type="submit">Guardar</button></div>
       </form>
       <div id="resultado-calidad" aria-live="polite"></div>
