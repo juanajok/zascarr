@@ -17,7 +17,13 @@
   <p class="audit-why" role="alert">No se pudo completar este grupo: {{ r.error }}</p>
   {% else %}
   <h2>Apartado {{ loop.index }}</h2>
+  {% if r.estado in ('cancelada', 'rechazada') or (r.estado == 'confirmada' and r.total_archivos == 0) %}
+  <p class="audit-why" role="status"><strong>No se ha apartado nada.</strong>
+    {% if r.motivo %}{{ r.motivo | motivo_apartado }}{% else %}Ninguna copia se pudo mover.{% endif %}
+  </p>
+  {% else %}
   <p>Estado: <strong>{% if r.estado == 'confirmada' %}Listo{% elif r.estado == 'deshecha' %}Deshecho{% else %}No completado{% endif %}</strong> · {{ r.total_archivos }} archivo(s) · {{ r.total_bytes | tamano }}</p>
+  {% endif %}
   {% for g in r.grupos %}
   <div class="audit-item">
     <div class="audit-detail">

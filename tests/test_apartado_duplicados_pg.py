@@ -486,3 +486,29 @@ async def test_cuarentena_symlink_fuera_falla_cerrado(banco, tmp_path):
     assert rutas[0].exists() and rutas[1].exists()
     assert not any(fuera.iterdir())
     fuera.rmdir()
+
+
+@pytest.mark.asyncio
+async def test_grupo_sin_movimientos_no_se_anuncia_como_exito(banco, tmp_path, monkeypatch):
+    """Un rename fallido deja 0 archivos movidos: la operación no es un éxito."""
+    library = _lib(tmp_path)
+    rutas, sha, vista, _ = await _preparar(banco, library, confirmar=False)
+
+    def falla_rename(_src, _dst):
+        raise OSError(errno.EACCES, "sin permiso para renombrar")
+
+    monkeypatch.setattr("zascarr.services.apartado_duplicados.os.replace", falla_rename)
+    async with banco.fabrica() as s:
+        resultado = await _servicio(s, library).confirmar(vista.token, [
+            GrupoEntrada(sha, tuple(str(r) for r in rutas), 0)])
+        op = await s.get(ApartadoOperacion, __import__("uuid").UUID(resultado.operacion))
+        confirmadas = (await s.execute(
+            select(ApartadoOperacion).where(ApartadoOperacion.estado == ApartadoEstado.CONFIRMADA)
+        )).scalars().all()
+    assert resultado.grupos[0].estado in ("rechazado", "error")
+    assert resultado.estado != "confirmada"
+    assert resultado.estado == "cancelada"
+    assert resultado.total_archivos == 0
+    assert op.estado == ApartadoEstado.CANCELADA
+    assert confirmadas == []
+    assert rutas[0].exists() and rutas[1].exists()
