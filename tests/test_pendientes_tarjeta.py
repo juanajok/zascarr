@@ -9,7 +9,7 @@ cerrar la deuda 6 y 7 de la revisión del sistema de diseño): la tarjeta usa `u
     que el servidor ya sabe que dará 404);
   · DISPONIBILIDAD DESCONOCIDA (`.cbz`/`.zip`): marcador debajo y `<img loading="lazy" alt="">` encima, sin
     `onerror`; si falla se ve el marcador;
-  · DISPONIBLE: va DEBAJO del nombre.
+  · DISPONIBLE: va ARRIBA del nombre, para que la fila empiece a la misma altura.
 El marcador reserva el 2:3, así que las tarjetas de una fila se alinean aunque la portada falte o tarde (esto
 **revierte U12**: el hueco vuelve a propósito). Rechazado: devolver 200 con un SVG y abrir/hacer `stat` de
 archivos al renderizar.
@@ -110,12 +110,14 @@ class TestDisponibilidadDesconocida:
             assert "onerror" not in (plantillas / nombre).read_text("utf-8"), nombre
 
 
-# ── 11. Disponible: debajo del nombre ─────────────────────────────────────────────────────────
+# ── 11. Disponible: arriba del nombre y fila alineada ─────────────────────────────────────────
 class TestPortadaBajoElNombre:
 
-    def test_el_nombre_va_antes_que_la_portada_en_el_orden_de_lectura(self):
+    def test_la_portada_va_primero_para_que_la_fila_empiece_a_la_misma_altura(self):
+        """El PO vio las portadas «descolocadas»: iban después de un nombre de 1 o 2 líneas. Arriba, todas
+        las tarjetas de una fila empiezan la portada a la misma altura; el nombre va debajo, entero."""
         t = _tarjetas(_archivo("Flash 01.cbz", FileFormat.CBZ))["Flash 01.cbz"]
-        assert t.index('class="filename"') < t.index('class="portada ')
+        assert t.index('class="portada ') < t.index('class="filename"')
 
     def test_la_portada_tiene_un_tope_de_ancho_para_no_empujar_las_acciones(self):
         reglas = [d for s, d in _reglas() if s.strip() == ".pending-card .portada-pendiente"]
