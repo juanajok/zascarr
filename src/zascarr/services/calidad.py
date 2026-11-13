@@ -123,6 +123,8 @@ class ResultadoMejoras:
     error: str | None
     actual: list[ArchivoActual]
     candidatos: list[MejoraCandidata]
+    #: Un fallo de red/cortesía merece otro intento; «sin candidatos» no.
+    reintentable: bool = False
 
 
 async def buscar_mejoras(db, serie, issue, *, min_tier: int = 1) -> ResultadoMejoras:
@@ -152,9 +154,11 @@ async def buscar_mejoras(db, serie, issue, *, min_tier: int = 1) -> ResultadoMej
         resultados = await ProwlarrClient().search(
             f"{serie.title} {issue.issue_number}", categories=[7030, 7020])
     except (CortesiaEnEspera, FuenteApagada):
-        return ResultadoMejoras(False, "Prowlarr no está disponible ahora mismo.", actuales, [])
+        return ResultadoMejoras(False, "Prowlarr no está disponible ahora mismo.",
+                                actuales, [], reintentable=True)
     except Exception:
-        return ResultadoMejoras(False, "No se pudo consultar Prowlarr.", actuales, [])
+        return ResultadoMejoras(False, "No se pudo consultar Prowlarr.",
+                                actuales, [], reintentable=True)
     candidatos = filtrar_mejoras(
         resultados, list(archivos), str(issue.issue_number), serie.title,
         min_tier=min_tier)

@@ -122,26 +122,42 @@ async def _rescan_loop(interval_minutes: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
-async def _upgrades_loop(interval_minutes: int) -> None:
-    """BL-D3: escaneo acotado y periódico de mejoras de edición.
+async def _upgrades_loop() -> None:
+    """BL-D3: escaneo acotado de mejoras, con cadencia leída en cada vuelta.
 
-    El primer pase espera un intervalo completo (no compite con el arranque).
-    Respeta el perfil D2; `cualquiera` y el escaneo desactivado no hacen nada.
+    Se arranca siempre (salvo BD degradada) para que activar el escaneo o
+    cambiar la cadencia en Ajustes funcione sin reiniciar. Si está desactivado
+    o el perfil es «cualquiera», no consulta nada y solo espera.
     """
     from zascarr.database import async_session_factory
     from zascarr.services.upgrades import escanear_mejoras
 
-    logger.info("upgrades.first_delayed", minutos=interval_minutes)
-    await asyncio.sleep(interval_minutes * 60)
+    logger.info("upgrades.scheduler_started")
+    siguiente: float | None = None
+    intervalo_previo = -1
+    bucle = asyncio.get_running_loop()
     while True:
         try:
-            async with async_session_factory() as db:
-                creadas = await escanear_mejoras(db)
-                if creadas:
-                    logger.info("upgrades.proposals_created", total=creadas)
+            settings = get_settings()
+            intervalo = max(0, int(getattr(settings, "upgrade_scan_interval_minutes", 0)))
+            perfil = getattr(settings, "quality_profile", "equilibrado")
+            ahora = bucle.time()
+            if intervalo <= 0 or perfil == "cualquiera":
+                siguiente = None
+            else:
+                if siguiente is None or intervalo != intervalo_previo:
+                    # Primera vuelta (o cambio de cadencia): espera el intervalo nuevo.
+                    siguiente = ahora + intervalo * 60
+                if ahora >= siguiente:
+                    async with async_session_factory() as db:
+                        creadas = await escanear_mejoras(db)
+                        if creadas:
+                            logger.info("upgrades.proposals_created", total=creadas)
+                    siguiente = bucle.time() + intervalo * 60
+            intervalo_previo = intervalo
         except Exception:
             logger.exception("upgrades.cycle_failed")
-        await asyncio.sleep(interval_minutes * 60)
+        await asyncio.sleep(60)
 
 
 async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
@@ -352,9 +368,9 @@ async def lifespan(app: FastAPI):
         if settings.rescan_interval_minutes > 0:
             background_tasks.append(
                 asyncio.create_task(_rescan_loop(settings.rescan_interval_minutes)))
-        if settings.upgrade_scan_interval_minutes > 0 and settings.quality_profile != "cualquiera":
-            background_tasks.append(
-                asyncio.create_task(_upgrades_loop(settings.upgrade_scan_interval_minutes)))
+        # BL-D3: siempre arranca; lee cadencia/perfil en cada vuelta para que
+        # activar o desactivar en Ajustes no exija reiniciar.
+        background_tasks.append(asyncio.create_task(_upgrades_loop()))
 
     yield
 
