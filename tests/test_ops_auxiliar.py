@@ -12,6 +12,7 @@ import os
 import socket
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -35,8 +36,8 @@ class Lanzador:
     def cerrojo_ocupado(self):
         return self.ocupado
 
-    def unidad_inactiva(self, unidad):
-        return not self.activa
+    def estado_unidad(self, unidad):
+        return "active" if self.activa else "inactive"
 
     def iniciar(self, unidad):
         self.iniciadas.append(unidad)
@@ -211,23 +212,40 @@ class TestCerrojo:
         correr(peticion(), estado, Lanzador(ocupado=True))
         assert not os.path.exists(estado.ruta_aceptadas) and not os.path.exists(estado.ruta_ops_status)
 
-    def test_dos_peticiones_concurrentes_solo_una_acepta_y_un_solo_start(self, estado):
-        lanz = Lanzador()
-        respuestas = []
+    def test_cuatro_peticiones_validas_a_la_vez_aceptan_una_y_un_solo_start(self, estado, tmp_path):
+        """T-05 / AC-08 (F-5): con `Accept=yes` hay un PROCESO por conexión; el bloqueo abarca leer-decidir-anotar-iniciar.
+        Procesos reales (no hilos) y un lanzador lento que ensancha la ventana: exactamente una aceptada y un `start`."""
+        import multiprocessing
 
-        def pedir(n):
-            respuestas.append(ops.procesar(peticion(id_=_id(n)), AHORA, CLAVE, estado, lanz).codigo)
+        registro = tmp_path / "starts.log"
 
-        hilos = [threading.Thread(target=pedir, args=(n,)) for n in (1, 2)]
-        for h in hilos:
-            h.start()
-        for h in hilos:
-            h.join()
-        # en esta prueba el estado es compartido sin bloqueo: se admite que ambas lleguen a `aceptada` SOLO si no
-        # hay protección; el contador de 300 s lo impide en cuanto una anota. Se exige que no haya dos `start`
-        # más de los que el contador permite, y que cada respuesta sea de la lista cerrada.
-        assert all(r in ops.CODIGOS for r in respuestas)
-        assert len(lanz.iniciadas) <= 2
+        class Lento(Lanzador):
+            def estado_unidad(self, unidad):
+                time.sleep(0.05)
+                return "inactive"
+
+            def iniciar(self, unidad):
+                time.sleep(0.15)
+                with open(registro, "a") as fh:
+                    fh.write("start\n")
+                return True
+
+        def hijo(n, salida):
+            r = ops.procesar(peticion(id_=_id(n)), AHORA, CLAVE, estado, Lento())
+            salida.send(r.codigo)
+
+        ctx = multiprocessing.get_context("fork")
+        tubos = [ctx.Pipe(duplex=False) for _ in range(4)]
+        procesos = [ctx.Process(target=hijo, args=(n, tubo[1])) for n, tubo in zip(range(1, 5), tubos, strict=True)]
+        for p in procesos:
+            p.start()
+        for p in procesos:
+            p.join(30)
+        assert all(t[0].poll(5) for t in tubos), "un proceso hijo murió sin responder"
+        codigos = sorted(t[0].recv() for t in tubos)
+        assert codigos.count("aceptada") == 1 and codigos.count("demasiado_pronto") == 3, codigos
+        assert registro.read_text().count("start") == 1
+        assert len(json.loads(Path(estado.ruta_aceptadas).read_text())) == 1
 
     def test_la_comprobacion_del_cerrojo_no_crea_ni_bloquea(self, tmp_path):
         """FR-11: `ENOENT` = libre y no se crea el fichero; tomado por otro = ocupado; libre = se suelta al instante."""
@@ -262,7 +280,7 @@ class TestLanzador:
         assert capturado["args"] == ["systemctl", "start", "--no-block", "zascarr-backup.service"]
         assert capturado["kw"]["env"] == {"PATH": ops.PATH_FIJO}
         assert not capturado["kw"].get("shell")
-        assert lanz.unidad_inactiva("zascarr-backup.service") is True
+        assert lanz.estado_unidad("zascarr-backup.service") == "inactive"
         assert capturado["kw"]["env"] == {"PATH": ops.PATH_FIJO}
 
     def test_si_systemctl_falla_no_se_acepta(self, estado):

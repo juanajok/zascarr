@@ -48,12 +48,18 @@ TIEMPO_LECTURA_S = 5             # y espera la línea como mucho esto
 CADUCIDAD_S = 120                # |creada − reloj del host| máximo, en los dos sentidos
 PURGA_VISTOS_S = 300             # un `id` visto se recuerda 300 s (la caducidad es ±120: un `id` válido vive hasta 240)
 ENTRE_COPIAS_S = 300             # intervalo mínimo entre dos copias aceptadas
+BLOQUEO_ESPERA_S = 5            # espera máxima por el bloqueo de `aceptadas`
 LIMITE_DIARIO = 6                # copias aceptadas en 24 h (ventana móvil)
 VENTANA_S = 24 * 3600
 TOLERANCIA_RELOJ_S = 300         # una época anotada hasta 300 s en el futuro se acepta (la Pi puede corregir la hora)
 #: Ruta CONSTANTE del cerrojo único de operaciones (la misma que `scripts/_cerrojo.sh`; una prueba las compara).
 RUTA_CERROJO = "/run/zascarr-ops.lock"
 PATH_FIJO = "/usr/sbin:/usr/bin:/sbin:/bin"
+#: `systemctl is-active`: libre = se puede iniciar (una copia fallida deja la unidad `failed`: F-3); ocupada = en marcha.
+#: Cualquier otra salida (vacía, de varias palabras, `maintenance`…) ⇒ falla cerrado (`estado_unidad_desconocido`).
+ESTADOS_LIBRES = frozenset({"inactive", "failed"})
+ESTADOS_OCUPADOS = frozenset({"activating", "active", "reloading", "deactivating"})
+TIEMPO_SYSTEMCTL_S = 5
 
 _RE_ID = re.compile(r"[0-9a-f]{32}")
 _RE_FIRMA = re.compile(r"[0-9a-f]{64}")
@@ -122,6 +128,10 @@ def parsear(linea: bytes) -> dict | None:
         return None
     if not isinstance(objeto["accion"], str):
         return None
+    try:
+        objeto["accion"].encode("utf-8")           # un sustituto suelto (JSON válido) no se puede firmar: F-4
+    except UnicodeEncodeError:
+        return None
     if not _es_entero(objeto["creada"]):
         return None
     if not isinstance(objeto["firma"], str) or not _RE_FIRMA.fullmatch(objeto["firma"]):
@@ -130,6 +140,10 @@ def parsear(linea: bytes) -> dict | None:
 
 
 # ── Estado en /run (tmpfs: un reinicio lo vacía y no puede quedar ninguna orden pendiente) ─────────────────────
+class AceptacionOcupada(OSError):
+    """No se tomó `aceptacion.lock` en el tiempo máximo (FR-35): otro proceso está en la sección crítica."""
+
+
 class ContadorIlegible(Exception):  # noqa: N818
     """`aceptadas` existe pero no se puede leer o interpretar: el auxiliar falla cerrado (nunca lo reinicia a 0)."""
 
@@ -205,6 +219,28 @@ class EstadoOps:
                   "resultado": "aceptada"}
         self._escribir_atomico(self.ruta_ops_status, json.dumps(cuerpo), 0o644)
 
+    @contextlib.contextmanager
+    def bloqueo(self, espera_s: float = BLOQUEO_ESPERA_S):
+        """Exclusión mutua entre procesos del auxiliar (`Accept=yes` lanza uno por conexión) desde que se lee
+        `aceptadas` hasta que se escribe `ops-status.json`: sin esto, cuatro firmas válidas a la vez se aceptan las
+        cuatro y el contador pierde actualizaciones (F-5). `OSError` si no se puede abrir o no llega a tomarse."""
+        fd = os.open(os.path.join(self.dir_estado, "aceptacion.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            limite = time.monotonic() + espera_s
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError as exc:
+                    if exc.errno not in (errno.EWOULDBLOCK, errno.EAGAIN):
+                        raise
+                    if time.monotonic() >= limite:
+                        raise AceptacionOcupada from exc
+                    time.sleep(0.02)
+            yield
+        finally:
+            os.close(fd)                                   # cerrar el descriptor suelta el flock
+
     @staticmethod
     def _escribir_atomico(destino: str, texto: str, modo: int) -> None:
         temporal = f"{destino}.tmp.{os.getpid()}"
@@ -248,14 +284,18 @@ class LanzadorSystemd:
         finally:
             os.close(fd)
 
-    def unidad_inactiva(self, unidad: str) -> bool:
-        resultado = self.ejecutar(["systemctl", "is-active", unidad], env={"PATH": PATH_FIJO}, capture_output=True,
-                                  text=True, timeout=10, check=False, stdin=subprocess.DEVNULL)
-        return resultado.stdout.strip() == "inactive"
+    def estado_unidad(self, unidad: str) -> str:
+        """La SALIDA de `systemctl is-active` (no su código: una unidad `failed` sale con código 3). Con descriptores
+        acotados (FR-09, O18) y tiempo máximo de 5 s; `TimeoutExpired`/`OSError` suben a quien llama."""
+        resultado = self.ejecutar(["systemctl", "is-active", unidad], env={"PATH": PATH_FIJO}, stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=TIEMPO_SYSTEMCTL_S,
+                                  check=False, close_fds=True)
+        return resultado.stdout.strip()
 
     def iniciar(self, unidad: str) -> bool:
         resultado = self.ejecutar(["systemctl", "start", "--no-block", unidad], env={"PATH": PATH_FIJO},
-                                  capture_output=True, timeout=10, check=False, stdin=subprocess.DEVNULL)
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                  timeout=TIEMPO_SYSTEMCTL_S, check=False, close_fds=True)
         return resultado.returncode == 0
 
 
@@ -290,6 +330,17 @@ def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, l
     unidad = UNIDADES[accion]
 
     try:
+        with estado.bloqueo():
+            return _aceptar(id_, unidad, ahora, estado, lanzador)
+    except AceptacionOcupada:
+        return _rechazo("no_disponible", id_, ACCION_COPIA, diario="aceptacion_ocupada")
+    except OSError:
+        return _rechazo("no_disponible", id_, ACCION_COPIA, diario="bloqueo_no_disponible")
+
+
+def _aceptar(id_: str, unidad: str, ahora: int, estado: EstadoOps, lanzador) -> Respuesta:
+    """Frecuencia, tope, cerrojo y arranque, con el bloqueo de `aceptadas` tomado (F-5)."""
+    try:
         aceptadas = estado.leer_aceptadas(ahora)
     except ContadorIlegible:
         # falla cerrado: nunca se reinicia a 0 ni se reescribe
@@ -299,20 +350,30 @@ def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, l
     if sum(1 for t in aceptadas if ahora - t < VENTANA_S) >= LIMITE_DIARIO:
         return _rechazo("limite_diario", id_, ACCION_COPIA)
 
-    if lanzador.cerrojo_ocupado() or not lanzador.unidad_inactiva(unidad):
-        return _rechazo("operacion_en_curso", id_, ACCION_COPIA)
-
     try:
-        estado.anotar_aceptada(ahora, aceptadas)
-    except OSError:
-        return _rechazo("no_disponible", id_, ACCION_COPIA, diario="contador_no_escrito")
-    if not lanzador.iniciar(unidad):
+        if lanzador.cerrojo_ocupado():
+            return _rechazo("operacion_en_curso", id_, ACCION_COPIA)
+        situacion = lanzador.estado_unidad(unidad)
+    except (OSError, subprocess.SubprocessError):
+        return _rechazo("no_disponible", id_, ACCION_COPIA, diario="systemctl_fallo")
+    if situacion in ESTADOS_OCUPADOS:
+        return _rechazo("operacion_en_curso", id_, ACCION_COPIA)
+    if situacion not in ESTADOS_LIBRES:
+        return _rechazo("no_disponible", id_, ACCION_COPIA, diario="estado_unidad_desconocido")
+
+    # El `start` va ANTES de anotar: un fallo al iniciar no consume el intento (reembolso, FR-10).
+    try:
+        iniciada = lanzador.iniciar(unidad)
+    except (OSError, subprocess.SubprocessError):
+        return _rechazo("no_disponible", id_, ACCION_COPIA, diario="systemctl_fallo")
+    if not iniciada:
         return _rechazo("no_disponible", id_, ACCION_COPIA, diario="inicio_fallido")
     try:
+        estado.anotar_aceptada(ahora, aceptadas)
         estado.escribir_ops_status(id_, ahora)
     except OSError:
         # la copia ya se ha iniciado: se acepta; la app caerá en «sin noticias» si no ve el rastro
-        return Respuesta("aceptada", "aceptada", id_, ACCION_COPIA, diario="ops_status_no_escrito")
+        return Respuesta("aceptada", "aceptada", id_, ACCION_COPIA, diario="estado_no_escrito")
     return Respuesta("aceptada", "aceptada", id_, ACCION_COPIA)
 
 
@@ -376,7 +437,11 @@ def main() -> int:
     estado = EstadoOps("/run/zascarr-ops", dir_status)
     clave = leer_clave(os.path.join(dir_ops, "ops.key"))
     linea = leer_linea(0)
-    respuesta = procesar(linea, int(time.time()), clave, estado, LanzadorSystemd())
+    try:
+        respuesta = procesar(linea, int(time.time()), clave, estado, LanzadorSystemd())
+    except Exception as exc:  # noqa: BLE001 — ninguna petición puede matar al auxiliar sin respuesta (F-4)
+        # al diario, solo la clase del error: nunca el contenido de la petición ni un traceback que lo lleve
+        respuesta = _rechazo("no_disponible", diario=f"error_interno_{type(exc).__name__}")
     with contextlib.suppress(OSError):
         os.write(1, respuesta.linea())
     ms = int((time.monotonic() - inicio) * 1000)
