@@ -164,7 +164,7 @@ async def test_no_enlaza_a_un_numero_con_archivos_de_otra_coleccion():
 _CREATE_TEMP_SERIES = (
     "CREATE TEMP TABLE series ("
     "id uuid PRIMARY KEY, title varchar(500), start_year smallint, "
-    "title_norm varchar(500), sort_title varchar(500))"
+    "volume smallint, title_norm varchar(500), sort_title varchar(500))"
 )
 _INSERT_SERIES = (
     "INSERT INTO series (id, title, start_year, title_norm, sort_title) "
