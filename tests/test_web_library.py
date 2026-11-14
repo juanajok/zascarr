@@ -189,8 +189,9 @@ class TestResultados:
             r = client.get("/ui/biblioteca/resultados?tradition=franco_belgian")
         assert r.status_code == 200
         assert "Thorgal" in r.text
-        # Es un fragmento: no repite el layout completo (topnav).
-        assert "ZascArr" not in r.text
+        # Es un fragmento: no repite el layout completo (sin <html>/doctype).
+        assert "<html" not in r.text.lower() and "<!doctype" not in r.text.lower()
+        assert 'id="filtros-campos"' in r.text
 
     def test_campos_uuid_vacios_no_dan_422(self):
         """Regresión: el formulario de filtros manda publisher_id/
@@ -633,7 +634,7 @@ class TestVistaLista:
     def test_una_vista_invalida_vuelve_a_tarjetas_con_aviso(self):
         series = make_series("Batman")
         r, _ = self._index(series, params="?vista=inventada")
-        assert "La presentación pedida no existe; se muestran tarjetas." in r.text
+        assert "La vista pedida no existe; se muestran tarjetas." in r.text
         assert "library-grid" in r.text and "library-lista" not in r.text
 
     def test_el_fragmento_lista_no_repite_layout(self):
@@ -641,7 +642,9 @@ class TestVistaLista:
         session = FakeSession([FakeExecResult(1), FakeExecResult([series])])
         with use_fake_session(session) as client:
             r = client.get("/ui/biblioteca/resultados?vista=lista")
-        assert "library-lista" in r.text and "ZascArr" not in r.text
+        assert "library-lista" in r.text
+        assert "<html" not in r.text.lower() and "<!doctype" not in r.text.lower()
+        assert 'id="filtros-campos"' in r.text
         assert not session._queue
 
 
@@ -752,3 +755,59 @@ def test_endpoint_previa_generica_200_404_y_fallback(monkeypatch):
             assert r.headers["cache-control"] == "no-store"
         r404 = client.get(f"/ui/series/{uuid4()}/previa")
         assert r404.status_code == 404
+
+
+def test_tarjeta_tebeo_etiqueta_y_sin_valor_interno():
+    serie = make_series("El Capitán Trueno")
+    serie.tradition = ComicTradition.TEBEO
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    tarjeta = r.text[r.text.index('class="library-card-meta"'):]
+    tarjeta = tarjeta[:tarjeta.index("</div>")]
+    assert "Tebeo español" in tarjeta
+    assert "tebeo" not in tarjeta
+
+
+def test_tradicion_desconocida_tiene_fallback_y_no_deja_punto_colgando():
+    serie = make_series("Rara")
+    serie.tradition = "tradicion_inventada"
+    serie.start_year = None
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    tarjeta = r.text[r.text.index('class="library-card-meta"'):]
+    tarjeta = tarjeta[:tarjeta.index("</div>")]
+    assert "Otra tradición" in tarjeta
+    assert "tradicion_inventada" not in tarjeta
+    assert "·" not in tarjeta
+
+
+def test_tradicion_none_no_deja_punto_colgando():
+    """Regresión H4 (#789): con año y sin tradición, la tarjeta no debe pintar un «·» colgando
+    ni inventar una etiqueta. El caso con año es el que muerde: sin año no hay separador posible."""
+    serie = make_series("Sin tradición")
+    serie.tradition = None
+    serie.start_year = 2011
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    inicio = r.text.index('class="library-card-meta"')
+    inicio = r.text.index(">", inicio) + 1
+    tarjeta = r.text[inicio:r.text.index("</div>", inicio)]
+    assert "2011" in tarjeta
+    assert "·" not in tarjeta
+    assert "Otra tradición" not in tarjeta and "None" not in tarjeta
+
+
+def test_tradicion_none_sin_anio_deja_la_tarjeta_vacia():
+    serie = make_series("Sin tradición ni año")
+    serie.tradition = None
+    serie.start_year = None
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    inicio = r.text.index('class="library-card-meta"')
+    inicio = r.text.index(">", inicio) + 1
+    tarjeta = r.text[inicio:r.text.index("</div>", inicio)]
+    assert tarjeta.strip() == ""

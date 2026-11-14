@@ -93,7 +93,7 @@ def _etiqueta_tradicion(tradicion) -> str:
     try:
         return _TRADICION_LABEL[ComicTradition(tradicion)]
     except (ValueError, KeyError):
-        return str(tradicion)
+        return "Otra tradición"
 
 
 templates.env.filters["tradicion"] = _etiqueta_tradicion
@@ -198,7 +198,7 @@ def _leer_filtros(
 
     vista_limpia = (vista or "").strip().lower()
     if vista_limpia not in ("", "tarjetas", "lista"):
-        avisos.append("La presentación pedida no existe; se muestran tarjetas.")
+        avisos.append("La vista pedida no existe; se muestran tarjetas.")
         vista_limpia = "tarjetas"
     expresion = parse_expresion(etiquetas)
     avisos.extend(expresion.avisos)
@@ -542,6 +542,7 @@ async def _contexto(
         "recuento_lectura": recuento_lectura_texto,
         "url_reintento": url_canonica,
         "url_reintento_fragmento": _url_fragmento(filtros_finales, page=pagina),
+        "publisher_conocido": nombres.get("publisher"),
         "url_vista_tarjetas": _url_pagina(replace(filtros_finales, vista="tarjetas"), page=pagina),
         "url_vista_lista": _url_pagina(replace(filtros_finales, vista="lista"), page=pagina),
         "url_vista_tarjetas_fragmento": _url_fragmento(
@@ -571,6 +572,11 @@ async def _respuesta_fragmento(
             ctx["publishers"] = await SeriesService(db).list_publishers_with_series()
         except Exception:  # noqa: BLE001 — el panel ya tiene su OOB mínimo
             ctx["publishers"] = []
+        if ctx.get("filtros") and ctx["filtros"].publisher_id and not ctx.get("publisher_conocido"):
+            nombre = next((p.name for p in ctx["publishers"]
+                           if str(p.id) == ctx["filtros"].publisher_id), None)
+            if nombre:
+                ctx["publisher_conocido"] = nombre
     respuesta = templates.TemplateResponse(request, "_rejilla_biblioteca.html", ctx)
     respuesta.headers["HX-Push-Url"] = ctx["url_canonica"]
     respuesta.headers["Cache-Control"] = "no-store"
