@@ -72,7 +72,7 @@ def _psql(pg: dict, sql: str) -> str:
 def _preparar(tmp_path: Path) -> dict:
     repo = tmp_path / "repo"
     (repo / "scripts").mkdir(parents=True)
-    for nombre in ("probar_restauracion.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh"):
+    for nombre in ("probar_restauracion.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh", "_cerrojo.sh"):
         shutil.copy2(SCRIPTS / nombre, repo / "scripts" / nombre)
     (repo / "docker-compose.yml").write_text("", encoding="utf-8")
     root = tmp_path / "root"

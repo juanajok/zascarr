@@ -55,6 +55,9 @@ echo -e "${B}====================================${N}\n"
 [[ "${BRANCH}" =~ ^[A-Za-z0-9._/-]+$ && "${BRANCH}" != -* && "${BRANCH}" != "HEAD" ]] || die \
     "El nombre de la rama no es válido. NO se ha actualizado nada."
 
+# ── Cerrojo único de operaciones (BL-OPS1): una operación de mantenimiento a la vez ────────────────
+tomar_cerrojo_operaciones || exit $?
+
 # ── 1. Requisitos ────────────────────────────────────────────────────────────
 comprobar_requisitos
 comprobar_git_utilizable
@@ -199,6 +202,10 @@ fi
 # fue bien pero la app va rara"). Se podan solas las que ya han perdido su dump
 # por la retención, que es lo que acota su número.
 podar_refs_huerfanas "${UPDATE_REF}"
+
+# ── 9. «Hacer una copia ahora» (BL-OPS1, FR-27): se refresca solo si ya estaba instalado ─────────────
+# Informativo: un fallo aquí nunca estropea una actualización ya hecha.
+bash "${SCRIPT_DIR}/instalar_ops.sh" --refrescar || warn "No se pudo refrescar «Hacer una copia ahora» (la actualización sigue válida)."
 
 echo -e "\n${B}====================================${N}"
 echo -e "${G}${B}  Actualización completada${N}"

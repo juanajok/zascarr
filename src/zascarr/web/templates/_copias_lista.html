@@ -1,0 +1,9 @@
+{#- El listado se recambia por piezas (`#copias-n`, `#copias-items`) para no cerrar el <details> abierto. -#}
+<div id="copias-lista">
+  {% if v.estado != "no_activado" %}
+  <details>
+    <summary>Copias guardadas {% include "_copias_n.html" %}</summary>
+    {% include "_copias_items.html" %}
+  </details>
+  {% endif %}
+</div>

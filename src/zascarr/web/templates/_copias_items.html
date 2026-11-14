@@ -1,0 +1,11 @@
+<div id="copias-items"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+  {% if copias is none %}
+    <p class="muted">Aún no hay lista de copias.</p>
+  {% else %}
+    <ul>
+      {% for c in copias %}
+      <li>{{ c.fecha }} · {{ c.tamano }} · también en el disco de respaldo: {{ "sí" if c.fuera_del_disco else "no" }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>

@@ -30,7 +30,6 @@ source "${SCRIPT_DIR}/_credenciales.sh"
 BACKUP_OFFSITE_DIR="${BACKUP_OFFSITE_DIR:-/media/Backup/zascarr/postgres}"
 BACKUP_OFFSITE_MOUNT="${BACKUP_OFFSITE_MOUNT:-/media/Backup}"
 BACKUP_STATUS_DIR="${BACKUP_STATUS_DIR:-/var/lib/zascarr/backup-status}"
-BACKUP_LOCK_FILE="${BACKUP_LOCK_FILE:-/run/zascarr-backup.lock}"
 STATUS_FILE="${BACKUP_STATUS_DIR}/status.json"
 
 STATUS_WRITTEN=0
@@ -40,21 +39,38 @@ OFFSITE_OK=1
 OFFSITE_ERROR=""
 ANCHOR_ERROR=""
 
+# ── Orden de arranque (BL-OPS1, FR-14; dictamen de SecOps M-1) ──────────────────────────────────────────────
+# (1) flock; (2) el cerrojo único; (3) el directorio de estado y el último éxito; (4) el trap; (5) los
+# requisitos. El trap va DESPUÉS del cerrojo y de leer `last_success_*`: con el cerrojo ocupado el 75 no debe
+# escribir `failed` encima de la copia que sí corre, y un fallo de precondición no debe borrar la última copia
+# buena. Hasta terminar (5) vale FASE=preparacion: un fallo ahí deja `precondition_failed`.
 command -v flock >/dev/null 2>&1 || die "No encuentro flock (util-linux)."
+
+# Escrito con `printf`, sin `jq` (debe poder escribirse aunque falte), atómico y sin fallar el script: deja
+# constancia de que esta copia NO arrancó porque había otra operación en marcha (FR-33).
+escribir_omitida() {
+    local tmp
+    install -d -m 755 "${BACKUP_STATUS_DIR}" 2>/dev/null || return 0
+    tmp="${BACKUP_STATUS_DIR}/omitida.json.tmp.$$"
+    if printf '{"schema":1,"omitida_epoch":%s,"motivo":"operacion_en_curso"}\n' "$(date +%s)" >"${tmp}" 2>/dev/null \
+        && chmod 644 "${tmp}" 2>/dev/null && mv "${tmp}" "${BACKUP_STATUS_DIR}/omitida.json" 2>/dev/null; then
+        return 0
+    fi
+    rm -f "${tmp}" 2>/dev/null || true
+    return 0
+}
+
+CERROJO_RC=0
+tomar_cerrojo_operaciones || CERROJO_RC=$?
+if (( CERROJO_RC == 75 )); then
+    escribir_omitida
+    exit 75
+elif (( CERROJO_RC != 0 )); then
+    exit "${CERROJO_RC}"
+fi
 command -v mountpoint >/dev/null 2>&1 || die "No encuentro mountpoint (util-linux)."
 
-comprobar_requisitos
-# Sin comprobar_git_utilizable: el volcado no necesita git. En una copia sin
-# `.git` el manifiesto deja el commit vacío y la retención no ve refs; en la Pi
-# el repo sí lo tiene y se rellena. update.sh/rollback.sh sí lo exigen.
-comprobar_env_legible "${ENV_FILE}"
-
-mkdir -p "${BACKUP_DIR}" || die "No puedo crear ${BACKUP_DIR}."
 install -d -m 755 "${BACKUP_STATUS_DIR}" || die "No puedo crear ${BACKUP_STATUS_DIR}."
-
-# Un solo backup a la vez: el timer y una ejecución manual no deben solaparse.
-exec 9>"${BACKUP_LOCK_FILE}" || die "No puedo abrir el cerrojo ${BACKUP_LOCK_FILE}."
-flock -n 9 || die "Ya hay una copia en curso (${BACKUP_LOCK_FILE})."
 
 # Conserva la última copia completa/local si este intento falla.
 if [[ -f "${STATUS_FILE}" ]] && jq -e . "${STATUS_FILE}" >/dev/null 2>&1; then
@@ -111,14 +127,26 @@ escribir_estado() {
     return 0
 }
 
+FASE="preparacion"
 on_exit() {
     local rc=$?
     if (( rc != 0 )) && (( STATUS_WRITTEN == 0 )); then
-        escribir_estado "failed" "unexpected" "" "" 0 false || true
+        local codigo="unexpected"
+        [[ "${FASE}" == "preparacion" ]] && codigo="precondition_failed"
+        escribir_estado "failed" "${codigo}" "" "" 0 false || true
     fi
     exit "${rc}"
 }
 trap on_exit EXIT
+
+comprobar_requisitos
+# Sin comprobar_git_utilizable: el volcado no necesita git. En una copia sin
+# `.git` el manifiesto deja el commit vacío y la retención no ve refs; en la Pi
+# el repo sí lo tiene y se rellena. update.sh/rollback.sh sí lo exigen.
+comprobar_env_legible "${ENV_FILE}"
+
+mkdir -p "${BACKUP_DIR}" || die "No puedo crear ${BACKUP_DIR}."
+FASE=""
 
 TS="$(date +%Y%m%d_%H%M%S)"
 DEST="${BACKUP_DIR}/backup_${TS}.sql.gz"
@@ -283,6 +311,9 @@ aplicar_retencion "${BACKUP_DIR}"
 if (( OFFSITE_OK == 1 )); then
     aplicar_retencion "${BACKUP_OFFSITE_DIR}"
 fi
+
+# Listado para la interfaz (BL-OPS1, FR-16): después de la retención; nunca hace fallar la copia.
+escribir_copias_json "${BACKUP_DIR}" "${BACKUP_OFFSITE_DIR}" "${BACKUP_STATUS_DIR}" || true
 
 # ── Estado final ─────────────────────────────────────────────────────────────
 if (( OFFSITE_OK == 1 )) && [[ -z "${ANCHOR_ERROR}" ]]; then

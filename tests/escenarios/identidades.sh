@@ -96,7 +96,7 @@ BACKUP="${W}/backups"; OFFSITE="${W}/backups-offsite"; STATUS="${W}/backup-statu
 mkdir -p "${BACKUP}" "${OFFSITE}" "${STATUS}"; chmod 777 "${BACKUP}" "${OFFSITE}" "${STATUS}"
 if env PATH="${W}/bin:${PATH}" STUB_LOG="${W}/docker.log" BACKUP_DIR="${BACKUP}" \
     BACKUP_OFFSITE_DIR="${OFFSITE}" BACKUP_OFFSITE_MOUNT="/" BACKUP_SKIP_DEVICE_CHECK=1 \
-    BACKUP_STATUS_DIR="${STATUS}" BACKUP_LOCK_FILE="${W}/backup.lock" \
+    BACKUP_STATUS_DIR="${STATUS}" ZASCARR_PRUEBAS=1 OPS_LOCK_FILE="${W}/backup.lock" \
     bash "${RAIZ}/zascarr/scripts/backup.sh" >/dev/null 2>&1 \
    && ls "${BACKUP}"/backup_*.sql.gz >/dev/null 2>&1; then
     pass P15 "backup.sh (root) sigue funcionando con el .env en 600 root:root"
