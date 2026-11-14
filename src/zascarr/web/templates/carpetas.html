@@ -205,7 +205,7 @@
     {% endif %}
     {% if g.patron_de_nombres.titulo_dominante %}
     <dt>Los nombres dicen</dt>
-    <dd>{{ g.patron_de_nombres.titulo_dominante }} ({{ (g.patron_de_nombres.proporcion * 100) | round | int }}&nbsp;% de los registros){% if g.patron_de_nombres.titulos_distintos > 1 %}; {{ g.patron_de_nombres.titulos_distintos }} títulos distintos{% endif %}</dd>
+    <dd>{{ g.patron_de_nombres.titulo_dominante }} ({{ (g.patron_de_nombres.proporcion * 100) | round | int }}&nbsp;% de los pendientes){% if g.patron_de_nombres.titulos_distintos > 1 %}; {{ g.patron_de_nombres.titulos_distintos }} títulos distintos{% endif %}</dd>
     {% endif %}
     {% if g.serie_sugerida %}
     <dt>Serie sugerida</dt>
