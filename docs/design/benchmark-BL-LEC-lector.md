@@ -140,12 +140,14 @@ Para CBZ no hay matriz: L3 (leer la entrada directamente) gana sin discusión.
 - No analizar la biblioteca entera al escanear (Komga: §4).
 - Al acabar un número, ofrecer el siguiente según la numeración propia de ZascArr, o lo que falta (L12).
 
-## 11. Decisiones pendientes del PO
+## 11. Decisiones del PO (2026-11-14)
 
-- **D-L1.** ADR nueva: JavaScript propio **solo** en la pantalla de lectura (un fichero, sin dependencias ni compilación, servido desde `static/`), como excepción declarada a «nada de JavaScript propio». Propuesta: sí.
-- **D-L2.** El progreso ya es por **número** (`ReadingProgress`, BL-C3). Falta saber **qué archivo** se estaba leyendo cuando el número tiene varios. Propuesta: una columna opcional `file_id` en `reading_progress` (migración aditiva); si el archivo cambia o desaparece, se retoma desde la página guardada en el archivo que se abra, avisando.
-- **D-L3.** Dónde vive la caché de RAR y cuánto ocupa. Propuesta: un volumen del contenedor en el disco de datos, no en la tarjeta SD, con una cuota fija pequeña (por ejemplo, 1 GiB) que BL-LEC0 ajusta con la medición.
-- **D-L4.** Cómo se lanza el lector. Propuesta: el botón «Leer» o «Continuar (pág. N)» en la ficha de número es el único camino; el doble clic en escritorio queda como atajo.
+| # | Decisión | Resultado |
+|---|---|---|
+| D-L1 | JavaScript propio | **Sí, solo en la pantalla de lectura:** un fichero sin dependencias ni compilación, servido desde `static/`. Excepción declarada a «nada de JavaScript propio»; se formaliza en una ADR nueva dentro de BL-LEC0. |
+| D-L2 | Qué archivo se leía | **Sí:** columna opcional `file_id` en `reading_progress` (migración aditiva). Si ese archivo cambia o desaparece, se retoma desde la página guardada en el que se abra, avisando. |
+| D-L3 | Caché de RAR | **Propuesta aceptada:** volumen del contenedor en el disco de datos, nunca en la tarjeta SD; cuota fija de ~1 GiB que BL-LEC0 ajusta con la medición; se limpia lo más antiguo salvo lo que se está leyendo. |
+| D-L4 | Cómo se abre el lector | **Botón «Leer» / «Continuar (pág. N)» en la ficha del número**; el doble clic, solo como atajo en el PC. |
 
 ## 12. NOT RUN
 
