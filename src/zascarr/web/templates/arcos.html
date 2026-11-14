@@ -27,4 +27,18 @@
 </nav>
 {% endif %}
 {% endif %}
+{% if herald_items %}
+<section class="edicion-manuales" aria-labelledby="herald-titulo">
+  <h2 id="herald-titulo" class="titulo-frase">Novedades de Comic Book Herald</h2>
+  <ul class="arcos-lista">
+    {% for item in herald_items %}
+    <li class="arco-fila">
+      <a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.titulo }}<span class="sr"> (se abre en otra pestaña)</span></a>
+      {% if item.publicado %}<span class="muted">{{ item.publicado.strftime("%d/%m/%Y") }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="caption">Solo títulos, fechas y enlaces del feed público; el artículo se lee en su web.</p>
+</section>
+{% endif %}
 {% endblock %}

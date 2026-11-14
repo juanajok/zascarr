@@ -22,6 +22,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **SCR5: novedades de Comic Book Herald por RSS (2026-11-14).** Fuente opcional (apagada por
+  defecto) que lee **solo el feed RSS 2.0 público** del sitio —título, enlace, fecha y
+  categorías, nunca el HTML del artículo ni imágenes, sin evadir el WAF— con la caché
+  condicional y robots.txt de SCR1 (TTL 6 h, retención 2 días, negativa 6 h), cortesía de
+  3,5 s, tope de 1 MiB y `lxml` sin entidades ni red. «Sagas en orden» muestra al final
+  «Novedades de Comic Book Herald» (hasta 5 guías, enlace externo con `rel="noopener
+  noreferrer"` y fecha en español) solo si la fuente está encendida en Ajustes; la fila de
+  `LEGAL.md` atribuye el artículo y la fuente sin copiar su contenido.
+
 - **SCR4: foro IPB con charset real, control de saturación y tarjeta en Ajustes (2026-11-14, #705).**
   El foro se lee decodificando su charset real (cabecera → `<meta>` → cp1252, nunca UTF-8 a
   ciegas) y el login/búsqueda envían el formulario en ese charset, conservando `s=`; se detecta

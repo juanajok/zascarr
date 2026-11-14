@@ -54,6 +54,10 @@
           <input type="checkbox" name="continuity_guide_enabled" value="true" {% if continuity_guide_enabled %}checked{% endif %}>
           Continuity Guide (guías de lectura; solo referencias, sin prosa)
         </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="comic_book_herald_enabled" value="true" {% if comic_book_herald_enabled %}checked{% endif %}>
+          Comic Book Herald (novedades de guías por RSS; solo títulos, fechas y enlaces del feed público)
+        </label>
         {% if fuentes_heredadas %}
         <div id="aviso-fuentes-heredadas">
           {% call ui.aviso("amber") %}<strong>Encendidas por compatibilidad con tu instalación anterior.</strong>

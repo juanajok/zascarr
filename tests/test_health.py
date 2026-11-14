@@ -610,3 +610,5 @@ def test_fuentes_de_metadatos_incluyen_las_fuentes_nuevas(monkeypatch):
     # SCR3: las guías de lectura también son fuentes y se ven aquí apagadas por defecto.
     assert fuentes["reading_orders"] == "disabled"
     assert fuentes["continuity_guide"] == "disabled"
+    # SCR5: el feed de Comic Book Herald también es una fuente apagada por defecto.
+    assert fuentes["comic_book_herald"] == "disabled"
