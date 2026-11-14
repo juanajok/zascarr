@@ -633,7 +633,7 @@ class TestVistaLista:
     def test_una_vista_invalida_vuelve_a_tarjetas_con_aviso(self):
         series = make_series("Batman")
         r, _ = self._index(series, params="?vista=inventada")
-        assert "La presentación pedida no existe; se muestran tarjetas." in r.text
+        assert "La vista pedida no existe; se muestran tarjetas." in r.text
         assert "library-grid" in r.text and "library-lista" not in r.text
 
     def test_el_fragmento_lista_no_repite_layout(self):
@@ -752,3 +752,40 @@ def test_endpoint_previa_generica_200_404_y_fallback(monkeypatch):
             assert r.headers["cache-control"] == "no-store"
         r404 = client.get(f"/ui/series/{uuid4()}/previa")
         assert r404.status_code == 404
+
+
+def test_tarjeta_tebeo_etiqueta_y_sin_valor_interno():
+    serie = make_series("El Capitán Trueno")
+    serie.tradition = ComicTradition.TEBEO
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    tarjeta = r.text[r.text.index('class="library-card-meta"'):]
+    tarjeta = tarjeta[:tarjeta.index("</div>")]
+    assert "Tebeo español" in tarjeta
+    assert "tebeo" not in tarjeta
+
+
+def test_tradicion_desconocida_tiene_fallback_y_no_deja_punto_colgando():
+    serie = make_series("Rara")
+    serie.tradition = "tradicion_inventada"
+    serie.start_year = None
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    tarjeta = r.text[r.text.index('class="library-card-meta"'):]
+    tarjeta = tarjeta[:tarjeta.index("</div>")]
+    assert "Otra tradición" in tarjeta
+    assert "·" not in tarjeta
+
+
+def test_tradicion_none_no_deja_punto_colgando():
+    serie = make_series("Sin tradición")
+    serie.tradition = None
+    serie.start_year = None
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    tarjeta = r.text[r.text.index('class="library-card-meta"'):]
+    tarjeta = tarjeta[:tarjeta.index("</div>")]
+    assert "·" not in tarjeta

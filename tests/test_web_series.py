@@ -1175,3 +1175,4 @@ class TestEstadoColeccionWK2:
         assert "Volver a completarla" in r.text
         assert "<h2>Te faltan</h2>" not in r.text
         assert "No la vas a completar. Sus huecos no cuentan como faltas" in r.text
+

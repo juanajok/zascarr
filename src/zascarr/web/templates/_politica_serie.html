@@ -30,7 +30,7 @@
       {# Defensa: un valor reservado que llegara por otra vía (BD antigua) no
          debe desaparecer del selector como si no estuviera puesto. #}
       <option value="{{ politica_actual.value }}" selected disabled>
-        {{ politica_actual.value }} — reservado, todavía no hace nada
+        {{ politica_actual_etiqueta or politica_actual.value }} — reservado, todavía no hace nada
       </option>
       {% endif %}
     </select>
