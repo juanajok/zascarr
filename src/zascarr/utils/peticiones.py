@@ -286,7 +286,12 @@ async def _leer_con_tope(cliente: httpx.AsyncClient, metodo: str, url: str, *,
                                             limite=limite, motivo="chunks")
             if deadline is not None and reloj() > deadline:
                 raise CortesiaEnEspera(fuente, host, 0.0, "cuerpo_lento")
-        return httpx.Response(r.status_code, headers=r.headers,
+        # `aiter_bytes()` ya descomprimió el cuerpo. Si se conservan `Content-Encoding`
+        # y `Content-Length`, el `Response` reconstruido intenta descomprimir otra vez
+        # (`zlib.error: incorrect header check`) y la longitud ya no corresponde.
+        cabeceras = [(k, v) for k, v in r.headers.multi_items()
+                     if k.lower() not in ("content-encoding", "content-length")]
+        return httpx.Response(r.status_code, headers=cabeceras,
                               content=bytes(acumulado), request=r.request)
 
 
