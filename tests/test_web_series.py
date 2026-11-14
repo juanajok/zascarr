@@ -1233,3 +1233,23 @@ def test_opcion_reservada_usa_etiqueta_no_valor_crudo(valor, etiqueta):
     assert f'value="{valor.value}"' in html
     assert etiqueta in html
     assert f">{valor.value}" not in html
+
+
+class TestAtribucionFandomVisible:
+    """SCR2 m-1: la atribución CC-BY-SA se ve sin desplegar «Fuentes y atribución»."""
+
+    def test_la_atribucion_se_ve_fuera_del_desplegable(self):
+        series = make_series(total_issues=3)
+        series.fandom_dc_slug = "Batman"
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert 'href="https://dc.fandom.com/wiki/Batman"' in r.text
+        assert "Creative Commons BY-SA 3.0" in r.text
+        dentro = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[0]
+        assert "BY-SA" not in dentro                    # el desplegable mantiene el aviso genérico
+        assert "DC/Marvel Database" in dentro
+        fuera = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[1]
+        assert "Creative Commons BY-SA 3.0" in fuera
