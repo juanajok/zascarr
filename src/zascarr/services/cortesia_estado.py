@@ -39,6 +39,7 @@ RESULTADOS = {
     "408": "No respondió a tiempo",
     "429": "Nos pidió esperar",
     "4xx": "Rechazó la consulta",
+    "304": "Sin cambios",
     "5xx": "Falló",
     "redireccion": "Nos redirigió",
 }

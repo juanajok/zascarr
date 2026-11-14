@@ -997,10 +997,32 @@ class EnrichmentService:
             await self.db.flush()
 
     async def _upsert_arc(self, arco: FandomArc) -> None:
-        """Crea/actualiza el arco y enlaza sus números locales en orden de lectura."""
+        """Crea/actualiza el arco de Fandom y enlaza sus números locales en orden de lectura.
+
+        SCR2 m-3 (SecOps): la identidad de un arco de Fandom es `metadata_["fandom_dc"]`
+        (título de la página en la wiki), NO el título visible. Un arco manual (sin metadata
+        de fuente) u otro de una fuente distinta con el mismo título es ajeno y no se toca:
+        se crea el arco de Fandom aparte.
+        """
+        # (1) El arco que YA es de este mismo artículo de Fandom.
         fila = (await self.db.execute(
-            select(StoryArc).where(StoryArc.title == arco.title[:500])
+            select(StoryArc).where(
+                StoryArc.metadata_["fandom_dc"].astext == arco.page_title)
         )).scalars().first()
+        if fila is None:
+            # (2) Compatibilidad: un arco antiguo de Fandom sin `origen` pero con
+            # `metadata_["fandom_dc"]`; no se adopta un arco manual ni de otra fuente.
+            candidata = (await self.db.execute(
+                select(StoryArc).where(StoryArc.title == arco.title[:500])
+            )).scalars().first()
+            if candidata is not None:
+                metadata = candidata.metadata_ or {}
+                origen = metadata.get("origen")
+                # Solo es reutilizable un arco que YA es de Fandom (con o sin `origen`);
+                # sin `metadata_["fandom_dc"]` es manual o de otra fuente: no se adopta.
+                if origen == "fandom_dc" or (
+                        origen is None and metadata.get("fandom_dc")):
+                    fila = candidata
         if fila is None:
             fila = StoryArc(
                 title=arco.title[:500],
