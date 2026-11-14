@@ -7,6 +7,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **V14 cerrada: migración de la UI sin restos (2026-11-14, #750).** Capturas nuevas en
+  `docs/design/ui-actual/` (claro/oscuro, escritorio/móvil), enlace desde el README, cierre
+  documental en BACKLOG y medición de peso: `web.css` pasa de 130.813 B a **128.037 B**, con
+  0 reglas sin uso y 27 alias retirados cubiertos por una prueba de no regresión.
 - **V14 F4: se cierra la lista de compatibilidad (2026-11-13, #750).** El último `.neutro` pasa a
   la base neutra y se retira su regla; `CLASES_ANTERIORES_A_V2` se sustituye por
   `ALIAS_RETIRADOS_EN_V14`, una prueba que impide que vuelvan los 27 alias retirados.

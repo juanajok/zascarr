@@ -1394,6 +1394,15 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 - **Dependencias.** V3 a V12.
 
 **V14 — Cierre: limpieza, documentación y trazabilidad (P2, S)**
+**Cómo se cerró (2026-11-14).** En cinco PR: F1 `scripts/auditar_css.py` + CI con `--strict`
+(#755); F2 retirada del CSS muerto (#755); F3a botones `.btn.primary` y avisos legales con
+`ui.aviso` (#762); F3b números con `ui.chip` y `chip-falta` (#769); F4 cierre de la lista de
+compatibilidad con `ALIAS_RETIRADOS_EN_V14` (#775); F5 estas capturas, documentación y medición de
+peso. Resultado: `web.css` 130.813 B→**128.037 B** pese a las pantallas nuevas de otras historias,
+0 reglas sin uso según la auditoría, 27 alias retirados con prueba de no regresión y
+`.estado-dot` documentado como excepción (componente actual del semáforo, no alias de V2).
+Capturas: `docs/design/ui-actual/`. ADR 0005 ya estaba aceptado desde 2026-10-02.
+ — **✅ Hecho (2026-11-14)**
 **F4 (2026-11-13):** el último `.neutro` (botón «Buscar →» del Inicio) pasa a la base neutra y su
 regla se retira. Se cierra la lista de compatibilidad `CLASES_ANTERIORES_A_V2`: la sustituye
 `ALIAS_RETIRADOS_EN_V14`, una prueba que impide que vuelvan los 27 alias retirados (CSS y
