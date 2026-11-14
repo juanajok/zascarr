@@ -135,3 +135,21 @@ Por impacto y orden:
 Estas conclusiones son **hipótesis de diseño**, no evidencia de usuarios. Para
 cerrar la validación hay que ejecutar las 5 sesiones reales del kit y comparar.
 Mientras tanto, H3 y H4 ya eran fallos objetivos de código y están corregidos.
+
+## 7. Segunda ronda aplicada
+
+Después de los walkthroughs se corrigieron los hallazgos que no exigían un rediseño
+grande:
+
+| Hallazgo | Cambio |
+|---|---|
+| H1/H2 jerarquía | «Vincular en su sitio» va antes y con peso de acción segura cuando procede; «Organizar» queda como alternativa. No se muestra Vincular en `_Unsorted` ni en packs, donde fallaría o sería peligroso. |
+| H8 foco | Las casillas del asistente tienen `id`, para que htmx pueda restaurar el foco tras el swap. |
+| H9 móvil | Barra sticky a `4rem` (bajo la cabecera) y `scroll-margin` en `#vinc-lote` y filas. |
+| H10 entrada | La recomendación «Empieza por carpeta» va antes de los botones; «Ver las vistas de trabajo» deja de ser el primer tab stop. |
+
+Verificación: 372 tests de pendientes, nombres/foco, accesibilidad estructural y
+contraste en verde.
+
+Siguen pendientes: H5 (recibo/deshacer), H6 (borradores visibles en carpetas),
+H7 (comparación de conflictos) y el doble campo de número de H1/H2.
