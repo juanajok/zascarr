@@ -4,12 +4,13 @@ from __future__ import annotations
 from urllib.parse import urlencode
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.database import get_db
+from zascarr.database import async_session_factory, get_db
 from zascarr.models import StoryArc
 from zascarr.services.arcos import (
     agregar_numero,
@@ -22,6 +23,7 @@ from zascarr.services.arcos import (
     pedir_arco,
     quitar_numero,
 )
+from zascarr.services.comicbook_herald import ComicBookHeraldClient
 from zascarr.services.reading_orders.comicbookreadingorders import (
     HOSTS_PERMITIDOS as RO_HOSTS,
 )
@@ -36,10 +38,17 @@ from zascarr.services.reading_orders.continuity_guide import (
     RUTAS_PROHIBIDAS as CG_RUTAS,
 )
 from zascarr.services.reconciliacion_lecturas import ORIGENES_DE_GUIA
-from zascarr.utils.cortesia import NOMBRES_DE_FUENTE
+from zascarr.utils.cache_http import CacheHttp
+from zascarr.utils.cortesia import (
+    NOMBRES_DE_FUENTE,
+    CortesiaEnEspera,
+    FuenteApagada,
+    fuente_habilitada,
+)
 from zascarr.web.atribucion import atribucion_de_arco
 from zascarr.web.routes import crear_templates
 
+logger = structlog.get_logger()
 router = APIRouter(prefix="/ui/arcos", tags=["ui"])
 templates = crear_templates()
 
@@ -90,12 +99,30 @@ def _redirigir(destino: str) -> RedirectResponse:
     return RedirectResponse(destino, status_code=303)
 
 
+async def _novedades_de_herald() -> list:
+    """Las 5 últimas guías del feed de Comic Book Herald, o [] (fuente apagada/fallo).
+
+    Solo se llama con la fuente encendida; un fallo de red/robots no pinta nada (sin error).
+    """
+    if not fuente_habilitada("comic_book_herald"):
+        return []
+    try:
+        async with ComicBookHeraldClient(CacheHttp(async_session_factory)) as cliente:
+            return (await cliente.novedades())[:5]
+    except (FuenteApagada, CortesiaEnEspera):
+        return []
+    except Exception:
+        logger.warning("comicbook_herald.ui_sin_novedades")
+        return []
+
+
 @router.get("", response_class=HTMLResponse)
 async def arcos(request: Request, pagina: int = Query(default=1, ge=1),
                 guardado: str = Query(default=""),
                 db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     return _respuesta(request, "arcos.html", {
         "pagina": await listar_arcos(db, pagina),
+        "herald_items": await _novedades_de_herald(),
         "aviso": {
             "creada": "Saga creada.",
             "guardada": "Saga guardada.",

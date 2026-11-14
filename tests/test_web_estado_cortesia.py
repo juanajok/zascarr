@@ -77,7 +77,7 @@ class TestEndpoint:
         assert {f["fuente"] for f in datos["fuentes"]} == {
             "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library",
             "fandom_dc", "fandom_marvel", "reading_orders", "continuity_guide",
-            "foro", "portada"}
+            "comic_book_herald", "foro", "portada"}
         assert all("://" not in h["host"] for h in datos["hosts"])
         assert all(h["host"] in ("comicvine.gamespot.com", "cbsistatic.com") for h in datos["hosts"])
         texto = json.dumps(datos)

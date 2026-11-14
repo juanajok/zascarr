@@ -36,7 +36,8 @@ def test_las_fuentes_nuevas_y_el_token_estan_en_ajustes(monkeypatch):
         comicvine_rate_limit=1.0, anilist_rate_limit=1.5, tebeosfera_rate_limit=2.5,
         gcd_rate_limit=2.0, metron_rate_limit=3.0, open_library_rate_limit=1.0,
         forum_enabled=False, forum_ipb_url="", forum_ipb_api_key="", forum_username="",
-        forum_password="", forum_rate_limit=6.0, forum_url=""))
+        forum_password="", forum_rate_limit=6.0, forum_url="",
+        comic_book_herald_enabled=True))
     c = _cliente()
     try:
         r = c.get("/ui/ajustes")
@@ -49,6 +50,9 @@ def test_las_fuentes_nuevas_y_el_token_estan_en_ajustes(monkeypatch):
     # SCR3: las dos guías de lectura son fuentes más, apagadas por defecto.
     assert 'name="reading_orders_enabled"' in r.text
     assert 'name="continuity_guide_enabled"' in r.text
+    # SCR5: el feed público de Comic Book Herald es una fuente más.
+    assert 'name="comic_book_herald_enabled"' in r.text
+    assert "Comic Book Herald" in r.text and "feed público" in r.text
     assert "Comic Book Reading Orders" in r.text and "Continuity Guide" in r.text
 
 
@@ -167,3 +171,17 @@ def test_guardar_indexers_de_prowlarr(monkeypatch):
         _cerrar()
     assert r.status_code == 200
     assert guardar.await_args.args[0] == {"prowlarr_indexer_ids": "3,7"}
+
+
+def test_guardar_fuentes_incluye_el_feed_de_herald(monkeypatch):
+    guardar = AsyncMock()
+    monkeypatch.setattr("zascarr.web.ajustes.RuntimeSettingsService",
+                        lambda _db: SimpleNamespace(save=guardar))
+    c = _cliente()
+    try:
+        r = c.post("/ui/ajustes/guardar/fuentes", data={
+            "comic_book_herald_enabled": "true"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert guardar.await_args.args[0]["comic_book_herald_enabled"] is True

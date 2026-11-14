@@ -477,6 +477,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             if getattr(settings, "reading_orders_enabled", False) else "disabled",
             "continuity_guide": "enabled"
             if getattr(settings, "continuity_guide_enabled", False) else "disabled",
+            "comic_book_herald": "enabled"
+            if getattr(settings, "comic_book_herald_enabled", False) else "disabled",
         },
         # A11: seguridad aparte de la salud técnica (ver estado_de_seguridad).
         "seguridad": estado_de_seguridad(settings),

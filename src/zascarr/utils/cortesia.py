@@ -110,6 +110,7 @@ NOMBRES_DE_FUENTE: dict[str, str] = {
     "fandom_marvel": "Marvel Database",
     "reading_orders": "Comic Book Reading Orders",
     "continuity_guide": "Continuity Guide",
+    "comic_book_herald": "Comic Book Herald",
     "foro": "Foro",
     "portada": "Portadas",
 }
@@ -118,7 +119,7 @@ NOMBRES_DE_FUENTE: dict[str, str] = {
 FUENTES_DECLARADAS: tuple[str, ...] = (
     "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library",
     "fandom_dc", "fandom_marvel", "reading_orders", "continuity_guide",
-    "foro", "portada")
+    "comic_book_herald", "foro", "portada")
 
 #: Intervalo del nivel host para las portadas (su URL no lleva fuente; §3.1 y §14.2).
 #: Se aplica por origen normalizado; los subdominios del CDN de Comic Vine heredan su intervalo.
@@ -251,6 +252,11 @@ def politica_de(fuente: str, ajustes=None, *, host: str | None = None) -> Politi
         defecto = 2.5 if fuente == "reading_orders" else 3.5
         return PoliticaFuente(
             fuente, nombre, float(getattr(s, f"{fuente}_rate_limit", defecto)), 1, 3)
+    if fuente == "comic_book_herald":
+        # SCR5: feed público de WordPress; 1 intento y 3 redirecciones (siempre del mismo host).
+        return PoliticaFuente(
+            fuente, nombre,
+            float(getattr(s, "comic_book_herald_rate_limit", 3.5)), 1, 3)
     if fuente == "foro":
         return PoliticaFuente(fuente, nombre, float(s.forum_rate_limit), 2, 3)
     if fuente == "portada":
