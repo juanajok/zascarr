@@ -42,6 +42,8 @@ class ScraperFalso:
         self.estado_entrada = 200
         self.charset_entrada = ("text/html", "iso8859-1", "iso8859-1")
         self.cookies_recibidas = 2
+        self.nombres_de_cookies = (["foro_member_id"] if login
+                                   else ["foro_nuevosession_id"])
         self.llamadas = 0
 
     async def login(self, _usuario: str, _clave: str) -> bool:

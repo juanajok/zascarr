@@ -99,7 +99,9 @@ async def _diagnostico(ajustes, *, consulta: str, leer_tema: bool, fabrica,
                f"{_charset_legible(cabecera)} | charset meta: {_charset_legible(meta)} | "
                f"usado: {usado}")
         if not confirmado:
-            salida("[2] Login: NO confirmado (no llegó cookie de miembro) | flood: no")
+            nombres = ", ".join(scraper.nombres_de_cookies) or "ninguna"
+            salida(f"[2] Login: NO confirmado (no llegó cookie de miembro) | flood: no | "
+                   f"cookies recibidas: {nombres} (solo nombres, sin valores)")
             salida("Conclusión: revisa FORUM_USERNAME/FORUM_PASSWORD y que la cuenta pueda "
                    "entrar en el foro. No se ha buscado nada.")
             return 5
