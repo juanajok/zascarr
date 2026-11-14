@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Buscar sagas en fuentes — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
+<h1>Buscar sagas en fuentes</h1>
+<p class="subtitle">Busca un arco en DC Database y revisa qué números tienes antes de importarlo.</p>
+{% if errores.get("general") %}{{ ui.aviso("warn", errores.general, foco=true) }}{% endif %}
+<form method="get" action="/ui/arcos/buscar" class="arcos-buscar-form">
+  <label for="buscar-arco-q">Título del arco o de la serie</label>
+  <input id="buscar-arco-q" type="search" name="q" value="{{ q }}" maxlength="200"
+         placeholder="Por ejemplo: Batman: Year One" required>
+  <button class="btn" type="submit">Buscar</button>
+</form>
+{% if q and not resultados and not errores %}
+{{ ui.estado_vacio("No se encontraron sagas", "Prueba con otro título o revisa que la fuente esté encendida en Ajustes.") }}
+{% elif resultados %}
+<ul class="arcos-lista">
+  {% for r in resultados %}
+  <li class="arco-fila">
+    <a href="/ui/arcos/buscar/preview?page_title={{ r.title|urlencode }}">{{ r.title }}</a>
+    {% if r.snippet %}<span class="muted">{{ r.snippet|striptags|truncate(160) }}</span>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+<p class="caption">Solo se muestran títulos y un resumen de DC Database. Al importar no se crean series ni números: únicamente se enlazan los que ya tienes.</p>
+{% endif %}
+{% endblock %}

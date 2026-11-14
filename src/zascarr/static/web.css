@@ -2514,6 +2514,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 #nombres-archivo .ajustes-actions button { min-height: 44px; }
 #nombres-archivo .nombres-ejemplos { margin: 8px 0; padding-left: 1.2em; }
 
+.arcos-buscar-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 14px 0; }
+.arcos-buscar-form label { flex: 1 1 240px; }
+.arcos-buscar-form input { width: 100%; min-height: 44px; }
+.arcos-buscar-form .btn, .arcos-importar-form .btn { min-height: 44px; }
+.arcos-importar-form { display: grid; gap: 10px; margin-top: 14px; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

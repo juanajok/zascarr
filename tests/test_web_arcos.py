@@ -460,3 +460,94 @@ def test_sin_arcos_de_fandom_no_se_pinta_el_aviso():
     finally:
         _cerrar()
     assert r.status_code == 200 and "DC/Marvel Database" not in r.text
+
+
+class _FakeFandom:
+    def __init__(self, *_a, **_k):
+        self.search = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_exc):
+        return None
+
+    async def search_pages(self, _consulta, limit=8):
+        return self.search
+
+
+def test_busqueda_en_fuentes_renderiza_resultados_y_enlace_previa():
+    from zascarr.services.fandom import FandomSearchPage
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.fuente_habilitada", return_value=True), \
+             patch("zascarr.web.arcos.FandomClient", _FakeFandom), \
+             patch.object(_FakeFandom, "search_pages", AsyncMock(
+                 return_value=[FandomSearchPage("Batman: Year One", "Un arco")])):
+            r = c.get("/ui/arcos/buscar?q=Batman")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Batman: Year One" in r.text
+    assert "/ui/arcos/buscar/preview?page_title=" in r.text
+
+
+def test_preview_renderiza_coincidencias_y_confirmacion():
+    from zascarr.services.arcos_fuentes import FilaArcoFandom, PreviaArcoFandom
+    previa = PreviaArcoFandom("Batman: Year One", "Batman: Year One", [
+        FilaArcoFandom("p", "Batman Vol 1", "404", "s1", "Batman", "i1", True),
+        FilaArcoFandom("p2", "Batman Vol 1", "405", faltan=True),
+    ], 1, 1)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.fuente_habilitada", return_value=True), \
+             patch("zascarr.web.arcos.FandomClient", _FakeFandom), \
+             patch("zascarr.web.arcos.previsualizar_arco_fandom",
+                   AsyncMock(return_value=previa)):
+            r = c.get("/ui/arcos/buscar/preview?page_title=Batman%3A+Year+One")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Batman #404" in r.text and "No está en tu biblioteca" in r.text
+    assert 'name="confirmo"' in r.text and "crear esta saga" in r.text
+    assert "dc.fandom.com/wiki/Batman:_Year_One" in r.text
+
+
+def test_importar_redirige_con_guardado_importada():
+    from zascarr.services.arcos_fuentes import ResultadoImportacionArco
+    arco_id = uuid4()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.fuente_habilitada", return_value=True), \
+             patch("zascarr.web.arcos.FandomClient", _FakeFandom), \
+             patch("zascarr.web.arcos.importar_arco_fandom", AsyncMock(
+                 return_value=ResultadoImportacionArco(str(arco_id), 1, 0, 2))):
+            r = c.post("/ui/arcos/buscar/importar", data={
+                "page_title": "Batman: Year One", "confirmo": "1"},
+                follow_redirects=False)
+    finally:
+        _cerrar()
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/ui/arcos/{arco_id}?guardado=importada"
+
+
+def test_fuente_apagada_no_hace_red_ni_500():
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.fuente_habilitada", return_value=False):
+            r = c.get("/ui/arcos/buscar?q=Batman")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "está apagada" in r.text
+
+
+def test_aviso_importada_al_volver_al_arco():
+    detalle = DetalleArco("a1", "Year One", None, False, [], 0)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{uuid4()}?guardado=importada")
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "importada desde Fandom" in r.text
