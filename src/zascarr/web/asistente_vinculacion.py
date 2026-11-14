@@ -95,7 +95,7 @@ MENSAJE_SIN_CLAVE = "ZascArr no tiene clave para firmar lo que ves: reinícialo 
 MENSAJE_SERIE_NO_VALIDA = ("Hace falta una serie de tu biblioteca para preparar la vinculación. Elige o crea la serie "
                            "primero: una candidata de búsqueda no basta.")
 MENSAJE_SERIE_NO_EXISTE = "La serie elegida ya no existe en tu biblioteca. Vuelve a elegirla."
-MENSAJE_GRUPO_NO_EXISTE = "Esa carpeta ya no tiene registros pendientes: puede que se hayan vinculado o descartado."
+MENSAJE_GRUPO_NO_EXISTE = "Esa carpeta ya no tiene pendientes: puede que se hayan vinculado o descartado."
 MENSAJE_BORRADOR_NO_VALE = ("No se ha podido reconstruir lo que habías marcado y escrito en esa página, así que se muestra "
                             "sin ello. Ese borrador no cuenta como una revisión válida.")
 
@@ -628,7 +628,7 @@ def _entero(valor: object) -> int:
 #: Qué pasó con cada archivo omitido y qué se puede hacer con lo que el contrato ofrece (revisar de nuevo). El servicio
 #: devuelve solo el CÓDIGO; el texto es presentación. Un código que no esté aquí no se inventa: sale con su código.
 TEXTO_DE_MOTIVO: dict[str, str] = {
-    "archivo_inexistente": "El registro ya no existe: puede que se haya borrado o vinculado desde otro sitio.",
+    "archivo_inexistente": "El archivo ya no existe: puede que se haya borrado o vinculado desde otro sitio.",
     "descartado": "Lo descartaste de la bandeja de pendientes, así que no se vincula.",
     "ya_vinculado_a_otro": "Ya estaba vinculado a otro número: no se cambia por ti.",
     "en_curso": "Tiene una asignación en curso: espera a que termine y revísalo de nuevo.",

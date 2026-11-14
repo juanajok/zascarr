@@ -157,7 +157,7 @@ class TestCriterio1Apertura:
 
     async def test_un_grupo_que_ya_no_existe_es_404_y_no_consulta(self, entorno):
         r = await abrir("Comics/NoExiste")
-        assert r.status_code == 404 and "ya no tiene registros pendientes" in visible(r.text)
+        assert r.status_code == 404 and "ya no tiene pendientes" in visible(r.text)
         assert entorno.fuentes.llamadas == []
 
     async def test_la_clave_y_el_titulo_se_escapan(self, entorno):
@@ -504,3 +504,18 @@ class TestCriterio7Senales:
         await sembrar_flash(entorno.banco)
         v = visible((await abrir()).text)
         assert "Qué se ha observado" not in v and "Serie sugerida" not in v
+
+
+class TestTerminologiaPendientes:
+    async def test_el_asistente_habla_de_pendientes_no_de_registros(self, entorno):
+        await sembrar_flash(entorno.banco, 3)
+        t = visible((await abrir()).text)
+        assert "pendientes en esta carpeta" in t
+        assert "Registros en esta carpeta" not in t
+        assert "registros pendientes" not in t
+        assert "Son registros pendientes de verificar" not in t
+
+    async def test_grupo_inexistente_dice_pendientes(self, entorno):
+        t = visible((await abrir("Comics/NoExiste")).text)
+        assert "ya no tiene pendientes" in t
+        assert "registros pendientes" not in t

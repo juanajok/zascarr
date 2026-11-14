@@ -24,9 +24,9 @@
 | **U13c** apertura del asistente | Desde la tarjeta se abre `/ui/pendientes/carpetas/asistente?clave=…` con los tres pasos, aviso «no se crea ninguna serie ni se vincula ningún archivo» y el recuento de la carpeta; sin jerga visible (`token`, `series_id`, `payload`, `endpoint`, `UUID`, `hash`, `cursor`). |
 | **No escrituras** | No se pulsó «Vincular» ni «Confirmar»; abrir el asistente no escribe. |
 
-## FAIL / hallazgo menor
+## FAIL / hallazgo menor — corregido en #834
 
-- **Terminología residual:** el asistente dice «**Registros** en esta carpeta 4» en un paso de la cola de Por revisar. El glosario U7 reserva «registro» para la fila técnica y pide «pendientes» en la cola; no se corrigió aquí porque U13 está cerrada y este trabajo es verificación. Candidato a limpieza posterior (junto con «catálogo» de Auditoría).
+- **Terminología residual:** el asistente dice «**Registros** en esta carpeta 4» en un paso de la cola de Por revisar. El glosario U7 reserva «registro» para la fila técnica y pide «pendientes» en la cola; no se corrigió aquí porque U13 está cerrada y este trabajo es verificación. **Corregido en #834** (`fix/ud834-terminologia`): el asistente usa «pendientes» (y «archivo» para el fichero); la excepción de procedencia de `carpetas.html` se conserva.
 
 ## NOT RUN
 

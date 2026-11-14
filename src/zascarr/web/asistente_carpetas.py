@@ -203,7 +203,7 @@ async def manual(
         if not propuesta:
             propuesta = (await DescubrimientoDeGrupo(db, secret="").abrir(clave)).consulta_propuesta
     except GrupoNoEncontradoError:
-        return _fragmento_error(request, "Esa carpeta ya no tiene registros pendientes.")
+        return _fragmento_error(request, "Esa carpeta ya no tiene pendientes.")
     return _sin_cache(templates.TemplateResponse(request, "_asistente_manual.html", {
         "clave": clave, "titulo": propuesta, "anio": "", "error": None, "tradicion_elegida": "",
         "tradiciones": _tradiciones(),

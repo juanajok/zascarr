@@ -325,7 +325,7 @@ async def preparar_vista_previa(
             vista = await servicio.previsualizar_sin_grupo(
                 tradicion=elegida, candidata=candidata, decision=decision, serie_id=serie_id)
     except GrupoNoEncontradoError:
-        return "_alta_error.html", {"texto": "Esa carpeta ya no tiene registros pendientes: la serie se puede crear desde Descubrir.",
+        return "_alta_error.html", {"texto": "Esa carpeta ya no tiene pendientes: la serie se puede crear desde Descubrir.",
                                     "codigo": "grupo_no_encontrado"}
     except AltaError as exc:
         if a_mano and getattr(exc, "codigo", "") in ("datos_invalidos", "demasiadas_parecidas"):

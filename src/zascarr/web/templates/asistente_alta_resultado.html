@@ -21,7 +21,7 @@
 
   {% if serie %}
   {% if pendientes is none %}
-  <p>Esa carpeta ya no tiene registros pendientes de vincular.</p>
+  <p>Esa carpeta ya no tiene pendientes de vincular.</p>
   {% else %}
   <p>{% if pendientes == 1 %}Queda 1 archivo{% else %}Quedan {{ pendientes }} archivos{% endif %} de la carpeta «{{ clave }}» sin vincular. Revisarlos no vincula nada hasta que lo confirmes.</p>
   <p><a class="btn primary" href="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion?clave=' ~ (clave | urlencode) ~ '&series_id=' ~ serie.series_id) }}">Revisar los archivos de esta carpeta</a></p>

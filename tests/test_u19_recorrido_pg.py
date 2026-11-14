@@ -233,7 +233,7 @@ class TestT8VolverAntesDelAlta:
     async def test_t8_sin_la_carpeta_no_hay_vista_previa_y_se_dice(self, ent):
         r = await get(f"{A}/alta", clave="Comics/NoExiste", candidata=candidata(clave="Comics/NoExiste"), tradition="american")
         assert r.status_code in (200, 404)
-        assert "ya no tiene registros pendientes" in visible(r.text)
+        assert "ya no tiene pendientes" in visible(r.text)
 
 
 # ═══ T9 · criterio 6: volver DESPUÉS del alta ═══════════════════════════════════════════════════

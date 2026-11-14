@@ -428,9 +428,9 @@ class TestFallos:
     async def test_t11_la_carpeta_ya_no_tiene_registros(self, ent):
         sid = await serie_de_prueba(ent)
         v = visible((await get(V, clave="Comics/NoExiste", series_id=str(sid))).text)
-        assert "ya no tiene registros pendientes" in v
+        assert "ya no tiene pendientes" in v
         a = visible((await get(f"{A}/alta/resultado", clave="Comics/NoExiste", series_id=str(sid))).text)
-        assert "ya no tiene registros pendientes" in a and "Revisar los archivos de esta carpeta" not in a
+        assert "ya no tiene pendientes" in a and "Revisar los archivos de esta carpeta" not in a
 
     async def test_t11_un_alta_con_el_token_roto_no_crea_nada_ni_afirma_exito(self, ent):
         await archivos(ent, UNO)
