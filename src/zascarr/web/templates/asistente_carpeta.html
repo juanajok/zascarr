@@ -20,7 +20,7 @@
   <h2 id="asistente-buscar" class="titulo-frase">Buscar en las fuentes</h2>
   <form class="asistente-form" hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/buscar') }}"
         hx-target="#asistente-resultados" hx-swap="innerHTML"
-        hx-indicator="#buscando-fuentes" hx-disabled-elt="find button">
+        hx-indicator="#buscando-fuentes" hx-disable="find button">
     <input type="hidden" name="clave" value="{{ g.clave }}">
     {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <label for="asistente-consulta">Título de la serie</label>

@@ -116,7 +116,7 @@ class TestCriterio1Apertura:
         t = (await abrir()).text
         assert t.index('id="asistente-buscar"') < t.index('asistente-local')
         assert 'hx-indicator="#buscando-fuentes"' in t
-        assert 'hx-disabled-elt="find button"' in t
+        assert 'hx-disable="find button"' in t
         assert 'id="buscando-fuentes"' in t and "Buscando en las fuentes…" in t
         assert 'class="primary">Buscar en las fuentes' in t
         buscar_local = t.index("Buscar en mi biblioteca")
