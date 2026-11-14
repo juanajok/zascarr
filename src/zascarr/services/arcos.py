@@ -146,17 +146,27 @@ async def pedir_arco(db: AsyncSession, arco_id: UUID) -> ResultadoPedidoArco:
     if arco is None:
         return ResultadoPedidoArco(False, {"general": "La saga ya no existe."})
     filas = (await db.execute(
-        select(StoryArcIssue.issue_id, StoryArcIssue.reading_order)
+        select(StoryArcIssue.issue_id, StoryArcIssue.reading_order,
+               Issue.series_id, Issue.issue_number)
+        .join(Issue, Issue.id == StoryArcIssue.issue_id)
         .where(StoryArcIssue.story_arc_id == arco_id)
         .order_by(StoryArcIssue.reading_order, StoryArcIssue.issue_id)
     )).all()
     if not filas:
         return ResultadoPedidoArco(False, {"general": "La saga no tiene números."})
     # Cualquier deseo previo cuenta: un `retirado` no debe resucitar en un
-    # pedido masivo; el coleccionista lo quitó a propósito.
-    pedidos = set((await db.execute(
-        select(Wishlist.issue_id).where(Wishlist.issue_id.is_not(None))
-    )).scalars().all())
+    # pedido masivo; el coleccionista lo quitó a propósito. Los deseos de
+    # política se guardan por (serie, número) con issue_id nulo (D8), así que
+    # también hay que mirar esa clave para no duplicarlos.
+    pedidos_issue = set()
+    pedidos_politica = set()
+    for issue_id, series_id, numero in (await db.execute(
+            select(Wishlist.issue_id, Wishlist.series_id, Wishlist.numero)
+            .where(Wishlist.issue_id.is_not(None) | Wishlist.series_id.is_not(None)))).all():
+        if issue_id is not None:
+            pedidos_issue.add(issue_id)
+        if series_id is not None and numero is not None:
+            pedidos_politica.add((series_id, int(numero)))
     en_biblioteca = set((await db.execute(
         select(File.issue_id).where(
             File.issue_id.in_([f.issue_id for f in filas]),
@@ -164,9 +174,13 @@ async def pedir_arco(db: AsyncSession, arco_id: UUID) -> ResultadoPedidoArco:
         ))).scalars().all())
     anadidos = ya = biblioteca = 0
     for fila in filas:
+        numero = None
+        if fila.issue_number is not None and str(fila.issue_number).strip().isdigit():
+            numero = int(str(fila.issue_number).strip())
         if fila.issue_id in en_biblioteca:
             biblioteca += 1
-        elif fila.issue_id in pedidos:
+        elif (fila.issue_id in pedidos_issue
+              or (fila.series_id, numero) in pedidos_politica):
             ya += 1
         else:
             db.add(Wishlist(

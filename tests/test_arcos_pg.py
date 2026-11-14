@@ -136,7 +136,8 @@ async def test_pedir_saga_anade_solo_lo_que_falta_y_respeta_orden():
                 i2 = Issue(id=uuid4(), series_id=b.id, issue_number="2", volume=1)
                 i3 = Issue(id=uuid4(), series_id=b.id, issue_number="3", volume=1)
                 i4 = Issue(id=uuid4(), series_id=b.id, issue_number="4", volume=1)
-                s.add_all([i1, i2, i3, i4])
+                i5 = Issue(id=uuid4(), series_id=b.id, issue_number="5", volume=1)
+                s.add_all([i1, i2, i3, i4, i5])
                 await s.flush()
                 s.add(File(id=uuid4(), file_path="/lib/b1.cbz", file_name="b1.cbz",
                            file_format=FileFormat.CBZ, issue_id=i1.id, is_missing=False))
@@ -144,16 +145,19 @@ async def test_pedir_saga_anade_solo_lo_que_falta_y_respeta_orden():
                                priority=5))
                 s.add(Wishlist(id=uuid4(), issue_id=i4.id, origen=WishlistOrigin.MANUAL,
                                priority=6, status=WishlistStatus.RETIRADO))
+                # D8: un deseo de política se guarda por (serie, número), sin issue_id.
+                s.add(Wishlist(id=uuid4(), series_id=b.id, numero=5,
+                               origen=WishlistOrigin.POLICY, priority=5))
                 arco = StoryArc(id=uuid4(), title="Court of Owls", is_crossover=True)
                 s.add(arco)
                 await s.flush()
-                for pos, issue in enumerate((i1, i2, i3, i4), start=1):
+                for pos, issue in enumerate((i1, i2, i3, i4, i5), start=1):
                     s.add(StoryArcIssue(story_arc_id=arco.id, issue_id=issue.id,
                                         reading_order=pos))
                 await s.commit()
                 r = await pedir_arco(s, arco.id)
-                assert r.ok and r.anadidos == 1 and r.ya_pedidos == 2
-                assert r.en_biblioteca == 1 and r.total == 4
+                assert r.ok and r.anadidos == 1 and r.ya_pedidos == 3
+                assert r.en_biblioteca == 1 and r.total == 5
                 await s.commit()
                 pedidos = (await s.execute(
                     select(Wishlist).where(Wishlist.issue_id == i3.id))).scalars().all()
@@ -164,5 +168,9 @@ async def test_pedir_saga_anade_solo_lo_que_falta_y_respeta_orden():
                 retirado = (await s.execute(
                     select(Wishlist).where(Wishlist.issue_id == i4.id))).scalars().all()
                 assert len(retirado) == 1 and retirado[0].status == WishlistStatus.RETIRADO
+                politica = (await s.execute(
+                    select(Wishlist).where(Wishlist.series_id == b.id,
+                                           Wishlist.numero == 5))).scalars().all()
+                assert len(politica) == 1 and politica[0].issue_id is None
         finally:
             await motor.dispose()
