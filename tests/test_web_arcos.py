@@ -426,3 +426,37 @@ async def test_un_fallo_del_feed_no_pinta_nada_y_no_lanza(monkeypatch):
     monkeypatch.setattr(modulo, "ComicBookHeraldClient", ClienteQueFalla)
     assert await modulo._novedades_de_herald() == []
 
+
+
+# ── SCR2 m-2: aviso CC-BY-SA en el listado cuando hay arcos de Fandom ─────────────────────
+
+def test_el_listado_avisa_de_la_licencia_si_hay_arcos_de_fandom():
+    pagina = PaginaArcos(
+        [ArcoResumen("a1", "Year One", False, 2, 1, origen="fandom_dc")],
+        1, 1, 1, 0, 1, hay_fandom=True)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.listar_arcos", AsyncMock(return_value=pagina)), \
+                patch("zascarr.web.arcos._novedades_de_herald", AsyncMock(return_value=[])):
+            r = c.get("/ui/arcos")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "DC/Marvel Database" in r.text and "BY-SA 3.0" in r.text
+    assert 'href="https://creativecommons.org/licenses/by-sa/3.0/"' in r.text
+    assert 'rel="noopener noreferrer"' in r.text
+    assert 'href="/legal"' in r.text
+    # Sin cambiar el orden de la lista.
+    assert r.text.index("Year One") < r.text.index("DC/Marvel Database")
+
+
+def test_sin_arcos_de_fandom_no_se_pinta_el_aviso():
+    pagina = PaginaArcos([ArcoResumen("a1", "Saga manual", False, 1, 1)], 1, 1, 1, 0, 1)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.listar_arcos", AsyncMock(return_value=pagina)), \
+                patch("zascarr.web.arcos._novedades_de_herald", AsyncMock(return_value=[])):
+            r = c.get("/ui/arcos")
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "DC/Marvel Database" not in r.text

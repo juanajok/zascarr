@@ -31,6 +31,9 @@ class ArcoResumen:
     is_crossover: bool
     numeros: int
     series: int
+    #: `metadata_["origen"]` del arco (`fandom_dc`, `reading_orders`, `continuity_guide`…);
+    #: None en un arco manual. Solo se usa para la atribución del listado (SCR2 m-2).
+    origen: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,8 @@ class PaginaArcos:
     paginas: int
     desde: int
     hasta: int
+    #: ¿Hay en la página algún arco de Fandom? El listado pinta el aviso CC-BY-SA una vez.
+    hay_fandom: bool = False
 
 
 @dataclass(frozen=True)
@@ -74,19 +79,29 @@ async def listar_arcos(db: AsyncSession, pagina: int = 1) -> PaginaArcos:
     filas = (await db.execute(
         select(
             StoryArc.id, StoryArc.title, StoryArc.is_crossover,
+            StoryArc.metadata_["origen"].astext.label("origen"),
+            StoryArc.metadata_["fandom_dc"].astext.label("fandom_dc"),
             func.count(StoryArcIssue.issue_id).label("numeros"),
             func.count(func.distinct(Issue.series_id)).label("series"),
         )
         .outerjoin(StoryArcIssue, StoryArcIssue.story_arc_id == StoryArc.id)
         .outerjoin(Issue, Issue.id == StoryArcIssue.issue_id)
-        .group_by(StoryArc.id, StoryArc.title, StoryArc.is_crossover)
+        .group_by(StoryArc.id, StoryArc.title, StoryArc.is_crossover,
+                  StoryArc.metadata_["origen"].astext,
+                  StoryArc.metadata_["fandom_dc"].astext)
         .order_by(StoryArc.title, StoryArc.id)
         .offset(desde).limit(POR_PAGINA))).all()
+    resumenes = [
+        ArcoResumen(str(f.id), f.title, bool(f.is_crossover),
+                    int(f.numeros or 0), int(f.series or 0),
+                    origen=f.origen or ("fandom_dc" if f.fandom_dc else None))
+        for f in filas
+    ]
     return PaginaArcos(
-        filas=[ArcoResumen(str(f.id), f.title, bool(f.is_crossover),
-                           int(f.numeros or 0), int(f.series or 0)) for f in filas],
+        filas=resumenes,
         total=total, pagina=pagina, paginas=paginas, desde=desde,
-        hasta=min(desde + POR_PAGINA, total))
+        hasta=min(desde + POR_PAGINA, total),
+        hay_fandom=any(fila.origen == "fandom_dc" for fila in resumenes))
 
 
 async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
