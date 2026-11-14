@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     comicvine_base_url: str = "https://comicvine.gamespot.com/api"
     comicvine_rate_limit: float = 1.0
 
+    # ── Red: tope real de transferencia (RES-3, #812) ─────────────
+    # Toda petición de `utils/peticiones.py` (y por tanto `cache_http`) lee el cuerpo en
+    # streaming y corta al superar este tope de bytes YA DECODIFICADOS. 4 MiB por defecto,
+    # acotado a 1–16 MiB; el `.env` puede subirlo/bajarlo. No se expone en Ajustes.
+    max_cuerpo_transfer_bytes: int = Field(
+        default=4_194_304, ge=1_048_576, le=16_777_216)
+
     # ── Fuentes de enriquecimiento (on/off en caliente, B8) ─────────
     # APAGADAS por defecto (decisión del PO, 2026-10-19, #239 · ADR 0013): ninguna fuente de
     # metadatos consulta Internet hasta que el coleccionista la enciende en /ui/ajustes. Las
