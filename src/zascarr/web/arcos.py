@@ -1,6 +1,7 @@
 """BL-C4 (#151): pantallas de sagas y su CRUD manual."""
 from __future__ import annotations
 
+from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
@@ -18,6 +19,7 @@ from zascarr.services.arcos import (
     eliminar_arco,
     listar_arcos,
     mover_numero,
+    pedir_arco,
     quitar_numero,
 )
 from zascarr.services.reading_orders.comicbookreadingorders import (
@@ -134,6 +136,9 @@ async def nueva_arco_guardar(request: Request,
 
 @router.get("/{arco_id}", response_class=HTMLResponse)
 async def arco(arco_id: UUID, request: Request, guardado: str = Query(default=""),
+               anadidos: int = Query(default=0, ge=0),
+               ya_pedidos: int = Query(default=0, ge=0),
+               en_biblioteca: int = Query(default=0, ge=0),
                db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     detalle = await detalle_arco(db, arco_id)
     if detalle is None:
@@ -152,7 +157,24 @@ async def arco(arco_id: UUID, request: Request, guardado: str = Query(default=""
         # El formulario de «Añadir un número» pinta siempre sus errores/valores: en el GET,
         # vacíos; el POST de error los rellena para no perder lo escrito.
         "errores": {}, "valores": {"serie": "", "numero": "", "orden": ""},
+        "pedido": {"anadidos": anadidos, "ya_pedidos": ya_pedidos,
+                   "en_biblioteca": en_biblioteca} if guardado == "pedido" else None,
     })
+
+
+@router.post("/{arco_id}/pedir")
+async def pedir_arco_completo(arco_id: UUID,
+                              db: AsyncSession = Depends(get_db)) -> Response:
+    """BL-D7: pide al wishlist los números de la saga que aún falten."""
+    resultado = await pedir_arco(db, arco_id)
+    if not resultado.ok:
+        raise HTTPException(status_code=404, detail=resultado.errores.get(
+            "general", "No se pudo pedir la saga"))
+    await db.commit()
+    consulta = urlencode({"guardado": "pedido", "anadidos": resultado.anadidos,
+                          "ya_pedidos": resultado.ya_pedidos,
+                          "en_biblioteca": resultado.en_biblioteca})
+    return _redirigir(f"/ui/arcos/{arco_id}?{consulta}")
 
 
 @router.get("/{arco_id}/editar", response_class=HTMLResponse)

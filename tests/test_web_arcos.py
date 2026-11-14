@@ -9,7 +9,13 @@ from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.services.arcos import ArcoResumen, DetalleArco, FilaArco, PaginaArcos
+from zascarr.services.arcos import (
+    ArcoResumen,
+    DetalleArco,
+    FilaArco,
+    PaginaArcos,
+    ResultadoPedidoArco,
+)
 
 
 def _cliente(metadata=None):
@@ -305,3 +311,43 @@ def test_anadir_numero_error_general_del_servicio_usa_aviso_neutro():
         _cerrar()
     assert r.status_code == 200
     assert "La saga ya no existe." in r.text and 'class="aviso' in r.text
+
+
+def test_pedir_saga_muestra_boton_y_redirige_con_recuento():
+    aid = str(uuid4())
+    filas = [
+        FilaArco(1, "i1", "s1", "Batman", "1", None, None, True),
+        FilaArco(2, "i2", "s2", "Nightwing", "2", None, None, False),
+    ]
+    detalle = DetalleArco(aid, "Court of Owls", None, True, filas, 2)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{aid}")
+        assert "Pedir los números que faltan" in r.text
+        assert "al wishlist" not in r.text.lower()
+        with patch("zascarr.web.arcos.pedir_arco", AsyncMock(
+                return_value=ResultadoPedidoArco(True, anadidos=1, ya_pedidos=0,
+                                                 en_biblioteca=1, total=2))):
+            r = c.post(f"/ui/arcos/{aid}/pedir", follow_redirects=False)
+        assert r.status_code == 303
+        assert "guardado=pedido" in r.headers["location"]
+        assert "anadidos=1" in r.headers["location"]
+    finally:
+        _cerrar()
+
+
+def test_pedir_saga_sin_nuevos_muestra_aviso_neutro():
+    aid = str(uuid4())
+    detalle = DetalleArco(aid, "Court of Owls", None, True, [], 0)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{aid}", params={
+                "guardado": "pedido", "anadidos": "0", "ya_pedidos": "2",
+                "en_biblioteca": "1"})
+    finally:
+        _cerrar()
+    assert "No había números nuevos que pedir" in r.text
+    assert "a tus deseados" not in r.text
+    assert "autofocus" in r.text
