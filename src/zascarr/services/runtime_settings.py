@@ -56,6 +56,8 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
     "amule": ("amule_url", "amule_password", "amule_enabled"),
     # BL-D2/D3: perfil legible y cadencia del escaneo de mejoras.
     "calidad": ("quality_profile", "upgrade_scan_interval_minutes", "upgrade_scan_batch"),
+    # BL-B9 (#158): nombres de archivo de destinos nuevos.
+    "nombres": ("naming_enabled", "naming_preset", "naming_padding"),
     # #488/BL-CNV6: carpetas declaradas compartidas (lista de rutas absolutas del contenedor).
     "compartidos": ("carpetas_compartidas",),
     # A6: auth_password_hash nunca llega aquí en claro — web/ajustes.py lo

@@ -249,6 +249,14 @@ class Settings(BaseSettings):
     #: 0 desactiva el escaneo de mejoras. El primer pase espera un intervalo.
     upgrade_scan_interval_minutes: int = Field(default=360, ge=0)
     upgrade_scan_batch: int = Field(default=3, ge=0, le=20)
+    # BL-B9 (#158): nombres de archivo de los destinos NUEVOS. Apagado por
+    # defecto para conservar exactamente el formato histórico; solo cambia
+    # cómo se llama un archivo al importarlo/asignarlo, nunca renombra la
+    # biblioteca existente.
+    naming_enabled: bool = Field(default=False)
+    naming_preset: str = Field(default="clasico")
+    #: 0 = usar el padding del preset; > 0 lo sobrescribe.
+    naming_padding: int = Field(default=0, ge=0, le=12)
 
     # ── Enricher (Comic Vine) ────────────────────────────────────────
     # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el
