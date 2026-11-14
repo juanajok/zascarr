@@ -19,6 +19,9 @@ PARAMETROS_DE_VUELTA = frozenset({
 })
 
 _ANCLA_DE_SERIE = re.compile(r"^serie-[0-9a-fA-F-]{36}$")
+_RUTA_DE_COLECCION = re.compile(
+    r"^/ui/colecciones/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
 def url_de_ficha(series_id: UUID | str, url_biblioteca: str) -> str:
@@ -44,6 +47,9 @@ def volver_segura(valor: str | None, series_id: UUID | str | None = None) -> str
     partes = urlsplit(valor)
     if partes.scheme or partes.netloc:
         return None
+    if _RUTA_DE_COLECCION.fullmatch(partes.path):
+        # Colección → serie: solo la ficha de la colección, sin query ni ancla.
+        return valor if not partes.query and not partes.fragment else None
     if partes.path != "/ui/biblioteca":
         return None
     if partes.fragment:
