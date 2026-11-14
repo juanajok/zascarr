@@ -38,6 +38,11 @@ segundo disco desde la UI, y A+B sin C miente en el escaneo.
 
 ---
 
+> **Aprobación del PO (2026-11-14).** Se aprueban las **7 decisiones recomendadas D1–D7** tal como
+> figuran en §2, y se autoriza empezar por el **corte A** (cimiento y migración) sin cambiar todavía
+> el comportamiento del importer ni Ajustes. La implementación del corte A exige ADR (recomendado
+> ADR 0020) y migración aditiva; los cortes B–D siguen pendientes de planificación.
+
 ## 1. Historia, valor y alcance
 
 ### 1.1 Historia y valor
