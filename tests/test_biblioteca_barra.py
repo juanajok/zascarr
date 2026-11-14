@@ -356,3 +356,20 @@ def test_con_editorial_activa_y_cero_editoriales_conserva_el_campo_y_su_etiqueta
     panel = panel[:panel.index("</details>")]
     assert 'id="f-publisher"' in panel
     assert "Editorial seleccionada" in panel
+
+
+def test_fragmento_con_editorial_activa_conserva_el_campo_y_la_etiqueta():
+    from uuid import uuid4 as _uuid4
+    publisher_id = _uuid4()
+    serie = make_series("Con editorial")
+    session = FakeSession([FakeExecResult(1), FakeExecResult([serie]),
+                           FakeExecResult("Bruguera")])
+    app.dependency_overrides[get_db] = override_get_db(session)
+    try:
+        client = TestClient(app, base_url="http://localhost", headers={"Origin": "http://localhost"})
+        r = client.get(f"/ui/biblioteca/resultados?publisher_id={publisher_id}")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    assert 'id="f-publisher"' in r.text
+    assert "Editorial seleccionada" in r.text or "Bruguera" in r.text
