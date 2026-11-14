@@ -160,6 +160,12 @@
   </p>
 
   <p class="carpeta-resumen">{{ g.n_archivos }} registros{% if g.serie_sugerida %} · Serie sugerida: {{ g.serie_sugerida.titulo }}{% else %} · Sin serie sugerida{% endif %}</p>
+  {% set borrador = borradores_guardados.get(g.clave) %}
+  {% if borrador %}
+  <p class="carpeta-borrador" role="status">{{ ui.chip("info", "Revisión guardada · " ~ borrador.total_marcados ~ " marcados") }}
+    {% if borrador.series_id %}<a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion/reabrir?clave={{ g.clave | urlencode }}&amp;series_id={{ borrador.series_id }}{{ contexto_query }}">Reanudar revisión</a>{% endif %}
+  </p>
+  {% endif %}
 
   <p class="carpeta-accion">
     {% if serie_actual %}

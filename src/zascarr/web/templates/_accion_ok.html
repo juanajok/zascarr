@@ -1,0 +1,6 @@
+{#- Recibo de una acción que YA se aplicó y que sustituye a la tarjeta. No promete deshacer. -#}
+<div class="pending-accion-ok" role="status">
+  <p><strong>{{ titulo }}</strong> {{ texto }}</p>
+  <p><a class="btn ghost sm" href="/ui/series/{{ series_id }}">Ver la serie</a></p>
+</div>
+{{ recontar_menu | safe }}

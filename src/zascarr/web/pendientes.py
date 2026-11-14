@@ -32,6 +32,7 @@ from zascarr.services.asignacion import (
     previsualizar_asignacion,
     servicio_por_defecto,
 )
+from zascarr.services.borradores_revision import BorradoresRevision
 from zascarr.services.especiales import EspecialesService, EspecialSinNumeroError
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ClavePendiente, ReviewService
 from zascarr.services.revision_carpetas import (
@@ -288,7 +289,8 @@ def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
                     serie_aviso: str | None = None,
                     estado_nuevos: str | None = None,
                     filtros: dict | None = None, avisos=(), url_base: str = "",
-                    url_quitar_filtro: str = "", url_quitar_serie: str = "") -> dict:
+                    url_quitar_filtro: str = "", url_quitar_serie: str = "",
+                    borradores_guardados=None) -> dict:
     """Prepara lo que pinta la plantilla SIN recalcular nada: señales, estados y etiquetas
     vienen del servicio (la misma respuesta que el JSON). Aquí solo se traducen los ids de
     `senales[].archivos` a nombres, que es presentación; `grupos[].archivos` contiene siempre
@@ -357,6 +359,7 @@ def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
         "url_base": url_base,
         "url_quitar_filtro": url_quitar_filtro,
         "url_quitar_serie": url_quitar_serie,
+        "borradores_guardados": borradores_guardados or {},
         "contexto_query": contexto.query,
         "contexto_campos": contexto.campos,
     }
@@ -433,6 +436,7 @@ async def carpetas(
         if (serie_actual is not None and not respuesta.grupos
                 and respuesta.filtro is None):
             estado_nuevos = await _estado_nuevos(db)
+        borradores_guardados = await BorradoresRevision(db).listar()
     except Exception as exc:  # noqa: BLE001 — un fallo no puede dejar recuentos a medias
         logger.warning("pendientes.carpetas_fallo", error=type(exc).__name__)
         resp = templates.TemplateResponse(
@@ -449,6 +453,7 @@ async def carpetas(
     resp = templates.TemplateResponse(request, "carpetas.html", _vista_carpetas(
         respuesta, serie_actual=serie_actual, serie_aviso=serie_aviso,
         estado_nuevos=estado_nuevos, filtros=filtros, avisos=filtros["avisos"],
+        borradores_guardados=borradores_guardados,
         url_base=_url_de_carpetas(limite=limite, serie=serie_str, filtros=filtros),
         url_quitar_filtro=_url_de_carpetas(limite=limite, serie=serie_str, filtros=sin_filtro),
         url_quitar_serie=_url_de_carpetas(limite=limite, serie="", filtros=filtros)))
@@ -689,7 +694,10 @@ async def vincular(
     resultado = await vincular_en_sitio(db, file_id, series_id, issue_number)
     if resultado.estado == "vinculado":
         await db.commit()
-        return HTMLResponse(RECONTAR_MENU)
+        return templates.TemplateResponse(
+            request, "_accion_ok.html",
+            {"titulo": "Vinculado.", "texto": "No se ha movido ni renombrado nada.",
+             "series_id": series_id, "recontar_menu": RECONTAR_MENU})
     aviso = {"tipo": "warn", "texto": resultado.texto}
     file = await db.get(File, file_id)
     if not _es_htmx(request):
