@@ -567,6 +567,10 @@ class TestPresupuestoTextoU21:
         antes = re.sub(r'<section[^>]*class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
         # #803: la navegación por anclas es un control de la ficha, no texto de entrada.
         antes = re.sub(r'<nav class="ficha-nav".*?</nav>', '', antes, flags=re.S)
+        # Los números son el contenido principal, no la entrada de texto de #208.
+        antes = re.sub(r'<section id="numeros-serie".*?</section>', '', antes, flags=re.S)
+        # «Retirar» es un control destructivo plegado, no copy de entrada.
+        antes = re.sub(r'<details class="series-retirar".*?</details>', '', antes, flags=re.S)
         # BL-INF6: «Elegir portada» es un CONTROL de acción (abre el selector), como los botones de
         # `.series-acciones`: no es texto de entrada y no compite con el presupuesto de #208.
         antes = re.sub(r'<details class="elegir-portada".*?</details>', '', antes, flags=re.S)
@@ -600,9 +604,9 @@ class TestPresupuestoTextoU21:
         assert len(palabras) <= 24, (len(palabras), " ".join(palabras))
         assert "Añadir números del disco" in self._texto(accion.group(1))
 
-    def test_la_accion_va_antes_que_el_listado(self):
+    def test_los_numeros_van_antes_que_la_politica(self):
         html = self._render()
-        assert html.index('id="wishlist_policy"') < html.index("Te faltan")
+        assert html.index('id="numeros-serie"') < html.index('id="wishlist_policy"')
 
     def test_las_fuentes_van_plegadas_y_no_se_pierden(self):
         html = self._render()
@@ -1253,3 +1257,48 @@ class TestAtribucionFandomVisible:
         assert "DC/Marvel Database" in dentro
         fuera = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[1]
         assert "Creative Commons BY-SA 3.0" in fuera
+
+
+def test_serie_larga_colapsa_los_numeros_y_deja_los_primeros_visibles():
+    series = make_series(total_issues=200)
+    presentes = [(str(i), "single_issue", True) for i in range(1, 101)]
+    session = FakeSession([
+        FakeExecResult([series]),
+        FakeExecResult(presentes),
+        acuse(), retirados(), FakeExecResult([]),
+    ])
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}")
+    assert r.status_code == 200
+    assert r.text.count('class="ficha-mas"') == 2
+    assert "Ver los 70 números que faltan" in r.text
+    assert "Ver los 70 números que tienes" in r.text
+    assert "#1" in r.text and "#100" in r.text
+    assert "#101" in r.text and "#200" in r.text
+
+
+def test_otras_fuentes_no_aparece_si_la_serie_no_tiene_fuente():
+    series = make_series(total_issues=3)
+    session = FakeSession([
+        FakeExecResult([series]),
+        FakeExecResult([]),
+        acuse(), retirados(), FakeExecResult([]),
+    ])
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}")
+    assert "Otras fuentes" not in r.text
+    assert "Buscar en otra fuente" not in r.text
+
+
+def test_retirar_esta_plegado_y_no_compite_con_la_accion_principal():
+    series = make_series(total_issues=3)
+    session = FakeSession([
+        FakeExecResult([series]),
+        FakeExecResult([]),
+        acuse(), retirados(), FakeExecResult([]),
+    ])
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}")
+    assert '<details class="series-retirar">' in r.text
+    assert "<summary>Retirar de mi biblioteca</summary>" in r.text
+    assert f'href="/ui/series/{series.id}/retirar"' in r.text
