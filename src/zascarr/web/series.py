@@ -129,6 +129,7 @@ from zascarr.services.politica import (
     retirar_de_serie,
     texto_de_cota,
 )
+from zascarr.services.portada_coleccion import portada_cacheada
 from zascarr.services.portada_numero import ANCHO_FICHA, ruta_previa
 from zascarr.services.portada_serie import (
     MAX_CANDIDATAS,
@@ -1193,6 +1194,23 @@ async def marcar_leido(series_id: UUID, issue_id: UUID, request: Request,
         destino = (f"/ui/series/{series_id}/numero/{issue_id}" if modo == "bloque"
                    else f"/ui/series/{series_id}#archivos-por-numero")
         respuesta = RedirectResponse(url=destino, status_code=303)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.get("/{series_id}/previa", response_class=HTMLResponse)
+async def previa_serie(series_id: UUID, request: Request,
+                       db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento de previa de portada de una serie para las listas (hover/foco)."""
+    series = await db.get(Series, series_id)
+    if series is None:
+        if request.headers.get("HX-Request") == "true":
+            return HTMLResponse("", headers={"Cache-Control": "no-store"})
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    cache = portada_cacheada(Path(get_settings().covers_cache_path), series.id)
+    src = f"/ui/series/{series.id}/portada" if cache is not None else None
+    respuesta = templates.TemplateResponse(
+        request, "_previa_serie.html", {"serie": series, "portada_src": src})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 

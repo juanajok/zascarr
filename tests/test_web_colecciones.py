@@ -80,10 +80,14 @@ def test_detalle_muestra_series_y_selector():
     assert "Flash" in r.text and "Batman" in r.text
     assert "Elegir portada" in r.text and "Usar la automática" in r.text
     assert "/portada" in r.text
-    assert 'id="previa-serie"' in r.text
-    assert 'hx-get="/ui/colecciones/' in r.text and '/previa/s1"' in r.text
-    assert '/previa/s2"' in r.text
-    assert "Pasa el ratón o toca una serie" in r.text
+    assert 'id="previa-serie"' not in r.text
+    assert 'hx-get="/ui/colecciones/' in r.text and '/previa/s2"' in r.text
+    assert 'hx-target="#previa-s2"' in r.text
+    assert 'hx-target="#previa-m-s1"' in r.text
+    assert 'class="chip-previa chip-previa-lista"' in r.text
+    assert "Ver portada" in r.text
+    assert 'hx-target="next .previa-numero"' in r.text
+    assert 'class="coleccion-check chip-previa"' in r.text
     # Sin imágenes masivas: la portada de cada serie se pide solo al fragmento.
     assert 'src="/ui/series/s1/portada"' not in r.text
     assert 'src="/ui/series/s2/portada"' not in r.text
@@ -388,6 +392,16 @@ def test_endpoint_previa_200_y_404():
             fallback = TestClient(app).get(f"/ui/colecciones/{cid}/previa/{sid}")
             assert fallback.status_code == 200
             assert "src=" not in fallback.text and "<img" not in fallback.text
+        candidata = SimpleNamespace(id=sid, title="Candidata", start_year=1999,
+                                    collection_id=None)
+        async def _db_candidata():
+            yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
+                                  get=AsyncMock(side_effect=[coleccion, candidata]))
+        app.dependency_overrides[get_db] = _db_candidata
+        with patch("zascarr.web.colecciones.portada_cacheada", return_value=Path("/covers/x.jpg")):
+            r_cand = TestClient(app).get(f"/ui/colecciones/{cid}/previa/{sid}")
+            assert r_cand.status_code == 200
+            assert "Candidata" in r_cand.text
         serie_ajena = SimpleNamespace(id=sid, title="Otra", start_year=2000,
                                       collection_id=uuid4())
         async def _db_ajena():
@@ -431,7 +445,8 @@ def test_vista_tarjetas_con_portadas_y_enlaces_que_conservan_estado():
     assert '<div class="coleccion-serie-card-portada"' in r.text
     assert 'id="series-titulo" tabindex="-1" autofocus' in r.text
     assert r.text.count("autofocus") == 1
-    assert r.text.find('id="previa-serie"') < r.text.find('coleccion-series-col')
+    assert 'hx-target="#previa' not in r.text
+    assert "previa-serie" not in r.text
     assert "cambio_vista=1" in r.text
     assert r.text.count("cambio_vista=1") == 2
 
@@ -505,3 +520,16 @@ def test_cambio_vista_con_aviso_no_duplica_autofocus():
     assert r.status_code == 200
     assert "Portada actualizada." in r.text
     assert r.text.count("autofocus") == 1
+
+
+def test_patron_chip_previa_y_override_tactil():
+    css = Path("src/zascarr/static/web.css").read_text()
+    assert ".coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty)" in css
+    assert ".chip-previa-lista:focus-within > .previa-numero:not(:empty)" in css
+    assert ".chip-previa-boton" in css and "min-height: 44px" in css
+    assert "position: fixed" in css
+    assert "z-index: 50" in css
+    assert "bottom: calc(64px + 16px)" in css
+    assert "width: 180px" in css
+    detalle = Path("src/zascarr/web/templates/_previa_serie.html").read_text()
+    assert "previa-card" in detalle and "previa-pie" in detalle

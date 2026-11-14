@@ -109,7 +109,19 @@
   <tbody>
     {% for series in items %}
     <tr id="serie-{{ series.id }}">
-      <td data-label="Título"><a href="{{ url_serie(series.id) }}">{{ series.title }}</a></td>
+      <td data-label="Título">
+        <span class="chip-previa chip-previa-lista">
+          <a href="{{ url_serie(series.id) }}"
+             hx-get="/ui/series/{{ series.id }}/previa"
+             hx-target="#previa-l-{{ series.id }}" hx-swap="innerHTML"
+             hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{{ series.title }}</a>
+          <button type="button" class="btn ghost sm chip-previa-boton"
+                  hx-get="/ui/series/{{ series.id }}/previa"
+                  hx-target="next .previa-numero" hx-swap="innerHTML"
+                  hx-trigger="click">Ver portada<span class="sr"> de {{ series.title }}</span></button>
+          <span class="previa-numero" id="previa-l-{{ series.id }}" aria-hidden="true"></span>
+        </span>
+      </td>
       <td data-label="Año">{% if series.start_year is not none %}{{ series.start_year }}{% else %}No consta{% endif %}</td>
       <td data-label="Tradición">{{ (series.tradition|tradicion) or "No consta" }}</td>
       <td data-label="Números">{% if series.total_issues is not none %}{{ series.total_issues }}{% else %}No consta{% endif %}</td>
