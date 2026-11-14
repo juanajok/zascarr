@@ -280,7 +280,9 @@ subtítulo conserva «Mejores ediciones…». No se alarga la entrada del menú.
   revisarlas antes de aplicar.
 - **NOT RUN:** navegador real, lector de pantalla y Pi. Las pruebas de §3 son propuestas de prueba, no
   resultados de sesiones.
-- Los cambios de texto de #205 **no** están aplicados: este PR no toca sus plantillas.
+- Los cambios de texto de #205 **sí están aplicados**: PR #804 (commit `00f357a4`, rama
+  `feat/u205-glosario`), con pruebas de texto visible en `tests/test_web_u205_glosario.py` y las
+  suites PG de sueltos/carpetas.
 
 ---
 
@@ -293,4 +295,4 @@ subtítulo conserva «Mejores ediciones…». No se alarga la entrada del menú.
 - Se decide que **saga** es la superficie y «arco» el código; **editorial** es `Publisher` y **sello** es `Imprint`.
 - La tabla de #205 queda en §3.1; los cambios de navegación y de otras pantallas, en §3.2; lo que no cambia, en §3.3.
 - Los tres grupos del menú ya existen (`menu.py:28`); las 10 entradas coinciden título = `h1` = menú y la prueba de navegación las cubre todas con una guarda `PAGINAS == ENTRADAS`.
-- Dudas para el PO: «Pendientes sueltos» vs «Archivos sueltos», «Estado de la serie» vs «Estado de la colección», alcance de Inicio en #205, si «Duplicados» se mantiene y la unidad del contador «Tebeos registrados».
+- **Aprobación del PO (2026-11-14):** «Pendientes sueltos», «Estado de la serie», mantener «Duplicados», Inicio/Ajustes/Exportar fuera de #205 y contador de tebeos sin cambio; #205 aplica §3.1 y cita esta aprobación en §7.

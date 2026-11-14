@@ -2,6 +2,7 @@
 """#205 AC5: textos visibles del glosario U7 en Por revisar, Biblioteca y Estado."""
 from __future__ import annotations
 
+import html as htmllib
 import re
 from types import SimpleNamespace
 from uuid import uuid4
@@ -34,7 +35,7 @@ def _cliente():
     async def _get_db():
         yield SesionVacia()
     app.dependency_overrides[get_db] = _get_db
-    return TestClient(app)
+    return TestClient(app, base_url="http://localhost", headers={"Origin": "http://localhost"})
 
 
 def _cerrar():
@@ -42,7 +43,8 @@ def _cerrar():
 
 
 def visible(html: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", re.sub(r"\{#.*?#\}", "", html, flags=re.S))).strip()
+    sin_etiquetas = re.sub(r"<[^>]+>", " ", re.sub(r"\{#.*?#\}", "", html, flags=re.S))
+    return re.sub(r"\s+", " ", htmllib.unescape(sin_etiquetas)).strip()
 
 
 def _get(ruta: str) -> str:
@@ -150,7 +152,7 @@ def test_carpetas_tarjeta_y_procedencia_conserva_registros(monkeypatch):
     grupo = Grupo(
         clave="Comics/Serie", carpeta_contextual="Serie", ascendentes=["Comics"],
         carpeta_limpia=None, estado="sin_serie", etiqueta="Sin serie", n_archivos=3,
-        patron_de_nombres=PatronDeNombres(titulo_dominante=None, proporcion=0.0, titulos_distintos=0),
+        patron_de_nombres=PatronDeNombres(titulo_dominante="Serie", proporcion=0.75, titulos_distintos=2),
         serie_sugerida=None, por_confirmar=False, en_conflicto=False, senales=[],
         archivos=[ArchivoRevision(id="a", nombre="Serie 01.cbz", estado="sin_serie")],
     )
@@ -160,11 +162,17 @@ def test_carpetas_tarjeta_y_procedencia_conserva_registros(monkeypatch):
     _con_carpetas(monkeypatch, respuesta)
     html = _get("/ui/pendientes/carpetas")
     t = visible(html)
-    assert "3 pendientes" in t
-    assert "3 registros" not in t
+    assert "3 pendientes visibles" in t
+    assert "75 % de los pendientes" in t
+    assert "de los registros" not in t
     assert "Ver pendientes (1 de 3)" in t
     assert "Son registros pendientes de verificar, no archivos confirmados." in t
     assert "<dt>Pendientes</dt>" in html
+    explicacion = html[html.index('class="carpeta-explicacion"'):]
+    explicacion = explicacion[:explicacion.index("</details>") + len("</details>")]
+    fuera = html.replace(explicacion, "")
+    assert "registros" not in visible(fuera).lower()
+    assert "registros" in visible(explicacion).lower()
 
 
 def test_biblioteca_estado_de_la_serie_y_valores(monkeypatch):
