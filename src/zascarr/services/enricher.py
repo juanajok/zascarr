@@ -68,6 +68,7 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
+import httpx
 import structlog
 from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -104,6 +105,7 @@ from zascarr.services.fandom import (
 )
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
+from zascarr.utils.peticiones import ErrorDePeticion
 
 logger = structlog.get_logger()
 
@@ -219,6 +221,8 @@ def puede_enlazarse_con_comic_vine(series: Series, comic_vine_activo: bool) -> b
         and series.anilist_id is None
         and series.tebeosfera_slug is None
         and series.gcd_id is None
+        and series.metron_id is None
+        and series.open_library_id is None
         and series.metadata_source != MetadataSource.MANUAL.value
         and series.tradition in _COMIC_VINE_TRADITIONS
     )
@@ -230,6 +234,8 @@ class EnrichmentReport:
     series_no_match: list[str] = field(default_factory=list)
     issues_enriched: list[str] = field(default_factory=list)
     issues_no_match: list[str] = field(default_factory=list)
+    #: SCR7: series a las que el relleno por id añadió algún campo (en memoria, sin modelo).
+    series_rellenadas: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -271,13 +277,17 @@ class EnrichmentService:
                  anilist_client: AniListClient | None = None,
                  tebeosfera_client: TebeosferaClient | None = None,
                  fandom_dc_client: FandomClient | None = None,
-                 fandom_marvel_client: FandomClient | None = None):
+                 fandom_marvel_client: FandomClient | None = None,
+                 gcd_client=None, metron_client=None, open_library_client=None):
         self.db = db
         self._injected_cv = cv_client                      # para tests
         self._injected_anilist = anilist_client            # para tests
         self._injected_tebeosfera = tebeosfera_client      # para tests
         self._injected_fandom_dc = fandom_dc_client        # para tests
         self._injected_fandom_marvel = fandom_marvel_client  # para tests
+        self._injected_gcd = gcd_client                    # para tests (SCR7)
+        self._injected_metron = metron_client
+        self._injected_open_library = open_library_client
 
     async def enrich_pending(self, limit: int = 20) -> EnrichmentReport:
         report = EnrichmentReport()
@@ -321,6 +331,12 @@ class EnrichmentService:
                 cv_client, anilist_client, tebeosfera_client, limit, report,
                 fandom_dc_client=fandom_dc_client, fandom_marvel_client=fandom_marvel_client,
             )
+            gcd_client = await self._cliente_gcd(stack, settings)
+            metron_client = await self._cliente_metron(stack, settings)
+            open_library_client = await self._cliente_open_library(stack, settings)
+            if any(c is not None for c in (gcd_client, metron_client, open_library_client)):
+                await self._enrich_huecos_por_id(
+                    gcd_client, metron_client, open_library_client, limit, report)
             await self._enrich_issues_batch(cv_client, limit, report)
             await self._enrich_issues_fandom(
                 fandom_dc_client, fandom_marvel_client, limit, report)
@@ -329,6 +345,107 @@ class EnrichmentService:
             await self._backfill_tags_anilist(anilist_client, limit, report)
             await self._backfill_personajes_cv(cv_client, limit, report)
         return report
+
+    # ── SCR7: relleno de huecos por id (GCD / Metron / Open Library) ─────
+
+    async def _cliente_gcd(self, stack, settings):
+        if not getattr(settings, "gcd_enabled", False):
+            return None
+        if self._injected_gcd is not None:
+            return self._injected_gcd
+        from zascarr.services.gcd import GCDClient
+
+        return await stack.enter_async_context(GCDClient())
+
+    async def _cliente_metron(self, stack, settings):
+        if not (getattr(settings, "metron_enabled", False)
+                and str(getattr(settings, "metron_token", "") or "").strip()):
+            return None
+        if self._injected_metron is not None:
+            return self._injected_metron
+        from zascarr.services.metron import MetronClient
+
+        return await stack.enter_async_context(MetronClient())
+
+    async def _cliente_open_library(self, stack, settings):
+        if not getattr(settings, "open_library_enabled", False):
+            return None
+        if self._injected_open_library is not None:
+            return self._injected_open_library
+        from zascarr.services.open_library import OpenLibraryClient
+
+        return await stack.enter_async_context(OpenLibraryClient())
+
+    async def _enrich_huecos_por_id(self, gcd_client, metron_client, open_library_client,
+                                    limit: int, report: EnrichmentReport) -> None:
+        """Rellena huecos por id (SCR7): solo vacíos, orden Metron→OL→GCD, tope 5/fuente."""
+        from collections import Counter
+
+        from zascarr.services.relleno_huecos import (
+            FUENTES_CON_RELLENO,
+            MAX_PETICIONES_FUENTE_POR_CICLO,
+            TRADICIONES_DE_FUENTE,
+            aplicar_relleno,
+            campos_faltantes,
+            ttl_vigente,
+        )
+
+        clientes = {"metron": metron_client, "open_library": open_library_client,
+                    "gcd": gcd_client}
+        if not any(clientes.values()):
+            return
+        filas = (await self.db.execute(
+            select(Series)
+            .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
+            .where(or_(Series.gcd_id.is_not(None), Series.metron_id.is_not(None),
+                       Series.open_library_id.is_not(None)))
+            .where(or_(Series.description.is_(None), Series.description == "",
+                       Series.start_year.is_(None), Series.end_year.is_(None)))
+            .order_by(Series.id)
+            .limit(limit)
+        )).scalars().all()
+        ahora = datetime.now(UTC)
+        peticiones: Counter[str] = Counter()
+        cortadas: set[str] = set()
+        for serie in filas:
+            tradicion = (serie.tradition.value if hasattr(serie.tradition, "value")
+                         else str(serie.tradition or ""))
+            for fuente in FUENTES_CON_RELLENO:
+                cliente = clientes[fuente]
+                if cliente is None or fuente in cortadas:
+                    continue
+                if peticiones[fuente] >= MAX_PETICIONES_FUENTE_POR_CICLO:
+                    continue
+                ident = (serie.gcd_id if fuente == "gcd"
+                         else serie.metron_id if fuente == "metron"
+                         else serie.open_library_id)
+                if ident is None:
+                    continue
+                permitidas = TRADICIONES_DE_FUENTE.get(fuente) or frozenset()
+                if permitidas and tradicion not in permitidas:
+                    continue
+                if ttl_vigente(serie, fuente, ahora):
+                    continue
+                if not campos_faltantes(serie, fuente):
+                    continue
+                peticiones[fuente] += 1
+                try:
+                    if fuente in ("metron", "gcd"):
+                        ficha = await cliente.get_series_por_id(int(ident))
+                    else:
+                        ficha = await cliente.get_work(str(ident))
+                except (ErrorDePeticion, httpx.HTTPError, RuntimeError):
+                    # Fallo transitorio/rate-limit: se corta esta fuente en el ciclo y NO se
+                    # marca el TTL de 30 días (se reintenta en el siguiente ciclo).
+                    logger.warning("enricher.huecos_fuente_cortada", fuente=fuente)
+                    cortadas.add(fuente)
+                    continue
+                campos = aplicar_relleno(serie, fuente, ficha, ahora)
+                if campos:
+                    report.series_rellenadas.append(str(serie.id))
+                    logger.info("enricher.huecos_rellenados", serie=str(serie.id),
+                                fuente=fuente, campos=len(campos))
+                await self.db.flush()
 
     # ── Backfill de identidad estructurada (#565 task-171) ───────────────
 
@@ -453,6 +570,10 @@ class EnrichmentService:
             # TÍTULO no prueba que sea la misma edición. Asociarle otra fuente es una acción
             # explícita y confirmada, no un emparejamiento automático.
             .where(Series.gcd_id.is_(None))
+            # SCR7/AC-11: Metron y Open Library también identifican; el primario no debe
+            # reclamar una identidad CV/Fandom por título para una serie ya identificada.
+            .where(Series.metron_id.is_(None))
+            .where(Series.open_library_id.is_(None))
             .where(Series.fandom_dc_slug.is_(None))
             .where(Series.fandom_marvel_slug.is_(None))
             .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))

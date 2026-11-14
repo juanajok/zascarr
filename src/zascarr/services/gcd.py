@@ -193,13 +193,15 @@ def _url_de_gcd(url: str) -> bool:
 class GCDClient:
     def __init__(self, *, politica: PoliticaFuente | None = None,
                  cortesia: CortesiaProceso | None = None,
-                 reloj=time.monotonic, dormir=asyncio.sleep, espera_max_s: float = 30.0):
+                 reloj=time.monotonic, dormir=asyncio.sleep, espera_max_s: float = 30.0,
+                 transporte: httpx.AsyncBaseTransport | None = None):
         s = get_settings()
         self._politica = politica or politica_de("gcd", s)
         self._cortesia = cortesia
         self._reloj = reloj
         self._dormir = dormir
         self._espera_max_s = espera_max_s
+        self._transporte = transporte
         self._client: httpx.AsyncClient | None = None
         #: Peticiones HTTP reales de la última búsqueda (0 si fue caché).
         self.ultimas_peticiones = 0
@@ -207,6 +209,7 @@ class GCDClient:
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
             base_url=_BASE_URL, timeout=30.0, follow_redirects=False,
+            transport=self._transporte,
             headers={
                 "User-Agent": "ZascArr/0.1 (+https://github.com/juanajok/zascarr)",
                 # Bug real (reportado, verificado en vivo): sin este header,
@@ -258,6 +261,35 @@ class GCDClient:
                                 if isinstance(data.get("issue_descriptors"), list) else None),
             raw=data, peticiones=1,
         )
+
+    async def get_series_por_id(self, gcd_id: int) -> GCDSerie | None:
+        """Ficha por ID para el relleno de huecos (SCR7): 404 ⇒ None; transitorio ⇒ excepción."""
+        if self._client is None:
+            raise RuntimeError("Cliente de GCD sin abrir: úsalo con `async with`.")
+        if not isinstance(gcd_id, int) or gcd_id <= 0:
+            return None
+        try:
+            r = await pedir_con_cortesia(
+                self._client, "GET", f"{_BASE_URL}/series/{gcd_id}/",
+                politica=self._politica, espera_max_s=self._espera_max_s,
+                cortesia=self._cortesia, reloj=self._reloj, dormir=self._dormir,
+            )
+        except RespuestaNoTransitoria as exc:
+            if exc.codigo == 404:
+                return None
+            raise
+        try:
+            data = r.json()
+        except ValueError as exc:
+            raise ErrorDePeticion("respuesta JSON inválida de GCD") from exc
+        if not isinstance(data, dict) or not data:
+            return None
+        return GCDSerie(
+            gcd_id=gcd_id, name=str(data.get("name") or ""),
+            year_began=data.get("year_began"), year_ended=data.get("year_ended"),
+            publisher=(data.get("publisher") if isinstance(data.get("publisher"), str)
+                       else None),
+            raw=data, peticiones=1)
 
     async def get_publisher(self, publisher_url: str) -> str | None:
         """Nombre de la editorial de GCD, o `None`; 1 petición y solo al origen de la API."""
