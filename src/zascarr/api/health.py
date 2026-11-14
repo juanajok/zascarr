@@ -466,6 +466,10 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "anilist":    "enabled" if settings.anilist_enabled else "disabled",
             "tebeosfera": "enabled" if settings.tebeosfera_enabled else "disabled",
             "gcd":        "enabled" if settings.gcd_enabled else "disabled",
+            # SCR7: ahora también rellenan huecos de series ya catalogadas.
+            "metron": "enabled" if getattr(settings, "metron_enabled", False) else "disabled",
+            "open_library": "enabled"
+            if getattr(settings, "open_library_enabled", False) else "disabled",
             # SCR2 (AC-17): las dos wikis de Fandom son fuentes de enriquecimiento y se
             # consultan en el ciclo, así que su estado debe verse aquí, apagadas por defecto.
             "fandom_dc": "enabled"
