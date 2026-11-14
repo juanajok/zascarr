@@ -219,7 +219,7 @@ async def previa_serie(request: Request, coleccion_id: UUID, serie_id: UUID,
     coleccion = await db.get(Collection, coleccion_id)
     serie = await db.get(Series, serie_id) if coleccion is not None else None
     if (coleccion is None or serie is None
-            or serie.collection_id != coleccion_id):
+            or serie.collection_id not in (None, coleccion_id)):
         return HTMLResponse("", status_code=404, headers={"Cache-Control": "no-store"})
     cache = portada_cacheada(Path(get_settings().covers_cache_path), serie.id)
     portada_src = f"/ui/series/{serie.id}/portada" if cache is not None else None

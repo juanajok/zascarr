@@ -88,6 +88,17 @@ class TestIndex:
         assert r.status_code == 200
         assert "Batman" in r.text
 
+    def test_lista_lleva_chip_previa(self):
+        series = make_series("Batman")
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca?vista=lista")
+        assert r.status_code == 200
+        assert f'hx-get="/ui/series/{series.id}/previa"' in r.text
+        assert f'hx-target="#previa-l-{series.id}"' in r.text
+        assert "Ver portada" in r.text
+        assert 'hx-target="next .previa-numero"' in r.text
+
     def test_la_portada_de_la_rejilla_lleva_v2(self):
         """R-01 de BL-PORT1 (#300): sin `?v=2` el navegador puede pintar hasta 24 h la
         portada vieja tras desplegar la caché `v2`. La ruta ignora el query."""
@@ -719,3 +730,25 @@ class TestEtiquetasBiblioteca:
         assert 'role="progressbar"' in r.text
         assert "38% leído · 3 de 8" in r.text
         assert 'aria-valuenow="38"' in r.text
+
+
+def test_endpoint_previa_generica_200_404_y_fallback(monkeypatch):
+    from pathlib import Path
+    from unittest.mock import patch
+
+    series = make_series("Batman")
+    session = FakeSession()
+
+    async def get(_modelo, clave):
+        return series if clave == series.id else None
+
+    session.get = get
+    monkeypatch.setattr("zascarr.web.series.portada_cacheada", lambda *_a: None)
+    with use_fake_session(session) as client:
+        with patch("zascarr.web.series.portada_cacheada", return_value=Path("/covers/x.jpg")):
+            r = client.get(f"/ui/series/{series.id}/previa")
+            assert r.status_code == 200
+            assert f"/ui/series/{series.id}/portada" in r.text
+            assert r.headers["cache-control"] == "no-store"
+        r404 = client.get(f"/ui/series/{uuid4()}/previa")
+        assert r404.status_code == 404

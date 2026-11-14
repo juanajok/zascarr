@@ -1924,6 +1924,18 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
    encogía al ancho del chip (~40 px). Va DEBAJO del chip para no tapar el rótulo de la sección;
    `pointer-events:none` para no robar el hover ni el clic. */
 .chip-previa { position: relative; display: inline-flex; }
+.chip-previa-boton { display: none; }
+.chip-previa-lista > .previa-numero {
+  position: fixed;
+  z-index: 50;
+  top: 50%;
+  right: 24px;
+  left: auto;
+  transform: translateY(-50%);
+  width: 200px;
+  max-width: calc(100vw - 48px);
+  pointer-events: none;
+}
 .previa-numero {
   position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
   width: 220px; z-index: 30; pointer-events: none;
@@ -2443,39 +2455,32 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-serie-card { display: flex; flex-direction: column; align-items: stretch; }
 .coleccion-serie-card-portada { display: block; }
 .coleccion-serie-card .btn { margin: 0 var(--space-2) 10px; min-height: 44px; }
-.coleccion-series-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px;
-  grid-template-areas: "principal previa";
-  gap: 16px;
-  align-items: start;
+.coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty) {
+  display: block;
 }
-.coleccion-series-col { grid-area: principal; min-width: 0; }
-.coleccion-previa-panel {
-  grid-area: previa;
-  position: sticky;
-  top: 16px;
-  width: 132px;
-  padding: 8px;
-  background: var(--paper-2);
-  border: var(--border-panel) solid var(--ink);
-  border-radius: var(--radius-panel);
+@media (hover: none), (pointer: coarse) {
+  .chip-previa-boton { display: inline-flex; align-items: center; min-height: 44px; }
 }
-.coleccion-previa-panel .portada { width: 100%; }
-.coleccion-previa-titulo { margin: 8px 0 2px; font-weight: 700; overflow-wrap: anywhere; }
-.coleccion-previa-contenido .caption { margin: 0; }
-@media (max-width: 760px) {
-  .coleccion-series-layout { grid-template-columns: 1fr; grid-template-areas: "previa" "principal"; }
-  .coleccion-previa-panel {
-    position: sticky;
-    top: 0;
-    width: auto;
-    display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
-    gap: 10px;
-    align-items: start;
+@media (max-width: 860px), (pointer: coarse) {
+  .chip-previa-lista > .previa-numero {
+    top: auto;
+    bottom: calc(64px + 16px);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(220px, calc(100vw - 24px));
   }
-  .coleccion-previa-panel .portada { width: 72px; }
+  .chip-previa-lista:focus-within > .previa-numero:not(:empty) {
+    display: block;
+  }
+  .coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty) {
+    display: block;
+    width: 180px;
+    max-width: calc(100vw - 24px);
+    left: 0;
+    right: auto;
+    transform: none;
+  }
 }
 
 
