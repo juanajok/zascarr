@@ -5,7 +5,11 @@
 <p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
 {% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
 {% if pedido %}
-{{ ui.aviso("ok", "Añadidos " ~ pedido.anadidos ~ " al wishlist. " ~ pedido.ya_pedidos ~ " ya estaban pedidos y " ~ pedido.en_biblioteca ~ " ya están en tu biblioteca.") }}
+{% if pedido.anadidos %}
+{{ ui.aviso("ok", "Añadidos " ~ pedido.anadidos ~ " " ~ ("número" if pedido.anadidos == 1 else "números") ~ " a tus deseados. " ~ pedido.ya_pedidos ~ " ya estaban pedidos y " ~ pedido.en_biblioteca ~ " ya están en tu biblioteca.", foco=true) }}
+{% else %}
+{{ ui.aviso("info", "No había números nuevos que pedir: " ~ pedido.ya_pedidos ~ " ya estaban pedidos y " ~ pedido.en_biblioteca ~ " ya están en tu biblioteca.", foco=true) }}
+{% endif %}
 {% endif %}
 <h1 class="titulo-frase">{{ arco.title }}</h1>
 <p class="subtitle">Orden de lectura{% if arco.is_crossover %} · cruza varias series{% endif %}.</p>
@@ -18,7 +22,7 @@
 <div class="arco-acciones">
   {% if faltan %}
   <form method="post" action="/ui/arcos/{{ arco.id }}/pedir">
-    <button class="btn primary" type="submit">Pedir los números que faltan ({{ faltan }})</button>
+    <button class="btn primary" type="submit">Pedir los números que faltan</button>
   </form>
   {% endif %}
   <a class="btn ghost sm" href="/ui/arcos/{{ arco.id }}/editar">Editar la saga</a>

@@ -19,7 +19,6 @@ from zascarr.models import (
     StoryArcIssue,
     Wishlist,
     WishlistOrigin,
-    WishlistStatus,
 )
 
 POR_PAGINA = 50
@@ -153,11 +152,11 @@ async def pedir_arco(db: AsyncSession, arco_id: UUID) -> ResultadoPedidoArco:
     )).all()
     if not filas:
         return ResultadoPedidoArco(False, {"general": "La saga no tiene números."})
+    # Cualquier deseo previo cuenta: un `retirado` no debe resucitar en un
+    # pedido masivo; el coleccionista lo quitó a propósito.
     pedidos = set((await db.execute(
-        select(Wishlist.issue_id).where(
-            Wishlist.issue_id.is_not(None),
-            Wishlist.status != WishlistStatus.RETIRADO,
-        ))).scalars().all())
+        select(Wishlist.issue_id).where(Wishlist.issue_id.is_not(None))
+    )).scalars().all())
     en_biblioteca = set((await db.execute(
         select(File.issue_id).where(
             File.issue_id.in_([f.issue_id for f in filas]),
