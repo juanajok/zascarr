@@ -135,3 +135,19 @@ Consecuencias:
 - **ZascArr no escribe nunca sobre la biblioteca canónica durante la exportación.** El parche de ComicInfo se aplica a una copia privada; con `hardlink` la exportación y el original comparten inodo, así que parchear "la exportación" sería parchear el original.
 
   **Matiz que acota esa garantía — el hardlink NO aísla el origen de terceros.** Que ZascArr no escriba no significa que el árbol exportado esté protegido: con `hardlink` el archivo exportado y el canónico son el **mismo inodo**, así que **cualquier herramienta que edite el destino en sitio** (Kavita, ComicTagger, un renombrador de metadatos) modifica también la biblioteca canónica. El manifiesto detecta la deriva *después* (§5), pero **no la previene**. Quien necesite aislamiento frente a lectores o etiquetadores que escriben debe elegir **`copy` para toda esa exportación**, no solo para los CBZ parcheados.
+
+## 10. Posible mejora futura: metadatos de catálogo junto a la exportación
+
+No forma parte de v1 y **no se escribe en la biblioteca canónica**. Si otra
+herramienta necesita leer el estado de una serie sin hablar con la API de
+ZascArr, el sitio correcto es el árbol de exportación (`export_path`), no la
+carpeta de la serie: un `series.json`/`metadata.json` junto a los archivos
+exportados, generado en el mismo run y cubierto por el manifiesto.
+
+Descarta el planteamiento de la antigua BL-C7 (#161) de regenerar un
+`series.json` dentro de cada carpeta de serie: no hay un estándar que lo
+consuma (Mylar3 usa el suyo; Kapowarr lo trata como metadato genérico;
+Kavita y ComicTagger no lo leen), duplicaría la verdad de `ComicInfo.xml` y
+obligaría a escribir en la biblioteca canónica tras cada cambio. Si se
+retoma, debe nacer como una extensión pequeña de B20 y con un consumidor
+externo concreto identificado.
