@@ -149,6 +149,8 @@ async def arco(arco_id: UUID, request: Request, guardado: str = Query(default=""
             "quitado": "Número quitado de la saga; sigue en tu biblioteca.",
             "orden": "Orden actualizado.",
         }.get(guardado, ""),
+        # El formulario de «Añadir un número» pinta siempre sus errores/valores: en el GET,
+        # vacíos; el POST de error los rellena para no perder lo escrito.
         "errores": {}, "valores": {"serie": "", "numero": "", "orden": ""},
     })
 
@@ -225,6 +227,7 @@ async def anadir_numero(arco_id: UUID, request: Request,
             "arco": detalle,
             "atribucion_fandom": atribucion_de_arco(metadata),
             "fuente_guia": fuente_de_guia(metadata),
+            "aviso": "",
             "errores": resultado.errores,
             "valores": {"serie": serie, "numero": numero, "orden": orden},
         })
