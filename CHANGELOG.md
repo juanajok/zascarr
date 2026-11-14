@@ -59,6 +59,8 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Asistente de carpeta: «pendientes» en avisos y «archivo» para el fichero (#834).** Los avisos de carpeta sin pendientes dejan de decir «registros»; el motivo de fichero inexistente pasa a «El archivo ya no existe…». El recuento de la carpeta ya decía «pendientes» y no se toca. Sin cambios de lógica, URLs ni datos.
+
 - **V14 cerrada: migración de la UI sin restos (2026-11-14, #750).** Capturas nuevas en
   `docs/design/ui-actual/` (claro/oscuro, escritorio/móvil), enlace desde el README, cierre
   documental en BACKLOG y medición de peso: `web.css` pasa de 130.813 B a **128.037 B**, con
