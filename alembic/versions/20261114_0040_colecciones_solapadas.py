@@ -43,8 +43,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.add_column("series", sa.Column("collection_id", UUID(as_uuid=True), nullable=True))
     op.create_foreign_key(
-        "series_collection_id_fkey", "series", "collections",
+        "fk_series_collection_id", "series", "collections",
         ["collection_id"], ["id"], ondelete="SET NULL")
+    # 0031 espera este índice al bajar más; al retirar la columna en el
+    # upgrade, PostgreSQL lo borró de forma implícita.
+    op.create_index("ix_series_collection_id", "series", ["collection_id"])
     op.execute(
         "UPDATE series s SET collection_id = ("
         "SELECT cs.collection_id FROM collection_series cs "
