@@ -56,6 +56,7 @@ from zascarr.models import (
     WishlistOrigin,
     WishlistPolicy,
     WishlistStatus,
+    collection_series,
 )
 from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import sign_token, verify_token
@@ -768,23 +769,28 @@ class Orchestrator:
             Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]),
             Wishlist.series_id.is_not(None),
         )
-        # #155: la colección puede añadir series (incluir) o vetarlas
-        # (excluir). Las excluidas solo entran si tienen items de política que
-        # retirar; las incluidas entran aunque su wishlist_policy sea «ninguno».
+        # #155 con M:N: incluir suma series; excluir gana sobre incluir.
+        incluidas = select(collection_series.c.series_id).join(
+            Collection, Collection.id == collection_series.c.collection_id
+        ).where(Collection.auto_search == CollectionAutoSearch.INCLUIR)
+        excluidas = select(collection_series.c.series_id).join(
+            Collection, Collection.id == collection_series.c.collection_id
+        ).where(Collection.auto_search == CollectionAutoSearch.EXCLUIR)
         consulta = (
             select(Series)
-            .outerjoin(Collection, Series.collection_id == Collection.id)
-            .where(or_(
-                Series.id.in_(pendientes),
-                and_(
-                    or_(
-                        Collection.id.is_(None),
-                        Collection.auto_search == CollectionAutoSearch.HEREDAR,
+            .where(
+                or_(
+                    Series.id.in_(pendientes),
+                    and_(
+                        Series.id.not_in(excluidas),
+                        or_(
+                            Series.wishlist_policy.in_(
+                                [WishlistPolicy.MISSING, WishlistPolicy.ALL]),
+                            Series.id.in_(incluidas),
+                        ),
                     ),
-                    Series.wishlist_policy.in_([WishlistPolicy.MISSING, WishlistPolicy.ALL]),
                 ),
-                Collection.auto_search == CollectionAutoSearch.INCLUIR,
-            ))
+            )
             .order_by(Series.sort_title)
         )
         return list((await self.db.execute(consulta)).scalars().all())

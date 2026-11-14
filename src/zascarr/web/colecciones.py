@@ -18,6 +18,7 @@ from zascarr.services.colecciones import (
     crear_coleccion,
     detalle_coleccion,
     editar_coleccion,
+    es_miembro,
     listar_colecciones,
     pagina_series_sin_coleccion,
     quitar_serie,
@@ -142,7 +143,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
     foco_vista = cambio_vista == "1"
     seleccion = _seleccion_valida(serie_ids)
     pagina_datos = await pagina_series_sin_coleccion(
-        db, q=q, tradicion=tradicion, pagina=pagina)
+        db, q=q, tradicion=tradicion, pagina=pagina, coleccion_id=coleccion_id)
     visibles = {s.id for s in pagina_datos.series}
     seleccion_oculta = [sid for sid in seleccion if sid not in visibles]
     return _respuesta(request, "coleccion_detalle.html", {
@@ -184,7 +185,7 @@ async def editar(request: Request, coleccion_id: UUID, name: str = Form(""),
         c = await detalle_coleccion(db, coleccion_id)
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,
-            "series": await series_sin_coleccion(db),
+            "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
             "valores": {"name": name, "description": description, "auto_search": auto_search},
             "errores": r.errores, "aviso": "",
         })
@@ -219,7 +220,7 @@ async def previa_serie(request: Request, coleccion_id: UUID, serie_id: UUID,
     coleccion = await db.get(Collection, coleccion_id)
     serie = await db.get(Series, serie_id) if coleccion is not None else None
     if (coleccion is None or serie is None
-            or serie.collection_id not in (None, coleccion_id)):
+            or not await es_miembro(db, coleccion_id, serie.id)):
         return HTMLResponse("", status_code=404, headers={"Cache-Control": "no-store"})
     cache = portada_cacheada(Path(get_settings().covers_cache_path), serie.id)
     portada_src = f"/ui/series/{serie.id}/portada" if cache is not None else None
@@ -238,7 +239,8 @@ async def cambiar_portada(request: Request, coleccion_id: UUID,
             elegida = UUID(series_id)
         except ValueError:
             c = await detalle_coleccion(db, coleccion_id)
-            pagina_datos = await pagina_series_sin_coleccion(db)
+            pagina_datos = await pagina_series_sin_coleccion(
+                db, coleccion_id=coleccion_id)
             return _respuesta(request, "coleccion_detalle.html", {
                 "coleccion": c, "politicas": POLITICAS,
                 "series": pagina_datos.series, "pagina": pagina_datos,
@@ -250,7 +252,7 @@ async def cambiar_portada(request: Request, coleccion_id: UUID,
         c = await detalle_coleccion(db, coleccion_id)
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,
-            "series": await series_sin_coleccion(db),
+            "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
             "candidatas_portada": await candidatas_portada(db, coleccion_id),
             "exportaciones": await historial_exportaciones(db, coleccion_id),
             "errores": r.errores, "aviso": ""})
@@ -268,7 +270,7 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
     if confirmo != "1":
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,
-            "series": await series_sin_coleccion(db),
+            "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
             "exportaciones": await historial_exportaciones(db, coleccion_id),
             "errores": {"general": "Marca la confirmación antes de exportar."}, "aviso": "",
         })
@@ -279,7 +281,7 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
         await db.commit()
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,
-            "series": await series_sin_coleccion(db),
+            "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
             "exportaciones": await historial_exportaciones(db, coleccion_id),
             "errores": {}, "exportacion": resumen, "aviso": "",
         })
@@ -287,7 +289,7 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
         error = str(exc)
     return _respuesta(request, "coleccion_detalle.html", {
         "coleccion": c, "politicas": POLITICAS,
-        "series": await series_sin_coleccion(db),
+        "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": {"general": error}, "aviso": "",
     })
@@ -330,7 +332,7 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
     vista = vista if vista in {"lista", "tarjetas"} else "lista"
     seleccion = _seleccion_valida(crudos)
     pagina_datos = await pagina_series_sin_coleccion(
-        db, q=q, tradicion=tradicion, pagina=pagina)
+        db, q=q, tradicion=tradicion, pagina=pagina, coleccion_id=coleccion_id)
     visibles = {s.id for s in pagina_datos.series}
     return _respuesta(request, "coleccion_detalle.html", {
         "coleccion": c, "politicas": POLITICAS,

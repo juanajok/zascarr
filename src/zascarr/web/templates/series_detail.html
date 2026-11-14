@@ -146,6 +146,8 @@
 <p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
 <section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
          hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
+<section id="colecciones-serie" class="series-colecciones" aria-label="Colecciones"
+         hx-get="/ui/series/{{ series.id }}/colecciones" hx-trigger="load" hx-swap="outerHTML"></section>
 {% include "_politica_serie.html" %}
 {% include "_nota_serie.html" %}
 

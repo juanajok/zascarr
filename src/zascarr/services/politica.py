@@ -31,6 +31,7 @@ from zascarr.models import (
     WishlistOrigin,
     WishlistPolicy,
     WishlistStatus,
+    collection_series,
 )
 from zascarr.services.series import huecos_de_serie, numero_de_grapa
 
@@ -104,15 +105,15 @@ async def politica_efectiva(db: AsyncSession, series: Series) -> WishlistPolicy:
     la guardada, pero la generación/retirada usan esta.
     """
     guardada = series.wishlist_policy or WishlistPolicy.NONE
-    if series.collection_id is None:
-        return guardada
-    coleccion = await db.get(Collection, series.collection_id)
-    if coleccion is None:
-        return guardada
-    if coleccion.auto_search == CollectionAutoSearch.INCLUIR:
-        return WishlistPolicy.MISSING
-    if coleccion.auto_search == CollectionAutoSearch.EXCLUIR:
+    politicas = (await db.execute(
+        select(Collection.auto_search)
+        .join(collection_series, collection_series.c.collection_id == Collection.id)
+        .where(collection_series.c.series_id == series.id)
+    )).scalars().all()
+    if CollectionAutoSearch.EXCLUIR in politicas:
         return WishlistPolicy.NONE
+    if CollectionAutoSearch.INCLUIR in politicas:
+        return WishlistPolicy.MISSING
     return guardada
 
 
