@@ -5,7 +5,7 @@
 <h1>Sagas en orden</h1>
 <p class="subtitle">Listas de lectura que cruzan series, en el orden que marca cada arco.</p>
 {% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
-<p><a class="btn ghost" href="/ui/arcos/nueva">Nueva saga</a></p>
+<p><a class="btn ghost" href="/ui/arcos/nueva">Nueva saga</a> <a class="btn ghost" href="/ui/arcos/buscar">Buscar en fuentes</a></p>
 {% if pagina.total == 0 %}
 {{ ui.estado_vacio("Todavía no hay sagas registradas", "Cuando ZascArr tenga arcos con números enlazados, aparecerán aquí en su orden de lectura.") }}
 {% else %}

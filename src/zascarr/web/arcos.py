@@ -23,7 +23,13 @@ from zascarr.services.arcos import (
     pedir_arco,
     quitar_numero,
 )
+from zascarr.services.arcos_fuentes import (
+    buscar_arcos_fandom,
+    importar_arco_fandom,
+    previsualizar_arco_fandom,
+)
 from zascarr.services.comicbook_herald import ComicBookHeraldClient
+from zascarr.services.fandom import FandomClient, FandomMaxLagError, FandomPayloadError
 from zascarr.services.reading_orders.comicbookreadingorders import (
     HOSTS_PERMITIDOS as RO_HOSTS,
 )
@@ -45,6 +51,7 @@ from zascarr.utils.cortesia import (
     FuenteApagada,
     fuente_habilitada,
 )
+from zascarr.utils.peticiones import ErrorDePeticion
 from zascarr.web.atribucion import atribucion_de_arco
 from zascarr.web.routes import crear_templates
 
@@ -161,6 +168,109 @@ async def nueva_arco_guardar(request: Request,
     return _redirigir(f"/ui/arcos/{resultado.arco.id}?guardado=creada")
 
 
+ERROR_FANDOM = ("No se pudo consultar DC Database. Inténtalo de nuevo más tarde.")
+
+
+async def _fuente_fandom_activa() -> bool:
+    return bool(fuente_habilitada("fandom_dc"))
+
+
+@router.get("/buscar", response_class=HTMLResponse)
+async def buscar_arcos(request: Request, q: str = Query(default=""),
+                       db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    consulta = (q or "").strip()[:200]
+    contexto = {"q": consulta, "resultados": [], "errores": {}, "aviso": ""}
+    if not await _fuente_fandom_activa():
+        contexto["errores"] = {"general": "La fuente DC Database está apagada en Ajustes."}
+        return _respuesta(request, "buscar_arcos.html", contexto)
+    if consulta:
+        try:
+            async with FandomClient(
+                    "dc.fandom.com", cache=CacheHttp(async_session_factory)) as cliente:
+                contexto["resultados"] = await buscar_arcos_fandom(consulta, cliente)
+        except (CortesiaEnEspera, FuenteApagada, FandomMaxLagError,
+                FandomPayloadError, ErrorDePeticion):
+            contexto["errores"] = {"general": ERROR_FANDOM}
+        except Exception:
+            logger.exception("arcos.buscar_fandom_failed")
+            contexto["errores"] = {"general": ERROR_FANDOM}
+    return _respuesta(request, "buscar_arcos.html", contexto)
+
+
+@router.get("/buscar/preview", response_class=HTMLResponse)
+async def previsualizar_arco(request: Request, page_title: str = Query(default=""),
+                             db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    titulo = (page_title or "").strip()[:255]
+    contexto = {"page_title": titulo, "previa": None, "errores": {}, "aviso": "",
+                "atribucion_fandom": atribucion_de_arco({"fandom_dc": titulo})}
+    if not titulo:
+        contexto["errores"] = {"general": "Falta el título de la página del arco."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
+    if not await _fuente_fandom_activa():
+        contexto["errores"] = {"general": "La fuente DC Database está apagada en Ajustes."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
+    try:
+        async with FandomClient(
+                "dc.fandom.com", cache=CacheHttp(async_session_factory)) as cliente:
+            previa = await previsualizar_arco_fandom(db, titulo, cliente)
+        if previa is None:
+            contexto["errores"] = {"general": "No se encontró ese arco en DC Database."}
+        else:
+            contexto["previa"] = previa
+    except (CortesiaEnEspera, FuenteApagada, FandomMaxLagError,
+            FandomPayloadError, ErrorDePeticion):
+        contexto["errores"] = {"general": ERROR_FANDOM}
+    except Exception:
+        logger.exception("arcos.previa_fandom_failed")
+        contexto["errores"] = {"general": ERROR_FANDOM}
+    return _respuesta(request, "previa_arco_fuente.html", contexto)
+
+
+@router.post("/buscar/importar", response_class=HTMLResponse)
+async def importar_arco(request: Request, page_title: str = Form(default=""),
+                        confirmo: str = Form(default="0"),
+                        db: AsyncSession = Depends(get_db)) -> Response:
+    titulo = (page_title or "").strip()[:255]
+    contexto = {"page_title": titulo, "previa": None, "errores": {}, "aviso": ""}
+    if not titulo:
+        contexto["errores"] = {"general": "Falta el título de la página del arco."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
+    if not await _fuente_fandom_activa():
+        contexto["errores"] = {"general": "La fuente DC Database está apagada en Ajustes."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
+    try:
+        async with FandomClient(
+                "dc.fandom.com", cache=CacheHttp(async_session_factory)) as cliente:
+            # Se conserva la previsualización para cualquier error de validación o de
+            # importación: el coleccionista no tiene que volver a buscar.
+            previa = await previsualizar_arco_fandom(db, titulo, cliente)
+            contexto["previa"] = previa
+            if previa is None:
+                contexto["errores"] = {"general": "No se encontró ese arco en DC Database."}
+                return _respuesta(request, "previa_arco_fuente.html", contexto)
+            if confirmo != "1":
+                contexto["errores"] = {
+                    "general": "Marca la confirmación antes de importar la saga."}
+                return _respuesta(request, "previa_arco_fuente.html", contexto)
+            resultado = await importar_arco_fandom(db, titulo, cliente)
+    except (CortesiaEnEspera, FuenteApagada, FandomMaxLagError,
+            FandomPayloadError, ErrorDePeticion):
+        await db.rollback()
+        contexto["errores"] = {"general": ERROR_FANDOM}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
+    except Exception:
+        logger.exception("arcos.importar_fandom_failed")
+        await db.rollback()
+        contexto["errores"] = {"general": "No se pudo importar la saga. Inténtalo de nuevo."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
+    if resultado is None:
+        await db.rollback()
+        contexto["errores"] = {"general": "No se pudo importar la saga. Inténtalo de nuevo."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
+    await db.commit()
+    return _redirigir(f"/ui/arcos/{resultado.arco_id}?guardado=importada")
+
+
 @router.get("/{arco_id}", response_class=HTMLResponse)
 async def arco(arco_id: UUID, request: Request, guardado: str = Query(default=""),
                anadidos: int = Query(default=0, ge=0),
@@ -180,6 +290,7 @@ async def arco(arco_id: UUID, request: Request, guardado: str = Query(default=""
             "numero": "Número añadido a la saga.",
             "quitado": "Número quitado de la saga; sigue en tu biblioteca.",
             "orden": "Orden actualizado.",
+            "importada": "Saga importada desde Fandom; solo se enlazaron números de tu biblioteca.",
         }.get(guardado, ""),
         # El formulario de «Añadir un número» pinta siempre sus errores/valores: en el GET,
         # vacíos; el POST de error los rellena para no perder lo escrito.
