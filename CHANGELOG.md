@@ -7,6 +7,9 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **V14 F4: se cierra la lista de compatibilidad (2026-11-13, #750).** El último `.neutro` pasa a
+  la base neutra y se retira su regla; `CLASES_ANTERIORES_A_V2` se sustituye por
+  `ALIAS_RETIRADOS_EN_V14`, una prueba que impide que vuelvan los 27 alias retirados.
 - **V14 F3b: los números de la ficha usan `ui.chip` (2026-11-13, #750).** Fuera `.issue-chip`,
   `.issue-missing`, `.issue-present`, `.issue-leido` y `.issue-leyendo`: presente `ok` (✓), leyendo
   `info`, leído `neutro`, y «te falta» `neutro` con `chip-falta` (borde discontinuo); los números
