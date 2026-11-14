@@ -75,10 +75,19 @@ MAX_BYTES_CHARSET = 4096
 FLOOD_MIN_S = 20.0
 FLOOD_MAX_S = 60.0
 FLOOD_POR_DEFECTO_S = 30.0
-#: Cookies que identifican a un miembro (sesión real, no la visita anónima de IPB).
-_COOKIES_DE_MIEMBRO = frozenset({
+#: Sufijos de cookie que identifican a un miembro (sesión real, no la visita anónima de IPB).
+#: Se compara por sufijo porque IPB permite un prefijo de cookie por foro (`foro_member_id`,
+#: `foro_pass_hash` en La Mansión CRG; visto en vivo el 2026-11-14).
+_COOKIES_DE_MIEMBRO = (
     "member_id", "pass_hash", "ips4_member_id", "ips4_pass_hash",
-})
+)
+
+
+def es_cookie_de_miembro(nombre: str) -> bool:
+    """¿El nombre de cookie identifica a un miembro, con o sin prefijo del foro?"""
+    nombre = (nombre or "").lower()
+    return any(nombre == sufijo or nombre.endswith("_" + sufijo)
+               for sufijo in _COOKIES_DE_MIEMBRO)
 #: Parámetros de query que son la sesión (no se guardan ni se pintan; m-1/m-2).
 _PARAMS_DE_SESION = frozenset({"s", "sid", "session", "session_id", "sess"})
 #: Puertos que no se escriben al normalizar una URL para mostrarla.
@@ -385,6 +394,11 @@ class ForumScraper:
             ocultos[campo.get("name")] = campo.get("value") or ""
         return accion, ocultos
 
+    @property
+    def nombres_de_cookies(self) -> list[str]:
+        """Nombres de las cookies recibidas (nunca los valores): ayuda a diagnosticar el login."""
+        return sorted(self._cookies)
+
     async def login(self, username: str, password: str) -> bool:
         if self._origen is None:
             raise OrigenNoPermitidoError("foro_sin_origen")
@@ -410,7 +424,7 @@ class ForumScraper:
         finally:
             await cliente.aclose()
         confirmado = any(
-            clave.lower() in _COOKIES_DE_MIEMBRO and str(valor) not in ("", "0")
+            es_cookie_de_miembro(clave) and str(valor) not in ("", "0")
             for clave, valor in self._cookies.items()
         )
         if not confirmado:
