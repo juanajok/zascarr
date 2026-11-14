@@ -256,3 +256,22 @@ def test_un_item_sin_fecha_es_valido():
            b"</item></channel></rss>")
     (item,) = parsear_feed(xml)
     assert item.publicado is None and isinstance(item, HeraldItem)
+
+
+@pytest.mark.parametrize("url", [
+    "http://www.comicbookherald.com/x/",           # sin TLS
+    "https://comicbookherald.com/x/",              # ápex: no es el host canónico del feed
+    "https://www.comicbookherald.com:8443/x/",     # puerto no estándar
+    "https://otro.example/x/",                     # host ajeno
+])
+def test_rechaza_esquema_apex_puerto_raro_y_otros_hosts(url):
+    xml = (f"<rss version='2.0'><channel><item><title>T</title>"
+           f"<link>{url}</link></item></channel></rss>").encode()
+    assert parsear_feed(xml) == []
+
+
+def test_acepta_el_puerto_443_explicito():
+    xml = (b"<rss version='2.0'><channel><item><title>T</title>"
+           b"<link>https://www.comicbookherald.com:443/ok/</link></item></channel></rss>")
+    items = parsear_feed(xml)
+    assert [item.url for item in items] == ["https://www.comicbookherald.com:443/ok/"]
