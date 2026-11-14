@@ -648,6 +648,22 @@ async def test_ac_01_cuerpo_exactamente_igual_al_tope_se_devuelve_completo(tope,
     assert len(peticiones) == 1
 
 
+async def test_respuesta_gzip_se_puede_leer_despues_del_tope(ajustes_habilitados):
+    """RES-3: el cuerpo ya viene descomprimido; no se vuelve a descomprimir al leerlo."""
+    cuerpo = b'{"ok": true, "titulo": "Thorgal"}'
+    comprimido = gzip.compress(cuerpo)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=comprimido, headers={
+            "content-type": "application/json", "content-encoding": "gzip"})
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        r = await _pedir(cliente, reloj, lim)
+    assert r.headers.get("content-encoding") is None
+    assert r.content == cuerpo and r.json()["titulo"] == "Thorgal"
+
+
 async def test_ac_02_cap_mas_uno_corta_por_chunks_y_lanza(tope, ajustes_habilitados):
     cap = tope(1024)
     peticiones: list[httpx.Request] = []
