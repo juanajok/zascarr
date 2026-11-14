@@ -311,7 +311,10 @@ class ReviewService:
         orig = Path(file.file_path)
         # capturado antes de reescribirlo abajo (B13: patrón de aprendizaje)
         original_name = file.file_name
-        dest = build_library_path(self._library, series, issue_number, orig.suffix)
+        dest = build_library_path(
+            self._library, series, issue_number, orig.suffix,
+            issue_title=issue.title if issue is not None else None,
+            issue_format=issue.format if issue is not None else None)
         # A3: mover a destino verificado — nunca sobreescribe ni borra el
         # original hasta que la copia está completa (ver utils/fs.safe_move).
         final_dest = await safe_move_async(orig, dest)

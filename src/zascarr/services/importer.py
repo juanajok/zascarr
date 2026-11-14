@@ -58,6 +58,7 @@ from zascarr.services.etiquetas_comicinfo import aplicar_comicinfo
 from zascarr.services.upgrades import reconciliar_mejora_importada
 from zascarr.utils.fs import listar_comics, safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
+from zascarr.utils.nombres_biblioteca import construir_nombre
 
 logger = structlog.get_logger()
 
@@ -902,12 +903,16 @@ class Importer:
             return self._library / "_Unsorted" / orig.name
         number = tr.comic_info.number if tr.comic_info else None
         return build_library_path(
-            self._library, series, number, orig.suffix, fallback_name=orig.name
+            self._library, series, number, orig.suffix, fallback_name=orig.name,
+            issue_title=getattr(tr.comic_info, "title", None) if tr.comic_info else None,
         )
 
 
 def build_library_path(library: Path, series: Series, issue_number: str | None,
-                       suffix: str, fallback_name: str | None = None) -> Path:
+                       suffix: str, fallback_name: str | None = None,
+                       *, issue_title: str | None = None,
+                       issue_format: IssueFormat | str | None = None,
+                       pack: bool = False) -> Path:
     """Ruta canónica /library/{tradición}/{Serie (Año)}/{Serie #NNN.ext}.
 
     Compartida entre el importer (issue_number viene de ComicInfo.xml, si
@@ -929,8 +934,15 @@ def build_library_path(library: Path, series: Series, issue_number: str | None,
     folder = f"{safe_title}{year_suffix}"
 
     if issue_number:
-        num = sanitize_segment(str(issue_number)).zfill(3)
-        filename = f"{safe_title} #{num}{suffix}"
+        if get_settings().naming_enabled:
+            nombre = construir_nombre(
+                series, issue_number, titulo=issue_title, formato=issue_format,
+                pack=pack, preset=get_settings().naming_preset,
+                padding=get_settings().naming_padding)
+            filename = f"{nombre}{suffix}"
+        else:
+            num = sanitize_segment(str(issue_number)).zfill(3)
+            filename = f"{safe_title} #{num}{suffix}"
     else:
         filename = fallback_name or f"{safe_title}{suffix}"
 

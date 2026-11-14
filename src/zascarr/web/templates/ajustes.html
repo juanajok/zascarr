@@ -294,6 +294,27 @@
 
   <h2 class="ajustes-acto" id="ajustes-propio">Tu ZascArr</h2>
 
+    <fieldset class="ajustes-card" id="nombres-archivo">
+      <legend>Nombres de archivo</legend>
+      <p class="ajustes-desc">Cómo se llaman los archivos de los destinos nuevos. La biblioteca que ya tienes no se renombra.</p>
+      <form hx-post="/ui/ajustes/guardar/nombres" hx-target="#resultado-nombres" hx-swap="innerHTML">
+        <label class="legal-checkbox">
+          <input type="checkbox" name="naming_enabled" value="true" {% if naming_enabled %}checked{% endif %}>
+          Usar nombres nuevos al organizar
+        </label>
+        <label>Estilo
+          <select name="naming_preset">
+            <option value="clasico" {% if naming_preset == "clasico" %}selected{% endif %}>Serie #003 (clásico)</option>
+            <option value="compacto" {% if naming_preset == "compacto" %}selected{% endif %}>Serie #03 (compacto)</option>
+            <option value="tradicion" {% if naming_preset == "tradicion" %}selected{% endif %}>Según la tradición</option>
+            <option value="titulo" {% if naming_preset == "titulo" %}selected{% endif %}>Serie #003 - Título</option>
+          </select>
+        </label>
+        <p class="ajustes-hint">Ejemplo: <code>{{ nombres_ejemplo }}.cbz</code>. Solo afecta a archivos nuevos; no renombra los que ya están organizados.</p>
+        <div class="ajustes-actions"><button type="submit">Guardar nombres de archivo</button></div>
+      </form>
+      <div id="resultado-nombres" aria-live="polite"></div>
+    </fieldset>
 
     {% include "_ajustes_seguridad.html" %}
 

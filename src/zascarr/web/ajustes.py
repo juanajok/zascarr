@@ -11,6 +11,8 @@ botón de probar antes de guardar.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -19,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
+from zascarr.models import ComicTradition
 from zascarr.services.amule import hash_contrasena_amuleweb
 from zascarr.services.auth import (
     COOKIE_NAME,
@@ -40,6 +43,7 @@ from zascarr.utils.cortesia import (
     FuenteApagada,
     politica_de,
 )
+from zascarr.utils.nombres_biblioteca import PRESETS, construir_nombre
 from zascarr.utils.peticiones import (
     ErrorDePeticion,
     ReintentosAgotados,
@@ -168,6 +172,13 @@ def _contexto() -> dict:
         "upgrade_scan_interval_minutes": getattr(s, "upgrade_scan_interval_minutes", 360),
         "upgrade_scan_batch": getattr(s, "upgrade_scan_batch", 3),
         "cortesia": texto_politica_ajustes(s),
+        "naming_enabled": s.naming_enabled,
+        "naming_preset": s.naming_preset,
+        "naming_padding": s.naming_padding,
+        "nombres_presets": PRESETS,
+        "nombres_ejemplo": construir_nombre(
+            SimpleNamespace(title="La Patrulla", tradition=ComicTradition.AMERICAN),
+            "3", preset=s.naming_preset, padding=s.naming_padding),
     }
 
 
@@ -299,6 +310,38 @@ async def guardar_calidad(
         "upgrade_scan_batch": lote,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Calidad"})
+
+
+@router.post("/guardar/nombres", response_class=HTMLResponse)
+async def guardar_nombres(
+    request: Request,
+    naming_enabled: bool = Form(default=False),
+    naming_preset: str = Form(default="clasico"),
+    naming_padding: str = Form(default="0"),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """BL-B9: activa/desactiva nombres nuevos y elige su preset."""
+    if naming_preset not in PRESETS:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Nombres de archivo",
+            "error": "Ese estilo de nombre no existe. Elige uno de la lista.",
+        })
+    try:
+        padding = int(naming_padding)
+    except (TypeError, ValueError):
+        padding = 0
+    padding = min(max(0, padding), 12)
+    await RuntimeSettingsService(db).save({
+        "naming_enabled": bool(naming_enabled),
+        "naming_preset": naming_preset,
+        "naming_padding": padding,
+    })
+    nombre = "Nombres de archivo"
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        "nombre": nombre,
+        "aviso": "Solo afecta a los archivos que se organicen a partir de ahora; "
+                 "la biblioteca existente no se renombra.",
+    })
 
 
 @router.post("/guardar/fuentes", response_class=HTMLResponse)

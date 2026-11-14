@@ -374,7 +374,10 @@ class AsignacionService:
             st2 = origen.stat()
             if (st2.st_size, st2.st_mtime_ns) != (st.st_size, st.st_mtime_ns):
                 return Resultado("error", "El archivo cambió mientras se preparaba la asignación; inténtalo de nuevo")
-            canonico = build_library_path(self._biblioteca, serie, issue_number, origen.suffix)
+            canonico = build_library_path(
+                self._biblioteca, serie, issue_number, origen.suffix,
+                issue_title=issue.title if issue is not None else None,
+                issue_format=issue.format if issue is not None else None)
 
             for k in range(0, 1000):
                 candidato = canonico if k == 0 else canonico.with_name(f"{canonico.stem} ({k}){canonico.suffix}")
@@ -827,7 +830,10 @@ async def previsualizar_asignacion(
             "ya_asignado", serie=serie.title, numero=numero,
             motivo="Ese archivo ya está en esa publicación; no hace falta moverlo.")
 
-    canonico = build_library_path(biblioteca, serie, numero, origen.suffix)
+    canonico = build_library_path(
+        biblioteca, serie, numero, origen.suffix,
+        issue_title=issue.title if issue is not None else None,
+        issue_format=issue.format if issue is not None else None)
     for k in range(0, 1000):
         candidato = canonico if k == 0 else canonico.with_name(
             f"{canonico.stem} ({k}){canonico.suffix}")
