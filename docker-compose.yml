@@ -121,6 +121,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-}@postgres:5432/zascarr
       - COMICVINE_API_KEY=${COMICVINE_API_KEY:-}
+      - MAX_CUERPO_TRANSFER_BYTES=${MAX_CUERPO_TRANSFER_BYTES:-4194304}
       - PROWLARR_URL=${PROWLARR_URL:-http://host.docker.internal:9696}
       - PROWLARR_API_KEY=${PROWLARR_API_KEY:-}
       - TRANSMISSION_URL=${TRANSMISSION_URL:-http://host.docker.internal:9091}

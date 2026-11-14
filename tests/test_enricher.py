@@ -77,6 +77,31 @@ def _ajustes_cv(monkeypatch):
         tebeosfera_rate_limit=2.5, gcd_rate_limit=2.0, forum_rate_limit=2.0))
 
 
+class _ContextoStream:
+    """`async with cliente.stream(...)` mínimo sobre una `httpx.Response` real."""
+
+    def __init__(self, respuesta):
+        self.respuesta = respuesta
+
+    async def __aenter__(self):
+        return self.respuesta
+
+    async def __aexit__(self, *_exc):
+        return None
+
+
+class _ClienteSecuencial:
+    """Cliente falso de RES-3: `stream()` devuelve las respuestas en orden y las cuenta."""
+
+    def __init__(self, respuestas):
+        self.respuestas = list(respuestas)
+        self.llamadas: list[tuple[str, str, dict]] = []
+
+    def stream(self, metodo, url, **kwargs):
+        self.llamadas.append((metodo, url, kwargs))
+        return _ContextoStream(self.respuestas.pop(0))
+
+
 class TestComicVineRetry:
     """El reintento y el 429 viven AHORA en la envoltura común (#134); el cliente solo la usa."""
 
@@ -88,23 +113,22 @@ class TestComicVineRetry:
             httpx.Response(429, headers={"Retry-After": "0.01"}, request=httpx.Request("GET", "http://x")),
             httpx.Response(200, json={"error": "OK", "results": []}, request=httpx.Request("GET", "http://x")),
         ]
-        fake_http = MagicMock()
-        fake_http.get = AsyncMock(side_effect=responses)
+        fake_http = _ClienteSecuencial(responses)
         client._client = fake_http
 
         data = await client._get("/search/", {"query": "batman"})
 
         assert data["results"] == []
-        assert fake_http.get.await_count == 2
+        assert len(fake_http.llamadas) == 2
 
     @pytest.mark.asyncio
     async def test_no_muta_params_del_caller(self, monkeypatch):
         _ajustes_cv(monkeypatch)
         client = ComicVineClient()
-        fake_http = MagicMock()
-        fake_http.get = AsyncMock(
-            return_value=httpx.Response(200, json={"error": "OK"}, request=httpx.Request("GET", "http://x"))
-        )
+        fake_http = _ClienteSecuencial([
+            httpx.Response(200, json={"error": "OK"},
+                           request=httpx.Request("GET", "http://x")),
+        ])
         client._client = fake_http
 
         caller_params = {"query": "batman"}
@@ -128,14 +152,13 @@ class TestAniListRetry:
             httpx.Response(200, json={"data": {"Page": {"media": []}}},
                            request=httpx.Request("POST", "http://x")),
         ]
-        fake_http = MagicMock()
-        fake_http.post = AsyncMock(side_effect=responses)
+        fake_http = _ClienteSecuencial(responses)
         client._client = fake_http
 
         results = await client.search_manga("berserk")
 
         assert results == []
-        assert fake_http.post.await_count == 2
+        assert len(fake_http.llamadas) == 2
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

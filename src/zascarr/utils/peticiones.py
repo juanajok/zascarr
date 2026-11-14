@@ -17,6 +17,10 @@ Reglas que aplica (spec §3–§5):
   máximo de la política. Un `Retry-After` se comparte como bloqueo de fuente y host; si no cabe en
   el presupuesto, espera visible sin dormir.
 - Los errores llevan un **código corto**, nunca la URL ni la query (§6.6).
+- RES-3 (#812): el cuerpo se lee **en streaming** con un tope real de bytes decodificados
+  (`max_cuerpo_transfer_bytes`, 4 MiB por defecto). Un cuerpo mayor corta la lectura y lanza
+  `CuerpoDemasiadoGrande` sin reintentar; `Content-Length` solo acelera el corte (puede faltar
+  o mentir). Así una respuesta hostil no se bufferiza entera antes de ser rechazada.
 """
 from __future__ import annotations
 
@@ -47,6 +51,10 @@ CODIGOS_SIN_CUERPO_TRAS_SALTO = frozenset({301, 302, 303})
 CABECERAS_SENSIBLES = frozenset({
     "authorization", "proxy-authorization", "cookie", "x-api-key",
 })
+#: RES-3: tamaño de trozo al leer el cuerpo en streaming (64 KiB).
+TROZO_LECTURA = 64 * 1024
+#: RES-3: tope por defecto si la configuración no lo trae (config.py lo acota a 1–16 MiB).
+MAX_CUERPO_TRANSFER_POR_DEFECTO = 4 * 1024 * 1024
 
 
 class ErrorDePeticion(Exception):  # noqa: N818 — nombre del contrato (§3.6)
@@ -86,6 +94,53 @@ class RespuestaNoTransitoria(ErrorDePeticion):  # noqa: N818 — nombre del cont
     def __init__(self, codigo: int):
         self.codigo = codigo
         super().__init__(f"respuesta no transitoria: HTTP {codigo}")
+
+
+class CuerpoDemasiadoGrande(ErrorDePeticion):  # noqa: N818 — nombre del contrato (§3.6)
+    """El cuerpo supera `max_cuerpo_transfer_bytes`: se corta y NO se reintenta.
+
+    Hereda de `ErrorDePeticion` (no de `RespuestaNoTransitoria`): un 2xx con cuerpo enorme no
+    es un «4xx no reintentable» ni debe crear una negativa en la caché. El mensaje no lleva
+    URL, query ni cuerpo; solo fuente, motivo, bytes leídos y límite.
+    """
+
+    def __init__(self, fuente: str, *, bytes_leidos: int, limite: int, motivo: str):
+        self.fuente = fuente
+        self.bytes_leidos = int(bytes_leidos)
+        self.limite = int(limite)
+        self.motivo = motivo
+        super().__init__(
+            f"cuerpo demasiado grande en {fuente} "
+            f"({self.bytes_leidos}/{self.limite} B, {motivo})")
+
+
+def _limite_de_cuerpo() -> int:
+    """El tope configurado (`max_cuerpo_transfer_bytes`); lectura perezosa de `get_settings`."""
+    from zascarr.config import get_settings
+
+    try:
+        limite = int(get_settings().max_cuerpo_transfer_bytes)  # type: ignore[attr-defined]
+    except (AttributeError, KeyError, TypeError, ValueError):
+        # Dobles de prueba con `__getattr__` estricto u objetos viejos sin el campo.
+        return MAX_CUERPO_TRANSFER_POR_DEFECTO
+    return limite if limite > 0 else MAX_CUERPO_TRANSFER_POR_DEFECTO
+
+
+def _longitud_declarada(valor: str | None) -> int | None:
+    """`Content-Length` como entero no negativo, o None si falta/no es válido (solo una pista)."""
+    if valor is None or not str(valor).strip().isdigit():
+        return None
+    try:
+        return int(str(valor).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _aviso_de_corte(fuente: str, motivo: str, bytes_leidos: int, limite: int,
+                    host: str) -> None:
+    """Un único evento por petición cortada; nunca URL, query ni cuerpo (RES-3/§6.6)."""
+    logger.warning("peticiones.cuerpo_demasiado_grande", fuente=fuente, motivo=motivo,
+                   bytes_leidos=bytes_leidos, limite=limite, host=host)
 
 
 def _cabeceras_sin_cuerpo(cabeceras: dict | None) -> dict | None:
@@ -173,26 +228,78 @@ def _cuerpo_de_formulario(datos, form_charset: str | None) -> tuple[bytes, dict 
     return cuerpo.encode(form_charset, errors="strict"), cabecera
 
 
-async def _enviar(cliente: httpx.AsyncClient, metodo: str, url: str, *,
-                  datos, cabeceras, form: bool,
-                  form_charset: str | None = None) -> httpx.Response:
-    """Un salto, sin seguir redirecciones automáticas.
-
-    GET lleva `params`; POST lleva `json` salvo `form=True` (formularios de Tebeosfera y del
-    foro, que esperan `application/x-www-form-urlencoded`). `form_charset` manda el
-    formulario codificado en el charset real del foro (SCR4; p. ej. iso-8859-1)."""
+def _argumentos_de_peticion(metodo: str, datos, cabeceras: dict | None, form: bool,
+                            form_charset: str | None):
+    """`(kwargs, cabeceras)` de un salto: GET params; POST json o formulario (charset SCR4)."""
     metodo = metodo.upper()
+    kwargs: dict = {}
+    cabeceras_finales = dict(cabeceras or {})
     if metodo == "GET" and datos is not None:
-        return await cliente.get(url, params=datos, headers=cabeceras)
-    if metodo == "POST" and datos is not None:
+        kwargs["params"] = datos
+    elif metodo == "POST" and datos is not None:
         if form:
             cuerpo, extra = _cuerpo_de_formulario(datos, form_charset)
             if cuerpo is not None:
-                return await cliente.post(url, content=cuerpo,
-                                          headers={**(cabeceras or {}), **extra})
-            return await cliente.post(url, data=datos, headers=cabeceras)
-        return await cliente.post(url, json=datos, headers=cabeceras)
-    return await cliente.request(metodo, url, headers=cabeceras)
+                kwargs["content"] = cuerpo
+                cabeceras_finales.update(extra or {})
+            else:
+                kwargs["data"] = datos
+        else:
+            kwargs["json"] = datos
+    return kwargs, (cabeceras_finales or None)
+
+
+async def _leer_con_tope(cliente: httpx.AsyncClient, metodo: str, url: str, *,
+                         datos, cabeceras, form: bool, form_charset: str | None,
+                         fuente: str, host: str, deadline: float | None,
+                         reloj=time.monotonic,
+                         limite: int | None = None) -> httpx.Response:
+    """Un salto con lectura **streaming** y tope real de bytes decodificados (RES-3).
+
+    - 3xx: se devuelve sin leer el cuerpo (los saltos los resuelve `_seguir_redirecciones`).
+    - `Content-Length` > límite: se corta antes de leer un solo trozo (`motivo="content_length"`).
+    - Si no: `aiter_bytes(64 KiB)` acumula y corta en cuanto supera el límite
+      (`motivo="chunks"`); cuenta bytes ya descomprimidos (cubre gzip-bomba).
+    - Un goteo que agota `deadline` lanza `CortesiaEnEspera(..., "cuerpo_lento")`.
+    - La `Response` devuelta conserva `.content/.text/.json()/.headers/.status_code/.request`.
+    """
+    limite = _limite_de_cuerpo() if limite is None else int(limite)
+    kwargs, cabeceras_finales = _argumentos_de_peticion(
+        metodo, datos, cabeceras, form, form_charset)
+    async with cliente.stream(metodo.upper(), url, headers=cabeceras_finales,
+                              **kwargs) as r:
+        if r.status_code in CODIGOS_REDIRECCION:
+            # No se lee el cuerpo de una redirección: el siguiente salto ya tiene su Location.
+            return httpx.Response(r.status_code, headers=r.headers, content=b"",
+                                  request=r.request)
+        declarada = _longitud_declarada(r.headers.get("content-length"))
+        if declarada is not None and declarada > limite:
+            _aviso_de_corte(fuente, "content_length", 0, limite, host)
+            raise CuerpoDemasiadoGrande(fuente, bytes_leidos=0, limite=limite,
+                                        motivo="content_length")
+        acumulado = bytearray()
+        async for trozo in r.aiter_bytes(chunk_size=TROZO_LECTURA):
+            acumulado.extend(trozo)
+            if len(acumulado) > limite:
+                _aviso_de_corte(fuente, "chunks", len(acumulado), limite, host)
+                raise CuerpoDemasiadoGrande(fuente, bytes_leidos=len(acumulado),
+                                            limite=limite, motivo="chunks")
+            if deadline is not None and reloj() > deadline:
+                raise CortesiaEnEspera(fuente, host, 0.0, "cuerpo_lento")
+        return httpx.Response(r.status_code, headers=r.headers,
+                              content=bytes(acumulado), request=r.request)
+
+
+async def _enviar(cliente: httpx.AsyncClient, metodo: str, url: str, *,
+                  datos, cabeceras, form: bool,
+                  form_charset: str | None = None,
+                  fuente: str = "", host: str = "",
+                  deadline: float | None = None, reloj=time.monotonic) -> httpx.Response:
+    """Un salto, sin seguir redirecciones automáticas (lectura con tope, RES-3)."""
+    return await _leer_con_tope(
+        cliente, metodo, url, datos=datos, cabeceras=cabeceras, form=form,
+        form_charset=form_charset, fuente=fuente, host=host, deadline=deadline,
+        reloj=reloj)
 
 
 async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: PoliticaFuente,
@@ -225,9 +332,12 @@ async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: Pol
         if not permitir_apagada and not fuente_habilitada(politica.fuente):
             raise FuenteApagada(politica.fuente)
         try:
-            respuesta = await _enviar(cliente, metodo_actual, url_actual,
-                                      datos=datos_actuales, cabeceras=cabeceras_actuales,
-                                      form=form, form_charset=form_charset)
+            respuesta = await _enviar(
+                cliente, metodo_actual, url_actual,
+                datos=datos_actuales, cabeceras=cabeceras_actuales,
+                form=form, form_charset=form_charset,
+                fuente=politica.fuente, host=host_efectivo(url_actual),
+                deadline=deadline, reloj=reloj)
         except (httpx.RemoteProtocolError, httpx.InvalidURL) as exc:
             # La URL del salto no es protocolizable: fallo de redirección, no de red.
             raise RedireccionNoPermitida("", "location_invalida") from exc
