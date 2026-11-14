@@ -364,7 +364,9 @@ async def pedir_con_cortesia(
             servicio.registrar_resultado(politica.fuente, "ok", intento=intento,
                                          espera_s=espera_s_intento)
             return respuesta
-        servicio.registrar_resultado(politica.fuente, "4xx", intento=intento,
-                                     espera_s=espera_s_intento)
+        # M-5 (SecOps): un 304 es «sin cambios», no un rechazo 4xx.
+        servicio.registrar_resultado(politica.fuente,
+                                     "304" if codigo == 304 else "4xx",
+                                     intento=intento, espera_s=espera_s_intento)
         raise RespuestaNoTransitoria(codigo)
     raise ReintentosAgotados(politica.fuente, politica.max_intentos, ultimo_codigo)
