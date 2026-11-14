@@ -1,3 +1,8 @@
+<div id="cabecera-alta" hx-swap-oob="true">
+  <h1>La serie está lista</h1>
+  <p class="subtitle">La serie ya existe. Revisar los archivos es el siguiente paso; todavía no se ha vinculado nada.</p>
+  {% from "_asistente_macros.html" import indicador_de_pasos %}{{ indicador_de_pasos(2) }}
+</div>
 {#- Paso 2 de Descubrir (crear o reutilizar): el resultado, con enlace a la ficha y, si se creó, «Deshacer». `r` es el
     `ResultadoAlta` del servicio. -#}
 <div class="alta-paso">
@@ -23,7 +28,7 @@
   <div class="alta-entrega">
     <p>Siguiente paso, que <strong>todavía no se ha hecho</strong>: revisar qué archivos de la carpeta «{{ grupo }}» se vinculan a esta serie.
       Confirmar el alta no vincula nada; la revisión y su confirmación son pasos aparte.</p>
-    <a class="btn" href="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion?clave=' ~ (grupo | urlencode) ~ '&series_id=' ~ r.serie.series_id) }}">Revisar los archivos de esta carpeta</a>
+    <a class="btn primary" href="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion?clave=' ~ (grupo | urlencode) ~ '&series_id=' ~ r.serie.series_id) }}">Revisar los archivos de esta carpeta</a>
     <p class="muted">Si recargas o vuelves a esta pantalla, lo que consta de esta alta sigue disponible: <a href="{{ con_contexto('/ui/pendientes/carpetas/asistente/alta/resultado?clave=' ~ (grupo | urlencode) ~ '&series_id=' ~ r.serie.series_id ~ ('&operacion=' ~ r.deshacer.operacion_id if r.deshacer else '')) }}">enlace al estado de esta alta</a>.</p>
   </div>
   {% else %}
