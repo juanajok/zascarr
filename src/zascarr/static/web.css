@@ -888,6 +888,9 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 15. DASHBOARD (métricas + estantería + descubrir) ───────────────────── */
 .dashboard { max-width: 1240px; margin: 0 auto; }
+.dashboard-cabecera { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.dashboard-cabecera h1 { margin-bottom: 0; }
+.dashboard-logs { align-self: start; }
 .dashboard h1 { font-size: var(--text-titulo-pagina); margin-bottom: var(--space-1); }
 
 .metrics-grid {
