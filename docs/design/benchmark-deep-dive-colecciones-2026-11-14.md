@@ -87,3 +87,14 @@ Decisiones:
 - [ ] Teclado: cada enlace tiene foco visible y nombre accesible; no hay enlaces
       anidados.
 - [ ] Tests de plantilla/ruta y contraste; sin cambios de esquema.
+
+## 5. Contexto de vuelta (adenda)
+
+La colección no debe ser un callejón sin salida. Se añade `volver` a la ficha de
+serie con la URL canónica de su colección; `volver_segura` acepta **solo** una
+ruta `/ui/colecciones/<uuid>` sin query ni ancla (nunca URLs externas), y la
+ficha muestra «Volver a la colección». Los enlaces de la colección a la serie
+llevan ese contexto; los de la biblioteca conservan su retorno actual.
+
+No se toca la navegación issue→serie: la ficha del número ya vuelve a su serie y
+muestra las colecciones de esta.

@@ -958,3 +958,111 @@ def test_paginas_de_volumen_filtra_personajes_y_numeros():
         "Absolute Batman Vol 1", "Batman: The Court of Owls",
     ]
     assert _paginas_de_volumen(candidatos, norm) == ["Batman Vol 1", "Batman Vol 2"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SCR2 m-3: el arco de Fandom no adopta un arco manual ni de otra fuente
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _ResultadoArcos:
+    def __init__(self, filas):
+        self._filas = filas
+
+    def scalars(self):
+        return self
+
+    def first(self):
+        return self._filas[0] if self._filas else None
+
+    def all(self):
+        return self._filas
+
+
+class _SesionArcos:
+    """Sesión mínima que filtra en memoria como lo harían las dos consultas reales."""
+
+    def __init__(self, arcos):
+        from zascarr.models import StoryArc
+
+        self.arcos = list(arcos)
+        self._StoryArc = StoryArc
+        self.añadidos: list = []
+
+    async def execute(self, statement):
+        texto = str(statement)
+        if "story_arcs.metadata ->>" in texto:
+            return _ResultadoArcos([
+                a for a in self.arcos
+                if (a.metadata_ or {}).get("fandom_dc") == self.page_title])
+        if "WHERE story_arcs.title" in texto:
+            return _ResultadoArcos([a for a in self.arcos if a.title == self.title])
+        return _ResultadoArcos([])                       # enlaces del arco
+
+    def add(self, fila):
+        self.arcos.append(fila)
+        self.añadidos.append(fila)
+
+    async def flush(self):
+        return None
+
+
+def _servicio_con_arco(arco_manual, *, page_title="Batman: Year One", title="Year One"):
+    from zascarr.services.fandom import FandomArc
+
+    sesion = _SesionArcos([arco_manual] if arco_manual is not None else [])
+    sesion.page_title = page_title
+    sesion.title = title
+    servicio = EnrichmentService(db=sesion)
+    return servicio, sesion, FandomArc(page_title=page_title, title=title)
+
+
+async def test_un_arco_manual_homonimo_queda_intacto_y_se_crea_el_de_fandom():
+    from zascarr.models import StoryArc
+
+    manual = StoryArc(id=uuid4(), title="Year One", metadata_={})
+    servicio, sesion, arco = _servicio_con_arco(manual)
+
+    await servicio._upsert_arc(arco)
+
+    assert manual.metadata_ == {}                        # nunca se le añade `fandom_dc`
+    assert len(sesion.arcos) == 2
+    nuevo = next(a for a in sesion.arcos if a is not manual)
+    assert nuevo.metadata_ == {"origen": "fandom_dc", "fandom_dc": "Batman: Year One"}
+
+
+async def test_un_arco_de_otra_fuente_homonimo_tampoco_se_adopta():
+    from zascarr.models import StoryArc
+
+    ajeno = StoryArc(id=uuid4(), title="Year One",
+                     metadata_={"origen": "reading_orders", "url": "https://x.test/guia/"})
+    metadata_original = dict(ajeno.metadata_)
+    servicio, sesion, arco = _servicio_con_arco(ajeno)
+
+    await servicio._upsert_arc(arco)
+
+    assert ajeno.metadata_ == metadata_original
+    assert len(sesion.arcos) == 2
+
+
+async def test_el_segundo_enricher_es_idempotente_y_no_duplica_el_arco():
+    servicio, sesion, arco = _servicio_con_arco(None)
+    await servicio._upsert_arc(arco)
+    assert len(sesion.arcos) == 1
+
+    servicio.db = sesion
+    await servicio._upsert_arc(arco)
+
+    assert len(sesion.arcos) == 1                        # se reutiliza por metadata fandom
+    assert len(sesion.añadidos) == 1
+
+
+async def test_un_arco_viejo_de_fandom_sin_origen_se_reutiliza_por_titulo():
+    from zascarr.models import StoryArc
+
+    viejo = StoryArc(id=uuid4(), title="Year One", metadata_={"fandom_dc": "Otra pagina"})
+    servicio, sesion, arco = _servicio_con_arco(viejo)
+
+    await servicio._upsert_arc(arco)
+
+    assert len(sesion.arcos) == 1
+    assert viejo.metadata_["fandom_dc"] == "Batman: Year One"

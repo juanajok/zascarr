@@ -19,6 +19,9 @@
   </li>
   {% endfor %}
 </ul>
+{% if pagina.hay_fandom %}
+<p class="caption">Algunas de estas sagas usan datos de DC/Marvel Database (Fandom), que se publican bajo la <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener noreferrer">licencia Creative Commons BY-SA 3.0<span class="sr"> (se abre en otra pestaña)</span></a>. <a href="/legal">Aviso legal</a>.</p>
+{% endif %}
 {% if pagina.paginas > 1 %}
 <nav class="pagination" aria-label="Páginas de sagas">
   {% if pagina.pagina > 1 %}<a class="page-link" href="/ui/arcos?pagina={{ pagina.pagina - 1 }}">← Anteriores</a>{% endif %}

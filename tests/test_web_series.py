@@ -564,7 +564,9 @@ class TestPresupuestoTextoU21:
         antes = re.sub(r'<p class="series-acciones">.*?</p>', '', antes, flags=re.S)
         # BL-INF1 (#447): el bloque informativo va después de la cabecera y no compite
         # con el presupuesto de la entrada de #208.
-        antes = re.sub(r'<section class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
+        antes = re.sub(r'<section[^>]*class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
+        # #803: la navegación por anclas es un control de la ficha, no texto de entrada.
+        antes = re.sub(r'<nav class="ficha-nav".*?</nav>', '', antes, flags=re.S)
         # BL-INF6: «Elegir portada» es un CONTROL de acción (abre el selector), como los botones de
         # `.series-acciones`: no es texto de entrada y no compite con el presupuesto de #208.
         antes = re.sub(r'<details class="elegir-portada".*?</details>', '', antes, flags=re.S)
@@ -578,6 +580,17 @@ class TestPresupuestoTextoU21:
         )
         palabras = re.findall(r"\w+", self._texto(antes))
         assert len(palabras) <= 50, (len(palabras), " ".join(palabras))
+
+    def test_navegacion_por_anclas_y_completitud_sin_ambiguedad(self):
+        html = self._render()
+        assert 'class="ficha-nav"' in html
+        for ancla in ("#numeros-serie", "#politica-serie", "#etiquetas-serie",
+                      "#colecciones-serie", "#coleccion-serie", "#datos-serie"):
+            assert f'href="{ancla}"' in html
+        assert 'id="numeros-serie"' in html
+        assert 'id="datos-serie"' in html
+        assert ">Completitud</h2>" in html
+        assert "Estado de la colección</h2>" not in html
 
     def test_presupuesto_de_la_accion_nueva(self):
         html = self._render()
@@ -992,6 +1005,15 @@ class TestVolverALaBiblioteca:
         assert 'href="/ui/biblioteca?q=thor&amp;page=2#serie-' in r.text
         assert "Volver a la biblioteca" in r.text
 
+    def test_desde_una_coleccion_vuelve_a_la_coleccion(self):
+        series = make_series(total_issues=3)
+        destino = f"/ui/colecciones/{uuid4()}"
+        r = self._get(series, destino)
+        assert r.status_code == 200
+        assert f'href="{destino}" class="back-link"' in r.text
+        assert "Volver a la colección" in r.text
+
+
     def test_sin_contexto_ofrece_biblioteca_sin_inventar_busqueda(self):
         series = make_series(total_issues=3)
         r = self._get(series)
@@ -1213,13 +1235,21 @@ def test_opcion_reservada_usa_etiqueta_no_valor_crudo(valor, etiqueta):
     assert f">{valor.value}" not in html
 
 
-def test_ficha_etiqueta_estado_de_la_serie():
-    series = make_series(total_issues=3)
-    session = FakeSession([
-        FakeExecResult([series]), FakeExecResult([]),
-        acuse(), retirados(), FakeExecResult([]),
-    ])
-    with use_fake_session(session) as client:
-        r = client.get(f"/ui/series/{series.id}")
-    assert "Estado de la serie" in r.text
-    assert "Estado de la colección" not in r.text
+class TestAtribucionFandomVisible:
+    """SCR2 m-1: la atribución CC-BY-SA se ve sin desplegar «Fuentes y atribución»."""
+
+    def test_la_atribucion_se_ve_fuera_del_desplegable(self):
+        series = make_series(total_issues=3)
+        series.fandom_dc_slug = "Batman"
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert 'href="https://dc.fandom.com/wiki/Batman"' in r.text
+        assert "Creative Commons BY-SA 3.0" in r.text
+        dentro = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[0]
+        assert "BY-SA" not in dentro                    # el desplegable mantiene el aviso genérico
+        assert "DC/Marvel Database" in dentro
+        fuera = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[1]
+        assert "Creative Commons BY-SA 3.0" in fuera
