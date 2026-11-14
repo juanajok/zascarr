@@ -249,6 +249,24 @@ def _argumentos_de_peticion(metodo: str, datos, cabeceras: dict | None, form: bo
     return kwargs, (cabeceras_finales or None)
 
 
+def _cabeceras_sin_codificacion(headers: httpx.Headers) -> httpx.Headers:
+    """Copia las cabeceras sin las que describen el cuerpo COMPRIMIDO ya decodificado.
+
+    `aiter_bytes` entrega bytes descomprimidos. Si se reconstruye la `Response` con el
+    `content-encoding`/`content-length` originales, httpx vuelve a descomprimir y falla
+    (`zlib.error: incorrect header check`) o sirve longitudes falsas.
+
+    Se devuelve un `httpx.Headers` (no una lista de `str`): así se conservan los valores
+    tal cual, incluidos `Location` no ASCII que httpx ya aceptó. Convertirlos a `str` los
+    re-codificaría y podría convertir una redirección inválida en una válida.
+    """
+    limpias = httpx.Headers(headers)
+    for clave in ("content-encoding", "content-length", "transfer-encoding"):
+        if clave in limpias:
+            del limpias[clave]
+    return limpias
+
+
 async def _leer_con_tope(cliente: httpx.AsyncClient, metodo: str, url: str, *,
                          datos, cabeceras, form: bool, form_charset: str | None,
                          fuente: str, host: str, deadline: float | None,
@@ -270,8 +288,8 @@ async def _leer_con_tope(cliente: httpx.AsyncClient, metodo: str, url: str, *,
                               **kwargs) as r:
         if r.status_code in CODIGOS_REDIRECCION:
             # No se lee el cuerpo de una redirección: el siguiente salto ya tiene su Location.
-            return httpx.Response(r.status_code, headers=r.headers, content=b"",
-                                  request=r.request)
+            return httpx.Response(r.status_code, headers=_cabeceras_sin_codificacion(r.headers),
+                                  content=b"", request=r.request)
         declarada = _longitud_declarada(r.headers.get("content-length"))
         if declarada is not None and declarada > limite:
             _aviso_de_corte(fuente, "content_length", 0, limite, host)
@@ -286,7 +304,8 @@ async def _leer_con_tope(cliente: httpx.AsyncClient, metodo: str, url: str, *,
                                             limite=limite, motivo="chunks")
             if deadline is not None and reloj() > deadline:
                 raise CortesiaEnEspera(fuente, host, 0.0, "cuerpo_lento")
-        return httpx.Response(r.status_code, headers=r.headers,
+        return httpx.Response(r.status_code,
+                              headers=_cabeceras_sin_codificacion(r.headers),
                               content=bytes(acumulado), request=r.request)
 
 

@@ -853,3 +853,38 @@ async def test_ac_12_gzip_bomba_corta_por_bytes_decodificados(tope, ajustes_habi
             await _pedir(cliente, reloj, lim)
     assert exc.value.motivo == "chunks"
     assert exc.value.bytes_leidos > cap          # cuenta lo DESCOMPRIMIDO
+
+
+async def test_cuerpo_comprimido_no_se_descomprime_dos_veces(ajustes_habilitados):
+    """Regresión real (Fandom/robots.txt): `aiter_bytes` ya decodifica gzip.
+
+    Al reconstruir la `Response` no se puede conservar `content-encoding`, o httpx
+    intenta descomprimir otra vez y lanza `zlib.error: incorrect header check`.
+    """
+    texto = "user-agent: *\nallow: /\n"
+    comprimido = gzip.compress(texto.encode())
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, stream=httpx.ByteStream(comprimido),
+            headers={"content-type": "text/plain", "content-encoding": "gzip"})
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        r = await _pedir(cliente, reloj, lim)
+    assert r.status_code == 200
+    assert r.text == texto
+    assert "content-encoding" not in r.headers
+
+
+async def test_cabecera_location_no_ascii_no_rompe_la_reconstruccion(ajustes_habilitados):
+    """Regresión: una respuesta con `Location` Unicode no debe reventar al convertir a bytes."""
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"ok", headers=[
+            (b"content-type", b"text/plain"),
+            (b"location", b"https://example.com/\xef\xbc\x8f/x")])
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        r = await _pedir(cliente, reloj, lim)
+    assert r.status_code == 200 and r.text == "ok"
