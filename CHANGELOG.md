@@ -5,6 +5,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Cambiado
+
+- **Colecciones solapadas (2026-11-14).** Una serie puede pertenecer a varias colecciones: la
+  pertenencia única `series.collection_id` pasa a la tabla puente `collection_series`
+  (migración 0040, conserva todas las asignaciones existentes). La ficha muestra todas sus
+  colecciones, la lista de alta permite series que ya están en otras y la política efectiva
+  combina las colecciones: `excluir` gana sobre `incluir`, y `incluir` sobre la política guardada.
+  Portada y exportación leen la tabla puente.
+
 ### Añadido
 
 - **SCR4: foro IPB con charset real, control de saturación y tarjeta en Ajustes (2026-11-14, #705).**
