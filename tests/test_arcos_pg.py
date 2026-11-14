@@ -20,6 +20,7 @@ from zascarr.models import (
     StoryArcIssue,
     Wishlist,
     WishlistOrigin,
+    WishlistStatus,
 )
 from zascarr.services.arcos import detalle_arco, listar_arcos, pedir_arco
 
@@ -134,22 +135,25 @@ async def test_pedir_saga_anade_solo_lo_que_falta_y_respeta_orden():
                 i1 = Issue(id=uuid4(), series_id=a.id, issue_number="1", volume=1)
                 i2 = Issue(id=uuid4(), series_id=b.id, issue_number="2", volume=1)
                 i3 = Issue(id=uuid4(), series_id=b.id, issue_number="3", volume=1)
-                s.add_all([i1, i2, i3])
+                i4 = Issue(id=uuid4(), series_id=b.id, issue_number="4", volume=1)
+                s.add_all([i1, i2, i3, i4])
                 await s.flush()
                 s.add(File(id=uuid4(), file_path="/lib/b1.cbz", file_name="b1.cbz",
                            file_format=FileFormat.CBZ, issue_id=i1.id, is_missing=False))
                 s.add(Wishlist(id=uuid4(), issue_id=i2.id, origen=WishlistOrigin.MANUAL,
                                priority=5))
+                s.add(Wishlist(id=uuid4(), issue_id=i4.id, origen=WishlistOrigin.MANUAL,
+                               priority=6, status=WishlistStatus.RETIRADO))
                 arco = StoryArc(id=uuid4(), title="Court of Owls", is_crossover=True)
                 s.add(arco)
                 await s.flush()
-                for pos, issue in enumerate((i1, i2, i3), start=1):
+                for pos, issue in enumerate((i1, i2, i3, i4), start=1):
                     s.add(StoryArcIssue(story_arc_id=arco.id, issue_id=issue.id,
                                         reading_order=pos))
                 await s.commit()
                 r = await pedir_arco(s, arco.id)
-                assert r.ok and r.anadidos == 1 and r.ya_pedidos == 1
-                assert r.en_biblioteca == 1 and r.total == 3
+                assert r.ok and r.anadidos == 1 and r.ya_pedidos == 2
+                assert r.en_biblioteca == 1 and r.total == 4
                 await s.commit()
                 pedidos = (await s.execute(
                     select(Wishlist).where(Wishlist.issue_id == i3.id))).scalars().all()
@@ -157,5 +161,8 @@ async def test_pedir_saga_anade_solo_lo_que_falta_y_respeta_orden():
                 assert pedidos[0].origen == WishlistOrigin.MANUAL
                 assert pedidos[0].priority == 3
                 assert pedidos[0].notes == "Saga: Court of Owls"
+                retirado = (await s.execute(
+                    select(Wishlist).where(Wishlist.issue_id == i4.id))).scalars().all()
+                assert len(retirado) == 1 and retirado[0].status == WishlistStatus.RETIRADO
         finally:
             await motor.dispose()

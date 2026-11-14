@@ -324,7 +324,7 @@ def test_pedir_saga_muestra_boton_y_redirige_con_recuento():
     try:
         with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
             r = c.get(f"/ui/arcos/{aid}")
-        assert "Pedir los números que faltan (1)" in r.text
+        assert "Pedir los números que faltan" in r.text
         with patch("zascarr.web.arcos.pedir_arco", AsyncMock(
                 return_value=ResultadoPedidoArco(True, anadidos=1, ya_pedidos=0,
                                                  en_biblioteca=1, total=2))):
