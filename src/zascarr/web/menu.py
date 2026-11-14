@@ -51,6 +51,8 @@ _PREFIJOS: tuple[tuple[str, str], ...] = (
     ("/ui/mejoras", "mejoras"),
     ("/ui/colecciones", "colecciones"),
     ("/ui/series", "biblioteca"),
+    ("/ui/arcos", "biblioteca"),   # Sagas cuelga de Biblioteca (biblioteca.html)
+    ("/ui/vistas", "revisar"),     # Vistas de trabajo cuelga de Por revisar (pendientes.html)
     ("/ui/auditoria", "duplicados"),
     ("/ui/descubrir", "descubrir"),
     ("/ui/wishlist", "deseados"),
