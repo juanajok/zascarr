@@ -294,6 +294,33 @@
 
   <h2 class="ajustes-acto" id="ajustes-propio">Tu ZascArr</h2>
 
+    <fieldset class="ajustes-card" id="nombres-archivo">
+      <legend>Nombres de archivo</legend>
+      <p class="ajustes-desc">Cómo se llaman los archivos que organices a partir de ahora. La biblioteca que ya tienes no se renombra.</p>
+      <form hx-post="/ui/ajustes/guardar/nombres" hx-target="#resultado-nombres" hx-swap="innerHTML">
+        <label class="legal-checkbox">
+          <input type="checkbox" name="naming_enabled" value="true" {% if naming_enabled %}checked{% endif %}>
+          Usar nombres nuevos al organizar
+        </label>
+        <label>Estilo
+          <select name="naming_preset">
+            <option value="clasico" {% if naming_preset == "clasico" %}selected{% endif %}>Clásico (Serie #003)</option>
+            <option value="compacto" {% if naming_preset == "compacto" %}selected{% endif %}>Compacto (Serie #03)</option>
+            <option value="tradicion" {% if naming_preset == "tradicion" %}selected{% endif %}>Según la tradición</option>
+            <option value="titulo" {% if naming_preset == "titulo" %}selected{% endif %}>Con el título del número</option>
+          </select>
+        </label>
+        <ul class="ajustes-hint nombres-ejemplos">
+          <li><strong>Clásico:</strong> La Patrulla #003</li>
+          <li><strong>Compacto:</strong> La Patrulla #03</li>
+          <li><strong>Tradición:</strong> La Patrulla #003 · Akira v01 · Thorgal T01 · Mortadelo nº 01</li>
+          <li><strong>Con título:</strong> La Patrulla #003 - Corte de los búhos</li>
+        </ul>
+        <p class="ajustes-hint">Solo afecta a archivos nuevos; los que ya están organizados conservan su nombre.</p>
+        <div class="ajustes-actions"><button type="submit">Guardar nombres de archivo</button></div>
+      </form>
+      <div id="resultado-nombres" aria-live="polite"></div>
+    </fieldset>
 
     {% include "_ajustes_seguridad.html" %}
 

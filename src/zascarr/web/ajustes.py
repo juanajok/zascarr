@@ -40,6 +40,7 @@ from zascarr.utils.cortesia import (
     FuenteApagada,
     politica_de,
 )
+from zascarr.utils.nombres_biblioteca import PRESETS
 from zascarr.utils.peticiones import (
     ErrorDePeticion,
     ReintentosAgotados,
@@ -168,6 +169,10 @@ def _contexto() -> dict:
         "upgrade_scan_interval_minutes": getattr(s, "upgrade_scan_interval_minutes", 360),
         "upgrade_scan_batch": getattr(s, "upgrade_scan_batch", 3),
         "cortesia": texto_politica_ajustes(s),
+        "naming_enabled": bool(getattr(s, "naming_enabled", False)),
+        "naming_preset": getattr(s, "naming_preset", "clasico"),
+        "naming_padding": getattr(s, "naming_padding", 0),
+        "nombres_presets": PRESETS,
     }
 
 
@@ -299,6 +304,28 @@ async def guardar_calidad(
         "upgrade_scan_batch": lote,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Calidad"})
+
+
+@router.post("/guardar/nombres", response_class=HTMLResponse)
+async def guardar_nombres(
+    request: Request,
+    naming_enabled: bool = Form(default=False),
+    naming_preset: str = Form(default="clasico"),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """BL-B9: activa/desactiva nombres nuevos y elige su preset."""
+    if naming_preset not in PRESETS:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Nombres de archivo",
+            "error": "Ese estilo de nombre no existe. Elige uno de la lista.",
+        })
+    await RuntimeSettingsService(db).save({
+        "naming_enabled": bool(naming_enabled),
+        "naming_preset": naming_preset,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        "nombre": "Nombres de archivo",
+    })
 
 
 @router.post("/guardar/fuentes", response_class=HTMLResponse)

@@ -58,6 +58,7 @@ from zascarr.services.etiquetas_comicinfo import aplicar_comicinfo
 from zascarr.services.upgrades import reconciliar_mejora_importada
 from zascarr.utils.fs import listar_comics, safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
+from zascarr.utils.nombres_biblioteca import construir_nombre, es_pack
 
 logger = structlog.get_logger()
 
@@ -848,18 +849,19 @@ class Importer:
         numero: str | None = None
         if fila.issue_id:
             fila_issue = (await self._db.execute(
-                select(Issue.issue_number, Series)
+                select(Issue.issue_number, Issue.title, Issue.format, Series)
                 .join(Series, Issue.series_id == Series.id)
                 .where(Issue.id == fila.issue_id)
             )).first()
             if fila_issue:
-                numero, serie = fila_issue
+                numero, titulo_issue, formato_issue, serie = fila_issue
 
         if serie is None:
             dest = self._library / "_Unsorted" / path.name
         else:
             dest = build_library_path(
-                self._library, serie, numero, path.suffix, fallback_name=path.name)
+                self._library, serie, numero, path.suffix, fallback_name=path.name,
+                issue_title=titulo_issue, issue_format=formato_issue)
 
         # A3: mismo mover verificado que una importación normal.
         final_dest = await safe_move_async(path, dest)
@@ -901,13 +903,19 @@ class Importer:
         if not series:
             return self._library / "_Unsorted" / orig.name
         number = tr.comic_info.number if tr.comic_info else None
+        edition_kind = parse_comic_filename(orig.name).edition_kind
         return build_library_path(
-            self._library, series, number, orig.suffix, fallback_name=orig.name
+            self._library, series, number, orig.suffix, fallback_name=orig.name,
+            issue_title=getattr(tr.comic_info, "title", None) if tr.comic_info else None,
+            issue_format=EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE),
         )
 
 
 def build_library_path(library: Path, series: Series, issue_number: str | None,
-                       suffix: str, fallback_name: str | None = None) -> Path:
+                       suffix: str, fallback_name: str | None = None,
+                       *, issue_title: str | None = None,
+                       issue_format: IssueFormat | str | None = None,
+                       pack: bool = False) -> Path:
     """Ruta canónica /library/{tradición}/{Serie (Año)}/{Serie #NNN.ext}.
 
     Compartida entre el importer (issue_number viene de ComicInfo.xml, si
@@ -929,8 +937,17 @@ def build_library_path(library: Path, series: Series, issue_number: str | None,
     folder = f"{safe_title}{year_suffix}"
 
     if issue_number:
-        num = sanitize_segment(str(issue_number)).zfill(3)
-        filename = f"{safe_title} #{num}{suffix}"
+        ajustes = get_settings()
+        if getattr(ajustes, "naming_enabled", False):
+            nombre = construir_nombre(
+                series, issue_number, titulo=issue_title, formato=issue_format,
+                pack=pack or es_pack(issue_number),
+                preset=getattr(ajustes, "naming_preset", "clasico"),
+                padding=getattr(ajustes, "naming_padding", 0))
+            filename = f"{nombre}{suffix}"
+        else:
+            num = sanitize_segment(str(issue_number)).zfill(3)
+            filename = f"{safe_title} #{num}{suffix}"
     else:
         filename = fallback_name or f"{safe_title}{suffix}"
 
