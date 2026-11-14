@@ -10,7 +10,8 @@ from zascarr.main import app
 
 CAMPOS = ("comicvine_enabled", "anilist_enabled", "tebeosfera_enabled", "gcd_enabled",
           "fandom_dc_enabled", "fandom_marvel_enabled",
-          "reading_orders_enabled", "continuity_guide_enabled")
+          "reading_orders_enabled", "continuity_guide_enabled",
+          "comic_book_herald_enabled")
 
 
 @pytest.fixture
