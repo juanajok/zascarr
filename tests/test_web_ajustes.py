@@ -588,10 +588,16 @@ class TestNombresDeArchivo:
         assert r.status_code == 200
         assert "Nombres de archivo" in r.text
         assert 'name="naming_preset"' in r.text
-        assert "La Patrulla #003.cbz" in r.text
-        assert "no renombra" in r.text
+        assert "archivos que organices a partir de ahora" in r.text
+        for ejemplo in ("La Patrulla #003", "La Patrulla #03", "Akira v01",
+                        "Thorgal T01", "Mortadelo nº 01",
+                        "La Patrulla #003 - Corte de los búhos"):
+            assert ejemplo in r.text
+        assert "no se renombra" in r.text
 
-    def test_guardar_aplica_al_instante(self, restaurar_settings):
+    def test_guardar_aplica_al_instante_y_no_pisa_padding(self, restaurar_settings):
+        s = get_settings()
+        s.naming_padding = 7
         app.dependency_overrides[get_db] = _override_get_db(FakeSession())
         try:
             r = TestClient(app).post("/ui/ajustes/guardar/nombres", data={
@@ -601,10 +607,9 @@ class TestNombresDeArchivo:
         finally:
             app.dependency_overrides.pop(get_db, None)
         assert r.status_code == 200 and "guardado" in r.text.lower()
-        s = get_settings()
         assert s.naming_enabled is True
         assert s.naming_preset == "compacto"
-        assert s.naming_padding == 2
+        assert s.naming_padding == 7
 
     def test_preset_invalido_no_guarda(self, restaurar_settings):
         s = get_settings()

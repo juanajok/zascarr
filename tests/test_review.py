@@ -124,6 +124,30 @@ class TestAssignToSeries:
         assert issues_created[0].format == IssueFormat.SINGLE_ISSUE
 
     @pytest.mark.asyncio
+    async def test_naming_activo_aplica_titulo_y_formato_del_issue(self, tmp_path, monkeypatch):
+        """BL-B9: con nombres activados, ReviewService pasa título/formato del Issue."""
+        from zascarr.config import get_settings
+        monkeypatch.setattr(get_settings(), "naming_enabled", True)
+        monkeypatch.setattr(get_settings(), "naming_preset", "titulo")
+        library = tmp_path / "library"
+        unsorted = library / "_Unsorted"
+        unsorted.mkdir(parents=True)
+        orig = unsorted / "batman 12.cbz"
+        orig.write_bytes(b"x")
+        series = make_series("Batman", start_year=2011)
+        issue = Issue(id=uuid4(), series_id=series.id, issue_number="12",
+                      title="Corte de los búhos", format=IssueFormat.SINGLE_ISSUE)
+        file = make_file(orig)
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([issue]), FakeExecResult([])],
+        )
+        service = ReviewService(db=session)
+        service._library = library
+        result = await service.assign_to_series(file.id, series.id, "12")
+        assert result.file_name == "Batman #012 - Corte de los búhos.cbz"
+
+    @pytest.mark.asyncio
     async def test_issue_nuevo_de_un_omnigold_se_crea_como_omnibus(self, tmp_path):
         """B15 (2026-09-26): el número que Pendientes ofrece para un
         Omnigold/Integral no es una grapa suelta — el Issue creado debe
