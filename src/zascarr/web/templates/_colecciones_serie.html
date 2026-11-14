@@ -3,7 +3,7 @@
   {% if colecciones %}
   <p class="series-colecciones-lista">
     {% for c in colecciones %}
-    <a class="chip chip-enlace" href="/ui/colecciones/{{ c.id }}">{{ c.name }}</a>
+    <a class="chip-enlace" href="/ui/colecciones/{{ c.id }}">{{ ui.chip("neutro", c.name) }}</a>
     {% endfor %}
   </p>
   {% else %}
