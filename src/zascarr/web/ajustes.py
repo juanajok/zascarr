@@ -169,9 +169,9 @@ def _contexto() -> dict:
         "upgrade_scan_interval_minutes": getattr(s, "upgrade_scan_interval_minutes", 360),
         "upgrade_scan_batch": getattr(s, "upgrade_scan_batch", 3),
         "cortesia": texto_politica_ajustes(s),
-        "naming_enabled": s.naming_enabled,
-        "naming_preset": s.naming_preset,
-        "naming_padding": s.naming_padding,
+        "naming_enabled": bool(getattr(s, "naming_enabled", False)),
+        "naming_preset": getattr(s, "naming_preset", "clasico"),
+        "naming_padding": getattr(s, "naming_padding", 0),
         "nombres_presets": PRESETS,
     }
 
