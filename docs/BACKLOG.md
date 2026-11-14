@@ -1654,6 +1654,7 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
 
 **Notas de proceso:**
 
+- **Pasada de deudas menores (2026-11-14, PR [#805](https://github.com/juanajok/zascarr/pull/805)):** cerradas m-1/m-2/m-3 de SCR2 (atribución legal visible y dedupe de arcos), M-5 de SCR1 (304 como «304»), cotas de categorías de SCR5 y la prueba `_pg` de reconciliación de SCR3 (con fix del helper async). Aceptadas con justificación m-6/M-6; diferidas con motivo RES-3 (streaming), M-4 (tope de Crawl-delay y reset de robots), carga perezosa/1 MiB de Herald, lectura de temas del foro e importación de guías. Registro completo y razones en `docs/design/deudas-menores-2026-11-14.md`. QA apto (6.987 passed ×2; `_pg` 1 passed con Postgres real) y SecOps favorable (§5.8 no aplica).
 - El spike de Fase 0 es ejecutable y reproducible: `python scripts/spike_fase0_fuentes.py` (1 petición por comprobación, pausa de 2,5 s). Sus resultados mandan sobre las suposiciones del estudio: si alguno cambia, se actualiza el informe antes que el código.
 - Orden de ataque propuesto: **SCR1 → SCR2 → SCR4 → SCR3 → SCR5** (la infraestructura primero; el foro es barato y depende solo de credenciales; las guías son el bloque más grande; Herald, último y condicionado).
 - Antes de cerrar una historia de esta épica: actualizar `LEGAL.md` en el mismo PR (el hash invalida la aceptación solo) y dejar en la ficha la decisión del PO que aplicaba (§8 del estudio).
