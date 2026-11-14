@@ -156,3 +156,15 @@ def test_m1_una_url_no_valida_sale_con_dos_y_no_pide_nada(url):
     codigo, salida, fabricado = _ejecutar(_ajustes(forum_url=url), ScraperFalso())
     assert codigo == 2 and fabricado == []
     assert "no es válida" in salida and "ninguna petición" in salida
+
+
+def test_main_aplica_los_ajustes_de_la_bd_cuando_no_se_pasan(monkeypatch):
+    """Un proceso suelto no aplica los overrides: el script debe cargarlos de la BD."""
+    llamadas: list[int] = []
+    monkeypatch.setattr(diagnostico, "_aplicar_ajustes_de_bd", lambda: llamadas.append(1))
+    monkeypatch.setattr(diagnostico, "get_settings", lambda: _ajustes(
+        forum_enabled=False, forum_url="", forum_username="", forum_password=""))
+    salida: list[str] = []
+    assert diagnostico.main([], salida=salida.append) == 2
+    assert llamadas == [1]
+    assert any("Faltan datos" in linea for linea in salida)
