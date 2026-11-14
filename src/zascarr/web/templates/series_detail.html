@@ -153,7 +153,7 @@
 
     <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo"
              {% if aviso_coleccion %}tabindex="-1" autofocus{% endif %}>
-      <h2 id="coleccion-serie-titulo" class="titulo-frase">Estado de la colección</h2>
+      <h2 id="coleccion-serie-titulo" class="titulo-frase">Estado de la serie</h2>
       <p>
         {% if estado_coleccion.tipo == "no_completar" %}
           {{ ui.chip("neutro", "No la vas a completar") }}

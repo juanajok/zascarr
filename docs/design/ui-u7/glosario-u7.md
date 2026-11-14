@@ -204,7 +204,7 @@ su página, el test falla. QA lo verificó quitando Mejoras de `PAGINAS` (1 fail
 | **4. Glosario de vocabulario de producto en `CLAUDE.md`.** | ✅ Hecho | `CLAUDE.md` §14: principio, 22 conceptos, reglas de contexto, excepciones y evidencias. |
 | **5. Tabla de cambios para #205** (concepto → texto anterior → texto acordado → ubicación → prueba). | ✅ Hecho | §3.1 (rutas de #205), §3.2 (U7/otras pantallas) y §3.3 (no cambia). |
 | **DoR: inventario de textos de las rutas afectadas.** | ✅ Existente | `docs/design/ui-u18/inventario-textos-y-recorte.md` (SHA `c90b8ed0`) y `vigencia-2026-11-14.md`. |
-| **DoR: aprobación del PO del glosario y su versión.** | ⏳ Pendiente | Este documento y `CLAUDE.md` §14 son la versión propuesta; la aprobación se registra en #793. Las dudas están en §7. |
+| **DoR: aprobación del PO del glosario y su versión.** | ✅ Cumplido (2026-11-14) | Aprobación registrada en §7; el glosario de `CLAUDE.md` §14 y esta versión son la referencia para #205. |
 
 **Lectura para #205:** el AC5 de #205 puede citar este documento como “glosario U7, versión
 2026-11-14”, pero no puede marcarlo como PASS hasta aplicar los textos de §3.1 y ejecutar las pruebas
@@ -250,23 +250,23 @@ visibles. El AC3 de U7 quedó cubierto al corregir Mejoras y ampliar `PAGINAS` e
 
 ## 7. Dudas para el PO
 
+**Aprobadas por el PO el 2026-11-14:**
+
+1. **Pendientes sueltos:** se adopta «Pendientes sueltos» (no «Archivos sueltos») en la vista y sus
+   mensajes.
+2. **Estado de la serie:** se adopta «Estado de la serie» en Biblioteca y ficha; el parámetro
+   `coleccion` y sus valores no cambian.
+3. **Alcance de #205:** se aplican solo las rutas de #205; Inicio, Ajustes y Exportar quedan fuera de
+   este PR (U7/V10 o historia propia).
+4. **Duplicados:** se mantiene «Duplicados» como nombre de menú/pantalla y «Revisar mi biblioteca»
+   como acción; URL intacta.
+5. **Contador «Tebeos registrados»:** no cambia en #205; su unidad se decidirá en otra historia.
+
+**DoR de #205:** cumplido con esta aprobación y el glosario de `CLAUDE.md` §14. Las dudas de §7
+quedan cerradas; lo que no esté en §3.1 sigue fuera del alcance de #205.
+
 **Resuelta por el PR de #793:** «Mejoras» es el nombre de pantalla (menú, `<title>` y `h1`) y el
 subtítulo conserva «Mejores ediciones…». No se alarga la entrada del menú.
-
-1. **Pendientes sueltos.** ¿Se adopta «Pendientes sueltos» en lugar de «Archivos sueltos»? Es coherente
-   con «suelto = pendiente sin carpeta», pero cambia una etiqueta que ya existe y un enlace de la
-   pantalla de Por revisar.
-2. **Estado de la serie.** ¿Se cambia «Estado de la colección» por «Estado de la serie» en el filtro de
-   Biblioteca y en la ficha? Evita la colisión con «Colecciones», pero puede confundirse con el estado
-   de publicación de la serie. Alternativa: «Completitud».
-3. **Alcance de #205.** El issue nombra acceso, Biblioteca, Por revisar y Estado. ¿Se incluyen en #205
-   los cambios de Inicio («Tu tebeoteca ahora», «pendientes sin clasificar») o se dejan para una
-   historia de Inicio? Sin esa decisión, §3.2 queda registrado pero no aplicado.
-4. **Duplicados.** ¿Se mantiene «Duplicados» como nombre de menú y pantalla (URL `/ui/auditoria`
-   intacta) y «Revisar mi biblioteca» como acción? Es lo que hay hoy; renombrar la pantalla a
-   «Revisión» obligaría a tocar menú y pruebas, y no es necesario para el glosario.
-5. **Contador «Tebeos registrados».** ¿La unidad son archivos (`File`), ejemplares o números? Hoy cuenta
-   filas; el glosario define «tebeo» como ejemplar y «número» como unidad bibliográfica.
 
 ---
 
