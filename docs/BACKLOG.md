@@ -1394,6 +1394,11 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 - **Dependencias.** V3 a V12.
 
 **V14 — Cierre: limpieza, documentación y trazabilidad (P2, S)**
+**F4 (2026-11-13):** el último `.neutro` (botón «Buscar →» del Inicio) pasa a la base neutra y su
+regla se retira. Se cierra la lista de compatibilidad `CLASES_ANTERIORES_A_V2`: la sustituye
+`ALIAS_RETIRADOS_EN_V14`, una prueba que impide que vuelvan los 27 alias retirados (CSS y
+plantillas). `.estado-dot` queda documentado como excepción: es el componente actual del semáforo.
+
 **F3b (2026-11-13):** los números de la ficha de serie y de la política dejan `.issue-chip` y usan
 `ui.chip`: presente `ok` (✓), leyendo `info`, leído `neutro` y «te falta» `neutro` + `chip-falta`
 (borde discontinuo), con el texto `sr` de leído/leyendo. La ficha enlaza los números con
