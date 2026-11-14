@@ -24,6 +24,8 @@ UA: `ZascArr/<versión>` (identificable, sin datos de la persona). Depende de un
 from __future__ import annotations
 
 import asyncio
+import math
+import re
 import time
 from dataclasses import dataclass, replace
 from datetime import timedelta
@@ -49,6 +51,11 @@ except PackageNotFoundError:  # pragma: no cover - solo si se ejecuta sin instal
 
 #: Tope de lo que se lee de `robots.txt`: RFC 9309 exige interpretar al menos 500 KiB.
 MAX_ROBOTS = 512 * 1024
+#: Tope por defecto del `Crawl-delay` si la configuración no lo trae (rango 5–300 en config).
+CRAWL_DELAY_MAX_POR_DEFECTO_S = 60.0
+#: Fuentes cuyos orígenes se pueden olvidar al cambiar su interruptor (M-4).
+FUENTES_CON_ROBOTS = ("fandom_dc", "fandom_marvel", "reading_orders",
+                      "continuity_guide", "comic_book_herald")
 
 
 def _origen(url: str) -> str:
@@ -117,6 +124,12 @@ class GestorRobots:
         self._reloj = reloj
         self._cache: dict[str, EntradaRobots] = {}
         self._candados: dict[str, tuple[object, asyncio.Lock]] = {}
+        #: Generación por origen: `olvidar` la sube y una evaluación en vuelo no resucita.
+        self._generacion: dict[str, int] = {}
+        #: Orígenes cuyo recorte de Crawl-delay ya se avisó mientras la entrada sigue viva.
+        self._avisos_crawl: set[str] = set()
+        #: Orígenes con `Crawl-delay: inf` (protego lo descarta; se conserva para el tope).
+        self._crawl_infinito: set[str] = set()
 
     def _candado(self, origen: str) -> asyncio.Lock:
         """Candado del origen, atado al bucle actual (las pruebas usan uno por test)."""
@@ -131,6 +144,61 @@ class GestorRobots:
         """Olvida todo el estado (pruebas y apagado/encendido de fuentes)."""
         self._cache.clear()
         self._candados.clear()
+        self._generacion.clear()
+        self._avisos_crawl.clear()
+        self._crawl_infinito.clear()
+
+    def olvidar(self, origen: str) -> None:
+        """Olvida el estado en memoria de un origen (M-4); el candado se conserva.
+
+        No lanza con una entrada inválida. No invalida la fila de `http_cache` del cuerpo de
+        robots.txt (24 h/12 h): solo se re-parsea/reintenta el estado de este proceso.
+        """
+        try:
+            clave = _origen(str(origen))
+        except (ValueError, TypeError):
+            return
+        if not clave or clave == "://":
+            return
+        self._cache.pop(clave, None)
+        self._generacion[clave] = self._generacion.get(clave, 0) + 1
+        self._avisos_crawl.discard(clave)
+        self._crawl_infinito.discard(clave)
+
+    def _maximo_crawl_delay(self) -> float:
+        """El tope configurado; se lee en cada evaluación (cambiarlo no recarga robots)."""
+        from zascarr.config import get_settings
+
+        try:
+            valor = float(get_settings().crawl_delay_max_s)  # type: ignore[attr-defined]
+        except (AttributeError, KeyError, TypeError, ValueError):
+            return CRAWL_DELAY_MAX_POR_DEFECTO_S
+        if not math.isfinite(valor) or valor <= 0:
+            return CRAWL_DELAY_MAX_POR_DEFECTO_S
+        return valor
+
+    def _recortar_crawl_delay(self, origen: str, declarado) -> float | None:
+        """Recorta el valor crudo del parser al máximo configurado (M-4 / AC-01…05).
+
+        `None`, no numérico, `NaN` o `<= 0` ⇒ None (sin cambio); `inf` o finito por encima del
+        máximo ⇒ máximo. `aplicar_crawl_delay` sigue subiendo el intervalo local como antes.
+        """
+        if declarado is None:
+            return None
+        try:
+            valor = float(declarado)
+        except (TypeError, ValueError):
+            return None
+        if math.isnan(valor) or valor <= 0:
+            return None
+        maximo = self._maximo_crawl_delay()
+        if math.isinf(valor) or valor > maximo:
+            if origen not in self._avisos_crawl:
+                self._avisos_crawl.add(origen)
+                logger.warning("robots.crawl_delay_recortado", origen=origen,
+                               declarado_s=valor, recortado_s=maximo, maximo_s=maximo)
+            return maximo
+        return valor
 
     async def evaluar(self, url: str, *,
                       descargar_robots_fn) -> tuple[bool, float | None]:
@@ -140,25 +208,34 @@ class GestorRobots:
         cortesía y la caché del proyecto. Solo se llama en un fallo de caché del origen.
         """
         origen = _origen(url)
+        generacion = self._generacion.get(origen, 0)
         entrada = self._cache.get(origen)
         if entrada is None or self._reloj() >= entrada.expira_monotonic:
             async with self._candado(origen):
                 entrada = self._cache.get(origen)
                 if entrada is None or self._reloj() >= entrada.expira_monotonic:
                     entrada = await self._cargar(origen, descargar_robots_fn)
-                    self._cache[origen] = entrada
+                    # Una evaluación en vuelo devuelve su resultado, pero si el origen se
+                    # olvidó mientras tanto NO resucita la entrada (M-4).
+                    if self._generacion.get(origen, 0) == generacion:
+                        self._cache[origen] = entrada
+                        self._avisos_crawl.discard(origen)
         if entrada.estado == "unreachable_disallow":
             return False, None
         if entrada.estado == "unavailable_allow" or entrada.parser is None:
             return True, None
         permitido = entrada.parser.can_fetch(url, self.user_agent)
-        retraso = entrada.parser.crawl_delay(self.user_agent)
-        return permitido, (float(retraso) if retraso is not None else None)
+        retraso_crudo = entrada.parser.crawl_delay(self.user_agent)
+        if retraso_crudo is None and origen in self._crawl_infinito:
+            retraso_crudo = float("inf")   # protego convierte `inf` en None: se conserva el hecho
+        retraso = self._recortar_crawl_delay(origen, retraso_crudo)
+        return permitido, retraso
 
     async def _cargar(self, origen: str, descargar_robots_fn) -> EntradaRobots:
         """Descarga y clasifica `robots.txt` de un origen según la matriz RFC 9309."""
         robots_url = f"{origen}/robots.txt"
         ahora = self._reloj()
+        self._crawl_infinito.discard(origen)
         try:
             respuesta = await descargar_robots_fn(robots_url)
         except (ReintentosAgotados, httpx.TransportError):
@@ -170,6 +247,8 @@ class GestorRobots:
         codigo = respuesta.status_code
         if 200 <= codigo < 300:
             texto = respuesta.content[:MAX_ROBOTS].decode("utf-8", "replace")
+            if re.search(r"(?im)^\s*crawl-delay\s*:\s*(?:inf|infinity)\s*$", texto):
+                self._crawl_infinito.add(origen)
             try:
                 parser = Protego.parse(texto)
             except Exception:
@@ -184,6 +263,51 @@ class GestorRobots:
             return EntradaRobots("unavailable_allow", None,
                                  ahora + self.TTL_UNAVAILABLE_S)
         return EntradaRobots("unreachable_disallow", None, ahora + self.TTL_UNREACHABLE_S)
+
+
+def origenes_de_fuente(fuente: str) -> tuple[str, ...]:
+    """Orígenes de robots.txt de una fuente (M-4); `()` si la fuente no usa robots.
+
+    Imports perezosos a propósito: evita el ciclo robots ↔ adaptadores de fuentes.
+    """
+    if fuente in ("fandom_dc", "fandom_marvel"):
+        from zascarr.services.fandom import FUENTES
+
+        host = FUENTES.get(fuente)
+        return (f"https://{host}",) if host else ()
+    if fuente == "reading_orders":
+        from zascarr.services.reading_orders.comicbookreadingorders import ORIGEN
+
+        return (ORIGEN,)
+    if fuente == "continuity_guide":
+        from zascarr.services.reading_orders.continuity_guide import ORIGEN
+
+        return (ORIGEN,)
+    if fuente == "comic_book_herald":
+        from zascarr.config import get_settings
+        from zascarr.services.comicbook_herald import FEED_POR_DEFECTO
+
+        try:
+            url = str(get_settings().comic_book_herald_feed_url or "")
+        except (AttributeError, KeyError, TypeError):
+            url = ""
+        origen = _origen(url or FEED_POR_DEFECTO)
+        return (origen,) if origen and origen != "://" else ()
+    # Foro, portadas y fuentes de enriquecimiento: no pasan por robots.txt.
+    return ()
+
+
+def olvidar_origenes_de_fuente(fuente: str) -> tuple[str, ...]:
+    """Olvida los orígenes de una fuente si el gestor del proceso existe (M-4).
+
+    Si aún no se ha instanciado, NO lo crea (no hay estado que olvidar) y devuelve el mapeo;
+    así el arranque y los tests no pagan una instanciación por guardar Ajustes.
+    """
+    origenes = origenes_de_fuente(fuente)
+    if _GESTOR_DE_PROCESO is not None:
+        for origen in origenes:
+            _GESTOR_DE_PROCESO.olvidar(origen)
+    return origenes
 
 
 _GESTOR_DE_PROCESO: GestorRobots | None = None
@@ -205,6 +329,8 @@ def _reiniciar_gestor_compartido() -> None:
 
 
 __all__ = [
+    "CRAWL_DELAY_MAX_POR_DEFECTO_S",
+    "FUENTES_CON_ROBOTS",
     "MAX_ROBOTS",
     "POLITICA_CACHE_ROBOTS",
     "USER_AGENT",
@@ -214,4 +340,6 @@ __all__ = [
     "GestorRobots",
     "aplicar_crawl_delay",
     "gestor_robots_de_proceso",
+    "olvidar_origenes_de_fuente",
+    "origenes_de_fuente",
 ]

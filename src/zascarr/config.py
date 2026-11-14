@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # acotado a 1–16 MiB; el `.env` puede subirlo/bajarlo. No se expone en Ajustes.
     max_cuerpo_transfer_bytes: int = Field(
         default=4_194_304, ge=1_048_576, le=16_777_216)
+    #: Tope al `Crawl-delay` que declare un `robots.txt` (M-4, #813). Un sitio puede pedir
+    #: 86400 s y dejar la fuente inutilizable; se recorta a 60 s por defecto (5–300), solo
+    #: por `.env` (no Ajustes). El valor se aplica en cada evaluación, sin recargar robots.
+    crawl_delay_max_s: int = Field(default=60, ge=5, le=300)
 
     # ── Fuentes de enriquecimiento (on/off en caliente, B8) ─────────
     # APAGADAS por defecto (decisión del PO, 2026-10-19, #239 · ADR 0013): ninguna fuente de
