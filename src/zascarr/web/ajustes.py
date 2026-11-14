@@ -50,6 +50,7 @@ from zascarr.utils.peticiones import (
     RespuestaNoTransitoria,
     pedir_con_cortesia,
 )
+from zascarr.utils.robots import FUENTES_CON_ROBOTS
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -343,14 +344,9 @@ async def guardar_nombres(
     })
 
 
-#: Fuentes con `robots.txt` cuyo estado en memoria se olvida al cambiar su interruptor (M-4).
-_FUENTES_CON_ROBOTS = ("fandom_dc", "fandom_marvel", "reading_orders",
-                       "continuity_guide", "comic_book_herald")
-
-
 def _fuentes_de_robots_cambiadas(previas: dict, nuevas: dict) -> tuple[str, ...]:
     """Fuentes cuyo booleano de activación cambia (para olvidar solo sus orígenes, M-4)."""
-    return tuple(fuente for fuente in _FUENTES_CON_ROBOTS
+    return tuple(fuente for fuente in FUENTES_CON_ROBOTS
                  if bool(previas.get(fuente, False)) != bool(nuevas.get(fuente, False)))
 
 
@@ -374,7 +370,7 @@ async def guardar_fuentes(
     # guardado falla no se olvida nada (el estado en memoria sigue a la configuración real).
     ajustes_previos = get_settings()
     previas = {fuente: bool(getattr(ajustes_previos, f"{fuente}_enabled", False))
-               for fuente in _FUENTES_CON_ROBOTS}
+               for fuente in FUENTES_CON_ROBOTS}
     nuevas = {
         "fandom_dc": fandom_dc_enabled,
         "fandom_marvel": fandom_marvel_enabled,
