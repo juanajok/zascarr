@@ -6,6 +6,7 @@ destino. Un nombre sin título no añade sufijos inventados (nunca «Unknown»).
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from zascarr.models import IssueFormat
@@ -30,6 +31,10 @@ ETIQUETAS_FORMATO: dict[str, str] = {
     IssueFormat.MANGA_TANKOBON.value: "Tankōbon",
     IssueFormat.DIGITAL.value: "Digital",
 }
+
+#: Rango real de números («1-2», «1–2», «1 al 2»): un pack, no un número
+#: suelto. No se inventa ningún rango que no venga en el dato.
+_RANGO = re.compile(r"^\s*(\d+)\s*(?:-|–|\bal\b)\s*(\d+)\s*$", re.IGNORECASE)
 
 #: Cómo se escribe el número según la tradición con preset «tradicion».
 _PATRON_TRADICION: dict[str, tuple[str, int]] = {
@@ -58,11 +63,19 @@ def _formato_de(formato: Any) -> str:
     return getattr(formato, "value", str(formato))
 
 
+def es_pack(numero: Any) -> bool:
+    """True si el número es un rango explícito («1-2», «1–2», «1 al 2»)."""
+    return bool(_RANGO.match(str(numero) if numero is not None else ""))
+
+
 def _numero_formateado(numero: Any, *, padding: int, prefijo: str) -> str:
     crudo = sanitize_segment(str(numero) if numero is not None else "").strip()
     if not crudo or crudo == "_Serie":
         return ""
-    if crudo.isdigit() and padding > 0:
+    rango = _RANGO.match(crudo)
+    if rango and padding > 0:
+        crudo = f"{rango.group(1).zfill(padding)}-{rango.group(2).zfill(padding)}"
+    elif crudo.isdigit() and padding > 0:
         crudo = crudo.zfill(padding)
     return f"{prefijo}{crudo}"
 

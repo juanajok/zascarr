@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from zascarr.models import ComicTradition, IssueFormat, Series
-from zascarr.services.importer import build_library_path
-from zascarr.utils.nombres_biblioteca import PRESETS, construir_nombre
+from zascarr.services.importer import Importer, build_library_path
+from zascarr.utils.nombres_biblioteca import PRESETS, construir_nombre, es_pack
 
 
 def _serie(titulo="Batman", tradicion=ComicTradition.AMERICAN) -> Series:
@@ -67,6 +67,14 @@ def test_especial_pack_y_sanitizado():
     assert construir_nombre(_serie("A/B"), "3", preset="clasico") == "A B #003"
 
 
+def test_pack_real_y_rango():
+    serie = _serie()
+    assert es_pack("1-2") and es_pack("1–2") and es_pack("1 al 2")
+    assert not es_pack("1") and not es_pack("1-")
+    assert construir_nombre(serie, "1-2", preset="clasico",
+                            pack=True) == "Batman #001-002 (Pack)"
+
+
 def test_build_library_path_respeta_enabled_y_legacy():
     serie = _serie()
     with patch("zascarr.services.importer.get_settings",
@@ -86,3 +94,19 @@ def test_build_library_path_respeta_enabled_y_legacy():
         con_titulo = build_library_path(
             Path("/lib"), serie, "3", ".cbz", issue_title="Corte")
     assert con_titulo.name == "Batman #003 - Corte.cbz"
+
+    with patch("zascarr.services.importer.get_settings",
+               return_value=_settings(naming_enabled=True, naming_preset="clasico")):
+        pack = build_library_path(Path("/lib"), serie, "1–2", ".cbz")
+    assert pack.name == "Batman #001-002 (Pack).cbz"
+
+
+def test_importer_build_dest_deriva_formato_especial():
+    serie = _serie()
+    imp = object.__new__(Importer)
+    imp._library = Path("/lib")
+    tr = SimpleNamespace(comic_info=SimpleNamespace(number="12"))
+    with patch("zascarr.services.importer.get_settings",
+               return_value=_settings(naming_enabled=True, naming_preset="clasico")):
+        dest = imp._build_dest(serie, tr, Path("Batman omnibus 12.cbz"))
+    assert dest.name == "Batman #012 (Ómnibus).cbz"
