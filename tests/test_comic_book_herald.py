@@ -277,3 +277,26 @@ def test_acepta_el_puerto_443_explicito():
            b"<link>https://www.comicbookherald.com:443/ok/</link></item></channel></rss>")
     items = parsear_feed(xml)
     assert [item.url for item in items] == ["https://www.comicbookherald.com:443/ok/"]
+
+
+# ── SCR5: cotas de categorías ─────────────────────────────────────────────────────────────
+
+def test_las_categorias_se_acotan_a_diez_y_cien_caracteres():
+    larga = "Categoría muy larga " * 12          # > 100 caracteres
+    categorias = "".join(
+        f"<category>{larga}</category>" for _ in range(50))
+    xml = (f'<?xml version="1.0"?><rss><channel><item>'
+           f"<title>T</title><link>https://www.comicbookherald.com/t/</link>"
+           f"{categorias}</item></channel></rss>").encode("utf-8")
+    (item,) = parsear_feed(xml)
+    assert len(item.categorias) == 10
+    assert all(len(categoria) <= 100 for categoria in item.categorias)
+
+
+def test_las_categorias_con_controles_se_descartan():
+    xml = (b'<?xml version="1.0"?><rss><channel><item>'
+           b"<title>T</title><link>https://www.comicbookherald.com/t/</link>"
+           b"<category>buena</category><category>mala&#127;[2J</category>"
+           b"</item></channel></rss>")
+    (item,) = parsear_feed(xml)
+    assert item.categorias == ("buena",)

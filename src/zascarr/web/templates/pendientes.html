@@ -2,8 +2,8 @@
 {% block title %}Por revisar — ZascArr{% endblock %}
 {% block content %}
 <h1>Por revisar</h1>
-<p class="subtitle">Archivos que el sistema no supo clasificar solo. Busca la serie correcta y confirma el número, o ignóralos si no pertenecen a tu colección.</p>
-{% if cards %}<p class="pend-recomendacion">Empieza por carpeta: resuelves varios archivos con una sola decisión.</p>{% endif %}
+<p class="subtitle">Pendientes que el sistema no supo clasificar solo. Busca la serie correcta y confirma el número, o ignóralos si no pertenecen a tu colección.</p>
+{% if cards %}<p class="pend-recomendacion">Empieza por carpeta: resuelves varios pendientes con una sola decisión.</p>{% endif %}
 {#- Las otras formas de revisar, en UNA fila (antes, dos párrafos con huecos distintos). No es un `<nav>`: la
     página tiene uno solo, el menú (test_web_navegacion). -#}
 <div class="acciones-fila" role="group" aria-label="Otras formas de revisar">
@@ -13,7 +13,7 @@
       funciona igual. -#}
   <a class="btn primary pend-carpetas" href="/ui/pendientes/carpetas"
      hx-get="/ui/pendientes/carpetas/recuento" hx-trigger="load" hx-swap="outerHTML">Revisar por carpeta</a>
-  <a class="btn ghost" href="/ui/pendientes/sueltos">Ver los archivos sueltos</a>
+  <a class="btn ghost" href="/ui/pendientes/sueltos">Ver los pendientes sueltos</a>
   {% endif %}
   <a class="btn ghost" href="/ui/vistas">Ver las vistas de trabajo</a>
 </div>
