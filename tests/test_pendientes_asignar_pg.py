@@ -71,7 +71,7 @@ class TestAsignarConectadoAlServicio:
     async def test_asigna_mueve_el_fichero_y_deja_issue_y_alias(self, mundo, cliente_de):
         async with cliente_de() as c:
             r = await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
-        assert r.status_code == 200 and r.text == RECONTAR_MENU      # la tarjeta desaparece
+        assert r.status_code == 200 and "Organizado." in r.text and "Deshacer" in r.text
         e = await mundo.estado()
         assert e.ops == ["limpiada"] and not e.origen_existe and len(e.destinos) == 1
         assert e.issue_id is not None and e.issues == 1 and e.alias == 1

@@ -178,14 +178,22 @@
       {% endif %}
       {% if a.repetido_con %}
       <div class="vinc-conflicto">
-        <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
+        <p class="caption vinc-repetido">Mismo número que otro archivo. Nada se elige, se fusiona ni se elimina por ti.</p>
+        <ul class="vinc-conflicto-lista">
+          {% for otro in a.repetido_con %}
+          {% set o = archivos_por_id.get(otro) %}
+          <li><strong>{{ nombres_de([otro]) | join(", ") }}</strong>{% if o %} · número {{ o.numero or "sin número" }}{% if o.ruta_actual %} · {{ o.ruta_actual }}{% endif %}{% endif %}</li>
+          {% endfor %}
+        </ul>
         {% if a.marcado %}
-        <button type="submit" name="quitar" value="{{ a.id }}" class="btn ghost sm"
-                id="quitar-{{ a.id }}">Quitar este del lote</button>
-        {% for otro in a.repetido_con %}
-        <button type="submit" name="quitar" value="{{ otro }}" class="btn ghost sm"
-                id="dejar-{{ a.id }}-{{ otro }}">Dejar este y quitar «{{ nombres_de([otro]) | join(", ") }}»</button>
-        {% endfor %}
+        <div class="vinc-acciones">
+          <button type="submit" name="quitar" value="{{ a.id }}" class="btn ghost sm"
+                  id="quitar-{{ a.id }}">Quitar este del lote</button>
+          {% for otro in a.repetido_con %}
+          <button type="submit" name="quitar" value="{{ otro }}" class="btn ghost sm"
+                  id="dejar-{{ a.id }}-{{ otro }}">Dejar este y quitar «{{ nombres_de([otro]) | join(", ") }}»</button>
+          {% endfor %}
+        </div>
         {% endif %}
       </div>
       {% endif %}
