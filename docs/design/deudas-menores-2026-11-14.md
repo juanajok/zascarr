@@ -36,8 +36,8 @@ SecOps **favorable**, §5.8 no aplica (no toca `ajustes`/`seguridad`/`models`/mi
 
 | Deuda | Por qué no ahora | Recomendación |
 |---|---|---|
-| **RES-3** tope de bytes real con streaming en `peticiones.py` (SCR1) | Exige rediseñar la capa HTTP compartida (streaming, redirecciones manuales, reintentos, cortesía): no es mecánico y toca todas las fuentes | Tarea propia con pruebas de cuerpo grande y contadores de memoria |
-| **M-4** tope de `Crawl-delay` y reinicio del estado de robots al apagar/encender fuente (SCR1) | Toca `robots.py` y el guardado de Ajustes (§5.8); la política actual ya solo **sube** el intervalo y el proceso es único | Tarea corta con tope (p. ej. 60 s) y reset en el toggle |
+| **RES-3** tope de bytes real con streaming en `peticiones.py` (SCR1) — [tarea #812](https://github.com/juanajok/zascarr/issues/812) (P1, M, «Lista para desarrollar») | Exige rediseñar la capa HTTP compartida (streaming, redirecciones manuales, reintentos, cortesía): no es mecánico y toca todas las fuentes | Tarea propia con pruebas de cuerpo grande y contadores de memoria |
+| **M-4** tope de `Crawl-delay` y reinicio del estado de robots al apagar/encender fuente (SCR1) — [tarea #813](https://github.com/juanajok/zascarr/issues/813) (P2, S, «Lista para desarrollar») | Toca `robots.py` y el guardado de Ajustes (§5.8); la política actual ya solo **sube** el intervalo y el proceso es único | Tarea corta con tope (p. ej. 60 s) y reset en el toggle |
 | **Herald: carga perezosa de la sección** (O2 QA) y **tope 1 MiB tras descargar** (o-1 SecOps) | La sección pide el feed en el GET de `/ui/arcos` (primera carga ≤3,5 s por cortesía); el tope real depende de RES-3 | Carga asíncrona/htmx con caché caliente y, junto a RES-3, tope antes de bufferizar |
 | **Lectura real de temas del foro** (SCR4) | Necesita URLs de hilos del usuario para validar con credenciales; hoy está cubierto con fixtures | Validar cuando haya URLs y añadir fixture/caso si el HTML real difiere |
 | **Pantalla de importación de guías** (SCR3) | Es una feature de UI, no una deuda menor | Historia propia: formulario URL + fuente + vista previa de reconciliación |
