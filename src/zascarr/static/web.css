@@ -794,6 +794,9 @@ button[type="submit"].btn-sugerencia {
 }
 .back-link:hover { color: var(--cyan-t); }
 
+.ficha-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0 0 var(--space-4); }
+.ficha-nav .btn { min-height: 40px; }
+.ficha-numeros, #politica-serie, #etiquetas-serie, #colecciones-serie, #coleccion-serie, #datos-serie, #archivos-por-numero { scroll-margin-top: var(--space-4); }
 .series-header { display: flex; gap: 22px; margin-bottom: var(--space-5); flex-wrap: wrap; }
 /* Los datos van a la derecha de la portada: sin base propia, su texto largo los mandaba debajo incluso a
    1280 px. Bajan solo cuando no caben (y en el móvil, por la regla de ≤ 860 px). */
