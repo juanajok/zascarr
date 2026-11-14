@@ -1179,3 +1179,35 @@ class TestEstadoColeccionWK2:
         assert "Volver a completarla" in r.text
         assert "<h2>Te faltan</h2>" not in r.text
         assert "No la vas a completar. Sus huecos no cuentan como faltas" in r.text
+
+
+
+@pytest.mark.parametrize("valor,etiqueta", [
+    (WishlistPolicy.FUTURE, "Números futuros (todavía no disponible)"),
+    (WishlistPolicy.ALL, "Todos los números (reservado)"),
+])
+def test_opcion_reservada_usa_etiqueta_no_valor_crudo(valor, etiqueta):
+    """R2 #789: las opciones reservadas conservan su value real y se leen en llano."""
+    from types import SimpleNamespace
+
+    from zascarr.web.series import templates
+
+    html = templates.env.get_template("_politica_serie.html").render(
+        series=SimpleNamespace(id=uuid4()),
+        politica_actual=valor,
+        politica_actual_etiqueta=etiqueta,
+        politicas_ofrecidas={},
+        motivo_futuros="la fuente no publica números futuros",
+        politica_efectiva=valor,
+        politica_efectiva_etiqueta=etiqueta,
+        coleccion_causa=None,
+        veredicto=SimpleNamespace(tipo="ninguno", no_calculable=False),
+        querer=SimpleNamespace(motivo=None, numeros=[]),
+        lote=25,
+        aviso_legal_pendiente=False,
+        retirados=0,
+        retirados_ahora=None,
+    )
+    assert f'value="{valor.value}"' in html
+    assert etiqueta in html
+    assert f">{valor.value}" not in html
