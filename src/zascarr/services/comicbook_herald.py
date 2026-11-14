@@ -52,7 +52,10 @@ logger = structlog.get_logger()
 #: Feed por defecto (categoría de guías de lectura; verificado en vivo el 2026-11-14).
 FEED_POR_DEFECTO = "https://www.comicbookherald.com/category/reading-orders/feed/"
 SITIO = "comic_book_herald"
-HOSTS_PERMITIDOS = ("comicbookherald.com", "www.comicbookherald.com")
+#: Host canónico del feed; el ápex (`comicbookherald.com`) y otros puertos no se aceptan
+#: (SecOps O1: el enlace solo se muestra, pero la validación se mantiene literal).
+HOSTS_PERMITIDOS = ("www.comicbookherald.com",)
+PUERTO_PERMITIDO = 443
 #: TTL 6 h, retención 2 días, negativa 6 h (matriz del estudio §5.3).
 POLITICA_CACHE_FEED = PoliticaCacheDominio(
     ttl_positivo=timedelta(hours=6),
@@ -92,6 +95,8 @@ def _url_del_articulo(url: str) -> str | None:
     except ValueError:
         return None
     if partes.scheme.lower() != "https" or (partes.hostname or "").lower() not in HOSTS_PERMITIDOS:
+        return None
+    if (partes.port or PUERTO_PERMITIDO) != PUERTO_PERMITIDO:
         return None
     if partes.username is not None or partes.password is not None or "@" in partes.netloc:
         return None
