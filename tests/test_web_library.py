@@ -784,7 +784,24 @@ def test_tradicion_desconocida_tiene_fallback_y_no_deja_punto_colgando():
 
 
 def test_tradicion_none_no_deja_punto_colgando():
+    """Regresión H4 (#789): con año y sin tradición, la tarjeta no debe pintar un «·» colgando
+    ni inventar una etiqueta. El caso con año es el que muerde: sin año no hay separador posible."""
     serie = make_series("Sin tradición")
+    serie.tradition = None
+    serie.start_year = 2011
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    inicio = r.text.index('class="library-card-meta"')
+    inicio = r.text.index(">", inicio) + 1
+    tarjeta = r.text[inicio:r.text.index("</div>", inicio)]
+    assert "2011" in tarjeta
+    assert "·" not in tarjeta
+    assert "Otra tradición" not in tarjeta and "None" not in tarjeta
+
+
+def test_tradicion_none_sin_anio_deja_la_tarjeta_vacia():
+    serie = make_series("Sin tradición ni año")
     serie.tradition = None
     serie.start_year = None
     session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
