@@ -77,7 +77,7 @@ def test_filtro_coleccion_se_combina_y_se_puede_quitar(monkeypatch):
     assert "Te faltan números" in r.text
     assert "Quitar filtro: Te faltan números" in r.text
     assert "coleccion=faltan" in r.text
-    assert '<label for="f-coleccion">Estado de la colección</label>' in r.text
+    assert '<label for="f-coleccion">Estado de la serie</label>' in r.text
     # El chip de quitar conserva los demás filtros y pierde solo coleccion.
     quitar = r.text.split("Quitar filtro: Te faltan números", 1)[0].rsplit("href=\"", 1)[1]
     assert "q=Thorgal" in quitar and "tradition=american" in quitar
@@ -96,7 +96,7 @@ def test_selector_fuera_de_rejilla_se_actualiza_por_oob(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
     assert fragmento.status_code == 200
     assert 'id="f-coleccion" hx-swap-oob="outerHTML"' in fragmento.text
-    assert 'aria-label="Estado de la colección"' in fragmento.text
+    assert 'aria-label="Estado de la serie"' in fragmento.text
     assert '<option value="">Cualquier estado</option>' in fragmento.text
     assert 'selected' not in fragmento.text.split('hx-swap-oob="outerHTML"', 1)[1]
 

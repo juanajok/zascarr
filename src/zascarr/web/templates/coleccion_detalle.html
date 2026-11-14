@@ -55,7 +55,7 @@
   <div class="series-grid coleccion-series-grid">
     {% for s in coleccion.series %}
     <article class="series-card coleccion-serie-card">
-      <a class="coleccion-serie-card-enlace" href="/ui/series/{{ s.id }}"
+      <a class="coleccion-serie-card-enlace" href="/ui/series/{{ s.id }}?volver={{ ('/ui/colecciones/' ~ coleccion.id) | urlencode }}"
          aria-label="Abrir la serie {{ s.title }}">
         <div class="coleccion-serie-card-portada">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-tarjeta", carga="lazy") }}</div>
         <span class="series-title">{{ s.title }}</span>
@@ -78,7 +78,7 @@
     <li class="coleccion-serie-fila">
       <div>
         <span class="chip-previa chip-previa-lista">
-          <a href="/ui/series/{{ s.id }}"
+          <a href="/ui/series/{{ s.id }}?volver={{ ('/ui/colecciones/' ~ coleccion.id) | urlencode }}"
              hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
              hx-target="#previa-m-{{ s.id }}" hx-swap="innerHTML"
              hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{{ s.title }}</a>

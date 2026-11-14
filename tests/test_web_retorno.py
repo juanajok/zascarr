@@ -44,6 +44,14 @@ def test_volver_sin_fragmento_tambien_vale():
     assert volver_segura("/ui/biblioteca?page=1") == "/ui/biblioteca?page=1"
 
 
+def test_volver_acepta_la_ficha_de_una_coleccion_sin_query_ni_ancla():
+    valor = f"/ui/colecciones/{uuid4()}"
+    assert volver_segura(valor) == valor
+    assert volver_segura(valor + "?x=1") is None
+    assert volver_segura(valor + "#serie-x") is None
+    assert volver_segura("/ui/colecciones/no-es-uuid") is None
+
+
 def test_volver_de_mas_de_2000_caracteres_se_rechaza():
     assert volver_segura("/ui/biblioteca?q=" + "x" * 1990) is None
 

@@ -404,7 +404,7 @@ class TestEnlaceACarpetas:
         assert m, "falta el enlace a carpetas"
         assert 'href="/ui/pendientes/carpetas"' in m.group(1)
         assert 'class="btn primary pend-carpetas"' in t
-        assert "Empieza por carpeta: resuelves varios archivos con una sola decisión." in t
+        assert "Empieza por carpeta: resuelves varios pendientes con una sola decisión." in t
         assert 'hx-get="/ui/pendientes/carpetas/recuento"' in m.group(1) and 'hx-trigger="load"' in m.group(1)
         assert "carpetas)" not in html.unescape(t)               # la lista no lo calcula
 

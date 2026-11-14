@@ -70,6 +70,9 @@ MAX_ITEMS = 10
 #: Tope defensivo del título y de la URL.
 MAX_TITULO = 500
 MAX_URL = 500
+#: Tope de categorías por item y de cada categoría (un feed manipulado no infla la UI).
+MAX_CATEGORIAS = 10
+MAX_CATEGORIA = 100
 @dataclass(frozen=True, slots=True)
 class HeraldItem:
     """Una guía del feed: solo metadatos públicos, sin contenido del artículo."""
@@ -115,6 +118,21 @@ def _texto_de(elemento, ruta: str) -> str:
     return " ".join((encontrado or "").split())
 
 
+def _categorias_de(item) -> tuple[str, ...]:
+    """Categorías del `<item>`: máx. 10, ≤100 caracteres y sin caracteres de control."""
+    categorias: list[str] = []
+    for elemento in item.findall("category"):
+        texto = " ".join((elemento.text or "").split())
+        if not texto:
+            continue
+        if any(ord(caracter) < 32 or ord(caracter) == 127 for caracter in texto):
+            continue
+        categorias.append(texto[:MAX_CATEGORIA])
+        if len(categorias) >= MAX_CATEGORIAS:
+            break
+    return tuple(categorias)
+
+
 def _fecha(publicado: str) -> datetime | None:
     if not publicado:
         return None
@@ -148,10 +166,7 @@ def parsear_feed(contenido: bytes) -> list[HeraldItem]:
         url = _url_del_articulo(_texto_de(item, "link"))
         if not titulo or url is None:
             continue
-        categorias = tuple(
-            texto for texto in (_texto_de(categoria, ".") for categoria in item.findall("category"))
-            if texto
-        )
+        categorias = _categorias_de(item)
         items.append(HeraldItem(
             titulo=titulo[:MAX_TITULO],
             url=url,
