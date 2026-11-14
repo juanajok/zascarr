@@ -249,7 +249,8 @@ class TestPasosEnLaPlantilla:
         """Un envío ya no es amarillo por serlo (el amarillo es opt-in con `.primary`): el de
         buscar, que no es la acción principal del Inicio, no lo lleva."""
         html = pagina(vista())
-        assert 'class="btn sm neutro">Buscar' in html
+        # V14 (#750): ya no hace falta el modificador `.neutro`; la base de un envío es neutra.
+        assert 'class="btn sm">Buscar' in html
         inicio = html.index('id="q-inicio"')
         assert "primary" not in html[inicio:html.index("</form>", inicio)]
 
