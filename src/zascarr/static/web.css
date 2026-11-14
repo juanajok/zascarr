@@ -692,6 +692,8 @@ button[type="submit"].btn-sugerencia {
 .assign-form {
   display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
 }
+.acciones-tarjeta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.acciones-tarjeta .btn, .acciones-tarjeta .btn-sugerencia { min-height: 44px; }
 .series-name { font-size: var(--text-boton); flex: 1; font-weight: 600; }
 /* El formulario de «especial sin número» vive dentro de una tarjeta de 200 px: sus campos ocupan el ancho
    disponible en vez de su tamaño natural, que los sacaba de la tarjeta. */

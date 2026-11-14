@@ -228,10 +228,9 @@ class TestFronterasDeFallo:
         """Excepción DESPUÉS del servicio y antes de responder: la asignación ya está confirmada y es coherente."""
         import zascarr.web.pendientes as pend
 
-        class Rota:
-            def __init__(self, *a, **k):
-                raise RuntimeError("no se puede construir la respuesta")
-        monkeypatch.setattr(pend, "HTMLResponse", Rota)
+        def rota(*a, **k):
+            raise RuntimeError("no se puede construir la respuesta")
+        monkeypatch.setattr(pend.templates, "TemplateResponse", rota)
         r = ent.asignar()
         bd, disco = await ent.bd(), ent.disco()
         assert r.status_code == 500

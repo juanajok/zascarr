@@ -163,7 +163,7 @@ class TestPendientesIndex:
             r = client.get("/ui/pendientes")
         assert "Vincular en su sitio" in r.text
         assert f'hx-post="/ui/pendientes/{file.id}/vincular"' in r.text
-        assert "solo funciona si esa publicación ya existe" in r.text
+        assert "Vincular no mueve ni renombra" in r.text
 
     def test_archivo_sin_candidatos_no_muestra_sugerencia(self):
         file = File(id=uuid4(), file_path="/lib/_Unsorted/algo.cbz", file_name="algo.cbz",
@@ -202,8 +202,11 @@ class TestLaAsignacionSeRotulaOrganizar:
         formularios = re.findall(
             r'<form[^>]*hx-get="/ui/pendientes/[^"]+/asignar/previa"[^>]*>(.*?)</form>',
             html, re.S)
-        return [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", re.search(r'<button[^>]*type="submit"[^>]*>.*?</button>', f, re.S).group(0))).strip()
-                for f in formularios]
+        botones = []
+        for f in formularios:
+            for b in re.findall(r'<button[^>]*type="submit"[^>]*>.*?</button>', f, re.S):
+                botones.append(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", b)).strip())
+        return botones
 
     @staticmethod
     def _texto_visible(html: str) -> str:
@@ -248,7 +251,8 @@ class TestLaAsignacionSeRotulaOrganizar:
         for p in con_previa:
             html = p.read_text(encoding="utf-8")
             botones = self._botones_de_asignar(html)
-            assert botones and all("organizar" in b.lower() for b in botones), p.name
+            assert botones, p.name
+            assert any("organizar" in b.lower() for b in botones), p.name
             assert "mueve y renombra el archivo" in self._texto_visible(html), p.name
             assert 'hx-post="/ui/pendientes/{{ c.file.id }}/asignar"' not in html, p.name
         previa = (plantillas / "_previa_asignacion.html").read_text(encoding="utf-8")
