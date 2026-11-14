@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
+from tests._pg import bd_efimera, migrar_a_head, url_asyncpg
 from zascarr.models import (
     ComicTradition,
     File,
@@ -53,7 +53,7 @@ async def _contar(db, modelo) -> int:
 
 
 async def test_reconciliar_guia_pg_crea_arco_en_orden_e_es_idempotente():
-    with bd_efimera_sync(URL) as url:
+    async with bd_efimera(URL) as url:   # versión async: el test ya corre en un bucle
         migrar_a_head(url)
         motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
         fabrica = async_sessionmaker(motor, expire_on_commit=False)
