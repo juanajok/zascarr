@@ -343,6 +343,17 @@ async def guardar_nombres(
     })
 
 
+#: Fuentes con `robots.txt` cuyo estado en memoria se olvida al cambiar su interruptor (M-4).
+_FUENTES_CON_ROBOTS = ("fandom_dc", "fandom_marvel", "reading_orders",
+                       "continuity_guide", "comic_book_herald")
+
+
+def _fuentes_de_robots_cambiadas(previas: dict, nuevas: dict) -> tuple[str, ...]:
+    """Fuentes cuyo booleano de activación cambia (para olvidar solo sus orígenes, M-4)."""
+    return tuple(fuente for fuente in _FUENTES_CON_ROBOTS
+                 if bool(previas.get(fuente, False)) != bool(nuevas.get(fuente, False)))
+
+
 @router.post("/guardar/fuentes", response_class=HTMLResponse)
 async def guardar_fuentes(
     request: Request,
@@ -359,6 +370,18 @@ async def guardar_fuentes(
     comic_book_herald_enabled: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
+    # M-4: solo se olvida el estado de robots de las fuentes que cambian de estado; si el
+    # guardado falla no se olvida nada (el estado en memoria sigue a la configuración real).
+    ajustes_previos = get_settings()
+    previas = {fuente: bool(getattr(ajustes_previos, f"{fuente}_enabled", False))
+               for fuente in _FUENTES_CON_ROBOTS}
+    nuevas = {
+        "fandom_dc": fandom_dc_enabled,
+        "fandom_marvel": fandom_marvel_enabled,
+        "reading_orders": reading_orders_enabled,
+        "continuity_guide": continuity_guide_enabled,
+        "comic_book_herald": comic_book_herald_enabled,
+    }
     await RuntimeSettingsService(db).save({
         "comicvine_enabled": comicvine_enabled,
         "anilist_enabled": anilist_enabled,
@@ -375,6 +398,11 @@ async def guardar_fuentes(
         # «heredado».
         "fuentes_heredadas": False,
     })
+    if any(previas.values()) or any(nuevas.values()):
+        from zascarr.utils.robots import olvidar_origenes_de_fuente
+
+        for fuente in _fuentes_de_robots_cambiadas(previas, nuevas):
+            olvidar_origenes_de_fuente(fuente)
     return templates.TemplateResponse(
         request, "_ajustes_guardado.html", {"nombre": "Fuentes de datos"}
     )
