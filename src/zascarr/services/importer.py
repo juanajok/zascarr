@@ -934,11 +934,12 @@ def build_library_path(library: Path, series: Series, issue_number: str | None,
     folder = f"{safe_title}{year_suffix}"
 
     if issue_number:
-        if get_settings().naming_enabled:
+        ajustes = get_settings()
+        if getattr(ajustes, "naming_enabled", False):
             nombre = construir_nombre(
                 series, issue_number, titulo=issue_title, formato=issue_format,
-                pack=pack, preset=get_settings().naming_preset,
-                padding=get_settings().naming_padding)
+                pack=pack, preset=getattr(ajustes, "naming_preset", "clasico"),
+                padding=getattr(ajustes, "naming_padding", 0))
             filename = f"{nombre}{suffix}"
         else:
             num = sanitize_segment(str(issue_number)).zfill(3)
