@@ -90,7 +90,6 @@ Columnas: **concepto** · **texto anterior (fichero:línea)** · **texto acordad
 | **registro** (resumen y detalle) | «{{ g.n_archivos }} registros» — `carpetas.html:162`; «Afecta a N registros» — `:226`; «Registros» — `:195`; «Ver registros (N)» — `:240` | «N pendientes» en la tarjeta y el resumen; «Registros» se conserva en el desplegable de procedencia (`carpetas.html:97-110`), que distingue la fila del archivo | `/ui/pendientes/carpetas`, tarjeta y detalle de grupo | El texto visible de `.carpeta-resumen`, del resumen de señales y del `<summary>` «Ver pendientes» usa «pendientes»; «registros» solo se permite dentro de `details.carpeta-explicacion`. |
 | **Por revisar / Pendientes por carpeta** (título y padre) | «Pendientes por carpeta» — `carpetas.html:2,29`; menú «Por revisar» — `menu.py:32`; CTA «Revisar por carpeta (N carpetas)» — `_pendientes_carpetas_enlace.html:3` | Se conserva «Pendientes por carpeta» como título de la vista; `<title>` pasa a «Pendientes por carpeta — Por revisar — ZascArr» y se añade la miga «Por revisar › Pendientes por carpeta». El CTA no cambia: cuenta carpetas y es una acción, no un nombre de pantalla. | `/ui/pendientes/carpetas`, `<title>`, miga y CTA | `<title>` contiene «Pendientes por carpeta — Por revisar»; el `h1` es «Pendientes por carpeta»; el menú sigue diciendo «Por revisar»; el CTA sigue diciendo «Revisar por carpeta (N carpetas)». |
 | **estado de la serie** (Biblioteca) — decisión del PO | «Estado de la colección» — `_selector_coleccion.html:1`; `series_detail.html:156` | «Estado de la serie». Si el PO prefiere «Completitud», solo cambia la etiqueta; el parámetro `coleccion` y sus valores no se tocan. | `/ui/biblioteca`, filtro de estado; `/ui/series/{id}`, sección de estado | La etiqueta visible es «Estado de la serie» y el `select` conserva `name="coleccion"` y los valores `completa`, `faltan`, `no_calculable`, `no_completar`. |
-
 | **registro** (acto) | «Hay un registro en marcha» — `carpetas.html:16`; «El registro está en Duplicados» — `:20` | «Estamos registrando la biblioteca»; «Registrar la biblioteca está en Duplicados» | `/ui/pendientes/carpetas`, aviso de registro en curso | El texto visible habla de «registrar», no de «un registro» como sustantivo. |
 | **registro** (vacío) | «No hay registros pendientes» — `carpetas.html:124` | «No hay pendientes por carpeta» | `/ui/pendientes/carpetas`, vacío | El vacío usa «pendientes», no «registros». |
 | **tebeoteca** (conjunto) | «Descargar colección y deseados» — `estado.html:115` | «Descargar tebeoteca y deseados» | `/estado`, bloque de descarga | El texto visible usa «tebeoteca» para el conjunto, no «colección». |
@@ -157,10 +156,10 @@ cumplido en el árbol actual.
 | Estado — `:41` | `/estado` | `estado.html:2` | `estado.html:4` | Sí |
 | Ajustes — `:43` | `/ui/ajustes` | `ajustes.html:2` | `ajustes.html:4` | Sí |
 
-**Único desajuste real de entrada principal:** «Mejoras». El menú dice «Mejoras» y la página se titula
-«Mejoras de edición» en `<title>` y `h1`. **Corregido en el PR de #793** (título/h1 «Mejoras»); el test se amplió para
-código de U7 (§3.2). La propuesta es dejar «Mejoras» como nombre de pantalla y conservar «Mejores
-ediciones» en el subtítulo.
+**Las 10 entradas coinciden** título = `h1` = menú tras el PR de #793 (Mejoras era el único desajuste:
+su `<title>`/`h1` decía «Mejoras de edición»). El subtítulo conserva «Mejores ediciones…» como
+descripción. El test se amplió a las 10 entradas y una prueba exige que `PAGINAS` cubra `ENTRADAS`
+(verificado por mutación en QA).
 
 ### 4.3 Vistas que no son entradas de menú
 
@@ -171,7 +170,6 @@ ediciones» en el subtítulo.
 | Sagas en orden | `/ui/arcos` | «Sagas en orden» — `arcos.html:2,5` | «Biblioteca» | `entrada_activa` ya devuelve `biblioteca` (añadido en el PR de #793). |
 | Vistas de trabajo | `/ui/vistas` | «Vistas de trabajo» — `vistas_trabajo.html:2,4` | «Por revisar» | `entrada_activa` ya devuelve `revisar` (añadido en el PR de #793). |
 | Exportar tebeoteca y deseados | `/ui/exportar` | «Exportar colección y deseados» — `exportar.html:2,5` | — | Sin entrada; sin marca de menú. **Deuda declarada**: se alcanza desde Estado y Ajustes; no se toca aquí. |
-| Vistas de trabajo | `/ui/vistas` | «Vistas de trabajo» — `vistas_trabajo.html:2,4` | «Por revisar» (enlace en `pendientes.html:18`) | No es entrada de menú; el título describe la vista. |
 | Archivos no disponibles | `/ui/no-disponibles` | «Archivos no disponibles» — `no_disponibles.html:2,4` | «Estado» | No es entrada de menú; cuelga de Estado (`menu.py:59`). |
 
 ### 4.4 El nombre antiguo «Mi biblioteca» ya no está en el árbol
@@ -189,13 +187,10 @@ tanto:
 
 ### 4.5 Cobertura de la prueba de navegación
 
-`tests/test_web_navegacion.py:438-448` ya comprueba que `<title>` y `h1` coinciden con la entrada del
-menú, pero su lista `PAGINAS` (`:429-433`) excluye **Mejoras** y **Colecciones**. Mejoras fallaría hoy
-si se añadiera. El PR de código debe:
-
-1. Corregir el título/h1 de Mejoras (§3.2).
-2. Añadir `("mejoras", "/ui/mejoras")` y `("colecciones", "/ui/colecciones")` a `PAGINAS`.
-3. Mantener la prueba como guarda de U7.
+`tests/test_web_navegacion.py` recorre ya las **10 entradas** en `PAGINAS` (mejoras y colecciones
+incluidas) y comprueba `<title>`, `h1` y la entrada activa. Una prueba adicional exige
+`{clave for clave, _ in PAGINAS} == {e.clave for e in ENTRADAS}`: si se añade una entrada al menú sin
+su página, el test falla. QA lo verificó quitando Mejoras de `PAGINAS` (1 failed).
 
 ---
 
@@ -205,8 +200,8 @@ si se añadiera. El PR de código debe:
 |---|---|---|
 | **1. Un término por concepto** en toda la UI y la documentación, distinguiendo archivo, registro, pendiente, tebeo, serie y número. | ✅ Documentado | `CLAUDE.md` §14 (tabla de conceptos y reglas de contexto); §2 y §3 de este documento. No aplicado a plantillas: eso es #205. |
 | **2. Entradas agrupadas por tarea** (Mi colección · Añadir · Sistema) o justificación escrita. | ✅ Cumplido en el árbol | `menu.py:28`; `_componentes.html:84-91`; `tests/test_web_navegacion.py:257-266`. |
-| **3. El título de cada página coincide con su entrada de menú.** | ⚠️ Parcial | 9 de 10 entradas principales coinciden (§4.2); falla «Mejoras» (`menu.py:35` vs `mejoras.html:2,5`). La prueba existente excluye Mejoras (`tests/test_web_navegacion.py:429-433`). |
-| **4. Glosario de vocabulario de producto en `CLAUDE.md`.** | ✅ Hecho | `CLAUDE.md` §14: principio, 21 conceptos, reglas de contexto, excepciones y evidencias. |
+| **3. El título de cada página coincide con su entrada de menú.** | ✅ Cumplido en el PR de #793 | Las 10 entradas coinciden (§4.2); `PAGINAS` cubre `ENTRADAS` y el test lo exige (`tests/test_web_navegacion.py`). |
+| **4. Glosario de vocabulario de producto en `CLAUDE.md`.** | ✅ Hecho | `CLAUDE.md` §14: principio, 22 conceptos, reglas de contexto, excepciones y evidencias. |
 | **5. Tabla de cambios para #205** (concepto → texto anterior → texto acordado → ubicación → prueba). | ✅ Hecho | §3.1 (rutas de #205), §3.2 (U7/otras pantallas) y §3.3 (no cambia). |
 | **DoR: inventario de textos de las rutas afectadas.** | ✅ Existente | `docs/design/ui-u18/inventario-textos-y-recorte.md` (SHA `c90b8ed0`) y `vigencia-2026-11-14.md`. |
 | **DoR: aprobación del PO del glosario y su versión.** | ⏳ Pendiente | Este documento y `CLAUDE.md` §14 son la versión propuesta; la aprobación se registra en #793. Las dudas están en §7. |
@@ -295,5 +290,5 @@ visibles. El AC3 de U7 quedó cubierto al corregir Mejoras y ampliar `PAGINAS` e
 - Se decide que **tebeo** es el objeto o ejemplar y «Tebeo español» solo la tradición; **número** es la unidad bibliográfica y no se cuenta con «tebeos».
 - Se decide que **saga** es la superficie y «arco» el código; **editorial** es `Publisher` y **sello** es `Imprint`.
 - La tabla de #205 queda en §3.1; los cambios de navegación y de otras pantallas, en §3.2; lo que no cambia, en §3.3.
-- Los tres grupos del menú ya existen (`menu.py:28`); el único desajuste de entrada principal es «Mejoras», y la prueba de navegación excluye Mejoras y Colecciones (`tests/test_web_navegacion.py:429-433`).
-- Dudas para el PO: «Mejoras» vs «Mejoras de edición», «Pendientes sueltos» vs «Archivos sueltos», «Estado de la serie» vs «Estado de la colección», alcance de Inicio en #205 y si «Duplicados» se mantiene.
+- Los tres grupos del menú ya existen (`menu.py:28`); las 10 entradas coinciden título = `h1` = menú y la prueba de navegación las cubre todas con una guarda `PAGINAS == ENTRADAS`.
+- Dudas para el PO: «Pendientes sueltos» vs «Archivos sueltos», «Estado de la serie» vs «Estado de la colección», alcance de Inicio en #205, si «Duplicados» se mantiene y la unidad del contador «Tebeos registrados».
