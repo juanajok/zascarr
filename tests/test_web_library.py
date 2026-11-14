@@ -96,6 +96,8 @@ class TestIndex:
         assert r.status_code == 200
         assert f'hx-get="/ui/series/{series.id}/previa"' in r.text
         assert f'hx-target="#previa-l-{series.id}"' in r.text
+        assert "Ver portada" in r.text
+        assert 'hx-target="next .previa-numero"' in r.text
 
     def test_la_portada_de_la_rejilla_lleva_v2(self):
         """R-01 de BL-PORT1 (#300): sin `?v=2` el navegador puede pintar hasta 24 h la
