@@ -235,6 +235,35 @@
       <div id="prueba-amule" aria-live="polite"></div>
     </fieldset>
 
+    <fieldset class="ajustes-card ajustes-card--tercio" id="ajustes-foro">
+      <legend>Foro</legend>
+      <p class="ajustes-desc">Busca enlaces de descarga en un foro IPB que configures tú.</p>
+      <form hx-post="/ui/ajustes/guardar/foro" hx-target="#resultado-foro" hx-swap="innerHTML">
+        <label>Dirección del foro
+          <input type="text" name="forum_url" value="{{ forum_url }}" placeholder="http://tu-foro.example/forum" autocomplete="off">
+        </label>
+        {% if forum_http_sin_tls %}
+        {{ ui.aviso("amber", "El foro usa HTTP sin cifrar: tu usuario y contraseña viajan sin protección. No reutilices una contraseña que uses en otro sitio; si puedes, usa un foro con HTTPS.") }}
+        {% endif %}
+        <label>Usuario
+          <input type="text" name="forum_username" value="{{ forum_username }}" autocomplete="off">
+        </label>
+        <label>Contraseña
+          <input type="password" name="forum_password" autocomplete="off"
+                 placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if forum_password_configurada else 'sin configurar' }}">
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="forum_enabled" value="true" {% if forum_enabled %}checked{% endif %}>
+          Activar el foro para buscar enlaces de descarga
+        </label>
+        <p class="ajustes-hint">Solo se leen las referencias de los temas; ZascArr no descarga ni publica nada en el foro. La conexión puede ser HTTP: el foro decide si ofrece HTTPS.</p>
+        <div class="ajustes-actions">
+          <button type="submit">Guardar</button>
+        </div>
+      </form>
+      <div id="resultado-foro" aria-live="polite"></div>
+    </fieldset>
+
 
     <fieldset class="ajustes-card ajustes-card--ancha" id="calidad-ediciones">
       <legend>Calidad y mejoras</legend>

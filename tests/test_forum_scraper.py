@@ -23,6 +23,7 @@ from zascarr.services.forum_scraper import (
     origen_de,
 )
 
+
 @pytest.fixture(autouse=True)
 def _foro_encendido(monkeypatch):
     """La puerta de fuente apagada de la envoltura lee la configuración real: aquí, encendida."""
@@ -366,4 +367,66 @@ class TestLoginConRedireccion:
         scraper = ForumScraper(BASE, rate_limit=0, crear_cliente=cliente)
         assert await scraper.login("usuario", "clave") is True
         assert scraper._cookies.get("member_id") == "42"
-        assert len(peticiones) == 2                      # login + salto al índice
+        # SCR4: GET de la página de entrada (charset y formulario) + POST + salto al índice.
+        assert len(peticiones) == 3
+
+
+# ── SCR4: los temas pueden llevar la sesión en la query (`&s=`) ───────────────────────────────
+
+class TestTemaConSesionEnLaQuery:
+
+    @pytest.mark.parametrize("href", [
+        "index.php?showtopic=5&s=SESION123",
+        "index.php?showtopic=5&amp;s=SESION123",
+        f"{BASE}/index.php?showtopic=5&s=SESION123&st=0",
+    ])
+    async def test_un_tema_con_s_y_otros_parametros_se_detecta_y_se_lee(self, href):
+        foro = Foro(_busqueda(href))
+        resultados = await foro.scraper().use_ipb_search("tebeo")
+        assert len(resultados) == 1
+        assert resultados[0].topic_title == "Tema 0"
+        assert resultados[0].topic_url.startswith(f"{BASE}/index.php?showtopic=5")
+        assert resultados[0].ed2k_links == [ED2K]
+        # La cookie viaja solo al origen del foro, también al abrir el tema.
+        assert foro.a_otro_origen() == []
+
+
+# ── m-2 SecOps: el enlace del tema no propaga la sesión (`s=`) ──────────────────────────────
+
+class TestTemaSinSesionEnLaUrl:
+
+    async def test_el_topic_url_conserva_showtopic_y_quita_s(self):
+        foro = Foro(_busqueda("index.php?showtopic=5&s=SESION123&st=0"))
+        resultados = await foro.scraper().use_ipb_search("tebeo")
+        assert resultados[0].topic_url == f"{BASE}/index.php?showtopic=5&st=0"
+        assert "SESION123" not in resultados[0].topic_url
+        assert resultados[0].ed2k_links == [ED2K]
+
+    async def test_el_resolver_quita_los_parametros_de_sesion(self):
+        scraper = Foro.scraper(Foro(""))
+        url = scraper._resolver_enlace(
+            "index.php?showtopic=7&s=SESION&sid=OTRA&st=2")
+        assert url == f"{BASE}/index.php?showtopic=7&st=2"
+
+    async def test_el_login_conserva_la_sesion_en_la_accion(self):
+        """El POST de login sí necesita conservar el `s=` del action (la otra mitad es la cookie)."""
+        peticiones: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            peticiones.append(request)
+            if request.method == "GET":
+                return httpx.Response(200, text=(
+                    '<html><meta charset="utf-8"><form action="/index.php?act=Login&CODE=01&s=SESION123">'
+                    '<input type="hidden" name="s" value="SESION123">'
+                    '<input type="text" name="UserName">'
+                    '<input type="password" name="PassWord"></form></html>'))
+            return httpx.Response(302, headers={
+                "location": "/index.php", "set-cookie": "member_id=1; Path=/"})
+
+        from zascarr.services.forum_scraper import ForumScraper
+
+        scraper = ForumScraper(BASE, rate_limit=0, crear_cliente=lambda: httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), follow_redirects=False))
+        assert await scraper.login("usuario", "clave") is True
+        post = next(p for p in peticiones if p.method == "POST")
+        assert "s=SESION123" in str(post.url)

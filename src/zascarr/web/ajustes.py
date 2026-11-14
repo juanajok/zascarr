@@ -11,6 +11,8 @@ botón de probar antes de guardar.
 """
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -26,6 +28,7 @@ from zascarr.services.auth import (
     crear_cookie_sesion,
 )
 from zascarr.services.cortesia_estado import texto_politica_ajustes
+from zascarr.services.forum_scraper import url_de_foro_visible
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.prowlarr import ProwlarrClient
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
@@ -144,6 +147,16 @@ def _contexto() -> dict:
         "amule_url": s.amule_url,
         "amule_password_configurada": bool(s.amule_password),
         "amule_enabled": s.amule_enabled,
+        # SCR4/D-1: tarjeta del foro. La contraseña NUNCA viaja a la plantilla (solo si consta).
+        # `getattr` tolera los dobles antiguos de Ajustes que aún no declaran estos campos.
+        # m-1 (SecOps): nunca se pinta `user:pass@` ni una query de sesión (`?s=`).
+        "forum_url": url_de_foro_visible(getattr(s, "forum_url", "") or ""),
+        "forum_username": getattr(s, "forum_username", ""),
+        "forum_password_configurada": bool(getattr(s, "forum_password", "")),
+        "forum_enabled": bool(getattr(s, "forum_enabled", False)),
+        # m-4: el esquema se compara sin distinguir mayúsculas (`HTTP://` también avisa).
+        "forum_http_sin_tls": url_de_foro_visible(
+            getattr(s, "forum_url", "") or "").lower().startswith("http://"),
         "carpetas_compartidas": list(getattr(s, "carpetas_compartidas", []) or []),
         "carpetas_disponibles": [
             {"ruta": str(ruta), "nombre": nombre}
@@ -443,6 +456,54 @@ async def guardar_amule(
         "amule_enabled": amule_enabled,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "aMule"})
+
+
+def _direccion_de_foro_valida(url: str) -> bool:
+    """Dirección base del foro: http(s), sin credenciales, query ni fragmento (m-1).
+
+    Las credenciales en la URL acabarían en logs/UI y la query puede ser `?s=<sesión>`; si el
+    `.env` trae una, Ajustes la rechaza en vez de guardarla/pintarla.
+    """
+    try:
+        partes = urlsplit(url)
+        _ = partes.port                       # valida el puerto (lanza ValueError si no lo es)
+    except ValueError:
+        return False
+    if partes.scheme.lower() not in ("http", "https") or not partes.hostname:
+        return False
+    if partes.username is not None or partes.password is not None or "@" in partes.netloc:
+        return False
+    return not partes.query and not partes.fragment
+
+
+@router.post("/guardar/foro", response_class=HTMLResponse)
+async def guardar_foro(
+    request: Request,
+    forum_url: str = Form(default=""),
+    forum_username: str = Form(default=""),
+    forum_password: str = Form(default=""),
+    forum_enabled: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """SCR4/D-1: URL, usuario, contraseña (en blanco = no cambiar) y activar.
+
+    La contraseña no se devuelve nunca a la plantilla; `RuntimeSettingsService.save` ignora
+    un secreto vacío. `http://` se acepta (D-2) y la tarjeta avisa de que no hay TLS.
+    """
+    direccion = forum_url.strip().rstrip("/")
+    if direccion and not _direccion_de_foro_valida(direccion):
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Foro",
+            "error": "La dirección del foro debe ser http o https, sin usuario, contraseña "
+                     "ni parámetros (como ?s=). Guarda solo la dirección base.",
+        })
+    await RuntimeSettingsService(db).save({
+        "forum_url": url_de_foro_visible(direccion) if direccion else "",
+        "forum_username": forum_username.strip(),
+        "forum_password": forum_password,
+        "forum_enabled": forum_enabled,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Foro"})
 
 
 @router.post("/guardar/compartidos", response_class=HTMLResponse)
