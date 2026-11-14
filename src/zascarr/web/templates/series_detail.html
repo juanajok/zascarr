@@ -259,7 +259,15 @@
     {% for n in archivos_por_numero %}
     <li class="archivos-numero" data-numero="{{ n.numero }}">
       {% set sin_numero = n.numero == "(sin número)" %}
-      <h3 class="archivos-numero-titulo"><a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}">{% if sin_numero %}Sin número{% if n.titulo %} · {{ n.titulo }}{% endif %}{% else %}#{{ n.numero }}{% if n.titulo %} · {{ n.titulo }}{% endif %}{% endif %}<span class="sr">{% if sin_numero %} ver información del especial{% else %} ver información del número {{ n.numero }}{% endif %}</span></a></h3>
+      <h3 class="archivos-numero-titulo">
+        <span class="chip-previa chip-previa-lista">
+          <a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}"
+             hx-get="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/previa"
+             hx-target="#previa-archivo-{{ n.issue_id }}" hx-swap="innerHTML"
+             hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{% if sin_numero %}Sin número{% if n.titulo %} · {{ n.titulo }}{% endif %}{% else %}#{{ n.numero }}{% if n.titulo %} · {{ n.titulo }}{% endif %}{% endif %}<span class="sr">{% if sin_numero %} ver información del especial{% else %} ver información del número {{ n.numero }}{% endif %}</span></a>
+          <span class="previa-numero" id="previa-archivo-{{ n.issue_id }}" aria-hidden="true"></span>
+        </span>
+      </h3>
       {% if n.mezcla %}{{ ui.aviso("amber", "Este número tiene archivos de títulos distintos. Si son tebeos diferentes, desvincúlalos y asígnalos a su serie o número.") }}{% endif %}
       <ul class="archivos-lista">
         {% for a in n.archivos %}
