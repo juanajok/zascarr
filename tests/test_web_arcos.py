@@ -335,3 +335,19 @@ def test_pedir_saga_muestra_boton_y_redirige_con_recuento():
         assert "anadidos=1" in r.headers["location"]
     finally:
         _cerrar()
+
+
+def test_pedir_saga_sin_nuevos_muestra_aviso_neutro():
+    aid = str(uuid4())
+    detalle = DetalleArco(aid, "Court of Owls", None, True, [], 0)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{aid}", params={
+                "guardado": "pedido", "anadidos": "0", "ya_pedidos": "2",
+                "en_biblioteca": "1"})
+    finally:
+        _cerrar()
+    assert "No había números nuevos que pedir" in r.text
+    assert "a tus deseados" not in r.text
+    assert "autofocus" in r.text
