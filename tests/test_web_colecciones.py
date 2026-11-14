@@ -56,6 +56,7 @@ def test_lista_muestra_colecciones_y_politica():
     assert "Grapas" in r.text and "Buscar faltantes de todas" in r.text
     assert "No buscar automáticamente" in r.text and "(heredar)" not in r.text
     assert "/ui/colecciones/c1/portada?v=auto-abc" in r.text
+    assert 'class="coleccion-portada-enlace" href="/ui/colecciones/c1"' in r.text
     assert "?v=" in r.text
     assert "Nueva colección" in r.text
 
@@ -151,6 +152,24 @@ def test_editar_asignar_quitar_y_borrar_redirigen():
         del detalle
     finally:
         _cerrar()
+
+
+def test_vista_tarjetas_hace_clicable_portada_y_titulo_de_la_serie():
+    c = _cliente()
+    detalle = DetalleColeccion("c1", "Grapas", None, "heredar", [
+        SerieDeColeccion("s1", "Flash", 1987, "ninguno", "No buscar", "ninguno", "No buscar"),
+    ])
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion", AsyncMock(return_value=_pagina())), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{uuid4()}?vista=tarjetas")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert 'class="coleccion-serie-card-enlace" href="/ui/series/s1"' in r.text
+    assert 'aria-label="Abrir la serie Flash"' in r.text
 
 
 def test_endpoint_portada_etag_304_y_404():
