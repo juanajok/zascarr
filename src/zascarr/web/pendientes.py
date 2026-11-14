@@ -89,7 +89,7 @@ def _suggestion(file: File) -> dict | None:
 
 
 def _puede_vincular(f: File) -> bool:
-    """Solo se ofrece Vincular donde puede funcionar: en la biblioteca, no en _Unsorted y no un pack."""
+    """Vincular solo donde puede funcionar: en la biblioteca, sin _Unsorted y sin pack."""
     try:
         return ("_Unsorted" not in Path(f.file_path).parts
                 and not parse_comic_filename(f.file_name).is_pack)
