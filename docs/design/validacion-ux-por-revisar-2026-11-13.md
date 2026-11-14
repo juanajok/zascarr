@@ -1,5 +1,12 @@
 # Validación UX del flujo «Por revisar» — kit y prueba en seco
 
+> **Protocolo superado (2026-11-14).** El kit operativo vigente es
+> [`docs/design/ui-u10/kit/`](ui-u10/kit/README.md): añade consentimiento y conservación,
+> reclutamiento, guion sobre la app real (una sola versión, sin A/B), registro por tarea y análisis.
+> Este documento se conserva como referencia histórica de perfiles, tareas y métricas; **no se
+> ejecutan los dos protocolos** ni se cuentan dos veces las mismas sesiones.
+
+
 > **Estado:** las sesiones con 5 coleccionistas **NO se han ejecutado**. No hay
 > personas reales reclutadas desde este entorno. Lo que sí se ejecutó es una
 > **prueba en seco automatizada** de los cinco recorridos sobre el código real
