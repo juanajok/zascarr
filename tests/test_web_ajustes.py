@@ -258,57 +258,71 @@ class TestGuardarSeguridad:
 
 class TestProbar:
 
+    @staticmethod
+    def _cliente_falso(monkeypatch, responder):
+        """Sustituye el cliente HTTP por uno con transporte simulado (streaming de RES-3)."""
+        import httpx
+        from httpx import AsyncClient as ClienteReal
+
+        def fabrica(**kw):
+            kw["transport"] = httpx.MockTransport(responder)
+            return ClienteReal(**kw)
+
+        monkeypatch.setattr("zascarr.web.ajustes.httpx.AsyncClient", fabrica)
+
     def test_comic_vine_sin_clave_falla_sin_llamar_a_la_red(self):
         client = TestClient(app)
         r = client.post("/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": ""})
         assert "✗" in r.text
         assert "Falta la clave" in r.text
 
-    def test_comic_vine_conexion_correcta(self):
-        respuesta = MagicMock(status_code=200)
-        respuesta.json.return_value = {"error": "OK"}
-        with patch("httpx.AsyncClient.get", AsyncMock(return_value=respuesta)):
-            client = TestClient(app)
-            r = client.post("/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
+    def test_comic_vine_conexion_correcta(self, monkeypatch):
+        import httpx
+
+        self._cliente_falso(monkeypatch, lambda _r: httpx.Response(200, json={"error": "OK"}))
+        client = TestClient(app)
+        r = client.post("/ui/ajustes/probar/comic-vine",
+                        data={"comicvine_api_key": "clave-valida"})
         assert "✓" in r.text
         assert "Conexión correcta" in r.text
 
-    def test_la_prueba_de_comic_vine_manda_el_user_agent_de_zascarr(self):
+    def test_la_prueba_de_comic_vine_manda_el_user_agent_de_zascarr(self, monkeypatch):
         """Bug real (2026-11-09): GameSpot bloquea con 403 el User-Agent genérico de httpx
-        (`python-httpx/…`). La prueba creaba un cliente sin cabecera y daba «HTTP 403» con una
-        clave válida. Debe mandar el MISMO User-Agent que el cliente real."""
+        (`python-httpx/…`). Debe mandar el MISMO User-Agent que el cliente real."""
+        import httpx
+
         capturado: dict = {}
-        respuesta = MagicMock(status_code=200)
-        respuesta.json.return_value = {"error": "OK"}
 
-        async def get(self, *args, **kwargs):
-            capturado["ua"] = self.headers.get("user-agent")
-            return respuesta
+        def responder(request: httpx.Request) -> httpx.Response:
+            capturado["ua"] = request.headers.get("user-agent")
+            return httpx.Response(200, json={"error": "OK"})
 
-        with patch("httpx.AsyncClient.get", get):
-            client = TestClient(app)
-            r = client.post(
-                "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
+        self._cliente_falso(monkeypatch, responder)
+        client = TestClient(app)
+        r = client.post(
+            "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
         assert "Conexión correcta" in r.text
         assert capturado["ua"] == "ZascArr/0.1"
 
-    def test_comic_vine_401_lo_dice_como_clave_rechazada(self):
-        respuesta = MagicMock(status_code=401)
-        with patch("httpx.AsyncClient.get", AsyncMock(return_value=respuesta)):
-            client = TestClient(app)
-            r = client.post(
-                "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-mala"})
+    def test_comic_vine_401_lo_dice_como_clave_rechazada(self, monkeypatch):
+        import httpx
+
+        self._cliente_falso(monkeypatch, lambda _r: httpx.Response(401))
+        client = TestClient(app)
+        r = client.post(
+            "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-mala"})
         assert "✗" in r.text
         assert "rechazó la clave (HTTP 401)" in r.text
 
-    def test_comic_vine_403_habla_del_bloqueo_anti_bots_y_de_la_vpn(self):
+    def test_comic_vine_403_habla_del_bloqueo_anti_bots_y_de_la_vpn(self, monkeypatch):
         """El 403 de GameSpot no significa «clave mala»: es su protección contra programas o la
         red. El mensaje no debe hacer pensar que la clave está mal y debe decir qué probar."""
-        respuesta = MagicMock(status_code=403)
-        with patch("httpx.AsyncClient.get", AsyncMock(return_value=respuesta)):
-            client = TestClient(app)
-            r = client.post(
-                "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
+        import httpx
+
+        self._cliente_falso(monkeypatch, lambda _r: httpx.Response(403))
+        client = TestClient(app)
+        r = client.post("/ui/ajustes/probar/comic-vine",
+                        data={"comicvine_api_key": "clave-valida"})
         assert "✗" in r.text
         assert "bloqueó la conexión (HTTP 403)" in r.text
         assert "protección contra programas" in r.text and "VPN" in r.text
