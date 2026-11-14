@@ -135,3 +135,24 @@ def test_login_no_confirmado_sale_con_cinco():
     assert codigo == 5
     assert "Login: NO confirmado" in salida
     assert "No se ha buscado nada." in salida
+
+
+# ── m-1/m-5 SecOps: URL visible y textos saneados ─────────────────────────────────────────
+
+def test_m1_m5_sanea_url_y_consulta_antes_de_imprimir():
+    ajustes = _ajustes(forum_url="http://lector:CLAVE@foro.example/forum?s=SESION123")
+    codigo, salida, _ = _ejecutar(ajustes, ScraperFalso(),
+                                  argv=["--consulta", "Año\x1b[2J\x07\x1b]0;x\x07"])
+    assert codigo == 0
+    assert "\x1b" not in salida and "\x07" not in salida
+    assert "lector:CLAVE" not in salida and "SESION123" not in salida
+    assert "Foro: http://foro.example/forum" in salida
+    assert "Año" in salida
+
+
+@pytest.mark.parametrize("url", ["ftp://foro.example/forum", "javascript:alert(1)",
+                                 "foro.example/forum"])
+def test_m1_una_url_no_valida_sale_con_dos_y_no_pide_nada(url):
+    codigo, salida, fabricado = _ejecutar(_ajustes(forum_url=url), ScraperFalso())
+    assert codigo == 2 and fabricado == []
+    assert "no es válida" in salida and "ninguna petición" in salida

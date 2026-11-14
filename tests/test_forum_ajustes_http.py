@@ -116,3 +116,63 @@ def test_ac_tls_3_legal_advierte_del_http_sin_tls():
     assert "Aviso legal" in texto or "aviso legal" in texto
     # El hash que versiona la aceptación se recalcula solo (no hay constante a mano).
     assert len(current_legal_version()) == 16
+
+
+# ── m-1/m-4 SecOps: URL visible sin credenciales/sesión y esquema sin distinguir caja ──────
+
+def test_m1_la_url_del_foro_se_pinta_sin_credenciales_ni_sesion(monkeypatch):
+    monkeypatch.setattr("zascarr.web.ajustes.get_settings", lambda: _ajustes(
+        forum_url="http://lector:CLAVE@foro.example/forum?s=SESION123",
+        forum_enabled=True))
+    c = _cliente()
+    try:
+        r = c.get("/ui/ajustes")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "lector:CLAVE" not in r.text and "SESION123" not in r.text
+    assert 'value="http://foro.example/forum"' in r.text
+    assert "HTTP sin cifrar" in r.text
+
+
+def test_m4_el_aviso_http_no_distingue_mayusculas(monkeypatch):
+    monkeypatch.setattr("zascarr.web.ajustes.get_settings", lambda: _ajustes(
+        forum_url="HTTP://foro.example/forum"))
+    c = _cliente()
+    try:
+        r = c.get("/ui/ajustes")
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "HTTP sin cifrar" in r.text
+
+
+def test_m1_guardar_rechaza_credenciales_y_query(monkeypatch):
+    guardar = AsyncMock()
+    monkeypatch.setattr("zascarr.web.ajustes.RuntimeSettingsService",
+                        lambda _db: SimpleNamespace(save=guardar))
+    c = _cliente()
+    try:
+        r = c.post("/ui/ajustes/guardar/foro", data={
+            "forum_url": "http://lector:CLAVE@foro.example/forum?s=SESION123",
+            "forum_username": "lector", "forum_password": "", "forum_enabled": "true"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "no puede llevar" not in r.text and "sin usuario, contraseña" in r.text
+    assert "CLAVE" not in r.text and "SESION123" not in r.text
+    guardar.assert_not_awaited()
+
+
+def test_m1_guardar_normaliza_esquema_y_host(monkeypatch):
+    guardar = AsyncMock()
+    monkeypatch.setattr("zascarr.web.ajustes.RuntimeSettingsService",
+                        lambda _db: SimpleNamespace(save=guardar))
+    c = _cliente()
+    try:
+        r = c.post("/ui/ajustes/guardar/foro", data={
+            "forum_url": "HTTPS://Foro.Example/forum/", "forum_username": "lector",
+            "forum_password": "", "forum_enabled": "true"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert guardar.await_args.args[0]["forum_url"] == "https://foro.example/forum"

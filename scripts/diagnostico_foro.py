@@ -19,10 +19,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import unicodedata
 from collections.abc import Callable
 
 from zascarr.config import get_settings
-from zascarr.services.forum_scraper import ForumFloodControl, ForumScraper
+from zascarr.services.forum_scraper import (
+    ForumFloodControl,
+    ForumScraper,
+    url_de_foro_visible,
+)
 from zascarr.utils.peticiones import ErrorDePeticion
 
 #: Campos que deben estar puestos para diagnosticar (solo se nombran, nunca su valor).
@@ -58,6 +63,18 @@ def _faltan(ajustes) -> list[str]:
     return faltan
 
 
+MAX_TEXTO_TERMINAL = 120
+
+
+def _texto_seguro(texto: str, maximo: int = MAX_TEXTO_TERMINAL) -> str:
+    """Texto externo para la terminal: sin controles C0/ESC/BEL ni formato Unicode (m-5)."""
+    seguro = "".join(
+        caracter for caracter in texto
+        if caracter.isprintable() and unicodedata.category(caracter) != "Cf"
+    )
+    return " ".join(seguro.split())[:maximo]
+
+
 def _charset_legible(charset: str | None) -> str:
     return charset if charset else "(ausente)"
 
@@ -66,8 +83,9 @@ async def _diagnostico(ajustes, *, consulta: str, leer_tema: bool, fabrica,
                        salida: Callable[[str], None],
                        dormir=asyncio.sleep) -> int:
     """Los tres pasos del diagnóstico. `fabrica` inyectable para las pruebas sin red."""
-    url = str(ajustes.forum_url)
-    http = url.startswith("http://")
+    url = _texto_seguro(url_de_foro_visible(str(ajustes.forum_url)))
+    consulta = _texto_seguro(consulta)
+    http = url.lower().startswith("http://")
     salida("ZascArr — diagnóstico del foro (SCR4)")
     aviso_tls = "  [HTTP SIN TLS: las credenciales viajan sin cifrar]" if http else ""
     salida(f"Foro: {url}{aviso_tls}")
@@ -130,7 +148,13 @@ def main(argv: list[str] | None = None, *, ajustes=None,
         salida("Configura el foro en Ajustes › Descargas › Foro (o en el .env) y activa la "
                "integración. No se ha hecho ninguna petición.")
         return 2
-    fabrica = fabrica or (lambda s: ForumScraper(base_url=s.forum_url))
+    direccion = _texto_seguro(url_de_foro_visible(str(ajustes.forum_url)))
+    if not direccion:
+        salida("ZascArr — diagnóstico del foro (SCR4)")
+        salida("La dirección del foro no es válida: debe ser http(s), sin usuario, contraseña "
+               "ni parámetros. No se ha hecho ninguna petición.")
+        return 2
+    fabrica = fabrica or (lambda _s: ForumScraper(base_url=direccion))
     return asyncio.run(_diagnostico(ajustes, consulta=args.consulta,
                                     leer_tema=args.leer_tema, fabrica=fabrica,
                                     salida=salida, dormir=dormir))

@@ -34,7 +34,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from html import unescape
-from urllib.parse import quote, urljoin, urlsplit
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
 
 import httpx
 import structlog
@@ -79,6 +79,10 @@ FLOOD_POR_DEFECTO_S = 30.0
 _COOKIES_DE_MIEMBRO = frozenset({
     "member_id", "pass_hash", "ips4_member_id", "ips4_pass_hash",
 })
+#: Parámetros de query que son la sesión (no se guardan ni se pintan; m-1/m-2).
+_PARAMS_DE_SESION = frozenset({"s", "sid", "session", "session_id", "sess"})
+#: Puertos que no se escriben al normalizar una URL para mostrarla.
+_PUERTOS_POR_DEFECTO = {"http": 80, "https": 443}
 
 #: La caja de error de IPB que acompaña a sus avisos (flood incluido).
 _RE_CAJA_ERROR = re.compile(
@@ -137,6 +141,45 @@ def origen_de(url: str) -> Origen | None:
     if esquema not in _PUERTO_POR_DEFECTO or not host:
         return None
     return esquema, host, puerto or _PUERTO_POR_DEFECTO[esquema]
+
+
+def _sin_parametros_de_sesion(url: str) -> str:
+    """Quita de la query los parámetros de sesión (`s=`, `sid`…), conservando los demás.
+
+    m-2 (SecOps): un `topic_url` con `s=` propaga la sesión a la UI/BD; `showtopic=N` y los
+    parámetros no sensibles se conservan porque forman parte del enlace.
+    """
+    try:
+        partes = urlsplit(url)
+    except ValueError:
+        return url
+    if not partes.query:
+        return url
+    pares = [(clave, valor) for clave, valor in parse_qsl(partes.query, keep_blank_values=True)
+             if clave.lower() not in _PARAMS_DE_SESION]
+    return urlunsplit((partes.scheme, partes.netloc, partes.path,
+                       urlencode(pares, doseq=True), ""))
+
+
+def url_de_foro_visible(url: str) -> str:
+    """URL del foro para pintar/registrar: sin credenciales, query de sesión ni fragmento (m-1).
+
+    Devuelve `""` si no es una URL http(s) con host; así Ajustes y el diagnóstico nunca muestran
+    `user:pass@` ni `?s=<sesión>` aunque el `.env` venga mal.
+    """
+    try:
+        partes = urlsplit(str(url).strip())
+        puerto = partes.port
+    except (ValueError, AttributeError):
+        return ""
+    esquema = partes.scheme.lower()
+    host = (partes.hostname or "").lower()
+    if esquema not in _PUERTOS_POR_DEFECTO or not host:
+        return ""
+    netloc = host
+    if puerto is not None and puerto != _PUERTOS_POR_DEFECTO[esquema]:
+        netloc = f"{host}:{puerto}"
+    return urlunsplit((esquema, netloc, partes.path or "/", "", ""))
 
 
 def _host_para_log(url: str) -> str:
@@ -237,7 +280,8 @@ class ForumScraper:
                  politica_busqueda: PoliticaFuente | None = None,
                  cortesia: CortesiaProceso | None = None,
                  reloj=time.monotonic, dormir=asyncio.sleep, espera_max_s: float = 30.0):
-        self._base = base_url.rstrip("/")
+        visible = url_de_foro_visible(base_url)
+        self._base = (visible or base_url).rstrip("/")
         self._origen = origen_de(self._base)
         ajustes = get_settings()
         # AC-INT-4: lectura y búsqueda salen de config.py; `rate_limit=` se conserva para los
@@ -349,7 +393,8 @@ class ForumScraper:
             html = await self._leer_entrada(cliente)
             accion, ocultos = self._formulario_de_login(html)
             if accion:
-                destino = self._resolver_enlace(accion)      # AC-CHA-6: mismo origen o error
+                destino = self._resolver_enlace(
+                    accion, conservar_sesion=True)           # AC-CHA-6: mismo origen o error
             else:
                 destino = f"{self._base}/index.php?act=Login&CODE=01"
             datos = {**ocultos, "UserName": username, "PassWord": password, "CookieDate": "1"}
@@ -380,8 +425,12 @@ class ForumScraper:
             cabeceras["Cookie"] = "; ".join(f"{k}={v}" for k, v in self._cookies.items())
         return cabeceras
 
-    def _resolver_enlace(self, href: str) -> str:
-        """URL absoluta del enlace, SOLO si es del origen del foro; si no, se lanza el error."""
+    def _resolver_enlace(self, href: str, *, conservar_sesion: bool = False) -> str:
+        """URL absoluta del enlace, SOLO si es del origen del foro; si no, se lanza el error.
+
+        Por defecto quita de la query los parámetros de sesión (`s=`): el enlace se guarda y se
+        pinta, así que no debe propagar la sesión (m-2). El login pide `conservar_sesion=True`.
+        """
         if self._origen is None:
             raise OrigenNoPermitidoError("foro_sin_origen")
         if any(c <= " " or c == "\x7f" or c == "\\" for c in href):
@@ -405,6 +454,8 @@ class ForumScraper:
             raise OrigenNoPermitidoError("url_mal_formada") from None
         if origen_de(url) != self._origen:
             raise OrigenNoPermitidoError("otro_origen")
+        if not conservar_sesion:
+            url = _sin_parametros_de_sesion(url)
         return url
 
     async def _get(self, url: str, *, politica: PoliticaFuente | None = None,
@@ -461,8 +512,9 @@ class ForumScraper:
         except (CortesiaEnEspera, FuenteApagada):
             # AC-16: una espera o una fuente apagada NO es «sin resultados» ni un fallo.
             raise
-        except Exception:
-            logger.exception("forum.search_failed")
+        except Exception as exc:
+            # m-3 (SecOps): tipo del error, nunca la excepción/URL con `s=` (privacidad §6.6).
+            logger.warning("forum.search_failed", error=type(exc).__name__)
             return []
         results: list[ForumResult] = []
         for href, title in TOPIC_PATTERN.findall(html)[:10]:
@@ -483,7 +535,8 @@ class ForumScraper:
                 logger.warning("forum.tema_rechazado", motivo=str(exc))
             except (CortesiaEnEspera, FuenteApagada):
                 raise
-            except Exception:
-                # Solo el host: la URL del tema puede llevar `s=<sesión>`.
-                logger.exception("forum.topic_failed", host=_host_para_log(url_tema))
+            except Exception as exc:
+                # Solo el host y el tipo: la URL del tema puede llevar `s=<sesión>` (m-3).
+                logger.warning("forum.topic_failed", host=_host_para_log(url_tema),
+                               error=type(exc).__name__)
         return results
