@@ -260,6 +260,24 @@ class Orchestrator:
         item.status = WishlistStatus.SEARCHING
         await self.db.flush()
 
+    async def _restaurar_marca(self, item: Wishlist,
+                               marca_previa: datetime | None) -> None:
+        """Deshace la marca de intento de `_marcar_busqueda` (usada si el foro pide esperar).
+
+        La marca de política se confirma con commit ANTES de la petición (FR-22), así que no basta
+        con tocar el atributo: se restaura con un UPDATE y, en política, se confirma igual que se
+        confirmó la marca. El ítem vuelve a ser elegible al pasar la espera y no cuenta en el techo
+        por hora (`_queda_cupo_de_politica`).
+        """
+        await self.db.execute(
+            update(Wishlist).where(Wishlist.id == item.id)
+            .values(last_searched_at=marca_previa)
+        )
+        item.last_searched_at = marca_previa
+        if getattr(item, "origen", None) == WishlistOrigin.POLICY:
+            await self.db.commit()
+        await self.db.flush()
+
     async def _process_item(self, item: Wishlist) -> bool:
         candidates = await self._search_and_rank(item)
         if not candidates:
@@ -307,6 +325,7 @@ class Orchestrator:
         # foro en cada ciclo con un item condenado. C6: va ANTES de comprobar si hay alguna fuente
         # activa (decisión del PO): un ítem sin fuentes gasta el cooldown de 6 h y no vuelve a
         # ocupar huecos del lote en cada ciclo.
+        marca_previa = getattr(item, "last_searched_at", None)
         await self._marcar_busqueda(item)
 
         settings = get_settings()
@@ -349,8 +368,14 @@ class Orchestrator:
             try:
                 forum_result = await self._forum_fallback(query)
             except ForumFloodControl:
+                # C-1 (SecOps): un flood es una espera, no un intento fallido. Se deshace la
+                # marca para que el ítem se reintente al pasar la espera y no consuma cupo de
+                # política (la marca de política se había confirmado antes de la petición).
+                # El estado vuelve a WANTED ANTES de restaurar: en política, la restauración
+                # confirma, y no debe persistir el SEARCHING transitorio de _marcar_busqueda.
                 item.status = WishlistStatus.WANTED
                 item.last_error = MOTIVO_FORO_ESPERA
+                await self._restaurar_marca(item, marca_previa)
                 await self.db.flush()
                 return None
             if forum_result:
@@ -645,8 +670,9 @@ class Orchestrator:
             # AC-16: sin turno no es un fallo; se omite el ciclo sin registrar excepción.
             logger.info("orchestrator.forum_sin_turno",
                         motivo=getattr(exc, "motivo", "apagada"))
-        except Exception:
-            logger.exception("orchestrator.forum_fallback_error")
+        except Exception as exc:
+            # m-3 (SecOps): solo el tipo, sin traza ni URL (la del foro puede llevar `s=`).
+            logger.warning("orchestrator.forum_fallback_error", error=type(exc).__name__)
         return None
 
     @staticmethod
