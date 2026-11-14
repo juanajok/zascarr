@@ -166,3 +166,28 @@ TEST_DATABASE_URL=… PYTHONPATH=src … python .qa-deudas/e2e_m3_pg.py  # 4/4 O
 `web/templates/{_legal_disclaimer,arcos,series_detail}.html`,
 `tests/{test_comic_book_herald,test_enricher,test_peticiones,test_reconciliacion_lecturas_pg,
 test_web_arcos,test_web_series}.py`. Sin cambios en `web/ajustes.py`, `models/` ni `alembic/`.
+
+---
+
+## Addendum — reconfirmación del bloqueante (f) (2026-11-14)
+
+**SHA con el fix:** `15a6e908bfad81546830981fc031469c8925eaa4` (PR #805). El único cambio
+funcional respecto a `938654ea` es en `tests/test_reconciliacion_lecturas_pg.py`: pasa de
+`bd_efimera_sync` a `async with bd_efimera(URL)`, que es la versión async; **no** se toca la
+lógica de la prueba ni el servicio de reconciliación.
+
+Reproducción propia con Postgres real (contenedor `zascarr-ux508-pg`, PG 15.19; base de pruebas
+`zascarr_qa_deudas_fix_test` creada y borrada para esta comprobación):
+
+```
+TEST_DATABASE_URL=postgresql://…@127.0.0.1:55508/zascarr_qa_deudas_fix_test \
+PYTHONPATH=src … -m pytest -q tests/test_reconciliacion_lecturas_pg.py
+→ 1 passed in 5.11s        (antes: RuntimeError: asyncio.run() …)
+
+PYTHONPATH=src … -m pytest -q tests/test_reconciliacion_lecturas_pg.py   # sin TEST_DATABASE_URL
+→ 1 skipped in 0.59s       (skip documentado, como exige la aceptación)
+```
+
+`git diff 938654ea..15a6e908 -- tests/test_reconciliacion_lecturas_pg.py` confirma que solo
+cambian el import y el `with`; el resto del lote y sus evidencias (a)-(e), (g) del informe
+siguen válidos. **Veredicto actualizado: APTO para `15a6e908`**; el bloqueante (f) queda cerrado.
