@@ -33,6 +33,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from html import unescape
 from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
@@ -60,8 +61,10 @@ logger = structlog.get_logger()
 
 ED2K_PATTERN   = re.compile(r'ed2k://\|file\|[^"<\s]+', re.IGNORECASE)
 MAGNET_PATTERN = re.compile(r'magnet:\?xt=urn:[^"<\s]+', re.IGNORECASE)
+#: `showtopic=N` con lo que IPB añada detrás (`&s=<sesión>`, `&st=…`): si se exige que el número
+#: cierre la URL, los temas con sesión en la query no se detectan (visto en la spec, AC de lectura).
 TOPIC_PATTERN = re.compile(
-    r'<a[^>]+href=["\']([^"\']*showtopic=\d+)["\'][^>]*>([^<]+)</a>', re.IGNORECASE
+    r'<a[^>]+href=["\']([^"\']*showtopic=\d+[^"\']*)["\'][^>]*>([^<]+)</a>', re.IGNORECASE
 )
 
 MAX_SALTOS = 3
@@ -463,6 +466,7 @@ class ForumScraper:
             return []
         results: list[ForumResult] = []
         for href, title in TOPIC_PATTERN.findall(html)[:10]:
+            href = unescape(href)  # `&amp;` del HTML, no parte de la ruta
             try:
                 url_tema = self._resolver_enlace(href)
             except OrigenNoPermitidoError as exc:

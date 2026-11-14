@@ -23,6 +23,7 @@ from zascarr.services.forum_scraper import (
     origen_de,
 )
 
+
 @pytest.fixture(autouse=True)
 def _foro_encendido(monkeypatch):
     """La puerta de fuente apagada de la envoltura lee la configuración real: aquí, encendida."""
@@ -368,3 +369,23 @@ class TestLoginConRedireccion:
         assert scraper._cookies.get("member_id") == "42"
         # SCR4: GET de la página de entrada (charset y formulario) + POST + salto al índice.
         assert len(peticiones) == 3
+
+
+# ── SCR4: los temas pueden llevar la sesión en la query (`&s=`) ───────────────────────────────
+
+class TestTemaConSesionEnLaQuery:
+
+    @pytest.mark.parametrize("href", [
+        "index.php?showtopic=5&s=SESION123",
+        "index.php?showtopic=5&amp;s=SESION123",
+        f"{BASE}/index.php?showtopic=5&s=SESION123&st=0",
+    ])
+    async def test_un_tema_con_s_y_otros_parametros_se_detecta_y_se_lee(self, href):
+        foro = Foro(_busqueda(href))
+        resultados = await foro.scraper().use_ipb_search("tebeo")
+        assert len(resultados) == 1
+        assert resultados[0].topic_title == "Tema 0"
+        assert resultados[0].topic_url.startswith(f"{BASE}/index.php?showtopic=5")
+        assert resultados[0].ed2k_links == [ED2K]
+        # La cookie viaja solo al origen del foro, también al abrir el tema.
+        assert foro.a_otro_origen() == []
