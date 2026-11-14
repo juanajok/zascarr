@@ -10,18 +10,15 @@
     <input type="hidden" name="candidata" value="{{ token }}">
     {% if consulta %}<input type="hidden" name="consulta" value="{{ consulta }}">{% endif %}
     <div class="discovery-card-actions">
-      <select name="tradition" required aria-label="Tradición">
-        <option value="" selected disabled>Elige la tradición…</option>
-        {% for value, label in tradiciones %}
-        <option value="{{ value }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Elegir esta serie</button>
+      <button type="submit" class="primary">Usar esta serie</button>
     </div>
-    {% if etiqueta_sugerida %}
-    <small>{{ etiqueta_sugerida | pista_de_tradicion(procedencia) }}{% if pista %} La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}.{% endif %}</small>
-    {% endif %}
+    <small>Después eliges la tradición y ves la vista previa; todavía no se crea nada.</small>
   </form>
+  {% if etiqueta_sugerida %}
+  <small>{{ etiqueta_sugerida | pista_de_tradicion(procedencia) }}{% if pista %} La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}.{% endif %}</small>
+  {% elif pista %}
+  <small>La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}. Es solo una pista.</small>
+  {% endif %}
 </div>
 {%- endmacro %}
 
