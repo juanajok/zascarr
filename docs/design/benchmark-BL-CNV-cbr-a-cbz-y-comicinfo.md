@@ -89,6 +89,18 @@ de la colección sea CBR, mejorar metadatos no llega a la mayoría de los tebeos
 - **Kapowarr**: no escribe metadatos en los archivos; existe la petición #50 («exporting
   metadata»). Estado no comprobado.
 
+### 4.3 Komga (añadido el 2026-11-14)
+
+Revisada al preparar la ficha del lector (BL-LEC), `gotson/komga` `db2ad64` (2026-11-11, MIT),
+`domain/service/BookConverter.kt::convertToCbz`. Convierte RAR4/RAR5 a CBZ **sin comprimir**
+(`DEFLATED` con `NO_COMPRESSION`), se niega si el destino ya existe y **verifica** la copia
+antes de seguir: la vuelve a escanear y analizar y exige que sea ZIP, que esté lista y que
+contenga **todas las páginas (nombre y tipo) y todos los ficheros** del original. Si algo
+falla, borra la copia. Si todo va bien, **borra el original de forma definitiva** y lo anota en
+su historial (`BookFileDeleted`); conserva el mismo `id` de libro. Lee el RAR con junrar 8.1.2.
+**Corrige esta ficha:** la v1 decía que ninguna referencia verificaba la copia; Komga sí lo hace,
+aunque por nombre y tipo, no por tamaño ni CRC.
+
 ## 5. Supuestos de su modelo que NO valen en ZascArr
 
 1. **Borrar el original es aceptable** (Kapowarr siempre; ComicTagger, Mylar3 en «move»).
@@ -111,7 +123,7 @@ de la colección sea CBR, mejorar metadatos no llega a la mayoría de los tebeos
 |---|---|---|---|
 | I1 | Copiar entrada a entrada **sin recomprimir** (`ZIP_STORED`) | **Adoptar** (ComicTagger) | Las imágenes ya van comprimidas; recomprimir gasta CPU en la Pi sin ganar espacio. Sin pérdida de calidad. Hay que medir la diferencia de tamaño (NOT RUN). |
 | I2 | Extraer todo a una carpeta y recomprimir con `DEFLATED` | **Descartar** (Kapowarr) | Doble escritura en disco USB, CPU y espacio temporal de un tebeo entero; ningún beneficio sobre I1. |
-| I3 | Verificar la copia antes de publicarla | **Construir sobre lo propio** (B6) | Manifiesto: mismo número de entradas, mismos nombres y mismo CRC/tamaño que el listado de `unar`, y `testzip`. Ninguna referencia verifica. |
+| I3 | Verificar la copia antes de publicarla | **Construir sobre lo propio** (B6) | Manifiesto: mismo número de entradas, mismos nombres y mismo CRC/tamaño que el listado de `unar`, y `testzip`. Komga sí verifica (ver §4.3): comprueba que la copia tiene todas las páginas y ficheros por nombre y tipo; aquí se exige además tamaño y CRC. |
 | I4 | Borrar el original tras el éxito | **Descartar** como acción del mismo paso; **adaptar** el «borrar aparte, apagado por defecto» de metron-tagger y Calibre | El original se **aparta** (carpeta de ZascArr, fuera de la biblioteca); vaciarla es una acción separada con confirmación. Ver decisión D2. |
 | I5 | Nombre único si ya existe `<nombre>.cbz` | **Adaptar** (ComicTagger) | Aquí mejor **no convertir** y avisar (`--abort-on-conflict`): un `.cbz` homónimo suele ser otra copia del mismo tebeo, terreno de BL-DUP. |
 | I6 | Lista de preferencia con «No convertir» siempre al final | **Adaptar** (Kapowarr) | En la primera versión el único destino es CBZ; la salida segura («si no se puede, se queda como está») sí se adopta. |
@@ -175,8 +187,8 @@ Puntuación 1–5 por enfoque de **conversión** (la parte que toca ficheros):
 (Kapowarr), conservar el original por defecto (metron-tagger, Calibre).
 
 **MEJORAR (con evidencia):**
-- Verificar la copia contra el original antes de publicarla (ninguna lo hace: §4.1).
-- Deshacer la conversión (todas borran o dejan el original suelto, sin vínculo).
+- Verificar la copia contra el original **por contenido** (tamaño y CRC), no solo por nombre y tipo como Komga (§4.3); ComicTagger y Kapowarr no verifican (§4.1).
+- Deshacer la conversión (todas borran o dejan el original suelto, sin vínculo; Komga lo borra y deja un evento en su historial).
 - Funcionar en la Pi sin `rar` propietario (Kapowarr no puede: §4.1).
 - Proponer metadatos campo a campo con su procedencia (Komf agrega a ciegas: §4.2).
 
