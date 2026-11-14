@@ -67,6 +67,12 @@
     </details>
     {#- SCR2 m-1: la atribución CC-BY-SA de Fandom se ve SIN desplegar el resumen. -#}
     {{ aviso_de_atribucion(atribucion_fandom, "esta ficha", true) }}
+    {% for datos in atribucion_relleno %}
+    <p class="caption">Parte de los datos de esta ficha viene de
+      <a href="{{ datos.url_ficha }}" target="_blank" rel="noopener noreferrer">{{ datos.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>,
+      bajo la <a href="{{ datos.url_licencia }}" target="_blank" rel="noopener noreferrer">licencia {{ datos.licencia }}<span class="sr"> (se abre en otra pestaña)</span></a>.
+    </p>
+    {% endfor %}
   </div>
 </div>
 

@@ -196,7 +196,7 @@ from zascarr.utils.portada_rar import (
     portada_de_rar,
 )
 from zascarr.web.asistente_vinculacion import FORMATOS_LEGIBLES
-from zascarr.web.atribucion import atribucion_fandom
+from zascarr.web.atribucion import atribucion_de_relleno, atribucion_fandom
 from zascarr.web.retorno import volver_segura
 from zascarr.web.routes import crear_templates
 
@@ -549,6 +549,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "procedencia": procedencia_de_serie(series),
         # SCR2: doble enlace visible (artículo + CC-BY-SA 3.0) cuando la identifica Fandom.
         "atribucion_fandom": atribucion_fandom(series),
+        "atribucion_relleno": atribucion_de_relleno(series),
         "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
         "aviso_guardado": {

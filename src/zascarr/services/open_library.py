@@ -21,7 +21,11 @@ import structlog
 
 from zascarr.config import get_settings
 from zascarr.utils.cortesia import CortesiaProceso, PoliticaFuente, politica_de
-from zascarr.utils.peticiones import ErrorDePeticion, pedir_con_cortesia
+from zascarr.utils.peticiones import (
+    ErrorDePeticion,
+    RespuestaNoTransitoria,
+    pedir_con_cortesia,
+)
 
 logger = structlog.get_logger()
 
@@ -40,6 +44,7 @@ class OpenLibraryResult:
     author_name: list[str] | None = None
     cover_id: int | None = None
     cover_url: str | None = None
+    description: str | None = None
     site_url: str | None = None
     editorial: str | None = None
     idioma: str | None = None
@@ -113,6 +118,46 @@ class OpenLibraryClient:
     async def __aexit__(self, *args):
         if self._client:
             await self._client.aclose()
+
+    async def get_work(self, work_id: str) -> OpenLibraryResult | None:
+        """`GET /works/{OL…W}.json`: ficha de UNA obra ya identificada (SCR7).
+
+        404/vacío ⇒ None (el llamador marca la caché negativa de 30 días); rate-limit o red
+        se propagan como `ErrorDePeticion` para que el enricher NO marque TTL.
+        """
+        if self._client is None:
+            raise RuntimeError("Cliente de Open Library sin abrir: úsalo con `async with`.")
+        limpio = _work_id(work_id)
+        if limpio is None:
+            return None
+        self.ultimas_peticiones += 1
+        try:
+            r = await pedir_con_cortesia(
+                self._client, "GET", f"{self._base}/works/{limpio}.json",
+                politica=self._politica, espera_max_s=self._espera_max_s,
+                cortesia=self._cortesia, reloj=self._reloj, dormir=self._dormir,
+            )
+        except RespuestaNoTransitoria as exc:
+            if exc.codigo == 404:
+                return None
+            raise
+        try:
+            data = r.json()
+        except ValueError as exc:
+            raise ErrorDePeticion("respuesta JSON inválida de Open Library") from exc
+        if not isinstance(data, dict) or not data:
+            return None
+        descripcion = data.get("description")
+        if isinstance(descripcion, dict):
+            descripcion = descripcion.get("value")
+        return OpenLibraryResult(
+            work_id=limpio,
+            title=str(data.get("title") or "").strip(),
+            start_year=data.get("first_publish_year"),
+            description=str(descripcion).strip() if descripcion else None,
+            site_url=f"{SITIO}/works/{limpio}",
+            raw=data,
+        )
 
     async def search_works(self, query: str, limit: int = 10) -> list[OpenLibraryResult]:
         """`GET /search.json?q=…&fields=…&limit=…`; una página, sin dumps."""
