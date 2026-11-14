@@ -79,3 +79,9 @@ V14 retiró `.topnav`, `.hero-state`, `.toast`, `.audit-ok`, `.ajustes-grid`, `.
 describe como el componente actual de los semáforos (glifos ✓ ! ? dibujados desde `static/iconos`).
 Retirarlo exigiría sustituir el semáforo por un chip o renombrarlo, y eso es una decisión de diseño
 aparte, no una limpieza mecánica.
+
+## Cierre de V14
+
+La migración de la Épica V queda cerrada: CSS muerto retirado, alias de V2 fuera (con prueba que
+impide su vuelta), capturas actuales en `docs/design/ui-actual/` y peso medido. La única excepción
+es `.estado-dot`, documentada arriba como componente actual del semáforo.
