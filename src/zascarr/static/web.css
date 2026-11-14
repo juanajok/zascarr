@@ -1956,12 +1956,14 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .chip-previa-boton { display: none; }
 .chip-previa-lista > .previa-numero {
   position: fixed;
+  z-index: 50;
   top: 50%;
   right: 24px;
   left: auto;
   transform: translateY(-50%);
   width: 200px;
   max-width: calc(100vw - 48px);
+  pointer-events: none;
 }
 .previa-numero {
   position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
@@ -2491,7 +2493,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (max-width: 860px), (pointer: coarse) {
   .chip-previa-lista > .previa-numero {
     top: auto;
-    bottom: 16px;
+    bottom: calc(64px + 16px);
     left: 50%;
     right: auto;
     transform: translateX(-50%);
@@ -2499,11 +2501,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   }
   .chip-previa-lista:focus-within > .previa-numero:not(:empty) {
     display: block;
-    width: 200px;
-    max-width: calc(100vw - 24px);
-    left: 0;
-    right: auto;
-    transform: none;
   }
   .coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty) {
     display: block;

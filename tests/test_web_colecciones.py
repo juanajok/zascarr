@@ -528,6 +528,8 @@ def test_patron_chip_previa_y_override_tactil():
     assert ".chip-previa-lista:focus-within > .previa-numero:not(:empty)" in css
     assert ".chip-previa-boton" in css and "min-height: 44px" in css
     assert "position: fixed" in css
+    assert "z-index: 50" in css
+    assert "bottom: calc(64px + 16px)" in css
     assert "width: 180px" in css
     detalle = Path("src/zascarr/web/templates/_previa_serie.html").read_text()
     assert "previa-card" in detalle and "previa-pie" in detalle
