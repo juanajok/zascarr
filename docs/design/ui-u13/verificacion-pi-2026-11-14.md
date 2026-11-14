@@ -26,7 +26,7 @@
 
 ## FAIL / hallazgo menor — corregido en #834
 
-- **Terminología residual:** el asistente dice «**Registros** en esta carpeta 4» en un paso de la cola de Por revisar. El glosario U7 reserva «registro» para la fila técnica y pide «pendientes» en la cola; no se corrigió aquí porque U13 está cerrada y este trabajo es verificación. **Corregido en #834** (`fix/ud834-terminologia`): el asistente usa «pendientes» (y «archivo» para el fichero); la excepción de procedencia de `carpetas.html` se conserva.
+- **Terminología residual:** los avisos del asistente decían «registros pendientes» y el motivo de fichero inexistente hablaba de «registro». El glosario U7 reserva «registro» para la fila técnica y pide «pendientes»; no se corrigió aquí porque U13 está cerrada y este trabajo es verificación. **Corregido en #834** (`fix/ud834-terminologia`) en los avisos y en `archivo_inexistente` → «archivo»; **el recuento «N pendientes en esta carpeta» ya era correcto** y no se tocó. La excepción de procedencia de `carpetas.html` se conserva.
 
 ## NOT RUN
 
