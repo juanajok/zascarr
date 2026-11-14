@@ -195,3 +195,200 @@ def test_singleton_perezoso_del_proceso_y_reinicio():
     assert gestor_robots_de_proceso() is gestor
     _reiniciar_gestor_compartido()
     assert gestor_robots_de_proceso() is not gestor
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# M-4 (#813): tope de Crawl-delay y olvido de robots por origen
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from types import SimpleNamespace  # noqa: E402
+
+from zascarr.utils.robots import olvidar_origenes_de_fuente, origenes_de_fuente  # noqa: E402
+
+
+def _ajustes_crawl(monkeypatch, maximo) -> SimpleNamespace:
+    ajustes = SimpleNamespace(crawl_delay_max_s=maximo)
+    monkeypatch.setattr("zascarr.config.get_settings", lambda: ajustes)
+    return ajustes
+
+
+class TestTopeCrawlDelay:
+
+    async def test_ac_01_86400_se_recorta_a_60_y_avisa_una_vez(self, monkeypatch):
+        import structlog
+
+        _ajustes_crawl(monkeypatch, 60)
+        reloj = Reloj()
+        descargas = Descargas(_robots("User-agent: *\nCrawl-delay: 86400\n"))
+        gestor = _gestor(reloj)
+        with structlog.testing.capture_logs() as registros:
+            assert await gestor.evaluar(URL, descargar_robots_fn=descargas) == (True, 60.0)
+            assert await gestor.evaluar(URL, descargar_robots_fn=descargas) == (True, 60.0)
+        avisos = [r for r in registros if r["event"] == "robots.crawl_delay_recortado"]
+        assert len(avisos) == 1
+        assert avisos[0]["declarado_s"] == 86400.0
+        assert avisos[0]["recortado_s"] == 60.0 and avisos[0]["maximo_s"] == 60.0
+        assert "://" in avisos[0]["origen"] and "/api" not in avisos[0]["origen"]
+        assert len(descargas.urls) == 1             # no hay segunda descarga
+
+    async def test_ac_02_un_delay_menor_no_se_recorta_ni_avisa(self, monkeypatch):
+        import structlog
+
+        _ajustes_crawl(monkeypatch, 60)
+        gestor = _gestor(Reloj())
+        with structlog.testing.capture_logs() as registros:
+            assert await gestor.evaluar(
+                URL, descargar_robots_fn=Descargas(_robots("User-agent: *\nCrawl-delay: 30\n"))
+            ) == (True, 30.0)
+        assert not [r for r in registros if r["event"] == "robots.crawl_delay_recortado"]
+
+    def test_ac_03_nunca_baja_del_minimo_local(self, monkeypatch):
+        _ajustes_crawl(monkeypatch, 60)
+        politica = PoliticaFuente("x", "X", 2.5, 1, 3)
+        assert aplicar_crawl_delay(politica, 1.0).intervalo_min_s == 2.5
+
+        _ajustes_crawl(monkeypatch, 5)
+        # El cap no acelera por debajo del mínimo local (90 > 5).
+        politica90 = PoliticaFuente("x", "X", 90.0, 1, 3)
+        assert aplicar_crawl_delay(politica90, 5.0).intervalo_min_s == 90.0
+
+    @pytest.mark.parametrize("texto", [
+        "User-agent: *\n",
+        "User-agent: *\nCrawl-delay: 0\n",
+        "User-agent: *\nCrawl-delay: -3\n",
+        "User-agent: *\nCrawl-delay: NaN\n",
+        "User-agent: *\nCrawl-delay: abc\n",
+    ])
+    async def test_ac_04_ausente_cero_negativo_nan_o_texto_no_cambian(self, monkeypatch, texto):
+        _ajustes_crawl(monkeypatch, 60)
+        gestor = _gestor(Reloj())
+        assert await gestor.evaluar(
+            URL, descargar_robots_fn=Descargas(_robots(texto))) == (True, None)
+
+    async def test_ac_04_infinito_se_recorta_al_maximo(self, monkeypatch):
+        _ajustes_crawl(monkeypatch, 60)
+        gestor = _gestor(Reloj())
+        assert await gestor.evaluar(
+            URL, descargar_robots_fn=Descargas(_robots("User-agent: *\nCrawl-delay: inf\n"))
+        ) == (True, 60.0)
+
+    async def test_ac_05_cambiar_el_maximo_surte_efecto_sin_recargar_robots(self, monkeypatch):
+        ajustes = _ajustes_crawl(monkeypatch, 60)
+        reloj = Reloj()
+        descargas = Descargas(_robots("User-agent: *\nCrawl-delay: 86400\n"))
+        gestor = _gestor(reloj)
+        assert (await gestor.evaluar(URL, descargar_robots_fn=descargas))[1] == 60.0
+
+        # El parser/EntradaRobots guarda el valor CRUDO; solo cambia el recorte de la evaluación.
+        ajustes.crawl_delay_max_s = 120
+        assert (await gestor.evaluar(URL, descargar_robots_fn=descargas))[1] == 120.0
+        assert len(descargas.urls) == 1
+        origen = "https://dc.fandom.com"
+        assert gestor._cache[origen].parser.crawl_delay(USER_AGENT) == 86400
+
+
+class TestOlvidar:
+
+    async def test_ac_06_olvidar_un_origen_no_toca_el_otro_y_fuerza_descarga(self):
+        reloj = Reloj()
+        descargas = Descargas(
+            _robots("User-agent: *\nDisallow: /privado\n"),
+            _robots("User-agent: *\n"),
+            _robots("User-agent: *\n"),
+        )
+        gestor = _gestor(reloj)
+        a = "https://a.example/privado/x"
+        b = "https://b.example/x"
+        assert await gestor.evaluar(a, descargar_robots_fn=descargas) == (False, None)
+        assert await gestor.evaluar(b, descargar_robots_fn=descargas) == (True, None)
+        assert len(descargas.urls) == 2
+
+        gestor.olvidar("https://a.example")
+        # B sigue cacheado: no se vuelve a descargar.
+        assert await gestor.evaluar(b, descargar_robots_fn=descargas) == (True, None)
+        assert len(descargas.urls) == 2
+        # A se vuelve a descargar y ahora permite.
+        assert await gestor.evaluar(a, descargar_robots_fn=descargas) == (True, None)
+        assert len(descargas.urls) == 3
+
+    async def test_ac_07_unreachable_disallow_sobrevive_si_no_se_olvida(self):
+        reloj = Reloj()
+        descargas = Descargas(httpx.Response(500), _robots("User-agent: *\n"))
+        gestor = _gestor(reloj)
+        assert await gestor.evaluar(URL, descargar_robots_fn=descargas) == (False, None)
+        assert await gestor.evaluar(URL, descargar_robots_fn=descargas) == (False, None)
+        assert len(descargas.urls) == 1             # el «prohibido» sobrevive
+        gestor.olvidar(URL)
+        assert await gestor.evaluar(URL, descargar_robots_fn=descargas) == (True, None)
+        assert len(descargas.urls) == 2
+
+    async def test_ac_08_evaluacion_en_vuelo_no_resucita_la_entrada(self):
+        reloj = Reloj()
+        inicio = asyncio.Event()
+        seguir = asyncio.Event()
+        descargas: list[str] = []
+
+        async def descargar(url: str) -> httpx.Response:
+            descargas.append(url)
+            if len(descargas) == 1:
+                inicio.set()
+                await seguir.wait()
+                return _robots("User-agent: *\nDisallow: /api\n")
+            return _robots("User-agent: *\n")
+
+        gestor = _gestor(reloj)
+        tarea = asyncio.create_task(gestor.evaluar(URL, descargar_robots_fn=descargar))
+        await inicio.wait()
+        gestor.olvidar(URL)                          # el toggle llega en mitad de la evaluación
+        seguir.set()
+        assert await tarea == (False, None)          # la evaluación en vuelo devuelve su resultado
+        assert "https://dc.fandom.com" not in gestor._cache   # pero no resucita la entrada
+
+        assert await gestor.evaluar(URL, descargar_robots_fn=descargar) == (True, None)
+        assert len(descargas) == 2                   # la siguiente descarga de nuevo
+        assert "https://dc.fandom.com" in gestor._cache
+
+    async def test_el_aviso_de_recorte_se_rearma_tras_olvidar(self, monkeypatch):
+        import structlog
+
+        _ajustes_crawl(monkeypatch, 60)
+        gestor = _gestor(Reloj())
+        robots = _robots("User-agent: *\nCrawl-delay: 86400\n")
+        with structlog.testing.capture_logs() as registros:
+            await gestor.evaluar(URL, descargar_robots_fn=Descargas(robots))
+            gestor.olvidar(URL)
+            await gestor.evaluar(URL, descargar_robots_fn=Descargas(robots))
+        assert len([r for r in registros if r["event"] == "robots.crawl_delay_recortado"]) == 2
+
+
+class TestOrigenesDeFuente:
+
+    @pytest.mark.parametrize(("fuente", "esperado"), [
+        ("fandom_dc", ("https://dc.fandom.com",)),
+        ("fandom_marvel", ("https://marvel.fandom.com",)),
+        ("reading_orders", ("https://comicbookreadingorders.com",)),
+        ("continuity_guide", ("https://www.continuityguide.net",)),
+        ("foro", ()),
+        ("portada", ()),
+        ("desconocida", ()),
+    ])
+    def test_ac_09_mapea_las_fuentes_con_robots(self, monkeypatch, fuente, esperado):
+        monkeypatch.setattr("zascarr.config.get_settings", lambda: SimpleNamespace(
+            comic_book_herald_feed_url="https://www.comicbookherald.com/category/x/feed/"))
+        assert origenes_de_fuente(fuente) == esperado
+
+    def test_ac_09_herald_usa_la_url_de_config(self, monkeypatch):
+        monkeypatch.setattr("zascarr.config.get_settings", lambda: SimpleNamespace(
+            comic_book_herald_feed_url="https://www.comicbookherald.com/otra/feed/"))
+        assert origenes_de_fuente("comic_book_herald") == (
+            "https://www.comicbookherald.com",)
+
+    def test_ac_09_no_instancia_el_gestor_compartido(self):
+        import zascarr.utils.robots as modulo
+
+        modulo._reiniciar_gestor_compartido()
+        assert modulo._GESTOR_DE_PROCESO is None
+        origenes_de_fuente("fandom_dc")
+        assert modulo._GESTOR_DE_PROCESO is None
+        assert olvidar_origenes_de_fuente("fandom_dc") == ("https://dc.fandom.com",)
+        assert modulo._GESTOR_DE_PROCESO is None
