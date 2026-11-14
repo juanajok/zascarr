@@ -1,0 +1,25 @@
+<div class="asistente-paso">
+  {{ ui.aviso("info", "Todavía no se ha creado ninguna serie. Elige la tradición para ver la vista previa.") }}
+  <h3 class="titulo-frase">Antes de crear «{{ titulo }}{% if anio %} ({{ anio }}){% endif %}»</h3>
+  <p class="caption">La tradición decide cómo se cuenta la serie. No cambia el título ni crea nada por sí sola.</p>
+  <form hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/elegir') }}"
+        hx-target="closest .asistente-paso" hx-swap="outerHTML">
+    <input type="hidden" name="clave" value="{{ clave }}">
+    {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
+    <input type="hidden" name="candidata" value="{{ candidata }}">
+    {% if consulta %}<input type="hidden" name="consulta" value="{{ consulta }}">{% endif %}
+    <label for="tradition-{{ candidata[-8:] }}">Tradición</label>
+    <select id="tradition-{{ candidata[-8:] }}" name="tradition" required>
+      <option value="" selected disabled>Elige la tradición…</option>
+      {% for value, label in tradiciones %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    {% if sugerida %}
+    <p class="caption">{{ sugerida | pista_de_tradicion(procedencia) }} Es solo una pista: la elección es tuya.{% if pista %} La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}.{% endif %}</p>
+    {% elif pista %}
+    <p class="caption">La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}. Es solo una pista.</p>
+    {% endif %}
+    <button type="submit" class="primary">Ver la vista previa</button>
+  </form>
+</div>
