@@ -387,6 +387,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "guardado",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
     "desde",
+    # BL-D7 (#163): resultado de pedir una saga (solo recuentos de la vista).
+    "anadidos", "ya_pedidos", "en_biblioteca",
     # #155: filtros del alta de series y selección de candidatas (estado de la vista).
     "serie_ids", "tradicion", "navegar",
 })
