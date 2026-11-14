@@ -262,6 +262,8 @@ def test_un_item_sin_fecha_es_valido():
     "http://www.comicbookherald.com/x/",           # sin TLS
     "https://comicbookherald.com/x/",              # ápex: no es el host canónico del feed
     "https://www.comicbookherald.com:8443/x/",     # puerto no estándar
+    "https://www.comicbookherald.com:0/x/",        # puerto 0 (menor m-1 de SecOps)
+    "https://www.comicbookherald.com:00/x/",       # puerto 0 con ceros
     "https://otro.example/x/",                     # host ajeno
 ])
 def test_rechaza_esquema_apex_puerto_raro_y_otros_hosts(url):
