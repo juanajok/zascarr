@@ -63,7 +63,13 @@
     {% for s in coleccion.series %}
     <li class="coleccion-serie-fila">
       <div>
-        <a href="/ui/series/{{ s.id }}">{{ s.title }}</a>
+        <span class="chip-previa chip-previa-lista">
+          <a href="/ui/series/{{ s.id }}"
+             hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
+             hx-target="#previa-m-{{ s.id }}" hx-swap="innerHTML"
+             hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{{ s.title }}</a>
+          <span class="previa-numero" id="previa-m-{{ s.id }}" aria-hidden="true"></span>
+        </span>
         <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>
       </div>
       <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">

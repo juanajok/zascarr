@@ -82,9 +82,9 @@ def test_detalle_muestra_series_y_selector():
     assert "/portada" in r.text
     assert 'id="previa-serie"' not in r.text
     assert 'hx-get="/ui/colecciones/' in r.text and '/previa/s2"' in r.text
-    assert '/previa/s1"' not in r.text
     assert 'hx-target="#previa-s2"' in r.text
-    assert 'hx-target="#previa-s1"' not in r.text
+    assert 'hx-target="#previa-m-s1"' in r.text
+    assert 'class="chip-previa chip-previa-lista"' in r.text
     assert 'class="coleccion-check chip-previa"' in r.text
     # Sin imágenes masivas: la portada de cada serie se pide solo al fragmento.
     assert 'src="/ui/series/s1/portada"' not in r.text
@@ -523,6 +523,7 @@ def test_cambio_vista_con_aviso_no_duplica_autofocus():
 def test_patron_chip_previa_y_override_tactil():
     css = Path("src/zascarr/static/web.css").read_text()
     assert ".coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty)" in css
+    assert ".chip-previa-lista:focus-within > .previa-numero:not(:empty)" in css
     assert "width: 180px" in css
     detalle = Path("src/zascarr/web/templates/_previa_serie.html").read_text()
     assert "previa-card" in detalle and "previa-pie" in detalle
