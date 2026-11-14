@@ -475,6 +475,22 @@ class Character(Base):
     universe: Mapped["Universe|None"] = relationship(back_populates="characters")
 
 
+# #155/BL-D6 (M:N): una serie puede estar en varias colecciones.
+collection_series = Table(
+    "collection_series",
+    Base.metadata,
+    Column(
+        "collection_id", UUID(as_uuid=True),
+        ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    Column(
+        "series_id", UUID(as_uuid=True),
+        ForeignKey("series.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+)
+
+
 class Collection(Base):
     """#155/BL-D6: agrupación manual de series con política de auto-búsqueda."""
     __tablename__ = "collections"
@@ -493,7 +509,7 @@ class Collection(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     series: Mapped[list["Series"]] = relationship(
-        back_populates="collection", foreign_keys="Series.collection_id")
+        secondary=collection_series, back_populates="collections")
     cover_series: Mapped["Series|None"] = relationship(foreign_keys=[cover_series_id])
 
 
@@ -529,11 +545,8 @@ class Series(Base):
     universe_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL")
     )
-    collection_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("collections.id", ondelete="SET NULL")
-    )
-    collection: Mapped["Collection|None"] = relationship(
-        back_populates="series", foreign_keys=[collection_id])
+    collections: Mapped[list["Collection"]] = relationship(
+        secondary=collection_series, back_populates="series")
     tradition: Mapped[ComicTradition] = mapped_column(
         Enum(
             ComicTradition,

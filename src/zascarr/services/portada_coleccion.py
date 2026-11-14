@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.models import Collection, Series
+from zascarr.models import Collection, Series, collection_series
 from zascarr.utils.cover import (
     CACHE_VERSION,
     CARPETA_EXTERNA,
@@ -163,7 +163,9 @@ def componer_mosaico(rutas: list[Path]) -> bytes:
 
 async def candidatas_portada(db: AsyncSession, collection_id: UUID) -> list[CandidataPortada]:
     filas = (await db.execute(
-        select(Series).where(Series.collection_id == collection_id)
+        select(Series).join(
+            collection_series, collection_series.c.series_id == Series.id)
+        .where(collection_series.c.collection_id == collection_id)
         .order_by(Series.sort_title, Series.title, Series.id)
     )).scalars().all()
     covers = _covers()
@@ -174,7 +176,9 @@ async def candidatas_portada(db: AsyncSession, collection_id: UUID) -> list[Cand
 
 async def _miembros(db: AsyncSession, collection_id: UUID) -> list[Series]:
     return list((await db.execute(
-        select(Series).where(Series.collection_id == collection_id)
+        select(Series).join(
+            collection_series, collection_series.c.series_id == Series.id)
+        .where(collection_series.c.collection_id == collection_id)
         .order_by(Series.sort_title, Series.title, Series.id)
     )).scalars().all())
 
@@ -211,8 +215,10 @@ async def obtener_portada(db: AsyncSession, collection_id: UUID) -> ResultadoPor
     # Override: solo si sigue siendo miembro y su portada está cacheada.
     if coleccion.cover_series_id is not None:
         miembro = (await db.execute(
-            select(Series).where(Series.id == coleccion.cover_series_id,
-                                 Series.collection_id == collection_id))).scalar_one_or_none()
+            select(Series).join(
+                collection_series, collection_series.c.series_id == Series.id)
+            .where(Series.id == coleccion.cover_series_id,
+                   collection_series.c.collection_id == collection_id))).scalar_one_or_none()
         ruta = portada_cacheada(covers, coleccion.cover_series_id) if miembro else None
         if ruta is not None:
             datos = await asyncio.to_thread(_leer_jpeg, ruta)
@@ -268,7 +274,11 @@ async def elegir_portada(db: AsyncSession, collection_id: UUID,
         await db.flush()
         return ResultadoEleccion(True, {})
     serie = await db.get(Series, series_id)
-    if serie is None or serie.collection_id != collection_id:
+    miembro = None if serie is None else (await db.execute(
+        select(collection_series.c.series_id).where(
+            collection_series.c.collection_id == collection_id,
+            collection_series.c.series_id == serie.id))).scalar_one_or_none()
+    if serie is None or miembro is None:
         return ResultadoEleccion(False, {
             "portada": "Esa serie no pertenece a la colección; elige una de sus series."})
     coleccion.cover_series_id = series_id

@@ -28,8 +28,12 @@ def _pagina(*series):
 
 
 def _cliente():
+    async def _execute(_consulta):
+        return SimpleNamespace(scalar_one_or_none=lambda: None)
+
     async def _db():
-        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
+                              execute=_execute)
     app.dependency_overrides[get_db] = _db
     return TestClient(app)
 
@@ -378,8 +382,12 @@ def test_endpoint_previa_200_y_404():
             return serie
         return None
 
+    async def execute(_consulta):
+        return SimpleNamespace(scalar_one_or_none=lambda: sid)
+
     async def _db():
-        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(), get=get)
+        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(), get=get,
+                              execute=execute)
     app.dependency_overrides[get_db] = _db
     try:
         with patch("zascarr.web.colecciones.portada_cacheada", return_value=Path("/covers/x.jpg")):
@@ -394,8 +402,12 @@ def test_endpoint_previa_200_y_404():
             assert "src=" not in fallback.text and "<img" not in fallback.text
         candidata = SimpleNamespace(id=sid, title="Candidata", start_year=1999,
                                     collection_id=None)
+        async def _execute_candidata(_c):
+            return SimpleNamespace(scalar_one_or_none=lambda: sid)
+
         async def _db_candidata():
             yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
+                                  execute=_execute_candidata,
                                   get=AsyncMock(side_effect=[coleccion, candidata]))
         app.dependency_overrides[get_db] = _db_candidata
         with patch("zascarr.web.colecciones.portada_cacheada", return_value=Path("/covers/x.jpg")):
@@ -404,8 +416,12 @@ def test_endpoint_previa_200_y_404():
             assert "Candidata" in r_cand.text
         serie_ajena = SimpleNamespace(id=sid, title="Otra", start_year=2000,
                                       collection_id=uuid4())
+        async def _execute_ajena(_c):
+            return SimpleNamespace(scalar_one_or_none=lambda: None)
+
         async def _db_ajena():
             yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
+                                  execute=_execute_ajena,
                                   get=AsyncMock(side_effect=[coleccion, serie_ajena]))
         app.dependency_overrides[get_db] = _db_ajena
         assert TestClient(app).get(

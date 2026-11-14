@@ -36,7 +36,7 @@ from zascarr.core.comicinfo_write import (
     plan as plan_comicinfo,
 )
 from zascarr.core.exportacion_kavita import ArchivoFuente, PlanExportacion, plan_export
-from zascarr.models import Collection, File, ImportRun, Issue, Series
+from zascarr.models import Collection, File, ImportRun, Issue, Series, collection_series
 from zascarr.services.tagger import TaggerService
 from zascarr.utils.cbz import leer_comicinfo, reescribir_con_xml
 
@@ -126,7 +126,8 @@ async def _filas(db: AsyncSession, collection: Collection) -> list[tuple[Archivo
         select(Series, Issue, File)
         .join(Issue, Issue.series_id == Series.id)
         .join(File, File.issue_id == Issue.id)
-        .where(Series.collection_id == collection.id)
+        .join(collection_series, collection_series.c.series_id == Series.id)
+        .where(collection_series.c.collection_id == collection.id)
         .order_by(Series.sort_title, Issue.sort_order, Issue.issue_number, File.file_path)
     )).all()
     salida: list[tuple[ArchivoFuente, File]] = []
