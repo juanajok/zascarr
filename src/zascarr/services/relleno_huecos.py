@@ -28,6 +28,17 @@ FUENTES_CON_RELLENO = ("metron", "open_library", "gcd")
 TTL_RELLENO = timedelta(days=30)
 #: Tope de peticiones por fuente y ciclo (protege la cuota anónima de GCD y el 20/min de Metron).
 MAX_PETICIONES_FUENTE_POR_CICLO = 5
+#: Cotas del texto de terceros que se guarda en la serie (m-1 de SecOps): sin controles.
+MAX_TEXTO_RELLENO = 4_000
+MAX_URL_RELLENO = 500
+
+
+def sanear_texto_relleno(valor: object) -> object:
+    """Texto de un tercero sin controles y acotado; deja intactos años/enteros."""
+    if not isinstance(valor, str):
+        return valor
+    limpio = "".join(c for c in valor if c.isprintable() or c in "\n\t")
+    return " ".join(limpio.split())[:MAX_TEXTO_RELLENO]
 #: Tradiciones en las que tiene sentido cada fuente (el enricher decide; aquí se reutiliza).
 TRADICIONES_DE_FUENTE: dict[str, frozenset[str]] = {
     "metron": frozenset({"american", "fumetti"}),
@@ -91,6 +102,9 @@ def _registrar(serie, fuente: str, ficha: object | None, campos: list[str],
     metadata = dict(serie.metadata_ or {})          # dict NUEVO (JSONB)
     relleno = dict(metadata.get("relleno") or {})
     ident, url = _id_y_url(fuente, ficha)
+    if isinstance(url, str):
+        url = sanear_texto_relleno(url)
+        url = url[:MAX_URL_RELLENO] if isinstance(url, str) else url
     relleno[fuente] = {
         "id": ident,
         "campos": list(campos),
@@ -122,7 +136,7 @@ def aplicar_relleno(serie, fuente: str, ficha: object | None,
             continue
         if not _vacio(getattr(serie, campo, None)):
             continue
-        valor = _leer(ficha, _ATRIBUTOS[fuente][campo])
+        valor = sanear_texto_relleno(_leer(ficha, _ATRIBUTOS[fuente][campo]))
         if _vacio(valor):
             continue
         setattr(serie, campo, valor)
@@ -154,6 +168,9 @@ __all__ = [
     "CAMPOS_PROHIBIDOS",
     "FUENTES_CON_RELLENO",
     "MAX_PETICIONES_FUENTE_POR_CICLO",
+    "MAX_TEXTO_RELLENO",
+    "MAX_URL_RELLENO",
+    "sanear_texto_relleno",
     "TRADICIONES_DE_FUENTE",
     "TTL_RELLENO",
     "aplicar_relleno",

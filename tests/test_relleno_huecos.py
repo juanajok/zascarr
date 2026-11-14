@@ -379,3 +379,25 @@ async def test_open_library_sin_id_valido_no_pide(ajustes_clientes):
                                      or httpx.Response(200, json={}))) as c:
         assert await c.get_work("no-es-una-obra") is None
     assert peticiones == []
+
+
+def test_m1_secops_acota_y_sanea_el_texto_de_terceros():
+    """m-1: una descripción/URL enorme o con controles se recorta y limpia al guardar."""
+    from types import SimpleNamespace
+
+    from zascarr.services.relleno_huecos import (
+        MAX_TEXTO_RELLENO,
+        MAX_URL_RELLENO,
+        aplicar_relleno,
+    )
+
+    serie = SimpleNamespace(description=None, start_year=None, end_year=None,
+                            metadata_={}, locked_fields=[])
+    ficha = SimpleNamespace(descripcion="\x00\x1b[2J" + "a" * 100_000,
+                            year_began=1985, year_ended=None,
+                            url="https://metron.cloud/series/" + "x" * 100_000)
+    aplicar_relleno(serie, "metron", ficha)
+    assert len(serie.description) <= MAX_TEXTO_RELLENO
+    assert "\x1b" not in serie.description and "\x00" not in serie.description
+    url = serie.metadata_["relleno"]["metron"]["url_ficha"]
+    assert url is None or len(url) <= MAX_URL_RELLENO
