@@ -1404,6 +1404,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .carpeta-accion-principal { border: var(--border-control) solid var(--ink); font-weight: 700; }
 .carpeta-avanzado { margin: 0 0 10px; }
 .carpeta-avanzado summary { cursor: pointer; }
+.pend-recomendacion { margin: 0 0 var(--space-2); font-weight: 700; }
+#vinc-lote, .vinc-fila { scroll-margin-top: 5rem; }
 
 /* Revisión de selección y números (#119). La revisión pendiente se avisa y el lote anterior deja de usarse. */
 .vinculacion-lista { list-style: none; padding: 0; margin: 0 0 var(--gutter); display: grid; gap: var(--space-3); }
@@ -1452,7 +1454,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vinc-barra-contexto { font-weight: 700; overflow-wrap: anywhere; }
 .vinc-barra .btn { margin-left: auto; }
 @media (max-width: 600px) {
-  .vinc-barra { position: sticky; top: 0; z-index: 4; }
+  .vinc-barra { position: sticky; top: 4rem; z-index: 4; }
   .vinc-barra .btn { margin-left: 0; width: 100%; min-height: 44px; }
   .vinc-borrador-acciones { display: grid; grid-template-columns: 1fr; }
   .vinc-borrador-acciones .btn { width: 100%; min-height: 44px; }

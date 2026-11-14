@@ -26,7 +26,7 @@ def test_los_avisos_de_tarjeta_reciben_el_foco():
 
 def test_en_movil_la_barra_y_las_acciones_siguen_visibles_y_son_tocables():
     assert "@media (max-width: 600px)" in CSS
-    assert ".vinc-barra { position: sticky; top: 0;" in CSS
+    assert ".vinc-barra { position: sticky; top: 4rem;" in CSS
     assert "@media (max-width: 480px)" in CSS
     assert ".pending-grid { grid-template-columns: 1fr; }" in CSS
     assert "min-height: 44px" in CSS

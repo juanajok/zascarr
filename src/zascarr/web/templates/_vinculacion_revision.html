@@ -99,7 +99,7 @@
       <div class="vinc-cab">
         {% if editable %}
         <label class="vinc-marca">
-          <input type="checkbox" name="marcar" value="{{ a.id }}"{% if a.marcado %} checked{% endif %}{% if not a.marcable and not a.marcado %} disabled{% endif %}>
+          <input id="marca-{{ a.id }}" type="checkbox" name="marcar" value="{{ a.id }}"{% if a.marcado %} checked{% endif %}{% if not a.marcable and not a.marcado %} disabled{% endif %}>
           <span class="nombre-archivo">{{ a.nombre }}</span>
         </label>
         {% else %}
