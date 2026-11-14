@@ -2,6 +2,7 @@
 """Biblioteca: barra única, contador OOB, panel y limpiar (rebanada 1)."""
 from __future__ import annotations
 
+import re
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -366,10 +367,30 @@ def test_fragmento_con_editorial_activa_conserva_el_campo_y_la_etiqueta():
                            FakeExecResult("Bruguera")])
     app.dependency_overrides[get_db] = override_get_db(session)
     try:
-        client = TestClient(app, base_url="http://localhost", headers={"Origin": "http://localhost"})
+        client = TestClient(app, base_url="http://localhost", headers={
+            "Origin": "http://localhost", "HX-Request": "true"})
         r = client.get(f"/ui/biblioteca/resultados?publisher_id={publisher_id}")
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert r.status_code == 200
     assert 'id="f-publisher"' in r.text
-    assert "Editorial seleccionada" in r.text or "Bruguera" in r.text
+    publicador = r.text[r.text.index('id="f-publisher"'):]
+    publicador = publicador[:publicador.index("</select>")]
+    assert "Editorial seleccionada" in publicador or "Bruguera" in publicador
+    assert re.search(r'<option value="[^"]+" selected>', publicador)
+
+
+def test_fragmento_sin_editoriales_y_sin_filtro_no_pinta_el_select():
+    serie = make_series("Sin editoriales")
+    session = FakeSession([FakeExecResult(0), FakeExecResult([serie]), FakeExecResult([])])
+    app.dependency_overrides[get_db] = override_get_db(session)
+    try:
+        client = TestClient(app, base_url="http://localhost", headers={
+            "Origin": "http://localhost", "HX-Request": "true"})
+        r = client.get("/ui/biblioteca/resultados?quitar=todos")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    panel = r.text[r.text.index('id="filtros-campos"'):]
+    panel = panel[:panel.index("</details>") if "</details>" in panel else len(panel)]
+    assert 'id="f-publisher"' not in panel

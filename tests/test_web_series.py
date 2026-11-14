@@ -1178,20 +1178,24 @@ class TestEstadoColeccionWK2:
 
 
 
-def test_opcion_reservada_usa_etiqueta_no_valor_crudo():
-    """R2 #789: el <option> reservado conserva su value real pero se lee en llano."""
+@pytest.mark.parametrize("valor,etiqueta", [
+    (WishlistPolicy.FUTURE, "Números futuros (todavía no disponible)"),
+    (WishlistPolicy.ALL, "Todos los números (reservado)"),
+])
+def test_opcion_reservada_usa_etiqueta_no_valor_crudo(valor, etiqueta):
+    """R2 #789: las opciones reservadas conservan su value real y se leen en llano."""
     from types import SimpleNamespace
 
     from zascarr.web.series import templates
 
     html = templates.env.get_template("_politica_serie.html").render(
         series=SimpleNamespace(id=uuid4()),
-        politica_actual=WishlistPolicy.FUTURE,
-        politica_actual_etiqueta="Números futuros (todavía no disponible)",
+        politica_actual=valor,
+        politica_actual_etiqueta=etiqueta,
         politicas_ofrecidas={},
         motivo_futuros="la fuente no publica números futuros",
-        politica_efectiva=WishlistPolicy.FUTURE,
-        politica_efectiva_etiqueta="Números futuros (todavía no disponible)",
+        politica_efectiva=valor,
+        politica_efectiva_etiqueta=etiqueta,
         coleccion_causa=None,
         veredicto=SimpleNamespace(tipo="ninguno", no_calculable=False),
         querer=SimpleNamespace(motivo=None, numeros=[]),
@@ -1200,6 +1204,6 @@ def test_opcion_reservada_usa_etiqueta_no_valor_crudo():
         retirados=0,
         retirados_ahora=None,
     )
-    assert 'value="futuros"' in html
-    assert "Números futuros (todavía no disponible)" in html
-    assert ">futuros" not in html
+    assert f'value="{valor.value}"' in html
+    assert etiqueta in html
+    assert f">{valor.value}" not in html

@@ -2,7 +2,7 @@
 
 
 > **Nota (2026-11-14):** este informe originó la tarjeta **#789 BL-U18b** (recorte de erratas
-> independientes del glosario). El PR de #789 implementa H1–H4/R1–R4 y **no cierra #205**: la
+> independientes del glosario). El PR de #789 implementa H1, H2, H4, R1, R2, R4 y pruebas H3 y **no cierra #205**: la
 > unificación terminológica sigue bloqueada por U7.
 
 **Fecha:** 2026-11-14
