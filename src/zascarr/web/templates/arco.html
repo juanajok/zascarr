@@ -3,7 +3,7 @@
 {% block content %}
 {% from "_atribucion_fandom.html" import aviso_de_atribucion %}
 <p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
-{% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
+{% if aviso %}{{ ui.aviso("ok", aviso, foco=true) }}{% endif %}
 {% if pedido %}
 {% if pedido.anadidos %}
 {{ ui.aviso("ok", "Añadidos " ~ pedido.anadidos ~ " " ~ ("número" if pedido.anadidos == 1 else "números") ~ " a tus deseados. " ~ pedido.ya_pedidos ~ " ya estaban pedidos y " ~ pedido.en_biblioteca ~ " ya están en tu biblioteca.", foco=true) }}

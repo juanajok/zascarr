@@ -9,11 +9,12 @@
   <label for="buscar-arco-q">Título del arco o de la serie</label>
   <input id="buscar-arco-q" type="search" name="q" value="{{ q }}" maxlength="200"
          placeholder="Por ejemplo: Batman: Year One" required>
-  <button class="btn" type="submit">Buscar</button>
+  <button class="btn primary" type="submit">Buscar</button>
 </form>
 {% if q and not resultados and not errores %}
 {{ ui.estado_vacio("No se encontraron sagas", "Prueba con otro título o revisa que la fuente esté encendida en Ajustes.") }}
 {% elif resultados %}
+<p class="caption" role="status" tabindex="-1" autofocus>{{ resultados|length }} {{ "resultado" if resultados|length == 1 else "resultados" }} en DC Database.</p>
 <ul class="arcos-lista">
   {% for r in resultados %}
   <li class="arco-fila">

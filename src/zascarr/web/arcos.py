@@ -231,36 +231,42 @@ async def importar_arco(request: Request, page_title: str = Form(default=""),
                         confirmo: str = Form(default="0"),
                         db: AsyncSession = Depends(get_db)) -> Response:
     titulo = (page_title or "").strip()[:255]
+    contexto = {"page_title": titulo, "previa": None, "errores": {}, "aviso": ""}
     if not titulo:
-        return _respuesta(request, "previa_arco_fuente.html", {
-            "page_title": titulo, "previa": None,
-            "errores": {"general": "Falta el título de la página del arco."}, "aviso": ""})
-    if confirmo != "1":
-        return _respuesta(request, "previa_arco_fuente.html", {
-            "page_title": titulo, "previa": None,
-            "errores": {"general": "Marca la confirmación antes de importar la saga."},
-            "aviso": ""})
+        contexto["errores"] = {"general": "Falta el título de la página del arco."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
     if not await _fuente_fandom_activa():
-        return _respuesta(request, "previa_arco_fuente.html", {
-            "page_title": titulo, "previa": None,
-            "errores": {"general": "La fuente DC Database está apagada en Ajustes."},
-            "aviso": ""})
+        contexto["errores"] = {"general": "La fuente DC Database está apagada en Ajustes."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
     try:
         async with FandomClient(
                 "dc.fandom.com", cache=CacheHttp(async_session_factory)) as cliente:
+            # Se conserva la previsualización para cualquier error de validación o de
+            # importación: el coleccionista no tiene que volver a buscar.
+            previa = await previsualizar_arco_fandom(db, titulo, cliente)
+            contexto["previa"] = previa
+            if previa is None:
+                contexto["errores"] = {"general": "No se encontró ese arco en DC Database."}
+                return _respuesta(request, "previa_arco_fuente.html", contexto)
+            if confirmo != "1":
+                contexto["errores"] = {
+                    "general": "Marca la confirmación antes de importar la saga."}
+                return _respuesta(request, "previa_arco_fuente.html", contexto)
             resultado = await importar_arco_fandom(db, titulo, cliente)
     except (CortesiaEnEspera, FuenteApagada, FandomMaxLagError,
             FandomPayloadError, ErrorDePeticion):
-        resultado = None
+        await db.rollback()
+        contexto["errores"] = {"general": ERROR_FANDOM}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
     except Exception:
         logger.exception("arcos.importar_fandom_failed")
-        resultado = None
+        await db.rollback()
+        contexto["errores"] = {"general": "No se pudo importar la saga. Inténtalo de nuevo."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
     if resultado is None:
         await db.rollback()
-        return _respuesta(request, "previa_arco_fuente.html", {
-            "page_title": titulo, "previa": None,
-            "errores": {"general": "No se pudo importar la saga. Inténtalo de nuevo."},
-            "aviso": ""})
+        contexto["errores"] = {"general": "No se pudo importar la saga. Inténtalo de nuevo."}
+        return _respuesta(request, "previa_arco_fuente.html", contexto)
     await db.commit()
     return _redirigir(f"/ui/arcos/{resultado.arco_id}?guardado=importada")
 

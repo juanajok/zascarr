@@ -509,17 +509,23 @@ def test_preview_renderiza_coincidencias_y_confirmacion():
         _cerrar()
     assert r.status_code == 200
     assert "Batman #404" in r.text and "No está en tu biblioteca" in r.text
-    assert 'name="confirmo"' in r.text and "crear esta saga" in r.text
+    assert 'name="confirmo"' in r.text and "crear o actualizar" in r.text
     assert "dc.fandom.com/wiki/Batman:_Year_One" in r.text
 
 
 def test_importar_redirige_con_guardado_importada():
-    from zascarr.services.arcos_fuentes import ResultadoImportacionArco
+    from zascarr.services.arcos_fuentes import (
+        PreviaArcoFandom,
+        ResultadoImportacionArco,
+    )
     arco_id = uuid4()
+    previa = PreviaArcoFandom("Batman: Year One", "Batman: Year One", [], 0, 0)
     c = _cliente()
     try:
         with patch("zascarr.web.arcos.fuente_habilitada", return_value=True), \
              patch("zascarr.web.arcos.FandomClient", _FakeFandom), \
+             patch("zascarr.web.arcos.previsualizar_arco_fandom",
+                   AsyncMock(return_value=previa)), \
              patch("zascarr.web.arcos.importar_arco_fandom", AsyncMock(
                  return_value=ResultadoImportacionArco(str(arco_id), 1, 0, 2))):
             r = c.post("/ui/arcos/buscar/importar", data={
@@ -551,3 +557,25 @@ def test_aviso_importada_al_volver_al_arco():
     finally:
         _cerrar()
     assert r.status_code == 200 and "importada desde Fandom" in r.text
+
+
+def test_importar_sin_confirmacion_conserva_la_previa():
+    from zascarr.services.arcos_fuentes import FilaArcoFandom, PreviaArcoFandom
+    previa = PreviaArcoFandom("Batman: Year One", "Batman: Year One", [
+        FilaArcoFandom("p", "Batman Vol 1", "404", faltan=True),
+    ], 0, 1)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.fuente_habilitada", return_value=True), \
+             patch("zascarr.web.arcos.FandomClient", _FakeFandom), \
+             patch("zascarr.web.arcos.previsualizar_arco_fandom",
+                   AsyncMock(return_value=previa)), \
+             patch("zascarr.web.arcos.importar_arco_fandom", AsyncMock()) as importar:
+            r = c.post("/ui/arcos/buscar/importar", data={
+                "page_title": "Batman: Year One"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Marca la confirmación" in r.text
+    assert "Batman Vol 1 #404" in r.text
+    importar.assert_not_awaited()
