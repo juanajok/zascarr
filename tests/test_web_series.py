@@ -1176,3 +1176,30 @@ class TestEstadoColeccionWK2:
         assert "<h2>Te faltan</h2>" not in r.text
         assert "No la vas a completar. Sus huecos no cuentan como faltas" in r.text
 
+
+
+def test_opcion_reservada_usa_etiqueta_no_valor_crudo():
+    """R2 #789: el <option> reservado conserva su value real pero se lee en llano."""
+    from types import SimpleNamespace
+
+    from zascarr.web.series import templates
+
+    html = templates.env.get_template("_politica_serie.html").render(
+        series=SimpleNamespace(id=uuid4()),
+        politica_actual=WishlistPolicy.FUTURE,
+        politica_actual_etiqueta="Números futuros (todavía no disponible)",
+        politicas_ofrecidas={},
+        motivo_futuros="la fuente no publica números futuros",
+        politica_efectiva=WishlistPolicy.FUTURE,
+        politica_efectiva_etiqueta="Números futuros (todavía no disponible)",
+        coleccion_causa=None,
+        veredicto=SimpleNamespace(tipo="ninguno", no_calculable=False),
+        querer=SimpleNamespace(motivo=None, numeros=[]),
+        lote=25,
+        aviso_legal_pendiente=False,
+        retirados=0,
+        retirados_ahora=None,
+    )
+    assert 'value="futuros"' in html
+    assert "Números futuros (todavía no disponible)" in html
+    assert ">futuros" not in html
