@@ -289,6 +289,8 @@ class TestDatosDelMenu:
         ("/ui/pendientes/abc/portada", "revisar"), ("/ui/biblioteca", "biblioteca"),
         ("/ui/biblioteca?page=2", "biblioteca"), ("/ui/series/123", "biblioteca"),
         ("/ui/mejoras", "mejoras"), ("/ui/mejoras/abc", "mejoras"),
+        ("/ui/colecciones", "colecciones"), ("/ui/colecciones/abc", "colecciones"),
+        ("/ui/arcos", "biblioteca"), ("/ui/vistas", "revisar"),
         ("/ui/auditoria", "duplicados"), ("/ui/descubrir", "descubrir"),
         ("/ui/wishlist", "deseados"), ("/estado", "estado"), ("/ui/ajustes", "ajustes"),
     ])
@@ -428,9 +430,16 @@ class TestLosEnlacesNoDependenDelFragmento:
 # ── 3. páginas: título, h1, aria-current, salto de contenido ──────────────────────────────
 PAGINAS = [
     ("inicio", "/ui/"), ("revisar", "/ui/pendientes"), ("biblioteca", "/ui/biblioteca"),
+    ("mejoras", "/ui/mejoras"), ("colecciones", "/ui/colecciones"),
     ("duplicados", "/ui/auditoria"), ("descubrir", "/ui/descubrir"),
     ("deseados", "/ui/wishlist"), ("estado", "/estado"), ("ajustes", "/ui/ajustes"),
 ]
+
+
+def test_las_paginas_cubren_todas_las_entradas_del_menu():
+    """U7: si se añade una entrada al menú, su página tiene que entrar en PAGINAS;
+    antes Mejoras y Colecciones se colaron porque el test no las recorría."""
+    assert {clave for clave, _ in PAGINAS} == {e.clave for e in ENTRADAS}
 
 
 class TestPaginas:
