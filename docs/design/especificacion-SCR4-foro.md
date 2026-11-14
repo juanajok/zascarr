@@ -138,3 +138,21 @@ transporte falso y valor canario. Los existentes `test_forum_scraper.py` (369 l�
 | D-1 | ¿Foro configurable en Ajustes (URL/usuario/contraseña/activar, grupo runtime y secretos) o se queda en `.env` y Ajustes solo muestra aviso/estado? | Tarjeta completa: es lo coherente con «activa el foro en Ajustes» (`orchestrator.py:114`); si no, corregir ese texto y `config.py:51-55` |
 | D-2 | ¿Se conserva `http://` (con aviso) o se exige HTTPS? | Conservar: el foro no ofrece TLS y el operador decide; aviso visible + LEGAL |
 | D-3 | ¿El flood debe conservar el cooldown de 6 h? | Dejarlo (es un intento real), anotado como límite |
+
+
+---
+
+## Validación en vivo (2026-11-14, Pi del PO)
+
+`python /app/scripts/diagnostico_foro.py` contra `http://lamansion-crg.net/forum/`:
+
+```
+[1] Entrada: HTTP 200 | charset cabecera: (ausente) | charset meta: iso8859-1 | usado: iso8859-1
+[2] Login: OK (cookies recibidas: 4; no se imprimen) | flood: no
+[3] Búsqueda «Año Uno»: HTTP 200 | flood: no | resultados: 2 | muestra: tema (sin título)
+```
+
+Confirma las tres validaciones: charset latin-1 detectado y usado, login real y búsqueda con tilde sin
+flood falso. Las cookies de este IPB llevan prefijo `foro_nuevo` (`foro_nuevomember_id`,
+`foro_nuevopass_hash`), de ahí los PRs #787/#792 sobre la confirmación del login. Queda como deuda la
+lectura de temas reales con `s=` en la query (cubierta por fixtures) y el cooldown de 6 h se mantiene.
