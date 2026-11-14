@@ -25,7 +25,8 @@
 <ul class="arcos-lista">
   {% for c in colecciones %}
   <li class="coleccion-fila">
-    <div class="coleccion-portada">{{ ui.portada(c.name, c.id, c.portada_url if c.tiene_portada else none, clase="portada-coleccion", carga="lazy") }}</div>
+    <a class="coleccion-portada-enlace" href="/ui/colecciones/{{ c.id }}"
+       aria-label="Abrir la colección {{ c.name }}">{{ ui.portada(c.name, c.id, c.portada_url if c.tiene_portada else none, clase="portada-coleccion", carga="lazy") }}</a>
     <div>
       <a href="/ui/colecciones/{{ c.id }}">{{ c.name }}</a>
       <span class="muted">{{ c.series }} {{ "serie" if c.series == 1 else "series" }} · {{ politicas.get(c.auto_search, c.auto_search) }}</span>

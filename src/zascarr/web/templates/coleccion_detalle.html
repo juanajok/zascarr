@@ -44,8 +44,11 @@
   <div class="series-grid coleccion-series-grid">
     {% for s in coleccion.series %}
     <article class="series-card coleccion-serie-card">
-      <div class="coleccion-serie-card-portada" aria-hidden="true">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-tarjeta", carga="lazy") }}</div>
-      <a href="/ui/series/{{ s.id }}" class="series-title">{{ s.title }}</a>
+      <a class="coleccion-serie-card-enlace" href="/ui/series/{{ s.id }}"
+         aria-label="Abrir la serie {{ s.title }}">
+        <div class="coleccion-serie-card-portada">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-tarjeta", carga="lazy") }}</div>
+        <span class="series-title">{{ s.title }}</span>
+      </a>
       <span class="series-year">{{ s.start_year or "Año no consta" }}</span>
       <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
         <input type="hidden" name="q" value="{{ q|default('') }}">

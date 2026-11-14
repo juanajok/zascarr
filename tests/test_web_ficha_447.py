@@ -59,6 +59,22 @@ def test_ficha_de_numero_muestra_texto_plano_autores_y_archivos():
     assert "None" not in r.text
 
 
+def test_ficha_de_numero_muestra_colecciones_de_su_serie():
+    from types import SimpleNamespace as NS
+    from unittest.mock import patch
+
+    serie = _serie()
+    issue = _issue(series_id=serie.id)
+    with patch("zascarr.web.series.colecciones_de_serie",
+               AsyncMock(return_value=[NS(id=uuid4(), name="Grapas")])):
+        with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie]),
+                                           FakeExecResult([])])) as client:
+            r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
+    assert r.status_code == 200
+    assert "Colecciones" in r.text and "Grapas" in r.text
+    assert "Este número está en las colecciones de su serie." in r.text
+
+
 def test_ficha_de_numero_sin_datos_dice_que_falta():
     serie = _serie(publisher=None, start_year=None, end_year=None)
     issue = _issue(series_id=serie.id, synopsis=None, release_date=None, page_count=None,
