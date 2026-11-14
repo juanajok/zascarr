@@ -692,6 +692,8 @@ button[type="submit"].btn-sugerencia {
 .assign-form {
   display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
 }
+.acciones-tarjeta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.acciones-tarjeta .btn, .acciones-tarjeta .btn-sugerencia { min-height: 44px; }
 .series-name { font-size: var(--text-boton); flex: 1; font-weight: 600; }
 /* El formulario de «especial sin número» vive dentro de una tarjeta de 200 px: sus campos ocupan el ancho
    disponible en vez de su tamaño natural, que los sacaba de la tarjeta. */
@@ -2492,6 +2494,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .etiquetas-ideas-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .etiqueta-idea { font: inherit; padding: 4px 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-pill); background: var(--paper); color: var(--ink); cursor: pointer; }
 .etiqueta-idea:hover { background: var(--paper-2); }
+
+#nombres-archivo .legal-checkbox { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+#nombres-archivo .ajustes-actions button { min-height: 44px; }
+#nombres-archivo .nombres-ejemplos { margin: 8px 0; padding-left: 1.2em; }
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,

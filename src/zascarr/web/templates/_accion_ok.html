@@ -1,6 +1,9 @@
-{#- Recibo de una acción que YA se aplicó y que sustituye a la tarjeta. No promete deshacer. -#}
+{#- Recibo de una acción que YA se aplicó y que sustituye a la tarjeta. -#}
 <div class="pending-accion-ok" role="status">
   <p><strong>{{ titulo }}</strong> {{ texto }}</p>
-  <p><a class="btn ghost sm" href="/ui/series/{{ series_id }}">Ver la serie</a></p>
+  <p>
+    <a class="btn ghost sm" href="/ui/series/{{ series_id }}">Ver la serie</a>
+    {% if deshacer_url %}<a class="btn ghost sm" href="{{ deshacer_url }}">Deshacer</a>{% endif %}
+  </p>
 </div>
 {{ recontar_menu | safe }}

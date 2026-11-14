@@ -148,11 +148,17 @@ class Settings(BaseSettings):
     # real concreto de fábrica, lo más cercano a "facilitación
     # organizada" que tenía el proyecto. Es un plugin IPB genérico: la
     # URL la aporta el usuario, el proyecto no incluye ni recomienda
-    # ningún foro concreto.
+    # ningún foro concreto. Se configura en Ajustes › Descargas › Foro
+    # (tarjeta completa, D-1 de SCR4); el `.env` solo aporta los valores
+    # iniciales. `http://` sigue siendo válido con aviso: el foro puede
+    # no ofrecer TLS y decide el operador (D-2).
     forum_url: str = Field(default="")
     forum_username: str = Field(default="")
     forum_password: str = Field(default="")
+    #: Login y lectura de temas (2 s). La búsqueda tiene su propio ritmo, más lento,
+    #: porque IPB bloquea por saturación (Search Flood Control).
     forum_rate_limit: float = Field(default=2.0)
+    forum_search_rate_limit: float = Field(default=25.0)
     forum_enabled: bool = Field(default=False)
 
     # ── Filesystem (rutas DENTRO del contenedor — genéricas y estables) ──
@@ -249,6 +255,14 @@ class Settings(BaseSettings):
     #: 0 desactiva el escaneo de mejoras. El primer pase espera un intervalo.
     upgrade_scan_interval_minutes: int = Field(default=360, ge=0)
     upgrade_scan_batch: int = Field(default=3, ge=0, le=20)
+    # BL-B9 (#158): nombres de archivo de los destinos NUEVOS. Apagado por
+    # defecto para conservar exactamente el formato histórico; solo cambia
+    # cómo se llama un archivo al importarlo/asignarlo, nunca renombra la
+    # biblioteca existente.
+    naming_enabled: bool = Field(default=False)
+    naming_preset: str = Field(default="clasico")
+    #: 0 = usar el padding del preset; > 0 lo sobrescribe.
+    naming_padding: int = Field(default=0, ge=0, le=12)
 
     # ── Enricher (Comic Vine) ────────────────────────────────────────
     # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el

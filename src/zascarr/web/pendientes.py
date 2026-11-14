@@ -668,7 +668,19 @@ async def asignar(request: Request, file_id: UUID, series_id: UUID = Form(...),
     resp = interpretar(r) if r is not None else RESPUESTA_INESPERADA
     aviso = {"tipo": resp.tipo, "texto": resp.texto}
     if resp.status == 200 and not resp.texto:
-        return HTMLResponse(RECONTAR_MENU)                      # la tarjeta desaparece
+        # Recibo explícito: la tarjeta desaparece, pero queda constancia de lo hecho y la
+        # puerta a la vista de desvinculación (que pide su propia confirmación).
+        titulo = ("Organizado." if r is not None and r.estado == EstadoResultado.ASIGNADO
+                  else "Ya estaba organizado.")
+        return templates.TemplateResponse(
+            request, "_accion_ok.html", {
+                "titulo": titulo,
+                "texto": ("El archivo se movió y renombró; se copió y verificó "
+                          "antes de retirar el original."),
+                "series_id": series_id,
+                "deshacer_url": f"/ui/series/{series_id}/archivos/{file_id}/deshacer",
+                "recontar_menu": RECONTAR_MENU,
+            })
     if resp.status == 200:                  # asignado, con un aviso que no debe perderse
         return templates.TemplateResponse(
             request, "_asignacion_aviso.html", {"aviso": aviso, "recontar_menu": RECONTAR_MENU})
@@ -697,7 +709,9 @@ async def vincular(
         return templates.TemplateResponse(
             request, "_accion_ok.html",
             {"titulo": "Vinculado.", "texto": "No se ha movido ni renombrado nada.",
-             "series_id": series_id, "recontar_menu": RECONTAR_MENU})
+             "series_id": series_id,
+             "deshacer_url": f"/ui/series/{series_id}/archivos/{file_id}/deshacer",
+             "recontar_menu": RECONTAR_MENU})
     aviso = {"tipo": "warn", "texto": resultado.texto}
     file = await db.get(File, file_id)
     if not _es_htmx(request):
