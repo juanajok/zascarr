@@ -200,7 +200,7 @@ class TestCriterio1y12Entrada:
             ajena = await c.get(RUTA, params={"clave": CLAVE, "series_id": str(uuid4())})
             sin_grupo = await c.get(RUTA, params={"clave": "Comics/NoExiste", "series_id": str(await serie_de_prueba(entorno))})
         assert "ya no existe en tu biblioteca" in Pagina(ajena.text).visible and Pagina(ajena.text).filas == []
-        assert "ya no tiene registros pendientes" in Pagina(sin_grupo.text).visible
+        assert "ya no tiene pendientes" in Pagina(sin_grupo.text).visible
 
     async def test_sin_clave_de_firma_se_dice_y_no_hay_token(self, entorno, monkeypatch):
         serie = await serie_de_prueba(entorno)
