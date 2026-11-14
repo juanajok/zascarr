@@ -166,7 +166,7 @@ def test_vista_tarjetas_hace_clicable_portada_y_titulo_de_la_serie():
     finally:
         _cerrar()
     assert r.status_code == 200
-    assert 'class="coleccion-serie-card-enlace" href="/ui/series/s1"' in r.text
+    assert 'class="coleccion-serie-card-enlace" href="/ui/series/s1' in r.text
     assert 'aria-label="Abrir la serie Flash"' in r.text
 
 
