@@ -1,104 +1,118 @@
 # Benchmark y auditoría UX/UI — ficha de serie (2026-11-14)
 
-> **Estado:** auditoría de la ficha `series_detail.html` y adaptación del patrón de navegación
-> por secciones. **NOT RUN:** navegador real, tableta/móvil físico, lector de pantalla y
-> validación con coleccionistas. Los PASS son de plantilla, CSS y pruebas.
+> **Estado:** auditoría y corrección de los cinco puntos pendientes de #803.
+> **Método:** lectura de plantilla/CSS, medición de la biblioteca real, revisión contra el
+> sistema de diseño y benchmark de referencias. **NOT RUN:** navegador real, tableta/móvil
+> físico, lector de pantalla y validación con personas. Los PASS son de plantilla/CSS/pruebas.
 
 ## 1. Problema local
 
-La ficha mezcla en una sola columna:
+La ficha mezclaba en una sola columna:
 
 1. cabecera con portada, sinopsis, acciones, fuentes y atribución;
 2. datos editoriales, autores y procedencia;
-3. etiquetas, colecciones del coleccionista, búsqueda automática y notas;
+3. etiquetas, colecciones, búsqueda automática y notas;
 4. completitud (D8), otras fuentes y enriquecimiento;
 5. **números que faltan**, números en la biblioteca y archivos, al final.
 
-En una serie de 31 números, el coleccionista tiene que atravesar **más de diez secciones**
-antes de llegar a lo que más consulta: sus números. En móvil la portada y el resumen ocupan
-la primera pantalla; el resto es una sucesión de bloques sin un índice que permita saltar.
-Además, «Estado de la colección» (completitud D8) y «Colecciones» (agrupaciones del
-coleccionista) usan la misma palabra para dos conceptos distintos.
+En una serie de 31 números había que atravesar más de diez secciones antes de llegar a
+lo que más se consulta. Además, «Estado de la colección» (completitud D8) y
+«Colecciones» (agrupaciones M:N) usaban la misma palabra para dos conceptos distintos.
+La medición real de la biblioteca mostró el caso extremo: **426 números** en una serie;
+**17 series con ≥ 50** y **6 con ≥ 100**.
 
-### Hallazgos
+### Hallazgos y estado
 
 | Prioridad | Hallazgo | Evidencia | Estado |
 |---|---|---|---|
-| **P0** | Los números quedan tras ~10 secciones; en móvil no hay atajo | orden de `series_detail.html` | **Mitigado**: navegación por anclas |
+| **P0** | Números tras ~10 secciones; en móvil sin atajo | orden de `series_detail.html` | **Corregido**: números tras la cabecera + anclas |
 | **P0** | «Estado de la colección» se confunde con las colecciones M:N | dos bloques con «colección» | **Corregido**: «Completitud» |
-| **P1** | La frase de entrada aparece después del bloque de datos | `.series-intro` tras `ficha-serie-datos` | **Corregido**: antes de los datos |
-| **P1** | Cabecera con 4 acciones (editar, añadir, retirar, fuentes) y texto explicativo largo | `.series-acciones` | **Pendiente**: mover «Retirar» a detalles |
-| **P1** | Sin navegación entre secciones en tableta/móvil | no había índice | **Corregido**: `ficha-nav` |
-| **P2** | «Otras fuentes» muestra un botón deshabilitado cuando no hay fuente | bloque condicional | **Pendiente**: ocultar o plegar |
-| **P2** | Rejillas de números sin límite visual para series de 100+ | `.issue-grid` | **Pendiente**: medir y valorar paginación |
-| **P2** | «Elegir portada» y «Fuentes y atribución» compiten en la primera pantalla | detalles antes de datos | **Aceptado**: son controles plegados |
-| **P2** | Portada 120 px en móvil + título y acciones dejan poco espacio | `.series-cover` | **Aceptado**: portada legible |
+| **P1** | Acción destructiva «Retirar» compite con la acción principal | `.series-acciones` | **Corregido**: `<details>` secundario |
+| **P1** | Serie con 426 números pinta cientos de chips | `present`/`missing` sin límite | **Corregido**: primeras 30 + «Ver el resto» |
+| **P1** | «Otras fuentes» mostraba un botón deshabilitado sin fuente | bloque siempre visible | **Corregido**: se oculta sin fuente |
+| **P2** | La frase de entrada aparecía después del bloque de datos | `.series-intro` | **Corregido**: antes de los datos |
+| **P2** | Sin navegación entre secciones en tableta/móvil | no había índice | **Corregido**: `ficha-nav` |
+| **P2** | «Elegir portada» compite en la primera pantalla | detalle plegado | **Aceptado**: es un control |
+| **P2** | Portada 120 px en móvil | `.series-cover` | **Aceptado**: legible |
 
 ## 2. Benchmark
 
 | Referencia | Cómo estructura una ficha larga | Qué se adopta / adapta / descarta |
 |---|---|---|
-| **Sonarr/Radarr** ([Library](https://wiki.servarr.com/en/sonarr/library)) | Ficha de serie con pestañas (serie, temporadas, historial…) y acciones en menú contextual; el detalle no apila todo en una columna | **Adoptar** la separación por áreas y la acción principal; **descartar** pestañas con estado para no introducir SPA |
-| **Komga** ([Collections](https://komga.org/docs/guides/collections/)) | Detalle con paneles plegables y acciones contextuales; la información de colección se despliega solo al pulsar | **Adoptar** los paneles plegables ya usados en portada/fuentes; **descartar** el modo de edición global |
-| **Kavita** ([series-detail.component.html](https://git.azen-sgg.ru/AZEN-SGG/Kavita/src/commit/4c44dbf3e205d6b8946d29b20e58fbeabcdb748b/UI/Web/src/app/series-detail/_components/series-detail/series-detail.component.html)) | Pestañas: Storyline, Volumes/Chapters, Specials, Related, Recommendations, Reviews, Details; contenido diferido (`@defer`) | **Adoptar** el principio de que los números son una sección de primer nivel; **adaptar** a anclas, sin JS de pestañas ni estado |
-| **Jellyfin/Plex** ([Item details](https://deepwiki.com/jellyfin/jellyfin-web/3.2-library-and-list-views)) | Héroe + acción principal + secciones; el resto se consulta en subpestañas o menús | **Adoptar** una acción principal clara; **descartar** el menú de tres puntos como única vía (poco descubrible) |
-| **Calibre-Web / estanterías** | Ficha de libro con metadatos y acciones; las estanterías se gestionan aparte | **Adoptar** no mezclar «completitud» con «colección» |
-| **ZascArr, sistema de diseño** ([sistema](sistema-de-diseno-zascarr.md)) | Lo secundario va plegado; ≤ 50 palabras antes de la primera acción; objetivos ≥ 40 px; sin diálogos; un solo principal | **Adoptar** `<details>`, anclas y botones; **descartar** tabs con estado y nuevos componentes |
+| **Sonarr/Radarr** ([Library](https://wiki.servarr.com/en/sonarr/library)) | Pestañas y acciones contextuales; no apila todo | Adoptar separación por áreas; descartar pestañas con estado |
+| **Komga** ([Collections](https://komga.org/docs/guides/collections/)) | Paneles plegables y acciones contextuales | Adoptar lo plegable; descartar modo de edición global |
+| **Kavita** ([series-detail](https://git.azen-sgg.ru/AZEN-SGG/Kavita/src/commit/4c44dbf3e205d6b8946d29b20e58fbeabcdb748b/UI/Web/src/app/series-detail/_components/series-detail/series-detail.component.html)) | Pestañas: Storyline, Volumes/Chapters, Specials, Related, Details, con contenido diferido | Adoptar «números como sección principal»; adaptar a anclas sin SPA |
+| **Jellyfin/Plex** ([Item details](https://deepwiki.com/jellyfin/jellyfin-web/3.2-library-and-list-views)) | Héroe + acción principal + secciones/subpestañas | Adoptar acción principal clara; descartar menú de tres puntos |
+| **Calibre-Web / estanterías** | Metadatos y acciones en la ficha; estanterías aparte | Adoptar no mezclar «completitud» con «colección» |
+| **ZascArr, sistema de diseño** ([sistema](sistema-de-diseno-zascarr.md)) | Lo secundario plegado; ≤ 50 palabras antes de la primera acción; objetivos ≥ 40 px; sin diálogos | Adoptar `<details>`, anclas y botones existentes; descartar tabs con estado |
 
 ### Opciones evaluadas
 
 | Opción | Ventaja | Problema | Veredicto |
 |---|---|---|---|
-| A. Dejar la columna actual | Cero coste | Números inaccesibles en móvil; ambigüedad conceptual | **Descartar** |
-| B. Pestañas con estado (Kavita) | Muy compacto | Estado, URLs, caché, HTMX y foco; más superficie de test | **Fase 2**, no ahora |
-| C. Navegación por anclas | Nativa, sin JS, teclado, URLs compartibles | No reduce la longitud; requiere buenos ids | **Adoptar** |
-| D. Mover números al primer bloque | Prioriza la tarea principal | Cambia la jerarquía editorial y muchas pruebas; el resto sigue siendo largo | **Recomendado como siguiente paso** |
-| E. Menú lateral de secciones | Buen acceso en escritorio | En móvil compite con la barra inferior; más CSS | **Descartar** ahora |
+| A. Dejar la columna actual | Cero coste | Números inaccesibles; ambigüedad | **Descartar** |
+| B. Pestañas con estado (Kavita) | Muy compacto | Estado, URLs, caché, HTMX y foco | **Fase 2**, no ahora |
+| C. Navegación por anclas + números arriba | Nativa, sin JS, teclado, URLs compartibles | No reduce la longitud de datos, pero prioriza la tarea | **Adoptar** |
+| D. Reordenar todo a datos primero | Estructura editorial clásica | Vuelve a esconder números | **Descartar** |
+| E. Colapsar rejillas de números | Evita 426 chips de golpe | Un clic extra para el resto | **Adoptar con umbral 30** |
 
 ## 3. Solución implementada
 
-- **`ficha-nav`** bajo la cabecera, con anclas: Números, Búsqueda, Etiquetas, Colecciones,
-  Completitud, Datos y Archivos (esta última solo si hay archivos).
-- Cada destino tiene `id` y `scroll-margin-top`; no hay estado ni peticiones adicionales.
-- «Estado de la colección» pasa a **«Completitud»** para no confundirse con las colecciones
-  del coleccionista.
-- La frase «Consulta tus números y ajusta la búsqueda automática» pasa **antes** del bloque
-  de datos, no después.
-- Los números se agrupan en `<section id="numeros-serie">` para que el ancla sea estable.
-- La navegación no entra en el presupuesto de texto de entrada: es un control, no copy.
-- Sin nuevos componentes visuales: usa `.btn.ghost.sm` (≥ 40 px) y los tokens existentes.
+- **Números inmediatamente después de la cabecera y la intro**, antes de portada, datos,
+  etiquetas, búsqueda, colecciones y completitud.
+- **`ficha-nav`** con anclas a Números, Búsqueda, Etiquetas, Colecciones, Completitud,
+  Datos y Archivos (si existe). Sin estado ni JS propio.
+- **«Estado de la colección» → «Completitud»**.
+- **«Retirar de mi biblioteca»** pasa a `<details class="series-retirar">`; el enlace real
+  sigue dentro y la garantía de no tocar archivos le acompaña.
+- **«Otras fuentes»** solo se renderiza si la serie tiene `comic_vine_id`, `anilist_id`,
+  `tebeosfera_slug` o `gcd_id`.
+- **Rejillas largas**: primeras 30 chips visibles y `<details>` «Ver los N números que
+  faltan / tienes» para el resto. Se aplica por encima de 30; con 100 números se evitan
+  200 chips de golpe.
+- La frase de entrada va antes del bloque de datos.
+- Sin componentes nuevos: `.btn.ghost.sm`, `<details>` y tokens existentes.
+
+### Medición real usada para decidir el umbral
+
+- Una serie con **426 números** (Batman Vol 1), **137** (Superman), **133** (The Flash),
+  **110** (Death Note), **100** (100 Balas).
+- **17 series con ≥ 50** números y **6 con ≥ 100**.
+- `total_issues` de la fuente no basta (máximo declarado 13): la decisión se toma por
+  `present|length`/`missing|length` reales, no por el metadato.
 
 ### Móvil y tableta
 
-- La navegación envuelve en varias filas; no hay scroll horizontal.
-- Cada enlace mantiene 40 px de alto y foco visible; se puede usar con teclado.
-- El salto a «Números» evita recorrer datos, etiquetas, política y notas.
+- Los números aparecen en la primera pantalla tras la cabecera; no hay que recorrer datos.
+- La navegación envuelve en varias filas, sin scroll horizontal; enlaces de ≥ 40 px.
+- Las rejillas de 30 chips caben en pocas filas y el resto queda a un toque.
+- La portada móvil baja a 96 px para que el índice completo quepa antes de la barra inferior.
+- La acción destructiva deja de competir con «Añadir números del disco».
 - No se toca la barra inferior de navegación de la app.
 
-## 4. Lo que queda propuesto (no implementado)
+## 4. Lo que sigue pendiente
 
-1. **Mover el bloque de números justo después de la cabecera**, antes de datos y etiquetas;
-   la navegación ya lo hace accesible, pero la jerarquía sigue siendo datos-first.
-2. **Plegar «Retirar de mi biblioteca»** en un `<details>` o menú secundario: es una acción
-   destructiva que hoy compite con «Añadir números del disco».
-3. **Ocultar «Otras fuentes»** cuando no hay ninguna fuente asociada, o integrarlo en el bloque
-   de datos.
-4. Medir una serie de 100+ números para decidir si las rejillas necesitan paginación o un
-   resumen «Ver los 100».
-5. Validar con 3–5 coleccionistas en tableta y móvil; sin esa validación no se cierra el P0.
+1. Validar con 3–5 coleccionistas reales en tableta y móvil; la simulación y las capturas
+   están en `validacion-ux-ficha-serie.md`, pero no cierran el P0 de producto.
+2. Valorar pestañas con estado si la ficha sigue siendo demasiado larga tras la validación.
+3. Medir si el umbral 30 es el adecuado con series de 400+ números.
+4. Revisar el orden de «Elegir portada» si la validación muestra que distrae.
 
 ## 5. Criterios de aceptación
 
-- La ficha contiene una navegación con anclas a Números, Búsqueda, Etiquetas, Colecciones,
-  Completitud y Datos; Archivos solo si existe la sección.
-- «Completitud» sustituye a «Estado de la colección» en la ficha de serie.
-- La frase de entrada aparece antes del bloque de datos.
-- No se introducen nuevos componentes, JS propio ni diálogos.
+- `#numeros-serie` aparece antes de `#datos-serie`, `#wishlist_policy`, etiquetas, colecciones
+  y completitud.
+- La ficha contiene navegación por anclas; «Archivos» solo si existe la sección.
+- «Completitud» sustituye a «Estado de la colección».
+- «Retirar de mi biblioteca» está dentro de un `<details>` y conserva su enlace.
+- «Otras fuentes» no aparece sin fuente asociada.
+- Con 100 presentes y 100 ausentes se muestran 30 + 30 y dos «Ver los 70…».
 - La suite de ficha, componentes y tokens de CSS sigue verde.
 
 ## 6. PASS / FAIL / NOT RUN
 
-- **PASS (código/pruebas):** navegación por anclas, ids estables, «Completitud», entrada
-  movida, presupuesto de texto y estilos con tokens.
-- **FAIL (previo, corregido/mitigado):** números sin atajo, ambigüedad «colección».
+- **PASS (código/pruebas):** orden, anclas, «Completitud», retirada plegada, fuentes
+  ocultas, colapso de rejillas, presupuesto de texto y estilos con tokens.
+- **FAIL (previo, corregido):** números al final, ambigüedad «colección», acción destructiva
+  a la vista, rejillas sin límite.
 - **NOT RUN:** navegador real, tableta/móvil, lector de pantalla y validación con personas.

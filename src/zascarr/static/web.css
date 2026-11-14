@@ -796,6 +796,8 @@ button[type="submit"].btn-sugerencia {
 
 .ficha-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0 0 var(--space-4); }
 .ficha-nav .btn { min-height: 40px; }
+.ficha-mas { margin: var(--space-2) 0; }
+.ficha-mas summary { cursor: pointer; min-height: 40px; padding: var(--space-1) 0; color: var(--ink-soft); font-weight: 700; }
 .ficha-numeros, #politica-serie, #etiquetas-serie, #colecciones-serie, #coleccion-serie, #datos-serie, #archivos-por-numero { scroll-margin-top: var(--space-4); }
 .series-header { display: flex; gap: 22px; margin-bottom: var(--space-5); flex-wrap: wrap; }
 /* Los datos van a la derecha de la portada: sin base propia, su texto largo los mandaba debajo incluso a
@@ -812,6 +814,8 @@ button[type="submit"].btn-sugerencia {
 .series-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2) 14px; align-items: center; margin: 10px 0 0; }
 /* Fila de enlaces secundarios bajo la frase de entrada (p. ej. las otras formas de revisar). */
 .acciones-fila { display: flex; flex-wrap: wrap; gap: var(--space-1) 14px; align-items: center; margin: var(--space-1) 0 var(--space-4); }
+.series-retirar { margin-top: var(--space-2); }
+.series-retirar summary { cursor: pointer; color: var(--ink-soft); font-weight: 600; padding: var(--space-2) 0; min-height: 40px; }
 .series-fuentes, .politica-detalles { margin-top: var(--space-2); }
 .politica-detalles code { font-size: var(--text-secundario); }
 .series-fuentes summary, .politica-detalles summary {
@@ -1065,6 +1069,11 @@ button[type="submit"].btn-sugerencia {
 
 @media (max-width: 480px) {
   .metrics-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .portada.series-cover { width: 96px; }
+  .series-header { margin-bottom: var(--space-3); }
 }
 
 /* ── 16a. DESCUBRIR (C0) — tarjeta horizontal (portada + ficha), a
