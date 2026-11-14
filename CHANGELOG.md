@@ -5,6 +5,17 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Añadido
+
+- **SCR4: foro IPB con charset real, control de saturación y tarjeta en Ajustes (2026-11-14, #705).**
+  El foro se lee decodificando su charset real (cabecera → `<meta>` → cp1252, nunca UTF-8 a
+  ciegas) y el login/búsqueda envían el formulario en ese charset, conservando `s=`; se detecta
+  el *Search Flood Control* de IPB (HTTP 200) como espera compartida de 20–60 s, no como «sin
+  resultados»; la búsqueda tiene su propio ritmo (25 s) separado de la lectura (2 s); Ajustes
+  estrena tarjeta **Foro** (URL, usuario, contraseña «en blanco = no cambia», activar) con aviso
+  de HTTP sin TLS, y `LEGAL.md` lo advierte. Incluye `scripts/diagnostico_foro.py` (sin
+  credenciales en pantalla) y pruebas con fixtures latin-1/cp1252 y de saturación.
+
 ### Corregido
 
 - **V14 cerrada: migración de la UI sin restos (2026-11-14, #750).** Capturas nuevas en
