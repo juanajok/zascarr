@@ -491,13 +491,6 @@ button.primary,
   color: var(--on-yellow);
 }
 
-/* `.neutro` era el parche para que un envío no saliera amarillo; ya no hace falta (el envío es neutro
-   por defecto), pero se conserva por compatibilidad de clases hasta V14. */
-button[type="submit"].neutro {
-  --btn-bg: var(--paper);
-  color: var(--ink);
-}
-
 .btn-ignorar {
   color: var(--ink-soft);
   border-color: var(--ink-faint);
