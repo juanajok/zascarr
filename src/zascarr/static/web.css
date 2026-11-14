@@ -2418,9 +2418,17 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-portada .portada { border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); box-shadow: var(--shadow-ink-sm); }
 .coleccion-descripcion { margin: 0 0 var(--space-2); color: var(--ink-soft); max-width: 62ch; }
 .coleccion-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; }
+.coleccion-series-cabecera { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+.coleccion-series-cabecera h2 { margin: 0; }
 .coleccion-series-lista { list-style: none; margin: 0 0 var(--space-3); padding: 0; }
 .coleccion-serie-fila { position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: var(--border-line) solid var(--paper-2); }
 .coleccion-serie-fila:last-child { border-bottom: 0; }
+/* Alta de series con divulgación progresiva: el selector no ocupa la ficha hasta abrirlo. */
+.coleccion-anadir { margin: 0 0 var(--space-3); }
+.coleccion-anadir > summary { list-style: none; cursor: pointer; width: fit-content; }
+.coleccion-anadir > summary::-webkit-details-marker { display: none; }
+.coleccion-anadir[open] > summary { margin-bottom: var(--space-3); }
+.coleccion-anadir-contenido { margin-top: var(--space-2); }
 .coleccion-alta-grupo { border: 0; padding: 0; margin: 0; }
 .coleccion-alta-grupo legend { font-weight: 700; margin-bottom: var(--space-1); }
 .coleccion-checkgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-2); margin: 10px 0; }

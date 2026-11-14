@@ -7,6 +7,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Alta de series en colecciones: divulgación progresiva (2026-11-14).** La ficha de una
+  colección ya no muestra siempre el selector con hasta 40 series de la biblioteca. Un botón
+  «Añadir series» (antes de la lista) despliega el panel; el fragmento solo se pide al abrir
+  (`/ui/colecciones/{id}/anadir`). Una colección vacía lo abre sola. Se corrige la copia
+  «Añadir series sin colección» (M:N), se conserva búsqueda/tradición/página/selección y se
+  mantienen vista lista/tarjetas y el foco. Ficha: `docs/design/benchmark-alta-series-colecciones.md`.
 - **Colecciones solapadas (2026-11-14).** Una serie puede pertenecer a varias colecciones: la
   pertenencia única `series.collection_id` pasa a la tabla puente `collection_series`
   (migración 0040, conserva todas las asignaciones existentes). La ficha muestra todas sus
