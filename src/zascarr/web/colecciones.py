@@ -22,7 +22,6 @@ from zascarr.services.colecciones import (
     listar_colecciones,
     pagina_series_sin_coleccion,
     quitar_serie,
-    series_sin_coleccion,
 )
 from zascarr.services.exportacion_kavita import (
     ExportacionError,
@@ -65,12 +64,11 @@ def _filtros(q: str, tradicion: str) -> tuple[str, str]:
 
 
 def _url_ficha(cid: UUID, q: str, tradicion: str, seleccion: list[str],
-               pagina: int = 1, vista: str = "lista",
-               cambio_vista: str = "") -> str:
+               pagina: int = 1, vista: str = "lista", cambio_vista: str = "") -> str:
     params: list[tuple[str, str]] = [("q", q), ("tradicion", tradicion),
                                      ("pagina", str(pagina)), ("vista", vista)]
     if cambio_vista:
-        params.append(("cambio_vista", "1"))
+        params.append(("cambio_vista", cambio_vista))
     params += [("serie_ids", sid) for sid in seleccion]
     return f"/ui/colecciones/{cid}?{urlencode(params)}"
 
@@ -125,44 +123,31 @@ async def nueva(request: Request, name: str = Form(""), description: str = Form(
 
 @router.get("/{coleccion_id}", response_class=HTMLResponse)
 async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
-                  navegar: str = "",
-                  q: str = Query(""), tradicion: str = Query(""),
-                  serie_ids: list[str] = Query([]),
-                  pagina: int = Query(1, ge=1), limpiar: str = Query(""),
-                  vista: str = Query("lista"), cambio_vista: str = Query(""),
+                  abrir: str = "", q: str = Query(""), tradicion: str = Query(""),
+                  serie_ids: list[str] = Query([]), pagina: int = Query(1, ge=1),
+                  limpiar: str = Query(""), vista: str = Query("lista"),
+                  cambio_vista: str = Query(""),
                   db: AsyncSession = Depends(get_db)):
     c = await detalle_coleccion(db, coleccion_id)
     if c is None:
         return _respuesta(request, "coleccion_detalle.html", {
-            "coleccion": None, "politicas": POLITICAS, "series": [],
+            "coleccion": None, "politicas": POLITICAS,
             "errores": {"general": "La colección ya no existe."}, "aviso": ""})
     q, tradicion = _filtros(q, tradicion)
     if limpiar == "1":
         q, tradicion = "", ""
     vista = vista if vista in {"lista", "tarjetas"} else "lista"
-    foco_vista = cambio_vista == "1"
     seleccion = _seleccion_valida(serie_ids)
-    pagina_datos = await pagina_series_sin_coleccion(
-        db, q=q, tradicion=tradicion, pagina=pagina, coleccion_id=coleccion_id)
-    visibles = {s.id for s in pagina_datos.series}
-    seleccion_oculta = [sid for sid in seleccion if sid not in visibles]
+    pagina_actual = max(1, pagina)
     return _respuesta(request, "coleccion_detalle.html", {
         "coleccion": c, "politicas": POLITICAS,
-        "series": pagina_datos.series, "pagina": pagina_datos,
-        "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
-        "seleccion": seleccion, "seleccion_oculta": seleccion_oculta, "vista": vista,
-        "foco_vista": foco_vista,
-        "foco_filtros": bool(q or tradicion or limpiar == "1" or pagina > 1
-                            or navegar == "1"),
+        "abrir_alta": abrir == "1", "vista": vista,
+        "q": q, "tradicion": tradicion, "seleccion": seleccion,
+        "pagina": None, "foco_vista": cambio_vista == "1",
         "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                      pagina_datos.pagina, "lista", "1"),
+                                      pagina_actual, "lista", "1"),
         "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                         pagina_datos.pagina, "tarjetas", "1"),
-        "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                   max(1, pagina_datos.pagina - 1), vista),
-        "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                    min(pagina_datos.paginas, pagina_datos.pagina + 1), vista),
-        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1, vista) + "&limpiar=1",
+                                         pagina_actual, "tarjetas", "1"),
         "candidatas_portada": await candidatas_portada(db, coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": {}, "aviso": {
@@ -172,6 +157,31 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
             "quitada": "Serie quitada de la colección; sigue en tu biblioteca.",
             "portada": "Portada actualizada.",
         }.get(guardado, ""),
+    })
+
+
+@router.get("/{coleccion_id}/anadir", response_class=HTMLResponse)
+async def panel_anadir(request: Request, coleccion_id: UUID, q: str = Query(""),
+                       tradicion: str = Query(""), pagina: int = Query(1, ge=1),
+                       serie_ids: list[str] = Query([]), limpiar: str = Query(""),
+                       db: AsyncSession = Depends(get_db)):
+    """Fragmento perezoso para añadir series: solo se pide al abrir el desplegable."""
+    coleccion = await db.get(Collection, coleccion_id)
+    if coleccion is None:
+        return HTMLResponse("", status_code=404,
+                            headers={"Cache-Control": "no-store"})
+    q, tradicion = _filtros(q, tradicion)
+    if limpiar == "1":
+        q, tradicion = "", ""
+    seleccion = _seleccion_valida(serie_ids)
+    pagina_datos = await pagina_series_sin_coleccion(
+        db, q=q, tradicion=tradicion, pagina=pagina, coleccion_id=coleccion_id)
+    visibles = {s.id for s in pagina_datos.series}
+    return _respuesta(request, "_coleccion_anadir.html", {
+        "coleccion": coleccion, "series": pagina_datos.series, "pagina": pagina_datos,
+        "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
+        "seleccion": seleccion,
+        "seleccion_oculta": [sid for sid in seleccion if sid not in visibles],
     })
 
 
@@ -185,7 +195,6 @@ async def editar(request: Request, coleccion_id: UUID, name: str = Form(""),
         c = await detalle_coleccion(db, coleccion_id)
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,
-            "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
             "valores": {"name": name, "description": description, "auto_search": auto_search},
             "errores": r.errores, "aviso": "",
         })
@@ -239,11 +248,8 @@ async def cambiar_portada(request: Request, coleccion_id: UUID,
             elegida = UUID(series_id)
         except ValueError:
             c = await detalle_coleccion(db, coleccion_id)
-            pagina_datos = await pagina_series_sin_coleccion(
-                db, coleccion_id=coleccion_id)
             return _respuesta(request, "coleccion_detalle.html", {
                 "coleccion": c, "politicas": POLITICAS,
-                "series": pagina_datos.series, "pagina": pagina_datos,
                 "candidatas_portada": await candidatas_portada(db, coleccion_id),
                 "exportaciones": await historial_exportaciones(db, coleccion_id),
                 "errores": {"portada": "La serie elegida no es válida."}, "aviso": ""})
@@ -252,7 +258,6 @@ async def cambiar_portada(request: Request, coleccion_id: UUID,
         c = await detalle_coleccion(db, coleccion_id)
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,
-            "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
             "candidatas_portada": await candidatas_portada(db, coleccion_id),
             "exportaciones": await historial_exportaciones(db, coleccion_id),
             "errores": r.errores, "aviso": ""})
@@ -270,7 +275,6 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
     if confirmo != "1":
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,
-            "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
             "exportaciones": await historial_exportaciones(db, coleccion_id),
             "errores": {"general": "Marca la confirmación antes de exportar."}, "aviso": "",
         })
@@ -281,7 +285,6 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
         await db.commit()
         return _respuesta(request, "coleccion_detalle.html", {
             "coleccion": c, "politicas": POLITICAS,
-            "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
             "exportaciones": await historial_exportaciones(db, coleccion_id),
             "errores": {}, "exportacion": resumen, "aviso": "",
         })
@@ -289,7 +292,6 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
         error = str(exc)
     return _respuesta(request, "coleccion_detalle.html", {
         "coleccion": c, "politicas": POLITICAS,
-        "series": await series_sin_coleccion(db, coleccion_id=coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": {"general": error}, "aviso": "",
     })
@@ -299,8 +301,7 @@ async def exportar(request: Request, coleccion_id: UUID, patch_comicinfo: str = 
 async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
                   serie_ids: list[str] = Form([]), serie_id: str = Form(""),
                   q: str = Form(""), tradicion: str = Form(""),
-                  pagina: int = Form(1), vista: str = Form("lista"),
-                  db: AsyncSession = Depends(get_db)):
+                  pagina: int = Form(1), db: AsyncSession = Depends(get_db)):
     crudos = [s for s in serie_ids if s.strip()]
     if serie_id.strip():
         crudos.append(serie_id)
@@ -319,8 +320,7 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
         if r.ok:
             await db.commit()
             q, tradicion = _filtros(q, tradicion)
-            vista = vista if vista in {"lista", "tarjetas"} else "lista"
-            consulta = {"guardado": "asignadas", "vista": vista}
+            consulta = {"guardado": "asignadas"}
             if q:
                 consulta["q"] = q
             if tradicion:
@@ -328,28 +328,9 @@ async def asignar(request: Request, coleccion_id: UUID, navegar: str = "",
             return _redirigir(f"/ui/colecciones/{coleccion_id}?{urlencode(consulta)}")
         r_errores = r.errores
     c = await detalle_coleccion(db, coleccion_id)
-    q, tradicion = _filtros(q, tradicion)
-    vista = vista if vista in {"lista", "tarjetas"} else "lista"
-    seleccion = _seleccion_valida(crudos)
-    pagina_datos = await pagina_series_sin_coleccion(
-        db, q=q, tradicion=tradicion, pagina=pagina, coleccion_id=coleccion_id)
-    visibles = {s.id for s in pagina_datos.series}
     return _respuesta(request, "coleccion_detalle.html", {
         "coleccion": c, "politicas": POLITICAS,
-        "series": pagina_datos.series, "pagina": pagina_datos,
-        "q": q, "tradicion": tradicion, "tradiciones": TRADICIONES,
-        "seleccion": seleccion, "vista": vista,
-        "foco_filtros": bool(q or tradicion or pagina > 1 or navegar == "1"),
-        "seleccion_oculta": [sid for sid in seleccion if sid not in visibles],
-        "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                      pagina_datos.pagina, "lista", "1"),
-        "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                         pagina_datos.pagina, "tarjetas", "1"),
-        "url_anterior": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                   max(1, pagina_datos.pagina - 1), vista),
-        "url_siguiente": _url_ficha(coleccion_id, q, tradicion, seleccion,
-                                    min(pagina_datos.paginas, pagina_datos.pagina + 1), vista),
-        "url_limpiar": _url_ficha(coleccion_id, "", "", seleccion, 1, vista) + "&limpiar=1",
+        "abrir_alta": True,
         "candidatas_portada": await candidatas_portada(db, coleccion_id),
         "exportaciones": await historial_exportaciones(db, coleccion_id),
         "errores": r_errores, "aviso": ""})
@@ -362,10 +343,10 @@ async def quitar(coleccion_id: UUID, serie_id: UUID, q: str = Form(""),
                  db: AsyncSession = Depends(get_db)):
     await quitar_serie(db, coleccion_id, serie_id)
     await db.commit()
-    q, tradicion = _filtros(q, tradicion)
-    vista = vista if vista in {"lista", "tarjetas"} else "lista"
-    consulta: list[tuple[str, str]] = [
-        ("guardado", "quitada"), ("q", q), ("tradicion", tradicion),
-        ("pagina", str(max(1, pagina))), ("vista", vista)]
-    consulta += [("serie_ids", sid) for sid in _seleccion_valida(serie_ids)]
-    return _redirigir(f"/ui/colecciones/{coleccion_id}?{urlencode(consulta)}")
+    params: list[tuple[str, str]] = [("guardado", "quitada"), ("q", q),
+                                     ("tradicion", tradicion),
+                                     ("pagina", str(max(1, pagina))),
+                                     ("vista", vista if vista in {"lista", "tarjetas"}
+                                      else "lista")]
+    params += [("serie_ids", sid) for sid in _seleccion_valida(serie_ids)]
+    return _redirigir(f"/ui/colecciones/{coleccion_id}?{urlencode(params)}")

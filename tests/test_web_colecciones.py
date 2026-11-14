@@ -33,7 +33,8 @@ def _cliente():
 
     async def _db():
         yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
-                              execute=_execute)
+                              execute=_execute,
+                              get=AsyncMock(return_value=SimpleNamespace(id=uuid4())))
     app.dependency_overrides[get_db] = _db
     return TestClient(app)
 
@@ -69,8 +70,6 @@ def test_detalle_muestra_series_y_selector():
                                    "No buscar automáticamente")])
     try:
         with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.pagina_series_sin_coleccion", AsyncMock(
-                 return_value=_pagina(SerieDeColeccion("s2", "Batman", 1940, "ninguno")))), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[
                  CandidataPortada("s1", "Flash", True)])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[
@@ -81,17 +80,16 @@ def test_detalle_muestra_series_y_selector():
     finally:
         _cerrar()
     assert r.status_code == 200
-    assert "Flash" in r.text and "Batman" in r.text
+    assert "Flash" in r.text and "Añadir series" in r.text
+    assert "Batman" not in r.text and "coleccion-check" not in r.text
     assert "Elegir portada" in r.text and "Usar la automática" in r.text
     assert "/portada" in r.text
     assert 'id="previa-serie"' not in r.text
-    assert 'hx-get="/ui/colecciones/' in r.text and '/previa/s2"' in r.text
-    assert 'hx-target="#previa-s2"' in r.text
+    assert 'hx-get="/ui/colecciones/' in r.text and '/anadir"' in r.text
     assert 'hx-target="#previa-m-s1"' in r.text
     assert 'class="chip-previa chip-previa-lista"' in r.text
     assert "Ver portada" in r.text
     assert 'hx-target="next .previa-numero"' in r.text
-    assert 'class="coleccion-check chip-previa"' in r.text
     # Sin imágenes masivas: la portada de cada serie se pide solo al fragmento.
     assert 'src="/ui/series/s1/portada"' not in r.text
     assert 'src="/ui/series/s2/portada"' not in r.text
@@ -247,7 +245,7 @@ def test_multiseleccion_muestra_checkboxes_y_redirige():
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.asignar_series", AsyncMock(
                  return_value=ResultadoColeccion(True))):
-            r = c.get(f"/ui/colecciones/{cid}")
+            r = c.get(f"/ui/colecciones/{cid}/anadir")
             assert r.status_code == 200
             assert 'name="serie_ids"' in r.text and "Añadir series seleccionadas" in r.text
             assert 'name="serie_ids" value="' + s1 + '"' in r.text
@@ -276,7 +274,7 @@ def test_multiseleccion_uuid_invalido_no_llama_al_servicio():
     finally:
         _cerrar()
     assert r.status_code == 200 and "no es válida" in r.text
-    assert f'value="{valida}"' in r.text and "checked" in r.text
+    assert "Añadir series" in r.text
     llamada.assert_not_awaited()
 
 
@@ -291,7 +289,7 @@ def test_filtros_y_seleccion_oculta_en_plantilla():
                  return_value=_pagina(SerieDeColeccion(visible, "Flash", 1987, "ninguno")))), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
-            r = c.get(f"/ui/colecciones/{cid}", params=[
+            r = c.get(f"/ui/colecciones/{cid}/anadir", params=[
                 ("q", "flash"), ("tradicion", "american"),
                 ("serie_ids", visible), ("serie_ids", oculta)])
     finally:
@@ -314,11 +312,12 @@ def test_filtro_sin_resultados_ofrece_limpiar():
                    AsyncMock(return_value=_pagina())), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
-            r = c.get(f"/ui/colecciones/{cid}", params=[("q", "nada"), ("serie_ids", sid)])
+            r = c.get(f"/ui/colecciones/{cid}/anadir", params=[("q", "nada"), ("serie_ids", sid)])
     finally:
         _cerrar()
     assert "No hay series con esos filtros" in r.text and "Limpiar filtros" in r.text
-    assert f"serie_ids={sid}" in r.text and "limpiar=1" in r.text
+    assert f'name="serie_ids" value="{sid}"' in r.text
+    assert 'name="limpiar" value="1"' in r.text
 
 
 def test_paginacion_conserva_seleccion_y_limpiar_es_boton():
@@ -334,7 +333,7 @@ def test_paginacion_conserva_seleccion_y_limpiar_es_boton():
                    AsyncMock(return_value=pagina)), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
-            r = c.get(f"/ui/colecciones/{cid}", params=[
+            r = c.get(f"/ui/colecciones/{cid}/anadir", params=[
                 ("q", "flash"), ("pagina", "2"), ("serie_ids", sid)])
     finally:
         _cerrar()
@@ -343,7 +342,6 @@ def test_paginacion_conserva_seleccion_y_limpiar_es_boton():
     assert "Anterior" in r.text and "Siguiente" in r.text
     assert 'name="pagina" value="1"' in r.text
     assert 'type="submit" name="limpiar" value="1"' in r.text
-    assert "autofocus" in r.text
 
 
 def test_limpiar_filtros_conserva_la_seleccion_en_el_servidor():
@@ -357,7 +355,7 @@ def test_limpiar_filtros_conserva_la_seleccion_en_el_servidor():
              patch("zascarr.web.colecciones.pagina_series_sin_coleccion", llamada), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
-            r = c.get(f"/ui/colecciones/{cid}", params=[
+            r = c.get(f"/ui/colecciones/{cid}/anadir", params=[
                 ("q", "flash"), ("tradicion", "manga"), ("limpiar", "1"),
                 ("serie_ids", sid)])
     finally:
@@ -549,3 +547,42 @@ def test_patron_chip_previa_y_override_tactil():
     assert "width: 180px" in css
     detalle = Path("src/zascarr/web/templates/_previa_serie.html").read_text()
     assert "previa-card" in detalle and "previa-pie" in detalle
+
+
+def test_detalle_no_carga_la_lista_de_alta_hasta_abrir_el_boton():
+    cid = uuid4()
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [
+        SerieDeColeccion("s1", "Flash", 1987, "ninguno")])
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            r = c.get(f"/ui/colecciones/{cid}")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Añadir series" in r.text
+    assert 'hx-get="/ui/colecciones/' in r.text and "/anadir" in r.text
+    assert 'id="coleccion-anadir-contenido"' in r.text
+    assert "coleccion-check" not in r.text
+    assert "Añadir series seleccionadas" not in r.text
+
+
+def test_panel_de_alta_solo_trae_series_al_abrirlo():
+    cid = uuid4()
+    sid = str(uuid4())
+    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.pagina_series_sin_coleccion", AsyncMock(
+                return_value=_pagina(SerieDeColeccion(sid, "Flash", 1987, "ninguno")))):
+            r = c.get(f"/ui/colecciones/{cid}/anadir")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Buscar por título" in r.text and "Flash" in r.text
+    assert 'name="serie_ids"' in r.text
+    assert "Añadir series seleccionadas" in r.text
+    assert r.headers["cache-control"] == "no-store"
+    assert "<!doctype html>" not in r.text
