@@ -11,7 +11,16 @@ from uuid import UUID
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.models import File, Issue, Series, StoryArc, StoryArcIssue
+from zascarr.models import (
+    File,
+    Issue,
+    Series,
+    StoryArc,
+    StoryArcIssue,
+    Wishlist,
+    WishlistOrigin,
+    WishlistStatus,
+)
 
 POR_PAGINA = 50
 
@@ -113,6 +122,62 @@ async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
         id=str(arco.id), title=arco.title, description=arco.description,
         is_crossover=bool(arco.is_crossover), filas=detalle,
         series=len({f.series_id for f in detalle}))
+
+
+@dataclass
+class ResultadoPedidoArco:
+    """BL-D7: resultado de pedir de una vez los números de una saga."""
+    ok: bool
+    errores: dict[str, str] = field(default_factory=dict)
+    anadidos: int = 0
+    ya_pedidos: int = 0
+    en_biblioteca: int = 0
+    total: int = 0
+
+
+async def pedir_arco(db: AsyncSession, arco_id: UUID) -> ResultadoPedidoArco:
+    """BL-D7: añade al wishlist los números de la saga que falten.
+
+    No crea una tabla nueva: un deseo por `issue` es suficiente y el orden se
+    conserva en `StoryArcIssue.reading_order` y en la prioridad del deseo. Los
+    deseos son manuales: la retirada automática de la política de una serie no
+    los toca. Los que ya están pedidos (incluidos los retirados) se omiten.
+    """
+    arco = await db.get(StoryArc, arco_id)
+    if arco is None:
+        return ResultadoPedidoArco(False, {"general": "La saga ya no existe."})
+    filas = (await db.execute(
+        select(StoryArcIssue.issue_id, StoryArcIssue.reading_order)
+        .where(StoryArcIssue.story_arc_id == arco_id)
+        .order_by(StoryArcIssue.reading_order, StoryArcIssue.issue_id)
+    )).all()
+    if not filas:
+        return ResultadoPedidoArco(False, {"general": "La saga no tiene números."})
+    pedidos = set((await db.execute(
+        select(Wishlist.issue_id).where(
+            Wishlist.issue_id.is_not(None),
+            Wishlist.status != WishlistStatus.RETIRADO,
+        ))).scalars().all())
+    en_biblioteca = set((await db.execute(
+        select(File.issue_id).where(
+            File.issue_id.in_([f.issue_id for f in filas]),
+            File.is_missing.is_(False),
+        ))).scalars().all())
+    anadidos = ya = biblioteca = 0
+    for fila in filas:
+        if fila.issue_id in en_biblioteca:
+            biblioteca += 1
+        elif fila.issue_id in pedidos:
+            ya += 1
+        else:
+            db.add(Wishlist(
+                issue_id=fila.issue_id, origen=WishlistOrigin.MANUAL,
+                priority=int(fila.reading_order) or 1,
+                notes=f"Saga: {arco.title}"))
+            anadidos += 1
+    await db.flush()
+    return ResultadoPedidoArco(True, anadidos=anadidos, ya_pedidos=ya,
+                               en_biblioteca=biblioteca, total=len(filas))
 
 
 @dataclass
