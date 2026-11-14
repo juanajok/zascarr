@@ -1005,6 +1005,15 @@ class TestVolverALaBiblioteca:
         assert 'href="/ui/biblioteca?q=thor&amp;page=2#serie-' in r.text
         assert "Volver a la biblioteca" in r.text
 
+    def test_desde_una_coleccion_vuelve_a_la_coleccion(self):
+        series = make_series(total_issues=3)
+        destino = f"/ui/colecciones/{uuid4()}"
+        r = self._get(series, destino)
+        assert r.status_code == 200
+        assert f'href="{destino}" class="back-link"' in r.text
+        assert "Volver a la colección" in r.text
+
+
     def test_sin_contexto_ofrece_biblioteca_sin_inventar_busqueda(self):
         series = make_series(total_issues=3)
         r = self._get(series)

@@ -3,7 +3,7 @@
 {% block content %}
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
 {% from "_atribucion_fandom.html" import aviso_de_atribucion %}
-{% if volver %}<a href="{{ volver }}" class="back-link">← Volver a la biblioteca</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
+{% if volver %}<a href="{{ volver }}" class="back-link">← Volver{% if volver.startswith('/ui/colecciones/') %} a la colección{% else %} a la biblioteca{% endif %}</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
 
 <div class="series-header">
   {#- BL-INF6: el envoltorio lleva id para que el panel pueda refrescar la portada nueva por OOB
