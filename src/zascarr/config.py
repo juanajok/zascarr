@@ -186,6 +186,12 @@ class Settings(BaseSettings):
     # (ver docker-compose.yml); los discos en sí se configuran en .env con
     # HOST_LIBRARY_DIR / HOST_DOWNLOADS_DIR / HOST_AMULE_INCOMING_DIR.
     library_path: Path = Field(default=Path("/media/library"))
+    #: Allowlist de montajes donde se pueden declarar raíces de biblioteca (#156).
+    #: Lista separada por comas de rutas del CONTENEDOR; vacío = solo `library_path`.
+    #: No es la configuración de las raíces: la BD guarda nombre/ruta/estado/tradiciones.
+    library_roots: str = Field(default="")
+    #: Rutas del host correspondientes a `library_roots`, en el mismo orden (solo para mostrar).
+    host_library_roots: str = Field(default="")
     # B20: raíz de exportación a Kavita. Siempre la ruta del contenedor; la
     # ruta del host se monta ahí con HOST_EXPORT_DIR (docker-compose/.env).
     export_path: Path = Field(default=Path("/media/export"))

@@ -777,6 +777,56 @@ class Tag(Base):
     series: Mapped[list["Series"]] = relationship(secondary=series_tags, back_populates="tags")
 
 
+class LibraryRoot(Base):
+    """Una raíz de biblioteca: un disco/montaje donde viven los archivos (#156, ADR 0020).
+
+    `path` es la ruta del CONTENEDOR; `host_path` es la ruta del host solo para mostrar.
+    """
+    __tablename__ = "library_roots"
+    __table_args__ = (
+        CheckConstraint(
+            "path LIKE '/%' AND path <> '/' "
+            "AND path NOT LIKE '%/../%' AND path NOT LIKE '%/.zascarr%'",
+            name="ck_library_root_path",
+        ),
+        CheckConstraint("is_default = false OR enabled = true",
+                        name="ck_library_root_default_enabled"),
+        Index("uq_library_roots_default", "is_default", unique=True,
+              postgresql_where=text("is_default")),
+    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4,
+                                    server_default=text("gen_random_uuid()"))
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    path: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    host_path: Mapped[str | None] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True,
+                                          server_default="true")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                             server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    traditions: Mapped[list["LibraryRootTradition"]] = relationship(
+        back_populates="root", cascade="all, delete-orphan")
+
+
+class LibraryRootTradition(Base):
+    """Mapeo tradición -> raíz. Una raíz puede servir N tradiciones; cada tradición una sola."""
+    __tablename__ = "library_root_traditions"
+    __table_args__ = (
+        UniqueConstraint("tradition", name="uq_library_root_traditions_tradition"),
+        Index("ix_library_root_traditions_tradition", "tradition"),
+    )
+    root_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("library_roots.id", ondelete="CASCADE"), primary_key=True)
+    tradition: Mapped[ComicTradition] = mapped_column(
+        Enum(ComicTradition, name="comic_tradition",
+             values_callable=lambda obj: [e.value for e in obj]),
+        primary_key=True)
+    root: Mapped[LibraryRoot] = relationship(back_populates="traditions")
+
+
 class File(Base):
     __tablename__ = "files"
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -784,6 +834,9 @@ class File(Base):
         UUID(as_uuid=True), ForeignKey("issues.id", ondelete="SET NULL")
     )
     file_path: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
+    #: Raíz explícita (#156). NULL = archivo fuera de toda raíz conocida.
+    root_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("library_roots.id", ondelete="RESTRICT"), index=True)
     file_name:           Mapped[str]          = mapped_column(String(500), nullable=False)
     file_format: Mapped[FileFormat] = mapped_column(
         Enum(FileFormat, name="file_format", values_callable=lambda obj: [e.value for e in obj]),
@@ -892,6 +945,9 @@ class AsignacionOperacion(Base):
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"))
     series_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"))
+    #: Raíz elegida al preparar la operación (#156); las filas antiguas quedan NULL.
+    root_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("library_roots.id", ondelete="RESTRICT"))
     estado: Mapped[AsignacionEstado] = mapped_column(
         Enum(AsignacionEstado, name="asignacion_estado",
              values_callable=lambda obj: [e.value for e in obj]),
@@ -996,6 +1052,9 @@ class ApartadoOperacion(Base):
     completas: el detalle por grupo vive en `apartado_grupos.detalle`."""
     __tablename__ = "apartado_operaciones"
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    #: Raíz de la cuarentena (#156); las operaciones antiguas quedan NULL.
+    root_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("library_roots.id", ondelete="RESTRICT"))
     estado: Mapped[ApartadoEstado] = mapped_column(
         Enum(ApartadoEstado, name="apartado_estado",
              values_callable=lambda obj: [e.value for e in obj]),
