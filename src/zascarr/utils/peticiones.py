@@ -24,7 +24,7 @@ import asyncio
 import math
 import time
 from email.utils import parsedate_to_datetime
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlencode, urljoin, urlsplit
 
 import httpx
 import structlog
@@ -151,17 +151,45 @@ def _destino_seguro(actual: str, location: str | None, *, hosts_redireccion,
     return destino, origen
 
 
+def _cuerpo_de_formulario(datos, form_charset: str | None) -> tuple[bytes, dict | None]:
+    """Cuerpo `x-www-form-urlencoded` en el charset pedido (SCR4) y su `Content-Type`.
+
+    Sin `form_charset` se deja el comportamiento de siempre (httpx lo codifica en UTF-8).
+    Un carácter que no cabe en el charset se reintenta en cp1252 (lo que ofrece IPB); si
+    tampoco, se rechaza con un mensaje SIN los valores del formulario (podrían ser secretos).
+    """
+    if not form_charset:
+        return None, None
+    try:
+        cuerpo = urlencode(datos, encoding=form_charset)
+    except (UnicodeEncodeError, LookupError):
+        try:
+            cuerpo = urlencode(datos, encoding="cp1252")
+        except UnicodeEncodeError:
+            raise ValueError(
+                "el formulario no se puede codificar en el charset del foro") from None
+        form_charset = "cp1252"
+    cabecera = {"Content-Type": f"application/x-www-form-urlencoded; charset={form_charset}"}
+    return cuerpo.encode(form_charset, errors="strict"), cabecera
+
+
 async def _enviar(cliente: httpx.AsyncClient, metodo: str, url: str, *,
-                  datos, cabeceras, form: bool) -> httpx.Response:
+                  datos, cabeceras, form: bool,
+                  form_charset: str | None = None) -> httpx.Response:
     """Un salto, sin seguir redirecciones automáticas.
 
     GET lleva `params`; POST lleva `json` salvo `form=True` (formularios de Tebeosfera y del
-    foro, que esperan `application/x-www-form-urlencoded`)."""
+    foro, que esperan `application/x-www-form-urlencoded`). `form_charset` manda el
+    formulario codificado en el charset real del foro (SCR4; p. ej. iso-8859-1)."""
     metodo = metodo.upper()
     if metodo == "GET" and datos is not None:
         return await cliente.get(url, params=datos, headers=cabeceras)
     if metodo == "POST" and datos is not None:
         if form:
+            cuerpo, extra = _cuerpo_de_formulario(datos, form_charset)
+            if cuerpo is not None:
+                return await cliente.post(url, content=cuerpo,
+                                          headers={**(cabeceras or {}), **extra})
             return await cliente.post(url, data=datos, headers=cabeceras)
         return await cliente.post(url, json=datos, headers=cabeceras)
     return await cliente.request(metodo, url, headers=cabeceras)
@@ -170,7 +198,8 @@ async def _enviar(cliente: httpx.AsyncClient, metodo: str, url: str, *,
 async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: PoliticaFuente,
                                 deadline: float | None, hosts_redireccion,
                                 datos, cabeceras, cortesia, reloj, motivo: str,
-                                form: bool, permitir_apagada: bool):
+                                form: bool, permitir_apagada: bool,
+                                form_charset: str | None = None):
     """Una llamada con sus saltos: cada hop pasa por la cola y cuenta en el presupuesto."""
     try:
         origen_inicial = origen_normalizado(url)
@@ -198,7 +227,7 @@ async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: Pol
         try:
             respuesta = await _enviar(cliente, metodo_actual, url_actual,
                                       datos=datos_actuales, cabeceras=cabeceras_actuales,
-                                      form=form)
+                                      form=form, form_charset=form_charset)
         except (httpx.RemoteProtocolError, httpx.InvalidURL) as exc:
             # La URL del salto no es protocolizable: fallo de redirección, no de red.
             raise RedireccionNoPermitida("", "location_invalida") from exc
@@ -216,6 +245,7 @@ async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: Pol
             datos_actuales = None
         if respuesta.status_code in CODIGOS_SIN_CUERPO_TRAS_SALTO:
             metodo_actual, datos_actuales = "GET", None
+            form_charset = None
             cabeceras_actuales = _cabeceras_sin_cuerpo(cabeceras_actuales)
         url_actual, origen_actual = destino, origen_destino
     raise DemasiadasRedirecciones(politica.max_redirecciones)
@@ -234,6 +264,7 @@ async def pedir_con_cortesia(
     cabeceras: dict | None = None,
     permitir_apagada: bool = False,
     form: bool = False,
+    form_charset: str | None = None,
     cortesia=None,
     reloj=time.monotonic,
     dormir=asyncio.sleep,
@@ -263,7 +294,8 @@ async def pedir_con_cortesia(
                 hosts_redireccion=hosts_redireccion, datos=datos, cabeceras=cabeceras,
                 cortesia=servicio, reloj=reloj,
                 motivo="cortesia" if intento == 1 else "reintento",
-                form=form, permitir_apagada=permitir_apagada)
+                form=form, permitir_apagada=permitir_apagada,
+                form_charset=form_charset)
         except CortesiaEnEspera:
             raise
         except httpx.TimeoutException:

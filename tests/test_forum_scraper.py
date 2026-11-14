@@ -366,4 +366,5 @@ class TestLoginConRedireccion:
         scraper = ForumScraper(BASE, rate_limit=0, crear_cliente=cliente)
         assert await scraper.login("usuario", "clave") is True
         assert scraper._cookies.get("member_id") == "42"
-        assert len(peticiones) == 2                      # login + salto al índice
+        # SCR4: GET de la página de entrada (charset y formulario) + POST + salto al índice.
+        assert len(peticiones) == 3

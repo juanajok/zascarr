@@ -35,6 +35,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import structlog
@@ -119,6 +120,8 @@ MOTIVO_FUENTE_INACCESIBLE = (
     "La fuente de búsqueda no respondió a tiempo — se reintentará automáticamente"
 )
 MOTIVO_SIN_RESULTADOS = "No se encontró nada en las fuentes activas"
+#: SCR4: el foro pidió esperar (Search Flood Control) — no es «sin resultados».
+MOTIVO_FORO_ESPERA = "El foro pidió esperar unos segundos; se reintentará"
 MOTIVO_CANDIDATO_RECHAZADO = (
     "Se encontró algo, pero ningún cliente de descarga está activo — revisa Ajustes"
 )
@@ -339,7 +342,17 @@ class Orchestrator:
         candidates = self._ranked_candidates(results, query) if results else []
 
         if not candidates:
-            forum_result = await self._forum_fallback(query)
+            # SCR4: una espera del foro por saturación (HTTP 200) no es «sin resultados»:
+            # se deja el ítem WANTED con su aviso propio y no se escribe MOTIVO_SIN_RESULTADOS.
+            from zascarr.services.forum_scraper import ForumFloodControl
+
+            try:
+                forum_result = await self._forum_fallback(query)
+            except ForumFloodControl:
+                item.status = WishlistStatus.WANTED
+                item.last_error = MOTIVO_FORO_ESPERA
+                await self.db.flush()
+                return None
             if forum_result:
                 candidates = [forum_result]
 
@@ -609,10 +622,13 @@ class Orchestrator:
         if not s.forum_enabled or not s.forum_username or not s.forum_url:
             return None
         try:
-            from zascarr.services.forum_scraper import ForumScraper
+            from zascarr.services.forum_scraper import ForumFloodControl, ForumScraper
             from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
             scraper = ForumScraper(base_url=s.forum_url, rate_limit=s.forum_rate_limit)
-            await scraper.login(s.forum_username, s.forum_password)
+            if not await scraper.login(s.forum_username, s.forum_password):
+                logger.info("orchestrator.forum_login_fallido",
+                            host=self._host_para_log_foro(s.forum_url))
+                return None
             for fr in await scraper.use_ipb_search(query):
                 if fr.ed2k_links:
                     return SearchResult(
@@ -622,6 +638,9 @@ class Orchestrator:
                     return SearchResult(
                         fr.topic_title, "forum:crg", fr.magnet_links[0], 0, 1, "comics"
                     )
+        except ForumFloodControl:
+            # El ítem ya está marcado; _search_and_rank deja MOTIVO_FORO_ESPERA.
+            raise
         except (CortesiaEnEspera, FuenteApagada) as exc:
             # AC-16: sin turno no es un fallo; se omite el ciclo sin registrar excepción.
             logger.info("orchestrator.forum_sin_turno",
@@ -629,6 +648,14 @@ class Orchestrator:
         except Exception:
             logger.exception("orchestrator.forum_fallback_error")
         return None
+
+    @staticmethod
+    def _host_para_log_foro(url: str) -> str:
+        """Host del foro para el log, sin la URL ni una posible `s=<sesión>`."""
+        try:
+            return (urlsplit(url).hostname or "?")[:100]
+        except ValueError:
+            return "?"
 
     @staticmethod
     def _candidato_es_del_numero(candidate: SearchResult, numero: int,
