@@ -265,6 +265,10 @@
              hx-get="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/previa"
              hx-target="#previa-archivo-{{ n.issue_id }}" hx-swap="innerHTML"
              hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{% if sin_numero %}Sin número{% if n.titulo %} · {{ n.titulo }}{% endif %}{% else %}#{{ n.numero }}{% if n.titulo %} · {{ n.titulo }}{% endif %}{% endif %}<span class="sr">{% if sin_numero %} ver información del especial{% else %} ver información del número {{ n.numero }}{% endif %}</span></a>
+          <button type="button" class="btn ghost sm chip-previa-boton"
+                  hx-get="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/previa"
+                  hx-target="next .previa-numero" hx-swap="innerHTML"
+                  hx-trigger="click">Ver portada<span class="sr"> del número {{ n.numero }}</span></button>
           <span class="previa-numero" id="previa-archivo-{{ n.issue_id }}" aria-hidden="true"></span>
         </span>
       </h3>

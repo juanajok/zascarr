@@ -1953,6 +1953,16 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
    encogía al ancho del chip (~40 px). Va DEBAJO del chip para no tapar el rótulo de la sección;
    `pointer-events:none` para no robar el hover ni el clic. */
 .chip-previa { position: relative; display: inline-flex; }
+.chip-previa-boton { display: none; }
+.chip-previa-lista > .previa-numero {
+  position: fixed;
+  top: 50%;
+  right: 24px;
+  left: auto;
+  transform: translateY(-50%);
+  width: 200px;
+  max-width: calc(100vw - 48px);
+}
 .previa-numero {
   position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
   width: 220px; z-index: 30; pointer-events: none;
@@ -2475,7 +2485,18 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty) {
   display: block;
 }
+@media (hover: none), (pointer: coarse) {
+  .chip-previa-boton { display: inline-flex; align-items: center; min-height: 44px; }
+}
 @media (max-width: 860px), (pointer: coarse) {
+  .chip-previa-lista > .previa-numero {
+    top: auto;
+    bottom: 16px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(220px, calc(100vw - 24px));
+  }
   .chip-previa-lista:focus-within > .previa-numero:not(:empty) {
     display: block;
     width: 200px;

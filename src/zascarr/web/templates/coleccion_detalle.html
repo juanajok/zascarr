@@ -68,6 +68,10 @@
              hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
              hx-target="#previa-m-{{ s.id }}" hx-swap="innerHTML"
              hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{{ s.title }}</a>
+          <button type="button" class="btn ghost sm chip-previa-boton"
+                  hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
+                  hx-target="next .previa-numero" hx-swap="innerHTML"
+                  hx-trigger="click">Ver portada<span class="sr"> de {{ s.title }}</span></button>
           <span class="previa-numero" id="previa-m-{{ s.id }}" aria-hidden="true"></span>
         </span>
         <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>

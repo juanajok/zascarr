@@ -175,6 +175,8 @@ def test_hrefs_de_chip_y_archivo_por_numero(monkeypatch):
     assert 'id="previa-issue-1"' in r.text
     assert 'id="previa-archivo-issue-1"' in r.text
     assert 'hx-target="#previa-archivo-issue-1"' in r.text
+    assert "Ver portada" in r.text
+    assert 'hx-target="next .previa-numero"' in r.text
     assert 'aria-hidden="true"' in r.text
     assert 'hx-trigger="mouseenter delay:150ms, focusin delay:150ms"' in r.text
 
