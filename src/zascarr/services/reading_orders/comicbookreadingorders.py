@@ -90,7 +90,11 @@ class ReadingOrdersExtractor(ExtractorGuias):
             anio = _texto(principales[0].xpath(
                 ".//span[contains(concat(' ', normalize-space(@class), ' '), ' year ')]"))
             if anio:
-                referencia = f"{referencia} ({anio})"
+                # La web envuelve el año en paréntesis (`(1982)`): se normaliza a dígitos
+                # para no construir `((1982))`, que el resolver no reconoce (visto en vivo).
+                digitos = re.sub(r"\D", "", anio)
+                if digitos:
+                    referencia = f"{referencia} ({digitos})"
             enlaces = hijo.xpath(
                 ".//a[contains(concat(' ', normalize-space(@class), ' '), "
                 "' read-link ')][@href]/@href")
