@@ -1211,3 +1211,15 @@ def test_opcion_reservada_usa_etiqueta_no_valor_crudo(valor, etiqueta):
     assert f'value="{valor.value}"' in html
     assert etiqueta in html
     assert f">{valor.value}" not in html
+
+
+def test_ficha_etiqueta_estado_de_la_serie():
+    series = make_series(total_issues=3)
+    session = FakeSession([
+        FakeExecResult([series]), FakeExecResult([]),
+        acuse(), retirados(), FakeExecResult([]),
+    ])
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}")
+    assert "Estado de la serie" in r.text
+    assert "Estado de la colección" not in r.text

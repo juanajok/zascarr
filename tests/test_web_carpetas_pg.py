@@ -146,7 +146,16 @@ class TestTextoYEtiquetas:
         r = await pagina()
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
         assert FRASE in visible(r.text)
+        assert "Son registros pendientes de verificar, no archivos confirmados." in visible(r.text)
         assert r.headers["cache-control"] == "no-store"
+
+    async def test_titulo_y_miga_de_pendientes_por_carpeta(self, banco):
+        r = await pagina()
+        assert "<title>Pendientes por carpeta — Por revisar — ZascArr</title>" in r.text
+        t = visible(r.text)
+        assert "Por revisar › Pendientes por carpeta" in t
+        assert "<h1>Pendientes por carpeta</h1>" in r.text
+        assert "Pendientes por carpeta — Por revisar — ZascArr" in r.text
 
     async def test_la_frase_sale_tambien_sin_nada_pendiente(self, banco):
         r = await pagina()
@@ -188,7 +197,7 @@ class TestConflictoVisible:
         assert "en conflicto" in t and "por confirmar" in t
         assert "La carpeta dice 2019; la serie sugerida empieza en 2025." in t
         assert "La carpeta añade «Saga de Scott Snyder»." in t
-        assert "Afecta a 9 registros" in t
+        assert "Afecta a 9 pendientes" in t
         assert "BATMAN (2025)" in t and "no está elegida ni asignada" in t
         for n in NOMBRES_SAGA:
             assert n in t                                   # los nombres afectados, a la vista
@@ -340,7 +349,7 @@ class TestPaginacion:
     async def test_la_muestra_limitada_se_dice(self, banco):
         await banco.sembrar(*(archivo(f"Comics/Larga/Cosa {i:03d}.cbz") for i in range(45)))
         t = visible((await pagina()).text)
-        assert "Ver registros (20 de 45)" in t and "hay 25 más" in t
+        assert "Ver pendientes (20 de 45)" in t and "hay 25 más" in t
 
     @pytest.mark.parametrize("params", [{"limite": 0}, {"limite": 1001}, {"desplazamiento": -1}, {"limite": "x"}])
     async def test_parametros_invalidos_son_422(self, banco, params):
@@ -826,7 +835,7 @@ class TestVacíoY326:
         r = await pagina({"serie": str(sid)})
         t = visible(r.text)
         assert "Tu biblioteca aún no está registrada, así que ZascArr no puede buscar archivos nuevos." in t
-        assert "El registro está en Duplicados, en el apartado «Registrar mi biblioteca»." in t
+        assert "Registrar la biblioteca está en Duplicados, en el apartado «Registrar mi biblioteca»." in t
         assert "No mueve ni renombra ningún archivo." in t
         assert "al final de la página" not in t
         assert r.text.count('class="empty-state"') == 1
@@ -860,7 +869,7 @@ class TestVacíoY326:
         monkeypatch.setattr(_pendientes.registro_biblioteca, "estado_actual",
                             lambda: _EstadoRegistro(fase=_FaseRegistro.CORRIENDO))
         r = await pagina({"serie": str(sid)})
-        assert "Hay un registro en marcha" in visible(r.text)
+        assert "Estamos registrando la biblioteca" in visible(r.text)
         assert r.text.count('class="empty-state"') == 1
 
     @pytest.mark.parametrize("marcador", [True, False])
