@@ -223,6 +223,20 @@ class TestMarcarTodos:
 
 # ── 2. Desmarcar todos ──────────────────────────────────────────────────────────────────────────
 
+    async def test_dejar_este_quita_el_otro_del_conflicto(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, "Flash 01 (1987).cbz", "Flash 01 (copia).cbz")
+        p = await abrir(serie)
+        a, b = p.filas
+        campos = p.formulario(marcar=(a.nombre, b.nombre))
+        campos.append(("quitar", b.id))
+        q = await enviar(campos)
+        pagina = Pagina(q.text, p.clave)
+        assert pagina.fila(a.nombre).marcado
+        assert not pagina.fila(b.nombre).marcado
+        assert pagina.total("a_vincular") == 1
+
+
 class TestDesmarcarTodos:
 
     async def test_quita_todas_las_marcas_de_la_pagina_y_conserva_los_numeros_escritos(self, entorno):
@@ -494,6 +508,11 @@ class TestBorradorGuardado:
                 headers={"HX-Request": "true", "Content-Type": "application/x-www-form-urlencoded"})
         assert guardado.status_code == 200, guardado.text
         assert "Borrador guardado" in Pagina(guardado.text).visible
+
+        async with cliente() as c:
+            carpetas = await c.get("/ui/pendientes/carpetas", params={"serie": str(serie)})
+        assert "Revisión guardada" in carpetas.text
+        assert "Reanudar revisión" in carpetas.text
 
         async with cliente() as c:
             apertura = await c.get(RUTA, params={"clave": q.clave, "series_id": str(serie)})

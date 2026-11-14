@@ -180,7 +180,12 @@
       <div class="vinc-conflicto">
         <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
         {% if a.marcado %}
-        <button type="submit" name="quitar" value="{{ a.id }}" class="btn ghost sm">Quitar este del lote</button>
+        <button type="submit" name="quitar" value="{{ a.id }}" class="btn ghost sm"
+                id="quitar-{{ a.id }}">Quitar este del lote</button>
+        {% for otro in a.repetido_con %}
+        <button type="submit" name="quitar" value="{{ otro }}" class="btn ghost sm"
+                id="dejar-{{ a.id }}-{{ otro }}">Dejar este y quitar «{{ nombres_de([otro]) | join(", ") }}»</button>
+        {% endfor %}
         {% endif %}
       </div>
       {% endif %}
