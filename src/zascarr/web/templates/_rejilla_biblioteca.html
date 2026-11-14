@@ -148,10 +148,11 @@
     {% endif %}
     <div class="library-card-body">
       <div class="library-card-title" title="{{ series.title }}">{{ series.title }}</div>
+      {% set tradicion_tarjeta = series.tradition|tradicion %}
       <div class="library-card-meta">
-        {{ series.start_year or "" }}
-        {% if series.start_year %}·{% endif %}
-        {{ series.tradition|tradicion }}
+        {% if series.start_year %}{{ series.start_year }}{% endif %}
+        {% if series.start_year and tradicion_tarjeta %}·{% endif %}
+        {% if tradicion_tarjeta %}{{ tradicion_tarjeta }}{% endif %}
       </div>
     </div>
   </a>

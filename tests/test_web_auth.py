@@ -113,15 +113,20 @@ class TestLoginForm:
         client = TestClient(app)
         r = client.get("/login")
         assert r.status_code == 200
-        assert 'name="password"' in r.text
-        assert 'name="username"' not in r.text
+        formulario = r.text.split("<form", 1)[1].split("</form>", 1)[0]
+        assert 'name="password"' in formulario
+        assert 'name="username"' not in formulario
+        assert "Introduce tu contraseña" in r.text
+        assert "Introduce tu usuario" not in r.text
 
     def test_modo_user_password_pide_tambien_usuario(self, restaurar_settings):
         get_settings().auth_mode = "user_password"
         client = TestClient(app)
         r = client.get("/login")
         assert r.status_code == 200
-        assert 'name="username"' in r.text
+        formulario = r.text.split("<form", 1)[1].split("</form>", 1)[0]
+        assert 'name="username"' in formulario
+        assert "Introduce tu usuario y tu contraseña" in r.text
 
     def test_next_externo_no_se_refleja_tal_cual(self, restaurar_settings):
         """Open redirect: un `next` que no sea una ruta relativa de este
@@ -179,6 +184,20 @@ class TestLoginSubmit:
         assert r.status_code == 401
         assert "Usuario o contraseña incorrectos." in r.text
         assert COOKIE_NAME not in r.cookies
+
+    def test_usuario_inexistente_da_el_mismo_error_generico(self, restaurar_settings):
+        get_settings().auth_mode = "user_password"
+        get_settings().auth_username = "juanjo"
+        get_settings().auth_password_hash = hash_password("secreta123")
+        get_settings().secret_key = "clave-de-prueba"
+        client = TestClient(app)
+
+        r = client.post("/login", data={
+            "username": "no-existe", "password": "secreta123", "next": "/ui/",
+        })
+
+        assert r.status_code == 401
+        assert "Usuario o contraseña incorrectos." in r.text
 
     def test_next_externo_en_el_submit_tampoco_redirige_fuera(self, restaurar_settings):
         get_settings().auth_mode = "password"
