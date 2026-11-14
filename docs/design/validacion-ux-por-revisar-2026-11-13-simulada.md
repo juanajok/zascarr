@@ -153,3 +153,13 @@ contraste en verde.
 
 Siguen pendientes: H5 (recibo/deshacer), H6 (borradores visibles en carpetas),
 H7 (comparación de conflictos) y el doble campo de número de H1/H2.
+
+## 8. Tercera ronda aplicada
+
+| Hallazgo | Cambio |
+|---|---|
+| H5 recibo | «Vincular en su sitio» sustituye la tarjeta por un recibo: «Vinculado. No se ha movido ni renombrado nada» + enlace a la serie. Organizar sigue sin recibo; no hay deshacer de un clic. |
+| H6 borradores | La lista de carpetas muestra «Revisión guardada · N marcados» y un botón «Reanudar revisión» que abre `/reabrir` con el borrador. |
+| H7 conflicto | Cada fila en conflicto ofrece «Quitar este del lote» y «Dejar este y quitar el otro», con el nombre del otro archivo. Sigue sin comparación de páginas/tamaño. |
+
+Pendiente de una ronda mayor: unificar el doble campo «nº», recibo de Organizar, deshacer de un clic y comparación rica de conflictos.
