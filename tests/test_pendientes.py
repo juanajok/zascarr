@@ -145,12 +145,25 @@ class TestPendientesIndex:
         assert "La Patrulla-X" in r.text
         assert "62% de coincidencia" in r.text
         assert f'value="{sid}"' in r.text
-        assert "Vincular en su sitio" in r.text
-        assert f'hx-post="/ui/pendientes/{file.id}/vincular"' in r.text
-        assert "solo funciona si esa publicación ya existe" in r.text
+        # En `_Unsorted` no se ofrece Vincular: fallaría siempre. Solo Organizar.
+        assert "Vincular en su sitio" not in r.text
         # #723: la búsqueda manual no compite con la sugerencia; vive en un desplegable.
         assert '<details class="elegir-otra-serie">' in r.text
         assert "Elegir otra serie" in r.text
+
+    def test_archivo_dentro_de_la_biblioteca_si_ofrece_vincular_en_sitio(self):
+        sid = uuid4()
+        file = File(
+            id=uuid4(), file_path="/lib/Comics/Flash/Flash 01.cbz",
+            file_name="Flash 01.cbz", file_format=FileFormat.CBZ,
+            metadata_={"match_status": "unsorted",
+                       "candidates": [{"series_id": str(sid), "title": "Flash", "score": 0.9}]},
+        )
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
+            r = client.get("/ui/pendientes")
+        assert "Vincular en su sitio" in r.text
+        assert f'hx-post="/ui/pendientes/{file.id}/vincular"' in r.text
+        assert "solo funciona si esa publicación ya existe" in r.text
 
     def test_archivo_sin_candidatos_no_muestra_sugerencia(self):
         file = File(id=uuid4(), file_path="/lib/_Unsorted/algo.cbz", file_name="algo.cbz",

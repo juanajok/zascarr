@@ -3,10 +3,10 @@
 {% block content %}
 <h1>Por revisar</h1>
 <p class="subtitle">Archivos que el sistema no supo clasificar solo. Busca la serie correcta y confirma el número, o ignóralos si no pertenecen a tu colección.</p>
+{% if cards %}<p class="pend-recomendacion">Empieza por carpeta: resuelves varios archivos con una sola decisión.</p>{% endif %}
 {#- Las otras formas de revisar, en UNA fila (antes, dos párrafos con huecos distintos). No es un `<nav>`: la
     página tiene uno solo, el menú (test_web_navegacion). -#}
 <div class="acciones-fila" role="group" aria-label="Otras formas de revisar">
-  <a class="btn ghost" href="/ui/vistas">Ver las vistas de trabajo</a>
   {% if cards %}
   {#- Criterio 5: el acceso a las carpetas se ve como ACCIÓN, con su recuento y qué cuenta (carpetas). -#}
   {#- El recuento se pide al cargarse (agrupar todos los pendientes cuesta; no bloquea la lista). Sin él, el enlace
@@ -15,8 +15,8 @@
      hx-get="/ui/pendientes/carpetas/recuento" hx-trigger="load" hx-swap="outerHTML">Revisar por carpeta</a>
   <a class="btn ghost" href="/ui/pendientes/sueltos">Ver los archivos sueltos</a>
   {% endif %}
+  <a class="btn ghost" href="/ui/vistas">Ver las vistas de trabajo</a>
 </div>
-{% if cards %}<p class="pend-recomendacion">Empieza por carpeta: resuelves varios archivos con una sola decisión.</p>{% endif %}
 {% if not cards %}
 <p class="empty">Nada pendiente — todo lo importado se ha podido clasificar.</p>
 {% else %}

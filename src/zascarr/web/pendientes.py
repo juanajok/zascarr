@@ -88,11 +88,21 @@ def _suggestion(file: File) -> dict | None:
     }
 
 
+def _puede_vincular(f: File) -> bool:
+    """Solo se ofrece Vincular donde puede funcionar: en la biblioteca, no en _Unsorted y no un pack."""
+    try:
+        return ("_Unsorted" not in Path(f.file_path).parts
+                and not parse_comic_filename(f.file_name).is_pack)
+    except (OSError, ValueError):
+        return False
+
+
 def _card(f: File) -> dict:
     return {
         "file": f,
         "detected": _detected_label(f.file_name),
         "suggestion": _suggestion(f),
+        "puede_vincular": _puede_vincular(f),
         # U12: ausencia CONOCIDA (por la extensión, sin I/O): ni `<img>` ni petición ni bloque.
         "con_portada": puede_tener_portada(f.file_path,
                                            (f.metadata_ or {}).get("formato_contenido")),
@@ -523,8 +533,11 @@ async def portada(file_id: UUID, request: Request, db: AsyncSession = Depends(ge
 async def buscar_serie(file_id: UUID, request: Request, q: str = "",
                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series_list = await ReviewService(db).search_series(q)
+    file = await db.get(File, file_id)
     return templates.TemplateResponse(
-        request, "_resultados_serie.html", {"file_id": file_id, "series_list": series_list}
+        request, "_resultados_serie.html",
+        {"file_id": file_id, "series_list": series_list,
+         "puede_vincular": bool(file and _puede_vincular(file))},
     )
 
 
