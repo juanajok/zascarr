@@ -1145,6 +1145,7 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
                             (ReadingStatus.READING, "Leyendo"),
                             (ReadingStatus.COMPLETED, "Leído")),
         "nota_numero": await leer_numero(db, issue_id),
+        "colecciones": await colecciones_de_serie(db, series_id),
         "aviso_guardado": {
             "numero": "Guardado: el número muestra lo que has escrito.",
             "desbloqueado": "Ese dato vuelve a quedar a cargo del enriquecimiento; no se ha borrado.",

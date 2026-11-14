@@ -22,6 +22,22 @@
     {% endif %}
   </div>
 </div>
+{% if colecciones %}
+<section id="colecciones-numero" class="series-colecciones" aria-label="Colecciones">
+  <h2 id="colecciones-numero-titulo" class="titulo-frase">Colecciones</h2>
+  <p class="caption">Este número está en las colecciones de su serie.</p>
+  <p class="series-colecciones-lista">
+    {% for c in colecciones %}
+    <a class="chip-enlace" href="/ui/colecciones/{{ c.id }}">{{ ui.chip("neutro", c.name) }}</a>
+    {% endfor %}
+  </p>
+</section>
+{% else %}
+<section id="colecciones-numero" class="series-colecciones" aria-label="Colecciones">
+  <h2 id="colecciones-numero-titulo" class="titulo-frase">Colecciones</h2>
+  <p class="muted">Este número no está en ninguna colección porque su serie tampoco.</p>
+</section>
+{% endif %}
 {% include "_nota_numero.html" %}
 <section class="tu-lectura" aria-labelledby="tu-lectura-titulo">
   <h2 id="tu-lectura-titulo">{{ textos_lectura.titulo }}</h2>
