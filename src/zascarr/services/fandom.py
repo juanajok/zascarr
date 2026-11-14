@@ -695,6 +695,14 @@ class FandomIssue:
     credits: dict[str, list[str]] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class FandomSearchPage:
+    """Una página devuelta por la búsqueda de la wiki."""
+
+    title: str
+    snippet: str = ""
+
+
 @dataclass
 class FandomArc:
     """Ficha de un arco («story arc») con sus números en orden de lectura."""
@@ -882,14 +890,25 @@ class FandomClient:
     # ── API pública ────────────────────────────────────────────────────────────────────────────
     async def search_series(self, titulo: str, limit: int = 10) -> list[str]:
         """Títulos de página que la wiki devuelve para una búsqueda (sin filtrar)."""
+        return [r.title for r in await self.search_pages(titulo, limit=limit)]
+
+    async def search_pages(self, consulta: str, limit: int = 8) -> list[FandomSearchPage]:
+        """Resultados de `list=search` con título y snippet (texto de la wiki)."""
         data = await self._api({
-            "action": "query", "list": "search", "srsearch": titulo,
-            "srlimit": str(max(1, min(50, limit))),
+            "action": "query", "list": "search", "srsearch": consulta,
+            "srlimit": str(max(1, min(50, limit))), "srprop": "snippet",
         })
         if not data:
             return []
-        return [s["title"] for s in (data.get("query") or {}).get("search") or []
-                if isinstance(s, dict) and s.get("title")]
+        resultados: list[FandomSearchPage] = []
+        for item in (data.get("query") or {}).get("search") or []:
+            if not isinstance(item, dict) or not item.get("title"):
+                continue
+            resultados.append(FandomSearchPage(
+                title=str(item["title"]),
+                snippet=str(item.get("snippet") or ""),
+            ))
+        return resultados
 
     async def get_volume(self, page_title: str,
                          incluir_portada: bool = True) -> FandomVolume | None:

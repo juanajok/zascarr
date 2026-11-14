@@ -236,6 +236,22 @@ def test_cadena_de_fuentes_american_con_fandom():
 
 # ── cliente con transporte simulado ───────────────────────────────────────────────────────────
 
+async def test_busqueda_pages_devuelve_titulo_y_snippet(monkeypatch):
+    cliente = _cliente(monkeypatch, {
+        "search": {"query": {"search": [{
+            "title": "Batman: Year One",
+            "snippet": 'Un <span class="searchmatch">arco</span> de Batman.',
+        }]}},
+    })
+    try:
+        paginas = await cliente.search_pages("Batman Year One", limit=3)
+    finally:
+        await cliente.__aexit__()
+    assert len(paginas) == 1
+    assert paginas[0].title == "Batman: Year One"
+    assert "arco" in paginas[0].snippet
+
+
 async def test_busqueda_devuelve_titulos(monkeypatch):
     cliente = _cliente(monkeypatch, {
         "search": {"query": {"search": [{"title": "Batman Vol 1"},
