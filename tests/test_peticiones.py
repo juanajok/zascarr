@@ -6,13 +6,16 @@ Sin red real: `httpx.MockTransport` registra cada petición y el reloj/la espera
 from __future__ import annotations
 
 import asyncio
+import gzip
 from types import SimpleNamespace
 
 import httpx
 import pytest
+import structlog
 
 from zascarr.utils.cortesia import CortesiaEnEspera, CortesiaProceso, politica_de
 from zascarr.utils.peticiones import (
+    CuerpoDemasiadoGrande,
     DemasiadasRedirecciones,
     FuenteApagada,
     RedireccionNoPermitida,
@@ -50,6 +53,7 @@ class Ajustes:
     forum_enabled = False
     forum_rate_limit = 2.0
     forum_url = ""
+    max_cuerpo_transfer_bytes = 4_194_304
 
 
 @pytest.fixture
@@ -593,3 +597,259 @@ class Test304NoEs4xx:
                 await _pedir(cliente, reloj, lim)
         fuentes = {f["fuente"]: f for f in lim.snapshot(ajustes_habilitados)["fuentes"]}
         assert fuentes["comicvine"]["ultimos_intentos"][-1]["resultado"] == "4xx"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RES-3 (#812): tope real de bytes con streaming (AC-01…12)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class _Flujo(httpx.AsyncByteStream):
+    """Cuerpo por trozos que cuenta lo servido; puede avanzar el reloj (goteo lento)."""
+
+    def __init__(self, trozos, *, reloj=None, avance: float = 0.0):
+        self.trozos = list(trozos)
+        self.reloj = reloj
+        self.avance = avance
+        self.leidos = 0
+
+    async def __aiter__(self):
+        for trozo in self.trozos:
+            if self.reloj is not None and self.avance:
+                self.reloj.t += self.avance
+            self.leidos += len(trozo)
+            yield trozo
+
+    async def aclose(self):
+        return None
+
+
+@pytest.fixture
+def tope(monkeypatch):
+    """Fija un tope pequeño para no alojar MiB en las pruebas (el valor real está en config)."""
+    def _fijar(limite: int) -> int:
+        monkeypatch.setattr(Ajustes, "max_cuerpo_transfer_bytes", limite)
+        return limite
+    return _fijar
+
+
+async def test_ac_01_cuerpo_exactamente_igual_al_tope_se_devuelve_completo(tope, ajustes_habilitados):
+    cap = tope(1024)
+    peticiones: list[httpx.Request] = []
+    cuerpo = b"x" * cap
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        peticiones.append(request)
+        return httpx.Response(200, content=cuerpo, headers={"content-type": "text/plain"})
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        r = await _pedir(cliente, reloj, lim)
+    assert r.status_code == 200 and r.content == cuerpo and r.text == cuerpo.decode()
+    assert len(peticiones) == 1
+
+
+async def test_ac_02_cap_mas_uno_corta_por_chunks_y_lanza(tope, ajustes_habilitados):
+    cap = tope(1024)
+    peticiones: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        peticiones.append(request)
+        # Stream sin `Content-Length` para forzar el corte por chunks (AC-02).
+        return httpx.Response(200, stream=_Flujo([b"y" * (cap + 1)]))
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        with structlog.testing.capture_logs() as registros, \
+                pytest.raises(CuerpoDemasiadoGrande) as exc:
+            await _pedir(cliente, reloj, lim)
+    assert exc.value.motivo == "chunks"
+    assert cap < exc.value.bytes_leidos <= cap + 64 * 1024
+    assert exc.value.limite == cap and len(peticiones) == 1
+    cortes = [r for r in registros if r["event"] == "peticiones.cuerpo_demasiado_grande"]
+    assert len(cortes) == 1 and cortes[0]["fuente"] == "comicvine"
+    assert "comicvine.gamespot.com" in cortes[0]["host"]
+
+
+async def test_ac_03_sin_content_length_corta_por_chunks(tope, ajustes_habilitados):
+    cap = tope(1024)
+    flujo = _Flujo([b"z" * 700, b"z" * 700])
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=flujo)
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        with pytest.raises(CuerpoDemasiadoGrande) as exc:
+            await _pedir(cliente, reloj, lim)
+    assert exc.value.motivo == "chunks" and exc.value.bytes_leidos > cap
+    assert flujo.leidos >= 1024
+
+
+async def test_ac_04_content_length_mayor_corta_sin_leer_chunks(tope, ajustes_habilitados):
+    cap = tope(1024)
+    flujo = _Flujo([b"x" * 500] * 10)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=flujo,
+                              headers={"content-length": str(cap + 1)})
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        with pytest.raises(CuerpoDemasiadoGrande) as exc:
+            await _pedir(cliente, reloj, lim)
+    assert exc.value.motivo == "content_length" and exc.value.bytes_leidos == 0
+    assert flujo.leidos == 0                    # ni un trozo leído
+
+
+async def test_ac_05_content_length_mentiroso_corta_por_chunks(tope, ajustes_habilitados):
+    cap = tope(1024)
+    flujo = _Flujo([b"x" * (cap + 1)])
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=flujo, headers={"content-length": "10"})
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        with pytest.raises(CuerpoDemasiadoGrande) as exc:
+            await _pedir(cliente, reloj, lim)
+    assert exc.value.motivo == "chunks" and exc.value.bytes_leidos > cap
+
+
+async def test_ac_06_redireccion_con_cuerpo_enorme_no_lee_el_3xx(tope, ajustes_habilitados):
+    cap = tope(1024)
+    flujo_302 = _Flujo([b"x" * (10 * cap)])
+    peticiones: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        peticiones.append(str(request.url))
+        if len(peticiones) == 1:
+            return httpx.Response(302, headers={"location": "/destino"},
+                                  stream=flujo_302)
+        return httpx.Response(200, content=b"final pequeno")
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        r = await _pedir(cliente, reloj, lim)
+    assert r.status_code == 200 and r.content == b"final pequeno"
+    assert len(peticiones) == 2 and flujo_302.leidos == 0
+
+
+async def test_ac_07_reintento_500_a_200_sigue_igual(tope, ajustes_habilitados):
+    tope(1024)
+    respuestas = iter([httpx.Response(500), httpx.Response(200, content=b"ok")])
+    peticiones: list[int] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        peticiones.append(1)
+        return next(respuestas)
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        r = await _pedir(cliente, reloj, lim, espera_max_s=60.0)
+    assert r.status_code == 200 and r.content == b"ok" and len(peticiones) == 2
+
+
+async def test_ac_07_el_tope_no_se_reintenta(tope, ajustes_habilitados):
+    cap = tope(1024)
+    peticiones: list[int] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        peticiones.append(1)
+        return httpx.Response(200, content=b"x" * (cap + 1))
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        with pytest.raises(CuerpoDemasiadoGrande):
+            await _pedir(cliente, reloj, lim, espera_max_s=60.0)
+    assert len(peticiones) == 1                 # no entra en el bucle de reintentos
+
+
+async def test_ac_07_500_y_luego_cuerpo_enorme_corta_en_la_final(tope, ajustes_habilitados):
+    cap = tope(1024)
+    respuestas = iter([httpx.Response(500),
+                       httpx.Response(200, content=b"x" * (cap + 1))])
+    peticiones: list[int] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        peticiones.append(1)
+        return next(respuestas)
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        with pytest.raises(CuerpoDemasiadoGrande):
+            await _pedir(cliente, reloj, lim, espera_max_s=60.0)
+    assert len(peticiones) == 2
+
+
+async def test_ac_09_la_response_conserva_json_text_headers_y_status(tope, ajustes_habilitados):
+    tope(1024)
+    payload = b'{"ok": true, "n": 3}'
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=payload,
+                              headers={"content-type": "application/json",
+                                       "x-propia": "si"})
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        r = await _pedir(cliente, reloj, lim)
+    assert r.status_code == 200 and r.json() == {"ok": True, "n": 3}
+    assert r.text == payload.decode() and r.headers["x-propia"] == "si"
+    assert r.content == payload
+
+
+async def test_ac_10_post_con_form_charset_sigue_mandando_el_cuerpo_correcto(tope, ajustes_habilitados):
+    tope(1024)
+    peticiones: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        peticiones.append(request)
+        return httpx.Response(200, content=b"ok")
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        r = await pedir_con_cortesia(
+            cliente, "POST", "https://comicvine.gamespot.com/api/",
+            politica=_politica(), espera_max_s=10.0, datos={"q": "Año"},
+            form=True, form_charset="iso8859-1",
+            cortesia=lim, reloj=reloj, dormir=reloj.dormir)
+    assert r.status_code == 200
+    peticion = peticiones[0]
+    assert peticion.headers["content-type"] == (
+        "application/x-www-form-urlencoded; charset=iso8859-1")
+    assert b"q=A%F1o" in peticion.content
+
+
+async def test_ac_11_goteo_lento_lanza_espera_de_cuerpo_sin_leer_el_tope(tope, ajustes_habilitados):
+    cap = tope(4096)
+    reloj = Reloj()
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        # Dos trozos pequeños; el primero ya agota el presupuesto de 1 s.
+        return httpx.Response(200, stream=_Flujo([b"a" * 100, b"b" * 100],
+                                                 reloj=reloj, avance=2.0))
+
+    cliente, _, _ = _mundo(handler)
+    lim = CortesiaProceso(reloj=reloj, dormir=reloj.dormir)
+    async with cliente:
+        with pytest.raises(CortesiaEnEspera) as exc:
+            await _pedir(cliente, reloj, lim, espera_max_s=1.0)
+    assert exc.value.motivo == "cuerpo_lento" and exc.value.espera_estimada_s == 0.0
+    # No llegó al tope: el corte es por tiempo, no por bytes.
+    assert cap > 100
+
+
+async def test_ac_12_gzip_bomba_corta_por_bytes_decodificados(tope, ajustes_habilitados):
+    cap = tope(1024)
+    comprimido = gzip.compress(b"x" * (cap + 1), mtime=0)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=comprimido,
+                              headers={"content-encoding": "gzip"})
+
+    cliente, reloj, lim = _mundo(handler)
+    async with cliente:
+        with pytest.raises(CuerpoDemasiadoGrande) as exc:
+            await _pedir(cliente, reloj, lim)
+    assert exc.value.motivo == "chunks"
+    assert exc.value.bytes_leidos > cap          # cuenta lo DESCOMPRIMIDO

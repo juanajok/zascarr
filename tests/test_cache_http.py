@@ -33,7 +33,11 @@ from zascarr.utils.cortesia import (
     FuenteApagada,
     PoliticaFuente,
 )
-from zascarr.utils.peticiones import ReintentosAgotados, RespuestaNoTransitoria
+from zascarr.utils.peticiones import (
+    CuerpoDemasiadoGrande,
+    ReintentosAgotados,
+    RespuestaNoTransitoria,
+)
 from zascarr.utils.robots import GestorRobots
 
 URL = "https://dc.fandom.com/api.php?action=query&titles=Batman+Vol+1"
@@ -481,3 +485,42 @@ def test_canonica_redacta_parametros_sensibles():
         "GET", "https://x.example/api?api-key=SECRETO&client_secret=OTRO&a=1")
     assert "SECRETO" not in canonica and "OTRO" not in canonica
     assert canonica.count("REDACTADO") == 2
+
+
+# ── RES-3 (#812): un cuerpo enorme se propaga y no escribe caché ni negativa ──────────────
+
+async def test_un_cuerpo_enorme_se_propaga_sin_escribir_cache(fuente_encendida, monkeypatch):
+    monkeypatch.setattr("zascarr.config.get_settings", lambda: SimpleNamespace(
+        fandom_dc_enabled=True, fandom_marvel_enabled=False,
+        max_cuerpo_transfer_bytes=1024))
+    peticiones: list[int] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        peticiones.append(1)
+        return httpx.Response(200, content=b"x" * 4096)
+
+    reloj, fecha, cortesia = _entorno()
+    cache = CacheHttpFalsa()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cliente:
+        with pytest.raises(CuerpoDemasiadoGrande) as exc:
+            await _pedir(cliente, cache, cortesia, reloj, fecha)
+    assert exc.value.motivo == "content_length" and len(peticiones) == 1
+    assert cache.escrituras == [] and cache.filas == {}
+    assert cache.renovaciones == 0 and cache.purgas == 0
+
+
+async def test_el_cuerpo_normal_sigue_cacheando_y_sirviendo_json(fuente_encendida):
+    peticiones: list[int] = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        peticiones.append(1)
+        return httpx.Response(200, content=b'{"ok":true}',
+                              headers={"content-type": "application/json"})
+
+    reloj, fecha, cortesia = _entorno()
+    cache = CacheHttpFalsa()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as cliente:
+        primera = await _pedir(cliente, cache, cortesia, reloj, fecha)
+        segunda = await _pedir(cliente, cache, cortesia, reloj, fecha)
+    assert primera.json() == segunda.json() == {"ok": True}
+    assert len(peticiones) == 1 and len(cache.escrituras) == 1
