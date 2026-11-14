@@ -169,7 +169,10 @@ class TestLoginSubmit:
 
         assert r.status_code == 401
         assert "Contraseña incorrecta." in r.text
-        assert "Usuario" not in r.text
+        main = r.text.split('class="content login-content"', 1)[1].split("</main>", 1)[0]
+        assert "Usuario" not in main
+        assert "Introduce tu contraseña" in main
+        assert "Introduce tu usuario" not in main
         assert COOKIE_NAME not in r.cookies
 
     def test_modo_usuario_conserva_el_mensaje_con_usuario(self, restaurar_settings):

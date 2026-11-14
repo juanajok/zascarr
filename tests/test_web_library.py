@@ -189,8 +189,9 @@ class TestResultados:
             r = client.get("/ui/biblioteca/resultados?tradition=franco_belgian")
         assert r.status_code == 200
         assert "Thorgal" in r.text
-        # Es un fragmento: no repite el layout completo (topnav).
-        assert "ZascArr" not in r.text
+        # Es un fragmento: no repite el layout completo (sin <html>/doctype).
+        assert "<html" not in r.text.lower() and "<!doctype" not in r.text.lower()
+        assert 'id="filtros-campos"' in r.text
 
     def test_campos_uuid_vacios_no_dan_422(self):
         """Regresión: el formulario de filtros manda publisher_id/
@@ -641,7 +642,9 @@ class TestVistaLista:
         session = FakeSession([FakeExecResult(1), FakeExecResult([series])])
         with use_fake_session(session) as client:
             r = client.get("/ui/biblioteca/resultados?vista=lista")
-        assert "library-lista" in r.text and "ZascArr" not in r.text
+        assert "library-lista" in r.text
+        assert "<html" not in r.text.lower() and "<!doctype" not in r.text.lower()
+        assert 'id="filtros-campos"' in r.text
         assert not session._queue
 
 
@@ -776,6 +779,7 @@ def test_tradicion_desconocida_tiene_fallback_y_no_deja_punto_colgando():
     tarjeta = r.text[r.text.index('class="library-card-meta"'):]
     tarjeta = tarjeta[:tarjeta.index("</div>")]
     assert "Otra tradición" in tarjeta
+    assert "tradicion_inventada" not in tarjeta
     assert "·" not in tarjeta
 
 
@@ -786,6 +790,7 @@ def test_tradicion_none_no_deja_punto_colgando():
     session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
     with use_fake_session(session) as client:
         r = client.get("/ui/biblioteca")
-    tarjeta = r.text[r.text.index('class="library-card-meta"'):]
-    tarjeta = tarjeta[:tarjeta.index("</div>")]
-    assert "·" not in tarjeta
+    inicio = r.text.index('class="library-card-meta"')
+    inicio = r.text.index(">", inicio) + 1
+    tarjeta = r.text[inicio:r.text.index("</div>", inicio)]
+    assert tarjeta.strip() == ""
