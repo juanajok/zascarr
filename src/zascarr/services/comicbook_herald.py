@@ -96,7 +96,7 @@ def _url_del_articulo(url: str) -> str | None:
         return None
     if partes.scheme.lower() != "https" or (partes.hostname or "").lower() not in HOSTS_PERMITIDOS:
         return None
-    if (partes.port or PUERTO_PERMITIDO) != PUERTO_PERMITIDO:
+    if partes.port not in (None, PUERTO_PERMITIDO):
         return None
     if partes.username is not None or partes.password is not None or "@" in partes.netloc:
         return None
