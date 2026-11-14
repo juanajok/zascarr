@@ -84,7 +84,7 @@ importantes, porque separan «no ejecutó» de «éxito de comprensión sin conf
 | C5 | Con una pista de zona («mira arriba») completa | `EC` | `no_aplica` | `no_aplica` | `N3` | `N3` siempre cuenta |
 | C6 | El moderador pulsa por ella y la tarea sale | `NA` | `si` | `no_verificado` | `N5` | No es éxito de la persona; se registra «moderador ejecutó» |
 | C7 | En T5 no quiere pulsar nada, explica que teme mover el archivo y no hay respuesta evaluable | `NE` | `no` | `no_verificado` | `N0` | «No ejecutó»: no es éxito ni fallo |
-| C8 | En T5 llega a la vista previa, nombra serie/número/carpeta/nombre final y no confirma | `ES` | `no` | `no_verificado` | `N0` | El criterio de T5 es comprensión; no confirmar no lo convierte en `NE` |
+| C8 | En T5 pulsa «Ver antes de organizar», lee la nota **después**, llega a la vista previa, nombra serie/número/carpeta/nombre final y no confirma | `ES` | `no` | `no_verificado` | `N0` | El criterio de T5 es comprensión; no confirmar no lo convierte en `NE`; se anota «leyó después» |
 | C9 | En T6 deja la tarea por miedo a equivocarse | `AB` | `no` | `no_aplica` | `N0` | El guion T6 lo llama abandono; se anota el motivo |
 | C10 | En T2 se agotan los 3 minutos sin encontrar el total | `AB` | `no_aplica` | `no_aplica` | `N0` | El guion llama abandono al tiempo máximo agotado, no fallo |
 | C11 | La vista de T4 no carga y la tarea se salta | `NA` | `no` | `no_verificado` | `N0` | Incidencia técnica: no es fallo de la persona |
@@ -167,13 +167,14 @@ rellenar las siete filas. **No son hallazgos sobre la app.**
 | F12 | `error_tipos` no distinguía acción peligrosa **aplicada** de **evitada**; «Ignorar» no es un movimiento | Se añadieron `accion_peligrosa_evitada` y `accion_peligrosa_aplicada`; `movimientos_accidentales` solo cuenta mover/renombrar aplicado |
 | F13 | Una cita podía llevar un nombre, una carpeta o una ruta | Se añadió la regla de anonimización y revisión por dos personas; en el repo solo van `F-A`, `F-B` y `C1/C2` |
 | F14 | Las filas sintéticas podían contaminar el análisis | Se añadió `origen` (`real`/`sintetico`) y `P0`/`S00` reservados; el análisis filtra |
-| F15 | El consentimiento todavía dice «preferencia A/B» y «por variante»; el guion dice una sola versión | **No aplicado**: es otro fichero. Se anota para que la persona responsable del consentimiento lo adapte antes de firmar (guion §1.1) |
+| F15 | El consentimiento y el README hablaban de preferencia A/B y de alternar A→B/B→A; el guion fija una sola versión | **Cerrado el 2026-11-14** por la persona responsable: el consentimiento ya no plantea preferencia A/B y el README dice «no hay A/B». Queda una mención suelta a «orden de variantes» que no afecta a la firma |
 | F16 | El README describe este fichero como «ensayo técnico del montaje»; este piloto es del instrumento | **No aplicado**: es otro fichero. Se anota; el montaje sigue pendiente en la checklist |
 | F17 | La misma conducta (miedo a mover) es `NE` en T5 y `AB` en T6; el guion T5 la titula «Abandono» pero pide registrar «no ejecutó» | Se documentó la diferencia en las definiciones y en los casos C7/C9; en T5 manda el «no ejecutó» (`NE`), en T6 el guion dice abandono (`AB`). No se unifica a ciegas |
 | F18 | El criterio de T5 dice «lee la nota antes de pulsar»; si la lee después pero entiende el destino, no estaba claro qué anotar | Se decidió clasificar por la comprensión final y anotar «leyó después» como observación; la diferencia se lleva a la ficha. Requiere calibración (caso C8) |
 | F19 | No había sitio para «moderador ejecutó» | `resultado=NA`, `ayuda_tipo=N5`, nota «moderador ejecutó» |
 | F20 | El guion pide comprobar el estado y las cifras después de cada sesión; no había campo | Se añadieron `restauracion` e `incidencias`; la verificación numérica se anota en `incidencias` si no coincide |
 | F21 | El criterio general del guion dice «con ayuda» para niveles 3–4, pero T1 y la escalera permiten que N1/N2 cuenten si desbloquean u orientan | Se aplica la regla específica (`N1`/`N2` solo si cambian el camino u orientan) y se declara en §5.2 del registro; se calibra con C2–C5 |
+| F22 | Quedan menciones sueltas a «orden de variantes» en el README y en el consentimiento, aunque ya no hay A/B | **No aplicado**: son otros ficheros; no afecta al registro ni a la firma, pero conviene limpiarlas antes de la primera sesión |
 
 **Fricciones que no se han podido cerrar en este piloto**:
 
@@ -249,6 +250,10 @@ publicar la ficha §13.
       piloto solo comprobó la estructura.
 - [x] Reconciliado el 2026-11-14: el [consentimiento](consentimiento-y-conservacion.md) ya no
       menciona «preferencia A/B»; esta ronda prueba **una sola versión** de la app (guion §1.1).
+- [ ] Limpiar las menciones sueltas a «orden de variantes» en el README y el consentimiento: en esta
+      ronda no hay A/B, solo F-A/F-B.
+- [ ] Que el README describa este fichero como **piloto del instrumento**, no como ensayo técnico del
+      montaje; el montaje es otra comprobación y sigue pendiente.
 - [ ] Hacer el **ensayo del montaje** con la [checklist](checklist-moderador.md): entorno, grabación,
       audio, borrado, snapshot y restauración.
 - [ ] Borrar o aislar las filas `S00/P0` antes de analizar; el filtro es `origen=real`.

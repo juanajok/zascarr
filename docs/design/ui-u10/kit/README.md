@@ -29,8 +29,8 @@ Todos los ficheros viven en esta carpeta (`docs/design/ui-u10/kit/`).
 |---|---|---|
 | [reclutamiento.md](reclutamiento.md) | Perfil, exclusiones, mensaje de invitación, agenda y riesgos de la muestra | Antes de invitar |
 | [consentimiento-y-conservacion.md](consentimiento-y-conservacion.md) | Qué se recoge y qué no, consentimiento, plazos, anonimización y plantilla | Antes y durante la sesión |
-| [piloto-tecnico-2026-11-14.md](piloto-tecnico-2026-11-14.md) | Ensayo técnico del montaje (entorno, material, grabación, borrado) | Antes de la primera sesión |
-| [guion-sesion-real.md](guion-sesion-real.md) | Tareas T1–T7, encuadre, orden de variantes y qué se dice (y qué no) | Durante la sesión |
+| [piloto-tecnico-2026-11-14.md](piloto-tecnico-2026-11-14.md) | Piloto del **instrumento de registro** (hoja, CSV, definiciones) con datos sintéticos; el ensayo del montaje (entorno, grabación, audio, borrado, restauración) sigue **NOT RUN** y depende de la checklist | Antes de la primera sesión |
+| [guion-sesion-real.md](guion-sesion-real.md) | Tareas T1–T7, encuadre, orden de las carpetas de ejemplo (F-A/F-B, si hay dos) y qué se dice (y qué no) | Durante la sesión |
 | [checklist-moderador.md](checklist-moderador.md) | Lista de comprobación del día: antes, durante y después | El día de la sesión |
 | [registro-y-analisis.md](registro-y-analisis.md) | Hoja por participante y tarea, tabla agregada, análisis y límites | Al terminar cada sesión y al cerrar |
 
@@ -96,7 +96,7 @@ Por tanto:
 - **#197 (U10)**: se cerró como decisión de producto con esa ficha; el informe quedó marcado como
   simulación. Este kit sirve para pagar la deuda, no para reabrir ni reescribir #197.
 - **#200 (U13)**: dejó de estar bloqueada por G1 y siguió su propio refinamiento. Las sesiones de
-  este kit prueban «Por revisar» (la pantalla implementada o las variantes que fije el guion) y
+  este kit prueban «Por revisar» (la app real, una sola versión que fija el guion) y
   pueden producir correcciones; no cierran #200 por sí solas.
 - **#196**: feature de la auditoría de UI donde se originó U10; la deuda debe seguir visible allí.
 - **#272**: esta tarjeta. Solo se cierra con personas reales y ficha actualizada.

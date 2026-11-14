@@ -124,7 +124,7 @@ El consentimiento se puede dar **por escrito** (firma o firma escaneada) o **ver
   **C-01, C-02…**.
 - **Registro del kit.** En el [registro y análisis](registro-y-analisis.md) y en el
   [reclutamiento](reclutamiento.md) solo consta: seudónimo, fecha, modalidad (firma o verbal),
-  referencia del original (`C-01`), audio sí/no y orden de variantes. **Nada más.**
+  referencia del original (`C-01`), audio sí/no y orden de las carpetas de ejemplo, si hay dos. **Nada más.**
 - **Consentimiento verbal.** El moderador lee la plantilla, pregunta «¿Aceptas?», y anota en el
   original privado: «consentimiento verbal de [nombre], fecha y hora, moderador [nombre]». En el
   registro del kit queda solo «verbal» y la fecha.
