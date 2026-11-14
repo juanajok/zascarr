@@ -12,7 +12,7 @@ Revisión de las **32 tarjetas activas** del Project 1 (todo lo que no está en
 | En refinamiento | 5 |
 | Lista para desarrollar | 5 |
 | En curso | 1 |
-| **Total activo** | **32** |
+| **Total activo** | **29** |
 
 ## Reconciliadas ahora
 
@@ -21,33 +21,29 @@ Revisión de las **32 tarjetas activas** del Project 1 (todo lo que no está en
 | [#705](https://github.com/juanajok/zascarr/issues/705) | SCR4 fusionada en #783/#785 y desplegada en la Pi, pero el issue seguía abierto. | **Cerrada** con comentario; la tarjeta ya estaba en Hecha. |
 | [#789](https://github.com/juanajok/zascarr/issues/789) | Issue cerrada por #791, pero la tarjeta seguía en «Fusionado — pendiente de despliegue». | Tarjeta movida a **Hecha**. |
 
-## Candidatas claras a retirar del tablero
+## Cierre ejecutado
 
-### #161 — BL-C7: fichero de estado por carpeta
+### #161 — BL-C7: fichero de estado por carpeta — tarjeta retirada
 
 - Issue **cerrada como `not_planned`** el 2026-11-14: no hay estándar ni
   consumidor claro para `series.json`; duplicaría `ComicInfo.xml`/B20 y
   escribiría en la biblioteca canónica.
-- La tarjeta sigue en **En refinamiento**.
-- **Acción recomendada:** quitar la tarjeta del Project (o archivar el issue
-  como no procedente). No se implementa.
+- La tarjeta estaba en **En refinamiento**.
+- **Hecho:** tarjeta retirada del Project; el issue sigue cerrado como no procedente.
 
 ### #111 — MIT-M8: contrato operativo de fuentes
 
 - Feature **padre** de #133, #134 y #135.
 - Las tres hijas están **cerradas**.
 - No queda trabajo activo conocido; el contrato se ejerció en las historias.
-- **Acción recomendada:** revisar el DoD de la feature y cerrarla como
-  completada, o dejar una nota de qué evidencia falta. No abrir trabajo nuevo
-  sin una hija concreta.
+- **Hecho:** cerrada como completada y tarjeta movida a Hecha.
 
 ### #125 — MIT-M5-US02: elegir una publicación identificada
 
 - Historia **paraguas** de #182 (discriminantes) y #183 (elección).
 - #182 y #183 están **cerradas**; el flujo de elección existe en la UI.
-- **Acción recomendada:** cerrar #125 como cubierta por sus hijas y dejar #108
-  (M5) abierta solo por #126. Antes de cerrar, comprobar que no queda ninguna
-  casilla de aceptación sin evidencia.
+- **Hecho:** cerrada como completada y tarjeta movida a Hecha. #108 sigue
+  abierta por #126.
 
 ## Activas que siguen teniendo sentido
 
@@ -68,6 +64,12 @@ Revisión de las **32 tarjetas activas** del Project 1 (todo lo que no está en
 | [#338](https://github.com/juanajok/zascarr/issues/338), [#339](https://github.com/juanajok/zascarr/issues/339), [#706](https://github.com/juanajok/zascarr/issues/706), [#736](https://github.com/juanajok/zascarr/issues/736), [#793](https://github.com/juanajok/zascarr/issues/793) | Producto/fuentes/glosario: siguen siendo trabajo futuro, no duplicados. |
 | [#148](https://github.com/juanajok/zascarr/issues/148), [#262](https://github.com/juanajok/zascarr/issues/262), [#159](https://github.com/juanajok/zascarr/issues/159), [#265](https://github.com/juanajok/zascarr/issues/265), [#266](https://github.com/juanajok/zascarr/issues/266) | Paraguas o refinamientos de duplicados; no son implementaciones cerradas. |
 | [#162](https://github.com/juanajok/zascarr/issues/162), [#163](https://github.com/juanajok/zascarr/issues/163), [#164](https://github.com/juanajok/zascarr/issues/164), [#156](https://github.com/juanajok/zascarr/issues/156) | Backlog de producto aún no cubierto por `main`. |
+
+## Resultado
+
+Tras el cierre: **29 tarjetas activas** (19 Backlog, 5 Lista, 4 En refinamiento,
+1 En curso). #161 ya no está en el tablero; #111 y #125 están cerradas y en
+Hecha.
 
 ## Recomendación operativa
 
