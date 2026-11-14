@@ -17,6 +17,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from tests.test_cache_http import CacheHttpFalsa, Reloj
+from zascarr.services.reading_order_resolver import parsear_referencia
 from zascarr.services.reading_orders import (
     MAX_CUERPO,
     MAX_GUIAS,
@@ -458,3 +459,17 @@ def test_c1_porcentaje_codificado_no_esquiva_la_validacion():
     assert not cg._url_del_sitio("https://www.continuityguide.net/%2e%2e/x")
     assert not cg._url_del_sitio("https://www.continuityguide.net/%61pi/guia")
     assert cg._url_del_sitio("https://www.continuityguide.net/planetx")
+
+
+def test_anio_con_parentesis_se_normaliza_y_el_resolver_lo_entiende():
+    """La web escribe el año como `(1982)`; no debe convertirse en `((1982))` (fallo visto en vivo)."""
+    extractor = ReadingOrdersExtractor(cache=None)  # type: ignore[arg-type]
+    html = (b'<html><body><main><h1>Guia de prueba</h1><ol class="issues">'
+            b'<li class="issue"><div class="issue-main"><span class="issue-title">'
+            b'New Teen Titans #21</span> <span class="year">(1982)</span></div></li>'
+            b'</ol></main></body></html>')
+    guia = extractor._parsear(html, RO_GUIA)
+    assert guia is not None
+    referencia = guia.entradas[0].referencia
+    assert referencia == "New Teen Titans #21 (1982)"
+    assert parsear_referencia(referencia) is not None
