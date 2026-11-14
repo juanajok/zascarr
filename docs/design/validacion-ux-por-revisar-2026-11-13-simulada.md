@@ -163,3 +163,16 @@ H7 (comparación de conflictos) y el doble campo de número de H1/H2.
 | H7 conflicto | Cada fila en conflicto ofrece «Quitar este del lote» y «Dejar este y quitar el otro», con el nombre del otro archivo. Sigue sin comparación de páginas/tamaño. |
 
 Pendiente de una ronda mayor: unificar el doble campo «nº», recibo de Organizar, deshacer de un clic y comparación rica de conflictos.
+
+## 9. Ronda final
+
+| Hallazgo | Cambio |
+|---|---|
+| H1 doble número | Tarjeta y resultados usan **un solo formulario y un solo campo «nº»**; «Vincular» y «Organizar» comparten el número. |
+| H5 recibo/undo | Vincular y Organizar sustituyen la tarjeta por un recibo con «Deshacer» hacia la vista de desvinculación (que pide confirmación). |
+| H6 borradores | La lista de carpetas muestra «Revisión guardada · N marcados» y «Reanudar revisión». |
+| H7 conflicto | Cada fila muestra el otro archivo con número y ruta, y ofrece «Quitar este» o «Dejar este y quitar el otro». |
+
+Verificación: 529 tests de pendientes, asistente, carpetas, foco y contraste en verde.
+
+Queda una validación con personas reales; la simulación no sustituye el kit.

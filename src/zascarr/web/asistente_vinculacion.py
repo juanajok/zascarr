@@ -325,6 +325,7 @@ def _contexto_de_la_revision(r: RespuestaVinculacion, cursor_actual: str, otros:
         "nombres_de": lambda ids: [por_id[i].nombre for i in ids if i in por_id],
         "borradores_json": json.dumps({k: b.a_json() for k, b in otros.items() if not b.vacio()}, ensure_ascii=False),
         "pendientes": pendientes, "incluidos": incluidos, "excluidos": excluidos, "limite": LIMITE_ARCHIVOS,
+        "archivos_por_id": {a.id: a for a in r.archivos},
         "n_marcados": sum(1 for a in r.archivos if a.marcado),
         "n_incluidos": len(incluidos),
         "n_bloqueados": sum(1 for a in r.archivos if a.marcado and not a.marcable),
