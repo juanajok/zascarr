@@ -143,6 +143,13 @@ def _contexto() -> dict:
         "amule_url": s.amule_url,
         "amule_password_configurada": bool(s.amule_password),
         "amule_enabled": s.amule_enabled,
+        # SCR4/D-1: tarjeta del foro. La contraseña NUNCA viaja a la plantilla (solo si consta).
+        # `getattr` tolera los dobles antiguos de Ajustes que aún no declaran estos campos.
+        "forum_url": getattr(s, "forum_url", ""),
+        "forum_username": getattr(s, "forum_username", ""),
+        "forum_password_configurada": bool(getattr(s, "forum_password", "")),
+        "forum_enabled": bool(getattr(s, "forum_enabled", False)),
+        "forum_http_sin_tls": str(getattr(s, "forum_url", "") or "").startswith("http://"),
         "carpetas_compartidas": list(getattr(s, "carpetas_compartidas", []) or []),
         "carpetas_disponibles": [
             {"ruta": str(ruta), "nombre": nombre}
@@ -416,6 +423,29 @@ async def guardar_amule(
         "amule_enabled": amule_enabled,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "aMule"})
+
+
+@router.post("/guardar/foro", response_class=HTMLResponse)
+async def guardar_foro(
+    request: Request,
+    forum_url: str = Form(default=""),
+    forum_username: str = Form(default=""),
+    forum_password: str = Form(default=""),
+    forum_enabled: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """SCR4/D-1: URL, usuario, contraseña (en blanco = no cambiar) y activar.
+
+    La contraseña no se devuelve nunca a la plantilla; `RuntimeSettingsService.save` ignora
+    un secreto vacío. `http://` se acepta (D-2) y la tarjeta avisa de que no hay TLS.
+    """
+    await RuntimeSettingsService(db).save({
+        "forum_url": forum_url.strip().rstrip("/"),
+        "forum_username": forum_username.strip(),
+        "forum_password": forum_password,
+        "forum_enabled": forum_enabled,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Foro"})
 
 
 @router.post("/guardar/compartidos", response_class=HTMLResponse)

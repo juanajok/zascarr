@@ -148,11 +148,17 @@ class Settings(BaseSettings):
     # real concreto de fábrica, lo más cercano a "facilitación
     # organizada" que tenía el proyecto. Es un plugin IPB genérico: la
     # URL la aporta el usuario, el proyecto no incluye ni recomienda
-    # ningún foro concreto.
+    # ningún foro concreto. Se configura en Ajustes › Descargas › Foro
+    # (tarjeta completa, D-1 de SCR4); el `.env` solo aporta los valores
+    # iniciales. `http://` sigue siendo válido con aviso: el foro puede
+    # no ofrecer TLS y decide el operador (D-2).
     forum_url: str = Field(default="")
     forum_username: str = Field(default="")
     forum_password: str = Field(default="")
+    #: Login y lectura de temas (2 s). La búsqueda tiene su propio ritmo, más lento,
+    #: porque IPB bloquea por saturación (Search Flood Control).
     forum_rate_limit: float = Field(default=2.0)
+    forum_search_rate_limit: float = Field(default=25.0)
     forum_enabled: bool = Field(default=False)
 
     # ── Filesystem (rutas DENTRO del contenedor — genéricas y estables) ──
