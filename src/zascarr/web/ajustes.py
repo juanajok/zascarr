@@ -133,6 +133,8 @@ def _contexto() -> dict:
         "fandom_marvel_enabled": bool(getattr(s, "fandom_marvel_enabled", False)),
         "reading_orders_enabled": bool(getattr(s, "reading_orders_enabled", False)),
         "continuity_guide_enabled": bool(getattr(s, "continuity_guide_enabled", False)),
+        # SCR5: solo el feed RSS público; no se pide el HTML de los artículos.
+        "comic_book_herald_enabled": bool(getattr(s, "comic_book_herald_enabled", False)),
         "metron_token_configurado": bool(getattr(s, "metron_token", "")),
         "fuentes_heredadas": s.fuentes_heredadas,
         "prowlarr_url": s.prowlarr_url,
@@ -354,6 +356,7 @@ async def guardar_fuentes(
     fandom_marvel_enabled: bool = Form(default=False),
     reading_orders_enabled: bool = Form(default=False),
     continuity_guide_enabled: bool = Form(default=False),
+    comic_book_herald_enabled: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     await RuntimeSettingsService(db).save({
@@ -367,6 +370,7 @@ async def guardar_fuentes(
         "fandom_marvel_enabled": fandom_marvel_enabled,
         "reading_orders_enabled": reading_orders_enabled,
         "continuity_guide_enabled": continuity_guide_enabled,
+        "comic_book_herald_enabled": comic_book_herald_enabled,
         # Guardar es tomar la decisión (aunque sea confirmar el estado actual): deja de ser
         # «heredado».
         "fuentes_heredadas": False,

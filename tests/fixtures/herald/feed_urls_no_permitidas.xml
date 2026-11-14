@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Comic Book Herald — Reading Orders</title>
+    <link>https://www.comicbookherald.com/category/reading-orders/</link>
+    <description>Reading orders and guides</description>
+    <language>en-US</language>
+    <item>
+      <title>Válida</title>
+      <link>https://www.comicbookherald.com/valida/</link>
+      <comments>https://www.comicbookherald.com/x/#comments</comments>
+      <dc:creator><![CDATA[CBH]]></dc:creator>
+      <pubDate>Mon, 10 Nov 2026 14:30:00 +0000</pubDate>
+      <category><![CDATA[Reading Orders]]></category>
+      <guid isPermaLink="false">https://www.comicbookherald.com/?p=1</guid>
+      <description><![CDATA[Resumen que NO debe guardarse ni mostrarse.]]></description>
+    </item>
+    <item>
+      <title>Host ajeno</title>
+      <link>https://evil.example/robo/</link>
+      <comments>https://www.comicbookherald.com/x/#comments</comments>
+      <dc:creator><![CDATA[CBH]]></dc:creator>
+      <pubDate>Mon, 10 Nov 2026 14:30:00 +0000</pubDate>
+      <category><![CDATA[Reading Orders]]></category>
+      <guid isPermaLink="false">https://www.comicbookherald.com/?p=1</guid>
+      <description><![CDATA[Resumen que NO debe guardarse ni mostrarse.]]></description>
+    </item>
+    <item>
+      <title>HTTP plano</title>
+      <link>http://www.comicbookherald.com/sin-tls/</link>
+      <comments>https://www.comicbookherald.com/x/#comments</comments>
+      <dc:creator><![CDATA[CBH]]></dc:creator>
+      <pubDate>Mon, 10 Nov 2026 14:30:00 +0000</pubDate>
+      <category><![CDATA[Reading Orders]]></category>
+      <guid isPermaLink="false">https://www.comicbookherald.com/?p=1</guid>
+      <description><![CDATA[Resumen que NO debe guardarse ni mostrarse.]]></description>
+    </item>
+    <item>
+      <title>Credenciales</title>
+      <link>https://user:pass@www.comicbookherald.com/credenciales/</link>
+      <comments>https://www.comicbookherald.com/x/#comments</comments>
+      <dc:creator><![CDATA[CBH]]></dc:creator>
+      <pubDate>Mon, 10 Nov 2026 14:30:00 +0000</pubDate>
+      <category><![CDATA[Reading Orders]]></category>
+      <guid isPermaLink="false">https://www.comicbookherald.com/?p=1</guid>
+      <description><![CDATA[Resumen que NO debe guardarse ni mostrarse.]]></description>
+    </item>
+    <item>
+      <title></title>
+      <link>https://www.comicbookherald.com/sin-titulo/</link>
+      <comments>https://www.comicbookherald.com/x/#comments</comments>
+      <dc:creator><![CDATA[CBH]]></dc:creator>
+      <pubDate>Mon, 10 Nov 2026 14:30:00 +0000</pubDate>
+      <category><![CDATA[Reading Orders]]></category>
+      <guid isPermaLink="false">https://www.comicbookherald.com/?p=1</guid>
+      <description><![CDATA[Resumen que NO debe guardarse ni mostrarse.]]></description>
+    </item>
+  </channel>
+</rss>

@@ -112,6 +112,15 @@ class Settings(BaseSettings):
     continuity_guide_enabled: bool = Field(default=False)
     continuity_guide_rate_limit: float = 3.5
 
+    # Comic Book Herald (SCR5): SOLO el feed RSS público de WordPress (título, enlace, fecha y
+    # categorías; nunca el HTML del artículo ni imágenes). Apagada por defecto (ADR 0013); el
+    # feed de categoría de guías de lectura es el default y se puede cambiar por otro del mismo
+    # host. Ritmo 3,5 s; caché de 6 h en `http_cache` (SCR1).
+    comic_book_herald_enabled: bool = Field(default=False)
+    comic_book_herald_rate_limit: float = 3.5
+    comic_book_herald_feed_url: str = Field(
+        default="https://www.comicbookherald.com/category/reading-orders/feed/")
+
     # ── GCD / Grand Comics Database (descubrimiento, C0) ─────────────
     # API pública real en /api/ (verificado en vivo 2026-09-25, ver
     # docs/adr/0002-enricher-scope.md), sin clave, anónima. Su propia

@@ -351,3 +351,78 @@ def test_pedir_saga_sin_nuevos_muestra_aviso_neutro():
     assert "No había números nuevos que pedir" in r.text
     assert "a tus deseados" not in r.text
     assert "autofocus" in r.text
+
+# ── SCR5: «Novedades de Comic Book Herald» al final de Sagas en orden ─────────────────────
+
+def _pagina_vacia():
+    return PaginaArcos([], 1, 1, 0, 0, 1)
+
+
+def test_la_lista_muestra_las_novedades_del_feed_con_enlace_externo():
+    from datetime import UTC, datetime
+
+    from zascarr.services.comicbook_herald import HeraldItem
+
+    novedades = [
+        HeraldItem("Año Uno de Batman: por dónde empezar",
+                   "https://www.comicbookherald.com/batman-year-one-reading-order/",
+                   datetime(2026, 11, 8, 9, 0, tzinfo=UTC)),
+        HeraldItem("La Patrulla-X de Claremont",
+                   "https://www.comicbookherald.com/x-men-claremont-reading-order/", None),
+    ]
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.listar_arcos", AsyncMock(return_value=_pagina_vacia())), \
+                patch("zascarr.web.arcos._novedades_de_herald",
+                      AsyncMock(return_value=novedades)):
+            r = c.get("/ui/arcos")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Novedades de Comic Book Herald" in r.text
+    assert 'href="https://www.comicbookherald.com/batman-year-one-reading-order/"' in r.text
+    assert 'target="_blank"' in r.text and 'rel="noopener noreferrer"' in r.text
+    assert "se abre en otra pestaña" in r.text
+    assert "08/11/2026" in r.text
+    assert "Año Uno de Batman" in r.text and "La Patrulla-X de Claremont" in r.text
+
+
+def test_sin_novedades_no_se_pinta_la_seccion():
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.listar_arcos", AsyncMock(return_value=_pagina_vacia())), \
+                patch("zascarr.web.arcos._novedades_de_herald", AsyncMock(return_value=[])):
+            r = c.get("/ui/arcos")
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "Novedades de Comic Book Herald" not in r.text
+
+
+async def test_la_fuente_apagada_no_instancia_el_cliente_del_feed(monkeypatch):
+    from zascarr.web import arcos as modulo
+
+    monkeypatch.setattr(modulo, "fuente_habilitada", lambda *_a, **_k: False)
+    monkeypatch.setattr(modulo, "ComicBookHeraldClient", None)   # si se usara, reventaría
+    assert await modulo._novedades_de_herald() == []
+
+
+async def test_un_fallo_del_feed_no_pinta_nada_y_no_lanza(monkeypatch):
+    from zascarr.web import arcos as modulo
+
+    class ClienteQueFalla:
+        def __init__(self, *_a, **_k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return None
+
+        async def novedades(self):
+            raise RuntimeError("sin red")
+
+    monkeypatch.setattr(modulo, "fuente_habilitada", lambda *_a, **_k: True)
+    monkeypatch.setattr(modulo, "ComicBookHeraldClient", ClienteQueFalla)
+    assert await modulo._novedades_de_herald() == []
+
