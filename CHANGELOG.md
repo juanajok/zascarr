@@ -7,6 +7,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Ficha de serie: navegación por secciones y «Completitud» (2026-11-14).** La ficha
+  estrena un índice de anclas (Números, Búsqueda, Etiquetas, Colecciones, Completitud, Datos
+  y Archivos si existe) para no recorrer diez secciones en móvil. El bloque D8 deja de llamarse
+  «Estado de la colección» para no confundirse con las colecciones M:N, y la frase de entrada
+  pasa antes de los datos. Sin JS ni componentes nuevos; benchmark en
+  `docs/design/benchmark-ficha-serie.md`.
 - **Alta de series en colecciones: divulgación progresiva (2026-11-14).** La ficha de una
   colección ya no muestra siempre el selector con hasta 40 series de la biblioteca. Un botón
   «Añadir series» (antes de la lista) despliega el panel; el fragmento solo se pide al abrir
