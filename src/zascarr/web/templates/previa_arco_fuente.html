@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_atribucion_fandom.html" import aviso_de_atribucion %}
+{% block title %}Previsualizar saga — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/arcos/buscar">← Volver a buscar</a></p>
+<h1>Previsualizar saga</h1>
+{% if errores.get("general") %}{{ ui.aviso("warn", errores.general, foco=true) }}{% endif %}
+{% if previa %}
+{{ aviso_de_atribucion(atribucion_fandom, "esta saga") }}
+<h2 class="titulo-frase">{{ previa.title }}</h2>
+<p class="caption">{{ previa.coinciden }} {{ "número coincide" if previa.coinciden == 1 else "números coinciden" }} con tu biblioteca · {{ previa.faltan }} {{ "número falta" if previa.faltan == 1 else "números faltan" }}.</p>
+<p class="caption">Esta previsualización no crea series ni números. Al importar solo se enlazan los números que ya tienes.</p>
+{% if previa.filas %}
+<ul class="arcos-lista">
+  {% for f in previa.filas %}
+  <li class="arco-fila">
+    {% if f.coincide %}
+    <a href="/ui/series/{{ f.series_id }}/numero/{{ f.issue_id }}">{{ f.serie }} #{{ f.numero }}</a>
+    {{ ui.chip("ok", "En tu biblioteca") }}
+    {% else %}
+    <span>{{ f.base }} #{{ f.numero }}</span>
+    {{ ui.chip("neutro", "No está en tu biblioteca") }}
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+<form method="post" action="/ui/arcos/buscar/importar" class="arcos-importar-form">
+  <input type="hidden" name="page_title" value="{{ previa.page_title }}">
+  <label class="legal-checkbox">
+    <input type="checkbox" name="confirmo" value="1" required>
+    Confirmo que quiero crear o actualizar esta saga y enlazar solo los números de mi biblioteca.
+  </label>
+  <button class="btn primary" type="submit">Importar saga</button>
+</form>
+{% else %}
+{{ ui.estado_vacio("Este arco no declara números", "No hay nada que enlazar en tu biblioteca.") }}
+{% endif %}
+{% endif %}
+{% endblock %}
