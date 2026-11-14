@@ -136,11 +136,33 @@ async def _diagnostico(ajustes, *, consulta: str, leer_tema: bool, fabrica,
         return 3
 
 
+def _aplicar_ajustes_de_bd() -> None:
+    """Aplica los overrides de Ajustes (BD) como hace el arranque de la app.
+
+    El script corre en un proceso suelto: sin esto solo vería el `.env` y un foro
+    configurado en Ajustes aparecería como «faltan datos». Si la BD no responde se sigue
+    con el entorno (el mensaje de datos que faltan lo explicará).
+    """
+    try:
+        from zascarr.database import async_session_factory
+        from zascarr.services.runtime_settings import load_overrides_at_startup
+
+        async def _cargar() -> None:
+            async with async_session_factory() as db:
+                await load_overrides_at_startup(db)
+
+        asyncio.run(_cargar())
+    except Exception:  # noqa: BLE001 - diagnóstico: la BD es opcional
+        pass
+
+
 def main(argv: list[str] | None = None, *, ajustes=None,
          fabrica=None, salida: Callable[[str], None] = print,
          dormir=asyncio.sleep) -> int:
     args = _parser().parse_args(argv)
-    ajustes = ajustes if ajustes is not None else get_settings()
+    if ajustes is None:
+        _aplicar_ajustes_de_bd()
+        ajustes = get_settings()
     faltan = _faltan(ajustes)
     if faltan:
         salida("ZascArr — diagnóstico del foro (SCR4)")
