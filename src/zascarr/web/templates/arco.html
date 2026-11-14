@@ -15,6 +15,37 @@
   <a class="btn ghost sm" href="/ui/arcos/{{ arco.id }}/editar">Editar la saga</a>
   <a class="btn btn-ignorar sm" href="/ui/arcos/{{ arco.id }}/eliminar">Eliminar la saga</a>
 </div>
+
+{#- Añadir un número a mano: la ruta POST ya existía pero no había formulario. Es una acción
+    secundaria (botón neutro, no `.primary`) para no competir con el recorrido de la saga. -#}
+<section class="edicion-manuales" aria-labelledby="arco-anadir-titulo">
+  <h2 id="arco-anadir-titulo" class="titulo-frase">Añadir un número</h2>
+  {% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
+  <form method="post" action="/ui/arcos/{{ arco.id }}/numeros" class="edicion-form">
+    <div class="edicion-dos">
+      <label>Serie
+        <input type="text" name="serie" value="{{ valores.serie }}" maxlength="500" required
+               placeholder="Tal como aparece en tu biblioteca"
+               aria-describedby="arco-anadir-ayuda">
+        {% if errores.serie %}<span class="campo-error">{{ errores.serie }}</span>{% endif %}
+      </label>
+      <label>Número
+        <input type="text" name="numero" value="{{ valores.numero }}" maxlength="20" required>
+        {% if errores.numero %}<span class="campo-error">{{ errores.numero }}</span>{% endif %}
+      </label>
+      <label>Posición
+        <input type="number" name="orden" value="{{ valores.orden }}" min="1" max="1000"
+               inputmode="numeric" placeholder="Vacía = al final">
+        {% if errores.orden %}<span class="campo-error">{{ errores.orden }}</span>{% endif %}
+      </label>
+    </div>
+    <p class="muted" id="arco-anadir-ayuda">Escribe el título tal como aparece en tu biblioteca. La posición es opcional: si la dejas vacía, el número va al final.</p>
+    <p class="caption">Solo cambia el orden de lectura en ZascArr: no se toca ningún número ni archivo.</p>
+    <div class="edicion-acciones">
+      <button type="submit" class="btn ghost">Añadir número</button>
+    </div>
+  </form>
+</section>
 <p class="caption">{{ arco.filas | length }} {{ "número" if arco.filas | length == 1 else "números" }} · {{ arco.series }} {{ "serie" if arco.series == 1 else "series" }}</p>
 {% if not arco.filas %}
 {{ ui.estado_vacio("Esta saga no tiene números enlazados", "No hay un orden de lectura que mostrar todavía.") }}

@@ -14,6 +14,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 - **V14 F4: se cierra la lista de compatibilidad (2026-11-13, #750).** El último `.neutro` pasa a
   la base neutra y se retira su regla; `CLASES_ANTERIORES_A_V2` se sustituye por
   `ALIAS_RETIRADOS_EN_V14`, una prueba que impide que vuelvan los 27 alias retirados.
+- **Sagas: añadir un número desde la ficha de la saga (2026-11-14).** La ruta
+  `POST /ui/arcos/{id}/numeros` y el servicio existían, pero la plantilla no ofrecía el
+  formulario: ahora la ficha muestra «Añadir un número» (serie, número y posición opcional),
+  con errores en español llano, valores conservados al reintentar y la garantía de que no se
+  toca ningún archivo. Se reutilizan las clases del sistema de diseño (`.edicion-form`,
+  `.campo-error`, …). PR del arreglo en el historial de `main`.
+
 - **V14 F3b: los números de la ficha usan `ui.chip` (2026-11-13, #750).** Fuera `.issue-chip`,
   `.issue-missing`, `.issue-present`, `.issue-leido` y `.issue-leyendo`: presente `ok` (✓), leyendo
   `info`, leído `neutro`, y «te falta» `neutro` con `chip-falta` (borde discontinuo); los números

@@ -172,3 +172,136 @@ def test_c4_fuente_de_guia_valida_host_esquema_y_rutas():
                            "url": con_credenciales}) is None
     assert fuente_de_guia({"origen": "fandom_dc",
                            "url": "https://dc.fandom.com/wiki/Batman"}) is None
+
+
+# ── «Añadir un número» desde la ficha de la saga (task-24) ───────────────────────────────────
+
+def _detalle_minimo(arco_id="a1"):
+    return DetalleArco(arco_id, "Court of Owls", None, False, [], 0)
+
+
+def test_detalle_ofrece_formulario_para_anadir_numero():
+    detalle = _detalle_minimo()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{uuid4()}")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Añadir un número" in r.text
+    assert 'action="/ui/arcos/a1/numeros"' in r.text
+    for campo in ('name="serie"', 'name="numero"', 'name="orden"'):
+        assert campo in r.text
+    assert 'maxlength="500"' in r.text and 'maxlength="20"' in r.text
+    assert "Tal como aparece en tu biblioteca" in r.text
+    assert "Vacía = al final" in r.text
+    # Acción secundaria: botón neutro, nunca `.primary`.
+    assert '<button type="submit" class="btn ghost">Añadir número</button>' in r.text
+
+
+def test_detalle_conserva_las_acciones_existentes():
+    filas = [FilaArco(1, "i1", "s1", "Batman", "1", None, None, True)]
+    detalle = DetalleArco("a1", "Court of Owls", None, False, filas, 1)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{uuid4()}")
+    finally:
+        _cerrar()
+    for texto in ("Editar la saga", "Eliminar la saga", "Subir una posición",
+                  "Bajar una posición", "Quitar de la saga", "Añadir un número"):
+        assert texto in r.text
+
+
+def test_anadir_numero_valido_redirige_con_guardado_numero():
+    from zascarr.services.arcos import ResultadoArco
+
+    arco = SimpleNamespace(id=uuid4(), title="Saga", description=None, is_crossover=False)
+    agregar = AsyncMock(return_value=ResultadoArco(True, arco=arco))
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.agregar_numero", agregar):
+            r = c.post(f"/ui/arcos/{arco.id}/numeros",
+                       data={"serie": "Batman", "numero": "1"},
+                       follow_redirects=False)
+    finally:
+        _cerrar()
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/ui/arcos/{arco.id}?guardado=numero"
+    assert agregar.await_args.kwargs == {"serie": "Batman", "numero": "1", "orden": None}
+
+
+def test_anadir_numero_con_posicion_la_pasa_al_servicio():
+    from zascarr.services.arcos import ResultadoArco
+
+    arco = SimpleNamespace(id=uuid4(), title="Saga", description=None, is_crossover=False)
+    agregar = AsyncMock(return_value=ResultadoArco(True, arco=arco))
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.agregar_numero", agregar):
+            r = c.post(f"/ui/arcos/{arco.id}/numeros",
+                       data={"serie": "Batman", "numero": "1", "orden": "2"},
+                       follow_redirects=False)
+    finally:
+        _cerrar()
+    assert r.status_code == 303
+    assert agregar.await_args.kwargs["orden"] == 2
+
+
+def test_anadir_numero_con_posicion_no_numerica_va_al_final():
+    from zascarr.services.arcos import ResultadoArco
+
+    arco = SimpleNamespace(id=uuid4(), title="Saga", description=None, is_crossover=False)
+    agregar = AsyncMock(return_value=ResultadoArco(True, arco=arco))
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.agregar_numero", agregar):
+            r = c.post(f"/ui/arcos/{arco.id}/numeros",
+                       data={"serie": "Batman", "numero": "1", "orden": "al-final"},
+                       follow_redirects=False)
+    finally:
+        _cerrar()
+    assert r.status_code == 303 and agregar.await_args.kwargs["orden"] is None
+
+
+def test_anadir_numero_invalido_rerenderiza_aviso_y_conserva_valores():
+    from zascarr.services.arcos import ResultadoArco
+
+    arco = SimpleNamespace(id=uuid4(), title="Saga", description=None, is_crossover=False)
+    errores = {"serie": "No encuentro una única serie con ese nombre. "
+                        "Escribe el título exacto."}
+    agregar = AsyncMock(return_value=ResultadoArco(False, errores=errores))
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.agregar_numero", agregar), \
+                patch("zascarr.web.arcos.detalle_arco",
+                      AsyncMock(return_value=_detalle_minimo(str(arco.id)))):
+            r = c.post(f"/ui/arcos/{arco.id}/numeros",
+                       data={"serie": "Batmanx", "numero": "7", "orden": "2"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "No encuentro una única serie con ese nombre." in r.text
+    assert 'value="Batmanx"' in r.text
+    assert 'value="7"' in r.text and 'value="2"' in r.text
+    assert 'class="campo-error"' in r.text
+
+
+def test_anadir_numero_error_general_del_servicio_usa_aviso_neutro():
+    from zascarr.services.arcos import ResultadoArco
+
+    arco = SimpleNamespace(id=uuid4(), title="Saga", description=None, is_crossover=False)
+    agregar = AsyncMock(return_value=ResultadoArco(
+        False, errores={"general": "La saga ya no existe."}))
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.agregar_numero", agregar), \
+                patch("zascarr.web.arcos.detalle_arco",
+                      AsyncMock(return_value=_detalle_minimo(str(arco.id)))):
+            r = c.post(f"/ui/arcos/{arco.id}/numeros",
+                       data={"serie": "Batman", "numero": "1"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "La saga ya no existe." in r.text and 'class="aviso' in r.text
