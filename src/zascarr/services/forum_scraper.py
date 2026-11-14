@@ -84,10 +84,14 @@ _COOKIES_DE_MIEMBRO = (
 
 
 def es_cookie_de_miembro(nombre: str) -> bool:
-    """¿El nombre de cookie identifica a un miembro, con o sin prefijo del foro?"""
+    """¿El nombre de cookie identifica a un miembro, con cualquier prefijo del foro?
+
+    IPB permite prefijos arbitrarios por foro: La Mansión CRG usa `foro_nuevo` en unas cookies
+    (`foro_nuevomember_id`) y `foro_` en otras (`foro_nuevosession_id`). Por eso se compara el
+    **final** del nombre, no `_` + sufijo.
+    """
     nombre = (nombre or "").lower()
-    return any(nombre == sufijo or nombre.endswith("_" + sufijo)
-               for sufijo in _COOKIES_DE_MIEMBRO)
+    return any(nombre.endswith(sufijo) for sufijo in _COOKIES_DE_MIEMBRO)
 #: Parámetros de query que son la sesión (no se guardan ni se pintan; m-1/m-2).
 _PARAMS_DE_SESION = frozenset({"s", "sid", "session", "session_id", "sess"})
 #: Puertos que no se escriben al normalizar una URL para mostrarla.

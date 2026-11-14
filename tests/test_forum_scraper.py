@@ -437,7 +437,7 @@ class TestTemaSinSesionEnLaUrl:
 
 @pytest.mark.parametrize("nombre", [
     "member_id", "pass_hash", "foro_member_id", "foro_pass_hash",
-    "ips4_member_id", "mi_foro_pass_hash",
+    "foro_nuevomember_id", "foro_nuevopass_hash", "ips4_member_id", "mi_foro_pass_hash",
 ])
 def test_una_cookie_de_miembro_se_reconoce_con_y_sin_prefijo(nombre):
     assert es_cookie_de_miembro(nombre) is True
