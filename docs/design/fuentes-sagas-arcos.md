@@ -20,6 +20,16 @@ un orden, y que se pueda casar con las series/números locales sin inventar.
   para series ya vinculadas (`fandom_dc_slug`). No hay búsqueda ni elección.
 - **#163** añade «Pedir los números que faltan» a una saga ya existente; no
   busca arcos nuevos.
+- **SCR3 ya está fusionado en `main`** (PRs #765/#771/#774, spec
+  `docs/design/especificacion-SCR3-lecturas.md`): dos extractores de guías
+  curadas (`comicbookreadingorders.com` y `continuityguide.net`), el resolver
+  puro, la reconciliación idempotente sobre `story_arcs` y un disparador manual
+  `scripts/reconciliar-lecturas.py`. Las fuentes están apagadas por defecto,
+  tienen interruptor en Ajustes y solo se leen por sitemap/HTML con
+  caché/robots (sin prosa del autor; `use=reference`). **No hay pantalla de
+  búsqueda de guías**: se dispara a mano por URL. Además, `arcos.html` muestra
+  las novedades del **feed público de Comic Book Herald** (SCR5), solo títulos,
+  fechas y enlaces.
 
 ## Comparativa
 
@@ -31,13 +41,20 @@ un orden, y que se pueda casar con las series/números locales sin inventar.
 | **Grand Comics Database (GCD)** | No: la API pública solo expone `series` y `publisher` | No | `gcd_id` en Metron/Comic Vine | API limitada; dumps | **No** para arcos/orden |
 | **Marvel Comics API** | No hay recurso de «story arc»; su unidad es `story` (portada, interior, texto) | No hay campo de orden de lectura | IDs propios, no los locales | API oficial con clave; límites | **No** para esta función |
 | **League of Comic Geeks** | Tiene listas de lectura, pero **no API pública oficial**; el CLI `locg` usa sesión de navegador (Playwright) | Sus listas tienen orden, pero son de usuario | Requiere login/scraping | Sin API estable; riesgo de ToS | **No integrar**; Metron ya atribuye listas LOCG |
-| **Comic Book Herald / CBRO / CMRO / CBT / Marvel Guides / How To Love Comics** | Son listas editoriales, no API | Sí, pero en HTML | Habría que scrapear y mapear a mano | Sin API; contenido editorial con derechos | **No scrapear**; usar Metron, que las atribuye |
+| **Comic Book Reading Orders** | Sí, extractor SCR3 ya fusionado | Sí: `ol.issues` en orden DOM | Resolver + `story_arcs` (solo lectura de la biblioteca) | HTML/sitemap por caché/robots; `use=reference`; sin prosa | **Ya integrado**; falta pantalla de búsqueda |
+| **Continuity Guide** | Sí, extractor SCR3 ya fusionado | Orden DOM por tarjetas; una página = un capítulo, no une capítulos | Resolver + `story_arcs` | HTML/sitemap por caché/robots, sin `?format=json` | **Ya integrado**; límite: orden entre capítulos no resuelto |
+| **Comic Book Herald** | Sí, feed RSS público (SCR5) | No: solo novedades/enlaces | — | Feed por caché/robots | **Solo novedades**, no orden; ya se muestra en Sagas |
+| **CBRO / CMRO / CBT / Marvel Guides / How To Love Comics** | Listas editoriales, sin API estable | Sí, en HTML | Habría que scrapear y mapear | Sin API; contenido editorial | **No scrapear**; Metron ya las atribuye |
 | **Wikipedia / Wikidata** | Páginas de arcos, datos dispersos | No estructurado | — | API, pero sin modelo de orden | **No** como fuente principal |
 | **Tebeosfera / Whakoom** | Fichas de colecciones/sagas en español | No orden de lectura explícito | Tebeosfera ya tiene cliente de scraping; Whakoom sin API | Sin API pública / ToS | **No** para órdenes |
 | **AniList / MangaUpdates** | Capítulos de manga | Orden de capítulos, no eventos cross-series | IDs de manga | API | **No** para arcos de cómic |
 
 ### Notas de verificación
 
+- **SCR3** dejó dos extractores ya probados y una reconciliación con
+  `story_arcs` (decisión del PO de 2026-11-13), sin UI de búsqueda. El detalle
+  está en `docs/design/especificacion-SCR3-lecturas.md` y en el cierre
+  [#774](https://github.com/juanajok/zascarr/pull/774).
 - **Metron** documenta `GET /api/arc/{id}/issue_list/` para el arco y, sobre
   todo, `GET /api/reading_list/{id}/items/` con `order`, `issue_type` y
   `attribution_source`. La lista de lectura requiere autenticación; el detalle
@@ -60,16 +77,22 @@ un orden, y que se pueda casar con las series/números locales sin inventar.
 
 ## Recomendación
 
-1. **Metron como primera fuente nueva**, porque es la única revisada que
-   separa «arco» de «orden de lectura» y ofrece el orden explícito, el tipo de
-   número y la atribución de la lista. Es también la que permite cubrir Marvel
-   y editoriales no DC sin scraping.
-2. **Fandom DC como fuente ya integrada**, añadiendo búsqueda explícita de
-   sagas para DC; no duplicar su parser.
-3. **Comic Vine como descubrimiento**, nunca como orden definitivo: si se usa,
+1. **Fandom DC primero para la búsqueda**: ya hay cliente, no exige
+   credenciales y permite buscar sagas DC; añadir búsqueda explícita, sin
+   duplicar el parser.
+2. **Metron como primera fuente nueva de orden**, porque separa «arco» de
+   «orden de lectura» y ofrece el orden explícito, el tipo de número y la
+   atribución de la lista. Es la que permite cubrir Marvel y editoriales no DC
+   sin scraping.
+3. **Reutilizar SCR3** para Comic Book Reading Orders y Continuity Guide: ya
+   existen extractor y reconciliación; lo que falta es una pantalla de búsqueda
+   de guías y el refresco, no otro parser. Comic Book Herald se queda como
+   novedades.
+4. **Comic Vine como descubrimiento**, nunca como orden definitivo: si se usa,
    marcar el orden como «propuesto» y pedir confirmación.
-4. **No integrar** GCD, Marvel API, LOCG por scraping ni las webs editoriales.
-   Si se necesita su contenido, Metron ya lo agrega con atribución.
+5. **No integrar** GCD, Marvel API, LOCG por scraping ni las webs editoriales
+   sin extractor aprobado. Si se necesita su contenido, Metron ya lo agrega con
+   atribución.
 
 ## Diseño propuesto del modo «Buscar saga en fuentes»
 
@@ -89,8 +112,12 @@ un orden, y que se pueda casar con las series/números locales sin inventar.
 
 ## Estimación
 
-- **MVP Metron + Fandom DC**: M. Incluye cliente HTTP autenticado, búsqueda,
+- **MVP Fandom DC**: S/M. Reutiliza el cliente y el parser; añade búsqueda,
+  previsualización, mapeo y confirmación.
+- **Metron + Fandom DC**: M. Incluye cliente HTTP autenticado, búsqueda,
   normalizador, previsualización, mapeo y confirmación.
+- **Pantalla sobre SCR3**: S/M, porque extractores y reconciliación ya existen;
+  falta buscar guías y exponer el resultado sin duplicar lógica.
 - **Añadir Comic Vine**: +S/M (ya hay cliente y claves; orden solo aproximado).
 - **Tests**: parsers y normalizador con respuestas grabadas; integración con
   Postgres para el mapeo; ninguna prueba debe llamar a la red en CI.
