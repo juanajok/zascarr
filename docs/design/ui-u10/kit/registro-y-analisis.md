@@ -42,8 +42,9 @@ No se empieza hasta que todo esto esté hecho y anotado:
       se calibra también y debe coincidir en los 12; **si solo hay una, se declara el límite** y otra
       persona revisa las citas y la clasificación.
 - [ ] **Consentimiento y conservación** leídos. Cada persona tiene su `P1…P5`, su `S01…S05` y su
-      referencia `C-01…`. La línea de «preferencia A/B» del consentimiento **no se usa** en esta
-      ronda (guion §1.1); se adapta antes de firmar.
+      referencia `C-01…`. El consentimiento ya no plantea preferencia A/B: esta ronda prueba una sola
+      versión (guion §1.1). Queda alguna mención suelta a «orden de variantes» en el kit; no afecta a
+      la firma y se limpia antes de la primera sesión.
 - [ ] **Hoja de cálculo preparada** con dos pestañas (sesiones y tareas) y los CSV de §4 importados.
 - [ ] **Ficha privada de sesión** preparada con la checklist: URL, nombres exactos de las carpetas,
       borrado y mapa seudónimo → identidad. Esa ficha **no** se sube al repositorio.
@@ -129,6 +130,9 @@ Diccionario de la hoja T:
 |---|---|---|
 | `origen` | Fila real o de prueba | `real`, `sintetico` |
 | `carpeta` | Carpeta usada en T3/T6 | `F-A`, `F-B`, `F-A2`, `F-B2`, `—` |
+| `resultado` | Resultado de la tarea (ver §5.1) | `ES`, `EC`, `FA`, `AB`, `NE`, `NA` |
+| `ejecucion` | Si se pulsó la acción con efecto (ver §5.6) | `si`, `no`, `no_requerida`, `no_aplica` |
+| `efecto` | Estado final (ver §5.6) | `correcto`, `incorrecto`, `no_verificado`, `no_aplica` |
 | `pausa_s` | Segundos de interrupciones técnicas descontados | entero o `0` |
 | `tiempo_tipo` | Qué clase de tiempo es | `tarea`, `exposicion`, `entrevista`, `no_medido` |
 | `errores` | Episodios de error (ver §5.3) | entero (`0` si ninguno) |
@@ -349,7 +353,7 @@ solo se sube un peldaño cuando la persona lleva un tiempo sin progresar. Se ano
 | `correcto` | El estado final coincide con el criterio de éxito (vinculado donde debía, sin mover, marcas conservadas…) |
 | `incorrecto` | El estado final no coincide: se movió, se vinculó mal, se perdió una marca, se duplicó una decisión |
 | `no_verificado` | La tarea no pedía efecto, no se confirmó o no se pudo comprobar (prototipo estático, sin acceso al estado) |
-| `no_aplica` | No hay efecto posible (T1, T2, T4, T6, T7) |
+| `no_aplica` | No hay efecto posible (T1, T2, T3, T4 y T7; T6 solo si el guion no pide ejecutar) |
 
 El efecto lo comprueba el observador o el moderador **en la pantalla o en el estado de la app**, no
 por lo que la persona cree. Si no se puede comprobar, `no_verificado`; no se supone.
@@ -408,8 +412,9 @@ quiere pulsar nada y no explica su modelo).
   nueva; no se edita la copia congelada.
 - Revisar que cada fila de tarea tiene su fila de sesión y que `origen=real` en todo lo que se
   analiza. El piloto (`origen=sintetico`) se filtra.
-- Contar el **n presentado por tarea**: personas con consentimiento, sesión `realizada` y tarea
-  presentada. `NA` no entra. Para el recuento de **éxito/fallo**, el denominador es `ES+EC+FA`;
+- Contar el **n presentado por tarea**: personas con consentimiento, sesión `realizada` (o
+  `retirada` si la persona autoriza usar lo ya hecho) y tarea presentada. `NA` no entra. Para el
+  recuento de **éxito/fallo**, el denominador es `ES+EC+FA`;
   `AB`, `NE` y `NA` se informan aparte, pero `AB` y `NE` **sí cuentan** para detectar una fricción
   (son personas que se enfrentaron a la tarea).
 
@@ -602,7 +607,9 @@ T2/T3, sin fila propia en la tabla.
 | ¿La sugerencia se lee como «no aplicada»? | ≥3 de 5 lo dicen sin ayuda | ≥3 de 5 creen que ya está aplicada | 2 de 5 |
 | ¿La carpeta con dos series tiene salida? | ≥3 de 5 encuentran una salida o dicen explícitamente que falta | ≥3 de 5 fuerzan una sola serie o inventan una acción inexistente | 2 de 5 |
 | ¿La base de carpetas se sostiene? | ≥3 de 5 completan T3/T6 sin ayuda y nadie queda bloqueado por la estructura | ≥3 de 5 quedan bloqueados por la estructura de carpetas | 2 de 5 |
-| ¿El alcance del lote se entiende? (H7) | **No se prueba en este guion**: la pantalla no tiene lote. Queda **NOT RUN** | — | — |
+
+Los «3 de 5» de la tabla son el caso de 5 personas; con 3 o 4 se aplica la regla de
+[§6.4](#64-detección-de-patrones): mínimo 3 personas y al menos el 60 % del n presentado.
 
 Lectura correcta de la tabla:
 
