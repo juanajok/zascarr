@@ -52,6 +52,18 @@
   </div>
 </div>
 
+<nav class="ficha-nav" aria-label="Secciones de la ficha">
+  <a class="btn ghost sm" href="#numeros-serie">Números</a>
+  <a class="btn ghost sm" href="#politica-serie">Búsqueda</a>
+  <a class="btn ghost sm" href="#etiquetas-serie">Etiquetas</a>
+  <a class="btn ghost sm" href="#colecciones-serie">Colecciones</a>
+  <a class="btn ghost sm" href="#coleccion-serie">Completitud</a>
+  <a class="btn ghost sm" href="#datos-serie">Datos</a>
+  {% if archivos_por_numero %}<a class="btn ghost sm" href="#archivos-por-numero">Archivos</a>{% endif %}
+</nav>
+
+<p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
+
 {#- BL-INF6 (#592): «Elegir portada». El panel NO se pide hasta desplegarlo (cero miniaturas y
     cero consultas en la carga de la ficha): el `toggle` nativo del <details> dispara el `hx-get`.
     El `summary` va sin atributos para que siga siendo un desplegable normal de teclado. -#}
@@ -62,7 +74,7 @@
   <p class="muted">Cargando las portadas disponibles…</p>
 </details>
 
-<section class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
+<section id="datos-serie" class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
   <h2 id="ficha-serie-datos-titulo" class="titulo-frase">{{ textos_ficha.serie_bloque }}</h2>
   {% if serie_vacia %}
   <p class="ficha-sinopsis">{{ textos_ficha.sin_datos }}</p>
@@ -143,7 +155,6 @@
   {% endif %}
 </section>
 
-<p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
 <section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
          hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
 <section id="colecciones-serie" class="series-colecciones" aria-label="Colecciones"
@@ -153,7 +164,7 @@
 
     <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo"
              {% if aviso_coleccion %}tabindex="-1" autofocus{% endif %}>
-      <h2 id="coleccion-serie-titulo" class="titulo-frase">Estado de la colección</h2>
+      <h2 id="coleccion-serie-titulo" class="titulo-frase">Completitud</h2>
       <p>
         {% if estado_coleccion.tipo == "no_completar" %}
           {{ ui.chip("neutro", "No la vas a completar") }}
@@ -215,6 +226,7 @@
   </form>
 </details>
 
+<section id="numeros-serie" class="ficha-numeros" aria-label="Números de la serie">
 {% if estado_coleccion.tipo != "no_completar" and missing %}
 <h2>Te faltan</h2>
 <div class="issue-grid">
@@ -244,6 +256,8 @@
   {% endfor %}
 </div>
 {% endif %}
+
+</section>
 
 {% if archivos_por_numero %}
 {#- BL-R1b (#254, D10): los archivos de cada número y, cuando el servicio lo permite (D9), «Deshacer esta vinculación». -#}

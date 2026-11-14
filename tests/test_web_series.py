@@ -564,7 +564,9 @@ class TestPresupuestoTextoU21:
         antes = re.sub(r'<p class="series-acciones">.*?</p>', '', antes, flags=re.S)
         # BL-INF1 (#447): el bloque informativo va después de la cabecera y no compite
         # con el presupuesto de la entrada de #208.
-        antes = re.sub(r'<section class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
+        antes = re.sub(r'<section[^>]*class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
+        # #803: la navegación por anclas es un control de la ficha, no texto de entrada.
+        antes = re.sub(r'<nav class="ficha-nav".*?</nav>', '', antes, flags=re.S)
         # BL-INF6: «Elegir portada» es un CONTROL de acción (abre el selector), como los botones de
         # `.series-acciones`: no es texto de entrada y no compite con el presupuesto de #208.
         antes = re.sub(r'<details class="elegir-portada".*?</details>', '', antes, flags=re.S)
@@ -578,6 +580,17 @@ class TestPresupuestoTextoU21:
         )
         palabras = re.findall(r"\w+", self._texto(antes))
         assert len(palabras) <= 50, (len(palabras), " ".join(palabras))
+
+    def test_navegacion_por_anclas_y_completitud_sin_ambiguedad(self):
+        html = self._render()
+        assert 'class="ficha-nav"' in html
+        for ancla in ("#numeros-serie", "#politica-serie", "#etiquetas-serie",
+                      "#colecciones-serie", "#coleccion-serie", "#datos-serie"):
+            assert f'href="{ancla}"' in html
+        assert 'id="numeros-serie"' in html
+        assert 'id="datos-serie"' in html
+        assert ">Completitud</h2>" in html
+        assert "Estado de la colección</h2>" not in html
 
     def test_presupuesto_de_la_accion_nueva(self):
         html = self._render()
