@@ -22,6 +22,7 @@ from zascarr.models import (
     Issue,
     IssueFormat,
     Series,
+    collection_series,
 )
 from zascarr.services import exportacion_kavita as svc
 
@@ -52,7 +53,8 @@ async def sembrar(db, tmp_path: Path, *, archivos=("Flash 1",)):
                    total_issues=3, wishlist_policy="ninguno")
     db.add_all([coleccion, serie])
     await db.flush()
-    serie.collection_id = coleccion.id
+    await db.execute(collection_series.insert().values(
+        collection_id=coleccion.id, series_id=serie.id))
     lib = tmp_path / "lib"
     lib.mkdir()
     for i, nombre in enumerate(archivos, start=1):

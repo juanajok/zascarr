@@ -124,10 +124,14 @@ class FakeSession:
         self.commit = AsyncMock()
 
     async def execute(self, statement):
-        # C6: la marca del intento es un `UPDATE … SET last_searched_at = now() RETURNING` (hora de la BD): contesta con
-        # una fecha sin consumir la cola de resultados de la prueba.
+        # C6: la marca del intento es un `UPDATE … SET last_searched_at = now()
+        # RETURNING` (hora de la BD): contesta con una fecha sin consumir la cola.
         texto = str(statement)
-        if (texto.startswith("UPDATE wishlist") and "last_searched_at" in texto) or texto.startswith("SELECT now()"):
+        if texto.startswith("SELECT collections.auto_search"):
+            return FakeExecResult([])
+        if ((texto.startswith("UPDATE wishlist")
+             and "last_searched_at" in texto)
+                or texto.startswith("SELECT now()")):
             return FakeMarca()
         return self._queue.pop(0)
 

@@ -71,7 +71,11 @@ class FakeSession:
     def add(self, objeto):
         self.added.append(objeto)
 
-    async def execute(self, _statement):
+    async def execute(self, statement):
+        # Las colecciones de la ficha se cargan en un fragmento aparte; si una
+        # prueba antigua no lo declara, la consulta de pertenencia va vacía.
+        if "collection_series" in str(statement):
+            return FakeExecResult([])
         return self._queue.pop(0)
 
     async def get(self, _model, _id):

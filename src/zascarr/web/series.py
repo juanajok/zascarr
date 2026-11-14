@@ -37,6 +37,7 @@ from zascarr.models import (
     WishlistOrigin,
     WishlistPolicy,
     WishlistStatus,
+    collection_series,
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.calidad import buscar_mejoras
@@ -47,7 +48,7 @@ from zascarr.services.coleccion import (
     estado_de_coleccion,
     version_de_decision,
 )
-from zascarr.services.colecciones import etiqueta_politica
+from zascarr.services.colecciones import colecciones_de_serie, etiqueta_politica
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
 from zascarr.services.conversion import ConversionDeArchivo
@@ -427,15 +428,20 @@ async def _veredicto(db: AsyncSession, series: Series, querer, politica: Wishlis
 
 async def _causa_de_coleccion(db: AsyncSession, series: Series) -> str | None:
     """Texto llano de por qué la política efectiva no es la guardada (o None)."""
-    if series.collection_id is None:
+    colecciones = (await db.execute(
+        select(Collection)
+        .join(collection_series, collection_series.c.collection_id == Collection.id)
+        .where(collection_series.c.series_id == series.id)
+        .order_by(Collection.name)
+    )).scalars().all()
+    if not colecciones:
         return None
-    coleccion = await db.get(Collection, series.collection_id)
-    if coleccion is None:
-        return None
-    if coleccion.auto_search.value == "incluir":
-        return f"La colección «{coleccion.name}» fuerza a buscar los números que faltan."
-    if coleccion.auto_search.value == "excluir":
-        return f"La colección «{coleccion.name}» veta la búsqueda automática."
+    vetos = [c for c in colecciones if c.auto_search.value == "excluir"]
+    if vetos:
+        return f"La colección «{vetos[0].name}» veta la búsqueda automática."
+    impulsos = [c for c in colecciones if c.auto_search.value == "incluir"]
+    if impulsos:
+        return f"La colección «{impulsos[0].name}» fuerza a buscar los números que faltan."
     return None
 
 
@@ -719,6 +725,19 @@ async def panel_etiquetas(series_id: UUID, request: Request,
         {"series": series, "etiquetas": etiquetas, "iniciales": iniciales,
          "mensaje": None, "error": None},
     )
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.get("/{series_id}/colecciones", response_class=HTMLResponse)
+async def panel_colecciones(series_id: UUID, request: Request,
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento de las colecciones de la serie (puede estar en varias)."""
+    series = await _serie_o_404(db, series_id)
+    respuesta = templates.TemplateResponse(
+        request, "_colecciones_serie.html",
+        {"series": series,
+         "colecciones": await colecciones_de_serie(db, series.id)})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 
