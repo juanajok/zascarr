@@ -569,3 +569,27 @@ class TestRecomendacionesDeSeguridad:
         lim.bloquear("comicvine", "https://a.example", 5000,
                      maximo_s=politica_de("comicvine", Ajustes()).bloqueo_max_s)
         assert lim.snapshot(Ajustes())["fuentes"][0]["bloqueada_hasta_s"] == 3600
+
+
+class Test304NoEs4xx:
+    """SCR1 M-5: un 304 es «sin cambios», no un rechazo 4xx en el snapshot."""
+
+    async def test_un_304_se_registra_como_304(self, ajustes_habilitados):
+        peticiones = []
+        cliente, reloj, lim = _mundo(
+            lambda r: peticiones.append(1) or httpx.Response(304))
+        async with cliente:
+            with pytest.raises(RespuestaNoTransitoria) as exc:
+                await _pedir(cliente, reloj, lim)
+        assert exc.value.codigo == 304 and len(peticiones) == 1
+        fuentes = {f["fuente"]: f for f in lim.snapshot(ajustes_habilitados)["fuentes"]}
+        assert fuentes["comicvine"]["ultimos_intentos"][-1]["resultado"] == "304"
+
+    @pytest.mark.parametrize("codigo", [400, 404])
+    async def test_el_resto_de_4xx_sigue_como_4xx(self, ajustes_habilitados, codigo):
+        cliente, reloj, lim = _mundo(lambda r: httpx.Response(codigo))
+        async with cliente:
+            with pytest.raises(RespuestaNoTransitoria):
+                await _pedir(cliente, reloj, lim)
+        fuentes = {f["fuente"]: f for f in lim.snapshot(ajustes_habilitados)["fuentes"]}
+        assert fuentes["comicvine"]["ultimos_intentos"][-1]["resultado"] == "4xx"
