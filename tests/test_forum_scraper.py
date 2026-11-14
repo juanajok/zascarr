@@ -20,6 +20,7 @@ from zascarr.services.forum_scraper import (
     MAX_SALTOS,
     ForumScraper,
     OrigenNoPermitidoError,
+    es_cookie_de_miembro,
     origen_de,
 )
 
@@ -430,3 +431,53 @@ class TestTemaSinSesionEnLaUrl:
         assert await scraper.login("usuario", "clave") is True
         post = next(p for p in peticiones if p.method == "POST")
         assert "s=SESION123" in str(post.url)
+
+
+# ── SCR4: IPB puede prefijar sus cookies (`foro_member_id`) ──────────────────────────────────
+
+@pytest.mark.parametrize("nombre", [
+    "member_id", "pass_hash", "foro_member_id", "foro_pass_hash",
+    "ips4_member_id", "mi_foro_pass_hash",
+])
+def test_una_cookie_de_miembro_se_reconoce_con_y_sin_prefijo(nombre):
+    assert es_cookie_de_miembro(nombre) is True
+
+
+@pytest.mark.parametrize("nombre", [
+    "foro_nuevosession_id", "foro_session_id", "PHPSESSID", "", "member_idx",
+])
+def test_una_cookie_que_no_es_de_miembro_no_se_confunde(nombre):
+    assert es_cookie_de_miembro(nombre) is False
+
+
+async def test_el_login_confirma_con_cookies_prefijadas_del_foro():
+    """La Mansión CRG usa prefijo `foro_`: `foro_member_id` es la sesión real (visto en vivo)."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "act=Login" in str(request.url):
+            return httpx.Response(302, headers={
+                "location": "/index.php",
+                "set-cookie": "foro_member_id=42; Path=/; HttpOnly",
+            })
+        return httpx.Response(200, text="<html>Dentro</html>")
+
+    def cliente() -> httpx.AsyncClient:
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler),
+                                 follow_redirects=False)
+
+    scraper = ForumScraper(BASE, rate_limit=0, crear_cliente=cliente)
+    assert await scraper.login("usuario", "clave") is True
+    assert scraper._cookies.get("foro_member_id") == "42"
+    assert "foro_member_id" in scraper.nombres_de_cookies
+
+
+async def test_el_login_no_se_confunde_con_la_cookie_de_sesion_anonima():
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html><form action='?act=Login'></form></html>",
+                              headers={"set-cookie": "foro_nuevosession_id=abc; Path=/"})
+
+    def cliente() -> httpx.AsyncClient:
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler),
+                                 follow_redirects=False)
+
+    scraper = ForumScraper(BASE, rate_limit=0, crear_cliente=cliente)
+    assert await scraper.login("usuario", "mala") is False
