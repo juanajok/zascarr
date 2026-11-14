@@ -1,6 +1,6 @@
 # Plan de retirada del CSS heredado y cierre de la Épica V (V14, #750)
 
-> **Estado: plan propuesto, sin ejecutar.** No autoriza código, migración ni despliegue.
+> **Estado: ejecutado el 2026-11-14.** No autoriza código, migración ni despliegue.
 > Base medida: `main` `667b508` (2026-11-13), la Pi desplegada con `d2faf13`. Complementa a
 > `docs/design/ui-migracion.md` y al sistema de diseño publicado
 > (`docs/design/sistema-de-diseno-zascarr.md`).
