@@ -968,6 +968,15 @@ migraciones en producción ni despliegue**.
 - **Pruebas.** Test de plantillas: el título de cada ruta coincide con su enlace de menú.
 - **Dependencias.** Ninguna.
 
+**Actualización 2026-11-14 (BL-U7 #793).** La navegación ya tiene **10 entradas en 3 grupos**
+(`menu.py`; el texto «ocho entradas planas» es histórico) y «Mi biblioteca»/«Revisión de mi
+biblioteca» ya no existen: la entrada y la página dicen «Duplicados» y la acción «Revisar mi
+biblioteca». Se corrigió el único título que no coincidía con su entrada («Mejoras de edición» →
+«Mejoras») y el test de títulos cubre ya las 10 entradas. Glosario de producto en `CLAUDE.md` §14 y
+tabla para aplicar en #205 en `docs/design/ui-u7/glosario-u7.md`. La **aplicación** del vocabulario a
+las pantallas y su prueba visible siguen en #205 (AC5); la aprobación del PO de las dudas del glosario
+(sueltos, estado de la serie, Duplicados, contador de tebeos, alcance de Inicio) queda registrada en #793.
+
 **U8 — Revisión de biblioteca con resumen y prioridad (P2, M)**
 
 - **Historia.** Como coleccionista con duplicados, quiero que la revisión de mi biblioteca me dé un resumen y ordene lo que más espacio recupera, para saber por dónde empezar.

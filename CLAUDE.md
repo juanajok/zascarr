@@ -369,6 +369,105 @@ código. Kapowarr y Mylar3 son GPL-3.0; Suwayomi declara MPL-2.0 con componentes
 terceros Apache-2.0. Antes de reutilizar una implementación, revisar el fichero concreto,
 sus avisos y obligaciones — no asumir «todas tienen la misma licencia».
 
+## 14. Glosario de vocabulario de producto
+
+> **Decidido el 2026-11-14 (BL-U7, #793).** Fuente única del vocabulario de superficie. La tabla de
+> cambios que aplica #205 está en [`docs/design/ui-u7/glosario-u7.md`](docs/design/ui-u7/glosario-u7.md).
+> Este glosario **no renombra** entidades, estados, operaciones, URLs ni valores persistidos: fija solo
+> el texto visible. Si una pantalla nueva necesita un término, se añade aquí antes de usarlo.
+
+**Principio.** Un término por concepto. Dos conceptos distintos no se convierten en sinónimos por
+comodidad, y un mismo concepto no cambia de nombre según la pantalla. La UI habla como el coleccionista
+(«tebeo», «número», «carpeta»), no como el esquema (`File`, `Issue`, `StoryArc`,
+`ComicTradition.TEBEO`). Cuando la precisión importa, se usa el término del concepto, no el más corto.
+
+### 14.1 Conceptos
+
+| Concepto | Qué es | Texto en la UI | NO usar | Dónde |
+|---|---|---|---|---|
+| **serie** | Conjunto de números con una identidad editorial (`Series`). No es un número ni un archivo. | «Serie» / «Series»; «Series en la biblioteca», «Buscar una serie», «Nueva serie». | «Título» como sinónimo de serie; «colección»; «cómic» como término de producto (se tolera en nombres de fuentes o descripciones de terceros). | `menu.py`, `biblioteca.html`, `_rejilla_biblioteca.html`, `series_detail.html` |
+| **número** | Unidad bibliográfica dentro de una serie (`Issue`); puede tener varios archivos. | «Número» / «Números»; «#12», «Números que te faltan», «N de M números». | «Tebeo» para contar números; «publicación» fuera de correspondencias; «tomo» salvo que sea el formato. | `_rejilla_biblioteca.html`, `series_detail.html`, `_tarjeta_pendiente.html` |
+| **archivo** | Fichero físico en disco (CBZ/CBR/PDF/EPUB) de una ruta (`File.file_path`). | «Archivo» / «Archivos»; «Archivos no disponibles», «el archivo no se mueve». | «Registro» para el fichero; «pendiente» para el fichero; «tebeo» cuando se habla de la ruta o el formato. | `src/zascarr/models/__init__.py`, `no_disponibles.html`, `_tarjeta_pendiente.html` |
+| **tebeo** | Palabra del coleccionista para un cómic como objeto o ejemplar; puede ser físico o un archivo. No es la unidad bibliográfica. | «Tebeo» / «Tebeos»; «Tebeos registrados», «En tu disco había N tebeos», «El mismo tebeo, dos veces». «Tebeo español» solo como tradición. | «Número» cuando se cuentan números; «registro» cuando se habla de la fila; «pendiente» como sinónimo; «tebeo» a secas como etiqueta de tradición. | `src/zascarr/models/__init__.py`, `library.py`, `dashboard.html`, `_auditoria_informe.html` |
+| **registro** | Fila de la biblioteca: una ruta en `files` con su estado (`File`), exista o no el archivo y esté o no vinculada. | «Registro» / «Registros» solo en la explicación de procedencia («Son registros pendientes de verificar, no archivos confirmados») y en contextos técnicos; el proceso se dice «registrar» o «registro de la biblioteca». | Como sinónimo de archivo, tebeo o pendiente; como unidad de los contadores de la cola. | `carpetas.html`, `src/zascarr/models/__init__.py` |
+| **pendiente** | Estado de un registro que aún no está asignado a un número y espera decisión (`issue_id IS NULL`, no descartado; la cola de «Por revisar» añade `match_status = unsorted`). | «Pendiente» / «Pendientes»; «Por revisar», «Mostrando X–Y de N pendientes», «Nada pendiente», «Pendientes sueltos». | «Archivo» para la cola; «registro»; «tebeo» como sinónimo. | `src/zascarr/services/review.py`, `pendientes.html`, `_pendientes_rango.html` |
+| **suelto** | Pendiente cuya ruta no tiene una carpeta de serie contextual (`dividir_ruta(...).contextual is None`). | «Suelto» / «Sueltos»; «Pendientes sueltos», «N sueltos». | «Archivo suelto» en la superficie principal; «colección» o «carpeta» para un suelto. | `src/zascarr/services/revision_carpetas.py`, `sueltos.html`, `pendientes.html` |
+| **carpeta** | Directorio del disco; en «Pendientes por carpeta», el grupo de pendientes que comparten una carpeta de serie contextual (una pista, no una clasificación). | «Carpeta» / «Carpetas»; «Pendientes por carpeta», «Revisar por carpeta (N carpetas)». | «Colección» para una carpeta; «serie» para la carpeta. | `src/zascarr/services/revision_carpetas.py`, `carpetas.html`, `_pendientes_carpetas_enlace.html` |
+| **colección** | Agrupación manual de series con política de auto-búsqueda (`Collection`, #155). No es el conjunto entero ni una carpeta. | «Colección» / «Colecciones»; «Nueva colección», «Añadir series a esta colección». | Para el conjunto entero («tu colección»); para una carpeta; para el estado de completitud. | `src/zascarr/models/__init__.py`, `colecciones.html`, `menu.py` |
+| **estado de la serie** | Completitud de tu colección para una serie: completa, le faltan números, no se puede calcular o no la vas a completar (`Series.metadata_["coleccion"]`, #340). | «Estado de la serie» (propuesto; hoy «Estado de la colección» en el filtro y la ficha). | «Estado de la colección» (colisiona con la pantalla «Colecciones»); «estado» a secas. | `_selector_coleccion.html`, `series_detail.html`, `src/zascarr/services/coleccion.py` |
+| **tebeoteca** | Conjunto entero de tebeos del coleccionista; el producto es un gestor de tebeoteca. | «Tebeoteca»; «Tu tebeoteca». | «Colección» para el conjunto entero; «biblioteca» cuando se habla del conjunto y no de la pantalla. | `dashboard.html`; §1 de este documento |
+| **biblioteca** | Pantalla `/ui/biblioteca` y catálogo de series; también, en minúscula, el conjunto de archivos en disco que ZascArr gestiona. | «Biblioteca» (pantalla, mayúscula); «tu biblioteca» (conjunto en disco). | «Mi biblioteca» para la revisión; «catálogo» en superficie; «colección» para la pantalla. | `menu.py`, `biblioteca.html`, `carpetas.html` |
+| **Por revisar** | Pantalla `/ui/pendientes` y cola de pendientes que esperan clasificación. | «Por revisar» (menú, título y h1); «Pendientes por carpeta» y «Pendientes sueltos» son vistas de esa cola. | «Pendientes» como nombre de la pantalla; «Revisión» sola; «Revisión de mi biblioteca». | `menu.py`, `pendientes.html`, `carpetas.html`, `sueltos.html` |
+| **revisión de la biblioteca (Duplicados)** | Revisión del disco: duplicados, registro, reescaneo y originales. La pantalla es `/ui/auditoria` y el menú dice «Duplicados»; la acción es «Revisar mi biblioteca». | «Duplicados» (menú, título, h1); «Revisar mi biblioteca» (acción). | «Mi biblioteca» o «Revisión de mi biblioteca» para la pantalla; «Por revisar» para esta revisión. | `menu.py`, `auditoria.html` |
+| **duplicado** | Grupo de archivos con el mismo contenido (mismos bytes). Dos ediciones del mismo número no son un duplicado. | «Duplicado» / «Duplicados»; «copias idénticas», «El mismo tebeo, dos veces». | Para «El mismo número, en dos ediciones»; para un pendiente. | `_duplicados.html`, `_auditoria_informe.html` |
+| **editorial** | Casa editorial de una serie (`Publisher`). El sello (`Imprint`) es otra cosa. | «Editorial» / «Editoriales»; «Todas las editoriales». | «Sello» como sinónimo; «colección». | `src/zascarr/models/__init__.py`, `_filtros_panel_campos.html`, `editar_serie.html` |
+| **tradición** | Tradición editorial de una serie (`ComicTradition`): grapa americana, tebeo español, manga… | «Tradición»; valores «Tebeo español», «Grapa americana», «Franco-belga (BD)», «Manga»… | El valor interno (`tebeo`, `franco_belgian`, `american`); «tebeo» a secas como etiqueta de tradición. | `src/zascarr/models/__init__.py`, `library.py`, `_filtros_panel_campos.html` |
+| **saga / arco** | Arco argumental o lista de lectura que puede cruzar series (`StoryArc`). | «Saga» / «Sagas»; «Sagas en orden», «Nueva saga». | «Arco» en superficie; «colección» para una saga. | `src/zascarr/models/__init__.py`, `arcos.html`, `_filtros_panel_campos.html` |
+| **edición** | Edición concreta de un número: formato, editorial, idioma, calidad (`IssueFormat` y filas de `Issue` distintas). | «Edición» / «Ediciones»; «Mejores ediciones», «Otras ediciones de este número». | «Número» o «publicación» para una edición. | `mejoras.html`, `_auditoria_informe.html`, `issue_detail.html` |
+| **mejora** | Edición mejor que la que ya tienes para un número; la propone ZascArr y el PO decide. | «Mejora» / «Mejoras»; «Mejoras» (pantalla), «Buscar mejoras ahora», «N pendientes» de mejoras. | «Mejoras de edición» como nombre de pantalla; «sugerencia» para la propuesta (la sugerencia es de la cola). | `mejoras.html`, `menu.py`, `web/mejoras.py` |
+| **publicación** | En declaraciones de carpeta y correspondencias, la unidad de destino: un número o un tomo de la biblioteca. En la ficha de número, la fecha de publicación es un dato de la edición. No es sinónimo general de número. | «Publicación» / «Publicaciones» solo en el flujo de correspondencias; «Una publicación es un número o tomo de tu biblioteca»; en la ficha, «Fecha de publicación». | Fuera de esos dos contextos; «Otras publicaciones con este número» cuando se habla de ediciones; «publicación» como sinónimo de número en la cola. | `crear_correspondencia.html`, `contexto_declarado.html`, `issue_detail.html` |
+| **catálogo** | Nombre interno del catálogo de la base de datos. No es un término de superficie. | — (usar «biblioteca»). | «Catálogo» en la superficie; se sustituye por «biblioteca» cuando se toque la pantalla (deuda de V11 en Auditoría). | `auditoria.html`, `_auditoria_registro.html` |
+
+### 14.2 Reglas de contexto
+
+- **Tebeo.** «Tebeo español» es la etiqueta de la tradición (`ComicTradition.TEBEO`), siempre con
+  «español» y en mayúscula cuando encabeza. «Tebeo» a secas es el objeto o ejemplar: «El mismo tebeo,
+  dos veces» (dos archivos idénticos) o «En tu disco había 1.542 tebeos» (ficheros leídos). No es
+  «número» cuando se cuenta la numeración de una serie y no es «registro» cuando se habla de la fila.
+- **Pendiente no es archivo.** Un **pendiente** es un registro en un estado (sin número, sin descartar);
+  el **archivo** es el fichero del disco. «Por revisar» lista pendientes, y algunos pueden apuntar a un
+  archivo que ya no está: por eso el subtítulo no dice «archivos».
+- **Suelto = pendiente sin carpeta.** Un **suelto** es un pendiente cuya ruta no tiene carpeta de serie
+  contextual. No es una categoría distinta de «pendiente»; es un pendiente más.
+- **Registro = fila, no archivo.** El **registro** es la fila de `files`; el **archivo** es el fichero.
+  La frase que lo explica —«Son registros pendientes de verificar, no archivos confirmados»— se conserva
+  en el desplegable de procedencia; fuera de ahí, «registro» no es una unidad de contador.
+- **Biblioteca, tebeoteca, colección y catálogo.** **Biblioteca** es la pantalla `/ui/biblioteca` (y, en
+  minúscula, el conjunto en disco); **tebeoteca** es el conjunto entero del coleccionista; **colección**
+  es un grupo con nombre de series (#155); **catálogo** es el nombre interno de la BD. No se usan como
+  sinónimos: «Tu colección ahora» del Inicio es «Tu tebeoteca ahora»; «meter en el catálogo» es
+  «registrar en la biblioteca».
+- **Revisión (Duplicados) no es «Por revisar».** **Por revisar** es la cola de pendientes
+  (`/ui/pendientes`). **Duplicados** es la revisión del disco (`/ui/auditoria`); su acción es «Revisar
+  mi biblioteca». «Revisión de mi biblioteca» y «Mi biblioteca» no son nombres de pantalla.
+- **Número, tebeo, edición y publicación.** **Número** es la unidad bibliográfica; **tebeo** es el
+  objeto o archivo; **edición** es una versión concreta de ese número; **publicación** es la unidad de
+  destino en una declaración de carpeta (un número o un tomo). No se intercambian al contar.
+- **Saga, arco, editorial y sello.** En superficie, «Saga»; «arco» y `StoryArc` son código. «Editorial»
+  es `Publisher`; «sello» es `Imprint` y solo se usa cuando el dato distingue el sello.
+
+### 14.3 Excepciones y términos técnicos
+
+- **Valores persistidos que no se tocan:** `tebeo` (`ComicTradition.TEBEO` y `ClaseZip.TEBEO`),
+  `futuros` y `todos` (`WishlistPolicy`), `publisher_id`, `vista` (`tarjetas`/`lista`),
+  `leido` (`si`/`leyendo`/`no`), `orden`, `coleccion`, `story_arc_id`, `review_motivo` y `auth_mode`.
+  Pueden aparecer en `value`, en la URL o en la BD; **no** en el texto visible como etiqueta.
+- **Código y diagnóstico:** `File`, `Issue`, `Series`, `StoryArc`, `Collection`, `Publisher`, `Imprint`,
+  `LibraryAdopter`, `ReviewService`, `revision_carpetas`, `catálogo`, `auditoría`, `arco`, `token`,
+  `lote` y `motivo` pueden vivir en código, JSON, pruebas o detalle técnico plegado. En superficie se
+  traducen o se omiten (A2, U20).
+- **«Tebeo» en un `value` o en una URL** (`tradition=tebeo`) es correcto; la etiqueta visible es
+  «Tebeo español». Una prueba que busque «tebeo» en todo el HTML siempre acertará: hay que mirar el
+  texto visible, como hace `tests/test_pendientes.py:212-215`.
+- **`ClaseZip.TEBEO`** (`src/zascarr/models/__init__.py:125`) clasifica el contenido de un ZIP; no es la tradición
+  ni una etiqueta de superficie.
+
+### 14.4 Evidencias
+
+- Definición de la historia y criterios: [`docs/BACKLOG.md`](docs/BACKLOG.md) U7 (`:959-968`) y U18
+  (`:1041`).
+- Inventario y vigencia de #205: [`inventario-textos-y-recorte.md`](docs/design/ui-u18/inventario-textos-y-recorte.md)
+  y [`vigencia-2026-11-14.md`](docs/design/ui-u18/vigencia-2026-11-14.md).
+- Tabla de cambios y navegación: [`docs/design/ui-u7/glosario-u7.md`](docs/design/ui-u7/glosario-u7.md).
+- Menú y grupos: [`src/zascarr/web/menu.py`](src/zascarr/web/menu.py) (`:28-44`) y
+  [`_componentes.html`](src/zascarr/web/templates/_componentes.html) (`:78-101`).
+- Condición de pendiente: [`src/zascarr/services/review.py`](src/zascarr/services/review.py) (`:130-137`);
+  sueltos y carpetas: [`src/zascarr/services/revision_carpetas.py`](src/zascarr/services/revision_carpetas.py)
+  (`:362-363`, `:487-492`).
+- Modelo: [`src/zascarr/models/__init__.py`](src/zascarr/models/__init__.py) (`ComicTradition:36-45`,
+  `ClaseZip:123-129`, `WishlistPolicy:192-200`, `Publisher:371`, `Imprint:391`, `Collection:494`,
+  `Series:516`, `StoryArc:628`, `Issue:646`, `File:780`).
+
 ---
 
 *Documento vivo. Cada decisión nueva que afecte a "cómo trabajamos" se
