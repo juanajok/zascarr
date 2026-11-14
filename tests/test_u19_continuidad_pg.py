@@ -187,6 +187,7 @@ class TestContinuidadDesdeCandidata:
         assert await instantanea(ent.banco) == antes and escrituras(ent.banco, desde) == []
         c = await crear_alta(ent)                                                       # el botón de la vista previa
         assert c.status_code == 200 and "creada" in visible(c.text)
+        assert 'hx-swap-oob="true"' in c.text and "La serie está lista" in c.text
         assert (await numero_de("series", ent.banco)) == 1
         async with ent.banco.fabrica() as s:
             vinculados = (await s.execute(text("SELECT count(*) FROM files WHERE issue_id IS NOT NULL"))).scalar_one()
@@ -259,7 +260,7 @@ class TestProgreso:
             "V": (await get(V, clave=CLAVE, series_id=str(sid))).text,
             "X": r.t,
             "lectura": (await get(f"{V}/resultado", ref=ref_de(r.t))).text,
-        }, {"A": 1, "alta": 1, "alta/resultado": 1, "V": 2, "X": 3, "lectura": 3}
+        }, {"A": 1, "alta": 1, "alta/resultado": 2, "V": 2, "X": 3, "lectura": 3}
 
     async def test_t6_cada_pantalla_marca_su_paso_con_aria_current_step(self, ent):
         pantallas, esperado = await self._pantallas(ent)

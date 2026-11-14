@@ -288,3 +288,11 @@ No se ha probado con navegador real, lector de pantalla ni 5 coleccionistas. Las
 hipótesis de tiempo, abandono y comprensión deben validarse con el kit de
 validación UX. La revisión de código sí confirma los problemas de orden,
 etiquetas, estado de carga y actualización del marco tras crear.
+
+## 9. P0 implementados (2026-11-14)
+
+- Fuentes primero: el formulario de fuentes es la primera acción y `.primary`; la búsqueda local queda en `<details>` y la manual como enlace secundario.
+- Espera visible: `hx-indicator`, `hx-disabled-elt` y texto «Buscando en las fuentes…».
+- Tradición movida al paso de confirmación: la tarjeta solo ofrece «Usar esta serie»; después se elige la tradición con etiqueta visible, pista de fuente/carpeta y sin preselección.
+- Tras crear: cabecera OOB «La serie está lista», paso 2 y «Revisar los archivos» como `.primary`; la página de estado también marca paso 2.
+- «Registros en esta carpeta» pasa a «pendientes».

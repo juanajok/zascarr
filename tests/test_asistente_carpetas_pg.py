@@ -111,12 +111,24 @@ async def estado_de_la_base(banco) -> dict:
 
 class TestCriterio1Apertura:
 
+    async def test_la_busqueda_en_fuentes_es_la_accion_principal_y_avisa_de_la_espera(self, entorno):
+        await sembrar_flash(entorno.banco, 3)
+        t = (await abrir()).text
+        assert t.index('id="asistente-buscar"') < t.index('asistente-local')
+        assert 'hx-indicator="#buscando-fuentes"' in t
+        assert 'hx-disable="find button"' in t
+        assert 'id="buscando-fuentes"' in t and "Buscando en las fuentes…" in t
+        assert 'class="primary">Buscar en las fuentes' in t
+        buscar_local = t.index("Buscar en mi biblioteca")
+        assert buscar_local > t.index('id="asistente-buscar"')   # la búsqueda local queda después
+
+
     async def test_conserva_la_clave_enseña_el_numero_de_archivos_y_propone_una_consulta_editable(self, entorno):
         await sembrar_flash(entorno.banco, 3)
         r = await abrir()
         t = r.text
         assert r.status_code == 200
-        assert CARPETA in visible(t) and re.search(r"Registros en esta carpeta\s*3\b", visible(t))
+        assert CARPETA in visible(t) and re.search(r"3 pendientes en esta carpeta", visible(t))
         assert f'name="clave" value="{CARPETA}"' in t                                   # se conserva la clave
         campo = re.search(r'<input[^>]*name="consulta"[^>]*>', t).group(0)
         assert 'value="Flash"' in campo and "readonly" not in campo and "disabled" not in campo   # propuesta, editable
@@ -222,9 +234,9 @@ class TestCriterio3SinPreseleccion:
         entorno.fuentes.resultados = [res(MetadataSource.COMIC_VINE, "1", "Flash", 1987)]
         t = (await buscar()).text
         assert "Comic Vine" in visible(t) and "Flash (1987)" in visible(t)
-        assert 'selected disabled' in t or 'selected' in t
-        assert len(re.findall(r"<option[^>]*\bselected\b[^>]*>", t)) == 1          # solo el marcador deshabilitado
-        assert re.search(r'<option value="" selected disabled>', t)
+        assert '<select name="tradition"' not in t
+        assert "Usar esta serie" in visible(t)
+        assert not re.findall(r"<option[^>]*\bselected\b[^>]*>", t)
         assert "checked" not in t and not re.search(r"\b(recomendad\w*|mejor|elegid\w*|preseleccionad\w*)\b", visible(t), re.I)
 
     async def test_no_se_inventan_los_campos_que_la_fuente_no_trae(self, entorno):
@@ -261,7 +273,8 @@ class TestCriterio3SinPreseleccion:
         v = visible(t)
         assert "La fuente lo clasifica" not in v and "La fuente no indica tradición" not in v
         assert "La fuente sugiere" not in v and "no de la obra: elige tú" not in v
-        assert 'value="" selected disabled' in t and "required" in re.search(r"<select[^>]*>", t).group(0)
+        assert '<select name="tradition"' not in t
+        assert "Usar esta serie" in visible(t)
         (token,) = tokens_de(t)
         firmada = verificar_token_candidata(token, CARPETA, SECRETO)
         assert firmada is not None and firmada.tradicion is None and firmada.procedencia is None
@@ -274,7 +287,7 @@ class TestCriterio3SinPreseleccion:
         t = (await buscar()).text
         assert "La fuente no indica tradición: se sugiere Grapa americana por defecto." in visible(t)
         assert "no de la obra: elige tú" in visible(t)
-        assert 'value="american" selected' not in t
+        assert "Usar esta serie" in visible(t)
 
     async def test_la_procedencia_desconocida_no_se_presenta_como_explicita(self, entorno):
         await sembrar_flash(entorno.banco)
@@ -318,8 +331,9 @@ class TestCriterio4Eleccion:
         antes = await estado_de_la_base(entorno.banco)
         r = await elegir(candidata=token)
         v = visible(r.text)
-        assert r.status_code == 200 and "Elige la tradición antes de continuar" in v and "Elección anotada" not in v
-        assert f'name="candidata" value="{token}"' in r.text                     # el mismo paso, para reintentar
+        assert r.status_code == 200 and "Todavía no se ha creado ninguna serie" in v and "Elección anotada" not in v
+        assert "Ver la vista previa" in v
+        assert f'name="candidata" value="{token}"' in r.text                     # el mismo token, para elegir tradición
         assert await estado_de_la_base(entorno.banco) == antes
 
     async def test_con_tradicion_la_eleccion_se_anota_conserva_el_grupo_y_no_crea_la_serie(self, entorno):
