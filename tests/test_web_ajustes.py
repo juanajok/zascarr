@@ -580,3 +580,46 @@ class TestPresupuestoDeTextoYAcessibilidad:
         r = TestClient(app).get("/ui/ajustes")
         assert 'id="aviso-fuentes-heredadas"' not in r.text      # sin heredadas, no hay aviso
         # (el caso con heredadas se prueba en test_fuentes_apagadas_por_defecto.py)
+
+
+class TestNombresDeArchivo:
+    def test_la_pagina_muestra_seccion_preset_y_ejemplo(self):
+        r = TestClient(app).get("/ui/ajustes")
+        assert r.status_code == 200
+        assert "Nombres de archivo" in r.text
+        assert 'name="naming_preset"' in r.text
+        assert "archivos que organices a partir de ahora" in r.text
+        for ejemplo in ("La Patrulla #003", "La Patrulla #03", "Akira v01",
+                        "Thorgal T01", "Mortadelo nº 01",
+                        "La Patrulla #003 - Corte de los búhos"):
+            assert ejemplo in r.text
+        assert "no se renombra" in r.text
+
+    def test_guardar_aplica_al_instante_y_no_pisa_padding(self, restaurar_settings):
+        s = get_settings()
+        s.naming_padding = 7
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/nombres", data={
+                "naming_enabled": "true", "naming_preset": "compacto",
+                "naming_padding": "2",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "guardado" in r.text.lower()
+        assert s.naming_enabled is True
+        assert s.naming_preset == "compacto"
+        assert s.naming_padding == 7
+
+    def test_preset_invalido_no_guarda(self, restaurar_settings):
+        s = get_settings()
+        antes = s.naming_preset
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/nombres", data={
+                "naming_enabled": "true", "naming_preset": "inventado",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "no existe" in r.text
+        assert s.naming_preset == antes

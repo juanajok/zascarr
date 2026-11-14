@@ -54,8 +54,12 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
         "transmission_password", "transmission_enabled",
     ),
     "amule": ("amule_url", "amule_password", "amule_enabled"),
+    # SCR4/D-1: tarjeta completa del foro en Ajustes (la contraseña vacía = no cambiar).
+    "foro": ("forum_url", "forum_username", "forum_password", "forum_enabled"),
     # BL-D2/D3: perfil legible y cadencia del escaneo de mejoras.
     "calidad": ("quality_profile", "upgrade_scan_interval_minutes", "upgrade_scan_batch"),
+    # BL-B9 (#158): nombres de archivo de destinos nuevos.
+    "nombres": ("naming_enabled", "naming_preset", "naming_padding"),
     # #488/BL-CNV6: carpetas declaradas compartidas (lista de rutas absolutas del contenedor).
     "compartidos": ("carpetas_compartidas",),
     # A6: auth_password_hash nunca llega aquí en claro — web/ajustes.py lo
@@ -71,7 +75,7 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
 # como "configurado"/"no configurado", nunca con el valor real.
 SECRET_FIELDS = {
     "comicvine_api_key", "metron_token", "prowlarr_api_key", "transmission_password",
-    "amule_password", "auth_password_hash", "webhook_token",
+    "amule_password", "forum_password", "auth_password_hash", "webhook_token",
 }
 # Campos donde un valor vacío guardado en la BD significa "vuelve al valor del
 # `.env`" en vez de "pisa con vacío". `base_url` es el caso que importa — es la
