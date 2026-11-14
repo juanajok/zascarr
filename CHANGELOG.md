@@ -34,6 +34,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **SCR7: GCD, Metron y Open Library rellenan huecos (2026-11-14, #736).** Las series que ya
+  tienen `gcd_id`, `metron_id` u `open_library_id` completan año, fin y sinopsis **solo si el
+  campo está vacío** (nunca pisan título, ids, procedencia, portada, total ni bloqueos) por
+  id exacto y por orden Metron → Open Library → GCD, con tope de 5 peticiones por fuente y
+  ciclo, TTL de 30 días para las negativas y fuentes apagadas por defecto. Ficha con
+  atribución CC BY-SA 4.0 (Metron/GCD) y Open Library; `LEGAL.md` y `/api/health` al día.
 - **BL-E5 (#164): descargar logs recientes desde Inicio (2026-11-14).** El dashboard
   ofrece «Descargar logs» y `/ui/logs` entrega un `.txt` con los últimos eventos de la app.
   El búfer es en memoria (500 eventos / 256 KiB), no lee Docker ni monta rutas del host, y
