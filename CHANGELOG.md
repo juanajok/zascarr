@@ -34,6 +34,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **BL-E5 (#164): descargar logs recientes desde Inicio (2026-11-14).** El dashboard
+  ofrece «Descargar logs» y `/ui/logs` entrega un `.txt` con los últimos eventos de la app.
+  El búfer es en memoria (500 eventos / 256 KiB), no lee Docker ni monta rutas del host, y
+  redacta contraseñas, tokens, cookies y queries sensibles; avisa de que puede contener rutas.
+  Sin migración ni dependencias. Ficha: `docs/design/especificacion-BL-E5-logs.md`.
 - **SCR5: novedades de Comic Book Herald por RSS (2026-11-14).** Fuente opcional (apagada por
   defecto) que lee **solo el feed RSS 2.0 público** del sitio —título, enlace, fecha y
   categorías, nunca el HTML del artículo ni imágenes, sin evadir el WAF— con la caché

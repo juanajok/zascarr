@@ -17,7 +17,11 @@ from zascarr.utils import lector_rar
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
 from zascarr.utils.portada_rar import barrer_temporales
+from zascarr.utils.registro_reciente import instalar_captura
 
+# BL-E5 (#164): búfer acotado para que el dashboard pueda descargar los últimos
+# eventos sin depender de Docker ni de una shell. No cambia el formato de stdout.
+instalar_captura()
 logger = structlog.get_logger()
 
 # `httpx` registra cada petición a nivel INFO con la URL COMPLETA, y en Telegram
