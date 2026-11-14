@@ -8,7 +8,7 @@
 | **Árbol inspeccionado** | `0816bd8e` (`docs/u7-glosario`; incluye #791, el recorte U18b) |
 | **Issues** | #793 (BL-U7, esta historia) · #205 (BL-U18, consumidor) |
 | **Rol** | SPEC/UX |
-| **Alcance** | Glosario, tabla de cambios, navegación y criterios. No implementa #205, no toca código, plantillas, tests ni autenticación. |
+| **Alcance** | Glosario, tabla de cambios, navegación y criterios. El **PR de #793** incluye además el arreglo de navegación (Mejoras, `PAGINAS`, prefijos de `entrada_activa`); no aplica los textos de #205 ni toca autenticación, datos o URLs. |
 | **Fuera de alcance** | Aplicar textos, renombrar entidades o valores persistidos, migraciones, despliegue, validación en navegador o en la Pi. |
 
 > **Fuente normativa:** `CLAUDE.md` §14. Este documento no duplica el glosario completo: lo
@@ -250,35 +250,37 @@ visibles. El AC3 de U7 quedó cubierto al corregir Mejoras y ampliar `PAGINAS` e
 
 ## 7. Dudas para el PO
 
-1. **Mejoras.** ¿Se deja «Mejoras» como nombre de pantalla (menú y `h1`) con el subtítulo «Mejores
-   ediciones…», o se prefiere «Mejoras de edición» también en el menú? La primera opción es la más
-   corta y cumple el criterio 3; la segunda es más explícita pero alarga la entrada.
-2. **Pendientes sueltos.** ¿Se adopta «Pendientes sueltos» en lugar de «Archivos sueltos»? Es coherente
+**Resuelta por el PR de #793:** «Mejoras» es el nombre de pantalla (menú, `<title>` y `h1`) y el
+subtítulo conserva «Mejores ediciones…». No se alarga la entrada del menú.
+
+1. **Pendientes sueltos.** ¿Se adopta «Pendientes sueltos» en lugar de «Archivos sueltos»? Es coherente
    con «suelto = pendiente sin carpeta», pero cambia una etiqueta que ya existe y un enlace de la
    pantalla de Por revisar.
-3. **Estado de la serie.** ¿Se cambia «Estado de la colección» por «Estado de la serie» en el filtro de
+2. **Estado de la serie.** ¿Se cambia «Estado de la colección» por «Estado de la serie» en el filtro de
    Biblioteca y en la ficha? Evita la colisión con «Colecciones», pero puede confundirse con el estado
    de publicación de la serie. Alternativa: «Completitud».
-4. **Alcance de #205.** El issue nombra acceso, Biblioteca, Por revisar y Estado. ¿Se incluyen en #205
+3. **Alcance de #205.** El issue nombra acceso, Biblioteca, Por revisar y Estado. ¿Se incluyen en #205
    los cambios de Inicio («Tu tebeoteca ahora», «pendientes sin clasificar») o se dejan para una
    historia de Inicio? Sin esa decisión, §3.2 queda registrado pero no aplicado.
-6. **Contador «Tebeos registrados».** ¿La unidad son archivos (`File`), ejemplares o números? Hoy cuenta filas; el glosario define «tebeo» como ejemplar y «número» como unidad bibliográfica.
-5. **Duplicados.** ¿Se mantiene «Duplicados» como nombre de menú y pantalla (URL `/ui/auditoria`
+4. **Duplicados.** ¿Se mantiene «Duplicados» como nombre de menú y pantalla (URL `/ui/auditoria`
    intacta) y «Revisar mi biblioteca» como acción? Es lo que hay hoy; renombrar la pantalla a
    «Revisión» obligaría a tocar menú y pruebas, y no es necesario para el glosario.
+5. **Contador «Tebeos registrados».** ¿La unidad son archivos (`File`), ejemplares o números? Hoy cuenta
+   filas; el glosario define «tebeo» como ejemplar y «número» como unidad bibliográfica.
 
 ---
 
 ## 8. Límites de la evidencia
 
-- Análisis **estático** del árbol `0816bd8e`; el inventario de #205 es de `c90b8ed0`. No se ha
-  ejecutado la suite, no se ha abierto navegador y no se ha tocado la Pi.
+- El **glosario y la tabla** son análisis documental del árbol `0816bd8e`; el inventario de #205 es de
+  `c90b8ed0`. El **PR de #793** añade además el arreglo de navegación (`mejoras.html`, `menu.py`,
+  `test_web_navegacion.py`): ahí sí se ejecutó la suite completa (**6936 passed, 2282 skipped**), ruff
+  y revisión de QA con mutación de la prueba de cobertura.
 - Las líneas citadas son las del árbol indicado; si #205 se implementa sobre otro SHA, hay que
   revisarlas antes de aplicar.
-- No se ha modificado código, plantillas, pruebas ni configuración. Solo se han escrito `CLAUDE.md`
-  §14 y este documento.
-- **NOT RUN:** navegador real, lector de pantalla, Pi, medición de textos renderizados. Las pruebas de
-  §3 son propuestas, no resultados.
+- **NOT RUN:** navegador real, lector de pantalla y Pi. Las pruebas de §3 son propuestas de prueba, no
+  resultados de sesiones.
+- Los cambios de texto de #205 **no** están aplicados: este PR no toca sus plantillas.
 
 ---
 
