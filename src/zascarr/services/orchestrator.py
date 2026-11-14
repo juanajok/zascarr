@@ -35,6 +35,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import structlog
@@ -119,6 +120,8 @@ MOTIVO_FUENTE_INACCESIBLE = (
     "La fuente de búsqueda no respondió a tiempo — se reintentará automáticamente"
 )
 MOTIVO_SIN_RESULTADOS = "No se encontró nada en las fuentes activas"
+#: SCR4: el foro pidió esperar (Search Flood Control) — no es «sin resultados».
+MOTIVO_FORO_ESPERA = "El foro pidió esperar unos segundos; se reintentará"
 MOTIVO_CANDIDATO_RECHAZADO = (
     "Se encontró algo, pero ningún cliente de descarga está activo — revisa Ajustes"
 )
@@ -257,6 +260,24 @@ class Orchestrator:
         item.status = WishlistStatus.SEARCHING
         await self.db.flush()
 
+    async def _restaurar_marca(self, item: Wishlist,
+                               marca_previa: datetime | None) -> None:
+        """Deshace la marca de intento de `_marcar_busqueda` (usada si el foro pide esperar).
+
+        La marca de política se confirma con commit ANTES de la petición (FR-22), así que no basta
+        con tocar el atributo: se restaura con un UPDATE y, en política, se confirma igual que se
+        confirmó la marca. El ítem vuelve a ser elegible al pasar la espera y no cuenta en el techo
+        por hora (`_queda_cupo_de_politica`).
+        """
+        await self.db.execute(
+            update(Wishlist).where(Wishlist.id == item.id)
+            .values(last_searched_at=marca_previa)
+        )
+        item.last_searched_at = marca_previa
+        if getattr(item, "origen", None) == WishlistOrigin.POLICY:
+            await self.db.commit()
+        await self.db.flush()
+
     async def _process_item(self, item: Wishlist) -> bool:
         candidates = await self._search_and_rank(item)
         if not candidates:
@@ -304,6 +325,7 @@ class Orchestrator:
         # foro en cada ciclo con un item condenado. C6: va ANTES de comprobar si hay alguna fuente
         # activa (decisión del PO): un ítem sin fuentes gasta el cooldown de 6 h y no vuelve a
         # ocupar huecos del lote en cada ciclo.
+        marca_previa = getattr(item, "last_searched_at", None)
         await self._marcar_busqueda(item)
 
         settings = get_settings()
@@ -339,7 +361,23 @@ class Orchestrator:
         candidates = self._ranked_candidates(results, query) if results else []
 
         if not candidates:
-            forum_result = await self._forum_fallback(query)
+            # SCR4: una espera del foro por saturación (HTTP 200) no es «sin resultados»:
+            # se deja el ítem WANTED con su aviso propio y no se escribe MOTIVO_SIN_RESULTADOS.
+            from zascarr.services.forum_scraper import ForumFloodControl
+
+            try:
+                forum_result = await self._forum_fallback(query)
+            except ForumFloodControl:
+                # C-1 (SecOps): un flood es una espera, no un intento fallido. Se deshace la
+                # marca para que el ítem se reintente al pasar la espera y no consuma cupo de
+                # política (la marca de política se había confirmado antes de la petición).
+                # El estado vuelve a WANTED ANTES de restaurar: en política, la restauración
+                # confirma, y no debe persistir el SEARCHING transitorio de _marcar_busqueda.
+                item.status = WishlistStatus.WANTED
+                item.last_error = MOTIVO_FORO_ESPERA
+                await self._restaurar_marca(item, marca_previa)
+                await self.db.flush()
+                return None
             if forum_result:
                 candidates = [forum_result]
 
@@ -609,10 +647,13 @@ class Orchestrator:
         if not s.forum_enabled or not s.forum_username or not s.forum_url:
             return None
         try:
-            from zascarr.services.forum_scraper import ForumScraper
+            from zascarr.services.forum_scraper import ForumFloodControl, ForumScraper
             from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
             scraper = ForumScraper(base_url=s.forum_url, rate_limit=s.forum_rate_limit)
-            await scraper.login(s.forum_username, s.forum_password)
+            if not await scraper.login(s.forum_username, s.forum_password):
+                logger.info("orchestrator.forum_login_fallido",
+                            host=self._host_para_log_foro(s.forum_url))
+                return None
             for fr in await scraper.use_ipb_search(query):
                 if fr.ed2k_links:
                     return SearchResult(
@@ -622,13 +663,25 @@ class Orchestrator:
                     return SearchResult(
                         fr.topic_title, "forum:crg", fr.magnet_links[0], 0, 1, "comics"
                     )
+        except ForumFloodControl:
+            # El ítem ya está marcado; _search_and_rank deja MOTIVO_FORO_ESPERA.
+            raise
         except (CortesiaEnEspera, FuenteApagada) as exc:
             # AC-16: sin turno no es un fallo; se omite el ciclo sin registrar excepción.
             logger.info("orchestrator.forum_sin_turno",
                         motivo=getattr(exc, "motivo", "apagada"))
-        except Exception:
-            logger.exception("orchestrator.forum_fallback_error")
+        except Exception as exc:
+            # m-3 (SecOps): solo el tipo, sin traza ni URL (la del foro puede llevar `s=`).
+            logger.warning("orchestrator.forum_fallback_error", error=type(exc).__name__)
         return None
+
+    @staticmethod
+    def _host_para_log_foro(url: str) -> str:
+        """Host del foro para el log, sin la URL ni una posible `s=<sesión>`."""
+        try:
+            return (urlsplit(url).hostname or "?")[:100]
+        except ValueError:
+            return "?"
 
     @staticmethod
     def _candidato_es_del_numero(candidate: SearchResult, numero: int,
