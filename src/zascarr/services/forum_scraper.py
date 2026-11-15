@@ -325,7 +325,8 @@ class ForumScraper:
                  politica: PoliticaFuente | None = None,
                  politica_busqueda: PoliticaFuente | None = None,
                  cortesia: CortesiaProceso | None = None,
-                 reloj=time.monotonic, dormir=asyncio.sleep, espera_max_s: float = 30.0):
+                 reloj=time.monotonic, dormir=asyncio.sleep, espera_max_s: float = 30.0,
+                 permitir_apagada: bool = False):
         visible = url_de_foro_visible(base_url)
         self._base = (visible or base_url).rstrip("/")
         self._origen = origen_de(self._base)
@@ -347,6 +348,8 @@ class ForumScraper:
         self._reloj = reloj
         self._dormir = dormir
         self._espera_max_s = espera_max_s
+        #: La prueba manual de Ajustes es la excepción explícita a «fuente apagada».
+        self._permitir_apagada = bool(permitir_apagada)
         self._cookies: dict = {}
         self._charset: str | None = None
         #: `(cabecera, meta, usado)` del último GET de entrada; lo usa el script de diagnóstico.
@@ -379,6 +382,7 @@ class ForumScraper:
                 espera_max_s=self._espera_max_s if espera_max_s is None else espera_max_s,
                 datos=datos, form=form, form_charset=form_charset,
                 cabeceras=self._cabeceras(url),
+                permitir_apagada=self._permitir_apagada,
                 cortesia=self._cortesia_actual(),
                 reloj=self._reloj, dormir=self._dormir,
             )
