@@ -284,10 +284,10 @@ async def test_m3_search_failed_no_registra_la_url_ni_la_excepcion(monkeypatch):
     scraper = ForumScraper(BASE, rate_limit=0, crear_cliente=lambda: httpx.AsyncClient(
         transport=httpx.MockTransport(lambda _r: httpx.Response(200)), follow_redirects=False))
 
-    async def _get_que_falla(_url, **_kw):
+    async def _buscar_que_falla(_query):
         raise RuntimeError("https://foro.example/index.php?showtopic=1&s=SESION_SECRETA")
 
-    monkeypatch.setattr(scraper, "_get", _get_que_falla)
+    monkeypatch.setattr(scraper, "_buscar_ipb", _buscar_que_falla)
     with structlog.testing.capture_logs() as registros:
         assert await scraper.use_ipb_search("tebeo") == []
     fallos = [r for r in registros if r["event"] == "forum.search_failed"]
