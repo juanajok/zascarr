@@ -686,3 +686,18 @@ class TestBlogRss:
             app.dependency_overrides.pop(get_db, None)
         assert r.status_code == 200 and "dirección" in r.text.lower()
         assert s.blog_feed_enabled is False
+
+
+    def test_url_privada_o_puerto_no_estandar_no_guarda(self, restaurar_settings):
+        s = get_settings()
+        antes = s.blog_feed_url
+        for mala in ("http://127.0.0.1/feed.xml", "https://blog.example:8080/feed.xml",
+                     "http://localhost/feed.xml"):
+            app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+            try:
+                r = TestClient(app).post("/ui/ajustes/guardar/blog", data={
+                    "blog_feed_enabled": "true", "blog_feed_url": mala})
+            finally:
+                app.dependency_overrides.pop(get_db, None)
+            assert r.status_code == 200 and "no es válida" in r.text
+            assert s.blog_feed_url == antes

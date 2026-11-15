@@ -148,14 +148,14 @@ def parsear_feed(xml_texto: str | bytes) -> list[EntradaFeed]:
 
 def _relevante(titulo: str, consulta: str, alias: set[str] | None = None) -> bool:
     from zascarr.core.matcher import normalize_title
-    from zascarr.utils.naming import normalize_series_name
+    from zascarr.utils.naming import normalize_series_name, parse_comic_filename
 
     terminos = [t for t in normalize_series_name(consulta).split() if len(t) > 1]
     if not terminos:
         return True
-    normalizado = normalize_series_name(titulo)
-    if alias and normalize_title(titulo) in alias:
+    if alias and normalize_title(parse_comic_filename(titulo).series or "") in alias:
         return True
+    normalizado = normalize_series_name(titulo)
     return all(t in normalizado for t in terminos)
 
 
@@ -190,10 +190,13 @@ def estado_feed(url: str) -> bool:
     if not url:
         return False
     try:
-        analizar_url(url, exigir_lista=False)
+        esquema, host, _puerto, _ruta = analizar_url(url, exigir_lista=False)
     except ValueError:
         return False
-    return True
+    if not esquema or not host:
+        return False
+    nombre = host.lower().rstrip(".")
+    return not (nombre == "localhost" or nombre.endswith(".local"))
 
 
 def resultados_de_busqueda(entradas: list[EntradaFeed], url: str) -> list[SearchResult]:

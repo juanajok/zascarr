@@ -145,3 +145,8 @@ async def test_descargar_publico_rechaza_dns_privado():
 
     with pytest.raises(UrlNoPermitidaError):
         await descargar_publico("https://blog.example/feed.xml", resolutor=resolver)
+
+
+def test_relevante_acepta_alias_local_con_numero():
+    from zascarr.services.blog_feed import _relevante
+    assert _relevante("La Patrulla-X 012 (1985).cbz", "X-Men 12", {"patrulla x"})
