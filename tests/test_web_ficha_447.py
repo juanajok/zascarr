@@ -144,7 +144,7 @@ def test_series_fuentes_sigue_dentro_de_la_cabecera_y_chip_con_sr():
                                       + [FakeExecResult([])] * 12)) as client:
         r = client.get(f"/ui/series/{serie.id}")
     html = r.text
-    assert html.index("Fuentes y atribución") < html.index("Sobre esta serie")
+    assert html.index("Aviso legal") < html.index("Sobre esta serie")
     assert 'class="caption">Los que más números firman' in html
     # La altura de 40 px se comprueba por selector en test_web_css_contraste.
 

@@ -81,7 +81,7 @@ def test_ac_tls_2_la_contrasena_configurada_no_llega_a_la_plantilla(monkeypatch)
     assert r.status_code == 200
     assert "CLAVE_CANARIA" not in r.text
     assert "member_id=" not in r.text and "pass_hash=" not in r.text
-    assert "ya configurada — deja en blanco para no cambiarla" in r.text
+    assert "ya configurada (vacío = no cambiar)" in r.text
 
 
 def test_guardar_foro_con_contrasena_en_blanco_no_la_pisa(monkeypatch):

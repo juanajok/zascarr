@@ -14,6 +14,8 @@
       <legend>Fuentes de metadatos</legend>
       <p class="ajustes-desc">Webs de las que saca portadas, números y datos de tus series. Si enciendes una, se le envían tus títulos.</p>
       <form hx-post="/ui/ajustes/guardar/fuentes" hx-target="#resultado-fuentes" hx-swap="innerHTML">
+        <div role="group" aria-labelledby="fuentes-metadatos">
+        <h3 id="fuentes-metadatos" class="ajustes-subgrupo">Metadatos</h3>
         <label class="legal-checkbox">
           <input type="checkbox" name="comicvine_enabled" value="true" {% if comicvine_enabled %}checked{% endif %}>
           Comic Vine (grapa americana y británica)
@@ -46,6 +48,9 @@
           <input type="checkbox" name="fandom_marvel_enabled" value="true" {% if fandom_marvel_enabled %}checked{% endif %}>
           Marvel Database (wikis de Fandom; serie y número; texto CC-BY-SA)
         </label>
+        </div>
+        <div role="group" aria-labelledby="fuentes-guias">
+        <h3 id="fuentes-guias" class="ajustes-subgrupo">Guías y novedades</h3>
         <label class="legal-checkbox">
           <input type="checkbox" name="reading_orders_enabled" value="true" {% if reading_orders_enabled %}checked{% endif %}>
           Comic Book Reading Orders (guías de lectura; solo referencias, sin prosa)
@@ -58,6 +63,7 @@
           <input type="checkbox" name="comic_book_herald_enabled" value="true" {% if comic_book_herald_enabled %}checked{% endif %}>
           Comic Book Herald (novedades de guías por RSS; solo títulos, fechas y enlaces del feed público)
         </label>
+        </div>
         {% if fuentes_heredadas %}
         <div id="aviso-fuentes-heredadas">
           {% call ui.aviso("amber") %}<strong>Encendidas por compatibilidad con tu instalación anterior.</strong>
@@ -73,7 +79,7 @@
 
       <details class="ajustes-mas">
         <summary>Qué pasa al apagar una fuente</summary>
-        <p class="ajustes-hint">Apagar una fuente no borra lo que ya trajo: solo deja de preguntarle, también en Descubrir. Si la vuelves a encender, las series que se le consultaron hace poco esperan 30 días antes de preguntarle otra vez. GCD, por ahora, solo sirve para buscar series en Descubrir; no completa las que ya tienes.</p>
+        <p class="ajustes-hint">Apagar una fuente no borra lo que ya trajo: solo deja de preguntarle, también en Descubrir. Si la vuelves a encender, las series que se le consultaron hace poco esperan 30 días antes de preguntarle otra vez. GCD, Metron y Open Library también rellenan huecos vacíos de series ya catalogadas; apagarlos deja de consultarlos.</p>
       </details>
       <details class="ajustes-mas">
         <summary>Cortesía y esperas</summary>
@@ -118,7 +124,7 @@
           <input type="password" name="metron_token" autocomplete="off"
                  placeholder="{{ 'ya configurado — deja en blanco para no cambiarlo' if metron_token_configurado else 'sin configurar' }}">
         </label>
-        <p class="ajustes-hint">Créalo en tu cuenta de Metron, en «Tokens». Metron y Open Library también rellenan huecos vacíos (año, fin, sinopsis) de series ya catalogadas. Los datos de Metron se muestran con atribución CC BY-SA 4.0; sus portadas no se usan.</p>
+        <p class="ajustes-hint">Créalo en tu cuenta de Metron, en «Tokens». Rellenan huecos vacíos de series ya catalogadas: Metron, año, fin y sinopsis; Open Library, sinopsis y año de obra/tomo. Los datos de Metron se muestran con atribución CC BY-SA 4.0; sus portadas no se usan.</p>
         <div class="ajustes-actions">
           <button type="submit">Guardar</button>
           <button type="button" hx-post="/ui/ajustes/probar/metron" hx-include="closest form"
@@ -266,6 +272,7 @@
         <label>Dirección del foro
           <input type="text" name="forum_url" value="{{ forum_url }}" placeholder="http://tu-foro.example/forum" autocomplete="off">
         </label>
+        <p class="ajustes-hint">Si empieza por <code>http://</code>, el usuario y la contraseña viajan sin cifrar: el foro no ofrece HTTPS y ZascArr te avisa, pero no lo evita. No reutilices una contraseña que uses en otro sitio.</p>
         {% if forum_http_sin_tls %}
         {{ ui.aviso("amber", "El foro usa HTTP sin cifrar: tu usuario y contraseña viajan sin protección. No reutilices una contraseña que uses en otro sitio; si puedes, usa un foro con HTTPS.") }}
         {% endif %}
@@ -274,7 +281,7 @@
         </label>
         <label>Contraseña
           <input type="password" name="forum_password" autocomplete="off"
-                 placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if forum_password_configurada else 'sin configurar' }}">
+                 placeholder="{{ 'ya configurada (vacío = no cambiar)' if forum_password_configurada else 'sin configurar' }}">
         </label>
         <label class="legal-checkbox">
           <input type="checkbox" name="forum_enabled" value="true" {% if forum_enabled %}checked{% endif %}>
