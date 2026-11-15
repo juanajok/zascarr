@@ -481,3 +481,24 @@ async def test_el_login_no_se_confunde_con_la_cookie_de_sesion_anonima():
 
     scraper = ForumScraper(BASE, rate_limit=0, crear_cliente=cliente)
     assert await scraper.login("usuario", "mala") is False
+
+
+async def test_la_busqueda_pide_todos_los_foros_y_lee_solo_las_filas_de_resultados():
+    """IPB exige `forums[]`; sin él devuelve «No has elegido ningún foro».
+
+    La página mezcla enlaces de navegación (`showtopic`) con la tabla real: solo
+    se abren los de `<!-- Begin Topic Entry -->`, no «aquí explicado/expuestos».
+    """
+    busqueda = (
+        '<html><a href="index.php?showtopic=110414">aquí explicado</a>'
+        '<table><tr><!-- Begin Topic Entry 1 -->'
+        '<a href="index.php?showtopic=999">DC K.O. #1</a>'
+        '<!-- End Topic Entry --></tr></table></html>'
+    )
+    foro = Foro(busqueda)
+
+    resultados = await foro.scraper().use_ipb_search("DC K.O.", abrir_temas=False)
+
+    assert [r.topic_title for r in resultados] == ["DC K.O. #1"]
+    peticiones = [str(p.url) for p in foro.peticiones if "act=Search" in str(p.url)]
+    assert peticiones and "forums" in peticiones[0] and "all" in peticiones[0]
