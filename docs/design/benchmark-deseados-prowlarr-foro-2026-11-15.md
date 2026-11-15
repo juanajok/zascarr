@@ -147,22 +147,30 @@ por el usuario, con aviso legal. Integrar/recomendar un foro concreto sigue desc
 
 ## 6. Medición en la Pi (2026-11-15)
 
-Medición puntual, no estadística. Se usó la configuración real de la instalación y una
-política de cortesía a 0 para medir red+parseo del foro (la app real añade la espera de
-25 s de `forum_search_rate_limit` entre búsquedas).
+Se usó la configuración real de la instalación y una política de cortesía a 0 para medir
+red+parseo del foro (la aplicación real añade `forum_search_rate_limit` de 25 s entre
+búsquedas). Las cifras del foro son 5 ejecuciones para «Batman»; las de «DC K.O.» son la
+muestra del caso real.
 
 | Operación | Resultado | Tiempo observado |
-|---|---|---|
+|---|---|---:|
 | Prowlarr `/api/v1/search` «DC K.O.» (categorías 7030/7020) | **0 resultados** | 0,30–0,57 s |
+| Prowlarr «Batman» (5 ejecuciones) | **127 resultados** | media 2,62 s |
 | Foro: login + POST búsqueda «DC K.O.» | **10 temas** | 3,75–5,18 s |
-| Foro: primer tema | **27 enlaces eD2K** | — |
-| Cascada Prowlarr→foro (misma muestra) | 0 + 10 | 5,75 s |
-| Paralelo | 0 + 10 | 1,71 s (una muestra) |
+| Foro: login + POST «Batman» (5 ejecuciones) | **10 temas** | media 4,97 s |
+| Foro: primer tema de «DC K.O.» | **27 enlaces eD2K** | — |
+| Solapamiento exacto de títulos Prowlarr/foro («Batman») | **0** | — |
+| Suma secuencial Prowlarr + foro («Batman») | 127 + 10 candidatos | ~7,6 s |
+| Paralelo (estimación con las medias) | 127 + 10 candidatos | ~5 s |
 
-La muestra paralela no es concluyente: el foro puede reutilizar sesión/caché y el tiempo
-varía. Lo que sí confirma es que **Prowlarr no encuentra «DC K.O.»** y que el foro sí
-devuelve temas reales; el valor del paralelo es no bloquear uno por el otro, no una
-promesa de latencia.
+**Lectura:** Prowlarr y el foro cubren cosas distintas. «DC K.O.» no aparece en Prowlarr
+con esas categorías, pero sí en el foro; «Batman» devuelve 127 resultados de indexers y 10
+temas del foro. El solapamiento de **títulos exactos** es 0, pero no se puede concluir que
+no haya duplicados de release: los nombres de un topic y de un release no son comparables
+sin normalizar más. La deduplicación actual (URL+título) no cubre ese caso.
+
+**Coste de UI:** 127 + 10 candidatos es una lista grande; la ficha no mide renderizado ni
+decide un límite. Es una deuda para una historia aparte.
 
 ## 7. Casos de prueba que deben quedar cubiertos
 
@@ -191,17 +199,61 @@ Pruebas existentes: `tests/test_orchestrator.py`, `tests/test_forum_scraper.py`,
    repetir este benchmark con datos.
 5. **Mantener el foro como opcional**: URL/credenciales del usuario, sin foro recomendado.
 
-## 9. NOT RUN / lagunas
+## 9. Ejecutado, FAIL y NOT RUN
 
-- No se ejecutaron Sonarr, Radarr, Mylar3, Kapowarr, Komga ni Kavita; solo documentación y
-  fichas previas. **No se infiere** que su comportamiento sea idéntico a la documentación.
-- No se probaron otros foros IPB ni varios foros a la vez.
-- No se midieron latencias repetidas, tasa de duplicados real entre Prowlarr y foro, ni
-  ranking con datos.
-- No se revisaron términos/robots de La Mansión para una integración recomendada.
-- No hay prueba con 5 coleccionistas ni lector de pantalla.
-- No se probaron títulos con tildes, acrónimos y ediciones españolas de forma sistemática.
-- **Caducidad:** revisar en ~60 días o antes si cambia Prowlarr, el foro o la historia.
+### Ejecutado
+
+- **Prowlarr real**: 5 ejecuciones de «Batman» (127 resultados, media 2,62 s) y «DC K.O.»
+  (0 resultados, < 1 s).
+- **Foro real**: login + POST, 5 ejecuciones de «Batman» (10 temas, media 4,97 s) y
+  «DC K.O.» (10 temas; primer tema con 27 enlaces eD2K).
+- **Solapamiento exacto de títulos** Prowlarr/foro («Batman»): 0.
+- **Robots de La Mansión**: `http://lamansion-crg.net/robots.txt` responde
+  `User-agent: * / Disallow: / / Noindex: /`.
+- **Página de términos/registro**: responde 200; no se aceptó ni se interpretó el contrato.
+- **Smoke de apps de referencia**: ver §9.1.
+
+### FAIL
+
+- **Robots del foro:** prohíbe a todos los robots acceder a todo el contenido. El plugin es
+  opt-in y de URL aportada por el usuario, pero una integración recomendada o por defecto no
+  es aceptable con esta política. Debe ser una decisión explícita del operador, con aviso.
+- **Duplicados:** 0 coincidencias de título exacto no equivale a 0 duplicados de release.
+  No hay medición release-a-release; la deduplicación URL+título no los detecta si cambian
+  el nombre.
+- **UI con 127 candidatos:** no se midió renderizado; el listado no tiene un límite visible.
+
+### NOT RUN / bloqueado
+
+- **Flujos completos de Sonarr, Radarr, Mylar3, Kapowarr, Komga y Kavita**: no se
+  ejecutaron búsqueda, importación ni matching. El smoke de arranque no los demuestra.
+- **Otros foros IPB**: no se probaron; faltan credenciales y permiso.
+- **5 coleccionistas / lector de pantalla**: no se puede ejecutar desde este entorno.
+- **Términos completos del foro**: solo se comprobó robots y que la página responde.
+- **Ranking con datos**: no se midió qué fuente produce mejores descargas.
+- **Títulos con tildes/acrónimos/ediciones españolas**: no hay matriz sistemática.
+
+### 9.1 Smoke de aplicaciones de referencia
+
+Imágenes oficiales levantadas en Docker el 2026-11-15. **PASS de smoke** = contenedor
+arriba y UI/API responde. **No es PASS de benchmark**: no se configuraron indexers, no se
+añadieron series ni se ejecutaron búsquedas/importaciones.
+
+| Aplicación | Imagen | Evidencia | Resultado |
+|---|---|---|---|
+| Sonarr | `linuxserver/sonarr:latest` | `/ping` → 200 `{"status":"OK"}` | **PASS smoke** |
+| Radarr | `linuxserver/radarr:latest` | `/ping` → 200 `{"status":"OK"}` | **PASS smoke** |
+| Mylar3 | `linuxserver/mylar3:latest` | UI redirige a login (303), app viva | **PASS smoke** |
+| Komga | `gotson/komga:latest` | UI 200, Lucene/index inicializado | **PASS smoke** |
+| Kavita | `linuxserver/kavita:latest` | UI 200, `Kavita - v0.9.1.4` | **PASS smoke** |
+| Kapowarr | `mrcas/kapowarr:latest` | UI 200, API key generada al arrancar | **PASS smoke** |
+
+No se creó una biblioteca en Komga/Kavita, no se añadió un indexer a Sonarr/Radarr, no se
+configuró Prowlarr en ellos y no se ejecutó una búsqueda en Mylar3/Kapowarr. Por tanto **no
+se comparó su flujo completo**; solo se acreditó que las versiones arrancan en este entorno.
+
+**Caducidad:** revisar en ~60 días (2027-01-14) o antes si cambia Prowlarr, el foro o la
+historia.
 
 ## 10. Decisión propuesta
 
@@ -209,6 +261,12 @@ Pruebas existentes: `tests/test_orchestrator.py`, `tests/test_forum_scraper.py`,
 fuente opcional IPB configurada por el usuario, y aplicar las mejoras de transparencia de
 §8 en una historia aparte. No se introduce modelo de datos nuevo ni se recomienda un foro
 concreto.
+
+**Condición legal:** el `robots.txt` del foro prohíbe a todos los robots. La integración
+debe seguir siendo opt-in, con URL y credenciales del operador, y no puede presentarse como
+«foro recomendado» ni activarse por defecto. Antes de convertirla en función de producto
+estable, el PO y legal deben decidir si se mantiene el scraping de un sitio con
+`Disallow: /`; esta ficha no lo autoriza.
 
 IGUALAR: agregación de Prowlarr, resultado normalizado, rate limit, confirmación humana.
 MEJORAR: paralelismo real, búsqueda POST del foro, filtro por palabras completas,
