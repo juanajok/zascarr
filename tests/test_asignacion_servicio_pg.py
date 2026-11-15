@@ -194,6 +194,50 @@ class TestSinRaiz:
 
 
     @pytest.mark.asyncio
+    async def test_raiz_deshabilitada_entre_la_foto_y_la_escritura(self, mundo):
+        async def gancho(punto):
+            if punto == "tras_preparar":
+                async with mundo.fabrica() as s:
+                    await s.execute(text(
+                        "UPDATE library_roots SET is_default = false, enabled = false"))
+                    await s.commit()
+        svc = AsignacionService(mundo.fabrica, mundo.lib, gancho=gancho)
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        r = await svc._ejecutar(op)
+        assert r.estado == "error" and "deshabilitada" in r.motivo
+        assert mundo.origen.exists()
+
+    @pytest.mark.asyncio
+    async def test_recuperacion_usa_la_raiz_persistida_tras_cambiar_el_mapeo(
+            self, mundo, tmp_path, monkeypatch):
+        from zascarr.config import get_settings
+        from zascarr.models import LibraryRoot, LibraryRootTradition
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        nueva = tmp_path / "nueva"
+        nueva.mkdir()
+        rid = uuid4()
+        async with mundo.fabrica() as s:
+            s.add(LibraryRoot(id=rid, name="Nueva", path=str(nueva), enabled=True,
+                              is_default=False))
+            await s.flush()
+            await s.execute(text(
+                "DELETE FROM library_root_traditions WHERE tradition = 'american'"))
+            s.add(LibraryRootTradition(root_id=rid, tradition=ComicTradition.AMERICAN))
+            await s.commit()
+        monkeypatch.setenv("LIBRARY_ROOTS", f"{mundo.lib},{nueva}")
+        get_settings.cache_clear()
+        r = await svc._ejecutar(op)
+        assert r.estado == "asignado"
+        assert Path(r.destino or "").is_relative_to(mundo.lib)
+        async with mundo.fabrica() as s:
+            f = await s.get(File, mundo.file_id)
+            root = (await s.execute(text(
+                "SELECT root_id FROM asignacion_operaciones WHERE id = :i"), {"i": op})).scalar()
+        assert root is not None and f.root_id == root
+        assert not Path(r.destino).is_relative_to(nueva)
+
+    @pytest.mark.asyncio
     async def test_operacion_legacy_con_raiz_deshabilitada_no_mueve(self, mundo):
         svc = mundo.servicio()
         op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")

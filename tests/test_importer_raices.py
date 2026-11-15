@@ -203,3 +203,20 @@ async def test_error_no_filtra_la_ruta_absoluta_en_el_informe(tmp_path, monkeypa
     await imp._import_file(src, report)
     assert str(src) not in " ".join(report.errors)
     assert str(tmp_path) not in " ".join(report.errors)
+
+
+@pytest.mark.asyncio
+async def test_causa_de_raiz_no_filtra_la_ruta_absoluta(tmp_path, monkeypatch):
+    from zascarr.services.raices import RaizNoDisponibleError
+    r = raiz(tmp_path, [ComicTradition.AMERICAN], name="Biblioteca")
+    imp, db, src = preparar(tmp_path, monkeypatch, raices=[r], serie_obj=serie())
+
+    async def falla(*_a, **_kw):
+        raise RaizNoDisponibleError(f"sin permiso en {r.path}")
+
+    monkeypatch.setattr(imp, "_raiz", falla)
+    report = ImportReport(started_at=datetime.now(UTC))
+    await imp._import_file(src, report)
+    texto = " ".join(report.errors)
+    assert str(r.path) not in texto and str(tmp_path) not in texto
+    assert "sin permiso" in texto
