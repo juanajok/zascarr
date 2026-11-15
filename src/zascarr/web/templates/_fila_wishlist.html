@@ -18,7 +18,7 @@
           hx-indicator="#buscando-{{ row.item.id }}">
     Buscar ahora
   </button>
-  <span class="htmx-indicator" id="buscando-{{ row.item.id }}">Buscando…</span>
+  <span class="htmx-indicator" id="buscando-{{ row.item.id }}">Buscando en las fuentes…</span>
   {% endif %}
   <button type="button" class="btn-ignorar"
           hx-post="/ui/wishlist/{{ row.item.id }}/quitar"

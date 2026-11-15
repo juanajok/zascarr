@@ -29,6 +29,7 @@ item pedía — el import loop periódico ya existente es quien de verdad
 clasifica el archivo, este método solo refleja ese hecho en el estado de
 la wishlist.
 """
+import asyncio
 import base64
 import json
 import time
@@ -359,23 +360,38 @@ class Orchestrator:
                 select(LocalAlias.pattern_norm)
                 .where(LocalAlias.series_id == item.series_id,
                        LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
+
+        # Prowlarr y foro se consultan SIEMPRE juntos (no en cascada): el
+        # coleccionista ve en una sola lista lo que hay en cada fuente. En
+        # paralelo para que el foro no espere a que Prowlarr agote su timeout.
+        # Un flood del foro no invalida los resultados de Prowlarr; si no hay
+        # ninguno, se conserva el comportamiento de espera de SCR4.
+        from zascarr.services.forum_scraper import ForumFloodControl
+
+        resultado_prowlarr, resultado_foro = await asyncio.gather(
+            self._prowlarr_candidates(query, settings),
+            self._forum_candidates(query),
+            return_exceptions=True,
+        )
+        for resultado in (resultado_prowlarr, resultado_foro):
+            if isinstance(resultado, asyncio.CancelledError):
+                raise resultado
+
         motivo_prowlarr: str | None = None
-        if settings.prowlarr_enabled:
-            if not prowlarr_configurado(settings):
-                # D9 (2026-11-11): fuente encendida pero incompleta NO es «sin resultados».
-                motivo_prowlarr = MOTIVO_PROWlARR_CONFIGURACION
-            else:
-                try:
-                    seleccionados = prowlarr_indexers_seleccionados(settings)
-                    if seleccionados:
-                        results = await self._prowlarr.search(
-                            query, categories=COMIC_CATEGORIES, indexer_ids=seleccionados)
-                    else:
-                        results = await self._prowlarr.search(
-                            query, categories=COMIC_CATEGORIES)
-                except Exception:
-                    logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
-                    motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
+        if isinstance(resultado_prowlarr, BaseException):
+            logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
+            motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
+        elif resultado_prowlarr is not None:
+            results, motivo_prowlarr = resultado_prowlarr
+
+        forum_flood = isinstance(resultado_foro, ForumFloodControl)
+        if forum_flood:
+            logger.info("orchestrator.forum_flood_sin_bloquear_prowlarr", id=str(item.id))
+        elif isinstance(resultado_foro, BaseException):
+            logger.warning("orchestrator.forum_search_failed", id=str(item.id),
+                           error=type(resultado_foro).__name__)
+        else:
+            results.extend(resultado_foro or [])
 
         motivo_blog: str | None = None
         if getattr(settings, "blog_feed_enabled", False):
@@ -392,28 +408,30 @@ class Orchestrator:
                     logger.exception("orchestrator.blog_search_failed")
                     motivo_blog = MOTIVO_FUENTE_INACCESIBLE
 
-        candidates = self._ranked_candidates(results, query) if results else []
+        # Deduplica por URL: la misma release puede aparecer en Prowlarr y en
+        # el foro, y no queremos dos botones para exactamente lo mismo.
+        vistos: set[tuple[str, str]] = set()
+        unicos: list[SearchResult] = []
+        for resultado in results:
+            clave = (resultado.download_url, resultado.title)
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            unicos.append(resultado)
 
-        if not candidates:
-            # SCR4: una espera del foro por saturación (HTTP 200) no es «sin resultados»:
-            # se deja el ítem WANTED con su aviso propio y no se escribe MOTIVO_SIN_RESULTADOS.
-            from zascarr.services.forum_scraper import ForumFloodControl
+        candidates = self._ranked_candidates(unicos, query) if unicos else []
 
-            try:
-                forum_result = await self._forum_fallback(query)
-            except ForumFloodControl:
-                # C-1 (SecOps): un flood es una espera, no un intento fallido. Se deshace la
-                # marca para que el ítem se reintente al pasar la espera y no consuma cupo de
-                # política (la marca de política se había confirmado antes de la petición).
-                # El estado vuelve a WANTED ANTES de restaurar: en política, la restauración
-                # confirma, y no debe persistir el SEARCHING transitorio de _marcar_busqueda.
-                item.status = WishlistStatus.WANTED
-                item.last_error = MOTIVO_FORO_ESPERA
-                await self._restaurar_marca(item, marca_previa)
-                await self.db.flush()
-                return None
-            if forum_result:
-                candidates = [forum_result]
+        if not candidates and forum_flood:
+            # C-1 (SecOps): un flood es una espera, no un intento fallido. Se deshace la
+            # marca para que el ítem se reintente al pasar la espera y no consuma cupo de
+            # política (la marca de política se había confirmado antes de la petición).
+            # El estado vuelve a WANTED ANTES de restaurar: en política, la restauración
+            # confirma, y no debe persistir el SEARCHING transitorio de _marcar_busqueda.
+            item.status = WishlistStatus.WANTED
+            item.last_error = MOTIVO_FORO_ESPERA
+            await self._restaurar_marca(item, marca_previa)
+            await self.db.flush()
+            return None
 
         # La relevancia se resuelve con el título local (sin el número) y los alias;
         # titulo_serie/alias_serie se cargaron antes de consultar las fuentes.
@@ -659,13 +677,44 @@ class Orchestrator:
                     backend=backend.value)
         return True, "Descarga enviada. Cuando llegue, el importador la añadirá al número."
 
-    async def _forum_fallback(self, query: str) -> SearchResult | None:
+    async def _prowlarr_candidates(
+            self, query: str, settings) -> tuple[list[SearchResult], str | None]:
+        """Resultados de Prowlarr y, si falla, el motivo D9 que se mostrará si no hay nada más."""
+        if not settings.prowlarr_enabled:
+            return [], None
+        if not prowlarr_configurado(settings):
+            # D9 (2026-11-11): fuente encendida pero incompleta NO es «sin resultados».
+            return [], MOTIVO_PROWlARR_CONFIGURACION
+        try:
+            seleccionados = prowlarr_indexers_seleccionados(settings)
+            if seleccionados:
+                return await self._prowlarr.search(
+                    query, categories=COMIC_CATEGORIES, indexer_ids=seleccionados), None
+            return await self._prowlarr.search(query, categories=COMIC_CATEGORIES), None
+        except Exception:
+            logger.exception("orchestrator.prowlarr_search_failed")
+            return [], MOTIVO_FUENTE_INACCESIBLE
+
+    async def _forum_candidates(self, query: str) -> list[SearchResult]:
+        """Candidatos del foro configurado; admite dobles antiguos que devolvían uno solo.
+
+        El scraper recorre TODOS los temas y enlaces de la búsqueda, no solo el
+        primero: el foro suele tener varias ediciones/releases en la misma página.
+        """
+        resultado = await self._forum_fallback(query)
+        if resultado is None:
+            return []
+        if isinstance(resultado, SearchResult):
+            return [resultado]
+        return list(resultado)
+
+    async def _forum_fallback(self, query: str) -> list[SearchResult]:
         s = get_settings()
         # forum_url vacío por defecto a propósito (blindaje legal): es un
         # plugin IPB genérico, la URL la aporta el usuario, el proyecto no
         # incluye ni recomienda ningún foro concreto.
         if not s.forum_enabled or not s.forum_username or not s.forum_url:
-            return None
+            return []
         try:
             from zascarr.services.forum_scraper import ForumFloodControl, ForumScraper
             from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
@@ -673,16 +722,19 @@ class Orchestrator:
             if not await scraper.login(s.forum_username, s.forum_password):
                 logger.info("orchestrator.forum_login_fallido",
                             host=self._host_para_log_foro(s.forum_url))
-                return None
+                return []
+            encontrados: list[SearchResult] = []
+            vistos: set[str] = set()
             for fr in await scraper.use_ipb_search(query):
-                if fr.ed2k_links:
-                    return SearchResult(
-                        fr.topic_title, "forum:crg", fr.ed2k_links[0], 0, 0, "comics"
-                    )
-                if fr.magnet_links:
-                    return SearchResult(
-                        fr.topic_title, "forum:crg", fr.magnet_links[0], 0, 1, "comics"
-                    )
+                for enlace in (*fr.ed2k_links, *fr.magnet_links):
+                    if enlace in vistos:
+                        continue
+                    vistos.add(enlace)
+                    encontrados.append(SearchResult(
+                        fr.topic_title, "forum:crg", enlace, 0,
+                        1 if enlace.lower().startswith("magnet:?") else 0, "comics"
+                    ))
+            return encontrados
         except ForumFloodControl:
             # El ítem ya está marcado; _search_and_rank deja MOTIVO_FORO_ESPERA.
             raise
@@ -693,7 +745,7 @@ class Orchestrator:
         except Exception as exc:
             # m-3 (SecOps): solo el tipo, sin traza ni URL (la del foro puede llevar `s=`).
             logger.warning("orchestrator.forum_fallback_error", error=type(exc).__name__)
-        return None
+        return []
 
     @staticmethod
     def _host_para_log_foro(url: str) -> str:

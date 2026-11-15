@@ -262,6 +262,62 @@ class TestProcessItemRetryPool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2a. Búsqueda conjunta: Prowlarr y foro, no una cascada
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestBusquedaConjunta:
+
+    @pytest.mark.asyncio
+    async def test_prowlarr_y_foro_se_consultan_siempre_y_se_mezclan(self, monkeypatch):
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave", "transmission_enabled": True, "amule_enabled": True,
+            "forum_enabled": True, "forum_url": "http://foro.example/forum",
+            "forum_username": "lector",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        torrent = make_result(title="Batman #1.cbz", seeders=20,
+                              url="magnet:?xt=urn:btih:torrent")
+        ed2k = SearchResult(title="Batman #1.cbr", indexer="forum:crg",
+                            download_url="ed2k://|file|Batman_01.cbr|1|ABC|/",
+                            size_bytes=0, seeders=0, category="comics")
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [torrent]
+        orch._forum_fallback = AsyncMock(return_value=[ed2k])
+
+        candidatos = await orch._search_and_rank(item)
+
+        assert {c.indexer for c in candidatos} == {"test", "forum:crg"}
+        assert candidatos[0] == torrent                    # torrents antes que eD2K
+        assert orch._prowlarr.search.await_count == 1
+        assert orch._forum_fallback.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_un_flood_del_foro_no_oculta_los_resultados_de_prowlarr(self, monkeypatch):
+        from zascarr.services.forum_scraper import ForumFloodControl
+
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave", "transmission_enabled": True, "amule_enabled": True,
+            "forum_enabled": True, "forum_url": "http://foro.example/forum",
+            "forum_username": "lector",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=10)]
+        orch._forum_fallback = AsyncMock(side_effect=ForumFloodControl("foro.example:80", 30.0))
+
+        candidatos = await orch._search_and_rank(item)
+
+        assert candidatos and item.status is WishlistStatus.SEARCHING
+        assert item.last_error is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 2b. last_error — D9: por qué esta fila no avanza, con causa distinguible
 # ═══════════════════════════════════════════════════════════════════════════
 
