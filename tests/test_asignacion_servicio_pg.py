@@ -194,6 +194,20 @@ class TestSinRaiz:
 
 
     @pytest.mark.asyncio
+    async def test_operacion_legacy_con_raiz_deshabilitada_no_mueve(self, mundo):
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        async with mundo.fabrica() as s:
+            await s.execute(text(
+                "UPDATE asignacion_operaciones SET root_id = NULL WHERE id = :i"), {"i": op})
+            await s.execute(text(
+                "UPDATE library_roots SET is_default = false, enabled = false"))
+            await s.commit()
+        r = await svc._ejecutar(op)
+        assert r.estado == "error" and "deshabilitada" in r.motivo
+        assert mundo.origen.exists()
+
+    @pytest.mark.asyncio
     async def test_raiz_retirada_tras_preparar_no_mueve(self, mundo):
         svc = mundo.servicio()
         op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
@@ -204,6 +218,21 @@ class TestSinRaiz:
         assert r.estado == "error" and "deshabilitada" in r.motivo
         assert mundo.origen.exists()
         assert not (mundo.lib / "Comics" / "Saga del Faro (2010)" / "Saga del Faro #012.cbz").exists()
+
+
+class TestSimlinkEnRaiz:
+
+    @pytest.mark.asyncio
+    async def test_un_symlink_intermedio_no_desvia_la_asignacion(self, mundo, tmp_path):
+        fuera = tmp_path / "fuera"
+        fuera.mkdir()
+        (mundo.lib / "Comics").symlink_to(fuera, target_is_directory=True)
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        r = await svc._ejecutar(op)
+        assert r.estado == "error"
+        assert mundo.origen.exists()
+        assert not list(fuera.rglob("*.cbz"))
 
 
 class TestMuerteDelProceso:

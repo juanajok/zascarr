@@ -383,13 +383,13 @@ class FotoDeRaices:
         return cls(raices, por_tradicion=por_tradicion)
 
     @classmethod
-    def compatibilidad(cls) -> FotoDeRaices:
+    def compatibilidad(cls, path: Path | None = None) -> FotoDeRaices:
         """Solo para dobles de prueba sin tabla de raíces: reproduce una instalación de una raíz."""
         s = get_settings()
         raiz = type("_RaizCompat", (), {})()
         raiz.id = None
         raiz.name = "Biblioteca"
-        raiz.path = str(s.library_path)
+        raiz.path = str(path or s.library_path)
         raiz.host_path = s.host_library_dir or None
         raiz.enabled = True
         raiz.is_default = True
@@ -441,6 +441,21 @@ class FotoDeRaices:
             raise RaizNoDisponibleError(
                 "No hay raíz por defecto; el archivo se queda en la cola.")
         return self._resolver_raiz(self._defecto)
+
+    def raiz_para_escritura(self, root_id: UUID | None) -> RaizResuelta:
+        """Revalida estado/allowlist/existencia/escritura antes de cada movimiento.
+
+        La foto conserva el mapeo, pero no la disponibilidad: un disco que se
+        desmonta o una raíz que se deshabilita entre archivos debe bloquear el
+        siguiente (H3).
+        """
+        if root_id is None:
+            raise RaizNoDisponibleError("La operación no tiene raíz persistida.")
+        for raiz in self._raices:
+            if str(raiz.id) == str(root_id):
+                self._resueltas.pop(str(raiz.id), None)
+                return self._resolver_raiz(raiz)
+        raise RaizNoDisponibleError("La raíz de la operación ya no existe.")
 
     def para_id(self, root_id: str | None) -> RaizResuelta:
         if root_id is None:

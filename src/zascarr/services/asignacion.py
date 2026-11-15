@@ -69,6 +69,7 @@ from zascarr.services.raices import (
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
+from zascarr.utils.fs import DestinoFueraDeRaizError, _validar_destino_en_raiz
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -488,9 +489,7 @@ class AsignacionService:
         if raiz is None:
             raise RaizNoDisponibleError(
                 "La operación antigua no cae bajo ninguna raíz; no se mueve.")
-        return RaizResuelta(
-            id=raiz.id if raiz.id is not None else None,
-            name=raiz.name, path=Path(raiz.path), host_path=raiz.host_path)
+        return foto.raiz_para_escritura(raiz.id)
 
     async def _continuar(self, op_id: UUID, prop: _Propiedad) -> Resultado:
         op = await self._op(op_id)
@@ -505,8 +504,11 @@ class AsignacionService:
             if not destino.is_relative_to(raiz.path):
                 raise RaizNoDisponibleError(
                     "El destino de la operación ya no está bajo su raíz.", raiz=raiz.name)
-        except RaizNoDisponibleError as exc:
-            return Resultado(EstadoResultado.ERROR, exc.causa, op["destino"])
+            _validar_destino_en_raiz(raiz.path, destino)
+            _validar_destino_en_raiz(raiz.path, Path(op["temporal"]))
+        except (RaizNoDisponibleError, DestinoFueraDeRaizError) as exc:
+            causa = getattr(exc, "causa", None) or str(exc)
+            return Resultado(EstadoResultado.ERROR, causa, op["destino"])
         base_temporal = Path(op["temporal"])
         mi_temporal = base_temporal.with_name(f"{base_temporal.name}.{prop.epoca}")
         perdida = Resultado("propiedad_perdida", "Otra ejecución tomó la operación; esta se detiene sin tocar nada",
@@ -535,6 +537,12 @@ class AsignacionService:
                 except OSError as exc:
                     return Resultado("error", f"La copia no se pudo verificar: {exc}")
                 await self._gancho("tras_copiar")
+                try:
+                    _validar_destino_en_raiz(raiz.path, destino)
+                    _validar_destino_en_raiz(raiz.path, mi_temporal)
+                except DestinoFueraDeRaizError as exc:
+                    mi_temporal.unlink(missing_ok=True)
+                    return Resultado(EstadoResultado.ERROR, str(exc), op["destino"])
                 if not await prop.vigente():
                     mi_temporal.unlink(missing_ok=True)
                     return perdida

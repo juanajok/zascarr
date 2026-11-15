@@ -101,6 +101,14 @@ def test_build_library_path_respeta_enabled_y_legacy():
     assert pack.name == "Batman #001-002 (Pack).cbz"
 
 
+def test_importer_build_dest_exige_base():
+    imp = object.__new__(Importer)
+    tr = SimpleNamespace(comic_info=SimpleNamespace(number="12"))
+    import pytest
+    with pytest.raises(TypeError):
+        imp._build_dest(_serie(), tr, Path("x.cbz"))
+
+
 def test_importer_build_dest_deriva_formato_especial():
     serie = _serie()
     imp = object.__new__(Importer)
@@ -108,5 +116,5 @@ def test_importer_build_dest_deriva_formato_especial():
     tr = SimpleNamespace(comic_info=SimpleNamespace(number="12"))
     with patch("zascarr.services.importer.get_settings",
                return_value=_settings(naming_enabled=True, naming_preset="clasico")):
-        dest = imp._build_dest(serie, tr, Path("Batman omnibus 12.cbz"))
+        dest = imp._build_dest(serie, tr, Path("Batman omnibus 12.cbz"), base=Path("/lib"))
     assert dest.name == "Batman #012 (Ómnibus).cbz"

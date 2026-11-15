@@ -62,7 +62,7 @@ from zascarr.services.raices import (
 )
 from zascarr.services.upgrades import reconciliar_mejora_importada
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
-from zascarr.utils.fs import listar_comics, safe_move_async, sanitize_segment
+from zascarr.utils.fs import listar_comics, safe_move_en_raiz_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.utils.nombres_biblioteca import construir_nombre, es_pack
 
@@ -101,6 +101,19 @@ TRADITION_MAP = {
 # EACCES como «ausente»
 # (el proyecto admite >=3.11, así que no se deja a la versión del intérprete).
 _ERRNOS_DE_AUSENCIA = frozenset({errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP})
+
+
+def _mensaje_sin_rutas(exc: BaseException, path: Path) -> str:
+    """Mensaje para el informe sin la ruta absoluta del archivo/carpeta."""
+    texto = str(exc)
+    reemplazos = {
+        str(path): path.name, str(path.resolve()): path.name,
+        str(path.parent): "<carpeta>", str(path.parent.resolve()): "<carpeta>",
+    }
+    for absoluta, visible in reemplazos.items():
+        if absoluta:
+            texto = texto.replace(absoluta, visible)
+    return texto
 
 
 def _existe(ruta: str) -> bool:
@@ -536,8 +549,8 @@ class Importer:
                 report.errors.append("El ciclo se detuvo antes de mirar el resto de las descargas")
                 break
             except Exception as exc:
-                logger.exception("importer.file_failed", path=str(path))
-                report.errors.append(f"{path.name}: {exc}")
+                logger.exception("importer.file_failed", file=path.name)
+                report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
 
         # B7: revisión de la biblioteca YA importada, no de lo nuevo que
         # acaba de llegar — un paso independiente del bucle de arriba.
@@ -740,6 +753,9 @@ class Importer:
     ) -> tuple[FotoDeRaices, RaizResuelta]:
         foto = await self._foto()
         raiz = foto.por_defecto() if por_defecto else foto.por_tradicion(tradicion)
+        # H3: la foto conserva el mapeo, pero se revalida la raíz en cada movimiento.
+        if raiz.id is not None:
+            raiz = foto.raiz_para_escritura(raiz.id)
         return foto, raiz
 
     async def _import_file(
@@ -793,16 +809,18 @@ class Importer:
             await asyncio.to_thread(
                 comprobar_espacio, raiz.path, path.stat().st_size, "importar a la biblioteca")
         except EspacioInsuficienteError as exc:
-            report.errors.append(f"{path.name}: {exc}")
+            report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
             logger.warning("importer.raiz_sin_espacio", archivo=path.name, raiz=raiz.name)
             return
         except OSError as exc:
-            report.errors.append(f"{path.name}: no se pudo comprobar el espacio de la raíz: {exc}")
+            report.errors.append(
+                f"{path.name}: no se pudo comprobar el espacio de la raíz: "
+                f"{_mensaje_sin_rutas(exc, path)}")
             return
 
         # A3: mover a destino verificado — nunca sobreescribe y no borra el
         # original hasta que la copia está completa (ver utils/fs.safe_move).
-        final_dest = await safe_move_async(path, dest)
+        final_dest = await safe_move_en_raiz_async(path, dest, raiz.path)
         dest_stat = final_dest.stat()
 
         metadata: dict = {
@@ -860,8 +878,8 @@ class Importer:
             sufijo = f" (ComicInfo: {'; '.join(avisos)})" if avisos else ""
             report.imported.append(
                 f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)}{sufijo}")
-        logger.info("importer.imported", dest=str(final_dest), root=raiz.name,
-                    status=result.status)
+        logger.info("importer.imported", file=path.name, root=raiz.name,
+                    relative=str(final_dest.relative_to(raiz.path)), status=result.status)
 
     async def _aplicar_comicinfo(
             self, result: MatchResult, tr: TriageResult, ruta: Path) -> list[str]:
@@ -933,11 +951,12 @@ class Importer:
             await asyncio.to_thread(
                 comprobar_espacio, raiz.path, path.stat().st_size, "recuperar en la biblioteca")
         except (EspacioInsuficienteError, OSError) as exc:
-            report.errors.append(f"{path.name}: no se pudo comprobar el espacio: {exc}")
+            report.errors.append(
+                f"{path.name}: no se pudo comprobar el espacio: {_mensaje_sin_rutas(exc, path)}")
             return
 
         # A3: mismo mover verificado que una importación normal.
-        final_dest = await safe_move_async(path, dest)
+        final_dest = await safe_move_en_raiz_async(path, dest, raiz.path)
 
         await _reenlazar_fila(fila, tr, final_dest, root_id=raiz.id)
         await self._db.flush()
@@ -945,7 +964,8 @@ class Importer:
         prefijo_raiz = "" if len(foto.raices) <= 1 else f"{raiz.name}: "
         report.imported.append(
             f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)} (recuperado)")
-        logger.info("importer.recuperado", dest=str(final_dest), root=raiz.name)
+        logger.info("importer.recuperado", file=path.name, root=raiz.name,
+                    relative=str(final_dest.relative_to(raiz.path)))
 
     async def _persist_run(self, report: ImportReport) -> None:
         run = ImportRun(
@@ -973,14 +993,13 @@ class Importer:
         await self._db.flush()
         report.run_id = run.id
 
-    def _build_dest(self, series, tr: TriageResult, orig: Path, *,
-                    base: Path | None = None) -> Path:
+    def _build_dest(self, series, tr: TriageResult, orig: Path, *, base: Path) -> Path:
         if not series:
-            return (base or self._library) / "_Unsorted" / orig.name
+            return base / "_Unsorted" / orig.name
         number = tr.comic_info.number if tr.comic_info else None
         edition_kind = parse_comic_filename(orig.name).edition_kind
         return build_library_path(
-            base or self._library, series, number, orig.suffix, fallback_name=orig.name,
+            base, series, number, orig.suffix, fallback_name=orig.name,
             issue_title=getattr(tr.comic_info, "title", None) if tr.comic_info else None,
             issue_format=EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE),
         )

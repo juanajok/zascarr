@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from tests._raices_pg import sembrar_raiz
+from tests._raices_pg import allowlist, sembrar_raiz
 from tests.test_revision_carpetas_pg import Banco
 from tests.test_vinculacion_previa_pg import url_bd  # noqa: F401  (fixture compartida)
 from zascarr.models import ComicTradition, File, FileFormat, Issue, IssueFormat, Series
@@ -26,6 +26,7 @@ async def banco(url_bd, monkeypatch, tmp_path):  # noqa: F811
     await b.limpiar()
     lib = tmp_path / "biblioteca"
     (lib / "Comics" / "Flash").mkdir(parents=True)
+    allowlist(monkeypatch, lib)
     root_id = await sembrar_raiz(b.fabrica, lib)
     sid = uuid4()
     async with b.fabrica() as s:
@@ -98,3 +99,20 @@ async def test_vincular_en_sitio_rechaza_unsorted_y_numero_inexistente(banco):
         assert no_existe.estado == "issue_no_existe"
         assert "Organizar" in no_existe.texto
         assert (await s.get(File, fid2)).issue_id is None
+
+
+async def test_archivo_fuera_de_toda_raiz_queda_null_y_se_vincula(banco, tmp_path):
+    ruta = tmp_path / "fuera" / "Flash 03.cbz"
+    ruta.parent.mkdir()
+    ruta.write_bytes(b"fuera")
+    fid = uuid4()
+    async with banco.banco.fabrica() as s:
+        s.add(File(id=fid, file_path=str(ruta), file_name=ruta.name,
+                   file_format=FileFormat.CBZ, metadata_={"match_status": "direct"}))
+        await s.commit()
+    async with banco.banco.fabrica() as s:
+        r = await vincular_en_sitio(s, fid, banco.sid, "1")
+        await s.commit()
+        f = await s.get(File, fid)
+    assert r.estado == "vinculado" and f.issue_id is not None and f.root_id is None
+    assert ruta.exists() and ruta.read_bytes() == b"fuera"
