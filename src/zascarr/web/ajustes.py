@@ -29,7 +29,12 @@ from zascarr.services.auth import (
 )
 from zascarr.services.blog_feed import estado_feed
 from zascarr.services.cortesia_estado import texto_politica_ajustes
-from zascarr.services.forum_scraper import url_de_foro_visible
+from zascarr.services.forum_scraper import (
+    ForumFloodControl,
+    ForumScraper,
+    OrigenNoPermitidoError,
+    url_de_foro_visible,
+)
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.prowlarr import ProwlarrClient
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
@@ -51,7 +56,7 @@ from zascarr.utils.peticiones import (
     RespuestaNoTransitoria,
     pedir_con_cortesia,
 )
-from zascarr.utils.robots import FUENTES_CON_ROBOTS
+from zascarr.utils.robots import FUENTES_CON_ROBOTS, AccesoProhibidoPorRobots
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -694,6 +699,66 @@ def _secreto_o_guardado(valor_form: str, campo: str) -> str:
     if campo not in SECRET_FIELDS:
         return valor_form
     return getattr(get_settings(), campo, "") or ""
+
+
+async def _test_foro(url: str, usuario: str, password: str) -> tuple[bool, str]:
+    """Prueba manual del foro: SOLO inicia sesión (sin búsqueda) y no persiste nada.
+
+    Es la excepción explícita a «fuente apagada»: el operador acaba de pulsar el botón, igual
+    que en Comic Vine/Metron. No genera tráfico de búsqueda ni gasta el intervalo de búsqueda.
+    """
+    direccion = (url or "").strip().rstrip("/")
+    if not _direccion_de_foro_valida(direccion):
+        return False, ("La dirección del foro no es válida: debe ser http(s), sin usuario, "
+                       "contraseña ni parámetros.")
+    usuario = (usuario or "").strip()
+    if not usuario or not password:
+        return False, "Falta el usuario o la contraseña."
+    try:
+        scraper = ForumScraper(direccion, permitir_apagada=True)
+        confirmado = await scraper.login(usuario, password)
+        if confirmado:
+            return True, "Conexión correcta: el foro aceptó el usuario."
+        return False, ("No se pudo iniciar sesión: revisa usuario y contraseña y que la "
+                       "cuenta pueda entrar en el foro.")
+    except ForumFloodControl as exc:
+        segundos = max(1, round(exc.segundos))
+        return False, ("No se ha probado: el foro pidió esperar ~"
+                       f"{segundos} s. Inténtalo de nuevo después.")
+    except CortesiaEnEspera as exc:
+        segundos = max(1, round(exc.espera_estimada_s))
+        return False, ("No se ha probado: hay que esperar ~"
+                       f"{segundos} s por cortesía. Inténtalo de nuevo en un momento.")
+    except AccesoProhibidoPorRobots:
+        return False, "El robots.txt del foro no permite comprobar la sesión."
+    except OrigenNoPermitidoError:
+        return False, ("La dirección del foro no es válida: debe ser http(s), sin usuario, "
+                       "contraseña ni parámetros.")
+    except (ErrorDePeticion, OSError, httpx.HTTPError) as exc:
+        logger.warning("ajustes.test_failed", integracion="foro",
+                       error=type(exc).__name__)
+        return False, ("No se pudo conectar con el foro: revisa la dirección y que la Pi "
+                       "llegue a él.")
+    except Exception as exc:
+        logger.warning("ajustes.test_failed", integracion="foro",
+                       error=type(exc).__name__)
+        return False, "No se pudo comprobar la conexión con el foro. Inténtalo de nuevo."
+
+
+@router.post("/probar/foro", response_class=HTMLResponse)
+async def probar_foro(
+    request: Request,
+    forum_url: str = Form(default=""),
+    forum_username: str = Form(default=""),
+    forum_password: str = Form(default=""),
+) -> HTMLResponse:
+    password = _secreto_o_guardado(forum_password, "forum_password")
+    ok, mensaje = await _test_foro(forum_url, forum_username, password)
+    aviso = (not ok) and mensaje.startswith("No se ha probado")
+    return templates.TemplateResponse(
+        request, "_ajustes_prueba.html",
+        {"ok": ok, "mensaje": mensaje, "aviso": aviso},
+    )
 
 
 @router.post("/probar/comic-vine", response_class=HTMLResponse)
