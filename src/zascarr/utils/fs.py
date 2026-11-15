@@ -114,6 +114,13 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
         st_root_path = os.stat(root_res, follow_symlinks=False)
         if (st_root_fd.st_dev, st_root_fd.st_ino) != (st_root_path.st_dev, st_root_path.st_ino):
             raise DestinoFueraDeRaizError("La raíz cambió entre la validación y la apertura.")
+        try:
+            abierto = os.readlink(f"/proc/self/fd/{root_fd}")
+        except OSError as exc:
+            raise DestinoFueraDeRaizError(
+                "No se pudo verificar la ruta canónica de la raíz abierta.") from exc
+        if os.path.normpath(abierto) != str(root_res):
+            raise DestinoFueraDeRaizError("La raíz abierta no es la ruta canónica esperada.")
     except DestinoFueraDeRaizError:
         with contextlib.suppress(OSError):
             os.close(root_fd)
@@ -140,10 +147,21 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
         except FileNotFoundError:
             st_final = None
         if st_final is not None:
-            # H1: nunca sobrescribir; el llamador decide el nombre alternativo.
             if stat.S_ISLNK(st_final.st_mode):
                 raise DestinoFueraDeRaizError("El destino final es un symlink.")
-            raise FileExistsError(errno.EEXIST, "El destino ya existe", final_name)
+            # A3: nombre alternativo único en el mismo dir_fd, sin salir de la raíz.
+            stem, suffix = os.path.splitext(final_name)
+            n = 1
+            while True:
+                candidato = f"{stem} ({n}){suffix}"
+                try:
+                    st = os.stat(candidato, dir_fd=parent_fd, follow_symlinks=False)
+                except FileNotFoundError:
+                    final_name = candidato
+                    break
+                if stat.S_ISLNK(st.st_mode):
+                    raise DestinoFueraDeRaizError("Un nombre alternativo es un symlink.")
+                n += 1
         src_parent = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             src_fd = os.open(source.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=src_parent)

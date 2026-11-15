@@ -455,6 +455,31 @@ class TestReviewServiceRaices:
         assert Path(result.file_path).is_relative_to(library)
 
     @pytest.mark.asyncio
+    async def test_destino_ocupado_usa_nombre_alternativo(self, tmp_path):
+        library = tmp_path / "library"
+        (library / "_Unsorted").mkdir(parents=True)
+        orig = library / "_Unsorted" / "batman 12.cbz"
+        orig.write_bytes(b"contenido")
+        ocupado = library / "Comics" / "Batman (2011)" / "Batman #012.cbz"
+        ocupado.parent.mkdir(parents=True)
+        ocupado.write_bytes(b"ajeno")
+        series = make_series("Batman", start_year=2011)
+        file = make_file(orig)
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([]), FakeExecResult([])],
+        )
+        root_id = uuid4()
+        raiz = SimpleNamespace(id=root_id, name="Biblioteca", path=str(library),
+                               host_path=None, enabled=True, is_default=True,
+                               traditions=[SimpleNamespace(tradition=ComicTradition.AMERICAN)])
+        service = ReviewService(db=session, foto_raices=FotoDeRaices([raiz], validar=False))
+        result = await service.assign_to_series(file.id, series.id, "12")
+        assert result.file_name == "Batman #012 (1).cbz"
+        assert result.root_id == root_id
+        assert ocupado.read_bytes() == b"ajeno"
+
+    @pytest.mark.asyncio
     async def test_sin_raiz_falla_cerrado_y_no_mueve(self, tmp_path):
         library = tmp_path / "library"
         (library / "_Unsorted").mkdir(parents=True)
