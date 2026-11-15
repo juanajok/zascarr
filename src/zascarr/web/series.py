@@ -158,7 +158,7 @@ from zascarr.services.relacion_confirmada import (
     estado_de_relacion,
     relacion_actual,
 )
-from zascarr.services.series import razon_de_no_calculable
+from zascarr.services.series import alternar_favorita, razon_de_no_calculable
 from zascarr.services.tagger import _LOCK_DE
 from zascarr.services.tokens_revision import (
     MAX_TOKEN_CONVERSION,
@@ -727,6 +727,17 @@ async def panel_sagas(series_id: UUID, request: Request,
         request, "_sagas_serie.html", {"series": series, "sagas": sagas})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
+
+
+@router.post("/{series_id}/favorito")
+async def cambiar_favorita(series_id: UUID, volver: str = Form(""),
+                           db: AsyncSession = Depends(get_db)):
+    """Marca/desmarca una serie como favorita local; sin efectos en archivos."""
+    serie = await _serie_o_404(db, series_id)
+    await alternar_favorita(db, serie.id)
+    await db.commit()
+    destino = volver if volver.startswith("/ui/") else f"/ui/series/{series_id}"
+    return RedirectResponse(destino, status_code=303)
 
 
 @router.get("/{series_id}/etiquetas", response_class=HTMLResponse)

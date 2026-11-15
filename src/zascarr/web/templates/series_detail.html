@@ -49,6 +49,12 @@
       {% endif %}
     </p>
     {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
+    <form method="post" action="/ui/series/{{ series.id }}/favorito" class="favorito-form">
+      <input type="hidden" name="volver" value="{{ volver or '' }}">
+      <button class="btn ghost sm" type="submit" aria-pressed="{{ 'true' if series.favorite else 'false' }}">
+        {{ "Quitar de favoritas" if series.favorite else "Marcar como favorita" }}
+      </button>
+    </form>
     <p class="series-acciones">
       <a class="btn ghost" href="/ui/series/{{ series.id }}/editar">Editar la ficha</a>
       <a class="btn primary" href="/ui/pendientes/carpetas?serie={{ series.id }}">Añadir números del disco</a>

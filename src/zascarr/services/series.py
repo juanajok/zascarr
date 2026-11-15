@@ -53,6 +53,16 @@ def pagina_efectiva(page: int, total: int, page_size: int) -> int:
     return min(max(page, 1), paginas)
 
 
+async def alternar_favorita(db: AsyncSession, series_id: UUID) -> bool | None:
+    """Marca/desmarca una serie como favorita local; devuelve el valor o None."""
+    serie = await db.get(Series, series_id)
+    if serie is None:
+        return None
+    serie.favorite = not bool(serie.favorite)
+    await db.flush()
+    return serie.favorite
+
+
 class SeriesService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -68,6 +78,7 @@ class SeriesService:
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
         author_id: UUID | None = None,
+        solo_favoritas: bool = False,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -130,6 +141,8 @@ class SeriesService:
                 .join(IssueCreator, IssueCreator.issue_id == Issue.id)
                 .where(IssueCreator.creator_id == author_id)
             ))
+        if solo_favoritas:
+            query = query.where(Series.favorite.is_(True))
 
         # BL-ETQ1b: EXISTS/NOT EXISTS por token; nunca JOIN+DISTINCT.
         for normalizado in etiquetas_positivas:
@@ -230,6 +243,7 @@ class SeriesService:
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
         author_id: UUID | None = None,
+        solo_favoritas: bool = False,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -244,6 +258,7 @@ class SeriesService:
             search=search, publisher_id=publisher_id, character_id=character_id,
             story_arc_id=story_arc_id,
             author_id=author_id,
+            solo_favoritas=solo_favoritas,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
@@ -262,6 +277,7 @@ class SeriesService:
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
         author_id: UUID | None = None,
+        solo_favoritas: bool = False,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -280,6 +296,7 @@ class SeriesService:
             search=search, publisher_id=publisher_id, character_id=character_id,
             story_arc_id=story_arc_id,
             author_id=author_id,
+            solo_favoritas=solo_favoritas,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
