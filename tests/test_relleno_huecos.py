@@ -448,3 +448,49 @@ async def test_o2_payload_vacio_o_sin_datos_utiles_es_none(ajustes_clientes):
                                  transporte=_transporte(lambda _r: httpx.Response(
                                      200, json={"key": "/works/OL1W"}))) as c:
         assert await c.get_work("OL1W") is None
+
+
+# ── m-1/m-2 de SecOps: rotación real y huella de fuentes en la marca ────────────────────────
+
+async def test_m1_secops_la_serie_procesada_avanza_en_la_rotacion():
+    from datetime import UTC, datetime
+
+    from zascarr.services.enricher import EnrichmentReport
+
+    serie = _serie(gcd_id=77)
+    servicio = _servicio([serie])
+    await servicio._enrich_huecos_por_id(_Cliente(_ficha_gcd()), None, None, 10,
+                                         EnrichmentReport())
+    assert isinstance(serie.enrichment_attempted_at, datetime)
+    assert serie.enrichment_attempted_at.tzinfo is not None
+    assert serie.enrichment_attempted_at <= datetime.now(UTC)
+
+
+async def test_m2_secops_la_marca_caduca_si_cambian_las_fuentes_disponibles():
+    from datetime import UTC, datetime
+
+    from zascarr.services.enricher import EnrichmentReport
+
+    ahora = datetime.now(UTC)
+    # Marca vieja hecha solo con GCD; ahora hay además Metron disponible.
+    marcada = _serie(id="s1", metron_id=88, gcd_id=77, metadata_={"relleno": {
+        "_sin_huecos_cubribles": {"fecha": ahora.isoformat(), "fuentes": "gcd"}}})
+    servicio = _servicio([marcada])
+    metron = _Cliente(_ficha_metron())
+    gcd = _Cliente(_ficha_gcd())
+    await servicio._enrich_huecos_por_id(gcd, metron, None, 10, EnrichmentReport())
+    assert metron.llamadas or gcd.llamadas      # se reevaluó pese a la marca vieja
+
+
+async def test_m2_secops_la_marca_vigente_con_mismas_fuentes_se_respeta():
+    from datetime import UTC, datetime
+
+    from zascarr.services.enricher import EnrichmentReport
+
+    ahora = datetime.now(UTC)
+    marcada = _serie(id="s2", gcd_id=77, metadata_={"relleno": {
+        "_sin_huecos_cubribles": {"fecha": ahora.isoformat(), "fuentes": "gcd"}}})
+    servicio = _servicio([marcada])
+    gcd = _Cliente(_ficha_gcd())
+    await servicio._enrich_huecos_por_id(gcd, None, None, 10, EnrichmentReport())
+    assert gcd.llamadas == []                    # no consume lote ni hace red

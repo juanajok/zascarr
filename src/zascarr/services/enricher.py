@@ -263,16 +263,32 @@ class SeriesMatch:
     end_year: int | None = None
 
 
-def _sin_huecos_cubribles_vigente(serie, ahora) -> bool:
-    """¿La serie ya está marcada como sin huecos cubribles dentro de los 30 días?"""
+def _huella_de_fuentes(fuentes: str) -> str:
+    """Firma estable de las fuentes de relleno disponibles (m-2 de SecOps)."""
+    return fuentes
+
+
+def _sin_huecos_cubribles_vigente(serie, ahora, fuentes: str) -> bool:
+    """¿La serie está marcada como sin huecos cubribles **para las fuentes actuales**?
+
+    La marca guarda la huella de las fuentes disponibles: si después se enciende una fuente
+    (o se añade el token de Metron), la marca deja de valer y la serie se reevalúa (m-2).
+    """
     from datetime import timedelta
 
     entrada = ((getattr(serie, "metadata_", None) or {}).get("relleno") or {}).get(
         "_sin_huecos_cubribles")
-    if not isinstance(entrada, str) or not entrada:
+    if isinstance(entrada, dict):
+        fecha_texto = entrada.get("fecha")
+        huella = entrada.get("fuentes")
+    elif isinstance(entrada, str):        # formato anterior sin huella: se reevalúa una vez
+        return False
+    else:
+        return False
+    if huella != fuentes or not isinstance(fecha_texto, str) or not fecha_texto:
         return False
     try:
-        fecha = datetime.fromisoformat(entrada)
+        fecha = datetime.fromisoformat(fecha_texto)
     except ValueError:
         return False
     if fecha.tzinfo is None:
@@ -280,11 +296,11 @@ def _sin_huecos_cubribles_vigente(serie, ahora) -> bool:
     return ahora - fecha < timedelta(days=30)
 
 
-def _marcar_sin_huecos_cubribles(serie, ahora) -> None:
+def _marcar_sin_huecos_cubribles(serie, ahora, fuentes: str) -> None:
     """Marca en el JSONB (dict nuevo) que no hay huecos que las fuentes actuales cubran."""
     metadata = dict(getattr(serie, "metadata_", None) or {})
     relleno = dict(metadata.get("relleno") or {})
-    relleno["_sin_huecos_cubribles"] = ahora.isoformat()
+    relleno["_sin_huecos_cubribles"] = {"fecha": ahora.isoformat(), "fuentes": fuentes}
     metadata["relleno"] = relleno
     serie.metadata_ = metadata
 
@@ -455,6 +471,8 @@ class EnrichmentService:
         ahora = datetime.now(UTC)
         peticiones: Counter[str] = Counter()
         cortadas: set[str] = set()
+        # m-2: la marca «sin huecos» solo vale para este conjunto de fuentes disponibles.
+        huella_fuentes = ",".join(sorted(f for f, c in clientes.items() if c is not None))
 
         def clave_de_turno(serie):
             momento = getattr(serie, "enrichment_attempted_at", None)
@@ -466,21 +484,33 @@ class EnrichmentService:
         for serie in filas:
             if procesadas >= limit:
                 break
-            if _sin_huecos_cubribles_vigente(serie, ahora):
+            if _sin_huecos_cubribles_vigente(serie, ahora, huella_fuentes):
                 continue                    # ya se marcó: no consume el limit ni hace red
             tradicion = (serie.tradition.value if hasattr(serie.tradition, "value")
                          else str(serie.tradition or ""))
+            # m-1/O1b: una fuente cortada en este ciclo no cuenta como cubrible (no se
+            # hace red); y si todo lo cubrible está cortado, no se marca la serie.
             cubribles = [
                 fuente for fuente in FUENTES_CON_RELLENO
-                if _fuente_cubrible(serie, fuente, clientes, tradicion, ahora,
-                                    ttl_vigente=ttl_vigente,
-                                    campos_faltantes=campos_faltantes)
+                if fuente not in cortadas
+                and _fuente_cubrible(serie, fuente, clientes, tradicion, ahora,
+                                     ttl_vigente=ttl_vigente,
+                                     campos_faltantes=campos_faltantes)
             ]
+            if not any(_fuente_cubrible(serie, fuente, clientes, tradicion, ahora,
+                                        ttl_vigente=ttl_vigente,
+                                        campos_faltantes=campos_faltantes)
+                       for fuente in FUENTES_CON_RELLENO):
+                _marcar_sin_huecos_cubribles(serie, ahora, huella_fuentes)
+                serie.enrichment_attempted_at = ahora      # m-1: la rotación avanza
+                await self.db.flush()
+                continue
             if not cubribles:
-                _marcar_sin_huecos_cubribles(serie, ahora)
+                serie.enrichment_attempted_at = ahora      # cortada: rota sin consumir lote
                 await self.db.flush()
                 continue
             procesadas += 1
+            serie.enrichment_attempted_at = ahora          # m-1: la rotación avanza
             for fuente in FUENTES_CON_RELLENO:
                 cliente = clientes[fuente]
                 if cliente is None or fuente in cortadas:
