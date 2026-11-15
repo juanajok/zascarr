@@ -203,8 +203,9 @@ vive en `tests/test_b23_flujo_pg.py`.
 3. **QA de bordes:** catálogo ya existente, archivo sin número, conversión fallida,
    opt-in apagado, carrera de `Issue` y nombre canónico.
 
-**Resultado:** PASS en los cuatro escenarios del test; los detalles y la salida de
-cada rol quedan en la PR. **NOT RUN:** Prowlarr/Transmission reales, SMB, CBR RAR
+**Resultado:** PASS en los siete escenarios del test (altas, catálogo existente,
+dos candidatos, CBR-ZIP, especial/pack, opt-in apagado y nombre sin número); los
+detalles y la salida de cada rol quedan en la PR. **NOT RUN:** Prowlarr/Transmission reales, SMB, CBR RAR
 real con `unar`, navegador y Pi física.
 
 **Conclusión de diseño:** el eslabón que faltaba no era el ciclo de descarga, sino
