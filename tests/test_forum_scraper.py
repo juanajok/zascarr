@@ -500,5 +500,8 @@ async def test_la_busqueda_pide_todos_los_foros_y_lee_solo_las_filas_de_resultad
     resultados = await foro.scraper().use_ipb_search("DC K.O.", abrir_temas=False)
 
     assert [r.topic_title for r in resultados] == ["DC K.O. #1"]
-    peticiones = [str(p.url) for p in foro.peticiones if "act=Search" in str(p.url)]
-    assert peticiones and "forums" in peticiones[0] and "all" in peticiones[0]
+    peticiones = [p for p in foro.peticiones if "act=Search" in str(p.url)]
+    assert peticiones and peticiones[0].method == "POST"
+    cuerpo = peticiones[0].content
+    assert b"forums%5B%5D=all" in cuerpo
+    assert b"search_in=titles" in cuerpo
