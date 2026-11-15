@@ -55,7 +55,13 @@ from zascarr.models import (
 )
 from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.etiquetas_comicinfo import aplicar_comicinfo
+from zascarr.services.raices import (
+    FotoDeRaices,
+    RaizNoDisponibleError,
+    RaizResuelta,
+)
 from zascarr.services.upgrades import reconciliar_mejora_importada
+from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
 from zascarr.utils.fs import listar_comics, safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.utils.nombres_biblioteca import construir_nombre, es_pack
@@ -317,7 +323,8 @@ async def _coincidencias_de_hash(db: AsyncSession, sha256: str) -> list[File]:
     )).scalars().all())
 
 
-async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
+async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path, *,
+                          root_id: UUID | None = None) -> None:
     """Actualiza la fila `is_missing` para que describa el fichero que YA está
     en `dest` (quien llama decide si lo movió —Importer— o ya estaba ahí
     —LibraryAdopter—).
@@ -332,6 +339,8 @@ async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
     vuelve con otra extensión no puede seguir anunciando la vieja. El formato
     REAL por contenido va aparte, en `metadata_["formato_contenido"]`."""
     fila.file_path = str(dest)
+    if root_id is not None:
+        fila.root_id = root_id
     fila.file_name = dest.name
     fila.file_format = FileFormat(dest.suffix.lstrip(".").lower())
     stat_dest = dest.stat()
@@ -484,8 +493,10 @@ def serialize_candidates(candidates: list[SeriesHit]) -> list[dict]:
 
 
 class Importer:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, *, foto_raices: FotoDeRaices | None = None):
         self._db = db
+        self._foto_inyectada = foto_raices
+        self._foto_raices = foto_raices
         s = get_settings()
         self._library = s.library_path
         self._scan_dirs = [
@@ -495,6 +506,8 @@ class Importer:
         ]
 
     async def scan_and_import(self, *, disparador: str = "automatico") -> ImportReport:
+        # Foto nueva por ciclo: un cambio de mapeo a mitad no cambia el destino de este ciclo.
+        self._foto_raices = getattr(self, "_foto_inyectada", None)
         report = ImportReport(started_at=datetime.now(UTC), disparador=disparador)
 
         # Dedupe por (st_dev, st_ino), no por ruta: ver `listar_comics`. El
@@ -712,6 +725,23 @@ class Importer:
             archivos_registrados=len(files), ausentes=len(ausentes),
             desaparecidos=desaparecidos, reaparecidos=reaparecidos)
 
+    async def _foto(self) -> FotoDeRaices:
+        """Foto de raíces por ciclo: una consulta, aunque haya muchos archivos."""
+        if self._foto_raices is None:
+            if isinstance(self._db, AsyncSession):
+                self._foto_raices = await FotoDeRaices.cargar(self._db)
+            else:
+                # Dobles de prueba sin tabla de raíces: reproducción de una instalación de una raíz.
+                self._foto_raices = FotoDeRaices.compatibilidad()
+        return self._foto_raices
+
+    async def _raiz(
+        self, tradicion, *, por_defecto: bool = False
+    ) -> tuple[FotoDeRaices, RaizResuelta]:
+        foto = await self._foto()
+        raiz = foto.por_defecto() if por_defecto else foto.por_tradicion(tradicion)
+        return foto, raiz
+
     async def _import_file(
         self, path: Path, report: ImportReport, pista: PistaDeCohorte | None = None
     ) -> None:
@@ -736,14 +766,39 @@ class Importer:
         tr, result = outcome.tr, outcome.result
         is_unsorted = result.status == MatchStatus.UNSORTED or not result.series_id
 
-        # Determinar tradición y ruta destino
-        if is_unsorted:
-            dest = self._library / "_Unsorted" / path.name
-        else:
+        # Resolver la raíz ANTES de construir la ruta o mover: si no está
+        # disponible, el archivo se queda en la cola y no se inventa otra.
+        series_obj = None
+        if not is_unsorted:
             series_obj = (await self._db.execute(
                 select(Series).where(Series.id == result.series_id)
             )).scalar_one_or_none()
-            dest = self._build_dest(series_obj, tr, path)
+            if series_obj is None:
+                is_unsorted = True
+        try:
+            foto, raiz = await self._raiz(
+                getattr(series_obj, "tradition", None), por_defecto=is_unsorted)
+        except RaizNoDisponibleError as exc:
+            report.errors.append(f"{path.name}: {exc.causa}")
+            logger.warning("importer.raiz_no_disponible", archivo=path.name,
+                           causa=exc.causa, raiz=exc.raiz)
+            return
+        if is_unsorted:
+            dest = raiz.path / "_Unsorted" / path.name
+        else:
+            dest = self._build_dest(series_obj, tr, path, base=raiz.path)
+
+        # La raíz de DESTINO debe tener espacio antes de copiar; never fallback.
+        try:
+            await asyncio.to_thread(
+                comprobar_espacio, raiz.path, path.stat().st_size, "importar a la biblioteca")
+        except EspacioInsuficienteError as exc:
+            report.errors.append(f"{path.name}: {exc}")
+            logger.warning("importer.raiz_sin_espacio", archivo=path.name, raiz=raiz.name)
+            return
+        except OSError as exc:
+            report.errors.append(f"{path.name}: no se pudo comprobar el espacio de la raíz: {exc}")
+            return
 
         # A3: mover a destino verificado — nunca sobreescribe y no borra el
         # original hasta que la copia está completa (ver utils/fs.safe_move).
@@ -766,6 +821,7 @@ class Importer:
 
         file_rec = File(
             issue_id=str(result.issue_id) if result.issue_id else None,
+            root_id=raiz.id,
             file_path=str(final_dest),
             file_name=final_dest.name,
             file_format=FileFormat(path.suffix.lstrip(".").lower()),
@@ -794,15 +850,18 @@ class Importer:
                 logger.warning("upgrade.reconciliacion_fallida",
                                issue_id=str(result.issue_id))
 
+        prefijo_raiz = "" if len(foto.raices) <= 1 else f"{raiz.name}: "
         if is_unsorted:
             motivo = "; ".join(result.notes) or "sin match fiable"
-            report.unsorted.append(f"{path.name} → _Unsorted ({motivo})")
+            report.unsorted.append(
+                f"{path.name} → {prefijo_raiz}_Unsorted ({motivo})")
         else:
             avisos = await self._aplicar_comicinfo(result, tr, final_dest)
             sufijo = f" (ComicInfo: {'; '.join(avisos)})" if avisos else ""
             report.imported.append(
-                f"{path.name} → {final_dest.relative_to(self._library)}{sufijo}")
-        logger.info("importer.imported", dest=str(final_dest), status=result.status)
+                f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)}{sufijo}")
+        logger.info("importer.imported", dest=str(final_dest), root=raiz.name,
+                    status=result.status)
 
     async def _aplicar_comicinfo(
             self, result: MatchResult, tr: TriageResult, ruta: Path) -> list[str]:
@@ -856,22 +915,37 @@ class Importer:
             if fila_issue:
                 numero, titulo_issue, formato_issue, serie = fila_issue
 
+        try:
+            foto, raiz = await self._raiz(
+                getattr(serie, "tradition", None), por_defecto=serie is None)
+        except RaizNoDisponibleError as exc:
+            report.errors.append(f"{path.name}: {exc.causa}")
+            logger.warning("importer.raiz_no_disponible", archivo=path.name,
+                           causa=exc.causa, raiz=exc.raiz)
+            return
         if serie is None:
-            dest = self._library / "_Unsorted" / path.name
+            dest = raiz.path / "_Unsorted" / path.name
         else:
             dest = build_library_path(
-                self._library, serie, numero, path.suffix, fallback_name=path.name,
+                raiz.path, serie, numero, path.suffix, fallback_name=path.name,
                 issue_title=titulo_issue, issue_format=formato_issue)
+        try:
+            await asyncio.to_thread(
+                comprobar_espacio, raiz.path, path.stat().st_size, "recuperar en la biblioteca")
+        except (EspacioInsuficienteError, OSError) as exc:
+            report.errors.append(f"{path.name}: no se pudo comprobar el espacio: {exc}")
+            return
 
         # A3: mismo mover verificado que una importación normal.
         final_dest = await safe_move_async(path, dest)
 
-        await _reenlazar_fila(fila, tr, final_dest)
+        await _reenlazar_fila(fila, tr, final_dest, root_id=raiz.id)
         await self._db.flush()
 
+        prefijo_raiz = "" if len(foto.raices) <= 1 else f"{raiz.name}: "
         report.imported.append(
-            f"{path.name} → {final_dest.relative_to(self._library)} (recuperado)")
-        logger.info("importer.recuperado", dest=str(final_dest))
+            f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)} (recuperado)")
+        logger.info("importer.recuperado", dest=str(final_dest), root=raiz.name)
 
     async def _persist_run(self, report: ImportReport) -> None:
         run = ImportRun(
@@ -899,13 +973,14 @@ class Importer:
         await self._db.flush()
         report.run_id = run.id
 
-    def _build_dest(self, series, tr: TriageResult, orig: Path) -> Path:
+    def _build_dest(self, series, tr: TriageResult, orig: Path, *,
+                    base: Path | None = None) -> Path:
         if not series:
-            return self._library / "_Unsorted" / orig.name
+            return (base or self._library) / "_Unsorted" / orig.name
         number = tr.comic_info.number if tr.comic_info else None
         edition_kind = parse_comic_filename(orig.name).edition_kind
         return build_library_path(
-            self._library, series, number, orig.suffix, fallback_name=orig.name,
+            base or self._library, series, number, orig.suffix, fallback_name=orig.name,
             issue_title=getattr(tr.comic_info, "title", None) if tr.comic_info else None,
             issue_format=EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE),
         )

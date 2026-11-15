@@ -21,6 +21,7 @@ import pytest
 from sqlalchemy import func, select, text
 
 from tests._pg import bd_efimera_sync, migrar_a_head
+from tests._raices_pg import allowlist
 from tests.test_registro_biblioteca_pg import MARCADOR, Mundo, _cbz
 from zascarr import database
 from zascarr.database import get_db
@@ -45,6 +46,7 @@ async def mundo(url_bd, tmp_path, monkeypatch):
     m = await Mundo(url_bd, tmp_path).sembrar()
     ajustes = type("A", (), {"library_path": m.lib})()
     monkeypatch.setattr("zascarr.services.library_adopter.get_settings", lambda: ajustes)
+    allowlist(monkeypatch, m.lib)
     monkeypatch.setattr(database, "async_session_factory", m.fabrica)
     registro_biblioteca.reiniciar_para_pruebas()
     # Estado de partida de #326: el registro inicial YA se hizo (marcador puesto).
