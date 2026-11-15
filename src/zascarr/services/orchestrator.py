@@ -61,6 +61,7 @@ from zascarr.models import (
 )
 from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import sign_token, verify_token
+from zascarr.services.blog_feed import buscar_en_feed, estado_feed, resultados_de_busqueda
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     ESTADOS_REACTIVABLES,
@@ -105,7 +106,11 @@ def hay_fuente_de_busqueda(settings) -> bool:
     foro_configurado = bool(
         settings.forum_enabled and settings.forum_username and settings.forum_url
     )
-    return bool(settings.prowlarr_enabled) or foro_configurado
+    blog_configurado = bool(
+        getattr(settings, "blog_feed_enabled", False)
+        and (getattr(settings, "blog_feed_url", "") or "").strip()
+    )
+    return bool(settings.prowlarr_enabled) or foro_configurado or blog_configurado
 
 
 # D9: causas distinguibles de "por qué esta búsqueda no avanza", en
@@ -113,7 +118,8 @@ def hay_fuente_de_busqueda(settings) -> bool:
 # que el coleccionista no pueda accionar. El aviso legal pendiente NO
 # vive aquí: es un estado global (ver services/legal.py), lo muestra la
 # UI de wishlist con un banner propio en vez de escribirse en cada fila.
-MOTIVO_SIN_FUENTE = "Sin fuente de búsqueda activa — activa Prowlarr o el foro en Ajustes"
+MOTIVO_SIN_FUENTE = (
+    "Sin fuente de búsqueda activa — activa Prowlarr, el foro o un blog/RSS en Ajustes")
 MOTIVO_PROWlARR_CONFIGURACION = (
     "Prowlarr está encendido pero le falta la URL o la clave de API — revísalo en Ajustes"
 )
@@ -341,6 +347,18 @@ class Orchestrator:
             return []
 
         results: list[SearchResult] = []
+        titulo_serie = ""
+        alias_serie: set[str] = set()
+        if item.series_id:
+            serie = (await self.db.execute(
+                select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
+            titulo_serie = serie.title if serie else ""
+            # B13: alias confirmados a mano. Se cargan antes de las fuentes para que el
+            # feed RSS también pueda aceptar un release con el nombre español.
+            alias_serie = set((await self.db.execute(
+                select(LocalAlias.pattern_norm)
+                .where(LocalAlias.series_id == item.series_id,
+                       LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
         motivo_prowlarr: str | None = None
         if settings.prowlarr_enabled:
             if not prowlarr_configurado(settings):
@@ -358,6 +376,21 @@ class Orchestrator:
                 except Exception:
                     logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
                     motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
+
+        motivo_blog: str | None = None
+        if getattr(settings, "blog_feed_enabled", False):
+            url_blog = (getattr(settings, "blog_feed_url", "") or "").strip()
+            if not estado_feed(url_blog):
+                motivo_blog = (
+                    "El blog/RSS está encendido pero le falta una URL válida — "
+                    "revísalo en Ajustes")
+            else:
+                try:
+                    entradas = await buscar_en_feed(url_blog, query, alias=alias_serie)
+                    results.extend(resultados_de_busqueda(entradas, url_blog))
+                except Exception:
+                    logger.exception("orchestrator.blog_search_failed")
+                    motivo_blog = MOTIVO_FUENTE_INACCESIBLE
 
         candidates = self._ranked_candidates(results, query) if results else []
 
@@ -382,27 +415,8 @@ class Orchestrator:
             if forum_result:
                 candidates = [forum_result]
 
-        # D8: la búsqueda es de TEXTO, así que devolver algo no significa que sea
-        # el número pedido. El filtro va ANTES de `candidatos_crudos` a
-        # propósito: si lo único que había era de otro número, el motivo no puede
-        # decir "ningún backend activo" (sería falso, y D9 existe justo para no
-        # dar ese tipo de motivo).
-        titulo_serie = ""
-        alias_serie: set[str] = set()
-        if item.series_id:
-            serie = (await self.db.execute(
-                select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
-            titulo_serie = serie.title if serie else ""
-            # B13: los alias que el coleccionista ya confirmó a mano. Un
-            # release español puede llamar "La Patrulla-X" a una serie
-            # catalogada como "X-Men"; sin ellos, la igualdad estricta
-            # descartaría el candidato bueno.
-            alias_serie = set((await self.db.execute(
-                select(LocalAlias.pattern_norm)
-                .where(LocalAlias.series_id == item.series_id,
-                       LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
         # La relevancia se resuelve con el título local (sin el número) y los alias;
-        # se hace después de cargarlos y antes del filtro de número.
+        # titulo_serie/alias_serie se cargaron antes de consultar las fuentes.
         candidates = self._relevantes(
             candidates, item.search_query or titulo_serie or query, alias_serie)
 
@@ -437,7 +451,7 @@ class Orchestrator:
             elif descartados_por_numero:
                 item.last_error = MOTIVO_NUMERO_DISTINTO
             else:
-                item.last_error = motivo_prowlarr or MOTIVO_SIN_RESULTADOS
+                item.last_error = motivo_prowlarr or motivo_blog or MOTIVO_SIN_RESULTADOS
             await self.db.flush()
             return []
 
@@ -759,7 +773,9 @@ class Orchestrator:
             backend = _detect_backend(r.download_url)
             score = self._score(r, norm)
             if backend == DownloadBackend.TRANSMISSION:
-                if r.seeders >= 1:
+                # Un feed RSS no publica seeders; sus magnet/.torrent son directos
+                # y no se descartan por no traer ese dato.
+                if r.seeders >= 1 or r.indexer.startswith("blog:"):
                     torrents.append((score, r))
             else:
                 ed2k.append((score, r))

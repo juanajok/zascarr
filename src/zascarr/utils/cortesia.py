@@ -111,6 +111,7 @@ NOMBRES_DE_FUENTE: dict[str, str] = {
     "reading_orders": "Comic Book Reading Orders",
     "continuity_guide": "Continuity Guide",
     "comic_book_herald": "Comic Book Herald",
+    "blog": "Blog o RSS",
     "foro": "Foro",
     "portada": "Portadas",
 }
@@ -257,6 +258,9 @@ def politica_de(fuente: str, ajustes=None, *, host: str | None = None) -> Politi
         return PoliticaFuente(
             fuente, nombre,
             float(getattr(s, "comic_book_herald_rate_limit", 3.5)), 1, 3)
+    if fuente == "blog":
+        # Feed del usuario: ritmo conservador, un intento y redirecciones acotadas.
+        return PoliticaFuente(fuente, nombre, float(getattr(s, "blog_feed_rate_limit", 2.0)), 1, 3)
     if fuente == "foro":
         return PoliticaFuente(fuente, nombre, float(s.forum_rate_limit), 2, 3)
     if fuente == "portada":
@@ -276,6 +280,10 @@ def fuente_habilitada(fuente: str, ajustes=None) -> bool:
         # están las dos (mismo criterio que la decisión D-7 del benchmark de SCR2).
         return bool(getattr(s, "fandom_dc_enabled", False)
                     or getattr(s, "fandom_marvel_enabled", False))
+    if fuente == "blog":
+        # El campo se llama `blog_feed_enabled`, no `blog_enabled`; además exige URL.
+        return bool(getattr(s, "blog_feed_enabled", False)
+                    and (getattr(s, "blog_feed_url", "") or "").strip())
     atributo = f"{fuente}_enabled"
     return bool(getattr(s, atributo, False))
 

@@ -203,7 +203,8 @@ def _literal(ip: str) -> str:
 
 
 async def _pedir(cliente: httpx.AsyncClient, esquema: str, host: str, ip: str, puerto: int | None,
-                 ruta: str, max_bytes: int) -> tuple[int, str | None, bytes]:
+                 ruta: str, max_bytes: int, *, accept: str = "image/*",
+                 referer: bool = True) -> tuple[int, str | None, bytes]:
     """Una petición a la dirección YA VALIDADA, con el nombre en `Host` y en la SNI de TLS.
     Devuelve (estado, destino, cuerpo): `destino` es `None` si NO es una redirección y, si lo es, el valor de
     `Location` (vacío si falta). Corta si el cuerpo supera `max_bytes`."""
@@ -212,10 +213,11 @@ async def _pedir(cliente: httpx.AsyncClient, esquema: str, host: str, ip: str, p
     # a descargas sin identificarse o sin referencia del sitio; verificado en vivo el 2026-11-13.
     cabeceras = {
         "Host": host if not puerto else f"{host}:{puerto}",
-        "Accept": "image/*",
+        "Accept": accept,
         "User-Agent": USER_AGENT,
-        "Referer": f"{esquema}://{host}/",
     }
+    if referer:
+        cabeceras["Referer"] = f"{esquema}://{host}/"
     extensiones = {"sni_hostname": host} if esquema == "https" else {}
     async with cliente.stream("GET", f"{esquema}://{autoridad}{ruta}", headers=cabeceras,
                               extensions=extensiones) as r:
@@ -255,8 +257,8 @@ async def descargar_imagen(url: str, *, resolutor: Resolutor | None = None,
     ajustes = ajustes if ajustes is not None else get_settings()
     actual = url
     async with asyncio.timeout(TIEMPO_TOTAL_S):
-        for salto in range(MAX_SALTOS + 1):
-            esquema, host, puerto, ruta = analizar_url(actual, exigir_lista=(salto == 0))
+        for _salto in range(MAX_SALTOS + 1):
+            esquema, host, puerto, ruta = analizar_url(actual, exigir_lista=(_salto == 0))
             fuente = fuente_de_host_portada(host)
             if fuente is not None and not fuente_habilitada(fuente, ajustes):
                 raise FuenteApagada(fuente)
@@ -270,6 +272,48 @@ async def descargar_imagen(url: str, *, resolutor: Resolutor | None = None,
             ip = await resolver_publica(host, puerto or _PUERTO_POR_DEFECTO[esquema], resolutor)
             async with crear_cliente() as cliente:
                 _, destino, cuerpo = await _pedir(cliente, esquema, host, ip, puerto, ruta, max_bytes)
+            if destino is None:
+                return cuerpo
+            if not destino:
+                raise _fallo("redireccion_sin_destino")
+            actual = urljoin(actual, destino)
+    raise _fallo("demasiadas_redirecciones")
+
+async def descargar_publico(
+    url: str, *, max_bytes: int = 4_194_304,
+    resolutor: Resolutor | None = None,
+    crear_cliente: CreadorDeCliente | None = None,
+    cortesia: CortesiaProceso | None = None,
+    reloj: Callable[[], float] = time.monotonic,
+    dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    espera_max_s: float = 15.0,
+) -> bytes:
+    """Descarga una URL HTTP(S) de un host público, sin lista de fuentes.
+
+    Para fuentes configurables por el usuario (feed RSS/Atom): aplica la misma política
+    SSRF que las portadas —sin IP literal, credenciales, puerto no estándar, resolución
+    pública de TODAS las direcciones, conexión a la IP validada y redirecciones a mano—
+    pero no exige que el host esté en la allowlist de portadas. No sigue proxies del
+    entorno. Devuelve los bytes o lanza `UrlNoPermitidaError`/errores de httpx.
+    """
+    resolutor = resolutor or resolver_dns
+    crear_cliente = crear_cliente or _cliente_por_defecto
+    servicio = cortesia or cortesia_de_proceso()
+    actual = url
+    async with asyncio.timeout(TIEMPO_TOTAL_S):
+        for _salto in range(MAX_SALTOS + 1):
+            esquema, host, puerto, ruta = analizar_url(actual, exigir_lista=False)
+            origen = f"{esquema}://{host}:{puerto or _PUERTO_POR_DEFECTO[esquema]}"
+            await servicio.esperar(
+                "blog", origen, motivo="blog", espera_max_s=espera_max_s,
+                intervalo_s=2.5, solo_host=True)
+            ip = await resolver_publica(host, puerto or _PUERTO_POR_DEFECTO[esquema], resolutor)
+            async with crear_cliente() as cliente:
+                _, destino, cuerpo = await _pedir(
+                    cliente, esquema, host, ip, puerto, ruta, max_bytes,
+                    accept="application/rss+xml, application/atom+xml, "
+                           "application/xml, text/xml, */*",
+                    referer=False)
             if destino is None:
                 return cuerpo
             if not destino:
