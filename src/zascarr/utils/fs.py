@@ -133,6 +133,12 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
                    sha256: str | None = None, size: int | None = None) -> Path:
     """Copia por descriptores a un temporal dentro de la raíz, sin seguir symlinks."""
     root_res, root_fd = _abrir_raiz_verificada(raiz)
+    try:
+        size_origen = os.stat(src, follow_symlinks=False).st_size
+    except OSError:
+        os.close(root_fd)
+        raise
+    comprobar_espacio(root_res, size_origen, "copiar el archivo a la biblioteca")
     temp_abs = Path(temp).resolve(strict=False)
     try:
         relativo = temp_abs.relative_to(root_res)
@@ -186,6 +192,8 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
             if not ok:
                 with contextlib.suppress(OSError):
                     os.unlink(final_name, dir_fd=parent_fd)
+            with contextlib.suppress(OSError):
+                os.close(temp_fd)
     finally:
         if parent_fd != root_fd:
             with contextlib.suppress(OSError):
@@ -193,6 +201,30 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
         with contextlib.suppress(OSError):
             os.close(root_fd)
 
+
+
+def eliminar_en_raiz(path: str | Path, raiz: str | Path) -> bool:
+    """Borra un archivo bajo la raíz usando dir_fd; no sigue symlinks. False si no existía."""
+    root_res, root_fd = _abrir_raiz_verificada(raiz)
+    try:
+        relativo = Path(path).resolve(strict=False).relative_to(root_res)
+    except ValueError:
+        os.close(root_fd)
+        raise DestinoFueraDeRaizError("El archivo no cuelga de la raíz autorizada.") from None
+    parent_fd = root_fd
+    try:
+        parent_fd, nombre = _abrir_padre_en_raiz(root_fd, relativo)
+        try:
+            os.unlink(nombre, dir_fd=parent_fd)
+        except FileNotFoundError:
+            return False
+        return True
+    finally:
+        if parent_fd != root_fd:
+            with contextlib.suppress(OSError):
+                os.close(parent_fd)
+        with contextlib.suppress(OSError):
+            os.close(root_fd)
 
 def publicar_en_raiz(temp: str | Path, dest: str | Path, raiz: str | Path) -> Path:
     """Publica con enlaces confinados; devuelve la ruta efectiva (nombre alternativo)."""

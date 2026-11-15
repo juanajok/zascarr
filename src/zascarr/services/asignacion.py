@@ -73,6 +73,7 @@ from zascarr.utils.fs import (
     DestinoFueraDeRaizError,
     _validar_destino_en_raiz,
     copiar_en_raiz,
+    eliminar_en_raiz,
     publicar_en_raiz,
     sanear_excepcion,
 )
@@ -205,7 +206,7 @@ def _renameat2_noreplace(origen: Path, destino: Path) -> None:
         raise OSError(e, os.strerror(e))
 
 
-def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None) -> None:
+def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None) -> Path | None:
     """Publica `temporal` como `destino` SIN poder reemplazar a nadie.
 
     `os.replace` sustituye en silencio un nombre existente, y comprobar `exists()` antes deja una ventana
@@ -216,16 +217,14 @@ def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None) -> Non
     (nada publicado) y `PublicadoConResiduoError` (SÍ publicado; solo falló retirar el temporal).
     """
     if raiz is not None:
-        if destino.exists() or destino.is_symlink():
-            raise FileExistsError(errno.EEXIST, "el destino ya existe", str(destino))
         try:
-            publicar_en_raiz(temporal, destino, raiz)
+            return publicar_en_raiz(temporal, destino, raiz)
         except OSError as exc:
             if exc.errno in _NO_SOPORTADO or exc.errno == errno.EPERM:
                 raise PublicacionNoSoportadaError(
                     exc.errno, f"este montaje no permite publicar sin reemplazar ({exc.strerror})") from exc
             raise
-        return
+        return None
     try:
         _renameat2_noreplace(temporal, destino)
     except OSError as exc:
@@ -255,6 +254,7 @@ def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None) -> Non
             os.close(fd)
     except OSError:
         pass
+    return None
 
 
 def _temporales_de(op, epoca: int) -> list[Path]:
@@ -533,7 +533,7 @@ class AsignacionService:
             _validar_destino_en_raiz(raiz.path, destino)
             _validar_destino_en_raiz(raiz.path, Path(op["temporal"]))
         except (RaizNoDisponibleError, DestinoFueraDeRaizError) as exc:
-            causa = getattr(exc, "causa", None) or sanear_excepcion(exc)
+            causa = sanear_excepcion(exc)
             return Resultado(EstadoResultado.ERROR, causa, op["destino"])
         base_temporal = Path(op["temporal"])
         mi_temporal = base_temporal.with_name(f"{base_temporal.name}.{prop.epoca}")
@@ -547,7 +547,7 @@ class AsignacionService:
                 _validar_destino_en_raiz(raiz.path, destino)
                 _validar_destino_en_raiz(raiz.path, mi_temporal)
             except (RaizNoDisponibleError, DestinoFueraDeRaizError) as exc:
-                causa = getattr(exc, "causa", None) or sanear_excepcion(exc)
+                causa = sanear_excepcion(exc)
                 return Resultado(EstadoResultado.ERROR, causa, op["destino"])
             if not destino.exists():
                 try:
@@ -575,14 +575,21 @@ class AsignacionService:
                     _validar_destino_en_raiz(raiz.path, destino)
                     _validar_destino_en_raiz(raiz.path, mi_temporal)
                 except (RaizNoDisponibleError, DestinoFueraDeRaizError) as exc:
-                    mi_temporal.unlink(missing_ok=True)
-                    causa = getattr(exc, "causa", None) or sanear_excepcion(exc)
+                    with contextlib.suppress(OSError):
+                        eliminar_en_raiz(mi_temporal, raiz.path)
+                    causa = sanear_excepcion(exc)
                     return Resultado(EstadoResultado.ERROR, causa, op["destino"])
                 if not await prop.vigente():
                     mi_temporal.unlink(missing_ok=True)
                     return perdida
                 try:
-                    await asyncio.to_thread(_publicar, mi_temporal, destino, raiz=raiz.path)
+                    publicado = await asyncio.to_thread(_publicar, mi_temporal, destino, raiz=raiz.path)
+                    if publicado is not None and publicado != destino:
+                        if not await self._fijar_destino(op_id, publicado, prop.epoca):
+                            return perdida
+                        op = dict(op)
+                        op["destino"] = str(publicado)
+                        destino = publicado
                 except FileNotFoundError:
                     return perdida           # su temporal ya no está: otro ejecutor lo limpió al tomar la operación
                 except FileExistsError:
@@ -650,6 +657,16 @@ class AsignacionService:
             hecho = (await s.execute(text(
                 "UPDATE asignacion_operaciones SET estado = CAST(:e AS asignacion_estado), actualizada = now() "
                 "WHERE id = :i AND epoca = :ep RETURNING 1"), {"e": estado, "i": op_id, "ep": epoca})).first()
+            await s.commit()
+        return hecho is not None
+
+    async def _fijar_destino(self, op_id: UUID, destino: Path, epoca: int) -> bool:
+        """Persiste el destino efectivo si este ejecutor sigue siendo el dueño."""
+        async with self._fabrica() as s:
+            hecho = (await s.execute(text(
+                "UPDATE asignacion_operaciones SET destino = :d, actualizada = now() "
+                "WHERE id = :i AND epoca = :ep RETURNING 1"),
+                {"d": str(destino), "i": op_id, "ep": epoca})).first()
             await s.commit()
         return hecho is not None
 
