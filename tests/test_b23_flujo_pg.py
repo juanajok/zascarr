@@ -212,3 +212,40 @@ async def test_flujo_elegir_candidato_descargar_importar(entorno, monkeypatch):
         issue = (await s.execute(select(Issue))).scalar_one()
     assert informe.errors == [] and fila.issue_id == issue.id
     assert not any(entorno.descargas.iterdir())
+
+
+async def test_especial_y_pack_no_crean_numero(entorno):
+    await serie_vacia(entorno, titulo="Flash")
+    un_zip(entorno.descargas / "Flash Especial 1.cbz", paginas=5)
+    un_zip(entorno.descargas / "Flash 001-003.cbz", paginas=4)
+
+    informe = await importar(entorno)
+
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(select(Issue))).scalars().all() == []
+        filas = (await s.execute(select(File))).scalars().all()
+    assert len(informe.unsorted) == 2
+    assert all("_Unsorted" in f.file_path for f in filas)
+
+
+async def test_opt_in_apagado_no_crea_numero(entorno, monkeypatch):
+    monkeypatch.setattr(mod.get_settings(), "import_create_missing_issue", False)
+    await serie_vacia(entorno)
+    un_zip(entorno.descargas / "Flash 001 (1987).cbz")
+
+    await importar(entorno)
+
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(select(Issue))).scalars().all() == []
+        (fila,) = (await s.execute(select(File))).scalars().all()
+    assert "_Unsorted" in fila.file_path
+
+
+async def test_nombre_sin_numero_no_crea_numero(entorno):
+    await serie_vacia(entorno)
+    un_zip(entorno.descargas / "Flash.cbz")
+
+    await importar(entorno)
+
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(select(Issue))).scalars().all() == []
