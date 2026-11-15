@@ -225,3 +225,74 @@ def test_m2_el_log_generico_no_vuelca_traza_ni_url(monkeypatch):
     assert fallos and fallos[0]["fuente"] == "reading_orders"
     assert fallos[0]["error"] == "RuntimeError"
     assert "exc_info" not in fallos[0] and "comicbookreadingorders" not in repr(fallos)
+
+
+# ── #854: foco del error y formulario htmx con estado de espera ──────────────────────────
+
+def test_el_formulario_usa_htmx_y_deshabilita_el_boton(monkeypatch):
+    monkeypatch.setattr("zascarr.web.arcos.fuente_habilitada", lambda *_a, **_k: True)
+    c = _cliente()
+    try:
+        r = c.get("/ui/arcos/importar-guia")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert 'hx-post="/ui/arcos/importar-guia"' in r.text
+    assert 'hx-target="#resultado-importar"' in r.text
+    assert 'hx-disable="find button"' in r.text
+    assert 'id="resultado-importar"' in r.text
+    assert 'id="importar-espera"' in r.text and "Leyendo la guía" in r.text
+
+
+def test_el_error_del_formulario_recibe_el_foco(monkeypatch):
+    monkeypatch.setattr("zascarr.web.arcos.fuente_habilitada", lambda *_a, **_k: True)
+    c = _cliente()
+    try:
+        r = c.post("/ui/arcos/importar-guia",
+                   data={"fuente": "reading_orders",
+                         "url": "https://atacante.example/guia/"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "autofocus" in r.text and 'aria-invalid="true"' in r.text
+
+
+def test_con_la_fuente_apagada_no_se_muestra_el_formulario(monkeypatch):
+    monkeypatch.setattr("zascarr.web.arcos.fuente_habilitada", lambda *_a, **_k: False)
+    c = _cliente()
+    try:
+        r = c.get("/ui/arcos/importar-guia")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert 'action="/ui/arcos/importar-guia"' not in r.text
+    assert 'href="/ui/ajustes"' in r.text
+
+
+def test_htmx_error_devuelve_solo_el_parcial(monkeypatch):
+    monkeypatch.setattr("zascarr.web.arcos.fuente_habilitada", lambda *_a, **_k: True)
+    c = _cliente()
+    try:
+        r = c.post("/ui/arcos/importar-guia",
+                   data={"fuente": "reading_orders",
+                         "url": "https://atacante.example/guia/"},
+                   headers={"HX-Request": "true"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "<html" not in r.text
+    assert "no es una guía válida" in r.text
+
+
+def test_htmx_exito_usa_hx_redirect(monkeypatch):
+    monkeypatch.setattr("zascarr.web.arcos.fuente_habilitada", lambda *_a, **_k: True)
+    resultado = _resultado()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.leer_y_reconciliar", AsyncMock(return_value=resultado)):
+            r = c.post("/ui/arcos/importar-guia",
+                       data={"fuente": "reading_orders", "url": URL_RO},
+                       headers={"HX-Request": "true"}, follow_redirects=False)
+    finally:
+        _cerrar()
+    assert r.status_code == 303
+    assert r.headers["HX-Redirect"].startswith(f"/ui/arcos/{resultado.arco_id}?importada=1")

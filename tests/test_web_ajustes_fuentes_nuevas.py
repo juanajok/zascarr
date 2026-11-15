@@ -53,6 +53,11 @@ def test_las_fuentes_nuevas_y_el_token_estan_en_ajustes(monkeypatch):
     # SCR5: el feed público de Comic Book Herald es una fuente más.
     assert 'name="comic_book_herald_enabled"' in r.text
     assert "Comic Book Herald" in r.text and "feed público" in r.text
+    # #854: fuentes agrupadas en metadatos vs guías/novedades y textos al día.
+    assert 'role="group"' in r.text
+    assert 'id="fuentes-metadatos"' in r.text and 'id="fuentes-guias"' in r.text
+    assert "GCD, por ahora, solo sirve para buscar series en Descubrir" not in r.text
+    assert "Metron, año, fin y sinopsis" in r.text
     assert "Comic Book Reading Orders" in r.text and "Continuity Guide" in r.text
 
 
@@ -185,3 +190,13 @@ def test_guardar_fuentes_incluye_el_feed_de_herald(monkeypatch):
         _cerrar()
     assert r.status_code == 200
     assert guardar.await_args.args[0]["comic_book_herald_enabled"] is True
+
+
+def test_el_placeholder_del_foro_es_corto_y_el_aviso_http_es_estatico():
+    from pathlib import Path
+
+    plantilla = (Path(__file__).resolve().parents[1]
+                 / "src" / "zascarr" / "web" / "templates" / "ajustes.html")
+    texto = plantilla.read_text(encoding="utf-8")
+    assert "ya configurada (vacío = no cambiar)' if forum_password_configurada" in texto
+    assert "viajan sin cifrar" in texto

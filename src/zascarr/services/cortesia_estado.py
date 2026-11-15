@@ -111,6 +111,14 @@ def _reintento_legible(intento: dict) -> str:
     return f"{resultado} hace {_espera(intento.get('hace_s', 0))}"
 
 
+#: Códigos de bloqueo que la UI traduce a llano (el código no se pinta).
+_MOTIVOS_DE_BLOQUEO = {
+    "429": "La web nos pidió esperar",
+    "flood": "El foro pidió esperar",
+    "maxlag": "La wiki pidió bajar el ritmo",
+}
+
+
 def _fila(fuente: dict, ajustes) -> dict:
     nombre = fuente.get("fuente")
     etiqueta = fuente.get("nombre") or NOMBRES_DE_FUENTE.get(nombre, nombre)
@@ -141,7 +149,8 @@ def _fila(fuente: dict, ajustes) -> dict:
         "en_espera": en_espera,
         "reintentos": _reintento_legible(intentos[0]) if intentos else "Ninguno",
         "nota_apagada": estado == "Apagada",
-        "motivo_bloqueo": fuente.get("bloqueo_motivo"),
+        "motivo_bloqueo": _MOTIVOS_DE_BLOQUEO.get(
+            str(fuente.get("bloqueo_motivo") or "")),
     }
 
 

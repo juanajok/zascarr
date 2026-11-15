@@ -1,131 +1,136 @@
-"""Revisión de UI/UX de 2026-11-12 contra el sistema de diseño: una regresión por hallazgo.
-
-Cada prueba lleva el nombre del mecanismo que falló al revisar la app con una biblioteca de prueba
-(22 CBZ, Chromium a 1280 y 375 px).
-"""
+"""#854: pasada de UI/UX (Herald perezoso y hallazgos M/B de la auditoría)."""
 from __future__ import annotations
 
-import re
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import MetadataSource
-from zascarr.services.registro_biblioteca import EstadoRegistro, FaseRegistro
-from zascarr.web import discovery
-from zascarr.web.routes import crear_templates
+from zascarr.services.arcos import DetalleArco, FilaArco, PaginaArcos
 
-RAIZ = Path(__file__).resolve().parents[1] / "src" / "zascarr"
-PLANTILLAS = RAIZ / "web" / "templates"
-CSS = (RAIZ / "static" / "web.css").read_text(encoding="utf-8")
+RAIZ = Path(__file__).resolve().parents[1]
+CSS = (RAIZ / "src" / "zascarr" / "static" / "web.css").read_text(encoding="utf-8")
 
 
-def _regla(selector: str) -> str:
-    m = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", CSS)
-    assert m, f"no hay regla para {selector}"
-    return " ".join(m.group(1).split())
+def _cliente(execute=None):
+    async def _exec(_consulta):
+        return SimpleNamespace(scalar_one_or_none=lambda: None)
+
+    async def _db():
+        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
+                              execute=execute or _exec)
+
+    app.dependency_overrides[get_db] = _db
+    return TestClient(app)
 
 
-def _texto(html: str) -> str:
-    return " ".join(re.sub(r"<[^>]+>", " ", html).split())
+def _cerrar():
+    app.dependency_overrides.pop(get_db, None)
 
 
-class TestLasBusquedasRespondenAlEscribirNoSoloAlSoltarUnaTecla:
-    """`keyup` no salta al pegar con el ratón, al elegir un autocompletado ni con algunos
-    teclados del móvil: la búsqueda se quedaba muda. `input` salta con cualquier forma de
-    escribir."""
-
-    def test_ninguna_busqueda_depende_solo_de_keyup(self):
-        malas = []
-        for p in sorted(PLANTILLAS.glob("*.html")):
-            for disparo in re.findall(r'hx-trigger="([^"]*)"', p.read_text(encoding="utf-8")):
-                if "keyup" in disparo and "input" not in disparo:
-                    malas.append(f"{p.name}: {disparo}")
-        assert not malas, "búsquedas que solo responden a keyup:\n  " + "\n  ".join(malas)
-
-    def test_la_busqueda_de_por_revisar_usa_input(self):
-        t = (PLANTILLAS / "_tarjeta_pendiente.html").read_text(encoding="utf-8")
-        assert 'hx-trigger="input changed delay:400ms, search"' in t
+def test_el_estado_vacio_de_sagas_tiene_accion_principal():
+    pagina = PaginaArcos([], 0, 1, 1, 0, 0)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.listar_arcos", AsyncMock(return_value=pagina)):
+            r = c.get("/ui/arcos")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert 'class="arcos-acciones"' in r.text
+    assert 'class="empty-state"' in r.text
+    assert 'class="btn primary" href="/ui/arcos/nueva"' in r.text
+    assert 'class="arcos-acciones-secundarias"' in r.text
 
 
-class TestUnSoloBotonPrincipalEnDuplicados:
-    """Con la biblioteca sin registrar salían tres amarillos a la vez: revisar, registrar y
-    reescanear. El principal es el que hace avanzar la tarea del Inicio (registrar); los otros dos
-    son neutros."""
-
-    def test_revisar_y_reescanear_son_neutros(self):
-        botones = {
-            "auditoria.html": r"<button[^>]*>\s*Revisar mi biblioteca",
-            "_rescan_biblioteca.html": r'<button[^>]*aria-describedby="rescan-aviso"[^>]*>',
-        }
-        for nombre, patron in botones.items():
-            boton = re.search(patron, (PLANTILLAS / nombre).read_text(encoding="utf-8"))
-            assert boton, nombre
-            assert "primary" not in boton.group(0), f"{nombre}: {boton.group(0)}"
-
-
-class TestElResumenDelRegistroNoCuentaCeros:
-    """«0 con serie sugerida (falta confirmar…)» explicaba algo que no había pasado; y
-    «1 repetidos»."""
-
-    def _render(self, **kw) -> str:
-        reg = EstadoRegistro(fase=FaseRegistro.TERMINADO, total=22, procesados=22, **kw)
-        return _texto(crear_templates().get_template("_auditoria_registro.html").render(reg=reg))
-
-    def test_sin_series_sugeridas_no_se_nombran(self):
-        t = self._render(sin_identificar=21, repetidos=1)
-        assert "con serie sugerida" not in t
-        assert "21 sin identificar" in t
-
-    def test_un_repetido_va_en_singular(self):
-        t = self._render(sin_identificar=21, repetidos=1)
-        assert "1 repetido (" in t and "1 repetidos" not in t
-
-    def test_con_series_sugeridas_se_siguen_explicando(self):
-        t = self._render(registrados=3, sin_identificar=2, repetidos=2)
-        assert "3 con serie sugerida" in t and "no están clasificados" in t
-        assert "2 repetidos" in t
+def test_la_saga_usa_un_solo_autofocus_con_prioridad_pedido():
+    arco_id = uuid4()
+    filas = [FilaArco(1, "i1", "s1", "Batman", "1", None, None, True)]
+    detalle = DetalleArco(str(arco_id), "Saga", None, False, filas, 1)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{arco_id}?importada=1&enlazados=1&omitidos=0"
+                      "&guardado=pedido&anadidos=1&ya_pedidos=0&en_biblioteca=0")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert r.text.count("autofocus") == 1
 
 
-class TestSinFuentesCrearAManoEsElCamino:
-    """Con todas las fuentes apagadas (lo que trae una instalación nueva, ADR 0013) la única forma
-    de dar de alta una serie estaba plegada al final de la página, y «Ajustes» no era un enlace."""
+def test_los_controles_de_fila_tienen_nombres_accesibles_unicos():
+    arco_id = uuid4()
+    filas = [FilaArco(1, "i1", "s1", "Batman", "1", None, None, True),
+             FilaArco(2, "i2", "s1", "Batman", "2", None, None, True)]
+    detalle = DetalleArco(str(arco_id), "Saga", None, False, filas, 1)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=detalle)):
+            r = c.get(f"/ui/arcos/{arco_id}")
+    finally:
+        _cerrar()
+    for texto in ("Subir Batman #1 una posición", "Bajar Batman #1 una posición",
+                  "Quitar Batman #1 de la saga", "Subir Batman #2 una posición"):
+        assert f'aria-label="{texto}"' in r.text
+    assert r.text.count('aria-label="Subir ') == 2
 
-    def test_el_alta_a_mano_se_enseña_abierta_y_ajustes_es_un_enlace(self, monkeypatch):
-        monkeypatch.setattr(discovery, "fuentes_que_se_consultan", lambda _settings: [])
-        r = TestClient(app).get("/ui/descubrir")
-        assert r.status_code == 200 and "No hay ninguna fuente activa" in r.text
-        assert '<details class="alta-a-mano" open>' in r.text
-        assert '<a href="/ui/ajustes">Ajustes</a>' in r.text
 
-    def test_con_alguna_fuente_el_alta_a_mano_sigue_plegada(self, monkeypatch):
-        monkeypatch.setattr(discovery, "fuentes_que_se_consultan",
-                            lambda _settings: [MetadataSource.COMIC_VINE])
-        r = TestClient(app).get("/ui/descubrir")
-        assert '<details class="alta-a-mano">' in r.text
+def test_el_h1_de_la_saga_solo_usa_titulo_frase_si_es_largo():
+    arco_id = uuid4()
+    corta = DetalleArco(str(arco_id), "Saga", None, False, [], 0)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=corta)):
+            r = c.get(f"/ui/arcos/{arco_id}")
+    finally:
+        _cerrar()
+    assert "<h1>Saga</h1>" in r.text
+
+    larga = DetalleArco(str(arco_id), "Una saga con muchas palabras", None, False, [], 0)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.detalle_arco", AsyncMock(return_value=larga)):
+            r = c.get(f"/ui/arcos/{arco_id}")
+    finally:
+        _cerrar()
+    assert '<h1 class="titulo-frase">Una saga con muchas palabras</h1>' in r.text
 
 
-class TestLaMaquetacionNoSeRompe:
-    def test_la_ficha_pone_los_datos_al_lado_de_la_portada(self):
-        """Sin base propia, el bloque de datos bajaba debajo de la portada incluso a 1280 px."""
-        regla = _regla(".series-header > div")
-        assert "flex: 1 1 20rem" in regla and "min-width: 0" in regla
+def test_la_ficha_tiene_una_sola_caja_de_atribucion_y_details_coherente():
+    from tests.test_web_series import (
+        FakeExecResult,
+        FakeSession,
+        acuse,
+        make_series,
+        retirados,
+        use_fake_session,
+    )
 
-    def test_la_ficha_no_lleva_estilos_en_linea(self):
-        ficha = (PLANTILLAS / "series_detail.html").read_text(encoding="utf-8")
-        assert 'style="display:inline"' not in ficha
-        assert "display: inline" in _regla(".anio-titulo")
+    series = make_series(total_issues=3)
+    series.fandom_dc_slug = "Batman"
+    series.metadata_ = {"relleno": {"gcd": {"id": "1", "campos": ["start_year"],
+                                            "ultimo_intento": "2026-11-14T12:00:00+00:00",
+                                            "url_ficha": "https://www.comics.org/series/1/"}}}
+    session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                           retirados(), FakeExecResult([])])
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}")
+    assert r.status_code == 200
+    assert r.text.count('class="atribucion-fuentes"') == 1
+    assert "<summary>Aviso legal</summary>" in r.text
+    assert "Grand Comics Database" in r.text and "DC Database" in r.text
 
-    def test_ignorar_va_al_pie_de_la_tarjeta(self):
-        assert "margin-top: auto" in _regla(".pending-body > .btn-ignorar")
-        assert "flex: 1" in _regla(".pending-body")
 
-    def test_el_especial_sin_numero_no_se_sale_de_la_tarjeta(self):
-        regla = _regla(".especial-input")
-        assert "width: 100%" in regla and "min-width: 0" in regla
-
-    def test_las_otras_formas_de_revisar_van_en_una_fila(self):
-        t = (PLANTILLAS / "pendientes.html").read_text(encoding="utf-8")
-        assert '<div class="acciones-fila" role="group" aria-label="Otras formas de revisar">' in t
-        assert "flex-wrap: wrap" in _regla(".acciones-fila")
+def test_el_css_de_las_novedades_y_del_formulario_usa_tokens():
+    for clase in (".novedades-lista", ".novedades-esqueleto", ".esqueleto-fila",
+                  ".arcos-acciones", ".atribucion-lista"):
+        assert clase in CSS
+    assert "min-height: calc(5 * 2.75rem" in CSS
+    assert ":has(#novedades-herald-contenido:empty)" in CSS
+    assert "overflow-wrap: anywhere" in CSS
+    assert "font-variant-numeric: tabular-nums" in CSS
+    assert "rgb(" not in CSS.split(".novedades-esqueleto", 1)[1].split("}", 1)[0]

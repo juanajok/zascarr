@@ -58,6 +58,8 @@ class PaginaArcos:
     hasta: int
     #: ¿Hay en la página algún arco de Fandom? El listado pinta el aviso CC-BY-SA una vez.
     hay_fandom: bool = False
+    #: ¿Hay algún arco reconciliado de una guía? El listado enlaza su fuente original.
+    hay_guia: bool = False
 
 
 @dataclass(frozen=True)
@@ -101,7 +103,9 @@ async def listar_arcos(db: AsyncSession, pagina: int = 1) -> PaginaArcos:
         filas=resumenes,
         total=total, pagina=pagina, paginas=paginas, desde=desde,
         hasta=min(desde + POR_PAGINA, total),
-        hay_fandom=any(fila.origen == "fandom_dc" for fila in resumenes))
+        hay_fandom=any(fila.origen == "fandom_dc" for fila in resumenes),
+        hay_guia=any(fila.origen in ("reading_orders", "continuity_guide")
+                     for fila in resumenes))
 
 
 async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
