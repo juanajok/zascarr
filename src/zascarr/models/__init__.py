@@ -786,7 +786,10 @@ class LibraryRoot(Base):
     __table_args__ = (
         CheckConstraint(
             "path LIKE '/%' AND path <> '/' "
-            "AND path NOT LIKE '%/../%' AND path NOT LIKE '%/.zascarr%'",
+            "AND path NOT LIKE '%/' AND path NOT LIKE '%//%' "
+            "AND path NOT LIKE '%/../%' AND path NOT LIKE '%/..' "
+            "AND path NOT LIKE '%/./%' AND path NOT LIKE '%/.' "
+            "AND path NOT LIKE '%/.zascarr%'",
             name="ck_library_root_path",
         ),
         CheckConstraint("is_default = false OR enabled = true",

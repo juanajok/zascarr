@@ -1,15 +1,14 @@
 # Especificación — BL-A5: repartir tradiciones entre discos (#156)
 
-> **Estado: DISEÑO PROPUESTO. NO APROBADO. NO IMPLEMENTADO. MIGRACIÓN NO AUTORIZADA NI
-> APLICADA.** Este documento **no escribe código, no crea la migración, no toca el disco, no
-> ejecuta pruebas y no despliega nada**. Las decisiones de producto de §2 están **pendientes del
-> PO**; se proponen, no se dan por aprobadas.
+> **Estado: APROBADO (D1–D7). CORTE A IMPLEMENTADO EN #844. MIGRACIÓN 0041 CREADA, NO APLICADA
+> EN PRODUCCIÓN. CORTES B–D PENDIENTES.** Este documento es la especificación de referencia; la
+> implementación del corte A (modelo, migración y `RaicesService`) vive en el PR #844. La migración
+> no se ha aplicado a ninguna instalación real y **A5 no está hecho**: solo se cierra con C+D (§8).
 > **Base contrastada:** `origin/main` **`acb82a40`** (2026-11-14), worktree `.squad/wt-156bench`,
 > rama `docs/156-benchmark`. La ficha de benchmark
 > [`benchmark-BL-A5-repartir-tradiciones.md`](benchmark-BL-A5-repartir-tradiciones.md) es insumo,
 > no aprobación. **Estimación: L** (§8); **A5 no se cierra con un corte parcial** (§8).
-> **ADR:** se recomienda **ADR 0020** si el PO acepta persistir raíces y `root_id` (§9); **no se
-> crea en este encargo**.
+> **ADR:** **ADR 0020** (`docs/adr/0020-raices-de-biblioteca.md`), aceptado por el PO para el corte A.
 
 ---
 
@@ -39,9 +38,10 @@ segundo disco desde la UI, y A+B sin C miente en el escaneo.
 ---
 
 > **Aprobación del PO (2026-11-14).** Se aprueban las **7 decisiones recomendadas D1–D7** tal como
-> figuran en §2, y se autoriza empezar por el **corte A** (cimiento y migración) sin cambiar todavía
-> el comportamiento del importer ni Ajustes. La implementación del corte A exige ADR (recomendado
-> ADR 0020) y migración aditiva; los cortes B–D siguen pendientes de planificación.
+> figuran en §2, y se autoriza el **corte A** (cimiento y migración) sin cambiar todavía el
+> comportamiento del importer ni Ajustes. El corte A está implementado en **#844**: ADR 0020,
+> modelos, migración aditiva 0041 y `RaicesService`; la migración **no se ha aplicado en producción**.
+> Los cortes B–D siguen pendientes de planificación; **A5 no está hecho**.
 
 ## 1. Historia, valor y alcance
 
@@ -90,21 +90,21 @@ resto de la aplicación sepa **dónde está cada cosa y qué raíz está caída*
 
 ---
 
-## 2. Decisiones de producto (pendientes del PO)
+## 2. Decisiones de producto (aprobadas por el PO)
 
-Las siete preguntas del benchmark (`benchmark…:295-305`), con opciones y recomendación. **Ninguna
-está aprobada**; la columna «Decisión del PO» queda **PENDIENTE** hasta que el PO la cierre. Si el
-PO no decide, la implementación **no empieza** por las que bloquean el contrato (1, 2, 3, 6).
+Las siete preguntas del benchmark (`benchmark…:295-305`), con opciones y recomendación. **Las siete
+(D1–D7) fueron aprobadas por el PO el 2026-11-14** tal como se indican; son la base del corte A y de
+los cortes B–D pendientes.
 
 | # | Pregunta | Opciones | Recomendación provisional | Decisión del PO |
 |---|---|---|---|---|
-| 1 | **¿Dónde vive la configuración?** | (a) `.env`/Compose estático; (b) Ajustes en caliente (D11); (c) tabla BD; (d) mezcla | **(d) Mezcla:** `.env`/Compose autoriza **qué está montado** (frontera de seguridad); la BD guarda nombre, `path`, `host_path`, `enabled` y tradiciones; Ajustes gestiona **solo raíces ya montadas**. Añadir disco = montaje + reinicio; no socket Docker. Se propone `LIBRARY_ROOTS`/`HOST_LIBRARY_ROOTS` como allowlist de montajes (§5) | **PENDIENTE** |
-| 2 | **¿Mapeo tradición→raíz o raíz→varias tradiciones?** | (a) 1:1; (b) N tradiciones por raíz; (c) N raíces por tradición con prioridad | **(b) una raíz puede tener N tradiciones; cada tradición una sola raíz.** Varias raíces por tradición es ambigüedad silenciosa; si se quiere, debe ser lista ordenada explícita, nunca fallback | **PENDIENTE** |
-| 3 | **¿Qué pasa si una tradición no tiene raíz?** | (a) raíz por defecto; (b) `_Unsorted`; (c) no mover y avisar; (d) elegir la raíz con más espacio | **(c) no mover y avisar** (fallo cerrado). Un default silencioso llena el disco equivocado; elegir por espacio rompe «cada tradición a su disco». `other` puede tener una raíz explícita «sin clasificar»; `_Unsorted` solo va a la raíz por defecto, que también es explícita | **PENDIENTE** |
-| 4 | **¿Se mueven los ficheros ya registrados al cambiar la configuración?** | (a) sí automático; (b) preguntar y mover; (c) no mover; (d) comando aparte | **(c) no en A5.** El cambio de mapeo solo afecta a importaciones nuevas; los archivos antiguos conservan su `root_id` y su ruta. Mover es otra historia con dry-run/confirmación/rollback | **PENDIENTE** |
-| 5 | **¿Un contrato único de escaneo o uno por consumidor?** | (a) cada servicio itera raíces; (b) un `RaicesService`/iterador común | **(b) un iterador único** (`RaicesService`) usado por importer, adopter, rescan, auditoría, disponibilidad, cuarentena, conversión y vinculación. Si cada uno hace su `rglob`, las diferencias serán bugs | **PENDIENTE** |
-| 6 | **¿Ruta persistida o derivada?** | (a) solo derivar por prefijo; (b) `root_id` en `File`; (c) ambas | **(c) `root_id` persistido + `file_path` absoluto**; la derivación por prefijo es solo compatibilidad de migración. Sin `root_id`, una raíz retirada o dos prefijos solapados hacen ambigua la pertenencia y la auditoría no distingue «archivo de raíz A» de «huérfano» | **PENDIENTE** |
-| 7 | **¿Alcance y esfuerzo?** | (a) L completo; (b) MVP sin UI; (c) partir en historias | **(a) L completo, cuatro cortes acumulativos** (§8); un «MVP sin UI» puede validar el contrato pero **no cierra A5**, porque el coleccionista no puede añadir el segundo disco | **PENDIENTE** |
+| 1 | **¿Dónde vive la configuración?** | (a) `.env`/Compose estático; (b) Ajustes en caliente (D11); (c) tabla BD; (d) mezcla | **(d) Mezcla:** `.env`/Compose autoriza **qué está montado** (frontera de seguridad); la BD guarda nombre, `path`, `host_path`, `enabled` y tradiciones; Ajustes gestiona **solo raíces ya montadas**. Añadir disco = montaje + reinicio; no socket Docker. Se propone `LIBRARY_ROOTS`/`HOST_LIBRARY_ROOTS` como allowlist de montajes (§5) | **APROBADA (2026-11-14)** |
+| 2 | **¿Mapeo tradición→raíz o raíz→varias tradiciones?** | (a) 1:1; (b) N tradiciones por raíz; (c) N raíces por tradición con prioridad | **(b) una raíz puede tener N tradiciones; cada tradición una sola raíz.** Varias raíces por tradición es ambigüedad silenciosa; si se quiere, debe ser lista ordenada explícita, nunca fallback | **APROBADA (2026-11-14)** |
+| 3 | **¿Qué pasa si una tradición no tiene raíz?** | (a) raíz por defecto; (b) `_Unsorted`; (c) no mover y avisar; (d) elegir la raíz con más espacio | **(c) no mover y avisar** (fallo cerrado). Un default silencioso llena el disco equivocado; elegir por espacio rompe «cada tradición a su disco». `other` puede tener una raíz explícita «sin clasificar»; `_Unsorted` solo va a la raíz por defecto, que también es explícita | **APROBADA (2026-11-14)** |
+| 4 | **¿Se mueven los ficheros ya registrados al cambiar la configuración?** | (a) sí automático; (b) preguntar y mover; (c) no mover; (d) comando aparte | **(c) no en A5.** El cambio de mapeo solo afecta a importaciones nuevas; los archivos antiguos conservan su `root_id` y su ruta. Mover es otra historia con dry-run/confirmación/rollback | **APROBADA (2026-11-14)** |
+| 5 | **¿Un contrato único de escaneo o uno por consumidor?** | (a) cada servicio itera raíces; (b) un `RaicesService`/iterador común | **(b) un iterador único** (`RaicesService`) usado por importer, adopter, rescan, auditoría, disponibilidad, cuarentena, conversión y vinculación. Si cada uno hace su `rglob`, las diferencias serán bugs | **APROBADA (2026-11-14)** |
+| 6 | **¿Ruta persistida o derivada?** | (a) solo derivar por prefijo; (b) `root_id` en `File`; (c) ambas | **(c) `root_id` persistido + `file_path` absoluto**; la derivación por prefijo es solo compatibilidad de migración. Sin `root_id`, una raíz retirada o dos prefijos solapados hacen ambigua la pertenencia y la auditoría no distingue «archivo de raíz A» de «huérfano» | **APROBADA (2026-11-14)** |
+| 7 | **¿Alcance y esfuerzo?** | (a) L completo; (b) MVP sin UI; (c) partir en historias | **(a) L completo, cuatro cortes acumulativos** (§8); un «MVP sin UI» puede validar el contrato pero **no cierra A5**, porque el coleccionista no puede añadir el segundo disco | **APROBADA (2026-11-14)** |
 
 **Consecuencia si no hay decisión:** no se implementa. El comportamiento actual (una raíz) sigue
 siendo el único soportado; no se introduce una raíz «provisional» ni un fallback. Las decisiones 1,
@@ -187,7 +187,7 @@ Restricciones:
 - No se añaden columnas a `conversion` ni a `vinculacion`: usan la ruta/`File` y su raíz; el
   diario/JSONB guarda `root_id` si hace falta para deshacer.
 
-### 3.2 Migración 0041 (propuesta, no aplicada)
+### 3.2 Migración 0041 (creada en #844; NO aplicada en producción)
 
 **Revisión `0041`, `down_revision = "0040"`** (la cabeza actual es `0040`; no existe
 `library_roots` ni `root_id` — comprobado con `grep -RIn 'library_roots\|root_id' src alembic/versions`
@@ -658,12 +658,13 @@ En `/ui/ajustes`, una tarjeta nueva (sección «Biblioteca» o «Archivos»):
 ### 7.6 PASS / FAIL / NOT RUN de esta especificación
 
 - **PASS:** lectura del benchmark y contraste con el código de `acb82a40`; contrato de datos,
-  comportamiento, seguridad, UX, pruebas y partición definidos; no se ejecutó nada.
-- **FAIL:** ninguno de la especificación. Un fallo real solo puede aparecer al implementar/probar.
-- **NOT RUN:** migración 0041, tests, dos discos/montajes, `safe_move` con EXDEV/disco lleno,
-  escaneo real con raíz caída, navegador/Ajustes, producción y Pi. La ficha de benchmark ya declaró
-  NOT RUN las ejecuciones de referencias y la prueba con dos discos; esta spec **no las convierte en
-  PASS**.
+  comportamiento, seguridad, UX, pruebas y partición definidos. Corte A: ADR 0020, modelo,
+  migración 0041 y `RaicesService` implementados y probados localmente (unitarias + PG real).
+- **FAIL:** ninguno de la especificación ni del corte A en las pruebas locales.
+- **NOT RUN:** migración 0041 **aplicada en una instalación real**, dos discos/montajes físicos,
+  `safe_move` con EXDEV/disco lleno, escaneo real con raíz caída, navegador/Ajustes, producción y Pi;
+  cortes B–D. La ficha de benchmark ya declaró NOT RUN las ejecuciones de referencias y la prueba
+  con dos discos; esta spec **no las convierte en PASS**.
 
 ---
 
@@ -709,7 +710,7 @@ otra raíz) sin escaneo por raíz haría que la app mintiera, que es justo lo qu
 | **BL-R9 / #326 rescan** | Rescan hoy hereda una raíz (`library_adopter.py:290,339,499`; `rescan_biblioteca.py:1-15,51-55`) | A5 lo hace iterar raíces; conserva el registro incremental, el cerrojo y los contratos de #326 |
 | **#231 disponibilidad** | Hoy la comprobación es global; el estado puede mentir si una raíz cae | A5 añade resultado/recuentos por raíz y un estado global «sin verificar» si alguna no se pudo mirar; no cambia la regla de solo lectura de la lista |
 | **#264 / ADR 0017 apartados** | La cuarentena actual es `<library>/.zascarr/apartados` global y la ruta relativa es única (`web/auditoria.py:395-399,437`) | Con N raíces, la cuarentena es **por raíz de origen**; la operación guarda `root_id` por ítem; undo no cruza monturas. Si #264 está fusionado, se adapta; si no, se coordina antes de C |
-| **ADR 0020** | Persistir raíces y `root_id` es una decisión duradera de modelo/configuración/seguridad | **Se recomienda crear ADR 0020** (siguiente número libre; no se crea aquí) que fije: entidad raíz, allowlist de montajes, unicidad tradición→raíz, `root_id`, migración y no-mover-existentes. Sin ADR aceptado, no se implementa el corte A |
+| **ADR 0020** | Persistir raíces y `root_id` es una decisión duradera de modelo/configuración/seguridad | **ADR 0020 creado** (`docs/adr/0020-raices-de-biblioteca.md`, aceptado para el corte A): entidad raíz, allowlist de montajes, unicidad tradición→raíz, `root_id`, migración y no-mover-existentes. Los cortes B–D siguen pendientes |
 
 **No se resuelve por decreto:** las decisiones 1, 2, 3, 6 y 7 del PO son previas al ADR; el ADR
 registra la decisión, no la sustituye.
@@ -792,15 +793,18 @@ registra la decisión, no la sustituye.
 | AC-14 | `test_ajustes_raices_browser`, `test_ajustes_a11y_320` | D |
 | AC-15 | Suite completa + `test_no_regresion_una_raiz` + PASS/FAIL/NOT RUN | A-D |
 
-### 10.3 Lo que **NO** se hace
+### 10.3 Lo que **NO** se hace en este corte
 
-- No se crea la migración 0041 ni se aplica.
-- No se implementa `RaicesService`, ni `library_roots`, ni `root_id`, ni la UI.
+- **No se aplica** la migración 0041 a ninguna instalación real; existe creada en #844 y su
+  aplicación es un paso operativo separado.
+- **No se conecta** `RaicesService` a importer/asignación; no hay comportamiento visible nuevo.
+- **No se implementa** la UI de Ajustes, ni los cortes B (importer/asignación) o C (N raíces
+  operativas) o D (Ajustes/operación).
 - No se mueven archivos existentes, no se renombran, no se borran, no se crea una raíz ausente.
-- No se añade socket Docker, no se montan discos, no se cambia Compose/bootstrap en este encargo.
+- No se añade socket Docker ni se montan discos desde la UI.
 - No se introduce una raíz por defecto implícita ni un fallback a otra raíz.
-- No se declara aprobada ninguna decisión de §2; no se declara hecho A5; no se estima una fecha.
-- No se ejecutan pruebas ni se declara PASS lo que está NOT RUN.
+- **No se declara hecho A5**; los cortes B–D siguen pendientes y no se estima una fecha.
+- No se declara PASS lo que está NOT RUN.
 
 ---
 
@@ -827,4 +831,4 @@ registra la decisión, no la sustituye.
 
 ---
 
-*Fin de la especificación. Diseño propuesto; no aprobado; no implementado; no migrado.*
+*Fin de la especificación. D1–D7 aprobadas; corte A implementado en #844; migración 0041 creada pero NO aplicada en producción; cortes B–D pendientes; A5 no está hecho.*

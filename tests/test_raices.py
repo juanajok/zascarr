@@ -16,7 +16,7 @@ from zascarr.services import raices
 
 
 def _settings(tmp_path: Path, **extra):
-    return SimpleNamespace(
+    base = dict(
         library_path=tmp_path / "library",
         library_roots=str(tmp_path / "library"),
         host_library_roots=str(tmp_path / "host-library"),
@@ -24,12 +24,14 @@ def _settings(tmp_path: Path, **extra):
         amule_incoming_dir=tmp_path / "incoming",
         export_path=tmp_path / "export",
         carpetas_compartidas=[],
-        **extra,
     )
+    base.update(extra)
+    return SimpleNamespace(**base)
 
 
 @pytest.fixture
 def tmp_raiz(tmp_path, monkeypatch):
+    (tmp_path / "library").mkdir()
     monkeypatch.setattr(raices, "get_settings", lambda: _settings(tmp_path))
     return tmp_path
 
@@ -54,6 +56,7 @@ def test_valida_raiz_y_rechaza_solapamientos(tmp_raiz):
     assert raiz["is_default"] is False
     existente = SimpleNamespace(id="r1", path=str(tmp_raiz / "library"), name="Biblioteca",
                                 host_path=None)
+    (tmp_raiz / "library" / "sub").mkdir()
     with pytest.raises(raices.RaizInvalidaError, match="solapa"):
         raices.validar_raiz(tmp_raiz / "library" / "sub", name="Sub", raices=[existente])
     with pytest.raises(raices.RaizInvalidaError, match="nombre"):
@@ -70,7 +73,6 @@ def test_rechaza_fuera_de_montaje_y_especiales(tmp_raiz):
 
 
 def test_symlink_roto_y_fichero(tmp_raiz):
-    (tmp_raiz / "library").mkdir()
     roto = tmp_raiz / "library" / "roto"
     roto.symlink_to(tmp_raiz / "no-existe")
     with pytest.raises(raices.RaizInvalidaError, match="symlink roto"):
@@ -139,3 +141,72 @@ def test_una_raiz_conserva_rutas_y_recuentos():
     assert raices.relative_to_root("/media/library/sub/b.cbz", raiz) == Path("sub/b.cbz")
     assert raices.ruta_visible("/media/library/sub/b.cbz", raiz) == "/srv/library/sub/b.cbz"
     assert raices.ruta_visible("/media/otra/c.cbz", raiz) == "/media/otra/c.cbz"
+
+
+def test_generador_de_raices_no_se_consume_antes_de_la_comprobacion(tmp_raiz):
+    existente = SimpleNamespace(id="r1", path=str(tmp_raiz / "library"), name="Biblioteca",
+                                host_path=None)
+    with pytest.raises(raices.RaizInvalidaError, match="solapa"):
+        raices.validar_raiz(tmp_raiz / "library", name="Otra", raices=(r for r in [existente]))
+
+
+def test_allowlist_con_varios_montajes(tmp_raiz, monkeypatch):
+    (tmp_raiz / "library2").mkdir()
+    monkeypatch.setattr(raices, "get_settings", lambda: _settings(
+        tmp_raiz, library_roots=f"{tmp_raiz / 'library'},{tmp_raiz / 'library2'}"))
+    assert raices.validar_raiz(
+        tmp_raiz / "library2", name="Segunda")["path"] == str(tmp_raiz / "library2")
+    with pytest.raises(raices.RaizInvalidaError, match="montaje"):
+        raices.validar_raiz(tmp_raiz / "otro", name="Otro")
+
+
+def test_symlink_al_mismo_inodo_se_rechaza(tmp_raiz):
+    existente = SimpleNamespace(id="r1", path=str(tmp_raiz / "library"), name="Biblioteca",
+                                host_path=None)
+    alias = tmp_raiz / "library" / "alias"
+    alias.symlink_to(tmp_raiz / "library", target_is_directory=True)
+    with pytest.raises(raices.RaizInvalidaError, match="inodo|solapa"):
+        raices.validar_raiz(alias, name="Alias", raices=[existente])
+
+
+def test_raiz_ausente_y_sin_escritura(tmp_raiz, monkeypatch):
+    with pytest.raises(raices.RaizInvalidaError, match="no existe"):
+        raices.validar_raiz(tmp_raiz / "library" / "ausente", name="Ausente")
+
+    def sin_permiso(*_a, **_kw):
+        raise PermissionError("solo lectura")
+    monkeypatch.setattr("tempfile.NamedTemporaryFile", sin_permiso)
+    with pytest.raises(raices.RaizInvalidaError, match="legible"):
+        raices.validar_raiz(tmp_raiz / "library", name="Biblioteca")
+
+
+def test_validar_conjunto_exige_una_raiz_por_defecto(tmp_raiz):
+    with pytest.raises(raices.RaizInvalidaError, match="exactamente"):
+        raices.validar_conjunto([])
+    with pytest.raises(raices.RaizInvalidaError, match="exactamente"):
+        raices.validar_conjunto([SimpleNamespace(is_default=False, enabled=True)])
+    raices.validar_conjunto([SimpleNamespace(is_default=True, enabled=True)])
+
+
+def test_symlink_intermedio_que_escapa_se_rechaza(tmp_raiz):
+    fuera = tmp_raiz / "fuera"
+    fuera.mkdir()
+    escape = tmp_raiz / "library" / "escape"
+    escape.symlink_to(fuera, target_is_directory=True)
+    with pytest.raises(raices.RaizInvalidaError, match="montaje"):
+        raices.validar_raiz(escape, name="Escape")
+
+
+def test_bucle_de_symlink(tmp_raiz):
+    bucle = tmp_raiz / "library" / "bucle"
+    bucle.symlink_to(bucle)
+    with pytest.raises(raices.RaizInvalidaError, match="symlink|bucle"):
+        raices.validar_raiz(bucle, name="Bucle")
+
+
+@pytest.mark.asyncio
+async def test_tradicion_fuera_de_allowlist_actual_no_se_devuelve(tmp_raiz, monkeypatch):
+    fila = SimpleNamespace(id="r1", path=str(tmp_raiz / "fuera"), enabled=True)
+    db = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+        scalar_one_or_none=lambda: fila)))
+    assert await raices.raiz_por_tradicion(db, ComicTradition.MANGA) is None

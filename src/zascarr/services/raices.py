@@ -3,6 +3,10 @@
 Contrato del corte A: normalización y validación de raíces, mapeo tradición→raíz y
 helpers de pertenencia/ruta visible. NO conecta todavía importer ni asignación: el
 comportamiento actual de una sola raíz no cambia.
+
+TOCTOU residual: entre validar y una escritura futura (cortes B/C) el montaje o la
+ruta pueden cambiar. En el corte A no se escribe; B/C deben revalidar (canonical +
+allowlist + permisos) antes de cada importación/escritura.
 """
 from __future__ import annotations
 
@@ -33,23 +37,49 @@ def _sin_barra_final(valor: str) -> str:
     return valor.rstrip("/") or "/"
 
 
+def _rechazar_control(texto: str) -> None:
+    if any(ord(c) < 32 or ord(c) == 127 for c in texto):
+        raise RaizInvalidaError("La ruta contiene caracteres de control.")
+
+
+def _hay_symlink_roto(ruta: str | Path) -> bool:
+    """Recorre los componentes: un symlink roto intermedio o final no se resuelve."""
+    actual = Path("/")
+    for parte in Path(ruta).parts[1:]:
+        actual = actual / parte
+        try:
+            if actual.is_symlink() and not actual.exists():
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def _resolver(ruta: str | Path) -> str:
+    """Ruta canónica real (symlinks resueltos), sin exigir que exista."""
+    try:
+        resuelta = Path(ruta).resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise RaizInvalidaError("La ruta tiene un symlink roto o un bucle.") from exc
+    return _sin_barra_final(os.path.normpath(str(resuelta)))
+
+
 def normalizar_ruta(valor: str | Path) -> str:
     """Ruta absoluta POSIX normalizada, sin `.`/`..` y sin barra final.
 
-    No resuelve symlinks (eso lo hace `validar_raiz` cuando la ruta existe): una ruta
-    inexistente también debe normalizarse para poder crearla/validarla.
+    No recorta espacios: un path con espacios al principio no es absoluto y se
+    rechaza. Tampoco resuelve symlinks: eso lo hace `validar_raiz` sobre la ruta
+    completa para comprobar que el destino real sigue dentro de la allowlist.
     """
-    texto = str(valor).strip()
+    texto = str(valor)
     if not texto:
         raise RaizInvalidaError("La ruta de la raíz no puede estar vacía.")
-    if "\x00" in texto:
-        raise RaizInvalidaError("La ruta contiene un carácter no válido.")
+    _rechazar_control(texto)
     ruta = Path(texto)
     if not ruta.is_absolute():
         raise RaizInvalidaError("La ruta de la raíz debe ser absoluta.")
-    # `resolve(strict=False)` elimina `.` y `..` sin tocar el disco.
     normalizada = os.path.normpath(str(ruta))
-    if normalizada == "." or normalizada == "..":
+    if normalizada in (".", ".."):
         raise RaizInvalidaError("La ruta de la raíz no es válida.")
     normalizada = _sin_barra_final(normalizada)
     if normalizada == "/":
@@ -85,7 +115,7 @@ def rutas_autorizadas() -> list[Montaje]:
     hosts = [p.strip() for p in (settings.host_library_roots or "").split(",")]
     montajes: list[Montaje] = []
     for i, cruda in enumerate(crudas):
-        montajes.append(Montaje(path=normalizar_ruta(cruda),
+        montajes.append(Montaje(path=_resolver(normalizar_ruta(cruda)),
                                 host_path=hosts[i] if i < len(hosts) else ""))
     return montajes
 
@@ -98,7 +128,7 @@ def _rutas_especiales() -> list[str]:
         settings.export_path,
         *settings.carpetas_compartidas,
     ]
-    return [normalizar_ruta(p) for p in candidatas if str(p).strip()]
+    return [_resolver(normalizar_ruta(p)) for p in candidatas if str(p).strip()]
 
 
 def _mismo_inodo(a: Path, b: Path) -> bool:
@@ -107,6 +137,17 @@ def _mismo_inodo(a: Path, b: Path) -> bool:
     except OSError:
         return False
     return (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino)
+
+
+def _comprobar_escritura(ruta: Path) -> None:
+    """Prueba real de lectura/escritura con un temporal creado y borrado."""
+    import tempfile
+    try:
+        with tempfile.NamedTemporaryFile(prefix=".zascarr-prueba-", dir=ruta, delete=True):
+            pass
+    except OSError as exc:
+        raise RaizInvalidaError(
+            f"La raíz no es legible/escribible para el usuario del servicio: {ruta}") from exc
 
 
 def validar_raiz(
@@ -119,38 +160,52 @@ def validar_raiz(
     raices: Iterable[LibraryRoot | dict] = (),
     root_id: str | None = None,
 ) -> dict:
-    """Normaliza y valida una raíz nueva/actualizada.
+    """Normaliza, resuelve y valida una raíz nueva/actualizada.
 
-    `raices` son las raíces ya guardadas (modelos o dicts); se excluye `root_id` al
-    comprobar unicidad. Lanza `RaizInvalidaError` con un motivo en español.
+    `raices` son las raíces ya guardadas (modelos o dicts); se materializa antes de
+    recorrerlo y se excluye `root_id` al comprobar unicidad. La ruta nueva debe
+    existir (la raíz 1 de la migración es la excepción: no la valida el servicio),
+    ser directorio y permitir crear/borrar un temporal. Lanza `RaizInvalidaError`.
     """
-    ruta = normalizar_ruta(path)
+    existentes = list(raices)
+    ruta_original = normalizar_ruta(path)
+    if _hay_symlink_roto(ruta_original):
+        raise RaizInvalidaError("La ruta es un symlink roto.")
+    ruta = _resolver(ruta_original)
     nombre = nombre_normalizado(name or Path(ruta).name)
-    if ruta == "/":
-        raise RaizInvalidaError("La raíz no puede ser «/».")
     if "/.zascarr" in ruta or ruta.endswith("/.zascarr"):
         raise RaizInvalidaError("La raíz no puede estar dentro de .zascarr.")
     if not enabled and is_default:
         raise RaizInvalidaError("Una raíz por defecto no puede estar deshabilitada.")
     if is_default and any(
             bool(r.get("is_default") if isinstance(r, dict) else r.is_default)
-            for r in raices
+            for r in existentes
             if not root_id or str(r.get("id") if isinstance(r, dict) else r.id) != str(root_id)):
         raise RaizInvalidaError("Ya hay una raíz por defecto.")
-    host = str(host_path or "").strip()
+
+    host = str(host_path or "")
     if host:
-        host = str(Path(host))
+        _rechazar_control(host)
         if not Path(host).is_absolute():
             raise RaizInvalidaError("La ruta del host debe ser absoluta.")
 
     montajes = rutas_autorizadas()
     if not any(es_componente_de(ruta, m.path) for m in montajes):
-        raise RaizInvalidaError("La ruta no está dentro de un montaje autorizado.")
+        raise RaizInvalidaError("La ruta resuelta no está dentro de un montaje autorizado.")
     for especial in _rutas_especiales():
         if es_componente_de(ruta, especial) or es_componente_de(especial, ruta):
             raise RaizInvalidaError(
                 "La raíz no puede solaparse con descargas, exportación ni .zascarr.")
-    for raiz in raices:
+    ruta_obj = Path(ruta)
+    if ruta_obj.is_symlink() and not ruta_obj.exists():
+        raise RaizInvalidaError("La ruta es un symlink roto.")
+    if not ruta_obj.exists():
+        raise RaizInvalidaError("La raíz no existe o el disco no está montado.")
+    if not ruta_obj.is_dir():
+        raise RaizInvalidaError("La ruta de la raíz no es una carpeta.")
+    _comprobar_escritura(ruta_obj)
+
+    for raiz in existentes:
         otro = raiz if isinstance(raiz, dict) else {
             "id": str(raiz.id), "path": raiz.path, "name": raiz.name,
             "host_path": raiz.host_path,
@@ -159,34 +214,36 @@ def validar_raiz(
             continue
         if nombre.casefold() == str(otro["name"]).casefold():
             raise RaizInvalidaError("Ya existe una raíz con ese nombre.")
-        if str(otro["path"]) == ruta or es_componente_de(ruta, str(otro["path"])) \
-                or es_componente_de(str(otro["path"]), ruta):
+        otra_ruta = _resolver(normalizar_ruta(str(otro["path"])))
+        if ruta == otra_ruta or es_componente_de(ruta, otra_ruta) \
+                or es_componente_de(otra_ruta, ruta):
             raise RaizInvalidaError("La raíz se solapa con otra raíz existente.")
         if host and otro.get("host_path") and str(otro["host_path"]) == host:
             raise RaizInvalidaError("Ya existe una raíz con esa ruta de host.")
-        # Dos rutas (o un symlink) que son el mismo inodo son la misma raíz física.
-        if (Path(ruta).exists() and Path(str(otro["path"])).exists()
-                and _mismo_inodo(Path(ruta), Path(str(otro["path"])))):
+        if (ruta_obj.exists() and Path(otra_ruta).exists()
+                and _mismo_inodo(ruta_obj, Path(otra_ruta))):
             raise RaizInvalidaError("La raíz es el mismo inodo que otra raíz existente.")
-
-    ruta_obj = Path(ruta)
-    if ruta_obj.is_symlink() and not ruta_obj.exists():
-        raise RaizInvalidaError("La ruta es un symlink roto.")
-    if ruta_obj.exists():
-        if not ruta_obj.is_dir():
-            raise RaizInvalidaError("La ruta de la raíz no es una carpeta.")
-        if ruta_obj.is_symlink() and not ruta_obj.resolve().is_dir():
-            raise RaizInvalidaError("La ruta es un symlink roto.")
-        # Symlink a una ruta autorizada: la ruta normalizada ya se validó por componentes.
-        if ruta_obj.is_symlink():
-            destino = normalizar_ruta(ruta_obj.resolve())
-            if not any(es_componente_de(destino, m.path) for m in montajes):
-                raise RaizInvalidaError(
-                    "El symlink de la raíz apunta fuera de un montaje autorizado.")
     return {
         "name": nombre, "path": ruta, "host_path": host or None,
         "enabled": bool(enabled), "is_default": bool(is_default),
     }
+
+
+def validar_conjunto(raices: Iterable[LibraryRoot | dict]) -> None:
+    """Invariante I4: exactamente una raíz por defecto, habilitada.
+
+    El índice parcial impide dos, pero no cero; el servicio lo exige al guardar.
+    """
+    filas = list(raices)
+    defectos = [
+        r for r in filas
+        if bool(r.get("is_default") if isinstance(r, dict) else r.is_default)
+    ]
+    if len(defectos) != 1:
+        raise RaizInvalidaError("Debe haber exactamente una raíz por defecto.")
+    unica = defectos[0]
+    if not bool(unica.get("enabled") if isinstance(unica, dict) else unica.enabled):
+        raise RaizInvalidaError("La raíz por defecto debe estar habilitada.")
 
 
 async def raiz_por_tradicion(db: AsyncSession, tradicion: ComicTradition) -> LibraryRoot | None:
@@ -196,10 +253,17 @@ async def raiz_por_tradicion(db: AsyncSession, tradicion: ComicTradition) -> Lib
         .join(LibraryRootTradition, LibraryRootTradition.root_id == LibraryRoot.id)
         .where(LibraryRootTradition.tradition == tradicion, LibraryRoot.enabled.is_(True))
     )).scalar_one_or_none()
+    if fila is None:
+        return None
+    # Si el operador retiró el montaje de la allowlist actual, no se usa para importar.
+    autorizadas = [m.path for m in rutas_autorizadas()]
+    if not any(es_componente_de(_resolver(fila.path), autorizada)
+               for autorizada in autorizadas):
+        return None
     return fila
 
 
-def raiz_de(ruta: str | Path, raices: Iterable[LibraryRoot]) -> LibraryRoot | None:
+def raiz_de(ruta: str | Path, raices: Iterable[LibraryRoot] = ()) -> LibraryRoot | None:
     """La raíz MÁS ESPECÍFICA que contiene `ruta` por componentes, o None."""
     candidatas = [r for r in raices if es_componente_de(ruta, r.path)]
     if not candidatas:
@@ -247,5 +311,9 @@ class RaicesService:
         return validar_raiz(path, **kw)
 
     @staticmethod
-    def raiz_de(ruta, raices) -> LibraryRoot | None:
+    def raiz_de(ruta, raices=()) -> LibraryRoot | None:
         return raiz_de(ruta, raices)
+
+    @staticmethod
+    def validar_conjunto(raices) -> None:
+        validar_conjunto(raices)

@@ -53,7 +53,10 @@ def upgrade() -> None:
         sa.UniqueConstraint("path", name="uq_library_roots_path"),
         sa.CheckConstraint(
             "path LIKE '/%' AND path <> '/' "
-            "AND path NOT LIKE '%/../%' AND path NOT LIKE '%/.zascarr%'",
+            "AND path NOT LIKE '%/' AND path NOT LIKE '%//%' "
+            "AND path NOT LIKE '%/../%' AND path NOT LIKE '%/..' "
+            "AND path NOT LIKE '%/./%' AND path NOT LIKE '%/.' "
+            "AND path NOT LIKE '%/.zascarr%'",
             name="ck_library_root_path",
         ),
         sa.CheckConstraint("is_default = false OR enabled = true",
@@ -100,7 +103,8 @@ def upgrade() -> None:
     conn.execute(
         sa.text(
             "UPDATE files SET root_id = :root_id WHERE root_id IS NULL "
-            "AND (file_path = :path OR file_path LIKE :path || '/%')"
+            "AND (file_path = :path "
+            "     OR left(file_path, length(:path) + 1) = :path || '/')"
         ),
         {"root_id": root_id, "path": path},
     )
