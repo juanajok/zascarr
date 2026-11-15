@@ -1,89 +1,215 @@
-# Benchmark — Deseados: Prowlarr + foro CRG en paralelo
+# Benchmark nivel 2 — Deseados: Prowlarr + foro IPB del CRG
 
-**Fecha:** 2026-11-15. **Carácter:** adenda **post-hoc** al benchmark de Deseados/Prowlarr del
-2026-11-11. **No es exhaustivo** en el sentido de haber comparado todos los productos antes de
-implementar: la implementación se hizo primero por una petición directa y una incidencia real.
-Esta ficha documenta las referencias que sí se consultaron, las que faltan y por qué.
+**Historia / problema:** al buscar un deseo, ZascArr debe consultar Prowlarr **y** el foro
+configurado (La Mansión del CRG en la instalación del PO), no solo uno como fallback. El
+caso real que lo motivó: «DC K.O. está en La Mansión, pero Deseados mostraba un resultado
+irrelevante de Prowlarr y no consultaba el foro».
 
-## 1. Pregunta y alcance
+**Fecha:** 2026-11-15. **SHA de ZascArr analizado:** `d20aad3d` (+ correcciones de la
+rama de búsqueda conjunta). **Nivel:** 2 (toca búsqueda y fuentes externas). **Caduca:**
+2027-01-14.
 
-¿Debe «Deseados» buscar en **Prowlarr** y en el **foro de La Mansión del CRG** a la vez, o mantener
-una cascada Prowlarr → foro? ¿Cómo lo resuelven otras herramientas?
+> **Aviso de proceso:** la implementación se hizo antes de esta ficha, por una petición
+> directa y una incidencia en producción. Esta ficha es **post-hoc**; no se presenta como
+> el benchmark previo que el procedimiento exige. Las lagunas están en §9.
 
-**Alcance:** búsqueda de una serie/número en Deseados; no descarga, no importación, no scraping de
-contenido. **Fuera:** validar legalidad de cada foro, medir catálogos, comparar calidad de releases.
+## 1. Problema local y estado vigente
 
-## 2. Comportamiento de ZascArr antes y después
+- **Deseados** busca por serie o número (`Orchestrator._search_and_rank`), con Prowlarr si
+  está configurado y un plugin IPB genérico para el foro.
+- **Antes:** el foro solo se consultaba si Prowlarr no dejaba candidatos. Un resultado
+  irrelevante de Prowlarr impedía ver el foro.
+- **Ahora:** Prowlarr y foro se consultan en paralelo; se mezclan, deduplican y rankean.
+  Prowlarr usa categorías `7030`/`7020`; el foro usa el formulario IPB real.
+- **Invariantes:** la búsqueda no descarga ni vincula; D10 exige confirmación humana; el
+  aviso legal sigue bloqueando la búsqueda si no está aceptado; el foro no tiene URL por
+  defecto.
 
-| Momento | Prowlarr | Foro | Resultado |
+## 2. Referencias y versiones
+
+| Referencia | Versión/commit leído | Qué se inspeccionó | Límite de la inspección |
 |---|---|---|---|
-| Antes | Se consulta primero | Solo si Prowlarr no deja candidatos | Un resultado irrelevante de Prowlarr impedía consultar el foro |
-| Después | Se consulta siempre | Se consulta siempre, en paralelo | Se mezclan, deduplican y rankean; un flood del foro no oculta Prowlarr |
-
-El foro sigue siendo el **plugin IPB genérico**: la URL la configura el usuario, no hay URL por
-defecto ni foro recomendado. La instalación del PO usa `lamansion-crg.net`.
-
-## 3. Referencias consultadas
-
-| Referencia | Patrón | Qué enseña | Qué no cubre |
-|---|---|---|---|
-| **Sonarr / Radarr** | Prowlarr como agregador de indexers; la app consulta una API y recibe resultados normalizados | Separar agregador de consumidor; una sola lista de candidatos | No scrapea foros; no mezcla una fuente HTML con indexers |
-| **Prowlarr** | Agrega Newznab/Torznab y devuelve resultados de todos los indexers | El consumidor no debe reconstruir un segundo agregador | No conoce eD2K ni un foro IPB |
-| **Mylar3** | Proveedores Newznab/Torznab/DDL; Prowlarr puede entrar como Torznab/Newznab | Búsqueda por número, cola y proveedores; una fuente no bloquea a las demás | No usa la API nativa de Prowlarr; no aporta un patrón de foro CRG |
-| **Kapowarr** | Indexer client GetComics (DDL) | Separar búsqueda, scoring y descarga | No usa Prowlarr ni foros |
-| **Komga / Kavita** | Escaneo de biblioteca y metadatos; no buscan descargas | Separar identificación/catálogo de adquisición | No resuelven «buscar un release en un foro» |
-| **La Mansión del CRG (IPB)** | Foro HTML con login; búsqueda por POST (`forums[]=all`, `search_in=titles`, `result_type=topics`); temas con enlaces eD2K | El foro no es una API: hay que enviar el formulario real, no inventar una URL GET | Sin API, sin promesa de estabilidad, flood y cambios de skin |
+| Sonarr | documentación pública (wiki Servarr, 2026) | Add New, Library Import, estados | No ejecutado |
+| Radarr | documentación pública (wiki Servarr) | Mismo patrón de agregación | No ejecutado |
+| Prowlarr | documentación de API + instalación real del PO | `/api/v1/search`, indexers, categorías | Ejecutado en la Pi |
+| Mylar3 | v0.8.3, `cdc94a44425b6f3f9cdb9b6e5f9d88ae2fee3316` (ficha previa) | `mylar/search.py`, proveedores Newznab/Torznab/DDL | No ejecutado |
+| Kapowarr | v1.3.2, `c191dda6617929c81292483a8cc07f631111dae2` (ficha previa) | `backend/implementations/indexer_clients`, search coordinator | No ejecutado |
+| Komga | documentación pública | Escaneo, metadatos, búsqueda local | No ejecutado |
+| Kavita | documentación pública | Escáner y metadata match | No ejecutado |
+| La Mansión del CRG | IPB observado en vivo 2026-11-15 | Login, formulario de búsqueda, tabla de resultados, temas, eD2K | Sin API ni versión pública |
 
 Fuentes:
 
-- Sonarr: [Library](https://wiki.servarr.com/en/sonarr/library).
-- Prowlarr: [API de búsqueda](https://prowlarr.com/docs/api/) (documentación pública del proyecto).
-- Mylar3: [README](https://github.com/mylar3/mylar3).
-- Kapowarr: [documentación](https://kapowarr.readthedocs.io/).
-- Komga: [Full Text Search](https://komga.org/es/docs/guides/search/).
-- Kavita: [Metadata](https://wiki.kavitareader.com/kavita+/metadata/).
+- Sonarr: <https://wiki.servarr.com/en/sonarr/library>
+- Prowlarr: <https://wiki.servarr.com/prowlarr>
+- Mylar3: <https://github.com/mylar3/mylar3>
+- Kapowarr: <https://kapowarr.readthedocs.io/>
+- Komga: <https://komga.org/es/docs/guides/search/>
+- Kavita: <https://wiki.kavitareader.com/kavita+/metadata/>
+- La Mansión: observación directa del formulario y la búsqueda; sin URL hardcodeada en
+  el producto.
 
-## 4. Comparación de patrones
+## 3. Cómo lo resuelve cada referencia
 
-| Dimensión | Sonarr/Radarr | Mylar3 | Kapowarr | ZascArr actual |
-|---|---|---|---|---|
-| Entrada | API Prowlarr | Proveedores | GetComics | Prowlarr + foro |
-| Fuentes simultáneas | Sí, dentro de Prowlarr | Sí, por proveedor | Un cliente | Sí, dos fuentes |
-| Resultados HTML | No | DDL/foro según proveedor | DDL | Sí (IPB) |
-| Normalización | La hace Prowlarr | Por proveedor | Propia | `SearchResult` común |
-| Fallo de una fuente | Aislado por Prowlarr | Pasa al siguiente | Falla la búsqueda | Aislado: Prowlarr y foro se capturan por separado |
-| Flood/rate limit | Gestionado por indexer | Pausas por proveedor | Rate limit propio | Cola compartida + `ForumFloodControl` |
-| Deduplicación | Prowlarr/indexers | Según proveedor | No aplica | URL + título |
-| Relevancia | Motor de búsqueda | Matching | Matching | Palabras completas + filtro de número + alias |
-| Descarga | Cliente externo | Cliente externo | Cliente externo | Transmission/aMule, confirmación manual (D10) |
+### Sonarr / Radarr
 
-## 5. Decisiones
+El consumidor consulta **Prowlarr** como agregador y recibe resultados normalizados. La
+biblioteca/importación es otro flujo. No scrapean un foro: la fuente es un indexer.
 
-1. **Mantener Prowlarr como agregador**: no se construye un segundo sistema de indexers.
-2. **Foro como fuente opcional y genérica**: URL y credenciales del usuario; el proyecto no
-   hardcodea ni recomienda un foro.
-3. **Consultar ambas en paralelo**: una fuente lenta o en flood no debe impedir ver la otra.
-4. **Mezclar y deduplicar**: URL + título; ranking existente (torrents antes que eD2K).
-5. **Filtrar por palabras completas**: «DC K.O.» no debe aceptar un título que solo contiene
-   «dc» o «ko» dentro de otra palabra («Konar»).
-6. **Conservar la confirmación humana**: la búsqueda no envía nada; D10 sigue decidiendo.
+**Lección:** una sola consulta al agregador; no reconstruir un segundo agregador. **No
+cubre:** eD2K ni un foro HTML.
 
-## 6. Lo que falta para llamarlo exhaustivo
+### Prowlarr
 
-- **No** se comparó el comportamiento de otros foros IPB/CRG ni de varios foros simultáneos.
-- **No** se midieron latencias reales de Prowlarr + foro en paralelo frente a cascada.
-- **No** se midió la tasa de duplicados entre Prowlarr y el foro, ni el ranking resultante.
-- **No** se probaron títulos cortos, acrónimos, tildes y ediciones españolas de forma sistemática.
-- **No** se ejecutó una prueba con 5 coleccionistas ni lectura con lector de pantalla.
-- **No** se revisó la licencia/términos de La Mansión para una integración recomendada; se usa como
-  foro configurado por el usuario, no como fuente incluida.
+API REST `/api/v1/search`; devuelve resultados de varios indexers, cada uno con su nombre,
+tamaño, seeders y URL de descarga. La instalación real del PO devuelve **0 resultados**
+para «DC K.O.» con las categorías de cómic.
 
-## 7. PASS / FAIL / NOT RUN
+**Lección:** Prowlarr ya resuelve la agregación torrent/NZB. **No cubre:** foros, eD2K,
+login, flood ni HTML.
 
-- **PASS (código):** Prowlarr y foro se consultan en paralelo; el fallo/flood de uno no oculta al
-  otro; el foro usa POST real con `forums[]=all`; el filtro de relevancia exige palabras completas.
-- **PASS (producción, 2026-11-15):** «DC K.O.» devuelve 10 temas del foro, incluido el tema
-  principal con 27 enlaces eD2K; Prowlarr no devuelve resultados relevantes para esa consulta.
-- **FAIL (benchmark exhaustivo):** no se ha comparado el patrón con otras herramientas en vivo ni
-  medido resultados; esta ficha es una revisión de referencias y del comportamiento propio.
-- **NOT RUN:** latencias, duplicados, usuarios, otros foros y términos.
+### Mylar3
+
+Modelo de proveedores (Newznab, Torznab, DDL) con orden y pausas; Prowlarr puede entrar
+como proveedor Torznab/Newznab, pero no usa su API nativa. Búsqueda por número, cola de
+wanted y matching.
+
+**Lección:** una fuente no debe bloquear a las demás; conservar el filtro por número.
+**No cubre:** un patrón listo para un foro IPB de eD2K.
+
+### Kapowarr
+
+Un indexer client DDL (GetComics); sin Prowlarr en la versión leída. Separa búsqueda,
+scoring y descarga.
+
+**Lección:** normalizar y puntuar antes de ofrecer; no unir búsqueda y descarga.
+**No cubre:** Prowlarr ni foro.
+
+### Komga / Kavita
+
+Gestionan biblioteca/escaneo y metadatos; no buscan releases en fuentes externas.
+
+**Lección:** separar catálogo de adquisición; ZascArr ya lo hace. **No cubre:** este flujo.
+
+### La Mansión del CRG (IPB)
+
+- Login con cookies de miembro.
+- Formulario `act=Search&CODE=01` por **POST** con `forums[]=all`, `search_in=titles`,
+  `result_type=topics`.
+- Los resultados están en filas `<!-- Begin Topic Entry -->`; mezclan temas reales con
+  paginación y «Último mensaje».
+- Cada tema puede contener enlaces eD2K (y potencialmente magnet).
+- Un `GET` con `keywords` no encuentra títulos cortos como «DC K.O.»; además puede
+  devolver «No has elegido ningún foro».
+
+**Lección:** hay que enviar el formulario real y filtrar la tabla, no enlazar a ojo.
+**Límite:** sin API, sin contrato de estabilidad, con flood/rate limit y cambios de skin.
+
+## 4. Matriz ponderada (nivel 2)
+
+Criterios y pesos por defecto del procedimiento; suma 100.
+
+| Criterio (peso) | Prowlarr solo | Cascada Prowlarr→foro | **Paralelo Prowlarr+foro** | Proveedores Mylar3 | DDL Kapowarr |
+|---|---:|---:|---:|---:|---:|
+| Flujo del Coleccionista (25) | 3 | 3 | **5** | 4 | 2 |
+| Coste en Pi (20) | 5 | 4 | **4** | 3 | 3 |
+| Seguridad/legalidad/licencia (20) | 4 | 3 | **3** | 3 | 1 |
+| Cobertura del requisito (15) | 3 | 3 | **5** | 4 | 2 |
+| Stack/modelo de datos (10) | 3 | 4 | **4** | 2 | 2 |
+| Mantenimiento (5) | 4 | 3 | **3** | 2 | 2 |
+| Lock-in/salida (5) | 4 | 3 | **3** | 3 | 2 |
+| **Total ponderado /100** | **370 (3,70)** | **330 (3,30)** | **410 (4,10)** | **325 (3,25)** | **200 (2,00)** |
+
+**Por qué gana el paralelo:** cubre el requisito real (ambas fuentes), no deja que un
+resultado irrelevante de Prowlarr esconda el foro y mantiene el coste de Pi acotado
+(consulta en paralelo, sin descargar contenido). La cascada era más barata pero peor para
+el caso que motivó la historia; Prowlarr solo no cumple el «también foro». Mylar3 exige
+otro modelo de proveedores y no resuelve el foro; Kapowarr no usa Prowlarr.
+
+La puntuación de legalidad no es un aval: el foro es una integración genérica configurada
+por el usuario, con aviso legal. Integrar/recomendar un foro concreto sigue descartado.
+
+## 5. Resultado por idea (adoptar / adaptar / mejorar / construir sobre lo propio / descartar)
+
+| Idea | Resultado | Motivo |
+|---|---|---|
+| Prowlarr como agregador de indexers | **Adoptar** | Ya resuelve torrent/NZB y aísla el fallo de cada indexer |
+| Consultar Prowlarr y foro en paralelo | **Adaptar** | La concurrencia es del consumidor; la referencia no mezcla HTML |
+| Formulario IPB por POST con `forums[]=all` | **Adaptar** | Depende del foro; se conserva el origen y las cookies del plugin |
+| Resultado común `SearchResult` y ranking | **Construir sobre lo propio** | Ya existe; el foro se traduce a ese contrato |
+| Deduplicación por URL+título | **Mejorar** | Evita dos botones de la misma release; se conserva el título como discriminante |
+| Filtro de relevancia por palabras completas | **Mejorar** | Evidencia: «ko» dentro de «Konar» colaba un manual de ginecología |
+| Mostrar estado de cada fuente en los resultados | **Mejorar** | Hoy un fallo del foro se silencia si Prowlarr trae algo; el Coleccionista no lo sabe |
+| Mostrar enlace al tema/tamaño desconocido | **Mejorar** | El candidato del foro muestra 0 B y no permite verificar el tema |
+| Autoimportar/autoenviar sin confirmar | **Descartar** | Rompe D10 y el consentimiento por efecto |
+| Construir un stack Newznab/Torznab propio (Mylar3) | **Descartar** | Prowlarr ya hace de agregador; coste y RAM en la Pi |
+| DDL GetComics como única fuente | **Descartar** | No cubre eD2K ni el foro del caso real |
+
+## 6. Medición en la Pi (2026-11-15)
+
+Medición puntual, no estadística. Se usó la configuración real de la instalación y una
+política de cortesía a 0 para medir red+parseo del foro (la app real añade la espera de
+25 s de `forum_search_rate_limit` entre búsquedas).
+
+| Operación | Resultado | Tiempo observado |
+|---|---|---|
+| Prowlarr `/api/v1/search` «DC K.O.» (categorías 7030/7020) | **0 resultados** | 0,30–0,57 s |
+| Foro: login + POST búsqueda «DC K.O.» | **10 temas** | 3,75–5,18 s |
+| Foro: primer tema | **27 enlaces eD2K** | — |
+| Cascada Prowlarr→foro (misma muestra) | 0 + 10 | 5,75 s |
+| Paralelo | 0 + 10 | 1,71 s (una muestra) |
+
+La muestra paralela no es concluyente: el foro puede reutilizar sesión/caché y el tiempo
+varía. Lo que sí confirma es que **Prowlarr no encuentra «DC K.O.»** y que el foro sí
+devuelve temas reales; el valor del paralelo es no bloquear uno por el otro, no una
+promesa de latencia.
+
+## 7. Casos de prueba que deben quedar cubiertos
+
+- Prowlarr y foro consultados aunque Prowlarr devuelva resultados.
+- Resultado irrelevante de Prowlarr filtrado por palabras completas («Konar» no es «ko»).
+- Foro con GET: no se usa; con POST y `forums[]=all`: devuelve temas.
+- Parser ignora navegación y paginación; lee solo filas `Begin Topic Entry`.
+- Flood del foro no oculta candidatos de Prowlarr; sin candidatos, deja `MOTIVO_FORO_ESPERA`.
+- Deduplicación URL+título.
+- El aviso legal y D10 no cambian.
+- Ancho de la UI de candidatos con dos fuentes y tamaños desconocidos.
+
+Pruebas existentes: `tests/test_orchestrator.py`, `tests/test_forum_scraper.py`,
+`tests/test_forum_flood.py`, `tests/test_forum_charset.py`, `tests/test_forum_cortesia.py`,
+`tests/test_web_wishlist.py`.
+
+## 8. Recomendaciones (no implementadas en esta ficha)
+
+1. **Estado por fuente en la lista**: si el foro falla, mostrar «Foro no disponible» sin
+   ocultar los resultados de Prowlarr (y viceversa).
+2. **Candidato del foro legible**: «Tamaño desconocido» en vez de `0 B`; enlace al tema
+   para verificar la release.
+3. **No cambiar el ranking sin datos**: hoy los torrents van antes que eD2K; el foro solo
+   aporta eD2K. Medir antes de priorizar de otra forma.
+4. **Instrumentar**: duración, número de resultados y estado por fuente por búsqueda, para
+   repetir este benchmark con datos.
+5. **Mantener el foro como opcional**: URL/credenciales del usuario, sin foro recomendado.
+
+## 9. NOT RUN / lagunas
+
+- No se ejecutaron Sonarr, Radarr, Mylar3, Kapowarr, Komga ni Kavita; solo documentación y
+  fichas previas. **No se infiere** que su comportamiento sea idéntico a la documentación.
+- No se probaron otros foros IPB ni varios foros a la vez.
+- No se midieron latencias repetidas, tasa de duplicados real entre Prowlarr y foro, ni
+  ranking con datos.
+- No se revisaron términos/robots de La Mansión para una integración recomendada.
+- No hay prueba con 5 coleccionistas ni lector de pantalla.
+- No se probaron títulos con tildes, acrónimos y ediciones españolas de forma sistemática.
+- **Caducidad:** revisar en ~60 días o antes si cambia Prowlarr, el foro o la historia.
+
+## 10. Decisión propuesta
+
+**Mantener el patrón paralelo Prowlarr + foro**, con Prowlarr como agregador y el foro como
+fuente opcional IPB configurada por el usuario, y aplicar las mejoras de transparencia de
+§8 en una historia aparte. No se introduce modelo de datos nuevo ni se recomienda un foro
+concreto.
+
+IGUALAR: agregación de Prowlarr, resultado normalizado, rate limit, confirmación humana.
+MEJORAR: paralelismo real, búsqueda POST del foro, filtro por palabras completas,
+deduplicación y (pendiente) transparencia de estado por fuente.
