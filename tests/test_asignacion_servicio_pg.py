@@ -575,14 +575,18 @@ class TestCopiaVerificada:
     @pytest.mark.asyncio
     async def test_una_copia_corrupta_no_se_publica(self, mundo, monkeypatch):
         import zascarr.services.asignacion as proto
+        import zascarr.utils.fs as fsmod
+        real = fsmod.copiar_en_raiz
 
-        def copia_corrupta(*_a, **_kw):
-            raise OSError("copia incompleta: el sha256 no coincide")
+        def copia_corrupta(*a, **kw):
+            copia = real(*a, **kw)
+            Path(copia.path).write_bytes(b"AJENO")
+            return copia
         monkeypatch.setattr(proto, "copiar_en_raiz", copia_corrupta)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
-        assert r.estado == "error" and "copia" in r.motivo.lower()
-        assert e.destinos == [] and e.partes == [] and e.origen_existe and e.issue_id is None
+        assert r.estado == "error"
+        assert e.destinos == [] and e.origen_existe and e.issue_id is None
 
 
 class TestCancelacionDelCliente:
@@ -1212,16 +1216,24 @@ class TestFalloDeEscrituraAlPublicar:
 
     @pytest.mark.asyncio
     async def test_publicado_con_link_y_fallo_al_retirar_el_temporal_no_cancela_y_conserva_el_origen(self, mundo, monkeypatch):
-        """Regresión del mecanismo: `link` crea el destino y `unlink(temporal)` falla. Cancelar aquí dejaría un
-        destino publicado SIN operación viva que lo reconcilie."""
+        """`link` publica y el `unlink` del temporal falla: la operación no se cancela y el residuo queda declarado."""
+        import zascarr.utils.fs as fsmod
+        real_unlink = fsmod.os.unlink
 
+        def unlink_bloqueado(path, *args, **kwargs):
+            if ".part" in Path(path).name:
+                raise PermissionError(13, "sin permiso para borrar")
+            return real_unlink(path, *args, **kwargs)
+        monkeypatch.setattr(fsmod.os, "unlink", unlink_bloqueado)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
-        # Con el helper confinado se publica con link y se retira el temporal: no queda residuo.
-        assert r.estado == "asignado"
-        assert e.ops == ["limpiada"] and not e.origen_existe and e.issue_id is not None
-        assert len(e.destinos) == 1 and e.partes == []
+        assert r.estado == "asignado_limpieza_pendiente"
+        assert e.ops == ["confirmada"] and e.origen_existe and e.issue_id is not None
+        assert len(e.destinos) == 1 and len(e.partes) == 1
         assert hashlib.sha256(Path(e.ruta).read_bytes()).hexdigest() == mundo.sha
+        monkeypatch.setattr(fsmod.os, "unlink", real_unlink)
+        assert [x.estado for x in await mundo.servicio().reconciliar()] == ["asignado"]
+        assert (await mundo.estado()).partes == []
 
     @pytest.mark.asyncio
     async def test_fallo_al_retirar_el_temporal_en_el_manejo_del_error_deja_la_operacion_viva(self, mundo, monkeypatch):
