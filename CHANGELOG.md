@@ -38,6 +38,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   un buscador de autores (`/ui/biblioteca/buscar-autor`) y el filtro `author_id`, combinable
   con editorial, tradición, personaje, saga, etiquetas y lectura. Los autores de la ficha de
   serie enlazan directamente a sus series. Sin migración ni cambios en archivos.
+- **«Probar conexión» del foro en Ajustes (2026-11-15, #877).** La tarjeta Foro permite comprobar
+  URL, usuario y contraseña **antes de guardar** (contraseña en blanco = la guardada): solo inicia
+  sesión (no busca ni gasta el intervalo de búsqueda), funciona aunque el foro esté apagado y
+  responde en español llano (OK, credenciales rechazadas, espera por cortesía/flood, URL inválida
+  o sin conexión), sin mostrar ni guardar credenciales.
+ (docs: changelog del botón Probar conexión del foro)
 - **Importación de guías de lectura desde la interfaz (2026-11-15, #843).** Nueva pantalla
   «Importar una guía» en Sagas en orden: eliges fuente (Comic Book Reading Orders / Continuity
   Guide) y pegas la URL; ZascArr valida la URL contra la allowlist del extractor, comprueba que
