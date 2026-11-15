@@ -46,6 +46,21 @@
   <div id="resultados-saga" class="series-results" aria-live="polite"></div>
 </div>
 <div class="filtro-campo">
+  <label for="f-idioma">Idioma</label>
+  <input type="text" id="f-idioma" name="idioma" value="{{ filtros.language }}"
+         maxlength="10" placeholder="es, en…" autocomplete="off">
+</div>
+<div class="filtro-campo">
+  <label for="f-edicion">Edición</label>
+  <select id="f-edicion" name="edicion">
+    <option value="">Toda edición</option>
+    <option value="oficial" {% if filtros.edition_kind == "oficial" %}selected{% endif %}>Oficial</option>
+    <option value="tradumaqueta" {% if filtros.edition_kind == "tradumaqueta" %}selected{% endif %}>Tradumaqueta</option>
+    <option value="escaneo_propio" {% if filtros.edition_kind == "escaneo_propio" %}selected{% endif %}>Escaneo propio</option>
+    <option value="otro" {% if filtros.edition_kind == "otro" %}selected{% endif %}>Otro</option>
+  </select>
+</div>
+<div class="filtro-campo">
   <label for="f-autor">Autor</label>
   <input type="search" placeholder="Buscar autor…" id="f-autor" name="autor"
          hx-get="/ui/biblioteca/buscar-autor" hx-trigger="input changed delay:400ms, search"

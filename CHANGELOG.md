@@ -34,6 +34,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **CUR4: idioma y edición de la serie (2026-11-16).** Campos estructurados opcionales
+  `language` (código corto normalizado) y `edition_kind` (oficial, tradumaqueta, escaneo
+  propio u otro), editables a mano, visibles en la ficha y filtrables en Biblioteca. No se
+  infieren de la tradición ni se importan de fuentes no autorizadas. Migración 0043 reversible.
 - **CUR3: favoritos locales de series (2026-11-16).** La ficha permite marcar/desmarcar
   una serie como favorita y Biblioteca incorpora «Solo favoritas» con estado en URL. La marca
   es local, idempotente y no toca etiquetas, Deseados, búsqueda ni archivos. Migración 0042

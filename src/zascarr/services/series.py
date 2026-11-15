@@ -79,6 +79,8 @@ class SeriesService:
         story_arc_id: UUID | None = None,
         author_id: UUID | None = None,
         solo_favoritas: bool = False,
+        language: str | None = None,
+        edition_kind: str | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -143,6 +145,10 @@ class SeriesService:
             ))
         if solo_favoritas:
             query = query.where(Series.favorite.is_(True))
+        if language:
+            query = query.where(Series.language == language)
+        if edition_kind:
+            query = query.where(Series.edition_kind == edition_kind)
 
         # BL-ETQ1b: EXISTS/NOT EXISTS por token; nunca JOIN+DISTINCT.
         for normalizado in etiquetas_positivas:
@@ -244,6 +250,8 @@ class SeriesService:
         story_arc_id: UUID | None = None,
         author_id: UUID | None = None,
         solo_favoritas: bool = False,
+        language: str | None = None,
+        edition_kind: str | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -259,6 +267,8 @@ class SeriesService:
             story_arc_id=story_arc_id,
             author_id=author_id,
             solo_favoritas=solo_favoritas,
+            language=language,
+            edition_kind=edition_kind,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
@@ -278,6 +288,8 @@ class SeriesService:
         story_arc_id: UUID | None = None,
         author_id: UUID | None = None,
         solo_favoritas: bool = False,
+        language: str | None = None,
+        edition_kind: str | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -297,6 +309,8 @@ class SeriesService:
             story_arc_id=story_arc_id,
             author_id=author_id,
             solo_favoritas=solo_favoritas,
+            language=language,
+            edition_kind=edition_kind,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,

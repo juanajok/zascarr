@@ -25,6 +25,23 @@
     <input type="text" name="publisher" value="{{ valores.publisher }}" maxlength="255">
     {% if errores.publisher %}<span class="campo-error">{{ errores.publisher }}</span>{% endif %}
   </label>
+  <div class="edicion-dos">
+    <label>Idioma
+      <input type="text" name="language" value="{{ valores.language }}" maxlength="10" placeholder="es, en…">
+      {% if errores.language %}<span class="campo-error">{{ errores.language }}</span>{% endif %}
+      <span class="caption">Código corto; déjalo vacío si no lo sabes.</span>
+    </label>
+    <label>Tipo de edición
+      <select name="edition_kind">
+        <option value="">Sin dato</option>
+        <option value="oficial" {% if valores.edition_kind == "oficial" %}selected{% endif %}>Oficial</option>
+        <option value="tradumaqueta" {% if valores.edition_kind == "tradumaqueta" %}selected{% endif %}>Tradumaqueta</option>
+        <option value="escaneo_propio" {% if valores.edition_kind == "escaneo_propio" %}selected{% endif %}>Escaneo propio</option>
+        <option value="otro" {% if valores.edition_kind == "otro" %}selected{% endif %}>Otro</option>
+      </select>
+      {% if errores.edition_kind %}<span class="campo-error">{{ errores.edition_kind }}</span>{% endif %}
+    </label>
+  </div>
   <label>Sinopsis
     <textarea name="description" rows="6" maxlength="10000">{{ valores.description }}</textarea>
     {% if errores.description %}<span class="campo-error">{{ errores.description }}</span>{% endif %}
