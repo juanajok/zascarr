@@ -116,7 +116,9 @@ def _enlace_de(entrada: ET.Element) -> str:
 
 def _entradas(xml_texto: str) -> list[ET.Element]:
     try:
-        raiz = ET.fromstring(xml_texto)
+        # `xml.etree` no resuelve entidades externas y expat >= 2.4.1 corta las anidadas;
+        # el cuerpo está acotado por `MAX_CUERPO_FEED`. Mismo criterio que ComicInfo.
+        raiz = ET.fromstring(xml_texto)  # noqa: S314
     except ET.ParseError:
         logger.warning("blog_feed.xml_invalido")
         return []
