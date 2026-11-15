@@ -53,6 +53,9 @@
   <div id="resultados-autor" class="series-results" aria-live="polite"></div>
 </div>
 <div class="filtro-campo">
+  <label class="filtro-favoritas"><input type="checkbox" name="favoritos" value="1" {% if filtros.favorito %}checked{% endif %}> Solo favoritas</label>
+</div>
+<div class="filtro-campo">
   <label for="f-etiquetas">Etiquetas</label>
   <input type="search" id="f-etiquetas" name="etiquetas" value="{{ filtros.etiquetas }}"
          placeholder="Buscar por etiqueta…" autocomplete="off"

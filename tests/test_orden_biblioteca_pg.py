@@ -87,6 +87,21 @@ async def test_filtro_por_autor_solo_devuelve_series_con_su_credito(entorno):
 
 
 @pytest.mark.asyncio
+async def test_filtro_solo_favoritas_pg(entorno):
+    async with entorno.fabrica() as s:
+        s.add_all([
+            Series(id=uuid4(), title="Favorita", tradition=ComicTradition.AMERICAN,
+                   favorite=True),
+            Series(id=uuid4(), title="Normal", tradition=ComicTradition.AMERICAN,
+                   favorite=False),
+        ])
+        await s.commit()
+    async with entorno.fabrica() as s:
+        items, total = await SeriesService(s).list_series(solo_favoritas=True)
+        assert total == 1 and [i.title for i in items] == ["Favorita"]
+
+
+@pytest.mark.asyncio
 async def test_desempate_determinista_pg(entorno):
     ids = [uuid4(), uuid4(), uuid4()]
     async with entorno.fabrica() as s:
