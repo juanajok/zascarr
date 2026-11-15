@@ -312,7 +312,7 @@ async def test_m3_forum_fallback_error_solo_registra_el_tipo(monkeypatch):
     monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ENCENDIDO)
     orq = _orquestador()
     with structlog.testing.capture_logs() as registros:
-        assert await orq._forum_fallback("thorgal") is None
+        assert await orq._forum_fallback("thorgal") == []
     fallos = [r for r in registros if r["event"] == "orchestrator.forum_fallback_error"]
     assert fallos and fallos[0]["error"] == "RuntimeError"
     assert "SESION_SECRETA" not in repr(registros)
