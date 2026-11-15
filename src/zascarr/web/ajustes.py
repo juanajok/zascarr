@@ -198,6 +198,8 @@ def _contexto() -> dict:
         "naming_preset": getattr(s, "naming_preset", "clasico"),
         "naming_padding": getattr(s, "naming_padding", 0),
         "nombres_presets": PRESETS,
+        "import_create_missing_issue": bool(getattr(s, "import_create_missing_issue", False)),
+        "import_convert_cbr": bool(getattr(s, "import_convert_cbr", False)),
     }
 
 
@@ -382,6 +384,23 @@ async def guardar_nombres(
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {
         "nombre": "Nombres de archivo",
+    })
+
+
+@router.post("/guardar/importacion", response_class=HTMLResponse)
+async def guardar_importacion(
+    request: Request,
+    import_create_missing_issue: bool = Form(default=False),
+    import_convert_cbr: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """B23: crear el primer número y convertir CBR al importar."""
+    await RuntimeSettingsService(db).save({
+        "import_create_missing_issue": bool(import_create_missing_issue),
+        "import_convert_cbr": bool(import_convert_cbr),
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        "nombre": "Importación",
     })
 
 

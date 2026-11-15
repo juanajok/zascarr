@@ -788,6 +788,7 @@ class Importer:
             return
         tr, result = outcome.tr, outcome.result
         is_unsorted = result.status == MatchStatus.UNSORTED or not result.series_id
+        ajustes = get_settings()
 
         # Resolver la raíz ANTES de construir la ruta o mover: si no está
         # disponible, el archivo se queda en la cola y no se inventa otra.
@@ -798,6 +799,18 @@ class Importer:
             )).scalar_one_or_none()
             if series_obj is None:
                 is_unsorted = True
+        parsed_para_destino = parse_comic_filename(path.name)
+        numero_destino: str | None = (
+            (tr.comic_info.number if tr.comic_info else None)
+            or parsed_para_destino.issue_number
+        )
+        if (not is_unsorted and result.issue_id is None
+                and getattr(ajustes, "import_create_missing_issue", False)):
+            numero_destino = await self._crear_issue_de_serie_vacia(
+                result, tr, path) or numero_destino
+        if not is_unsorted and result.issue_id is None:
+            # Sin número enlazado no se finge una serie «completa»: va a Pendientes.
+            is_unsorted = True
         try:
             foto, raiz = await self._raiz(
                 getattr(series_obj, "tradition", None), por_defecto=is_unsorted)
@@ -810,7 +823,8 @@ class Importer:
         if is_unsorted:
             dest = raiz.path / "_Unsorted" / path.name
         else:
-            dest = self._build_dest(series_obj, tr, path, base=raiz.path)
+            dest = self._build_dest(
+                series_obj, tr, path, base=raiz.path, issue_number=numero_destino)
 
         # La raíz de DESTINO debe tener espacio antes de copiar; never fallback.
         try:
@@ -875,6 +889,13 @@ class Importer:
             except Exception:  # noqa: BLE001 — la conciliación no tumba la importación
                 logger.warning("upgrade.reconciliacion_fallida",
                                issue_id=str(result.issue_id))
+
+        if (getattr(ajustes, "import_convert_cbr", False)
+                and not is_unsorted and result.series_id is not None
+                and path.suffix.lower() == ".cbr"):
+            convertido = await self._convertir_cbr_importado(file_rec, result)
+            if convertido is not None:
+                final_dest = convertido
 
         prefijo_raiz = "" if len(foto.raices) <= 1 else f"{raiz.name}: "
         if is_unsorted:
@@ -1002,10 +1023,86 @@ class Importer:
         await self._db.flush()
         report.run_id = run.id
 
-    def _build_dest(self, series, tr: TriageResult, orig: Path, *, base: Path) -> Path:
+    async def _crear_issue_de_serie_vacia(
+        self, result: MatchResult, tr: TriageResult, path: Path
+    ) -> str | None:
+        """B23: si la serie no tiene NINGÚN número, crea el que trae el archivo.
+
+        Solo actúa en una serie vacía: en una catálogo existente, un número que el
+        matcher no encontró es una discrepancia que se revisa, no se inventa.
+        """
+        if result.series_id is None:
+            return None
+        parsed = parse_comic_filename(path.name)
+        numero = (tr.comic_info.number if tr.comic_info else None) or parsed.issue_number
+        if not numero or parsed.edition_kind is not None or es_pack(str(numero)):
+            return None
+        numero = str(numero).strip()
+        if not numero:
+            return None
+        existentes = (await self._db.execute(
+            select(func.count()).select_from(Issue)
+            .where(Issue.series_id == result.series_id)
+        )).scalar_one()
+        if existentes:
+            return None
+        formato = EDITION_KIND_A_FORMAT.get(parsed.edition_kind, IssueFormat.SINGLE_ISSUE)
+        try:
+            orden = float(numero.replace(",", "."))
+        except (TypeError, ValueError):
+            orden = None
+        issue = Issue(
+            series_id=result.series_id, issue_number=numero, format=formato,
+            sort_order=orden, metadata_={"origen": "importador"}, locked_fields=[],
+        )
+        try:
+            async with self._db.begin_nested():
+                self._db.add(issue)
+                await self._db.flush()
+        except Exception:  # noqa: BLE001 — carrera con otro importador/alta
+            logger.info("importer.issue_nueva_carrera", numero=numero)
+            issue = (await self._db.execute(
+                select(Issue).where(Issue.series_id == result.series_id,
+                                    Issue.issue_number == numero)
+            )).scalar_one_or_none()
+            if issue is None:
+                return None
+        result.issue_id = issue.id
+        logger.info("importer.issue_creada_al_importar",
+                    serie=str(result.series_id), numero=numero)
+        return numero
+
+    async def _convertir_cbr_importado(self, file_rec: File,
+                                       result: MatchResult) -> Path | None:
+        """B23: convierte el CBR importado con la verificación reversible de siempre."""
+        if result.series_id is None:
+            return None
+        try:
+            from zascarr.services.conversion import ConversionDeArchivo
+
+            servicio = ConversionDeArchivo(self._db, secret=get_settings().secret_key)
+            vista = await servicio.previsualizar(result.series_id, file_rec.id)
+            if not vista.puede_convertir or not vista.token:
+                logger.info("importer.conversion_omitida",
+                            file_id=str(file_rec.id), motivo=vista.motivo)
+                return None
+            resultado = await servicio.confirmar(vista.token)
+            if resultado.resultado not in ("convertida", "ya_convertida"):
+                logger.info("importer.conversion_no_aplicada",
+                            file_id=str(file_rec.id), resultado=resultado.resultado)
+                return None
+            ruta = Path(file_rec.file_path)
+            logger.info("importer.conversion_ok", file_id=str(file_rec.id), destino=str(ruta))
+            return ruta
+        except Exception:  # noqa: BLE001 — nunca se pierde el CBR por una conversión
+            logger.exception("importer.conversion_fallida", file_id=str(file_rec.id))
+            return None
+
+    def _build_dest(self, series, tr: TriageResult, orig: Path, *, base: Path,
+                    issue_number: str | None = None) -> Path:
         if not series:
             return base / "_Unsorted" / orig.name
-        number = tr.comic_info.number if tr.comic_info else None
+        number = issue_number or (tr.comic_info.number if tr.comic_info else None)
         edition_kind = parse_comic_filename(orig.name).edition_kind
         return build_library_path(
             base, series, number, orig.suffix, fallback_name=orig.name,

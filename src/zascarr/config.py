@@ -297,6 +297,12 @@ class Settings(BaseSettings):
     naming_preset: str = Field(default="clasico")
     #: 0 = usar el padding del preset; > 0 lo sobrescribe.
     naming_padding: int = Field(default=0, ge=0, le=12)
+    # B23: al importar, crear el número si la serie está vacía y el nombre lo
+    # identifica. Desactivado por defecto: no cambia bibliotecas existentes.
+    import_create_missing_issue: bool = Field(default=False)
+    # B23: convertir CBR→CBZ al importar. Desactivado por defecto; la conversión
+    # manual de la ficha sigue disponible sin encender esto.
+    import_convert_cbr: bool = Field(default=False)
 
     # ── Enricher (Comic Vine) ────────────────────────────────────────
     # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el
