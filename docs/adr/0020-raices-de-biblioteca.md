@@ -1,8 +1,10 @@
 # ADR 0020: raíces de biblioteca múltiples por tradición
 
-- **Estado:** **Aceptado por el PO (2026-11-14) solo para el corte A** (cimiento y migración).
-  Los cortes B–D quedan **pendientes de planificación**. Aceptar esta ADR **no implementa nada,
-  no aplica la migración 0041 en producción ni despliega**; cada paso exige su autorización.
+- **Estado:** **Aceptado por el PO (2026-11-14); cortes A (#844) y B (#859) implementados.**
+  A y B están implementados y probados, pero **no desplegados**. La migración 0041 está aplicada
+  **solo en la Pi del PO con backup** (evidencia de #156), **fuera de este PR**; no implica
+  despliegue general ni autorización para instalar en otras. Los cortes
+  C–D quedan **pendientes de planificación**; A5 no está cerrado.
 - **Relación:** #156 BL-A5 (feature #148); benchmark
   [`benchmark-BL-A5-repartir-tradiciones.md`](../design/benchmark-BL-A5-repartir-tradiciones.md)
   (nivel 2, `main@acb82a40`); especificación
@@ -99,6 +101,9 @@ mismo `relative_to`, mismo `is_missing` y mismos recuentos tras la migración.
 
 ## Estado
 
-**Aceptado por el PO el 2026-11-14, únicamente para el corte A.** B–D quedan pendientes de
-planificación; la migración 0041 no está aplicada y este ADR no autoriza ejecución en producción
-ni despliegue. Referencias: #156, benchmark y especificación enlazados arriba.
+**Aceptado por el PO el 2026-11-14.** Corte A implementado en **#844** (modelo, migración 0041,
+`RaicesService`) y corte B en **#859** (importer/asignación, confinamiento de `safe_move`,
+`root_id` persistido y M1). **No desplegado por este PR**; la migración 0041 solo está aplicada en
+la Pi del PO con backup (evidencia de #156), **fuera de este PR**; no implica despliegue general
+ni autorización para instalar en otras. C–D pendientes; A5 no
+está cerrado. Referencias: #156, benchmark y especificación enlazados arriba.

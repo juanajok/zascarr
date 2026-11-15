@@ -29,6 +29,7 @@ from zascarr.models import (
     FileFormat,
     Issue,
     IssueFormat,
+    LibraryRoot,
     MetadataSource,
     Series,
     Wishlist,
@@ -42,6 +43,7 @@ from zascarr.services.importer import (
 )
 from zascarr.services.library_adopter import AdoptionReport, LibraryAdopter
 from zascarr.services.orchestrator import Orchestrator
+from zascarr.services.raices import FotoDeRaices
 from zascarr.services.tagger import ESCRITO, TaggerService
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -114,8 +116,10 @@ async def _montar(db, tmp_path: Path, *, formato: FileFormat = FileFormat.CBZ,
 
 
 def _fila(db, *, sha256_hash: str, original_sha256: str | None = None,
-           is_missing: bool = False, imported_at=None, nombre="x.cbz", ruta: Path | None = None) -> File:
-    """`ruta`: dónde está de verdad el fichero de la fila. Una fila que debe ser una copia PRESENTE (duplicado real)
+           is_missing: bool = False, imported_at=None, nombre="x.cbz",
+           ruta: Path | None = None) -> File:
+    """`ruta`: dónde está de verdad el fichero de la fila. Una fila que debe ser
+    una copia PRESENTE (duplicado real)
     necesita un fichero que exista; sin él, su ruta es una referencia obsoleta."""
     f = File(id=uuid4(), file_path=str(ruta) if ruta else f"/lib/{uuid4()}.cbz", file_name=nombre,
              file_format=FileFormat.CBZ, sha256_hash=sha256_hash,
@@ -184,7 +188,8 @@ class TestDedupeIntegridad:
         _fila(db, sha256_hash=sha, is_missing=True,
               imported_at=datetime(2020, 1, 1, tzinfo=UTC))
         _fila(db, sha256_hash=sha, is_missing=False, nombre="presente.cbz",
-              ruta=_crear_cbz(tmp_path / "presente.cbz"), imported_at=datetime(2021, 1, 1, tzinfo=UTC))
+              ruta=_crear_cbz(tmp_path / "presente.cbz"),
+              imported_at=datetime(2021, 1, 1, tzinfo=UTC))
         await db.flush()
 
         outcome = await _triage_and_match(db, ruta)
@@ -328,9 +333,11 @@ class TestReenlazado:
         db.add(fila)
         await db.flush()
 
+        (tmp_path / "lib").mkdir(exist_ok=True)
         importer = Importer.__new__(Importer)
         importer._db = db
         importer._library = tmp_path / "lib"
+        importer._foto_raices = FotoDeRaices.compatibilidad(path=tmp_path / "lib")
         report = ImportReport(started_at=datetime.now(UTC))
 
         await importer._reenlazar(
@@ -391,9 +398,11 @@ class TestReenlazadoD8:
         # Antes de reenlazar: el fichero es `is_missing` → no cumple.
         assert await orch._is_fulfilled(item) is False
 
+        (tmp_path / "lib").mkdir(exist_ok=True)
         importer = Importer.__new__(Importer)
         importer._db = db
         importer._library = tmp_path / "lib"
+        importer._foto_raices = FotoDeRaices.compatibilidad(path=tmp_path / "lib")
         await importer._reenlazar(
             fila, entrante, TriageResult(path=entrante, sha256=hash_original),
             ImportReport(started_at=datetime.now(UTC)))
@@ -469,10 +478,46 @@ class TestReenlazadoFormatoDeclarado:
         )
 
     def _importer(self, db, tmp_path) -> Importer:
+        (tmp_path / "lib").mkdir(exist_ok=True)
+        (tmp_path / "lib").mkdir(exist_ok=True)
         importer = Importer.__new__(Importer)
         importer._db = db
         importer._library = tmp_path / "lib"
+        importer._foto_raices = FotoDeRaices.compatibilidad(path=tmp_path / "lib")
         return importer
+
+    @pytest.mark.asyncio
+    async def test_recuperar_con_raiz_actualiza_root_id(self, db, tmp_path):
+        from types import SimpleNamespace
+        from uuid import uuid4 as _uuid4
+        serie = Series(id=_uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       start_year=2011)
+        db.add(serie)
+        issue = Issue(id=_uuid4(), series_id=serie.id, issue_number="1")
+        db.add(issue)
+        await db.flush()
+        entrante = tmp_path / "descargas" / "recuperado.cbz"
+        entrante.parent.mkdir()
+        _crear_cbz(entrante)
+        sha = sha256_streaming(entrante)
+        fila = self._fila(issue_id=issue.id, formato=FileFormat.CBZ, sha=sha)
+        db.add(fila)
+        await db.flush()
+        root_id = _uuid4()
+        # La BD ya trae la raíz por defecto de 0041: esta es una raíz adicional.
+        db.add(LibraryRoot(id=root_id, name="Raíz", path=str(tmp_path / "lib"),
+                           enabled=True, is_default=False))
+        await db.flush()
+        raiz = SimpleNamespace(id=root_id, name="Raíz", path=str(tmp_path / "lib"),
+                               host_path=None, enabled=True, is_default=True,
+                               traditions=[SimpleNamespace(tradition=ComicTradition.AMERICAN)])
+        importer = self._importer(db, tmp_path)
+        importer._foto_raices = FotoDeRaices([raiz], validar=False)
+        await importer._reenlazar(
+            fila, entrante, TriageResult(path=entrante, sha256=sha),
+            ImportReport(started_at=datetime.now(UTC)))
+        assert str(fila.root_id) == str(root_id)
+        assert Path(fila.file_path).is_relative_to(tmp_path / "lib")
 
     @pytest.mark.asyncio
     async def test_importer_reenlaza_cbz_desaparecido_en_ruta_cbr(self, db, tmp_path):

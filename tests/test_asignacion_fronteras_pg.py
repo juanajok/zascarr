@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
+from tests._raices_pg import allowlist, sembrar_raiz
 from zascarr.models import (
     ComicTradition,
     File,
@@ -81,6 +82,7 @@ class Entorno:
             library_path=self.lib, downloads_path=self.dl, transmission_download_dir=str(self.dl),
             amule_incoming_dir=str(self.dl / "amule"), asignacion_simultaneas=1))
         monkeypatch.setattr("zascarr.config.get_settings", lambda: ajustes)
+        allowlist(monkeypatch, self.lib)
         app = FastAPI()
         app.include_router(router)
         self.app = app
@@ -93,7 +95,8 @@ class Entorno:
         # La BD es EFÍMERA y de este módulo: se vacía entre pruebas para que el recuento de ficheros de
         # la biblioteca (y el guardarraíl de desaparición masiva de B7) dependa solo de cada prueba.
         async with self.engine.begin() as c:
-            await c.execute(text("TRUNCATE asignacion_operaciones, files, issues, series, local_aliases, import_runs CASCADE"))
+            await c.execute(text("TRUNCATE asignacion_operaciones, files, issues, series, local_aliases, import_runs, library_root_traditions, library_roots CASCADE"))
+        await sembrar_raiz(self.fabrica, self.lib)
         self.origen = self.lib / "_Unsorted" / nombre
         contenido = hacer_cbz(self.origen, marca)
         async with self.fabrica() as s:
@@ -157,7 +160,7 @@ class TestFronterasDeFallo:
 
     @pytest.mark.asyncio
     async def test_fallo_antes_de_mover_no_deja_nada(self, ent, monkeypatch):
-        def publicar_roto(temporal, destino):
+        def publicar_roto(temporal, destino, **kwargs):
             raise OSError("disco de destino de solo lectura")
         monkeypatch.setattr("zascarr.services.asignacion._publicar", publicar_roto)
         r = ent.asignar()
