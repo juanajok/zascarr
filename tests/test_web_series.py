@@ -1335,3 +1335,24 @@ class TestAtribucionRellenoVisible:
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
         assert r.status_code == 200 and "Grand Comics Database" not in r.text
+
+
+class TestAtribucionRellenoSinUrl:
+    """O3 (deudas SCR7): si la URL de ficha no valida, se pinta nombre+licencia sin enlace."""
+
+    def test_la_atribucion_se_muestra_aunque_la_url_no_sea_valida(self):
+        series = make_series(total_issues=3)
+        series.metadata_ = {"relleno": {
+            "gcd": {"id": "1", "campos": ["start_year"],
+                    "ultimo_intento": "2026-11-14T12:00:00+00:00",
+                    "url_ficha": "https://atacante.example/series/1/"},
+        }}
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        fuera = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[1]
+        assert "Grand Comics Database" in fuera and "CC BY-SA 4.0" in fuera
+        assert 'href="https://atacante.example/series/1/"' not in fuera
+        assert 'href=""' not in fuera
