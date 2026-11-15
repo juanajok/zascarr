@@ -61,6 +61,8 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
     "calidad": ("quality_profile", "upgrade_scan_interval_minutes", "upgrade_scan_batch"),
     # BL-B9 (#158): nombres de archivo de destinos nuevos.
     "nombres": ("naming_enabled", "naming_preset", "naming_padding"),
+    # B23: decisiones de importación de una serie nueva.
+    "importacion": ("import_create_missing_issue", "import_convert_cbr"),
     # #488/BL-CNV6: carpetas declaradas compartidas (lista de rutas absolutas del contenedor).
     "compartidos": ("carpetas_compartidas",),
     # A6: auth_password_hash nunca llega aquí en claro — web/ajustes.py lo
