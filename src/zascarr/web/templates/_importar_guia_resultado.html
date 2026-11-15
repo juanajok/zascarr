@@ -1,1 +1,5 @@
-{% if errores.get("general") %}{{ ui.aviso("warn", errores.general, foco=true) }}{% endif %}
+{% if errores.get("general") %}<div id="importar-error">{{ ui.aviso("warn", errores.general, foco=true) }}</div>{% endif %}
+<input type="url" name="url" id="importar-url" value="{{ valores.url }}" maxlength="500" required
+       placeholder="https://… (la URL exacta de la guía, sin parámetros)"
+       aria-invalid="true" aria-describedby="importar-ayuda importar-error"
+       hx-swap-oob="outerHTML:#importar-url">
