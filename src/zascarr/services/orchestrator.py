@@ -368,6 +368,7 @@ class Orchestrator:
         # Un flood del foro no invalida los resultados de Prowlarr; si no hay
         # ninguno, se conserva el comportamiento de espera de SCR4.
         from zascarr.services.forum_scraper import ForumFloodControl
+        from zascarr.utils.cortesia import CortesiaEnEspera
 
         resultado_prowlarr, resultado_foro = await asyncio.gather(
             self._prowlarr_candidates(query, settings),
@@ -388,8 +389,11 @@ class Orchestrator:
             results, motivo_prowlarr = resultado_prowlarr
 
         forum_flood = isinstance(resultado_foro, ForumFloodControl)
+        forum_espera = isinstance(resultado_foro, CortesiaEnEspera)
         if forum_flood:
             logger.info("orchestrator.forum_flood_sin_bloquear_prowlarr", id=str(item.id))
+        elif forum_espera:
+            logger.info("orchestrator.forum_cortesia_sin_bloquear_prowlarr", id=str(item.id))
         elif isinstance(resultado_foro, BaseException):
             logger.warning("orchestrator.forum_search_failed", id=str(item.id),
                            error=type(resultado_foro).__name__)
@@ -427,7 +431,7 @@ class Orchestrator:
         if not candidates and forum_flood:
             # C-1 (SecOps): un flood es una espera, no un intento fallido. Se deshace la
             # marca para que el ítem se reintente al pasar la espera y no consuma cupo de
-            # política (la marca de política se había confirmado antes de la petición).
+            # política (la marca se había confirmado antes de la petición).
             # El estado vuelve a WANTED ANTES de restaurar: en política, la restauración
             # confirma, y no debe persistir el SEARCHING transitorio de _marcar_busqueda.
             item.status = WishlistStatus.WANTED
@@ -435,6 +439,15 @@ class Orchestrator:
             await self._restaurar_marca(item, marca_previa)
             await self.db.flush()
             return None
+
+        if not candidates and forum_espera:
+            # La cortesía del foro no es «no hay nada»: se informa y se libera la marca
+            # para que el coleccionista pueda reintentar en cuanto pase la espera.
+            item.status = WishlistStatus.WANTED
+            item.last_error = MOTIVO_FORO_ESPERA
+            await self._restaurar_marca(item, marca_previa)
+            await self.db.flush()
+            return []
 
         # La relevancia se resuelve con el título local (sin el número) y los alias;
         # titulo_serie/alias_serie se cargaron antes de consultar las fuentes.
@@ -704,14 +717,15 @@ class Orchestrator:
         El scraper recorre TODOS los temas y enlaces de la búsqueda, no solo el
         primero: el foro suele tener varias ediciones/releases en la misma página.
         """
-        resultado = await self._forum_fallback(query)
+        resultado = await self._forum_fallback(query, propagar_espera=True)
         if resultado is None:
             return []
         if isinstance(resultado, SearchResult):
             return [resultado]
         return list(resultado)
 
-    async def _forum_fallback(self, query: str) -> list[SearchResult]:
+    async def _forum_fallback(
+            self, query: str, *, propagar_espera: bool = False) -> list[SearchResult]:
         s = get_settings()
         # forum_url vacío por defecto a propósito (blindaje legal): es un
         # plugin IPB genérico, la URL la aporta el usuario, el proyecto no
@@ -741,8 +755,14 @@ class Orchestrator:
         except ForumFloodControl:
             # El ítem ya está marcado; _search_and_rank deja MOTIVO_FORO_ESPERA.
             raise
-        except (CortesiaEnEspera, FuenteApagada) as exc:
-            # AC-16: sin turno no es un fallo; se omite el ciclo sin registrar excepción.
+        except CortesiaEnEspera as exc:
+            # La búsqueda manual necesita distinguir «el foro pidió esperar» de «no hay
+            # nada»; el ciclo automático puede omitirlo y reintentar más tarde.
+            if propagar_espera:
+                raise
+            logger.info("orchestrator.forum_sin_turno",
+                        motivo=getattr(exc, "motivo", "cortesia"))
+        except FuenteApagada as exc:
             logger.info("orchestrator.forum_sin_turno",
                         motivo=getattr(exc, "motivo", "apagada"))
         except Exception as exc:

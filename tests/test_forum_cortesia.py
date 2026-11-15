@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from uuid import uuid4
 from unittest.mock import MagicMock
 
 import httpx
@@ -141,3 +143,25 @@ class TestForoSinTurno:
         eventos = [r["event"] for r in registros]
         assert "orchestrator.forum_fallback_error" not in eventos
         assert "orchestrator.forum_sin_turno" in eventos
+
+
+async def test_la_cortesia_del_foro_se_muestra_como_espera_no_como_sin_resultados(monkeypatch):
+    """El foro no devolvió vacío: IPB pidió esperar. La UI debe decirlo."""
+    from zascarr.models import WishlistStatus
+    from zascarr.services.orchestrator import MOTIVO_FORO_ESPERA, Orchestrator
+    orq = Orchestrator(db=SimpleNamespace(flush=AsyncMock(), execute=AsyncMock(), commit=AsyncMock()))
+    orq._build_query = AsyncMock(return_value="consulta")
+    orq._marcar_busqueda = AsyncMock()
+    orq._forum_fallback = AsyncMock(side_effect=CortesiaEnEspera(
+        "foro", "foro.example:80", 25.0, "cortesia"))
+    item = SimpleNamespace(id=uuid4(), status=None, last_error=None, numero=None,
+                           series_id=None)
+    ajustes = SimpleNamespace(forum_enabled=True, forum_url="http://foro.example/forum",
+                              forum_username="lector", prowlarr_enabled=False,
+                              transmission_enabled=False, amule_enabled=False)
+    monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+
+    assert await orq._search_and_rank(item) == []
+    assert item.last_error == MOTIVO_FORO_ESPERA
+    assert item.status is WishlistStatus.WANTED
+    orq.db.flush.assert_awaited()
