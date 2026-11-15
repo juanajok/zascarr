@@ -637,3 +637,52 @@ class TestNombresDeArchivo:
             app.dependency_overrides.pop(get_db, None)
         assert r.status_code == 200 and "no existe" in r.text
         assert s.naming_preset == antes
+
+
+class TestBlogRss:
+    def test_pagina_muestra_seccion_sin_url_por_defecto(self):
+        r = TestClient(app).get("/ui/ajustes")
+        assert r.status_code == 200
+        assert "Blog o RSS" in r.text
+        assert 'name="blog_feed_url"' in r.text
+        assert "Solo se aceptan enlaces" in r.text
+
+    def test_guardar_url_valida_y_activar(self, restaurar_settings):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/blog", data={
+                "blog_feed_enabled": "true",
+                "blog_feed_name": "Mi blog",
+                "blog_feed_url": "https://blog.example/feed.xml",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "guardado" in r.text.lower()
+        s = get_settings()
+        assert s.blog_feed_enabled is True
+        assert s.blog_feed_url == "https://blog.example/feed.xml"
+        assert s.blog_feed_name == "Mi blog"
+
+    def test_url_invalida_no_guarda(self, restaurar_settings):
+        s = get_settings()
+        antes = s.blog_feed_url
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/blog", data={
+                "blog_feed_enabled": "true", "blog_feed_url": "javascript:alert(1)"})
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "http://" in r.text
+        assert s.blog_feed_url == antes
+
+    def test_activo_sin_url_no_guarda(self, restaurar_settings):
+        s = get_settings()
+        s.blog_feed_enabled = False
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/blog", data={
+                "blog_feed_enabled": "true", "blog_feed_url": ""})
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "dirección" in r.text.lower()
+        assert s.blog_feed_enabled is False

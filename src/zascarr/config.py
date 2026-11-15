@@ -181,6 +181,14 @@ class Settings(BaseSettings):
     forum_search_rate_limit: float = Field(default=25.0)
     forum_enabled: bool = Field(default=False)
 
+    # ── Blog o RSS genérico (BLOG1) ────────────────────────────────
+    # El usuario aporta la URL; no hay ninguna por defecto. Solo se aceptan
+    # enlaces de descarga directa que vengan en el feed (sin scrapear posts).
+    blog_feed_url: str = Field(default="")
+    blog_feed_name: str = Field(default="Blog o RSS")
+    blog_feed_enabled: bool = Field(default=False)
+    blog_feed_rate_limit: float = Field(default=2.0)
+
     # ── Filesystem (rutas DENTRO del contenedor — genéricas y estables) ──
     # El contenedor monta los discos reales del usuario en estas rutas
     # (ver docker-compose.yml); los discos en sí se configuran en .env con

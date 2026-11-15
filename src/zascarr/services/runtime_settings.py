@@ -66,6 +66,8 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
     # A6: auth_password_hash nunca llega aquí en claro — web/ajustes.py lo
     # calcula (services/auth.py::hash_password) ANTES de llamar a save().
     "seguridad": ("auth_mode", "auth_username", "auth_password_hash", "base_url"),
+    # BLOG1: feed RSS/Atom genérico aportado por el usuario.
+    "blog": ("blog_feed_url", "blog_feed_name", "blog_feed_enabled", "blog_feed_rate_limit"),
     # E4: aviso de importación por webhook, apagado por defecto.
     "avisos": (
         "webhook_enabled", "webhook_type", "webhook_url",
