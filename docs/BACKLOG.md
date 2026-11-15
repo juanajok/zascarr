@@ -566,6 +566,27 @@ migraciones en producción ni despliegue**.
   merge de #514; **el SHA exacto no consta y la Pi no se ha verificado desde aquí**.
   #514 **no viaja en `20e5f9f`**, que es el despliegue de ETQ1a.
 
+### Épica CUR — "Curo mi biblioteca con datos locales" (propuesta 2026-11-15)
+
+Feature abierta: [#861](https://github.com/juanajok/zascarr/issues/861). Nace del benchmark
+de comunidades de escaneos/tradumaquetas: se adopta la **curación**, el **orden de lectura**
+y la **procedencia**, no sus descargas. No integra fuentes externas ni scraping.
+
+| ID | Historia | Aceptación | P | Est |
+|---|---|---|---|---|
+| CUR1 | Como coleccionista, quiero ver en la ficha de una serie en qué sagas participa y en qué posición, para seguir un orden de lectura sin ir a otra pantalla ([#862](https://github.com/juanajok/zascarr/issues/862)) | Bloque «Sagas» perezoso con enlace a `/ui/arcos/{id}` y posición; sin sagas no se pinta; no toca archivos ni orden; sin migración | P1 | M |
+| CUR2 | Como coleccionista, quiero filtrar la Biblioteca por autor y combinarlo con editorial, tradición o saga ([#863](https://github.com/juanajok/zascarr/issues/863)) | Filtro por autor exacto en URL, chip y «Limpiar todos»; paginación y sin N+1; enlace desde la ficha; sin migración | P2 | M |
+| CUR3 | Como coleccionista con cientos de series, quiero marcar favoritas y filtrarlas ([#864](https://github.com/juanajok/zascarr/issues/864)) | Marca idempotente, filtro «Favoritas» en URL, no toca etiquetas/Deseados/archivos; migración reversible | P2 | M |
+| CUR4 | Como coleccionista, quiero registrar idioma y edición de una serie para distinguir oficial/tradumaqueta ([#865](https://github.com/juanajok/zascarr/issues/865)) | Campos estructurados opcionales, sin inferir de la tradición ni importar de fuentes no autorizadas; visibles/filtrables; migración reversible | P2 | M |
+| CUR5 | Como coleccionista, quiero continuar leyendo desde Inicio ([#866](https://github.com/juanajok/zascarr/issues/866)) | Tarjeta solo con lectura en curso; enlace a número/ficha; sin telemetría; pruebas de consulta/UI | P2 | M |
+| CUR6 | Como coleccionista, quiero que una saga tenga portada y progreso para usarla como guía de etapa ([#867](https://github.com/juanajok/zascarr/issues/867)) | Portada sin hotlinking + progreso leídos/total; ficha/listado; no cambia orden ni archivos | P2 | S |
+| CUR7 | Como coleccionista, quiero acotar la Biblioteca por año o etapa ([#868](https://github.com/juanajok/zascarr/issues/868)) | Rango desde/hasta combinable, chips, URL y paginación; sin inventar etapas | P2 | M |
+
+**Fichas:** `docs/design/decision-curacion-comunidades.md` y
+`docs/design/benchmark-fuentes-comunidades.md`.
+**Límites:** sin fuentes de descarga, Telegram, foros, Mega ni agregadores; nada de scraping.
+Publicar estas tarjetas no autoriza código, migraciones en producción ni despliegue.
+
 ### Épica D — "El sistema busca lo que me falta"
 
 | ID | Historia | Aceptación | P | Est |
