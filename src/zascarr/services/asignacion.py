@@ -207,7 +207,8 @@ def _renameat2_noreplace(origen: Path, destino: Path) -> None:
 
 def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None,
               fd: int | None = None, st_dev: int | None = None,
-              st_ino: int | None = None) -> Path | None:
+              st_ino: int | None = None,
+              sha256_esperado: str | None = None) -> Path | None:
     """Publica `temporal` como `destino` SIN poder reemplazar a nadie.
 
     `os.replace` sustituye en silencio un nombre existente, y comprobar `exists()` antes deja una ventana
@@ -221,7 +222,8 @@ def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None,
         try:
             if fd is not None:
                 return publicar_en_raiz(temporal, destino, raiz, fd=fd,
-                                        inodo_esperado=(st_dev, st_ino))
+                                        inodo_esperado=(st_dev, st_ino),
+                                        sha256_esperado=sha256_esperado)
             return publicar_en_raiz(temporal, destino, raiz)
         except OSError as exc:
             if exc.errno in _NO_SOPORTADO or exc.errno == errno.EPERM:
@@ -589,7 +591,11 @@ class AsignacionService:
                     causa = sanear_excepcion(exc)
                     return Resultado(EstadoResultado.ERROR, causa, op["destino"])
                 if not await prop.vigente():
-                    mi_temporal.unlink(missing_ok=True)
+                    with contextlib.suppress(OSError):
+                        eliminar_en_raiz(
+                            mi_temporal, raiz.path,
+                            inodo_esperado=((copia.st_dev, copia.st_ino)
+                                            if copia is not None else None))
                     return perdida
                 try:
                     try:
@@ -597,7 +603,8 @@ class AsignacionService:
                             _publicar, mi_temporal, destino, raiz=raiz.path,
                             fd=copia.fd if copia is not None else None,
                             st_dev=copia.st_dev if copia is not None else None,
-                            st_ino=copia.st_ino if copia is not None else None)
+                            st_ino=copia.st_ino if copia is not None else None,
+                            sha256_esperado=copia.sha256 if copia is not None else None)
                     finally:
                         if copia is not None:
                             copia.cerrar()
@@ -616,7 +623,10 @@ class AsignacionService:
                     # Alguien (ajeno a las operaciones) ocupó el destino tras reservarlo: NO se toca. La
                     # operación se cancela y quien reintente reservará el siguiente nombre libre.
                     with contextlib.suppress(OSError):
-                        eliminar_en_raiz(mi_temporal, raiz.path)
+                        eliminar_en_raiz(
+                            mi_temporal, raiz.path,
+                            inodo_esperado=((copia.st_dev, copia.st_ino)
+                                            if copia is not None else None))
                     if not await self._cerrar(op_id, "cancelada", prop.epoca):
                         return perdida
                     return Resultado("destino_ocupado", "Otro fichero ocupó el destino; no se tocó. Reintenta.", op["destino"])
@@ -627,7 +637,7 @@ class AsignacionService:
                     logger.warning("asignacion.temporal_sin_retirar", operacion=str(op_id))
                 except PublicacionNoSoportadaError as exc:
                     # Nada publicado. Si retirar la copia propia falla, la operación se CONSERVA viva.
-                    if not await self._retirar_copia_y_cancelar(op_id, mi_temporal, prop):
+                    if not await self._retirar_copia_y_cancelar(op_id, mi_temporal, prop, raiz=raiz.path, copia=copia):
                         return Resultado("error", "No se pudo retirar la copia temporal; se limpiará al reintentar",
                                          op["destino"])
                     return Resultado("error", sanear_excepcion(exc), op["destino"])
@@ -641,7 +651,7 @@ class AsignacionService:
                     if destino.exists():
                         return Resultado(EstadoResultado.PENDIENTE_DE_COMPROBAR,
                                          "Error al publicar con el destino ya presente; se conserva todo", op["destino"])
-                    if not await self._retirar_copia_y_cancelar(op_id, mi_temporal, prop):
+                    if not await self._retirar_copia_y_cancelar(op_id, mi_temporal, prop, raiz=raiz.path, copia=copia):
                         return Resultado("error", "No se pudo retirar la copia temporal; se limpiará al reintentar",
                                          op["destino"])
                     return Resultado("error", "No se pudo escribir en la carpeta de destino", op["destino"])
@@ -660,13 +670,21 @@ class AsignacionService:
 
         return await self._limpiar(op_id, origen, op, prop)
 
-    async def _retirar_copia_y_cancelar(self, op_id: UUID, temporal: Path, prop: _Propiedad) -> bool:
+    async def _retirar_copia_y_cancelar(self, op_id: UUID, temporal: Path, prop: _Propiedad,
+                                        *, raiz: Path | None = None, copia=None) -> bool:
         """Fallo anterior a publicar: retira la copia propia y SOLO ENTONCES cancela (libera la reserva).
 
         Si no se puede retirar, devuelve False y la operación sigue viva: su ruta temporal está en la fila, y
         al continuar se retiran los temporales de épocas anteriores antes de copiar de nuevo."""
         try:
-            await asyncio.to_thread(temporal.unlink, missing_ok=True)
+            if raiz is not None:
+                borrado = await asyncio.to_thread(
+                    eliminar_en_raiz, temporal, raiz,
+                    inodo_esperado=((copia.st_dev, copia.st_ino) if copia is not None else None))
+                if not borrado and temporal.exists():
+                    return False
+            else:
+                await asyncio.to_thread(temporal.unlink, missing_ok=True)
         except OSError:
             return False
         await self._cerrar(op_id, "cancelada", prop.epoca)

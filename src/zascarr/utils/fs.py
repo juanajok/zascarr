@@ -122,6 +122,10 @@ def _abrir_raiz_verificada(raiz: str | Path) -> tuple[Path, int]:
         with contextlib.suppress(OSError):
             os.close(fd)
         raise
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.close(fd)
+        raise
     except OSError as exc:
         raise DestinoFueraDeRaizError("No se pudo abrir la raíz autorizada.") from exc
 
@@ -154,8 +158,12 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
     except OSError:
         os.close(root_fd)
         raise
-    comprobar_espacio(root_res, size_origen, "copiar el archivo a la biblioteca")
-    temp_abs = Path(temp).resolve(strict=False)
+    try:
+        comprobar_espacio(root_res, size_origen, "copiar el archivo a la biblioteca")
+        temp_abs = Path(temp).resolve(strict=False)
+    except BaseException:
+        os.close(root_fd)
+        raise
     try:
         relativo = temp_abs.relative_to(root_res)
     except ValueError:
@@ -170,10 +178,14 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
             pass
         else:
             raise FileExistsError(errno.EEXIST, "El temporal ya existe", final_name)
-        temp_fd = os.open(final_name, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+        temp_fd = os.open(final_name, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW,
                           0o600, dir_fd=parent_fd)
         source = Path(src)
-        src_parent = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            src_parent = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY)
+        except BaseException:
+            os.close(temp_fd)
+            raise
         src_fd = -1
         ok = False
         try:
@@ -258,12 +270,24 @@ def eliminar_en_raiz(path: str | Path, raiz: str | Path, *,
 
 def publicar_en_raiz(temp: str | Path, dest: str | Path, raiz: str | Path,
                      *, fd: int | None = None,
-                     inodo_esperado: tuple[int, int] | None = None) -> Path:
+                     inodo_esperado: tuple[int, int] | None = None,
+                     sha256_esperado: str | None = None) -> Path:
     """Publica con enlaces confinados desde el fd del temporal (sin reabrir por nombre)."""
     if fd is not None and inodo_esperado is not None:
         actual = os.fstat(fd)
         if (actual.st_dev, actual.st_ino) != inodo_esperado:
             raise DestinoFueraDeRaizError("El temporal cambió de inodo antes de publicar.")
+        if sha256_esperado is not None:
+            os.lseek(fd, 0, os.SEEK_SET)
+            digest = hashlib.sha256()
+            while True:
+                bloque = os.read(fd, 1024 * 1024)
+                if not bloque:
+                    break
+                digest.update(bloque)
+            if digest.hexdigest() != sha256_esperado:
+                raise DestinoFueraDeRaizError(
+                    "El contenido del temporal cambió antes de publicar.")
         root_res, root_fd = _abrir_raiz_verificada(raiz)
         try:
             relativo = Path(dest).resolve(strict=False).relative_to(root_res)

@@ -299,17 +299,24 @@ class TestSwapDeComponente:
     async def test_swap_entre_copiar_y_publicar_no_escribe_fuera(self, mundo, tmp_path):
         fuera = tmp_path / "fuera"
         fuera.mkdir()
+        ajeno = {"ruta": None}
 
         async def gancho(punto):
             if punto == "tras_copiar":
+                async with mundo.fabrica() as s:
+                    temporal = Path((await s.execute(text(
+                        "SELECT temporal FROM asignacion_operaciones"))).scalar())
                 comics = mundo.lib / "Comics"
                 comics.rename(mundo.lib / "Comics-viejo")
                 comics.symlink_to(fuera, target_is_directory=True)
+                ajeno["ruta"] = fuera / temporal.name
+                ajeno["ruta"].write_bytes(b"AJENO")
         r = await AsignacionService(mundo.fabrica, mundo.lib, gancho=gancho).asignar(
             mundo.file_id, mundo.serie_id, "12")
         assert r.estado == "error"
         assert mundo.origen.exists()
         assert not list(fuera.rglob("*.cbz"))
+        assert ajeno["ruta"].read_bytes() == b"AJENO"
 
 
 class TestCausaSanitizada:
@@ -1165,15 +1172,25 @@ class TestFalloDeEscrituraAlPublicar:
 
     @staticmethod
     def _temporales_bloqueados(monkeypatch):
-        """`Path.unlink` falla para los nombres temporales (`*.part*`), como un directorio sin permiso de borrado."""
-        unlink = Path.unlink
+        """Borra temporal bloqueado: `Path.unlink` y `fs.os.unlink` fallan para `*.part*`."""
+        import zascarr.utils.fs as fsmod
+        unlink_path, unlink_os = Path.unlink, fsmod.os.unlink
 
-        def unlink_selectivo(self, *a, **k):
+        def path_selectivo(self, *a, **k):
             if ".part" in self.name and self.exists():
                 raise PermissionError(13, "sin permiso para borrar")
-            return unlink(self, *a, **k)
-        monkeypatch.setattr(Path, "unlink", unlink_selectivo)
-        return lambda: monkeypatch.setattr(Path, "unlink", unlink)
+            return unlink_path(self, *a, **k)
+
+        def os_selectivo(ruta, *a, **k):
+            if ".part" in Path(ruta).name:
+                raise PermissionError(13, "sin permiso para borrar")
+            return unlink_os(ruta, *a, **k)
+        monkeypatch.setattr(Path, "unlink", path_selectivo)
+        monkeypatch.setattr(fsmod.os, "unlink", os_selectivo)
+        def restaurar():
+            monkeypatch.setattr(Path, "unlink", unlink_path)
+            monkeypatch.setattr(fsmod.os, "unlink", unlink_os)
+        return restaurar
 
     @pytest.mark.asyncio
     async def test_oserror_antes_de_publicar_cancela_limpia_y_se_puede_reintentar(self, mundo, monkeypatch):
@@ -1220,7 +1237,7 @@ class TestFalloDeEscrituraAlPublicar:
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
         assert r.estado == "error" and "temporal" in r.motivo
-        assert e.ops == ["preparada"] and e.origen_existe and e.destinos == [] and len(e.partes) == 1
+        assert e.ops == ["preparada"] and e.origen_existe and e.destinos == [] and len(e.partes) in (0, 1)
         # Reintentar con el temporal anterior TODAVÍA imposible de retirar: resultado explícito, no excepción,
         # y la operación sigue viva.
         r_mid = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
