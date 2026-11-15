@@ -22,7 +22,7 @@ from zascarr.models import (
     WishlistOrigin,
     WishlistStatus,
 )
-from zascarr.services.arcos import detalle_arco, listar_arcos, pedir_arco
+from zascarr.services.arcos import detalle_arco, listar_arcos, pedir_arco, sagas_de_serie
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
@@ -65,6 +65,12 @@ async def test_arco_cruza_series_y_respeta_reading_order():
                 assert [f.series for f in detalle.filas] == ["Batman", "Nightwing"]
                 assert [f.orden for f in detalle.filas] == [1, 2]
                 assert detalle.filas[0].disponible is True
+                sagas = await sagas_de_serie(s, a.id)
+                assert len(sagas) == 1
+                assert sagas[0].title == "Court of Owls"
+                assert (sagas[0].desde, sagas[0].hasta, sagas[0].total) == (1, 1, 2)
+                assert sagas[0].is_crossover is True
+                assert await sagas_de_serie(s, uuid4()) == []
         finally:
             await motor.dispose()
 

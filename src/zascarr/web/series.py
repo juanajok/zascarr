@@ -40,6 +40,7 @@ from zascarr.models import (
     collection_series,
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
+from zascarr.services.arcos import sagas_de_serie
 from zascarr.services.calidad import buscar_mejoras
 from zascarr.services.coleccion import (
     ConflictoVersionError,
@@ -712,6 +713,20 @@ async def aplicar_enriquecimiento(
         request, "enriquecimiento_resultado.html",
         {"series": series, "resultado": resultado, "error": None},
     )
+
+
+@router.get("/{series_id}/sagas", response_class=HTMLResponse)
+async def panel_sagas(series_id: UUID, request: Request,
+                      db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento perezoso: sagas en las que participa la serie y su posición."""
+    series = await _serie_o_404(db, series_id)
+    sagas = await sagas_de_serie(db, series.id)
+    if not sagas:
+        return HTMLResponse("", headers={"Cache-Control": "no-store"})
+    respuesta = templates.TemplateResponse(
+        request, "_sagas_serie.html", {"series": series, "sagas": sagas})
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 @router.get("/{series_id}/etiquetas", response_class=HTMLResponse)
