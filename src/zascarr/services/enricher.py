@@ -263,6 +263,52 @@ class SeriesMatch:
     end_year: int | None = None
 
 
+def _sin_huecos_cubribles_vigente(serie, ahora) -> bool:
+    """¿La serie ya está marcada como sin huecos cubribles dentro de los 30 días?"""
+    from datetime import timedelta
+
+    entrada = ((getattr(serie, "metadata_", None) or {}).get("relleno") or {}).get(
+        "_sin_huecos_cubribles")
+    if not isinstance(entrada, str) or not entrada:
+        return False
+    try:
+        fecha = datetime.fromisoformat(entrada)
+    except ValueError:
+        return False
+    if fecha.tzinfo is None:
+        fecha = fecha.replace(tzinfo=UTC)
+    return ahora - fecha < timedelta(days=30)
+
+
+def _marcar_sin_huecos_cubribles(serie, ahora) -> None:
+    """Marca en el JSONB (dict nuevo) que no hay huecos que las fuentes actuales cubran."""
+    metadata = dict(getattr(serie, "metadata_", None) or {})
+    relleno = dict(metadata.get("relleno") or {})
+    relleno["_sin_huecos_cubribles"] = ahora.isoformat()
+    metadata["relleno"] = relleno
+    serie.metadata_ = metadata
+
+
+def _fuente_cubrible(serie, fuente, clientes, tradicion, ahora, *, ttl_vigente,
+                     campos_faltantes) -> bool:
+    from zascarr.services.relleno_huecos import TRADICIONES_DE_FUENTE
+
+    cliente = clientes.get(fuente)
+    if cliente is None:
+        return False
+    ident = (serie.gcd_id if fuente == "gcd"
+             else serie.metron_id if fuente == "metron"
+             else serie.open_library_id)
+    if ident is None:
+        return False
+    permitidas = TRADICIONES_DE_FUENTE.get(fuente) or frozenset()
+    if permitidas and tradicion not in permitidas:
+        return False
+    if ttl_vigente(serie, fuente, ahora):
+        return False
+    return bool(campos_faltantes(serie, fuente))
+
+
 class EnrichmentService:
     """Enriquecimiento incremental: cada llamada procesa un lote pequeño.
 
@@ -401,15 +447,40 @@ class EnrichmentService:
                        Series.open_library_id.is_not(None)))
             .where(or_(Series.description.is_(None), Series.description == "",
                        Series.start_year.is_(None), Series.end_year.is_(None)))
-            .order_by(Series.id)
-            .limit(limit)
+            # O1: la más antigua primero (las nunca intentadas, NULLS FIRST) para que el
+            # lote avance y no se quede mirando siempre las mismas filas.
+            .order_by(Series.enrichment_attempted_at.asc().nullsfirst(), Series.id)
+            .limit(max(limit * 50, 500))
         )).scalars().all()
         ahora = datetime.now(UTC)
         peticiones: Counter[str] = Counter()
         cortadas: set[str] = set()
+
+        def clave_de_turno(serie):
+            momento = getattr(serie, "enrichment_attempted_at", None)
+            return (momento is not None, momento.timestamp() if momento else 0.0,
+                    str(getattr(serie, "id", "")))
+
+        filas = sorted(filas, key=clave_de_turno)
+        procesadas = 0
         for serie in filas:
+            if procesadas >= limit:
+                break
+            if _sin_huecos_cubribles_vigente(serie, ahora):
+                continue                    # ya se marcó: no consume el limit ni hace red
             tradicion = (serie.tradition.value if hasattr(serie.tradition, "value")
                          else str(serie.tradition or ""))
+            cubribles = [
+                fuente for fuente in FUENTES_CON_RELLENO
+                if _fuente_cubrible(serie, fuente, clientes, tradicion, ahora,
+                                    ttl_vigente=ttl_vigente,
+                                    campos_faltantes=campos_faltantes)
+            ]
+            if not cubribles:
+                _marcar_sin_huecos_cubribles(serie, ahora)
+                await self.db.flush()
+                continue
+            procesadas += 1
             for fuente in FUENTES_CON_RELLENO:
                 cliente = clientes[fuente]
                 if cliente is None or fuente in cortadas:

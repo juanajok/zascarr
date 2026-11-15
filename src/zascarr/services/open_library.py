@@ -150,7 +150,7 @@ class OpenLibraryClient:
         descripcion = data.get("description")
         if isinstance(descripcion, dict):
             descripcion = descripcion.get("value")
-        return OpenLibraryResult(
+        ficha = OpenLibraryResult(
             work_id=limpio,
             title=str(data.get("title") or "").strip(),
             start_year=data.get("first_publish_year"),
@@ -158,6 +158,10 @@ class OpenLibraryClient:
             site_url=f"{SITIO}/works/{limpio}",
             raw=data,
         )
+        # O2: sin título, descripción ni año no hay dato útil que rellenar.
+        if not (ficha.title or ficha.description or ficha.start_year is not None):
+            return None
+        return ficha
 
     async def search_works(self, query: str, limit: int = 10) -> list[OpenLibraryResult]:
         """`GET /search.json?q=…&fields=…&limit=…`; una página, sin dumps."""

@@ -284,12 +284,17 @@ class GCDClient:
             raise ErrorDePeticion("respuesta JSON inválida de GCD") from exc
         if not isinstance(data, dict) or not data:
             return None
-        return GCDSerie(
+        ficha = GCDSerie(
             gcd_id=gcd_id, name=str(data.get("name") or ""),
             year_began=data.get("year_began"), year_ended=data.get("year_ended"),
             publisher=(data.get("publisher") if isinstance(data.get("publisher"), str)
                        else None),
             raw=data, peticiones=1)
+        # O2: sin nombre ni años no hay ningún dato útil para el relleno.
+        if not (ficha.name or ficha.year_began is not None
+                or ficha.year_ended is not None):
+            return None
+        return ficha
 
     async def get_publisher(self, publisher_url: str) -> str | None:
         """Nombre de la editorial de GCD, o `None`; 1 petición y solo al origen de la API."""
