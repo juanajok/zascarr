@@ -441,6 +441,18 @@ class Orchestrator:
             candidates, item.search_query or titulo_serie or query, alias_serie)
 
         descartados_por_numero = 0
+        if item.series_id:
+            serie = (await self.db.execute(
+                select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
+            titulo_serie = serie.title if serie else ""
+            # B13: los alias que el coleccionista ya confirmó a mano. Un
+            # release español puede llamar "La Patrulla-X" a una serie
+            # catalogada como "X-Men"; sin ellos, la igualdad estricta
+            # descartaría el candidato bueno.
+            alias_serie = set((await self.db.execute(
+                select(LocalAlias.pattern_norm)
+                .where(LocalAlias.series_id == item.series_id,
+                       LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
         if item.numero is not None:
             antes = len(candidates)
             candidates = [
@@ -449,6 +461,15 @@ class Orchestrator:
                 if self._candidato_es_del_numero(c, item.numero, titulo_serie, alias_serie)
             ]
             descartados_por_numero = antes - len(candidates)
+        else:
+            # Búsqueda a nivel de SERIE: antes se aceptaba cualquier resultado
+            # de Prowlarr que no fuera de otro número. Un disco de ginecología
+            # con «DC» en el título entraba como candidato de «DC K.O.».
+            referencia = titulo_serie or query
+            candidates = [
+                c for c in candidates
+                if self._candidato_es_de_la_serie(c, referencia, alias_serie)
+            ]
 
         # Blindaje legal: opt-in por backend (deshabilitados por defecto,
         # igual que forum_enabled ya lo estaba) — un candidato de un
@@ -756,6 +777,29 @@ class Orchestrator:
             return (urlsplit(url).hostname or "?")[:100]
         except ValueError:
             return "?"
+
+    @staticmethod
+    def _candidato_es_de_la_serie(candidate: SearchResult, titulo_serie: str,
+                                  alias_serie: set[str] | None = None) -> bool:
+        """¿El título del release pertenece a la serie pedida?
+
+        Se compara el **título de serie parseado**, no una contención cruda:
+        «DC K.O.» no debe aceptar un manual de ginecología que también dice
+        «DC». Los alias locales (B13) son la única holgura: los confirmó una
+        persona. Sin título de referencia no se filtra (no hay nada con lo que
+        comparar), igual que en el flujo antiguo.
+        """
+        referencia = normalize_title(titulo_serie).replace(" ", "")
+        if not referencia:
+            return True
+        parsed = parse_comic_filename(candidate.title)
+        candidato = normalize_title(parsed.series or candidate.title).replace(" ", "")
+        if candidato == referencia:
+            return True
+        return any(
+            normalize_title(alias).replace(" ", "") == candidato
+            for alias in (alias_serie or set()) if alias
+        )
 
     @staticmethod
     def _candidato_es_del_numero(candidate: SearchResult, numero: int,
