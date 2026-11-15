@@ -156,6 +156,14 @@ async def _no_hacer_nada(_punto: str) -> None:
     return None
 
 
+def _inodo(ruta: Path) -> tuple[int, int] | None:
+    try:
+        st = ruta.stat(follow_symlinks=False)
+    except OSError:
+        return None
+    return (st.st_dev, st.st_ino)
+
+
 def _sha256(ruta: Path) -> str:
     with open(ruta, "rb") as f:
         return hashlib.file_digest(f, "sha256").hexdigest()
@@ -558,8 +566,14 @@ class AsignacionService:
             if not destino.exists():
                 try:
                     for anterior in range(1, prop.epoca):              # temporales de ejecutores anteriores
-                        base_temporal.with_name(f"{base_temporal.name}.{anterior}").unlink(missing_ok=True)
-                    base_temporal.unlink(missing_ok=True)
+                        anterior_ruta = base_temporal.with_name(f"{base_temporal.name}.{anterior}")
+                        inodo = _inodo(anterior_ruta)
+                        if inodo is not None:
+                            eliminar_en_raiz(anterior_ruta, raiz.path, inodo_esperado=inodo)
+                    inodo_base = _inodo(base_temporal)
+                    if inodo_base is not None:
+                        eliminar_en_raiz(base_temporal, raiz.path,
+                                         inodo_esperado=inodo_base)
                 except OSError as exc:
                     # No se toca nada más: la operación sigue viva y el próximo intento vuelve a limpiarlos.
                     logger.warning("asignacion.temporal_previo_sin_retirar", operacion=str(op_id), error=type(exc).__name__)
@@ -569,12 +583,14 @@ class AsignacionService:
                 if not await prop.vigente():
                     return perdida
                 copia = None
+                inodo_copia = None
                 try:
                     copia = await asyncio.to_thread(
                         _copiar_y_verificar, origen, mi_temporal, op["sha256"],
                         op["size_bytes"], raiz=raiz.path)
                     if copia is not None:
                         mi_temporal = copia.path
+                        inodo_copia = (copia.st_dev, copia.st_ino)
                 except EspacioInsuficienteError as exc:
                     # La operación sigue `preparada`: se puede reintentar tras liberar espacio.
                     return Resultado("error", sanear_excepcion(exc), op["destino"])
@@ -587,15 +603,17 @@ class AsignacionService:
                     _validar_destino_en_raiz(raiz.path, mi_temporal)
                 except (RaizNoDisponibleError, DestinoFueraDeRaizError) as exc:
                     with contextlib.suppress(OSError):
-                        eliminar_en_raiz(mi_temporal, raiz.path)
+                        inodo = _inodo(mi_temporal)
+                        if inodo is not None:
+                            eliminar_en_raiz(mi_temporal, raiz.path,
+                                             inodo_esperado=inodo)
                     causa = sanear_excepcion(exc)
                     return Resultado(EstadoResultado.ERROR, causa, op["destino"])
                 if not await prop.vigente():
                     with contextlib.suppress(OSError):
                         eliminar_en_raiz(
                             mi_temporal, raiz.path,
-                            inodo_esperado=((copia.st_dev, copia.st_ino)
-                                            if copia is not None else None))
+                            inodo_esperado=inodo_copia)
                     return perdida
                 try:
                     try:
@@ -625,8 +643,7 @@ class AsignacionService:
                     with contextlib.suppress(OSError):
                         eliminar_en_raiz(
                             mi_temporal, raiz.path,
-                            inodo_esperado=((copia.st_dev, copia.st_ino)
-                                            if copia is not None else None))
+                            inodo_esperado=inodo_copia)
                     if not await self._cerrar(op_id, "cancelada", prop.epoca):
                         return perdida
                     return Resultado("destino_ocupado", "Otro fichero ocupó el destino; no se tocó. Reintenta.", op["destino"])
@@ -684,7 +701,7 @@ class AsignacionService:
                 if not borrado and temporal.exists():
                     return False
             else:
-                await asyncio.to_thread(temporal.unlink, missing_ok=True)
+                return False  # sin raíz no se borra por nombre: se deja residuo declarado
         except OSError:
             return False
         await self._cerrar(op_id, "cancelada", prop.epoca)
@@ -775,8 +792,13 @@ class AsignacionService:
             return Resultado(EstadoResultado.PROPIEDAD_PERDIDA, "Otra ejecución tomó la operación", op["destino"])
         destino = Path(op["destino"])
         with contextlib.suppress(OSError):
-            if destino.is_file() and await asyncio.to_thread(_sha256, destino) == op["sha256"]:
-                destino.unlink()
+            if (destino.is_file()
+                    and await asyncio.to_thread(_sha256, destino) == op["sha256"]
+                    and op.get("root_id") is not None
+                    and (inodo := _inodo(destino)) is not None):
+                raiz = await self._raiz_para_escritura(op)
+                await asyncio.to_thread(eliminar_en_raiz, destino, raiz.path,
+                                        inodo_esperado=inodo)
         await self._cerrar(op["id"], "cancelada", prop.epoca)
         return resultado
 
@@ -822,9 +844,24 @@ class AsignacionService:
         # Residuos de la publicación (un segundo nombre del mismo contenido): con el destino ya acreditado.
         # Si alguno no se puede retirar se CONSERVA el origen y la operación sigue confirmada: la próxima
         # continuación (reintento o arranque) vuelve a intentarlo.
+        raiz_limpieza = None
+        if op.get("root_id") is not None:
+            try:
+                raiz_limpieza = (await self._raiz_para_escritura(op)).path
+            except RaizNoDisponibleError:
+                raiz_limpieza = None
+        if raiz_limpieza is None:
+            return Resultado("asignado_limpieza_pendiente",
+                             "No se puede confinar la limpieza; se conserva el origen", op["destino"])
         for temporal in temporales:
             try:
-                await asyncio.to_thread(temporal.unlink)
+                inodo = _inodo(temporal)
+                if inodo is None:
+                    continue
+                borrado = await asyncio.to_thread(eliminar_en_raiz, temporal,
+                                                  raiz_limpieza, inodo_esperado=inodo)
+                if not borrado and temporal.exists():
+                    raise OSError("temporal no coincide con su inodo")
             except OSError:
                 return Resultado("asignado_limpieza_pendiente",
                                  "Queda un temporal sin retirar; se conserva el origen", op["destino"])
