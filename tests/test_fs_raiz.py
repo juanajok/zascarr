@@ -132,3 +132,23 @@ def test_temporal_sustituido_no_publica_ajeno_y_se_limpia_sin_borrarlo(tmp_path)
         assert temp.read_bytes() == b"AJENO"
     finally:
         copia.cerrar()
+
+
+def test_temporal_sobrescrito_in_place_no_publica_ajeno(tmp_path):
+    from zascarr.utils.fs import copiar_en_raiz, publicar_en_raiz
+    raiz = tmp_path / "raiz"
+    raiz.mkdir()
+    origen = tmp_path / "origen.cbz"
+    origen.write_bytes(b"contenido")
+    temp = raiz / "temporal.part"
+    copia = copiar_en_raiz(origen, temp, raiz)
+    try:
+        temp.write_bytes(b"AJENO")
+        with pytest.raises(DestinoFueraDeRaizError):
+            publicar_en_raiz(temp, raiz / "final.cbz", raiz, fd=copia.fd,
+                             inodo_esperado=(copia.st_dev, copia.st_ino),
+                             sha256_esperado=copia.sha256)
+        assert not (raiz / "final.cbz").exists()
+        assert temp.read_bytes() == b"AJENO"
+    finally:
+        copia.cerrar()
