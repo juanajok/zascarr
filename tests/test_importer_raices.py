@@ -220,3 +220,21 @@ async def test_causa_de_raiz_no_filtra_la_ruta_absoluta(tmp_path, monkeypatch):
     texto = " ".join(report.errors)
     assert str(r.path) not in texto and str(tmp_path) not in texto
     assert "sin permiso" in texto
+
+
+@pytest.mark.asyncio
+async def test_causa_con_ruta_y_espacios_no_llega_al_informe(tmp_path, monkeypatch):
+    from zascarr.services.raices import RaizNoDisponibleError
+    r = raiz(tmp_path, [ComicTradition.AMERICAN], name="Biblioteca")
+    r.path = str(tmp_path / "WD Elements" / "mi biblioteca")
+    imp, db, src = preparar(tmp_path, monkeypatch, raices=[r], serie_obj=serie())
+
+    async def falla(*_a, **_kw):
+        raise RaizNoDisponibleError(f"sin permiso en {r.path}")
+
+    monkeypatch.setattr(imp, "_raiz", falla)
+    report = ImportReport(started_at=datetime.now(UTC))
+    await imp._import_file(src, report)
+    texto = " ".join(report.errors)
+    assert "WD Elements" not in texto and str(tmp_path) not in texto
+    assert "sin permiso" in texto

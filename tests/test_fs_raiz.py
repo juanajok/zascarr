@@ -43,3 +43,40 @@ def test_subdirectorio_normal_si_se_mueve(tmp_path):
     final = safe_move_en_raiz(origen, destino, raiz)
     assert final == destino and final.is_relative_to(raiz)
     assert final.read_bytes() == b"contenido" and not origen.exists()
+
+
+def test_destino_ocupado_no_se_sobrescribe_y_conserva_original(tmp_path):
+    raiz = tmp_path / "raiz"
+    raiz.mkdir()
+    origen = tmp_path / "origen.cbz"
+    origen.write_bytes(b"contenido")
+    destino = raiz / "Uno.cbz"
+    destino.write_bytes(b"ajeno")
+    with pytest.raises(FileExistsError):
+        safe_move_en_raiz(origen, destino, raiz)
+    assert origen.exists() and destino.read_bytes() == b"ajeno"
+
+
+def test_carrera_de_raiz_swap_a_symlink_falla_cerrada(tmp_path, monkeypatch):
+    import os
+    raiz = tmp_path / "raiz"
+    raiz.mkdir()
+    fuera = tmp_path / "fuera"
+    fuera.mkdir()
+    origen = tmp_path / "origen.cbz"
+    origen.write_bytes(b"contenido")
+    real_open = os.open
+    swapped = False
+
+    def abre_raiz(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if not swapped and str(path) == str(raiz.resolve()):
+            swapped = True
+            raiz.rename(tmp_path / "raiz-vieja")
+            raiz.symlink_to(fuera, target_is_directory=True)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr("zascarr.utils.fs.os.open", abre_raiz)
+    with pytest.raises(DestinoFueraDeRaizError):
+        safe_move_en_raiz(origen, raiz / "Uno.cbz", raiz)
+    assert origen.exists() and not list(fuera.rglob("*.cbz"))

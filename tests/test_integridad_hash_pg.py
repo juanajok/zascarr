@@ -116,8 +116,10 @@ async def _montar(db, tmp_path: Path, *, formato: FileFormat = FileFormat.CBZ,
 
 
 def _fila(db, *, sha256_hash: str, original_sha256: str | None = None,
-           is_missing: bool = False, imported_at=None, nombre="x.cbz", ruta: Path | None = None) -> File:
-    """`ruta`: dónde está de verdad el fichero de la fila. Una fila que debe ser una copia PRESENTE (duplicado real)
+           is_missing: bool = False, imported_at=None, nombre="x.cbz",
+           ruta: Path | None = None) -> File:
+    """`ruta`: dónde está de verdad el fichero de la fila. Una fila que debe ser
+    una copia PRESENTE (duplicado real)
     necesita un fichero que exista; sin él, su ruta es una referencia obsoleta."""
     f = File(id=uuid4(), file_path=str(ruta) if ruta else f"/lib/{uuid4()}.cbz", file_name=nombre,
              file_format=FileFormat.CBZ, sha256_hash=sha256_hash,
@@ -186,7 +188,8 @@ class TestDedupeIntegridad:
         _fila(db, sha256_hash=sha, is_missing=True,
               imported_at=datetime(2020, 1, 1, tzinfo=UTC))
         _fila(db, sha256_hash=sha, is_missing=False, nombre="presente.cbz",
-              ruta=_crear_cbz(tmp_path / "presente.cbz"), imported_at=datetime(2021, 1, 1, tzinfo=UTC))
+              ruta=_crear_cbz(tmp_path / "presente.cbz"),
+              imported_at=datetime(2021, 1, 1, tzinfo=UTC))
         await db.flush()
 
         outcome = await _triage_and_match(db, ruta)
@@ -501,8 +504,9 @@ class TestReenlazadoFormatoDeclarado:
         db.add(fila)
         await db.flush()
         root_id = _uuid4()
+        # La BD ya trae la raíz por defecto de 0041: esta es una raíz adicional.
         db.add(LibraryRoot(id=root_id, name="Raíz", path=str(tmp_path / "lib"),
-                           enabled=True, is_default=True))
+                           enabled=True, is_default=False))
         await db.flush()
         raiz = SimpleNamespace(id=root_id, name="Raíz", path=str(tmp_path / "lib"),
                                host_path=None, enabled=True, is_default=True,

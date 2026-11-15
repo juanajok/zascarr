@@ -69,7 +69,7 @@ from zascarr.services.raices import (
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
-from zascarr.utils.fs import DestinoFueraDeRaizError, _validar_destino_en_raiz
+from zascarr.utils.fs import DestinoFueraDeRaizError, _validar_destino_en_raiz, sanear_excepcion
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -512,7 +512,7 @@ class AsignacionService:
             _validar_destino_en_raiz(raiz.path, destino)
             _validar_destino_en_raiz(raiz.path, Path(op["temporal"]))
         except (RaizNoDisponibleError, DestinoFueraDeRaizError) as exc:
-            causa = getattr(exc, "causa", None) or str(exc)
+            causa = getattr(exc, "causa", None) or sanear_excepcion(exc)
             return Resultado(EstadoResultado.ERROR, causa, op["destino"])
         base_temporal = Path(op["temporal"])
         mi_temporal = base_temporal.with_name(f"{base_temporal.name}.{prop.epoca}")
@@ -526,7 +526,7 @@ class AsignacionService:
                 _validar_destino_en_raiz(raiz.path, destino)
                 _validar_destino_en_raiz(raiz.path, mi_temporal)
             except (RaizNoDisponibleError, DestinoFueraDeRaizError) as exc:
-                causa = getattr(exc, "causa", None) or str(exc)
+                causa = getattr(exc, "causa", None) or sanear_excepcion(exc)
                 return Resultado(EstadoResultado.ERROR, causa, op["destino"])
             if not destino.exists():
                 try:
@@ -545,16 +545,18 @@ class AsignacionService:
                     await asyncio.to_thread(_copiar_y_verificar, origen, mi_temporal, op["sha256"], op["size_bytes"])
                 except EspacioInsuficienteError as exc:
                     # La operación sigue `preparada`: se puede reintentar tras liberar espacio.
-                    return Resultado("error", str(exc), op["destino"])
+                    return Resultado("error", sanear_excepcion(exc), op["destino"])
                 except OSError as exc:
-                    return Resultado("error", f"La copia no se pudo verificar: {exc}")
+                    return Resultado("error", f"La copia no se pudo verificar: {sanear_excepcion(exc)}")
                 await self._gancho("tras_copiar")
                 try:
+                    raiz = await self._raiz_para_escritura(op)
                     _validar_destino_en_raiz(raiz.path, destino)
                     _validar_destino_en_raiz(raiz.path, mi_temporal)
-                except DestinoFueraDeRaizError as exc:
+                except (RaizNoDisponibleError, DestinoFueraDeRaizError) as exc:
                     mi_temporal.unlink(missing_ok=True)
-                    return Resultado(EstadoResultado.ERROR, str(exc), op["destino"])
+                    causa = getattr(exc, "causa", None) or sanear_excepcion(exc)
+                    return Resultado(EstadoResultado.ERROR, causa, op["destino"])
                 if not await prop.vigente():
                     mi_temporal.unlink(missing_ok=True)
                     return perdida
@@ -579,7 +581,7 @@ class AsignacionService:
                     if not await self._retirar_copia_y_cancelar(op_id, mi_temporal, prop):
                         return Resultado("error", "No se pudo retirar la copia temporal; se limpiará al reintentar",
                                          op["destino"])
-                    return Resultado("error", str(exc), op["destino"])
+                    return Resultado("error", sanear_excepcion(exc), op["destino"])
                 except OSError as exc:
                     # Sin permiso, solo lectura, sin espacio…, o un error cuyo efecto no se conoce. Primero se
                     # MIRA el destino: si existe, pudo publicarse (p. ej. un montaje de red que falló al responder),
@@ -824,15 +826,15 @@ async def reconciliar_al_arrancar(servicio: AsignacionService | None = None) -> 
         try:
             servicio = servicio_por_defecto()
         except Exception as exc:  # noqa: BLE001 — «nunca propaga»: una configuración rota no puede subir por la tarea de fondo
-            logger.exception("asignacion.reconciliacion_sin_servicio")
+            logger.error("asignacion.reconciliacion_sin_servicio")
             _ULTIMA_RECONCILIACION = {"ok": False, "intentos": 0, "error": type(exc).__name__}
             return 0
     for intento in range(1, RECONCILIACION_INTENTOS + 1):
         try:
             resultados = await servicio.reconciliar()
         except Exception as exc:  # noqa: BLE001 — ver la docstring
-            logger.exception("asignacion.reconciliacion_fallida", intento=intento,
-                             intentos=RECONCILIACION_INTENTOS)
+            logger.error("asignacion.reconciliacion_fallida", intento=intento,
+                         intentos=RECONCILIACION_INTENTOS, error=type(exc).__name__)
             _ULTIMA_RECONCILIACION = {
                 "ok": False if intento == RECONCILIACION_INTENTOS else None,
                 "intentos": intento,

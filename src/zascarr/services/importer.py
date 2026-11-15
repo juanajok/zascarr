@@ -115,7 +115,7 @@ def _mensaje_sin_rutas(exc: BaseException, path: Path) -> str:
         if absoluta:
             texto = texto.replace(absoluta, visible)
     # Cualquier otra ruta absoluta que venga de una causa (p. ej. la raíz).
-    return re.sub(r"(?<![\w.])/(?:[^\s'\"()]+)", "<ruta>", texto)
+    return re.sub(r"(?<![\w.])/(?:[^\n\r\t]+?)(?=\s*(?:$|[.;:)]))", "<ruta>", texto)
 
 
 def _existe(ruta: str) -> bool:
