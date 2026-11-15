@@ -34,7 +34,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from html import unescape
-from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import httpx
 import structlog
@@ -83,7 +83,21 @@ def temas_de_busqueda(html: str) -> list[tuple[str, str]]:
     bloques = RESULTADO_PATTERN.findall(html)
     if not bloques:
         return TOPIC_PATTERN.findall(html)
-    return [match for bloque in bloques for match in TOPIC_PATTERN.findall(bloque)]
+    return _sin_paginacion(
+        [match for bloque in bloques for match in TOPIC_PATTERN.findall(bloque)])
+
+
+def _sin_paginacion(temas: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Quita enlaces de paginación («1», «2», «Último mensaje») de una fila."""
+    limpios: list[tuple[str, str]] = []
+    for href, title in temas:
+        titulo = title.strip()
+        if not titulo or titulo.isdigit() or titulo.lower().startswith("último mensaje"):
+            continue
+        if "st=" in href or "start=" in href or "view=" in href:
+            continue
+        limpios.append((href, title))
+    return limpios
 
 
 MAX_SALTOS = 3
@@ -529,20 +543,38 @@ class ForumScraper:
         html = await self._get(url)
         return self._enlaces_del_tema(html, url, "")
 
+    async def _buscar_ipb(self, query: str) -> str:
+        """POST real del formulario de búsqueda de IPB.
+
+        Con GET, IPB no encuentra títulos cortos como «DC K.O.» (devolvía
+        «No has elegido ningún foro» o ignoraba el término); el formulario
+        real envía `search_in=titles`, `forums[]=all` y `result_type=topics`.
+        """
+        datos = {
+            "forums[]": "all",
+            "keywords": query,
+            "search_in": "titles",
+            "result_type": "topics",
+            "searchsubs": "1",
+            "prune": "0",
+            "prune_type": "older",
+            "sort_key": "relevance",
+            "sort_order": "desc",
+        }
+        respuesta = await self._pedir(
+            f"{self._base}/index.php?act=Search&CODE=01",
+            datos=datos, form=True,
+            politica=self._politica_busqueda,
+            espera_max_s=self._espera_busqueda_s,
+            form_charset=self._charset or "cp1252")
+        texto = self._decodificar(respuesta)
+        self._comprobar_flood(texto)
+        return texto
+
     async def use_ipb_search(self, query: str, *, abrir_temas: bool = True) -> list[ForumResult]:
         """Busca en el foro. Un flood lanza; un vacío real devuelve `[]`."""
-        charset = self._charset or "cp1252"
         try:
-            termino = quote(query, encoding=charset)
-        except UnicodeEncodeError:
-            # Un carácter fuera del charset se sustituye en cp1252 (el foro no lo entendería
-            # igual, pero no se rompe la búsqueda ni se filtra la query al log).
-            termino = quote(query, encoding="cp1252", errors="replace")
-        url = (f"{self._base}/index.php?act=Search&CODE=01&keywords={termino}"
-               "&searchin=titles&forums%5B%5D=all")
-        try:
-            html = await self._get(url, politica=self._politica_busqueda,
-                                   espera_max_s=self._espera_busqueda_s)
+            html = await self._buscar_ipb(query)
         except OrigenNoPermitidoError as exc:
             logger.warning("forum.search_rechazada", motivo=str(exc))
             return []
