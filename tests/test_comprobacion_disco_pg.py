@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
+from tests._raices_pg import allowlist, sembrar_raiz
 from zascarr.models import ComicTradition, File, FileFormat, ImportRun, Series
 from zascarr.services import comprobacion_disco as servicio
 from zascarr.services.comprobacion_disco import FaseCicloDisco
@@ -153,7 +154,7 @@ class TestPersistenciaYLectura:
 
 
 @pytest.fixture
-def montaje(tmp_path, monkeypatch):
+async def montaje(fabrica, tmp_path, monkeypatch):
     library = tmp_path / "lib"
     library.mkdir()
     descargas = tmp_path / "descargas"
@@ -164,6 +165,8 @@ def montaje(tmp_path, monkeypatch):
     ajustes.amule_incoming_dir = str(tmp_path / "amule")
     ajustes.downloads_path = descargas
     monkeypatch.setattr("zascarr.services.importer.get_settings", lambda: ajustes)
+    allowlist(monkeypatch, library)
+    await sembrar_raiz(fabrica, library)
     return ajustes
 
 

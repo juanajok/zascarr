@@ -564,20 +564,46 @@ class AsignacionService:
                 causa = sanear_excepcion(exc)
                 return Resultado(EstadoResultado.ERROR, causa, op["destino"])
             if not destino.exists():
-                try:
-                    for anterior in range(1, prop.epoca):              # temporales de ejecutores anteriores
-                        anterior_ruta = base_temporal.with_name(f"{base_temporal.name}.{anterior}")
-                        inodo = _inodo(anterior_ruta)
+                # Sin inodo registrado no se borra a ciegas: solo se retira si su contenido
+                # es exactamente el de esta operación; si no, queda residuo declarado.
+                for anterior in range(1, prop.epoca):
+                    anterior_ruta = base_temporal.with_name(f"{base_temporal.name}.{anterior}")
+                    if anterior_ruta.exists():
+                        try:
+                            propio = await asyncio.to_thread(_sha256, anterior_ruta) == op["sha256"]
+                        except OSError:
+                            propio = False
+                        if propio:
+                            inodo = _inodo(anterior_ruta)
+                            if inodo is not None:
+                                try:
+                                    eliminar_en_raiz(anterior_ruta, raiz.path,
+                                                     inodo_esperado=inodo)
+                                except OSError:
+                                    logger.warning(
+                                        "asignacion.temporal_previo_residuo_declarado",
+                                        operacion=str(op_id), epoca=anterior)
+                        else:
+                            logger.warning("asignacion.temporal_previo_residuo_declarado",
+                                           operacion=str(op_id), epoca=anterior)
+                if base_temporal.exists():
+                    try:
+                        propio = await asyncio.to_thread(_sha256, base_temporal) == op["sha256"]
+                    except OSError:
+                        propio = False
+                    if propio:
+                        inodo = _inodo(base_temporal)
                         if inodo is not None:
-                            eliminar_en_raiz(anterior_ruta, raiz.path, inodo_esperado=inodo)
-                    inodo_base = _inodo(base_temporal)
-                    if inodo_base is not None:
-                        eliminar_en_raiz(base_temporal, raiz.path,
-                                         inodo_esperado=inodo_base)
-                except OSError as exc:
-                    # No se toca nada más: la operación sigue viva y el próximo intento vuelve a limpiarlos.
-                    logger.warning("asignacion.temporal_previo_sin_retirar", operacion=str(op_id), error=type(exc).__name__)
-                    return Resultado("error", "No se pudo retirar un temporal anterior; se reintentará", op["destino"])
+                            try:
+                                eliminar_en_raiz(base_temporal, raiz.path,
+                                                 inodo_esperado=inodo)
+                            except OSError:
+                                logger.warning(
+                                    "asignacion.temporal_previo_residuo_declarado",
+                                    operacion=str(op_id), epoca=0)
+                    else:
+                        logger.warning("asignacion.temporal_previo_residuo_declarado",
+                                       operacion=str(op_id), epoca=0)
                 if not _origen_es_el_preparado(origen, op["size_bytes"], op["mtime_ns"]):
                     return Resultado("error", "El origen cambió o desapareció antes de copiarlo; no se toca nada")
                 if not await prop.vigente():
@@ -861,14 +887,26 @@ class AsignacionService:
                              "No se puede confinar la limpieza; se conserva el origen", op["destino"])
         for temporal in temporales:
             try:
-                inodo = _inodo(temporal)
-                if inodo is None:
-                    continue
+                propio = await asyncio.to_thread(_sha256, temporal) == op["sha256"]
+            except OSError:
+                propio = False
+            if not propio:
+                logger.warning("asignacion.temporal_residuo_declarado",
+                               operacion=str(op_id), temporales=1)
+                continue
+            inodo = _inodo(temporal)
+            if inodo is None:
+                logger.warning("asignacion.temporal_residuo_declarado",
+                               operacion=str(op_id), temporales=1)
+                continue
+            try:
                 borrado = await asyncio.to_thread(eliminar_en_raiz, temporal,
                                                   raiz_limpieza, inodo_esperado=inodo)
-                if not borrado and temporal.exists():
-                    raise OSError("temporal no coincide con su inodo")
-            except (OSError, DestinoFueraDeRaizError):
+            except OSError:
+                return Resultado("asignado_limpieza_pendiente",
+                                 "Queda un temporal sin retirar; se conserva el origen",
+                                 op["destino"])
+            if not borrado and temporal.exists():
                 return Resultado("asignado_limpieza_pendiente",
                                  "Queda un temporal sin retirar; se conserva el origen", op["destino"])
         if origen.exists():

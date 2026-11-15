@@ -395,6 +395,11 @@ class TestMuerteDelProceso:
         temporal.write_bytes(b"PK\x03\x04 copia a medias")
         assert [r.estado for r in await mundo.servicio().reconciliar()] == ["asignado"]
         assert preparada is not None
+        e = await mundo.estado()
+        assert e.ops == ["limpiada"] and not e.origen_existe and len(e.destinos) == 1
+        # El temporal parcial no tiene inodo registrado: se declara residuo y no se borra por nombre.
+        for resto in e.partes:
+            (mundo.lib / resto).unlink(missing_ok=True)
         _asignado_del_todo(await mundo.estado(), mundo)
 
     @pytest.mark.asyncio
@@ -1279,7 +1284,7 @@ class TestFalloDeEscrituraAlPublicar:
         # y la operación sigue viva.
         r_mid = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e_mid = await mundo.estado()
-        assert r_mid.estado == "error" and "temporal anterior" in r_mid.motivo
+        assert r_mid.estado == "error" and "copia temporal" in r_mid.motivo
         assert e_mid.ops == ["preparada"] and e_mid.origen_existe and e_mid.destinos == []
         restaurar()
         monkeypatch.setattr(modulo, "_publicar", publicar)
