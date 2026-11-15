@@ -281,6 +281,10 @@ def test_htmx_error_devuelve_solo_el_parcial(monkeypatch):
         _cerrar()
     assert r.status_code == 200 and "<html" not in r.text
     assert "no es una guía válida" in r.text
+    # m-1 de SecOps: el error htmx debe actualizar el input (aria-invalid + valor) por OOB.
+    assert 'hx-swap-oob="outerHTML:#importar-url"' in r.text
+    assert 'id="importar-url"' in r.text and 'aria-invalid="true"' in r.text
+    assert "atacante.example" in r.text
 
 
 def test_htmx_exito_usa_hx_redirect(monkeypatch):
