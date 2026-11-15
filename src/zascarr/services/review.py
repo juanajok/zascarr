@@ -31,7 +31,6 @@ from uuid import UUID
 from sqlalchemy import DateTime, func, literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
     EDITION_KIND_A_FORMAT,
@@ -43,7 +42,8 @@ from zascarr.models import (
 )
 from zascarr.services.alias_decisiones import aprender_alias
 from zascarr.services.importer import build_library_path
-from zascarr.utils.fs import safe_move_async
+from zascarr.services.raices import FotoDeRaices, RaizNoDisponibleError
+from zascarr.utils.fs import safe_move_en_raiz_async
 from zascarr.utils.naming import parse_comic_filename
 
 # B15 (2026-09-26): el mapa edition_kind → IssueFormat vive en models junto al
@@ -124,7 +124,7 @@ class PaginaPendientes:
 class ReviewService:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._library = get_settings().library_path
+        self._library: Path | None = None   # solo para dobles de prueba heredados
 
     @staticmethod
     def _condiciones_pendientes() -> tuple:
@@ -268,6 +268,17 @@ class ReviewService:
         if not series:
             raise ValueError("Serie no encontrada")
 
+        try:
+            legacy = getattr(self, "_library", None)
+            foto = (await FotoDeRaices.cargar(self.db) if isinstance(self.db, AsyncSession)
+                    else FotoDeRaices.compatibilidad(path=legacy))
+            raiz = foto.por_tradicion(getattr(series, "tradition", None))
+            if raiz.id is not None:
+                raiz = foto.raiz_para_escritura(raiz.id)
+        except RaizNoDisponibleError as exc:
+            raise RuntimeError(
+                f"El camino heredado necesita una raíz válida: {exc.causa}") from exc
+
         # B15 (2026-09-26): el Issue.format que correspondería a este archivo
         # se decide ANTES de buscar el Issue, para poder compararlo con el que
         # ya exista. Un mismo número puede ser dos ediciones distintas (la
@@ -313,15 +324,16 @@ class ReviewService:
         # capturado antes de reescribirlo abajo (B13: patrón de aprendizaje)
         original_name = file.file_name
         dest = build_library_path(
-            self._library, series, issue_number, orig.suffix,
+            raiz.path, series, issue_number, orig.suffix,
             issue_title=issue.title if issue is not None else None,
             issue_format=issue.format if issue is not None else None)
         # A3: mover a destino verificado — nunca sobreescribe ni borra el
         # original hasta que la copia está completa (ver utils/fs.safe_move).
-        final_dest = await safe_move_async(orig, dest)
+        final_dest = await safe_move_en_raiz_async(orig, dest, raiz.path)
 
         file.issue_id = issue.id
         file.file_path = str(final_dest)
+        file.root_id = raiz.id
         file.file_name = final_dest.name
         file.metadata_source = MetadataSource.MANUAL.value
         await self.db.flush()

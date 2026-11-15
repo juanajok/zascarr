@@ -15,7 +15,7 @@ from zascarr.core.matcher import MatchResult, MatchStatus
 from zascarr.models import ComicTradition, Series
 from zascarr.services import importer as mod
 from zascarr.services.importer import Importer, ImportReport
-from zascarr.services.raices import FotoDeRaices
+from zascarr.services.raices import FotoDeRaices, Montaje
 from zascarr.utils.espacio import EspacioInsuficienteError
 
 
@@ -155,3 +155,51 @@ async def test_no_usa_default_si_la_tradicion_no_tiene_raiz(tmp_path, monkeypatc
     report = ImportReport(started_at=datetime.now(UTC))
     await imp._import_file(src, report)
     assert src.exists() and db.added == [] and "no tiene una raíz" in report.errors[0]
+
+
+@pytest.mark.asyncio
+async def test_raiz_ausente_no_mueve_ni_crea_fila(tmp_path, monkeypatch):
+    r = raiz(tmp_path, [ComicTradition.AMERICAN], name="Ausente")
+    r.path = str(tmp_path / "no-existe")
+    imp, db, src = preparar(tmp_path, monkeypatch, raices=[r], serie_obj=serie())
+    # La foto se construye con validación real para comprobar existencia.
+    monkeypatch.setattr("zascarr.services.raices.rutas_autorizadas",
+                        lambda: [Montaje(path=str(tmp_path))])
+    imp._foto_raices = FotoDeRaices([r])
+    report = ImportReport(started_at=datetime.now(UTC))
+    await imp._import_file(src, report)
+    assert src.exists() and db.added == []
+    assert "no existe" in report.errors[0]
+
+
+@pytest.mark.asyncio
+async def test_raiz_se_deshabilita_entre_dos_archivos(tmp_path, monkeypatch):
+    r = raiz(tmp_path, [ComicTradition.AMERICAN], name="Biblioteca")
+    imp, db, src = preparar(tmp_path, monkeypatch, raices=[r], serie_obj=serie())
+    monkeypatch.setattr("zascarr.services.raices.rutas_autorizadas",
+                        lambda: [Montaje(path=str(tmp_path))])
+    imp._foto_raices = FotoDeRaices([r])
+    first = ImportReport(started_at=datetime.now(UTC))
+    await imp._import_file(src, first)
+    assert db.added and db.added[0].root_id is not None
+    r.enabled = False
+    segundo = tmp_path / "Batman 002.cbz"
+    segundo.write_bytes(b"y")
+    second = ImportReport(started_at=datetime.now(UTC))
+    await imp._import_file(segundo, second)
+    assert segundo.exists() and len(db.added) == 1
+    assert "deshabilitada" in second.errors[0]
+
+
+@pytest.mark.asyncio
+async def test_error_no_filtra_la_ruta_absoluta_en_el_informe(tmp_path, monkeypatch):
+    r = raiz(tmp_path, [ComicTradition.AMERICAN], name="Biblioteca")
+    imp, db, src = preparar(tmp_path, monkeypatch, raices=[r], serie_obj=serie())
+
+    def falla(_ruta, _n, _ctx):
+        raise OSError(f"fallo en {src}")
+    monkeypatch.setattr(mod, "comprobar_espacio", falla)
+    report = ImportReport(started_at=datetime.now(UTC))
+    await imp._import_file(src, report)
+    assert str(src) not in " ".join(report.errors)
+    assert str(tmp_path) not in " ".join(report.errors)

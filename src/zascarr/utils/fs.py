@@ -39,6 +39,56 @@ from zascarr.utils.espacio import comprobar_espacio
 _MAX_SEGMENT_BYTES = 240
 
 
+class DestinoFueraDeRaizError(OSError):
+    """El destino o un symlink intermedio se sale de la raíz autorizada."""
+
+
+def _validar_destino_en_raiz(raiz: str | Path, dest: str | Path) -> Path:
+    """Comprueba el destino resuelto y sus componentes existentes contra la raíz.
+
+    No sigue un symlink final (se rechaza) y exige que el padre real esté dentro
+    de la raíz real. La comprobación se repite en cada paso de `safe_move`.
+    """
+    raiz_res = Path(raiz).resolve(strict=False)
+    destino = Path(dest)
+    if destino.is_symlink():
+        raise DestinoFueraDeRaizError(f"El destino es un symlink: {destino.name}")
+    try:
+        padre_res = destino.parent.resolve(strict=False)
+        destino_res = destino.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise DestinoFueraDeRaizError("No se pudo resolver el destino.") from exc
+    if not padre_res.is_relative_to(raiz_res) or not destino_res.is_relative_to(raiz_res):
+        raise DestinoFueraDeRaizError(
+            f"El destino se sale de la raíz autorizada: {destino.name}")
+    # Cada componente existente por debajo de la raíz que sea symlink debe resolver dentro.
+    actual = raiz_res
+    try:
+        relativo = destino.relative_to(raiz_res)
+    except ValueError:
+        raise DestinoFueraDeRaizError(
+            f"El destino no cuelga de la raíz autorizada: {destino.name}") from None
+    for parte in relativo.parts[:-1]:
+        actual = actual / parte
+        if actual.is_symlink():
+            objetivo = actual.resolve(strict=False)
+            if not objetivo.is_relative_to(raiz_res):
+                raise DestinoFueraDeRaizError(
+                    f"Un symlink intermedio se sale de la raíz: {parte}")
+    return raiz_res
+
+
+def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Path:
+    """`safe_move` confinado a `raiz`: rechaza symlinks que saquen la escritura."""
+    return safe_move(src, dest, raiz=raiz)
+
+
+async def safe_move_en_raiz_async(src: str | Path, dest: str | Path,
+                                 raiz: str | Path) -> Path:
+    """`safe_move_en_raiz` fuera del event loop."""
+    return await asyncio.to_thread(safe_move_en_raiz, src, dest, raiz)
+
+
 def sanitize_segment(name: str | None) -> str:
     """Convierte un nombre en un segmento de ruta seguro, de un solo nivel.
 
@@ -93,7 +143,8 @@ def _same_filesystem(src: Path, dest: Path) -> bool:
         return False
 
 
-def safe_move(src: str | Path, dest: str | Path) -> Path:
+def safe_move(src: str | Path, dest: str | Path, *,
+              raiz: str | Path | None = None) -> Path:
     """Mueve `src` a `dest` sin arriesgar datos (A3). Devuelve el destino real.
 
     Garantías:
@@ -117,6 +168,8 @@ def safe_move(src: str | Path, dest: str | Path) -> Path:
     """
     src = Path(src)
     dest = Path(dest)
+    if raiz is not None:
+        _validar_destino_en_raiz(raiz, dest)
 
     # Ya está en su sitio (mismo fichero): no hay nada que mover.
     if src.resolve() == dest.resolve():
@@ -125,8 +178,14 @@ def safe_move(src: str | Path, dest: str | Path) -> Path:
     if not src.exists():
         raise FileNotFoundError(f"Origen inexistente: {src}")
 
+    if raiz is not None:
+        _validar_destino_en_raiz(raiz, dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
+    if raiz is not None:
+        _validar_destino_en_raiz(raiz, dest)
     dest = _unique_path(dest)  # A3: nunca pisar un destino ya ocupado.
+    if raiz is not None:
+        _validar_destino_en_raiz(raiz, dest)
 
     src_size = src.stat().st_size
 
@@ -134,6 +193,8 @@ def safe_move(src: str | Path, dest: str | Path) -> Path:
         # Mismo disco: renombrado atómico, sin copia que verificar. La
         # re-comprobación acorta la ventana entre "comprobar" y "colocar".
         dest = _unique_path(dest)
+        if raiz is not None:
+            _validar_destino_en_raiz(raiz, dest)
         try:
             os.replace(src, dest)
             return dest
@@ -161,6 +222,8 @@ def safe_move(src: str | Path, dest: str | Path) -> Path:
                 "copia incompleta: el tamaño del destino no coincide con el original"
             )
         dest = _unique_path(dest)  # re-comprobación antes de colocar (ver docstring)
+        if raiz is not None:
+            _validar_destino_en_raiz(raiz, dest)
         os.replace(tmp, dest)
     except Exception:
         tmp.unlink(missing_ok=True)
@@ -171,9 +234,10 @@ def safe_move(src: str | Path, dest: str | Path) -> Path:
     return dest
 
 
-async def safe_move_async(src: str | Path, dest: str | Path) -> Path:
+async def safe_move_async(src: str | Path, dest: str | Path, *,
+                          raiz: str | Path | None = None) -> Path:
     """`safe_move` fuera del event loop (I/O de disco potencialmente grande)."""
-    return await asyncio.to_thread(safe_move, src, dest)
+    return await asyncio.to_thread(safe_move, src, dest, raiz=raiz)
 
 
 def listar_comics(dirs, extensiones) -> list[Path]:

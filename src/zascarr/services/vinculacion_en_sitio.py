@@ -42,6 +42,8 @@ async def vincular_en_sitio(
     try:
         foto = await FotoDeRaices.cargar(db)
         raiz = raiz_de(file.file_path, foto.raices)
+        if raiz is not None:
+            raiz = foto.raiz_para_escritura(raiz.id)
     except Exception:  # noqa: BLE001 — la raíz no es requisito del vínculo
         raiz = None
     if raiz is not None:
