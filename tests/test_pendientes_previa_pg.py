@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tests._pg import alembic, bd_efimera, url_asyncpg
+from tests._raices_pg import allowlist, sembrar_raiz
 from zascarr.models import ComicTradition, File, FileFormat, Series
 from zascarr.services.asignacion import previsualizar_asignacion
 
@@ -21,12 +22,14 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.asyncio
-async def test_previa_calcula_destino_y_no_escribe(tmp_path):
+async def test_previa_calcula_destino_y_no_escribe(tmp_path, monkeypatch):
     async with bd_efimera(TEST_DATABASE_URL) as url:
         alembic(url, "upgrade", "head")
         motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
         fab = async_sessionmaker(motor, expire_on_commit=False)
         try:
+            allowlist(monkeypatch, tmp_path / "library")
+            await sembrar_raiz(fab, tmp_path / "library")
             origen = tmp_path / "x.cbz"
             origen.write_bytes(b"contenido")
             async with fab() as s:

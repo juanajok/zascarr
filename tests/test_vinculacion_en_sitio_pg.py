@@ -2,17 +2,15 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
 
+from tests._raices_pg import allowlist, sembrar_raiz
 from tests.test_revision_carpetas_pg import Banco
 from tests.test_vinculacion_previa_pg import url_bd  # noqa: F401  (fixture compartida)
 from zascarr.models import ComicTradition, File, FileFormat, Issue, IssueFormat, Series
-from zascarr.services import vinculacion_en_sitio
 from zascarr.services.vinculacion_en_sitio import vincular_en_sitio
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -23,19 +21,19 @@ pytestmark = [
 
 
 @pytest.fixture
-async def banco(url_bd, monkeypatch, tmp_path):
+async def banco(url_bd, monkeypatch, tmp_path):  # noqa: F811
     b = Banco(url_bd)
     await b.limpiar()
     lib = tmp_path / "biblioteca"
     (lib / "Comics" / "Flash").mkdir(parents=True)
-    monkeypatch.setattr(vinculacion_en_sitio, "get_settings",
-                        lambda: SimpleNamespace(library_path=lib))
+    allowlist(monkeypatch, lib)
+    root_id = await sembrar_raiz(b.fabrica, lib)
     sid = uuid4()
     async with b.fabrica() as s:
         s.add(Series(id=sid, title="Flash", tradition=ComicTradition.AMERICAN))
         s.add(Issue(id=uuid4(), series_id=sid, issue_number="1", format=IssueFormat.SINGLE_ISSUE))
         await s.commit()
-    yield SimpleNamespace(banco=b, lib=lib, sid=sid)
+    yield SimpleNamespace(banco=b, lib=lib, sid=sid, root_id=root_id)
     await b.cerrar()
 
 
@@ -55,6 +53,7 @@ async def test_vincular_en_sitio_enlaza_sin_tocar_el_archivo(banco):
         f = await s.get(File, fid)
         assert f is not None and f.issue_id is not None
         assert f.file_path == str(ruta) and ruta.exists()
+        assert str(f.root_id) == banco.root_id
 
     assert ruta.read_bytes() == b"contenido"
 
@@ -100,3 +99,20 @@ async def test_vincular_en_sitio_rechaza_unsorted_y_numero_inexistente(banco):
         assert no_existe.estado == "issue_no_existe"
         assert "Organizar" in no_existe.texto
         assert (await s.get(File, fid2)).issue_id is None
+
+
+async def test_archivo_fuera_de_toda_raiz_queda_null_y_se_vincula(banco, tmp_path):
+    ruta = tmp_path / "fuera" / "Flash 03.cbz"
+    ruta.parent.mkdir()
+    ruta.write_bytes(b"fuera")
+    fid = uuid4()
+    async with banco.banco.fabrica() as s:
+        s.add(File(id=fid, file_path=str(ruta), file_name=ruta.name,
+                   file_format=FileFormat.CBZ, metadata_={"match_status": "direct"}))
+        await s.commit()
+    async with banco.banco.fabrica() as s:
+        r = await vincular_en_sitio(s, fid, banco.sid, "1")
+        await s.commit()
+        f = await s.get(File, fid)
+    assert r.estado == "vinculado" and f.issue_id is not None and f.root_id is None
+    assert ruta.exists() and ruta.read_bytes() == b"fuera"

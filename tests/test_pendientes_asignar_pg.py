@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import text
 
 from tests._pg import bd_efimera_sync, migrar_a_head
+from tests._raices_pg import allowlist
 from tests.test_asignacion_servicio_pg import Mundo
 from zascarr.database import get_db
 from zascarr.main import app
@@ -36,8 +37,9 @@ def url_bd():
 
 
 @pytest.fixture
-async def mundo(url_bd, tmp_path):
+async def mundo(url_bd, tmp_path, monkeypatch):
     m = await Mundo(url_bd, tmp_path).sembrar()
+    allowlist(monkeypatch, m.lib)
     yield m
     await m.cerrar()
 

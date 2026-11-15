@@ -1,14 +1,16 @@
 # Especificación — BL-A5: repartir tradiciones entre discos (#156)
 
-> **Estado: APROBADO (D1–D7). CORTE A IMPLEMENTADO EN #844. MIGRACIÓN 0041 CREADA, NO APLICADA
-> EN PRODUCCIÓN. CORTES B–D PENDIENTES.** Este documento es la especificación de referencia; la
-> implementación del corte A (modelo, migración y `RaicesService`) vive en el PR #844. La migración
-> no se ha aplicado a ninguna instalación real y **A5 no está hecho**: solo se cierra con C+D (§8).
+> **Estado: APROBADO (D1–D7). CORTES A (#844) Y B (#859) IMPLEMENTADOS; NO DESPLEGADOS. MIGRACIÓN
+> 0041 APLICADA EN LA PI DEL PO CON BACKUP, FUERA DE ESTE PR; NO IMPLICA DESPLIEGUE GENERAL; CORTES C–D
+> PENDIENTES.** Este documento es la especificación de referencia. El corte A (modelo, migración y
+> `RaicesService`) y el corte B (importer/asignación y confinamiento) están implementados y probados
+> localmente, pero este PR **no despliega** ni aplica la migración a una instalación general;
+> **A5 no está hecho**: solo se cierra con C+D (§8).
 > **Base contrastada:** `origin/main` **`acb82a40`** (2026-11-14), worktree `.squad/wt-156bench`,
 > rama `docs/156-benchmark`. La ficha de benchmark
 > [`benchmark-BL-A5-repartir-tradiciones.md`](benchmark-BL-A5-repartir-tradiciones.md) es insumo,
 > no aprobación. **Estimación: L** (§8); **A5 no se cierra con un corte parcial** (§8).
-> **ADR:** **ADR 0020** (`docs/adr/0020-raices-de-biblioteca.md`), aceptado por el PO para el corte A.
+> **ADR:** **ADR 0020** (`docs/adr/0020-raices-de-biblioteca.md`), aceptado por el PO; cubre A y B.
 
 ---
 
@@ -38,10 +40,11 @@ segundo disco desde la UI, y A+B sin C miente en el escaneo.
 ---
 
 > **Aprobación del PO (2026-11-14).** Se aprueban las **7 decisiones recomendadas D1–D7** tal como
-> figuran en §2, y se autoriza el **corte A** (cimiento y migración) sin cambiar todavía el
-> comportamiento del importer ni Ajustes. El corte A está implementado en **#844**: ADR 0020,
-> modelos, migración aditiva 0041 y `RaicesService`; la migración **no se ha aplicado en producción**.
-> Los cortes B–D siguen pendientes de planificación; **A5 no está hecho**.
+> figuran en §2, y se autoriza el **corte A** (cimiento y migración). El corte A está implementado
+> en **#844** (ADR 0020, modelos, migración aditiva 0041 y `RaicesService`) y el corte B en **#859**
+> (importer/asignación, `safe_move` confinado, `root_id` persistido y M1). **Este PR no despliega**:
+> la migración 0041 solo está aplicada en la Pi del PO con backup (evidencia de #156), **fuera de
+> este PR**; no implica despliegue general ni autorización para instalar en otras. Los cortes C–D siguen pendientes; **A5 no está hecho**.
 
 ## 1. Historia, valor y alcance
 
@@ -106,10 +109,11 @@ los cortes B–D pendientes.
 | 6 | **¿Ruta persistida o derivada?** | (a) solo derivar por prefijo; (b) `root_id` en `File`; (c) ambas | **(c) `root_id` persistido + `file_path` absoluto**; la derivación por prefijo es solo compatibilidad de migración. Sin `root_id`, una raíz retirada o dos prefijos solapados hacen ambigua la pertenencia y la auditoría no distingue «archivo de raíz A» de «huérfano» | **APROBADA (2026-11-14)** |
 | 7 | **¿Alcance y esfuerzo?** | (a) L completo; (b) MVP sin UI; (c) partir en historias | **(a) L completo, cuatro cortes acumulativos** (§8); un «MVP sin UI» puede validar el contrato pero **no cierra A5**, porque el coleccionista no puede añadir el segundo disco | **APROBADA (2026-11-14)** |
 
-**Estado de las decisiones:** D1–D7 fueron **aprobadas por el PO el 2026-11-14** y el **corte A**
-está implementado en #844 (cimiento + migración 0041, sin cambiar aún importer ni Ajustes). Las
-decisiones 1, 2, 3 y 6 son **bloqueantes** para el contrato de datos; 4, 5 y 7 bloquean el cierre de
-la historia. Si el PO revisa alguna decisión, se para antes del corte B; no se introduce una raíz
+**Estado de las decisiones:** D1–D7 fueron **aprobadas por el PO el 2026-11-14**; los **cortes A
+(#844) y B (#859)** están implementados (A: cimiento/migración/0041; B: importer/asignación y
+confinamiento). Las decisiones 1, 2, 3 y 6 son **bloqueantes** para el contrato de datos; 4, 5 y 7
+bloquean el cierre de la historia. Si el PO revisa alguna decisión, se para antes del siguiente
+corte; no se introduce una raíz
 «provisional» ni un fallback.
 
 ---
@@ -661,12 +665,15 @@ En `/ui/ajustes`, una tarjeta nueva (sección «Biblioteca» o «Archivos»):
 
 - **PASS:** lectura del benchmark y contraste con el código de `acb82a40`; contrato de datos,
   comportamiento, seguridad, UX, pruebas y partición definidos. Corte A: ADR 0020, modelo,
-  migración 0041 y `RaicesService` implementados y probados localmente (unitarias + PG real).
-- **FAIL:** ninguno de la especificación ni del corte A en las pruebas locales.
-- **NOT RUN:** migración 0041 **aplicada en una instalación real**, dos discos/montajes físicos,
-  `safe_move` con EXDEV/disco lleno, escaneo real con raíz caída, navegador/Ajustes, producción y Pi;
-  cortes B–D. La ficha de benchmark ya declaró NOT RUN las ejecuciones de referencias y la prueba
-  con dos discos; esta spec **no las convierte en PASS**.
+  migración 0041 y `RaicesService` implementados y probados localmente. Corte B: importer/asignación
+  resuelven raíz antes de escribir, confinamiento de `safe_move`, `root_id` persistido, M1 y pruebas
+  unitarias + PG real.
+- **FAIL:** ninguno de la especificación ni de los cortes A/B en las pruebas locales.
+- **NOT RUN:** migración 0041 **aplicada en una instalación general** (solo está aplicada en la Pi
+  del PO con backup, evidencia de #156), dos discos/montajes físicos, `safe_move` con EXDEV/disco
+  lleno, escaneo real con raíz caída (corte C), navegador/Ajustes (corte D), producción y Pi.
+  La ficha de benchmark ya declaró NOT RUN las ejecuciones de referencias y la prueba con dos discos;
+  esta spec **no las convierte en PASS**.
 
 ---
 
@@ -712,7 +719,7 @@ otra raíz) sin escaneo por raíz haría que la app mintiera, que es justo lo qu
 | **BL-R9 / #326 rescan** | Rescan hoy hereda una raíz (`library_adopter.py:290,339,499`; `rescan_biblioteca.py:1-15,51-55`) | A5 lo hace iterar raíces; conserva el registro incremental, el cerrojo y los contratos de #326 |
 | **#231 disponibilidad** | Hoy la comprobación es global; el estado puede mentir si una raíz cae | A5 añade resultado/recuentos por raíz y un estado global «sin verificar» si alguna no se pudo mirar; no cambia la regla de solo lectura de la lista |
 | **#264 / ADR 0017 apartados** | La cuarentena actual es `<library>/.zascarr/apartados` global y la ruta relativa es única (`web/auditoria.py:395-399,437`) | Con N raíces, la cuarentena es **por raíz de origen**; la operación guarda `root_id` por ítem; undo no cruza monturas. Si #264 está fusionado, se adapta; si no, se coordina antes de C |
-| **ADR 0020** | Persistir raíces y `root_id` es una decisión duradera de modelo/configuración/seguridad | **ADR 0020 creado** (`docs/adr/0020-raices-de-biblioteca.md`, aceptado para el corte A): entidad raíz, allowlist de montajes, unicidad tradición→raíz, `root_id`, migración y no-mover-existentes. Los cortes B–D siguen pendientes |
+| **ADR 0020** | Persistir raíces y `root_id` es una decisión duradera de modelo/configuración/seguridad | **ADR 0020 creado** (`docs/adr/0020-raices-de-biblioteca.md`, cortes A y B): entidad raíz, allowlist de montajes, unicidad tradición→raíz, `root_id`, migración y no-mover-existentes. Los cortes C–D siguen pendientes |
 
 **No se resuelve por decreto:** las decisiones 1, 2, 3, 6 y 7 del PO son previas al ADR; el ADR
 registra la decisión, no la sustituye.
@@ -795,17 +802,17 @@ registra la decisión, no la sustituye.
 | AC-14 | `test_ajustes_raices_browser`, `test_ajustes_a11y_320` | D |
 | AC-15 | Suite completa + `test_no_regresion_una_raiz` + PASS/FAIL/NOT RUN | A-D |
 
-### 10.3 Lo que **NO** se hace en este corte
+### 10.3 Lo que **NO** se hace en los cortes A/B
 
-- **No se aplica** la migración 0041 a ninguna instalación real; existe creada en #844 y su
-  aplicación es un paso operativo separado.
-- **No se conecta** `RaicesService` a importer/asignación; no hay comportamiento visible nuevo.
-- **No se implementa** la UI de Ajustes, ni los cortes B (importer/asignación) o C (N raíces
-  operativas) o D (Ajustes/operación).
+- **No se despliega** este PR: la migración 0041 solo está aplicada en la Pi del PO con backup
+  (evidencia de #156), **fuera de este PR**; no implica despliegue general ni autorización para
+  instalar en otras.
+- **No se implementa** la UI de Ajustes ni los cortes C (N raíces operativas) o D
+  (Ajustes/operación).
 - No se mueven archivos existentes, no se renombran, no se borran, no se crea una raíz ausente.
 - No se añade socket Docker ni se montan discos desde la UI.
 - No se introduce una raíz por defecto implícita ni un fallback a otra raíz.
-- **No se declara hecho A5**; los cortes B–D siguen pendientes y no se estima una fecha.
+- **No se declara hecho A5**; los cortes C–D siguen pendientes y no se estima una fecha.
 - No se declara PASS lo que está NOT RUN.
 
 ---
@@ -833,4 +840,4 @@ registra la decisión, no la sustituye.
 
 ---
 
-*Fin de la especificación. D1–D7 aprobadas; corte A implementado en #844; migración 0041 creada pero NO aplicada en producción; cortes B–D pendientes; A5 no está hecho.*
+*Fin de la especificación. D1–D7 aprobadas; cortes A (#844) y B (#859) implementados, no desplegados; migración 0041 aplicada en la Pi del PO con backup, fuera de este PR, sin implicar despliegue general; cortes C–D pendientes; A5 no está hecho.*

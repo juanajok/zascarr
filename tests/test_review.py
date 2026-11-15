@@ -9,6 +9,7 @@ mueven de verdad, no una simulación del movimiento.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -25,6 +26,7 @@ from zascarr.models import (
     MetadataSource,
     Series,
 )
+from zascarr.services.raices import FotoDeRaices
 from zascarr.services.review import (
     MOTIVO_COLISION_EDICION,
     ColisionDeEdicionError,
@@ -428,3 +430,92 @@ class TestSearchSeries:
         result = await service.search_series("sand")
 
         assert result == [series]
+
+
+class TestReviewServiceRaices:
+    @pytest.mark.asyncio
+    async def test_usa_la_raiz_resuelta_y_guarda_root_id(self, tmp_path):
+        library = tmp_path / "library"
+        (library / "_Unsorted").mkdir(parents=True)
+        orig = library / "_Unsorted" / "batman 12.cbz"
+        orig.write_bytes(b"contenido")
+        series = make_series("Batman", start_year=2011)
+        file = make_file(orig)
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([]), FakeExecResult([])],
+        )
+        root_id = uuid4()
+        raiz = SimpleNamespace(id=root_id, name="Biblioteca", path=str(library),
+                               host_path=None, enabled=True, is_default=True,
+                               traditions=[SimpleNamespace(tradition=ComicTradition.AMERICAN)])
+        service = ReviewService(db=session, foto_raices=FotoDeRaices([raiz], validar=False))
+        result = await service.assign_to_series(file.id, series.id, "12")
+        assert result.root_id == root_id
+        assert Path(result.file_path).is_relative_to(library)
+
+    @pytest.mark.asyncio
+    async def test_destino_ocupado_usa_nombre_alternativo(self, tmp_path):
+        library = tmp_path / "library"
+        (library / "_Unsorted").mkdir(parents=True)
+        orig = library / "_Unsorted" / "batman 12.cbz"
+        orig.write_bytes(b"contenido")
+        ocupado = library / "Comics" / "Batman (2011)" / "Batman #012.cbz"
+        ocupado.parent.mkdir(parents=True)
+        ocupado.write_bytes(b"ajeno")
+        series = make_series("Batman", start_year=2011)
+        file = make_file(orig)
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([]), FakeExecResult([])],
+        )
+        root_id = uuid4()
+        raiz = SimpleNamespace(id=root_id, name="Biblioteca", path=str(library),
+                               host_path=None, enabled=True, is_default=True,
+                               traditions=[SimpleNamespace(tradition=ComicTradition.AMERICAN)])
+        service = ReviewService(db=session, foto_raices=FotoDeRaices([raiz], validar=False))
+        result = await service.assign_to_series(file.id, series.id, "12")
+        assert result.file_name == "Batman #012 (1).cbz"
+        assert result.root_id == root_id
+        assert ocupado.read_bytes() == b"ajeno"
+
+    @pytest.mark.asyncio
+    async def test_sin_raiz_falla_cerrado_y_no_mueve(self, tmp_path):
+        library = tmp_path / "library"
+        (library / "_Unsorted").mkdir(parents=True)
+        orig = library / "_Unsorted" / "batman 12.cbz"
+        orig.write_bytes(b"contenido")
+        series = make_series("Batman", start_year=2011)
+        file = make_file(orig)
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([]), FakeExecResult([])],
+        )
+        service = ReviewService(db=session, foto_raices=FotoDeRaices([], validar=False))
+        with pytest.raises(RuntimeError, match="raíz"):
+            await service.assign_to_series(file.id, series.id, "12")
+        assert orig.exists()
+
+
+class TestReviewServiceSanitizaCausa:
+    @pytest.mark.asyncio
+    async def test_raiz_con_espacios_no_filtra_ruta(self, tmp_path):
+        from zascarr.services.raices import RaizNoDisponibleError
+        library = tmp_path / "library"
+        (library / "_Unsorted").mkdir(parents=True)
+        orig = library / "_Unsorted" / "x.cbz"
+        orig.write_bytes(b"contenido")
+        series = make_series("Batman")
+        file = make_file(orig)
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([]), FakeExecResult([])],
+        )
+        class FotoRota:
+            def por_tradicion(self, _t):
+                raise RaizNoDisponibleError("sin permiso en /tmp/WD Elements/mi biblioteca")
+        service = ReviewService(db=session, foto_raices=FotoRota())
+        with pytest.raises(RuntimeError) as excinfo:
+            await service.assign_to_series(file.id, series.id, "12")
+        assert "/tmp/WD Elements" not in str(excinfo.value)
+        assert "sin permiso" in str(excinfo.value) and orig.exists()
