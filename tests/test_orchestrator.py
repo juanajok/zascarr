@@ -1292,6 +1292,13 @@ class TestRelevanciaDeBusqueda:
         bueno = make_result(title="DC K.O. 001 (2025) (Digital).cbz", seeders=10)
         assert orch._relevantes([ruido, bueno], "DC K.O.") == [bueno]
 
+    def test_ko_dentro_de_konar_no_cuenta_como_palabra(self):
+        orch = Orchestrator(db=FakeSession())
+        ruido = make_result(
+            title="Konar H. DC Dutta's Textbook of Gynecology...8ed 2020")
+        bueno = make_result(title="DC K.O. 001 (2025) (Digital).cbz")
+        assert orch._relevantes([ruido, bueno], "DC K.O.") == [bueno]
+
     def test_un_titulo_con_todos_los_terminos_pasa(self):
         orch = Orchestrator(db=FakeSession())
         bueno = make_result(title="X-Men 01.cbz", seeders=2)
