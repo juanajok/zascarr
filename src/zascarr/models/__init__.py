@@ -531,6 +531,9 @@ class Series(Base):
     #: Volumen/edición cuando la fuente o el título lo declaran. No es
     #: identidad; se usa para desambiguar la referencia (Catwoman Vol. 4/5).
     volume: Mapped[int | None] = mapped_column(SmallInteger)
+    #: Marca local del coleccionista; no se sincroniza con ninguna fuente.
+    favorite: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"))
     #: Referencia humana derivada (título + año + volumen). No única, no es
     #: identidad y no sustituye a `title`/`title_norm`.
     reference_name: Mapped[str | None] = mapped_column(

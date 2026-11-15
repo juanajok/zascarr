@@ -571,6 +571,8 @@ class TestPresupuestoTextoU21:
         antes = re.sub(r'<section id="numeros-serie".*?</section>', '', antes, flags=re.S)
         # «Retirar» es un control destructivo plegado, no copy de entrada.
         antes = re.sub(r'<details class="series-retirar".*?</details>', '', antes, flags=re.S)
+        # La marca de favorita es un control de la ficha, no copy de entrada.
+        antes = re.sub(r'<form[^>]*class="favorito-form".*?</form>', '', antes, flags=re.S)
         # BL-INF6: «Elegir portada» es un CONTROL de acción (abre el selector), como los botones de
         # `.series-acciones`: no es texto de entrada y no compite con el presupuesto de #208.
         antes = re.sub(r'<details class="elegir-portada".*?</details>', '', antes, flags=re.S)
@@ -1281,6 +1283,19 @@ def test_panel_sagas_muestra_posicion_y_no_pinta_si_no_hay_sagas():
         vacio = client.get(f"/ui/series/{series.id}/sagas")
     assert vacio.status_code == 200 and vacio.text == ""
     assert vacio.headers["cache-control"] == "no-store"
+
+
+def test_marcar_favorita_alterna_y_vuelve_al_origen():
+    series = make_series(total_issues=3)
+    session = FakeSession([], series=series)
+    session.commit = AsyncMock()
+    with use_fake_session(session) as client:
+        r = client.post(f"/ui/series/{series.id}/favorito",
+                        data={"volver": "/ui/biblioteca"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/ui/biblioteca"
+    assert series.favorite is True
+    session.commit.assert_awaited_once()
 
 
 def test_serie_larga_colapsa_los_numeros_y_deja_los_primeros_visibles():
