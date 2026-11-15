@@ -1225,3 +1225,29 @@ class TestSincronizacionD8:
 
         orch._prowlarr.search.assert_awaited_once_with(
             "Batman", categories=[7030, 7020], indexer_ids=[3, 7])
+
+
+class TestRelevanciaDeBusqueda:
+    """La búsqueda de texto no debe devolver cualquier cosa que comparta una palabra."""
+
+    def test_dc_ko_no_deja_pasar_libros_que_solo_tienen_dc(self):
+        orch = Orchestrator(db=FakeSession())
+        ruido = make_result(title="DC Power Supply Circuits 2026.pdf", seeders=10)
+        bueno = make_result(title="DC K.O. 001 (2025) (Digital).cbz", seeders=10)
+        assert orch._relevantes([ruido, bueno], "DC K.O.") == [bueno]
+
+    def test_un_titulo_con_todos_los_terminos_pasa(self):
+        orch = Orchestrator(db=FakeSession())
+        bueno = make_result(title="X-Men 01.cbz", seeders=2)
+        assert orch._relevantes([bueno], "X-Men") == [bueno]
+
+    def test_consulta_de_una_letra_no_filtra(self):
+        orch = Orchestrator(db=FakeSession())
+        candidato = make_result(title="X 01.cbz", seeders=2)
+        assert orch._relevantes([candidato], "X") == [candidato]
+
+    def test_alias_local_espanol_pasa_aunque_no_contenga_el_titulo_ingles(self):
+        orch = Orchestrator(db=FakeSession())
+        alias = {"patrulla x"}
+        candidato = make_result(title="La Patrulla-X 012 (1985).cbz", seeders=2)
+        assert orch._relevantes([candidato], "X-Men 12", alias) == [candidato]
