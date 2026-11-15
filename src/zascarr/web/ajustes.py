@@ -27,6 +27,7 @@ from zascarr.services.auth import (
     SESSION_MAX_AGE,
     crear_cookie_sesion,
 )
+from zascarr.services.blog_feed import estado_feed
 from zascarr.services.cortesia_estado import texto_politica_ajustes
 from zascarr.services.forum_scraper import url_de_foro_visible
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
@@ -336,10 +337,11 @@ async def guardar_blog(
     """BLOG1: feed RSS/Atom genérico; el usuario aporta la URL."""
     url = (blog_feed_url or "").strip()
     nombre = (blog_feed_name or "").strip()[:120] or "Blog o RSS"
-    if url and not url_valida(url):
+    if url and not estado_feed(url):
         return templates.TemplateResponse(request, "_ajustes_guardado.html", {
             "nombre": "Blog o RSS",
-            "error": "La dirección tiene que empezar por http:// o https:// y llevar un dominio.",
+            "error": ("La dirección no es válida para el conector: usa un dominio público "
+                      "http:// o https://, sin IP, credenciales ni puerto."),
         })
     if blog_feed_enabled and not url:
         return templates.TemplateResponse(request, "_ajustes_guardado.html", {

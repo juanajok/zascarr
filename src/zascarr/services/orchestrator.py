@@ -347,6 +347,18 @@ class Orchestrator:
             return []
 
         results: list[SearchResult] = []
+        titulo_serie = ""
+        alias_serie: set[str] = set()
+        if item.series_id:
+            serie = (await self.db.execute(
+                select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
+            titulo_serie = serie.title if serie else ""
+            # B13: alias confirmados a mano. Se cargan antes de las fuentes para que el
+            # feed RSS también pueda aceptar un release con el nombre español.
+            alias_serie = set((await self.db.execute(
+                select(LocalAlias.pattern_norm)
+                .where(LocalAlias.series_id == item.series_id,
+                       LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
         motivo_prowlarr: str | None = None
         if settings.prowlarr_enabled:
             if not prowlarr_configurado(settings):
@@ -374,7 +386,7 @@ class Orchestrator:
                     "revísalo en Ajustes")
             else:
                 try:
-                    entradas = await buscar_en_feed(url_blog, query)
+                    entradas = await buscar_en_feed(url_blog, query, alias=alias_serie)
                     results.extend(resultados_de_busqueda(entradas, url_blog))
                 except Exception:
                     logger.exception("orchestrator.blog_search_failed")
@@ -403,27 +415,8 @@ class Orchestrator:
             if forum_result:
                 candidates = [forum_result]
 
-        # D8: la búsqueda es de TEXTO, así que devolver algo no significa que sea
-        # el número pedido. El filtro va ANTES de `candidatos_crudos` a
-        # propósito: si lo único que había era de otro número, el motivo no puede
-        # decir "ningún backend activo" (sería falso, y D9 existe justo para no
-        # dar ese tipo de motivo).
-        titulo_serie = ""
-        alias_serie: set[str] = set()
-        if item.series_id:
-            serie = (await self.db.execute(
-                select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
-            titulo_serie = serie.title if serie else ""
-            # B13: los alias que el coleccionista ya confirmó a mano. Un
-            # release español puede llamar "La Patrulla-X" a una serie
-            # catalogada como "X-Men"; sin ellos, la igualdad estricta
-            # descartaría el candidato bueno.
-            alias_serie = set((await self.db.execute(
-                select(LocalAlias.pattern_norm)
-                .where(LocalAlias.series_id == item.series_id,
-                       LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
         # La relevancia se resuelve con el título local (sin el número) y los alias;
-        # se hace después de cargarlos y antes del filtro de número.
+        # titulo_serie/alias_serie se cargaron antes de consultar las fuentes.
         candidates = self._relevantes(
             candidates, item.search_query or titulo_serie or query, alias_serie)
 
