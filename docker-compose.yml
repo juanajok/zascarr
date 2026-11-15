@@ -135,6 +135,9 @@ services:
       - FORUM_USERNAME=${FORUM_USERNAME:-}
       - FORUM_PASSWORD=${FORUM_PASSWORD:-}
       - LIBRARY_PATH=/media/library
+      # #156: montajes autorizados para raíces adicionales (vacío = solo LIBRARY_PATH).
+      - LIBRARY_ROOTS=${LIBRARY_ROOTS:-}
+      - HOST_LIBRARY_ROOTS=${HOST_LIBRARY_ROOTS:-}
       - EXPORT_PATH=${EXPORT_PATH:-/media/export}
       - HOST_EXPORT_DIR=${HOST_EXPORT_DIR:-}
       # La ruta REAL de la biblioteca en el host: la app solo la usa para MOSTRARLA (la vista previa de «Desvincular»

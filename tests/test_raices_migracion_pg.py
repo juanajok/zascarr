@@ -174,3 +174,57 @@ async def test_constraints_del_contrato(monkeypatch):
                     await c.execute(text("DELETE FROM library_roots WHERE id = :r"), {"r": root_id})
         finally:
             await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_backfill_no_confunde_wildcards_del_path(monkeypatch):
+    monkeypatch.setenv("LIBRARY_PATH", "/media/my_lib%rary")
+    async with bd_efimera(URL) as url:
+        alembic(url, "upgrade", "0040")
+        engine = await _con(url)
+        try:
+            async with engine.begin() as c:
+                await c.execute(text(
+                    "INSERT INTO files (id, file_path, file_name, file_format) VALUES "
+                    "(gen_random_uuid(), '/media/my_lib%rary/ok.cbz', 'ok.cbz', 'cbz'), "
+                    "(gen_random_uuid(), '/media/myXlibYrary/ajeno.cbz', 'ajeno.cbz', 'cbz')"
+                ))
+        finally:
+            await engine.dispose()
+        alembic(url, "upgrade", "0041")
+        filas = dict(await _filas(url, "SELECT file_path, root_id FROM files"))
+        assert filas["/media/my_lib%rary/ok.cbz"] is not None
+        assert filas["/media/myXlibYrary/ajeno.cbz"] is None
+
+
+@pytest.mark.asyncio
+async def test_check_de_path_normalizado_y_tradition_unica(monkeypatch):
+    monkeypatch.setenv("LIBRARY_PATH", "/media/library")
+    async with bd_efimera(URL) as url:
+        alembic(url, "upgrade", "0041")
+        engine = await _con(url)
+        try:
+            malos = [
+                ("/media/library/", "RutaTrailing"),
+                ("/media/library//x", "RutaDoble"),
+                ("/media/library/../x", "RutaPadre"),
+                ("/media/library/./x", "RutaPunto"),
+                ("/media/library/.", "RutaPuntoFinal"),
+            ]
+            for path, name in malos:
+                with pytest.raises(IntegrityError):
+                    async with engine.begin() as c:
+                        await c.execute(text(
+                            "INSERT INTO library_roots (name, path) VALUES (:n, :p)"),
+                            {"n": name, "p": path})
+            async with engine.begin() as c:
+                segunda = (await c.execute(text(
+                    "INSERT INTO library_roots (name, path) VALUES ('Segunda', '/media/library2') "
+                    "RETURNING id"))).scalar_one()
+            with pytest.raises(IntegrityError):
+                async with engine.begin() as c:
+                    await c.execute(text(
+                        "INSERT INTO library_root_traditions (root_id, tradition) "
+                        "VALUES (:r, 'manga')"), {"r": segunda})
+        finally:
+            await engine.dispose()
