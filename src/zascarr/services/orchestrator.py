@@ -32,6 +32,7 @@ la wishlist.
 import asyncio
 import base64
 import json
+import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -857,7 +858,10 @@ class Orchestrator:
                 relevante.append(candidato)
                 continue
             normalizado = normalize_series_name(candidato.title)
-            if all(t in normalizado for t in terminos):
+            # Palabras completas, no subcadenas: «ko» está dentro de «Konar» y
+            # hacía pasar un manual de ginecología como «DC K.O.».
+            palabras = set(re.findall(r"\w+", normalizado))
+            if all(t in palabras for t in terminos):
                 relevante.append(candidato)
         return relevante
 
