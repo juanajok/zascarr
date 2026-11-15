@@ -34,6 +34,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Importación de guías de lectura desde la interfaz (2026-11-15, #843).** Nueva pantalla
+  «Importar una guía» en Sagas en orden: eliges fuente (Comic Book Reading Orders / Continuity
+  Guide) y pegas la URL; ZascArr valida la URL contra la allowlist del extractor, comprueba que
+  la fuente esté encendida en Ajustes, reconcilia la guía y te lleva a la saga con el resumen
+  (números enlazados y omitidos con motivo). Los errores, la fuente apagada y las esperas de
+  cortesía se explican en español llano, sin pantallas de error. Complementa el script manual
+  `scripts/reconciliar-lecturas.py`.
+
 - **SCR7: GCD, Metron y Open Library rellenan huecos (2026-11-14, #736).** Las series que ya
   tienen `gcd_id`, `metron_id` u `open_library_id` completan año, fin y sinopsis **solo si el
   campo está vacío** (nunca pisan título, ids, procedencia, portada, total ni bloqueos) por
