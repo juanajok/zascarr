@@ -34,6 +34,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **CUR2: filtro por autor en Biblioteca (2026-11-15).** La barra de filtros incorpora
+  un buscador de autores (`/ui/biblioteca/buscar-autor`) y el filtro `author_id`, combinable
+  con editorial, tradición, personaje, saga, etiquetas y lectura. Los autores de la ficha de
+  serie enlazan directamente a sus series. Sin migración ni cambios en archivos.
 - **Importación de guías de lectura desde la interfaz (2026-11-15, #843).** Nueva pantalla
   «Importar una guía» en Sagas en orden: eliges fuente (Comic Book Reading Orders / Continuity
   Guide) y pegas la URL; ZascArr valida la URL contra la allowlist del extractor, comprueba que
