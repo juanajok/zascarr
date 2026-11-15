@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Importar una guía de lectura — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
+<h1>Importar una guía</h1>
+<p class="subtitle">Enlaza los números de una guía de lectura con los que ya tienes. No se crean series ni números.</p>
+{% if errores.get("general") %}{{ ui.aviso("warn", errores.general) }}{% endif %}
+{% if fuente_apagada %}
+{{ ui.aviso("amber", "Esa fuente está apagada: enciéndela en Ajustes antes de importar. La guía no se leerá hasta entonces.") }}
+<p><a class="btn ghost sm" href="/ui/ajustes">Ir a Ajustes</a></p>
+{% endif %}
+<form method="post" action="/ui/arcos/importar-guia" class="edicion-form">
+  <label>Fuente
+    <select name="fuente">
+      <option value="reading_orders" {% if valores.fuente == "reading_orders" %}selected{% endif %}>Comic Book Reading Orders</option>
+      <option value="continuity_guide" {% if valores.fuente == "continuity_guide" %}selected{% endif %}>Continuity Guide</option>
+    </select>
+  </label>
+  <label>Dirección de la guía
+    <input type="url" name="url" value="{{ valores.url }}" maxlength="500" required
+           placeholder="https://… (la URL exacta de la guía, sin parámetros)">
+  </label>
+  <p class="muted">Ejemplos: <code>https://comicbookreadingorders.com/dc/events/…-reading-order/</code> o <code>https://www.continuityguide.net/…</code>. Copia la dirección desde el navegador.</p>
+  <p class="caption">La fuente debe estar encendida en Ajustes. La primera lectura puede tardar unos segundos (cortesía y robots.txt); no repitas la petición.</p>
+  <div class="edicion-acciones">
+    <button type="submit" class="btn primary">Importar guía</button>
+  </div>
+</form>
+{% endblock %}
