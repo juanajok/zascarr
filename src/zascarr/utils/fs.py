@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import errno
+import hashlib
 import os
 import re
 import shutil
@@ -85,6 +86,117 @@ def sanear_excepcion(exc: BaseException) -> str:
     """Mensaje de excepción sin rutas absolutas (para informes/logs)."""
     return re.sub(r"(?<![\w.])/(?:[^\n\r\t]+?)(?=\s*(?:$|[.;:)]))", "<ruta>", str(exc))
 
+
+
+
+def _abrir_raiz_verificada(raiz: str | Path) -> tuple[Path, int]:
+    """Abre la raíz y verifica que el fd es exactamente su ruta canónica."""
+    root_res = Path(raiz).resolve(strict=False)
+    if not root_res.is_dir():
+        raise DestinoFueraDeRaizError("La raíz no existe o no es un directorio.")
+    try:
+        fd = os.open(root_res, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        st_fd = os.fstat(fd)
+        st_path = os.stat(root_res, follow_symlinks=False)
+        if (st_fd.st_dev, st_fd.st_ino) != (st_path.st_dev, st_path.st_ino):
+            raise DestinoFueraDeRaizError("La raíz cambió entre la validación y la apertura.")
+        abierto = os.readlink(f"/proc/self/fd/{fd}")
+        if os.path.normpath(abierto) != str(root_res):
+            raise DestinoFueraDeRaizError("La raíz abierta no es la ruta canónica esperada.")
+        return root_res, fd
+    except DestinoFueraDeRaizError:
+        with contextlib.suppress(OSError):
+            os.close(fd)
+        raise
+    except OSError as exc:
+        raise DestinoFueraDeRaizError("No se pudo abrir la raíz autorizada.") from exc
+
+
+def _abrir_padre_en_raiz(raiz_fd: int, relativo: Path) -> tuple[int, str]:
+    """Recorre/crea los componentes del padre con dir_fd y O_NOFOLLOW."""
+    parent_fd = raiz_fd
+    for parte in relativo.parts[:-1]:
+        try:
+            fd = os.open(parte, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                         dir_fd=parent_fd)
+        except FileNotFoundError:
+            os.mkdir(parte, 0o755, dir_fd=parent_fd)
+            fd = os.open(parte, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                         dir_fd=parent_fd)
+        if parent_fd != raiz_fd:
+            os.close(parent_fd)
+        parent_fd = fd
+    return parent_fd, relativo.parts[-1]
+
+
+def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
+                   sha256: str | None = None, size: int | None = None) -> Path:
+    """Copia por descriptores a un temporal dentro de la raíz, sin seguir symlinks."""
+    root_res, root_fd = _abrir_raiz_verificada(raiz)
+    temp_abs = Path(temp).resolve(strict=False)
+    try:
+        relativo = temp_abs.relative_to(root_res)
+    except ValueError:
+        os.close(root_fd)
+        raise DestinoFueraDeRaizError("El temporal no cuelga de la raíz autorizada.") from None
+    parent_fd = root_fd
+    try:
+        parent_fd, final_name = _abrir_padre_en_raiz(root_fd, relativo)
+        try:
+            os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise FileExistsError(errno.EEXIST, "El temporal ya existe", final_name)
+        temp_fd = os.open(final_name, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+                          0o600, dir_fd=parent_fd)
+        source = Path(src)
+        src_parent = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY)
+        src_fd = -1
+        ok = False
+        try:
+            src_fd = os.open(source.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=src_parent)
+            digest = hashlib.sha256()
+            total = 0
+            with os.fdopen(os.dup(src_fd), "rb") as entrada, \
+                    os.fdopen(os.dup(temp_fd), "wb") as salida:
+                while True:
+                    bloque = entrada.read(1024 * 1024)
+                    if not bloque:
+                        break
+                    digest.update(bloque)
+                    total += len(bloque)
+                    salida.write(bloque)
+                salida.flush()
+                os.fsync(salida.fileno())
+            os.close(src_fd)
+            os.close(src_parent)
+            if size is not None and total != size:
+                raise OSError("copia incompleta: el tamaño no coincide")
+            if sha256 is not None and digest.hexdigest() != sha256:
+                raise OSError("copia incompleta: el sha256 no coincide")
+            ok = True
+            return root_res / relativo.parent / final_name
+        finally:
+            with contextlib.suppress(OSError):
+                os.close(src_parent)
+            if src_fd >= 0:
+                with contextlib.suppress(OSError):
+                    os.close(src_fd)
+            if not ok:
+                with contextlib.suppress(OSError):
+                    os.unlink(final_name, dir_fd=parent_fd)
+    finally:
+        if parent_fd != root_fd:
+            with contextlib.suppress(OSError):
+                os.close(parent_fd)
+        with contextlib.suppress(OSError):
+            os.close(root_fd)
+
+
+def publicar_en_raiz(temp: str | Path, dest: str | Path, raiz: str | Path) -> Path:
+    """Publica con enlaces confinados; devuelve la ruta efectiva (nombre alternativo)."""
+    return safe_move_en_raiz(temp, dest, raiz)
 
 def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Path:
     """Mueve con descriptores y `dir_fd`, sin seguir symlinks fuera de la raíz.

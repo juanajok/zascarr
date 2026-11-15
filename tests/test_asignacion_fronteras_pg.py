@@ -160,7 +160,7 @@ class TestFronterasDeFallo:
 
     @pytest.mark.asyncio
     async def test_fallo_antes_de_mover_no_deja_nada(self, ent, monkeypatch):
-        def publicar_roto(temporal, destino):
+        def publicar_roto(temporal, destino, **kwargs):
             raise OSError("disco de destino de solo lectura")
         monkeypatch.setattr("zascarr.services.asignacion._publicar", publicar_roto)
         r = ent.asignar()

@@ -495,3 +495,27 @@ class TestReviewServiceRaices:
         with pytest.raises(RuntimeError, match="raíz"):
             await service.assign_to_series(file.id, series.id, "12")
         assert orig.exists()
+
+
+class TestReviewServiceSanitizaCausa:
+    @pytest.mark.asyncio
+    async def test_raiz_con_espacios_no_filtra_ruta(self, tmp_path):
+        from zascarr.services.raices import RaizNoDisponibleError
+        library = tmp_path / "library"
+        (library / "_Unsorted").mkdir(parents=True)
+        orig = library / "_Unsorted" / "x.cbz"
+        orig.write_bytes(b"contenido")
+        series = make_series("Batman")
+        file = make_file(orig)
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([]), FakeExecResult([])],
+        )
+        class FotoRota:
+            def por_tradicion(self, _t):
+                raise RaizNoDisponibleError("sin permiso en /tmp/WD Elements/mi biblioteca")
+        service = ReviewService(db=session, foto_raices=FotoRota())
+        with pytest.raises(RuntimeError) as excinfo:
+            await service.assign_to_series(file.id, series.id, "12")
+        assert "/tmp/WD Elements" not in str(excinfo.value)
+        assert "sin permiso" in str(excinfo.value) and orig.exists()
