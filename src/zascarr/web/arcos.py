@@ -30,6 +30,10 @@ from zascarr.services.arcos_fuentes import (
 )
 from zascarr.services.comicbook_herald import ComicBookHeraldClient
 from zascarr.services.fandom import FandomClient, FandomMaxLagError, FandomPayloadError
+from zascarr.services.reading_orders import (
+    ContinuityGuideExtractor,
+    ReadingOrdersExtractor,
+)
 from zascarr.services.reading_orders.comicbookreadingorders import (
     HOSTS_PERMITIDOS as RO_HOSTS,
 )
@@ -43,7 +47,10 @@ from zascarr.services.reading_orders.continuity_guide import (
 from zascarr.services.reading_orders.continuity_guide import (
     RUTAS_PROHIBIDAS as CG_RUTAS,
 )
-from zascarr.services.reconciliacion_lecturas import ORIGENES_DE_GUIA
+from zascarr.services.reconciliacion_lecturas import (
+    ORIGENES_DE_GUIA,
+    leer_y_reconciliar,
+)
 from zascarr.utils.cache_http import CacheHttp
 from zascarr.utils.cortesia import (
     NOMBRES_DE_FUENTE,
@@ -52,6 +59,7 @@ from zascarr.utils.cortesia import (
     fuente_habilitada,
 )
 from zascarr.utils.peticiones import ErrorDePeticion
+from zascarr.utils.robots import AccesoProhibidoPorRobots
 from zascarr.web.atribucion import atribucion_de_arco
 from zascarr.web.routes import crear_templates
 
@@ -121,6 +129,117 @@ async def _novedades_de_herald() -> list:
     except Exception:
         logger.warning("comicbook_herald.ui_sin_novedades")
         return []
+
+
+#: Motivos de la reconciliación en llano (nunca códigos internos en la UI).
+MOTIVOS_DE_GUIA = {
+    "sin_referencia": "referencias que no se entendieron",
+    "no_aplica": "tomos o volúmenes que no son grapas",
+    "serie_no_encontrada": "series que no están en tu biblioteca",
+    "ambiguo": "referencias ambiguas",
+    "numero_no_encontrado": "números que no tienes",
+    "tope": "referencias por encima del límite",
+}
+_EXTRACTORES_DE_GUIA = {
+    "reading_orders": ReadingOrdersExtractor,
+    "continuity_guide": ContinuityGuideExtractor,
+}
+
+
+def _contexto_importar_guia(*, fuente: str = "reading_orders", url: str = "",
+                            errores: dict | None = None,
+                            valores: dict | None = None) -> dict:
+    fuente = fuente if fuente in ORIGENES_DE_GUIA else "reading_orders"
+    return {
+        "fuente": fuente,
+        "url": url,
+        "errores": errores or {},
+        "valores": valores or {"fuente": fuente, "url": url},
+        "fuente_apagada": not fuente_habilitada(fuente),
+    }
+
+
+def _motivos_legibles(motivos) -> str:
+    partes = []
+    for clave, cantidad in motivos:
+        etiqueta = MOTIVOS_DE_GUIA.get(str(clave), "otras referencias")
+        partes.append(f"{cantidad} {etiqueta}")
+    return "; ".join(partes)
+
+
+@router.get("/importar-guia", response_class=HTMLResponse)
+async def importar_guia_form(request: Request,
+                             fuente: str = Query(default="reading_orders"),
+                             url: str = Query(default="")) -> HTMLResponse:
+    return _respuesta(request, "importar_guia.html",
+                      _contexto_importar_guia(fuente=fuente, url=url[:500]))
+
+
+@router.post("/importar-guia", response_class=HTMLResponse)
+async def importar_guia(request: Request, fuente: str = Form(default=""),
+                        url: str = Form(default=""),
+                        db: AsyncSession = Depends(get_db)) -> Response:
+    """Importa una guía de SCR3 y reconcilia con la biblioteca (historia #843)."""
+    url = (url or "").strip()[:500]
+    if fuente not in ORIGENES_DE_GUIA:
+        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+            url=url, valores={"fuente": fuente, "url": url},
+            errores={"general": "Elige una de las dos fuentes de guías."}))
+    hosts, rutas = _HOSTS_DE_GUIA[fuente]
+    if not url_de_sitio_valida(url, hosts, rutas_prohibidas=rutas, exigir_pagina=True):
+        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+            fuente=fuente, url=url,
+            errores={"general": "Esa dirección no es una guía válida de esa fuente. "
+                                "Copia la URL de la guía (https), sin parámetros."}))
+    if not fuente_habilitada(fuente):
+        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+            fuente=fuente, url=url,
+            errores={"general": "Esa fuente está apagada en Ajustes. Enciéndela para "
+                                "importar la guía."}))
+    nombre = NOMBRES_DE_FUENTE.get(fuente, fuente)
+    try:
+        extractor = _EXTRACTORES_DE_GUIA[fuente](CacheHttp(async_session_factory))
+        async with extractor:
+            resultado = await leer_y_reconciliar(db, extractor, url)
+    except CortesiaEnEspera as exc:
+        await db.rollback()
+        segundos = max(1, round(exc.espera_estimada_s))
+        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+            fuente=fuente, url=url,
+            errores={"general": f"{nombre} pide esperar ~{segundos} s antes de otra "
+                                "consulta. Inténtalo de nuevo en un momento."}))
+    except AccesoProhibidoPorRobots:
+        await db.rollback()
+        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+            fuente=fuente, url=url,
+            errores={"general": f"El robots.txt de {nombre} no permite leer esa guía."}))
+    except ErrorDePeticion:
+        await db.rollback()
+        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+            fuente=fuente, url=url,
+            errores={"general": f"No se pudo leer la guía de {nombre}. Inténtalo de nuevo "
+                                "más tarde."}))
+    except Exception:
+        logger.exception("arcos.importar_guia_failed", fuente=fuente)
+        await db.rollback()
+        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+            fuente=fuente, url=url,
+            errores={"general": "No se pudo importar la guía. Inténtalo de nuevo."}))
+    if resultado is None or resultado.arco_id is None:
+        await db.rollback()
+        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+            fuente=fuente, url=url,
+            errores={"general": "La guía no tiene entradas legibles o no se pudo leer. "
+                                "Comprueba la dirección y que la fuente siga encendida."}))
+    await db.commit()
+    motivos = _motivos_legibles(resultado.motivos)[:400]
+    consulta = urlencode({
+        "importada": "1",
+        "enlazados": resultado.enlazados,
+        "omitidos": resultado.omitidos,
+        "motivos": motivos,
+    })
+    return _redirigir(f"/ui/arcos/{resultado.arco_id}?{consulta}")
 
 
 @router.get("", response_class=HTMLResponse)
@@ -273,6 +392,10 @@ async def importar_arco(request: Request, page_title: str = Form(default=""),
 
 @router.get("/{arco_id}", response_class=HTMLResponse)
 async def arco(arco_id: UUID, request: Request, guardado: str = Query(default=""),
+               importada: str = Query(default=""),
+               enlazados: int = Query(default=0, ge=0),
+               omitidos: int = Query(default=0, ge=0),
+               motivos: str = Query(default=""),
                anadidos: int = Query(default=0, ge=0),
                ya_pedidos: int = Query(default=0, ge=0),
                en_biblioteca: int = Query(default=0, ge=0),
@@ -295,6 +418,8 @@ async def arco(arco_id: UUID, request: Request, guardado: str = Query(default=""
         # El formulario de «Añadir un número» pinta siempre sus errores/valores: en el GET,
         # vacíos; el POST de error los rellena para no perder lo escrito.
         "errores": {}, "valores": {"serie": "", "numero": "", "orden": ""},
+        "importada": {"enlazados": enlazados, "omitidos": omitidos,
+                      "motivos": motivos[:400]} if importada == "1" else None,
         "pedido": {"anadidos": anadidos, "ya_pedidos": ya_pedidos,
                    "en_biblioteca": en_biblioteca} if guardado == "pedido" else None,
     })
