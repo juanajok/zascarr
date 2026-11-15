@@ -137,7 +137,7 @@ class TestForoSinTurno:
         with structlog.testing.capture_logs() as registros:
             resultado = await modulo_orchestrator.Orchestrator(
                 db=MagicMock())._forum_fallback("thorgal")
-        assert resultado is None
+        assert resultado == []
         eventos = [r["event"] for r in registros]
         assert "orchestrator.forum_fallback_error" not in eventos
         assert "orchestrator.forum_sin_turno" in eventos
