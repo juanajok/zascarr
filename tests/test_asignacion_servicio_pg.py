@@ -208,6 +208,20 @@ class TestSinRaiz:
         assert mundo.origen.exists()
 
     @pytest.mark.asyncio
+    async def test_raiz_deshabilitada_entre_copiar_y_publicar(self, mundo):
+        async def gancho(punto):
+            if punto == "tras_copiar":
+                async with mundo.fabrica() as s:
+                    await s.execute(text(
+                        "UPDATE library_roots SET is_default = false, enabled = false"))
+                    await s.commit()
+        svc = AsignacionService(mundo.fabrica, mundo.lib, gancho=gancho)
+        r = await svc.asignar(mundo.file_id, mundo.serie_id, "12")
+        assert r.estado == "error" and "deshabilitada" in r.motivo
+        assert mundo.origen.exists()
+        assert not (mundo.lib / "Comics" / "Saga del Faro (2010)" / "Saga del Faro #012.cbz").exists()
+
+    @pytest.mark.asyncio
     async def test_recuperacion_usa_la_raiz_persistida_tras_cambiar_el_mapeo(
             self, mundo, tmp_path, monkeypatch):
         from zascarr.config import get_settings

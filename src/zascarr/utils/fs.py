@@ -81,6 +81,11 @@ def _validar_destino_en_raiz(raiz: str | Path, dest: str | Path) -> Path:
     return raiz_res
 
 
+def sanear_excepcion(exc: BaseException) -> str:
+    """Mensaje de excepción sin rutas absolutas (para informes/logs)."""
+    return re.sub(r"(?<![\w.])/(?:[^\n\r\t]+?)(?=\s*(?:$|[.;:)]))", "<ruta>", str(exc))
+
+
 def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Path:
     """Mueve con descriptores y `dir_fd`, sin seguir symlinks fuera de la raíz.
 
@@ -104,7 +109,15 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
     if destino.is_symlink():
         raise DestinoFueraDeRaizError("El destino final es un symlink.")
     try:
-        root_fd = os.open(root_res, os.O_RDONLY | os.O_DIRECTORY)
+        root_fd = os.open(root_res, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        st_root_fd = os.fstat(root_fd)
+        st_root_path = os.stat(root_res, follow_symlinks=False)
+        if (st_root_fd.st_dev, st_root_fd.st_ino) != (st_root_path.st_dev, st_root_path.st_ino):
+            raise DestinoFueraDeRaizError("La raíz cambió entre la validación y la apertura.")
+    except DestinoFueraDeRaizError:
+        with contextlib.suppress(OSError):
+            os.close(root_fd)
+        raise
     except OSError as exc:
         raise DestinoFueraDeRaizError("No se pudo abrir la raíz autorizada.") from exc
     parent_fd = root_fd
@@ -121,26 +134,16 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
                 os.close(parent_fd)
             parent_fd = fd
         final_name = relativo.parts[-1]
-        # Nunca elegir un nombre que sea symlink (aunque sea roto).
+        final_name = relativo.parts[-1]
         try:
             st_final = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
         except FileNotFoundError:
             st_final = None
         if st_final is not None:
+            # H1: nunca sobrescribir; el llamador decide el nombre alternativo.
             if stat.S_ISLNK(st_final.st_mode):
                 raise DestinoFueraDeRaizError("El destino final es un symlink.")
-            stem, suffix = os.path.splitext(final_name)
-            n = 1
-            while True:
-                candidato = f"{stem} ({n}){suffix}"
-                try:
-                    st = os.stat(candidato, dir_fd=parent_fd, follow_symlinks=False)
-                except FileNotFoundError:
-                    final_name = candidato
-                    break
-                if stat.S_ISLNK(st.st_mode):
-                    raise DestinoFueraDeRaizError("Un nombre alternativo es un symlink.")
-                n += 1
+            raise FileExistsError(errno.EEXIST, "El destino ya existe", final_name)
         src_parent = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             src_fd = os.open(source.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=src_parent)
@@ -160,9 +163,12 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
             comprobar_espacio(root_res, st_src.st_size, "mover a la biblioteca")
             if st_src.st_dev == os.fstat(parent_fd).st_dev:
                 try:
-                    os.replace(source.name, final_name, src_dir_fd=src_parent,
-                               dst_dir_fd=parent_fd)
+                    os.link(source.name, final_name, src_dir_fd=src_parent,
+                            dst_dir_fd=parent_fd, follow_symlinks=False)
+                    os.unlink(source.name, dir_fd=src_parent)
                     return root_res / relativo.parent / final_name
+                except FileExistsError:
+                    raise
                 except OSError as exc:
                     if exc.errno != errno.EXDEV:
                         raise
@@ -179,8 +185,9 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
                     raise OSError("copia incompleta: el tamaño no coincide")
                 os.close(temp_fd)
                 temp_fd = -1
-                os.replace(temp_name, final_name, src_dir_fd=parent_fd,
-                           dst_dir_fd=parent_fd)
+                os.link(temp_name, final_name, src_dir_fd=parent_fd,
+                        dst_dir_fd=parent_fd, follow_symlinks=False)
+                os.unlink(temp_name, dir_fd=parent_fd)
                 os.unlink(source.name, dir_fd=src_parent)
                 return root_res / relativo.parent / final_name
             except BaseException:
