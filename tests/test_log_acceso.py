@@ -389,6 +389,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "desde",
     # BL-D7 (#163): resultado de pedir una saga (solo recuentos de la vista).
     "anadidos", "ya_pedidos", "en_biblioteca",
+    # #843: importación de una guía de lectura (fuente, aviso de resultado y recuentos).
+    "fuente", "importada", "enlazados", "omitidos", "motivos",
     # #155: filtros del alta de series y selección de candidatas (estado de la vista).
     "serie_ids", "tradicion",
     # #797: abrir el desplegable de alta tras un error (estado de la vista).
