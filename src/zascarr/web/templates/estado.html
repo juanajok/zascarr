@@ -81,6 +81,7 @@
             <th scope="row">{{ f.fuente }}</th>
             <td>
               <span class="cortesia-estado cortesia-estado-{{ f.clase }}">{{ f.estado }}</span>
+              {% if f.motivo_bloqueo %}<div class="muted">{{ f.motivo_bloqueo }}</div>{% endif %}
               {% if f.nota_apagada %}<div class="muted">{{ cortesia.nota_apagada }}</div>{% endif %}
             </td>
             <td>{{ f.proxima }}</td>

@@ -172,3 +172,17 @@ class TestAjustes:
         assert "ajustes-aviso" in r.text
         assert "ajustes-error" not in r.text
         assert "hay que esperar ~12 s por cortesía" in r.text
+
+
+class TestMotivosY304:
+    def test_el_motivo_del_bloqueo_se_dice_en_llano(self, entorno, cliente):
+        r = cliente.get("/estado")
+        assert r.status_code == 200
+        assert "La web nos pidió esperar" in r.text
+        assert "nos pidió esperar" in r.text
+
+    def test_un_304_se_dice_sin_cambios(self, entorno, cliente):
+        entorno.registrar_resultado("comicvine", "304", intento=2, espera_s=0.5)
+        r = cliente.get("/estado")
+        assert r.status_code == 200
+        assert "Sin cambios" in r.text

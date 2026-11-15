@@ -358,44 +358,116 @@ def _pagina_vacia():
     return PaginaArcos([], 1, 1, 0, 0, 1)
 
 
-def test_la_lista_muestra_las_novedades_del_feed_con_enlace_externo():
+def test_la_pagina_de_sagas_no_pide_el_feed(monkeypatch):
+    """#854 A: el GET de Sagas no puede hacer red para el feed de Herald."""
+    def _no_debe_llamarse(*_a, **_k):
+        raise AssertionError("el GET de Sagas no debe pedir el feed")
+
+    monkeypatch.setattr("zascarr.web.arcos._novedades_de_herald", _no_debe_llamarse)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.listar_arcos", AsyncMock(return_value=_pagina_vacia())):
+            r = c.get("/ui/arcos")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+
+
+def test_el_marcado_de_novedades_es_perezoso():
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.listar_arcos", AsyncMock(return_value=_pagina_vacia())):
+            r = c.get("/ui/arcos")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert 'hx-get="/ui/arcos/novedades-herald"' in r.text
+    assert 'hx-trigger="revealed once"' in r.text
+    assert 'id="novedades-herald-contenido"' in r.text
+    assert 'aria-live="polite"' in r.text
+    assert 'id="novedades-herald-cargando"' in r.text
+    assert 'class="novedades-esqueleto"' in r.text
+    assert 'class="esqueleto-fila"' in r.text
+    assert 'hx-indicator="#novedades-herald-cargando"' in r.text
+
+
+def _novedades() -> list:
     from datetime import UTC, datetime
 
     from zascarr.services.comicbook_herald import HeraldItem
 
-    novedades = [
+    return [
         HeraldItem("Año Uno de Batman: por dónde empezar",
                    "https://www.comicbookherald.com/batman-year-one-reading-order/",
                    datetime(2026, 11, 8, 9, 0, tzinfo=UTC)),
         HeraldItem("La Patrulla-X de Claremont",
                    "https://www.comicbookherald.com/x-men-claremont-reading-order/", None),
     ]
+
+
+def test_el_parcial_de_novedades_pinta_los_items():
     c = _cliente()
     try:
-        with patch("zascarr.web.arcos.listar_arcos", AsyncMock(return_value=_pagina_vacia())), \
-                patch("zascarr.web.arcos._novedades_de_herald",
-                      AsyncMock(return_value=novedades)):
-            r = c.get("/ui/arcos")
+        with patch("zascarr.web.arcos._novedades_de_herald",
+                   AsyncMock(return_value=_novedades())):
+            r = c.get("/ui/arcos/novedades-herald")
     finally:
         _cerrar()
     assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-store"
     assert "Novedades de Comic Book Herald" in r.text
     assert 'href="https://www.comicbookherald.com/batman-year-one-reading-order/"' in r.text
     assert 'target="_blank"' in r.text and 'rel="noopener noreferrer"' in r.text
-    assert "se abre en otra pestaña" in r.text
-    assert "08/11/2026" in r.text
-    assert "Año Uno de Batman" in r.text and "La Patrulla-X de Claremont" in r.text
+    assert "se abre en otra pestaña" in r.text and "08/11/2026" in r.text
+    assert 'class="novedades-lista"' in r.text
 
 
-def test_sin_novedades_no_se_pinta_la_seccion():
+def test_el_parcial_sin_novedades_devuelve_vacio():
     c = _cliente()
     try:
-        with patch("zascarr.web.arcos.listar_arcos", AsyncMock(return_value=_pagina_vacia())), \
-                patch("zascarr.web.arcos._novedades_de_herald", AsyncMock(return_value=[])):
-            r = c.get("/ui/arcos")
+        with patch("zascarr.web.arcos._novedades_de_herald", AsyncMock(return_value=[])):
+            r = c.get("/ui/arcos/novedades-herald")
     finally:
         _cerrar()
     assert r.status_code == 200 and "Novedades de Comic Book Herald" not in r.text
+    assert "<ul" not in r.text and "<section" not in r.text
+
+
+def test_el_parcial_con_la_fuente_apagada_no_hace_red(monkeypatch):
+    modulo = __import__("zascarr.web.arcos", fromlist=["arcos"])
+    monkeypatch.setattr(modulo, "fuente_habilitada", lambda *_a, **_k: False)
+    monkeypatch.setattr(modulo, "ComicBookHeraldClient", None)
+    c = _cliente()
+    try:
+        r = c.get("/ui/arcos/novedades-herald")
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "Novedades" not in r.text
+
+
+def test_el_parcial_ante_un_fallo_devuelve_200_vacio(monkeypatch):
+    class ClienteQueFalla:
+        def __init__(self, *_a, **_k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return None
+
+        async def novedades(self):
+            raise RuntimeError("sin red")
+
+    modulo = __import__("zascarr.web.arcos", fromlist=["arcos"])
+    monkeypatch.setattr(modulo, "fuente_habilitada", lambda *_a, **_k: True)
+    monkeypatch.setattr(modulo, "ComicBookHeraldClient", ClienteQueFalla)
+    c = _cliente()
+    try:
+        r = c.get("/ui/arcos/novedades-herald")
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "Novedades" not in r.text
 
 
 async def test_la_fuente_apagada_no_instancia_el_cliente_del_feed(monkeypatch):
