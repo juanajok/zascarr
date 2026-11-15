@@ -1035,10 +1035,12 @@ class Importer:
             return None
         parsed = parse_comic_filename(path.name)
         numero = (tr.comic_info.number if tr.comic_info else None) or parsed.issue_number
-        if not numero or parsed.edition_kind is not None or es_pack(str(numero)):
+        if not numero or parsed.edition_kind is not None or parsed.is_special or parsed.is_pack:
+            return None
+        if not tr.strong_candidate and parsed.confidence < 0.7:
             return None
         numero = str(numero).strip()
-        if not numero:
+        if not numero or es_pack(numero):
             return None
         existentes = (await self._db.execute(
             select(func.count()).select_from(Issue)
