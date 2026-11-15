@@ -185,10 +185,14 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
         try:
             src_parent = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY)
         except BaseException:
+            st_temp = os.fstat(temp_fd)
             with contextlib.suppress(OSError):
                 os.close(temp_fd)
             with contextlib.suppress(OSError):
-                os.unlink(final_name, dir_fd=parent_fd)
+                st_name = os.stat(final_name, dir_fd=parent_fd,
+                                  follow_symlinks=False)
+                if (st_name.st_dev, st_name.st_ino) == (st_temp.st_dev, st_temp.st_ino):
+                    os.unlink(final_name, dir_fd=parent_fd)
             raise
         src_fd = -1
         ok = False
@@ -226,7 +230,11 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
                     os.close(src_fd)
             if not ok:
                 with contextlib.suppress(OSError):
-                    os.unlink(final_name, dir_fd=parent_fd)
+                    st_temp = os.fstat(temp_fd)
+                    st_name = os.stat(final_name, dir_fd=parent_fd,
+                                      follow_symlinks=False)
+                    if (st_name.st_dev, st_name.st_ino) == (st_temp.st_dev, st_temp.st_ino):
+                        os.unlink(final_name, dir_fd=parent_fd)
                 with contextlib.suppress(OSError):
                     os.close(temp_fd)
     finally:
@@ -366,6 +374,7 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
         raise DestinoFueraDeRaizError("El destino no tiene nombre de archivo.")
     if destino.is_symlink():
         raise DestinoFueraDeRaizError("El destino final es un symlink.")
+    root_fd = -1
     try:
         root_fd = os.open(root_res, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         st_root_fd = os.fstat(root_fd)
@@ -379,12 +388,15 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
                 "No se pudo verificar la ruta canónica de la raíz abierta.") from exc
         if os.path.normpath(abierto) != str(root_res):
             raise DestinoFueraDeRaizError("La raíz abierta no es la ruta canónica esperada.")
-    except DestinoFueraDeRaizError:
-        with contextlib.suppress(OSError):
-            os.close(root_fd)
+    except BaseException as exc:
+        if root_fd >= 0:
+            with contextlib.suppress(OSError):
+                os.close(root_fd)
+        if isinstance(exc, DestinoFueraDeRaizError):
+            raise
+        if isinstance(exc, OSError):
+            raise DestinoFueraDeRaizError("No se pudo abrir la raíz autorizada.") from exc
         raise
-    except OSError as exc:
-        raise DestinoFueraDeRaizError("No se pudo abrir la raíz autorizada.") from exc
     parent_fd = root_fd
     try:
         for parte in relativo.parts[:-1]:
@@ -459,18 +471,26 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
                     os.fsync(salida.fileno())
                 if os.fstat(temp_fd).st_size != st_src.st_size:
                     raise OSError("copia incompleta: el tamaño no coincide")
+                st_temp = os.fstat(temp_fd)
                 os.close(temp_fd)
                 temp_fd = -1
                 os.link(temp_name, final_name, src_dir_fd=parent_fd,
                         dst_dir_fd=parent_fd, follow_symlinks=False)
-                os.unlink(temp_name, dir_fd=parent_fd)
+                st_name = os.stat(temp_name, dir_fd=parent_fd,
+                                  follow_symlinks=False)
+                if (st_name.st_dev, st_name.st_ino) == (st_temp.st_dev, st_temp.st_ino):
+                    os.unlink(temp_name, dir_fd=parent_fd)
                 os.unlink(source.name, dir_fd=src_parent)
                 return root_res / relativo.parent / final_name
             except BaseException:
                 if temp_fd >= 0:
+                    st_temp = os.fstat(temp_fd)
                     os.close(temp_fd)
-                with contextlib.suppress(OSError):
-                    os.unlink(temp_name, dir_fd=parent_fd)
+                    with contextlib.suppress(OSError):
+                        st_name = os.stat(temp_name, dir_fd=parent_fd,
+                                          follow_symlinks=False)
+                        if (st_name.st_dev, st_name.st_ino) == (st_temp.st_dev, st_temp.st_ino):
+                            os.unlink(temp_name, dir_fd=parent_fd)
                 raise
         finally:
             os.close(src_fd)
