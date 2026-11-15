@@ -37,7 +37,11 @@
 
 {% block content %}
 <div class="dashboard">
-  <h1>Inicio</h1>
+  <div class="dashboard-cabecera">
+    <h1>Inicio</h1>
+    <a class="btn ghost sm dashboard-logs" href="/ui/logs">Descargar logs</a>
+  </div>
+  <p class="caption">Si algo no funciona, descarga los últimos registros. Pueden incluir rutas de tu biblioteca; contraseñas y tokens se ocultan.</p>
 
   {#- Una sola cuenta que cuadra (caso real, 2026-10-20: «encontramos 1542 · registrados 1325», paso 1 «Hecho»
       y «Revisa 1322» sin decir cómo encajaban): lo registrado y en qué punto está, con partes que suman el
@@ -171,11 +175,5 @@
     </form>
   </section>
 
-  <section class="diagnostico-logs" aria-labelledby="h-logs">
-    <h2 id="h-logs" class="seccion">¿Algo no funciona?</h2>
-    <p class="caption">Descarga los últimos registros de ZascArr para revisarlos o adjuntarlos a un informe. No hace falta abrir una terminal.</p>
-    <p><a class="btn ghost" href="/ui/logs">Descargar logs</a></p>
-    <p class="caption">El fichero puede incluir rutas y nombres de tu biblioteca. Revísalo antes de compartirlo; las contraseñas y tokens conocidos se ocultan.</p>
-  </section>
 </div>
 {% endblock %}
