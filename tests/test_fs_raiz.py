@@ -1,6 +1,9 @@
 """H1: mover un archivo confinado a la raíz, sin seguir symlinks de subdirectorio."""
 from __future__ import annotations
 
+import uuid
+from pathlib import Path
+
 import pytest
 
 from zascarr.utils.fs import DestinoFueraDeRaizError, safe_move_en_raiz
@@ -165,3 +168,35 @@ def test_fallo_al_verificar_raiz_no_deja_unbound(tmp_path, monkeypatch):
     with pytest.raises(DestinoFueraDeRaizError):
         safe_move_en_raiz(origen, raiz / "Uno.cbz", raiz)
     assert origen.exists()
+
+
+def test_cross_device_swap_temporal_publica_desde_fd(tmp_path, monkeypatch):
+    import os
+    shm = Path("/dev/shm")
+    if not shm.is_dir():
+        pytest.skip("sin /dev/shm")
+    root = tmp_path / "raiz"
+    root.mkdir()
+    origen = shm / f"origen-{os.getpid()}-{uuid.uuid4().hex}.cbz"
+    origen.write_bytes(b"contenido")
+    if origen.stat().st_dev == root.stat().st_dev:
+        origen.unlink(missing_ok=True)
+        pytest.skip("mismo dispositivo")
+    import zascarr.utils.fs as fsmod
+    real_link = fsmod.os.link
+
+    def link_swap(src, dst, *args, **kwargs):
+        if str(src).startswith("/proc/self/fd/"):
+            for temp in root.glob("*.part"):
+                temp.unlink()
+                temp.write_bytes(b"AJENO")
+        return real_link(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(fsmod.os, "link", link_swap)
+    try:
+        with pytest.raises((FileNotFoundError, DestinoFueraDeRaizError)):
+            fsmod.safe_move_en_raiz(origen, root / "final.cbz", root)
+        assert not (root / "final.cbz").exists()
+        assert origen.exists()
+    finally:
+        origen.unlink(missing_ok=True)

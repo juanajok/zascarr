@@ -472,14 +472,18 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
                 if os.fstat(temp_fd).st_size != st_src.st_size:
                     raise OSError("copia incompleta: el tamaño no coincide")
                 st_temp = os.fstat(temp_fd)
-                os.close(temp_fd)
-                temp_fd = -1
-                os.link(temp_name, final_name, src_dir_fd=parent_fd,
-                        dst_dir_fd=parent_fd, follow_symlinks=False)
-                st_name = os.stat(temp_name, dir_fd=parent_fd,
-                                  follow_symlinks=False)
-                if (st_name.st_dev, st_name.st_ino) == (st_temp.st_dev, st_temp.st_ino):
-                    os.unlink(temp_name, dir_fd=parent_fd)
+                # Publica desde el fd: aunque el nombre temporal se sustituya,
+                # se enlaza el inodo que se acaba de verificar.
+                os.link(f"/proc/self/fd/{temp_fd}", final_name,
+                        dst_dir_fd=parent_fd, follow_symlinks=True)
+                try:
+                    st_name = os.stat(temp_name, dir_fd=parent_fd,
+                                      follow_symlinks=False)
+                    if (st_name.st_dev, st_name.st_ino) == (st_temp.st_dev, st_temp.st_ino):
+                        os.unlink(temp_name, dir_fd=parent_fd)
+                finally:
+                    os.close(temp_fd)
+                    temp_fd = -1
                 os.unlink(source.name, dir_fd=src_parent)
                 return root_res / relativo.parent / final_name
             except BaseException:

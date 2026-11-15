@@ -607,6 +607,9 @@ class AsignacionService:
                         if inodo is not None:
                             eliminar_en_raiz(mi_temporal, raiz.path,
                                              inodo_esperado=inodo)
+                    if copia is not None:
+                        copia.cerrar()
+                        copia = None
                     causa = sanear_excepcion(exc)
                     return Resultado(EstadoResultado.ERROR, causa, op["destino"])
                 if not await prop.vigente():
@@ -614,6 +617,9 @@ class AsignacionService:
                         eliminar_en_raiz(
                             mi_temporal, raiz.path,
                             inodo_esperado=inodo_copia)
+                    if copia is not None:
+                        copia.cerrar()
+                        copia = None
                     return perdida
                 try:
                     try:
