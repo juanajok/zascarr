@@ -106,9 +106,11 @@ los cortes B–D pendientes.
 | 6 | **¿Ruta persistida o derivada?** | (a) solo derivar por prefijo; (b) `root_id` en `File`; (c) ambas | **(c) `root_id` persistido + `file_path` absoluto**; la derivación por prefijo es solo compatibilidad de migración. Sin `root_id`, una raíz retirada o dos prefijos solapados hacen ambigua la pertenencia y la auditoría no distingue «archivo de raíz A» de «huérfano» | **APROBADA (2026-11-14)** |
 | 7 | **¿Alcance y esfuerzo?** | (a) L completo; (b) MVP sin UI; (c) partir en historias | **(a) L completo, cuatro cortes acumulativos** (§8); un «MVP sin UI» puede validar el contrato pero **no cierra A5**, porque el coleccionista no puede añadir el segundo disco | **APROBADA (2026-11-14)** |
 
-**Consecuencia si no hay decisión:** no se implementa. El comportamiento actual (una raíz) sigue
-siendo el único soportado; no se introduce una raíz «provisional» ni un fallback. Las decisiones 1,
-2, 3 y 6 son **bloqueantes** para el contrato de datos; 4, 5 y 7 bloquean el cierre de la historia.
+**Estado de las decisiones:** D1–D7 fueron **aprobadas por el PO el 2026-11-14** y el **corte A**
+está implementado en #844 (cimiento + migración 0041, sin cambiar aún importer ni Ajustes). Las
+decisiones 1, 2, 3 y 6 son **bloqueantes** para el contrato de datos; 4, 5 y 7 bloquean el cierre de
+la historia. Si el PO revisa alguna decisión, se para antes del corte B; no se introduce una raíz
+«provisional» ni un fallback.
 
 ---
 
@@ -189,9 +191,9 @@ Restricciones:
 
 ### 3.2 Migración 0041 (creada en #844; NO aplicada en producción)
 
-**Revisión `0041`, `down_revision = "0040"`** (la cabeza actual es `0040`; no existe
-`library_roots` ni `root_id` — comprobado con `grep -RIn 'library_roots\|root_id' src alembic/versions`
-sin resultados).
+**Revisión `0041`, `down_revision = "0040"`.** Al escribir esta especificación la cabeza era `0040`
+y no existían `library_roots` ni `root_id`; el **corte A (#844) ya crea la 0041** con las tablas y la
+columna. **No está aplicada en producción**: esta sección describe su contrato, no un despliegue.
 
 `upgrade`:
 
@@ -822,7 +824,7 @@ registra la decisión, no la sustituye.
   `services/vinculacion.py:185`; `services/exportacion_kavita.py:85-110`;
   `models/__init__.py:36-45,550-553,780-786`; `utils/ruta_visible.py:16-27`;
   `web/auditoria.py:395-399,437`; `web/ajustes.py:167-174,545-553`;
-  `scripts/_rutas.sh:87-230`; migración `0040` (cabeza actual).
+  `scripts/_rutas.sh:87-230`; migración `0041` (creada en el corte A; `0040` era la cabeza al especificar).
 - Referencias del benchmark: Sonarr/Radarr, Kapowarr, Mylar3 y Komga, leídas por el SCOUT; no
   ejecutadas. Licencias GPL-3.0; no se copia código, solo contratos.
 - **Caducidad:** 2027-01-13 (~60 días), o antes si cambia `library_path`, el montaje de Compose,
