@@ -82,6 +82,7 @@ class AutorPrincipal:
     nombre: str
     papel: str
     numeros: int
+    id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -174,12 +175,13 @@ async def cargar_ficha_serie(db: AsyncSession, series_id: UUID) -> FichaSerie | 
         getattr(i, "sort_order", None) is None, getattr(i, "sort_order", None) or 0.0,
         natural_key(i.issue_number or ""), str(i.id)))
     filas = (await db.execute(
-        select(IssueCreator.role, Creator.name, func.max(Creator.metadata_source),
+        select(IssueCreator.role, Creator.id, Creator.name,
+               func.max(Creator.metadata_source),
                func.count(func.distinct(IssueCreator.issue_id)))
         .join(Creator, Creator.id == IssueCreator.creator_id)
         .join(Issue, Issue.id == IssueCreator.issue_id)
         .where(Issue.series_id == series_id)
-        .group_by(IssueCreator.role, Creator.name)
+        .group_by(IssueCreator.role, Creator.id, Creator.name)
         .order_by(func.count(func.distinct(IssueCreator.issue_id)).desc(), Creator.name)
     )).all()
     autores: dict[str, list[AutorPrincipal]] = {}
@@ -187,11 +189,12 @@ async def cargar_ficha_serie(db: AsyncSession, series_id: UUID) -> FichaSerie | 
     todas: dict[str, list[AutorPrincipal]] = {}
     fuentes_creditos: set[str] = set()
     credito_sin_fuente = False
-    for rol, nombre, fuente_credito, cantidad in filas:
+    for rol, creator_id, nombre, fuente_credito, cantidad in filas:
         clave = rol.value if hasattr(rol, "value") else str(rol)
         if clave in ("writer", "penciler"):
             todas.setdefault(clave, []).append(
-                AutorPrincipal(nombre=nombre, papel=clave, numeros=int(cantidad)))
+                AutorPrincipal(nombre=nombre, papel=clave, numeros=int(cantidad),
+                               id=str(creator_id)))
             if fuente_credito:
                 fuentes_creditos.add(str(fuente_credito))
             else:

@@ -22,8 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
     Character,
+    Creator,
     File,
     Issue,
+    IssueCreator,
     IssueFormat,
     MetadataSource,
     Publisher,
@@ -65,6 +67,7 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        author_id: UUID | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -120,6 +123,12 @@ class SeriesService:
                 select(Issue.series_id)
                 .join(StoryArcIssue, StoryArcIssue.issue_id == Issue.id)
                 .where(StoryArcIssue.story_arc_id == story_arc_id)
+            ))
+        if author_id:
+            query = query.where(Series.id.in_(
+                select(Issue.series_id)
+                .join(IssueCreator, IssueCreator.issue_id == Issue.id)
+                .where(IssueCreator.creator_id == author_id)
             ))
 
         # BL-ETQ1b: EXISTS/NOT EXISTS por token; nunca JOIN+DISTINCT.
@@ -220,6 +229,7 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        author_id: UUID | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -233,6 +243,7 @@ class SeriesService:
             page=page, page_size=page_size, tradition=tradition, status=status,
             search=search, publisher_id=publisher_id, character_id=character_id,
             story_arc_id=story_arc_id,
+            author_id=author_id,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
@@ -250,6 +261,7 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        author_id: UUID | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -267,6 +279,7 @@ class SeriesService:
             page=page, page_size=page_size, tradition=tradition, status=status,
             search=search, publisher_id=publisher_id, character_id=character_id,
             story_arc_id=story_arc_id,
+            author_id=author_id,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
@@ -286,6 +299,7 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        author_id: UUID | None = None,
     ) -> dict[str, str | None]:
         """Nombres legibles de los filtros activos, para sus chips.
 
@@ -306,6 +320,10 @@ class SeriesService:
             nombres["story_arc"] = (await self.db.execute(
                 select(StoryArc.title).where(StoryArc.id == story_arc_id)
             )).scalar()
+        if author_id is not None:
+            nombres["author"] = (await self.db.execute(
+                select(Creator.name).where(Creator.id == author_id)
+            )).scalar()
         return nombres
 
     async def search_characters(self, query: str, limit: int = 20) -> list[Character]:
@@ -322,6 +340,16 @@ class SeriesService:
             return []
         return list((await self.db.execute(
             select(StoryArc).where(StoryArc.title.ilike(f"%{query}%")).order_by(StoryArc.title).limit(limit)
+        )).scalars().all())
+
+    async def search_creators(self, query: str, limit: int = 20) -> list[Creator]:
+        """Autores cuyo nombre coincide; el filtro se aplica después por id."""
+        texto = (query or "").strip()
+        if not texto:
+            return []
+        return list((await self.db.execute(
+            select(Creator).where(Creator.name.ilike(f"%{texto}%"))
+            .order_by(Creator.name).limit(limit)
         )).scalars().all())
 
 
