@@ -1302,3 +1302,36 @@ def test_retirar_esta_plegado_y_no_compite_con_la_accion_principal():
     assert '<details class="series-retirar">' in r.text
     assert "<summary>Retirar de mi biblioteca</summary>" in r.text
     assert f'href="/ui/series/{series.id}/retirar"' in r.text
+
+
+class TestAtribucionRellenoVisible:
+    """SCR7: la ficha muestra la atribución de GCD/Metron/Open Library sin desplegar."""
+
+    def test_la_atribucion_del_relleno_se_ve_fuera_del_desplegable(self):
+        series = make_series(total_issues=3)
+        series.metadata_ = {"relleno": {
+            "metron": {"id": "88", "campos": ["description", "start_year"],
+                       "ultimo_intento": "2026-11-14T12:00:00+00:00",
+                       "url_ficha": "https://metron.cloud/series/88/"},
+        }}
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        fuera = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[1]
+        assert "Metron" in fuera
+        assert 'href="https://metron.cloud/series/88/"' in fuera
+        assert 'href="https://creativecommons.org/licenses/by-sa/4.0/"' in fuera
+        assert "CC BY-SA 4.0" in fuera
+
+    def test_sin_campos_rellenados_no_se_pinta_la_atribucion(self):
+        series = make_series(total_issues=3)
+        series.metadata_ = {"relleno": {"gcd": {"id": "1", "campos": [],
+                                               "ultimo_intento": "2026-11-14T12:00:00+00:00",
+                                               "url_ficha": "https://www.comics.org/series/1/"}}}
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200 and "Grand Comics Database" not in r.text

@@ -612,3 +612,6 @@ def test_fuentes_de_metadatos_incluyen_las_fuentes_nuevas(monkeypatch):
     assert fuentes["continuity_guide"] == "disabled"
     # SCR5: el feed de Comic Book Herald también es una fuente apagada por defecto.
     assert fuentes["comic_book_herald"] == "disabled"
+    # SCR7: Metron y Open Library ahora también rellenan huecos y se ven aquí.
+    assert fuentes["metron"] == "disabled"
+    assert fuentes["open_library"] == "disabled"
