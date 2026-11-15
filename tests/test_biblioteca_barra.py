@@ -47,14 +47,14 @@ def test_barra_unica_con_busqueda_acciones_y_panel():
     assert "Buscar por título" in html
 
 
-def test_panel_tiene_labels_visibles_y_los_seis_filtros():
+def test_panel_tiene_labels_visibles_y_los_siete_filtros():
     html = _index()
     panel = html[html.index('id="panel-filtros"'):]
     panel = panel[:panel.index("</details>")]
     for etiqueta, campo in (
         ("Tradición", "f-tradition"), ("Editorial", "f-publisher"),
         ("Lectura", "f-leido"), ("Personaje", "f-personaje"),
-        ("Saga", "f-saga"), ("Etiquetas", "f-etiquetas"),
+        ("Saga", "f-saga"), ("Autor", "f-autor"), ("Etiquetas", "f-etiquetas"),
     ):
         assert f'<label for="{campo}">{etiqueta}</label>' in panel
     assert "<noscript>" in panel and "Aplicar filtros" in panel
@@ -108,6 +108,8 @@ def test_panel_conserva_los_tres_buscadores_y_sus_endpoints():
     assert 'hx-target="#resultados-personaje"' in panel
     assert 'hx-get="/ui/biblioteca/buscar-saga"' in panel
     assert 'hx-target="#resultados-saga"' in panel
+    assert 'hx-get="/ui/biblioteca/buscar-autor"' in panel
+    assert 'hx-target="#resultados-autor"' in panel
     assert 'hx-include="#filtros"' in panel
     assert 'aria-live="polite"' in panel
 

@@ -17,7 +17,7 @@ from structlog.testing import capture_logs
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import Character, ComicTradition, Publisher, Series, StoryArc
+from zascarr.models import Character, ComicTradition, Creator, Publisher, Series, StoryArc
 
 
 class FakeScalarResult:
@@ -512,6 +512,21 @@ class TestBusquedaPersonajeSagaConservaFiltros:
         assert "La Patrulla X" in r.text
         assert "tradition=tebeo" in r.text
         assert f"story_arc_id={saga.id}" in r.text
+
+    def test_autor_anade_su_filtro_sin_perder_los_demas(self):
+        autor = Creator(id=uuid4(), name="Alan Moore")
+        publisher_id = uuid4()
+        session = FakeSession([FakeExecResult([autor])])
+        with use_fake_session(session) as client:
+            r = client.get(
+                "/ui/biblioteca/buscar-autor?autor=moore"
+                f"&tradition=tebeo&publisher_id={publisher_id}"
+            )
+        assert r.status_code == 200
+        assert "Alan Moore" in r.text
+        assert "tradition=tebeo" in r.text
+        assert f"publisher_id={publisher_id}" in r.text
+        assert f"author_id={autor.id}" in r.text
 
     def test_contrato_antiguo_con_q_sigue_funcionando(self):
         personaje = Character(id=uuid4(), name="Mortadelo")
