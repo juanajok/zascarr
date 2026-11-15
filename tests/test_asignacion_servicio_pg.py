@@ -336,6 +336,31 @@ class TestCausaSanitizada:
         assert mundo.origen.exists()
 
 
+class TestAbandonarConRaizCaida:
+
+    @pytest.mark.asyncio
+    async def test_abandonar_con_raiz_deshabilitada_no_propaga(self, mundo):
+        from types import SimpleNamespace
+
+        from zascarr.services.asignacion import EstadoResultado, Resultado
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        destino = Path(op["destino"])
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(mundo.origen.read_bytes())
+        async with mundo.fabrica() as s:
+            await s.execute(text("UPDATE library_roots SET is_default=false, enabled=false"))
+            await s.commit()
+
+        async def vigente():
+            return True
+        r = await svc._abandonar(op, SimpleNamespace(vigente=vigente, epoca=0),
+                                 Resultado(EstadoResultado.ERROR, "fallo conocido"))
+        assert r.estado == "error"
+        assert (await mundo.estado()).ops == ["cancelada"]
+
+
 class TestMuerteDelProceso:
     """Un subproceso real muere en cada punto; después se reconcilia en OTRO proceso, sin intervención."""
 
