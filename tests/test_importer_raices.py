@@ -5,6 +5,7 @@ Sin BD real: dobles del triaje/matcher y una foto de raíces explícita.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -238,3 +239,19 @@ async def test_causa_con_ruta_y_espacios_no_llega_al_informe(tmp_path, monkeypat
     texto = " ".join(report.errors)
     assert "WD Elements" not in texto and str(tmp_path) not in texto
     assert "sin permiso" in texto
+
+
+@pytest.mark.asyncio
+async def test_destino_ocupado_usa_nombre_alternativo_y_guarda_esa_ruta(tmp_path, monkeypatch):
+    r = raiz(tmp_path, [ComicTradition.AMERICAN], name="Biblioteca")
+    imp, db, src = preparar(tmp_path, monkeypatch, raices=[r], serie_obj=serie())
+    destino = Path(r.path) / "Comics" / "Batman (2011)" / "Batman 001.cbz"
+    destino.parent.mkdir(parents=True)
+    destino.write_bytes(b"ajeno")
+    report = ImportReport(started_at=datetime.now(UTC))
+    await imp._import_file(src, report)
+    assert report.imported and "(1)" in report.imported[0]
+    f = db.added[0]
+    assert Path(f.file_path) == destino.with_name("Batman 001 (1).cbz")
+    assert f.root_id == r.id
+    assert destino.read_bytes() == b"ajeno"
