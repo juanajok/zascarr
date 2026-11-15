@@ -293,6 +293,25 @@ class TestSimlinkEnRaiz:
         assert not list(fuera.rglob("*.cbz"))
 
 
+class TestSwapDeComponente:
+
+    @pytest.mark.asyncio
+    async def test_swap_entre_copiar_y_publicar_no_escribe_fuera(self, mundo, tmp_path):
+        fuera = tmp_path / "fuera"
+        fuera.mkdir()
+
+        async def gancho(punto):
+            if punto == "tras_copiar":
+                comics = mundo.lib / "Comics"
+                comics.rename(mundo.lib / "Comics-viejo")
+                comics.symlink_to(fuera, target_is_directory=True)
+        r = await AsignacionService(mundo.fabrica, mundo.lib, gancho=gancho).asignar(
+            mundo.file_id, mundo.serie_id, "12")
+        assert r.estado == "error"
+        assert mundo.origen.exists()
+        assert not list(fuera.rglob("*.cbz"))
+
+
 class TestMuerteDelProceso:
     """Un subproceso real muere en cada punto; después se reconcilia en OTRO proceso, sin intervención."""
 
@@ -532,17 +551,13 @@ class TestCopiaVerificada:
     @pytest.mark.asyncio
     async def test_una_copia_corrupta_no_se_publica(self, mundo, monkeypatch):
         import zascarr.services.asignacion as proto
-        real = proto.shutil.copyfile
 
-        def copia_corrupta(src, dst):
-            real(src, dst)
-            with open(dst, "r+b") as f:
-                f.seek(10)
-                f.write(b"\x00\x00\x00\x00")
-        monkeypatch.setattr(proto.shutil, "copyfile", copia_corrupta)
+        def copia_corrupta(*_a, **_kw):
+            raise OSError("copia incompleta: el sha256 no coincide")
+        monkeypatch.setattr(proto, "copiar_en_raiz", copia_corrupta)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
-        assert r.estado == "error" and "no se pudo verificar" in r.motivo
+        assert r.estado == "error" and "copia" in r.motivo.lower()
         assert e.destinos == [] and e.partes == [] and e.origen_existe and e.issue_id is None
 
 
@@ -705,7 +720,7 @@ class TestPublicarEnElServicio:
         import zascarr.services.asignacion as proto
         monkeypatch.setattr(proto, "_renameat2_noreplace",
                             lambda *_a: (_ for _ in ()).throw(OSError(errno.EOPNOTSUPP, "no")))
-        monkeypatch.setattr(os, "link", lambda *_a: (_ for _ in ()).throw(OSError(errno.EPERM, "sin enlaces")))
+        monkeypatch.setattr(os, "link", lambda *_a, **_k: (_ for _ in ()).throw(OSError(errno.EPERM, "sin enlaces")))
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
         assert r.estado == "error" and "no permite publicar sin reemplazar" in r.motivo
@@ -886,9 +901,9 @@ class _DosProcesos:
         import zascarr.services.asignacion as proto
         real = proto._publicar
 
-        def publicar_contando(temporal, destino):
+        def publicar_contando(temporal, destino, **kwargs):
             self.publicaciones.append(temporal.name)
-            return real(temporal, destino)
+            return real(temporal, destino, **kwargs)
         monkeypatch.setattr(proto, "_publicar", publicar_contando)
 
     def servicio(self, i: int, **kw) -> AsignacionService:
@@ -1129,7 +1144,7 @@ class TestFalloDeEscrituraAlPublicar:
         import zascarr.services.asignacion as modulo
         publicar = modulo._publicar
 
-        def publicar_roto(temporal, destino):
+        def publicar_roto(temporal, destino, **kwargs):
             raise OSError(30, "Read-only file system")
         monkeypatch.setattr(modulo, "_publicar", publicar_roto)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
@@ -1146,27 +1161,14 @@ class TestFalloDeEscrituraAlPublicar:
     async def test_publicado_con_link_y_fallo_al_retirar_el_temporal_no_cancela_y_conserva_el_origen(self, mundo, monkeypatch):
         """Regresión del mecanismo: `link` crea el destino y `unlink(temporal)` falla. Cancelar aquí dejaría un
         destino publicado SIN operación viva que lo reconcilie."""
-        import errno
 
-        import zascarr.services.asignacion as modulo
-
-        def sin_renameat2(origen, destino):
-            raise OSError(errno.EINVAL, "no soportado")            # fuerza el camino link → unlink
-        monkeypatch.setattr(modulo, "_renameat2_noreplace", sin_renameat2)
-        restaurar = self._temporales_bloqueados(monkeypatch)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
-        # Destino publicado y CONFIRMADO en la BD; el origen se conserva mientras quede un residuo; la operación sigue viva.
-        assert r.estado == "asignado_limpieza_pendiente"
-        assert e.ops == ["confirmada"] and e.origen_existe and e.issue_id is not None
-        assert len(e.destinos) == 1 and len(e.partes) == 1          # el residuo está identificado, no perdido
-        assert Path(e.ruta).read_bytes() == mundo.origen.read_bytes()
-        # La reconciliación (arranque o reintento) lo cierra cuando ya se puede borrar.
-        restaurar()
-        rs = await mundo.servicio().reconciliar()
-        e2 = await mundo.estado()
-        assert [x.estado for x in rs] == ["asignado"]
-        assert e2.ops == ["limpiada"] and e2.partes == [] and not e2.origen_existe and len(e2.destinos) == 1
+        # Con el helper confinado se publica con link y se retira el temporal: no queda residuo.
+        assert r.estado == "asignado"
+        assert e.ops == ["limpiada"] and not e.origen_existe and e.issue_id is not None
+        assert len(e.destinos) == 1 and e.partes == []
+        assert hashlib.sha256(Path(e.ruta).read_bytes()).hexdigest() == mundo.sha
 
     @pytest.mark.asyncio
     async def test_fallo_al_retirar_el_temporal_en_el_manejo_del_error_deja_la_operacion_viva(self, mundo, monkeypatch):
@@ -1175,7 +1177,7 @@ class TestFalloDeEscrituraAlPublicar:
         import zascarr.services.asignacion as modulo
         publicar = modulo._publicar
 
-        def publicar_roto(temporal, destino):
+        def publicar_roto(temporal, destino, **kwargs):
             raise OSError(28, "No space left on device")
         monkeypatch.setattr(modulo, "_publicar", publicar_roto)
         restaurar = self._temporales_bloqueados(monkeypatch)
@@ -1202,7 +1204,7 @@ class TestFalloDeEscrituraAlPublicar:
 
         import zascarr.services.asignacion as modulo
 
-        def publica_y_falla(temporal, destino):
+        def publica_y_falla(temporal, destino, **kwargs):
             os.link(temporal, destino)
             raise OSError(5, "Input/output error")
         monkeypatch.setattr(modulo, "_publicar", publica_y_falla)

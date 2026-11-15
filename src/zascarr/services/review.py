@@ -43,7 +43,7 @@ from zascarr.models import (
 from zascarr.services.alias_decisiones import aprender_alias
 from zascarr.services.importer import build_library_path
 from zascarr.services.raices import FotoDeRaices, RaizNoDisponibleError
-from zascarr.utils.fs import safe_move_en_raiz_async
+from zascarr.utils.fs import safe_move_en_raiz_async, sanear_excepcion
 from zascarr.utils.naming import parse_comic_filename
 
 # B15 (2026-09-26): el mapa edition_kind → IssueFormat vive en models junto al
@@ -279,7 +279,7 @@ class ReviewService:
                 raiz = foto.raiz_para_escritura(raiz.id)
         except RaizNoDisponibleError as exc:
             raise RuntimeError(
-                f"El camino heredado necesita una raíz válida: {exc.causa}") from exc
+                f"El camino heredado necesita una raíz válida: {sanear_excepcion(exc)}") from exc
 
         # B15 (2026-09-26): el Issue.format que correspondería a este archivo
         # se decide ANTES de buscar el Issue, para poder compararlo con el que

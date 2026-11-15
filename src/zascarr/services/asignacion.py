@@ -69,7 +69,13 @@ from zascarr.services.raices import (
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
-from zascarr.utils.fs import DestinoFueraDeRaizError, _validar_destino_en_raiz, sanear_excepcion
+from zascarr.utils.fs import (
+    DestinoFueraDeRaizError,
+    _validar_destino_en_raiz,
+    copiar_en_raiz,
+    publicar_en_raiz,
+    sanear_excepcion,
+)
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -154,8 +160,12 @@ def _sha256(ruta: Path) -> str:
         return hashlib.file_digest(f, "sha256").hexdigest()
 
 
-def _copiar_y_verificar(origen: Path, temporal: Path, sha_esperado: str, size: int) -> None:
+def _copiar_y_verificar(origen: Path, temporal: Path, sha_esperado: str, size: int,
+                        *, raiz: Path | None = None) -> None:
     """Copia a un temporal en la carpeta de destino y lo VERIFICA (tamaño y sha256) antes de publicarlo."""
+    if raiz is not None:
+        copiar_en_raiz(origen, temporal, raiz, sha256=sha_esperado, size=size)
+        return
     temporal.parent.mkdir(parents=True, exist_ok=True)
     comprobar_espacio(temporal.parent, size, "asignar el archivo")
     try:
@@ -195,7 +205,7 @@ def _renameat2_noreplace(origen: Path, destino: Path) -> None:
         raise OSError(e, os.strerror(e))
 
 
-def _publicar(temporal: Path, destino: Path) -> None:
+def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None) -> None:
     """Publica `temporal` como `destino` SIN poder reemplazar a nadie.
 
     `os.replace` sustituye en silencio un nombre existente, y comprobar `exists()` antes deja una ventana
@@ -205,6 +215,17 @@ def _publicar(temporal: Path, destino: Path) -> None:
     reemplazar». Lanza `FileExistsError` si el destino ya existe (no se toca), `PublicacionNoSoportadaError`
     (nada publicado) y `PublicadoConResiduoError` (SÍ publicado; solo falló retirar el temporal).
     """
+    if raiz is not None:
+        if destino.exists() or destino.is_symlink():
+            raise FileExistsError(errno.EEXIST, "el destino ya existe", str(destino))
+        try:
+            publicar_en_raiz(temporal, destino, raiz)
+        except OSError as exc:
+            if exc.errno in _NO_SOPORTADO or exc.errno == errno.EPERM:
+                raise PublicacionNoSoportadaError(
+                    exc.errno, f"este montaje no permite publicar sin reemplazar ({exc.strerror})") from exc
+            raise
+        return
     try:
         _renameat2_noreplace(temporal, destino)
     except OSError as exc:
@@ -369,7 +390,7 @@ class AsignacionService:
                 foto = await self._foto(s)
                 raiz = foto.por_tradicion(getattr(serie, "tradition", None))
             except RaizNoDisponibleError as exc:
-                return Resultado(EstadoResultado.ERROR, exc.causa)
+                return Resultado(EstadoResultado.ERROR, sanear_excepcion(exc))
 
             viva = (await s.execute(text(
                 f"SELECT id FROM asignacion_operaciones WHERE file_id = :f AND {VIVAS}"), {"f": file_id})).first()  # noqa: S608 (solo interpola VIVAS)
@@ -542,7 +563,7 @@ class AsignacionService:
                 if not await prop.vigente():
                     return perdida
                 try:
-                    await asyncio.to_thread(_copiar_y_verificar, origen, mi_temporal, op["sha256"], op["size_bytes"])
+                    await asyncio.to_thread(_copiar_y_verificar, origen, mi_temporal, op["sha256"], op["size_bytes"], raiz=raiz.path)
                 except EspacioInsuficienteError as exc:
                     # La operación sigue `preparada`: se puede reintentar tras liberar espacio.
                     return Resultado("error", sanear_excepcion(exc), op["destino"])
@@ -561,7 +582,7 @@ class AsignacionService:
                     mi_temporal.unlink(missing_ok=True)
                     return perdida
                 try:
-                    await asyncio.to_thread(_publicar, mi_temporal, destino)
+                    await asyncio.to_thread(_publicar, mi_temporal, destino, raiz=raiz.path)
                 except FileNotFoundError:
                     return perdida           # su temporal ya no está: otro ejecutor lo limpió al tomar la operación
                 except FileExistsError:
@@ -887,7 +908,7 @@ async def previsualizar_asignacion(
                 else FotoDeRaices.compatibilidad())
         raiz = foto.por_tradicion(getattr(serie, "tradition", None))
     except RaizNoDisponibleError as exc:
-        return PreviaAsignacion("sin_raiz", motivo=exc.causa)
+        return PreviaAsignacion("sin_raiz", motivo=sanear_excepcion(exc))
 
     formato = EDITION_KIND_A_FORMAT.get(
         parse_comic_filename(file.file_name).edition_kind, IssueFormat.SINGLE_ISSUE)
