@@ -62,17 +62,26 @@
       </p>
     </details>
     <details class="series-fuentes">
-      <summary>Fuentes y atribución</summary>
+      <summary>Aviso legal</summary>
       {{ legal_disclaimer("metadata") }}
     </details>
-    {#- SCR2 m-1: la atribución CC-BY-SA de Fandom se ve SIN desplegar el resumen. -#}
-    {{ aviso_de_atribucion(atribucion_fandom, "esta ficha", true) }}
-    {% for datos in atribucion_relleno %}
-    <p class="caption">Parte de los datos de esta ficha viene de
-      {% if datos.url_ficha %}<a href="{{ datos.url_ficha }}" target="_blank" rel="noopener noreferrer">{{ datos.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>{% else %}{{ datos.nombre }}{% endif %},
-      bajo la <a href="{{ datos.url_licencia }}" target="_blank" rel="noopener noreferrer">licencia {{ datos.licencia }}<span class="sr"> (se abre en otra pestaña)</span></a>.
-    </p>
-    {% endfor %}
+    {#- SCR2/SCR7: una sola caja de atribución (Fandom y relleno), visible sin desplegar. #}
+    {% if atribucion_fandom or atribucion_relleno %}
+    <div class="atribucion-fuentes">
+      <p class="caption">Parte de los datos de esta ficha viene de:</p>
+      <ul class="atribucion-lista">
+        {% if atribucion_fandom %}
+        <li>«{{ atribucion_fandom.titulo }}» en
+          <a href="{{ atribucion_fandom.url_articulo }}" target="_blank" rel="noopener noreferrer">{{ atribucion_fandom.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>,
+          bajo la <a href="{{ atribucion_fandom.url_licencia }}" target="_blank" rel="noopener noreferrer">licencia Creative Commons BY-SA 3.0<span class="sr"> (se abre en otra pestaña)</span></a>.</li>
+        {% endif %}
+        {% for datos in atribucion_relleno %}
+        <li>{% if datos.url_ficha %}<a href="{{ datos.url_ficha }}" target="_blank" rel="noopener noreferrer">{{ datos.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>{% else %}{{ datos.nombre }}{% endif %},
+          bajo <a href="{{ datos.url_licencia }}" target="_blank" rel="noopener noreferrer">{{ datos.licencia }}<span class="sr"> (se abre en otra pestaña)</span></a>.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
   </div>
 </div>
 

@@ -804,6 +804,8 @@ button[type="submit"].btn-sugerencia {
    1280 px. Bajan solo cuando no caben (y en el móvil, por la regla de ≤ 860 px). */
 .series-header > div { flex: 1 1 20rem; min-width: 0; }
 .anio-titulo { display: inline; }
+/* #854: cifras que se comparan en la ficha (año del título y totales). */
+.anio-titulo, .series-meta { font-variant-numeric: tabular-nums; }
 .portada.series-cover {
   width: 140px;
   border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
@@ -2370,11 +2372,16 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* BL-INF5 (#591): formularios de edición manual. */
 .edicion-form { display: grid; gap: 14px; max-width: 48rem; }
+.edicion-form code { overflow-wrap: anywhere; }
 .edicion-form label { display: grid; gap: 5px; font-weight: 600; }
 .edicion-form input, .edicion-form textarea, .edicion-form select { font: inherit; padding: var(--space-2) 10px; border: var(--border-chip) solid var(--ink); border-radius: 6px; background: var(--paper); color: var(--ink); }
 .edicion-form textarea { resize: vertical; }
 .edicion-dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-3); }
 .campo-error { color: var(--warn-t); font-weight: 700; font-size: var(--text-secundario); }
+/* #854: una sola caja de atribución de la ficha (Fandom y relleno juntos). */
+.atribucion-fuentes { margin: var(--space-3) 0; }
+.atribucion-lista { margin: var(--space-2) 0 0; padding-left: var(--space-3); display: grid; gap: var(--space-1); }
+.ajustes-subgrupo { margin: var(--space-3) 0 var(--space-2); }
 .edicion-acciones { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .edicion-manuales { margin-top: 22px; }
 .edicion-manuales ul { list-style: none; padding: 0; display: grid; gap: var(--space-2); }
@@ -2387,6 +2394,17 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* BL-C4 (#151): gestión manual de sagas. */
 .arco-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 10px 0 var(--space-4); }
+/* #854: acciones de Sagas con el mismo tamaño y estado vacío con salida. */
+.arcos-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 10px 0 var(--space-4); }
+.arcos-acciones-secundarias { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
+/* #854: novedades externas sin la tarjeta de una saga local. */
+.novedades-herald { margin-top: var(--space-4); }
+.novedades-lista { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: 0; }
+.novedad-fila { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: var(--border-panel) solid var(--ink-faint); }
+.novedad-fila:last-child { border-bottom: 0; }
+.novedades-esqueleto { min-height: calc(5 * 2.75rem + 4 * var(--space-2)); display: grid; gap: var(--space-2); }
+.esqueleto-fila { min-height: 2.75rem; border: var(--border-panel) solid var(--ink-faint); border-radius: var(--radius-panel); background: var(--paper-2); }
+#novedades-herald:has(#novedades-herald-contenido:empty) { display: none; }
 .arco-controles { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
 
 /* #264 B: apartar copias idénticas desde Duplicados. */

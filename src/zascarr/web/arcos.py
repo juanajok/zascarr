@@ -114,15 +114,17 @@ def _redirigir(destino: str) -> RedirectResponse:
     return RedirectResponse(destino, status_code=303)
 
 
-async def _novedades_de_herald() -> list:
+async def _novedades_de_herald(*, espera_max_s: float = 30.0) -> list:
     """Las 5 últimas guías del feed de Comic Book Herald, o [] (fuente apagada/fallo).
 
-    Solo se llama con la fuente encendida; un fallo de red/robots no pinta nada (sin error).
+    La llamada desde el GET de Sagas es **perezosa** (#854): el endpoint que la usa pide un
+    presupuesto corto (10 s) para que un feed lento no retenga la página.
     """
     if not fuente_habilitada("comic_book_herald"):
         return []
     try:
-        async with ComicBookHeraldClient(CacheHttp(async_session_factory)) as cliente:
+        async with ComicBookHeraldClient(
+                CacheHttp(async_session_factory), espera_max_s=espera_max_s) as cliente:
             return (await cliente.novedades())[:5]
     except (FuenteApagada, CortesiaEnEspera):
         return []
@@ -159,12 +161,32 @@ def _contexto_importar_guia(*, fuente: str = "reading_orders", url: str = "",
     }
 
 
+def _respuesta_importar(request: Request, contexto: dict) -> HTMLResponse:
+    """En htmx se cambia solo el bloque de resultado; sin htmx, la página completa."""
+    es_htmx = request.headers.get("hx-request", "").lower() == "true"
+    return _respuesta(request,
+                      "_importar_guia_resultado.html" if es_htmx else "importar_guia.html",
+                      contexto)
+
+
 def _motivos_legibles(motivos) -> str:
     partes = []
     for clave, cantidad in motivos:
         etiqueta = MOTIVOS_DE_GUIA.get(str(clave), "otras referencias")
         partes.append(f"{cantidad} {etiqueta}")
     return "; ".join(partes)
+
+
+@router.get("/novedades-herald", response_class=HTMLResponse)
+async def novedades_herald(request: Request) -> HTMLResponse:
+    """Parcial perezoso de «Novedades de Comic Book Herald» (#854).
+
+    Fuente apagada o cualquier fallo ⇒ 200 con cuerpo vacío: la sección se oculta con `:has`
+    y no se pinta un error. La respuesta nunca se cachea en el navegador (la caché del feed
+    vive en `http_cache`, 6 h).
+    """
+    items = await _novedades_de_herald(espera_max_s=10.0)
+    return _respuesta(request, "_novedades_herald.html", {"herald_items": items})
 
 
 @router.get("/importar-guia", response_class=HTMLResponse)
@@ -182,17 +204,17 @@ async def importar_guia(request: Request, fuente: str = Form(default=""),
     """Importa una guía de SCR3 y reconcilia con la biblioteca (historia #843)."""
     url = (url or "").strip()[:500]
     if fuente not in ORIGENES_DE_GUIA:
-        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+        return _respuesta_importar(request, _contexto_importar_guia(
             url=url, valores={"fuente": fuente, "url": url},
             errores={"general": "Elige una de las dos fuentes de guías."}))
     hosts, rutas = _HOSTS_DE_GUIA[fuente]
     if not url_de_sitio_valida(url, hosts, rutas_prohibidas=rutas, exigir_pagina=True):
-        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+        return _respuesta_importar(request, _contexto_importar_guia(
             fuente=fuente, url=url,
             errores={"general": "Esa dirección no es una guía válida de esa fuente. "
                                 "Copia la URL de la guía (https), sin parámetros."}))
     if not fuente_habilitada(fuente):
-        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+        return _respuesta_importar(request, _contexto_importar_guia(
             fuente=fuente, url=url,
             errores={"general": "Esa fuente está apagada en Ajustes. Enciéndela para "
                                 "importar la guía."}))
@@ -203,7 +225,7 @@ async def importar_guia(request: Request, fuente: str = Form(default=""),
             resultado = await leer_y_reconciliar(db, extractor, url)
         if resultado is None or resultado.arco_id is None:
             await db.rollback()
-            return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+            return _respuesta_importar(request, _contexto_importar_guia(
                 fuente=fuente, url=url,
                 errores={"general": "La guía no tiene entradas legibles o no se pudo leer. "
                                     "Comprueba la dirección y que la fuente siga encendida."}))
@@ -212,18 +234,18 @@ async def importar_guia(request: Request, fuente: str = Form(default=""),
     except CortesiaEnEspera as exc:
         await db.rollback()
         segundos = max(1, round(exc.espera_estimada_s))
-        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+        return _respuesta_importar(request, _contexto_importar_guia(
             fuente=fuente, url=url,
             errores={"general": f"{nombre} pide esperar ~{segundos} s antes de otra "
                                 "consulta. Inténtalo de nuevo en un momento."}))
     except AccesoProhibidoPorRobots:
         await db.rollback()
-        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+        return _respuesta_importar(request, _contexto_importar_guia(
             fuente=fuente, url=url,
             errores={"general": f"El robots.txt de {nombre} no permite leer esa guía."}))
     except ErrorDePeticion:
         await db.rollback()
-        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+        return _respuesta_importar(request, _contexto_importar_guia(
             fuente=fuente, url=url,
             errores={"general": f"No se pudo leer la guía de {nombre}. Inténtalo de nuevo "
                                 "más tarde."}))
@@ -232,7 +254,7 @@ async def importar_guia(request: Request, fuente: str = Form(default=""),
         logger.error("arcos.importar_guia_failed", fuente=fuente,
                      error=type(exc).__name__)
         await db.rollback()
-        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+        return _respuesta_importar(request, _contexto_importar_guia(
             fuente=fuente, url=url,
             errores={"general": "No se pudo importar la guía. Inténtalo de nuevo."}))
     motivos = _motivos_legibles(resultado.motivos)[:400]
@@ -242,7 +264,11 @@ async def importar_guia(request: Request, fuente: str = Form(default=""),
         "omitidos": resultado.omitidos,
         "motivos": motivos,
     })
-    return _redirigir(f"/ui/arcos/{resultado.arco_id}?{consulta}")
+    destino = f"/ui/arcos/{resultado.arco_id}?{consulta}"
+    respuesta = _redirigir(destino)
+    if request.headers.get("hx-request", "").lower() == "true":
+        respuesta.headers["HX-Redirect"] = destino
+    return respuesta
 
 
 @router.get("", response_class=HTMLResponse)
@@ -251,7 +277,6 @@ async def arcos(request: Request, pagina: int = Query(default=1, ge=1),
                 db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     return _respuesta(request, "arcos.html", {
         "pagina": await listar_arcos(db, pagina),
-        "herald_items": await _novedades_de_herald(),
         "aviso": {
             "creada": "Saga creada.",
             "guardada": "Saga guardada.",

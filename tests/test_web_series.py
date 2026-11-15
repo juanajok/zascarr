@@ -614,11 +614,10 @@ class TestPresupuestoTextoU21:
             r'<details class="series-fuentes">(.*?)</details>', html, re.S
         )
         assert detalle is not None
-        assert "<summary>Fuentes y atribución</summary>" in detalle.group(1)
+        assert "<summary>Aviso legal</summary>" in detalle.group(1)
         assert "Los metadatos de esta ficha proceden de fuentes de terceros" in detalle.group(1)
-        assert "Fuentes y atribución" not in html.split('id="politica-serie"', 1)[0].replace(
-            "<summary>Fuentes y atribución</summary>", ""
-        )
+        assert html.split('id="politica-serie"', 1)[0].count(
+            "<summary>Aviso legal</summary>") == 1
 
     def test_la_garantia_va_junto_al_selector_y_no_al_final(self):
         html = self._render()

@@ -3,9 +3,9 @@
 {% block content %}
 {% from "_atribucion_fandom.html" import aviso_de_atribucion %}
 <p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
-{% if aviso %}{{ ui.aviso("ok", aviso, foco=true) }}{% endif %}
+{% if aviso %}{{ ui.aviso("ok", aviso, foco=(not importada and not pedido)) }}{% endif %}
 {% if importada %}
-{{ ui.aviso("ok", "Guía importada: " ~ importada.enlazados ~ " números enlazados, " ~ importada.omitidos ~ " omitidos." ~ (" Motivos: " ~ importada.motivos ~ "." if importada.motivos else ""), foco=true) }}
+{{ ui.aviso("ok", "Guía importada: " ~ importada.enlazados ~ " números enlazados, " ~ importada.omitidos ~ " omitidos." ~ (" Motivos: " ~ importada.motivos ~ "." if importada.motivos else ""), foco=(not pedido)) }}
 {% endif %}
 {% if pedido %}
 {% if pedido.anadidos %}
@@ -14,7 +14,7 @@
 {{ ui.aviso("info", "No había números nuevos que pedir: " ~ pedido.ya_pedidos ~ " ya estaban pedidos y " ~ pedido.en_biblioteca ~ " ya están en tu biblioteca.", foco=true) }}
 {% endif %}
 {% endif %}
-<h1 class="titulo-frase">{{ arco.title }}</h1>
+{% set titulo_largo = arco.title.split() | length > 3 %}<h1{% if titulo_largo %} class="titulo-frase"{% endif %}>{{ arco.title }}</h1>
 <p class="subtitle">Orden de lectura{% if arco.is_crossover %} · cruza varias series{% endif %}.</p>
 {% if arco.description %}<p>{{ arco.description }}</p>{% endif %}
 {% if fuente_guia %}
@@ -75,13 +75,13 @@
     {% if f.disponible %}{{ ui.chip("ok", "En tu biblioteca") }}{% else %}{{ ui.chip("neutro", "No disponible") }}{% endif %}
     <span class="arco-controles">
       <form method="post" action="/ui/arcos/{{ arco.id }}/numeros/{{ f.issue_id }}/mover" class="inline-desbloquear">
-        <input type="hidden" name="subir" value="true"><button type="submit" class="btn ghost sm">Subir una posición</button>
+        <input type="hidden" name="subir" value="true"><button type="submit" class="btn ghost sm" aria-label="Subir {{ f.series }} #{{ f.numero }} una posición">Subir una posición</button>
       </form>
       <form method="post" action="/ui/arcos/{{ arco.id }}/numeros/{{ f.issue_id }}/mover" class="inline-desbloquear">
-        <input type="hidden" name="subir" value="false"><button type="submit" class="btn ghost sm">Bajar una posición</button>
+        <input type="hidden" name="subir" value="false"><button type="submit" class="btn ghost sm" aria-label="Bajar {{ f.series }} #{{ f.numero }} una posición">Bajar una posición</button>
       </form>
       <form method="post" action="/ui/arcos/{{ arco.id }}/numeros/{{ f.issue_id }}/quitar" class="inline-desbloquear">
-        <button type="submit" class="btn ghost sm">Quitar de la saga</button>
+        <button type="submit" class="btn ghost sm" aria-label="Quitar {{ f.series }} #{{ f.numero }} de la saga">Quitar de la saga</button>
       </form>
     </span>
   </li>
