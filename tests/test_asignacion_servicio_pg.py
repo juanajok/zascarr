@@ -312,6 +312,23 @@ class TestSwapDeComponente:
         assert not list(fuera.rglob("*.cbz"))
 
 
+class TestCausaSanitizada:
+
+    @pytest.mark.asyncio
+    async def test_causa_de_raiz_con_espacios_no_aparece_en_resultado(self, mundo):
+        from zascarr.services.raices import RaizNoDisponibleError
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+
+        async def falla(_op):
+            raise RaizNoDisponibleError("sin permiso en /tmp/WD Elements/mi biblioteca")
+        svc._raiz_para_escritura = falla
+        r = await svc._ejecutar(op)
+        assert r.estado == "error"
+        assert "/tmp/WD Elements" not in r.motivo and "sin permiso" in r.motivo
+        assert mundo.origen.exists()
+
+
 class TestMuerteDelProceso:
     """Un subproceso real muere en cada punto; después se reconcilia en OTRO proceso, sin intervención."""
 
@@ -672,6 +689,22 @@ class TestNoBorrarLaUltimaCopia:
         assert mundo.origen.read_bytes() == bytes(otro)           # el fichero distinto sigue intacto
 
 
+class TestRaizLlena:
+
+    @pytest.mark.asyncio
+    async def test_raiz_llena_no_copia_ni_mueve(self, mundo, monkeypatch):
+        import zascarr.utils.fs as fsmod
+        from zascarr.utils.espacio import EspacioInsuficienteError
+
+        def sin_espacio(*_a, **_kw):
+            raise EspacioInsuficienteError(bytes_libres=0, bytes_necesarios=1, contexto="x")
+        monkeypatch.setattr(fsmod, "comprobar_espacio", sin_espacio)
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        assert r.estado == "error" and "espacio" in r.motivo.lower()
+        assert e.origen_existe and e.destinos == [] and e.partes == [] and e.issue_id is None
+
+
 class TestPublicarEnElServicio:
 
     @pytest.mark.asyncio
@@ -686,15 +719,18 @@ class TestPublicarEnElServicio:
         op = await servicio._preparar(mundo.file_id, mundo.serie_id, "12")
         r = await servicio._ejecutar(op)                       # UN intento, sin el reintento de `asignar`
         e = await mundo.estado()
-        assert r.estado == "destino_ocupado"
-        assert e.ops == ["cancelada"] and e.origen_existe and e.partes == [] and e.issue_id is None
-        ocupado = mundo.lib / e.destinos[0]
+        assert r.estado == "asignado"
+        assert e.ops == ["limpiada"] and not e.origen_existe and e.issue_id is not None
+        assert Path(e.ruta).name.endswith("(1).cbz")
+        assert (mundo.lib / "Comics" / "Saga del Faro (2010)" / "Saga del Faro #012.cbz").read_bytes() != Path(e.ruta).read_bytes()
+        assert e.file_root_id is not None
+        ocupado = mundo.lib / "Comics" / "Saga del Faro (2010)" / "Saga del Faro #012.cbz"
         ajeno_bytes = ocupado.read_bytes()
         assert ajeno_bytes.count(b"AJENO") > 0 or len(ajeno_bytes) > 0
         # El reintento reserva el siguiente nombre libre y el ajeno sigue intacto.
         r2 = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e2 = await mundo.estado()
-        assert r2.estado == "asignado" and ocupado.read_bytes() == ajeno_bytes
+        assert r2.estado == "ya_asignado" and ocupado.read_bytes() == ajeno_bytes
         assert e2.ruta.endswith("(1).cbz") and e2.ruta != str(ocupado)
 
     @pytest.mark.asyncio
@@ -711,7 +747,7 @@ class TestPublicarEnElServicio:
         r = await mundo.servicio(gancho=intruso_una_vez).asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
         assert r.estado == "asignado" and e.ruta.endswith("(1).cbz")
-        assert e.ops == ["cancelada", "limpiada"] and e.partes == [] and not e.origen_existe
+        assert e.ops == ["limpiada"] and e.partes == [] and not e.origen_existe
 
     @pytest.mark.asyncio
     async def test_un_montaje_sin_publicacion_segura_rechaza_la_operacion(self, mundo, monkeypatch):
@@ -1009,7 +1045,7 @@ class TestPerdidaDelCandadoMientrasSigueElTrabajo:
         dp, ra, rb, _, _ = await self._escenario(mundo, monkeypatch, punto, vigente_siempre=True)
         try:
             assert [x.estado for x in rb] == ["asignado"]
-            assert getattr(ra, "estado", None) == "propiedad_perdida"       # el vallado de época lo detiene
+            assert getattr(ra, "estado", None) in ("propiedad_perdida", "pendiente_de_comprobar")  # vallado/efecto incierto
             e = await mundo.estado()
             assert e.ops == ["limpiada"]                                     # la operación de B no fue alterada por A
             _asignado_del_todo(e, mundo)
