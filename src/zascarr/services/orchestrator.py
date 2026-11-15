@@ -61,6 +61,7 @@ from zascarr.models import (
 )
 from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import sign_token, verify_token
+from zascarr.services.blog_feed import buscar_en_feed, estado_feed, resultados_de_busqueda
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     ESTADOS_REACTIVABLES,
@@ -105,7 +106,11 @@ def hay_fuente_de_busqueda(settings) -> bool:
     foro_configurado = bool(
         settings.forum_enabled and settings.forum_username and settings.forum_url
     )
-    return bool(settings.prowlarr_enabled) or foro_configurado
+    blog_configurado = bool(
+        getattr(settings, "blog_feed_enabled", False)
+        and (getattr(settings, "blog_feed_url", "") or "").strip()
+    )
+    return bool(settings.prowlarr_enabled) or foro_configurado or blog_configurado
 
 
 # D9: causas distinguibles de "por qué esta búsqueda no avanza", en
@@ -113,7 +118,8 @@ def hay_fuente_de_busqueda(settings) -> bool:
 # que el coleccionista no pueda accionar. El aviso legal pendiente NO
 # vive aquí: es un estado global (ver services/legal.py), lo muestra la
 # UI de wishlist con un banner propio en vez de escribirse en cada fila.
-MOTIVO_SIN_FUENTE = "Sin fuente de búsqueda activa — activa Prowlarr o el foro en Ajustes"
+MOTIVO_SIN_FUENTE = (
+    "Sin fuente de búsqueda activa — activa Prowlarr, el foro o un blog/RSS en Ajustes")
 MOTIVO_PROWlARR_CONFIGURACION = (
     "Prowlarr está encendido pero le falta la URL o la clave de API — revísalo en Ajustes"
 )
@@ -359,6 +365,21 @@ class Orchestrator:
                     logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
                     motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
 
+        motivo_blog: str | None = None
+        if getattr(settings, "blog_feed_enabled", False):
+            url_blog = (getattr(settings, "blog_feed_url", "") or "").strip()
+            if not estado_feed(url_blog):
+                motivo_blog = (
+                    "El blog/RSS está encendido pero le falta una URL válida — "
+                    "revísalo en Ajustes")
+            else:
+                try:
+                    entradas = await buscar_en_feed(url_blog, query)
+                    results.extend(resultados_de_busqueda(entradas, url_blog))
+                except Exception:
+                    logger.exception("orchestrator.blog_search_failed")
+                    motivo_blog = MOTIVO_FUENTE_INACCESIBLE
+
         candidates = self._ranked_candidates(results, query) if results else []
 
         if not candidates:
@@ -437,7 +458,7 @@ class Orchestrator:
             elif descartados_por_numero:
                 item.last_error = MOTIVO_NUMERO_DISTINTO
             else:
-                item.last_error = motivo_prowlarr or MOTIVO_SIN_RESULTADOS
+                item.last_error = motivo_prowlarr or motivo_blog or MOTIVO_SIN_RESULTADOS
             await self.db.flush()
             return []
 
@@ -759,7 +780,9 @@ class Orchestrator:
             backend = _detect_backend(r.download_url)
             score = self._score(r, norm)
             if backend == DownloadBackend.TRANSMISSION:
-                if r.seeders >= 1:
+                # Un feed RSS no publica seeders; sus magnet/.torrent son directos
+                # y no se descartan por no traer ese dato.
+                if r.seeders >= 1 or r.indexer.startswith("blog:"):
                     torrents.append((score, r))
             else:
                 ed2k.append((score, r))

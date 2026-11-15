@@ -185,6 +185,9 @@ def _contexto() -> dict:
         "upgrade_scan_interval_minutes": getattr(s, "upgrade_scan_interval_minutes", 360),
         "upgrade_scan_batch": getattr(s, "upgrade_scan_batch", 3),
         "cortesia": texto_politica_ajustes(s),
+        "blog_feed_enabled": bool(getattr(s, "blog_feed_enabled", False)),
+        "blog_feed_url": getattr(s, "blog_feed_url", ""),
+        "blog_feed_name": getattr(s, "blog_feed_name", "Blog o RSS"),
         "naming_enabled": bool(getattr(s, "naming_enabled", False)),
         "naming_preset": getattr(s, "naming_preset", "clasico"),
         "naming_padding": getattr(s, "naming_padding", 0),
@@ -320,6 +323,37 @@ async def guardar_calidad(
         "upgrade_scan_batch": lote,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Calidad"})
+
+
+@router.post("/guardar/blog", response_class=HTMLResponse)
+async def guardar_blog(
+    request: Request,
+    blog_feed_enabled: bool = Form(default=False),
+    blog_feed_url: str = Form(default=""),
+    blog_feed_name: str = Form(default="Blog o RSS"),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """BLOG1: feed RSS/Atom genérico; el usuario aporta la URL."""
+    url = (blog_feed_url or "").strip()
+    nombre = (blog_feed_name or "").strip()[:120] or "Blog o RSS"
+    if url and not url_valida(url):
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Blog o RSS",
+            "error": "La dirección tiene que empezar por http:// o https:// y llevar un dominio.",
+        })
+    if blog_feed_enabled and not url:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Blog o RSS",
+            "error": "Escribe la dirección del blog o RSS antes de activarlo.",
+        })
+    await RuntimeSettingsService(db).save({
+        "blog_feed_enabled": bool(blog_feed_enabled),
+        "blog_feed_url": url,
+        "blog_feed_name": nombre,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        "nombre": "Blog o RSS",
+    })
 
 
 @router.post("/guardar/nombres", response_class=HTMLResponse)

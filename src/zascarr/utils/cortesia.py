@@ -111,6 +111,7 @@ NOMBRES_DE_FUENTE: dict[str, str] = {
     "reading_orders": "Comic Book Reading Orders",
     "continuity_guide": "Continuity Guide",
     "comic_book_herald": "Comic Book Herald",
+    "blog": "Blog o RSS",
     "foro": "Foro",
     "portada": "Portadas",
 }
@@ -257,6 +258,9 @@ def politica_de(fuente: str, ajustes=None, *, host: str | None = None) -> Politi
         return PoliticaFuente(
             fuente, nombre,
             float(getattr(s, "comic_book_herald_rate_limit", 3.5)), 1, 3)
+    if fuente == "blog":
+        # Feed del usuario: ritmo conservador, un intento y redirecciones acotadas.
+        return PoliticaFuente(fuente, nombre, float(getattr(s, "blog_feed_rate_limit", 2.0)), 1, 3)
     if fuente == "foro":
         return PoliticaFuente(fuente, nombre, float(s.forum_rate_limit), 2, 3)
     if fuente == "portada":
