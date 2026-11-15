@@ -43,6 +43,20 @@ from zascarr.utils.espacio import comprobar_espacio
 _MAX_SEGMENT_BYTES = 240
 
 
+@dataclass(frozen=True)
+class CopiaEnRaiz:
+    """Temporal copiado dentro de la raíz; el fd se mantiene abierto hasta publicar."""
+    path: Path
+    fd: int
+    st_dev: int
+    st_ino: int
+    sha256: str
+
+    def cerrar(self) -> None:
+        with contextlib.suppress(OSError):
+            os.close(self.fd)
+
+
 class DestinoFueraDeRaizError(OSError):
     """El destino o un symlink intermedio se sale de la raíz autorizada."""
 
@@ -112,7 +126,7 @@ def _abrir_raiz_verificada(raiz: str | Path) -> tuple[Path, int]:
         raise DestinoFueraDeRaizError("No se pudo abrir la raíz autorizada.") from exc
 
 
-def _abrir_padre_en_raiz(raiz_fd: int, relativo: Path) -> tuple[int, str]:
+def _abrir_padre_en_raiz(raiz_fd: int, relativo: Path, *, crear: bool = True) -> tuple[int, str]:
     """Recorre/crea los componentes del padre con dir_fd y O_NOFOLLOW."""
     parent_fd = raiz_fd
     for parte in relativo.parts[:-1]:
@@ -120,6 +134,8 @@ def _abrir_padre_en_raiz(raiz_fd: int, relativo: Path) -> tuple[int, str]:
             fd = os.open(parte, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                          dir_fd=parent_fd)
         except FileNotFoundError:
+            if not crear:
+                raise
             os.mkdir(parte, 0o755, dir_fd=parent_fd)
             fd = os.open(parte, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                          dir_fd=parent_fd)
@@ -130,7 +146,7 @@ def _abrir_padre_en_raiz(raiz_fd: int, relativo: Path) -> tuple[int, str]:
 
 
 def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
-                   sha256: str | None = None, size: int | None = None) -> Path:
+                   sha256: str | None = None, size: int | None = None) -> CopiaEnRaiz:
     """Copia por descriptores a un temporal dentro de la raíz, sin seguir symlinks."""
     root_res, root_fd = _abrir_raiz_verificada(raiz)
     try:
@@ -182,7 +198,10 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
             if sha256 is not None and digest.hexdigest() != sha256:
                 raise OSError("copia incompleta: el sha256 no coincide")
             ok = True
-            return root_res / relativo.parent / final_name
+            st_temp = os.fstat(temp_fd)
+            return CopiaEnRaiz(path=root_res / relativo.parent / final_name,
+                               fd=temp_fd, st_dev=st_temp.st_dev,
+                               st_ino=st_temp.st_ino, sha256=digest.hexdigest())
         finally:
             with contextlib.suppress(OSError):
                 os.close(src_parent)
@@ -192,8 +211,8 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
             if not ok:
                 with contextlib.suppress(OSError):
                     os.unlink(final_name, dir_fd=parent_fd)
-            with contextlib.suppress(OSError):
-                os.close(temp_fd)
+                with contextlib.suppress(OSError):
+                    os.close(temp_fd)
     finally:
         if parent_fd != root_fd:
             with contextlib.suppress(OSError):
@@ -203,7 +222,8 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
 
 
 
-def eliminar_en_raiz(path: str | Path, raiz: str | Path) -> bool:
+def eliminar_en_raiz(path: str | Path, raiz: str | Path, *,
+                     inodo_esperado: tuple[int, int] | None = None) -> bool:
     """Borra un archivo bajo la raíz usando dir_fd; no sigue symlinks. False si no existía."""
     root_res, root_fd = _abrir_raiz_verificada(raiz)
     try:
@@ -213,7 +233,17 @@ def eliminar_en_raiz(path: str | Path, raiz: str | Path) -> bool:
         raise DestinoFueraDeRaizError("El archivo no cuelga de la raíz autorizada.") from None
     parent_fd = root_fd
     try:
-        parent_fd, nombre = _abrir_padre_en_raiz(root_fd, relativo)
+        try:
+            parent_fd, nombre = _abrir_padre_en_raiz(root_fd, relativo, crear=False)
+        except FileNotFoundError:
+            return False
+        if inodo_esperado is not None:
+            try:
+                st = os.stat(nombre, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                return False
+            if (st.st_dev, st.st_ino) != inodo_esperado:
+                return False
         try:
             os.unlink(nombre, dir_fd=parent_fd)
         except FileNotFoundError:
@@ -226,8 +256,58 @@ def eliminar_en_raiz(path: str | Path, raiz: str | Path) -> bool:
         with contextlib.suppress(OSError):
             os.close(root_fd)
 
-def publicar_en_raiz(temp: str | Path, dest: str | Path, raiz: str | Path) -> Path:
-    """Publica con enlaces confinados; devuelve la ruta efectiva (nombre alternativo)."""
+def publicar_en_raiz(temp: str | Path, dest: str | Path, raiz: str | Path,
+                     *, fd: int | None = None,
+                     inodo_esperado: tuple[int, int] | None = None) -> Path:
+    """Publica con enlaces confinados desde el fd del temporal (sin reabrir por nombre)."""
+    if fd is not None and inodo_esperado is not None:
+        actual = os.fstat(fd)
+        if (actual.st_dev, actual.st_ino) != inodo_esperado:
+            raise DestinoFueraDeRaizError("El temporal cambió de inodo antes de publicar.")
+        root_res, root_fd = _abrir_raiz_verificada(raiz)
+        try:
+            relativo = Path(dest).resolve(strict=False).relative_to(root_res)
+            parent_fd, final_name = _abrir_padre_en_raiz(root_fd, relativo)
+            try:
+                try:
+                    st = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
+                except FileNotFoundError:
+                    st = None
+                if st is not None:
+                    stem, suffix = os.path.splitext(final_name)
+                    n = 1
+                    while True:
+                        candidato = f"{stem} ({n}){suffix}"
+                        try:
+                            os.stat(candidato, dir_fd=parent_fd, follow_symlinks=False)
+                        except FileNotFoundError:
+                            final_name = candidato
+                            break
+                        n += 1
+                try:
+                    st_tmp = os.stat(Path(temp).name, dir_fd=parent_fd,
+                                     follow_symlinks=False)
+                except FileNotFoundError as exc:
+                    raise DestinoFueraDeRaizError(
+                        "El temporal desapareció antes de publicar.") from exc
+                if (st_tmp.st_dev, st_tmp.st_ino) != inodo_esperado:
+                    raise DestinoFueraDeRaizError(
+                        "El temporal fue sustituido por otro inodo.")
+                os.link(f"/proc/self/fd/{fd}", final_name, dst_dir_fd=parent_fd,
+                        follow_symlinks=True)
+                with contextlib.suppress(OSError):
+                    st_tmp = os.stat(Path(temp).name, dir_fd=parent_fd,
+                                     follow_symlinks=False)
+                    if (st_tmp.st_dev, st_tmp.st_ino) == inodo_esperado:
+                        os.unlink(Path(temp).name, dir_fd=parent_fd)
+                return root_res / relativo.parent / final_name
+            finally:
+                if parent_fd != root_fd:
+                    with contextlib.suppress(OSError):
+                        os.close(parent_fd)
+        finally:
+            with contextlib.suppress(OSError):
+                os.close(root_fd)
     return safe_move_en_raiz(temp, dest, raiz)
 
 def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Path:
