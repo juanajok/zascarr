@@ -108,6 +108,7 @@ def _abrir_raiz_verificada(raiz: str | Path) -> tuple[Path, int]:
     root_res = Path(raiz).resolve(strict=False)
     if not root_res.is_dir():
         raise DestinoFueraDeRaizError("La raíz no existe o no es un directorio.")
+    fd = -1
     try:
         fd = os.open(root_res, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         st_fd = os.fstat(fd)
@@ -118,16 +119,16 @@ def _abrir_raiz_verificada(raiz: str | Path) -> tuple[Path, int]:
         if os.path.normpath(abierto) != str(root_res):
             raise DestinoFueraDeRaizError("La raíz abierta no es la ruta canónica esperada.")
         return root_res, fd
-    except DestinoFueraDeRaizError:
-        with contextlib.suppress(OSError):
-            os.close(fd)
+    except BaseException as exc:
+        if fd >= 0:
+            with contextlib.suppress(OSError):
+                os.close(fd)
+        if isinstance(exc, DestinoFueraDeRaizError):
+            raise
+        if isinstance(exc, OSError):
+            raise DestinoFueraDeRaizError(
+                "No se pudo abrir o verificar la raíz autorizada.") from exc
         raise
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.close(fd)
-        raise
-    except OSError as exc:
-        raise DestinoFueraDeRaizError("No se pudo abrir la raíz autorizada.") from exc
 
 
 def _abrir_padre_en_raiz(raiz_fd: int, relativo: Path, *, crear: bool = True) -> tuple[int, str]:
@@ -184,7 +185,10 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
         try:
             src_parent = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY)
         except BaseException:
-            os.close(temp_fd)
+            with contextlib.suppress(OSError):
+                os.close(temp_fd)
+            with contextlib.suppress(OSError):
+                os.unlink(final_name, dir_fd=parent_fd)
             raise
         src_fd = -1
         ok = False
@@ -272,7 +276,13 @@ def publicar_en_raiz(temp: str | Path, dest: str | Path, raiz: str | Path,
                      *, fd: int | None = None,
                      inodo_esperado: tuple[int, int] | None = None,
                      sha256_esperado: str | None = None) -> Path:
-    """Publica con enlaces confinados desde el fd del temporal (sin reabrir por nombre)."""
+    """Publica con enlaces confinados desde el fd del temporal (sin reabrir por nombre).
+
+    Riesgo residual aceptado (SEC): un proceso con el mismo UID y escritura en la raíz
+    puede modificar el temporal entre la verificación y el ``link``. Ese actor ya puede
+    escribir directamente en la biblioteca, así que no es una frontera de privilegios;
+    A3 protege frente a fallos, no frente a un atacante local con escritura.
+    """
     if fd is not None and inodo_esperado is not None:
         actual = os.fstat(fd)
         if (actual.st_dev, actual.st_ino) != inodo_esperado:
