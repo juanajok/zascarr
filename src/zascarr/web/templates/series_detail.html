@@ -171,7 +171,7 @@
   <dl class="ficha-autores">
     {% for clave, etiqueta in roles_ficha %}
     {% if clave in ("writer", "penciler") and ficha.autores.get(clave) %}
-    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{{ a.nombre }} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
+    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{% if a.id %}<a href="/ui/biblioteca?author_id={{ a.id }}">{{ a.nombre }}</a>{% else %}{{ a.nombre }}{% endif %} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
     {% endif %}
     {% endfor %}
   </dl>

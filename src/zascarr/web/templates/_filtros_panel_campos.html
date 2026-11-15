@@ -46,6 +46,13 @@
   <div id="resultados-saga" class="series-results" aria-live="polite"></div>
 </div>
 <div class="filtro-campo">
+  <label for="f-autor">Autor</label>
+  <input type="search" placeholder="Buscar autor…" id="f-autor" name="autor"
+         hx-get="/ui/biblioteca/buscar-autor" hx-trigger="input changed delay:400ms, search"
+         hx-target="#resultados-autor" hx-swap="innerHTML" hx-include="#filtros">
+  <div id="resultados-autor" class="series-results" aria-live="polite"></div>
+</div>
+<div class="filtro-campo">
   <label for="f-etiquetas">Etiquetas</label>
   <input type="search" id="f-etiquetas" name="etiquetas" value="{{ filtros.etiquetas }}"
          placeholder="Buscar por etiqueta…" autocomplete="off"
@@ -58,6 +65,7 @@
 </div>
 <input type="hidden" name="character_id" value="{{ filtros.character_id }}">
 <input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
+<input type="hidden" name="author_id" value="{{ filtros.author_id }}">
 <input type="hidden" name="page" value="1">
 <p class="caption barra-panel-ayuda">Los filtros se aplican al cambiarlos.</p>
 <noscript><button class="btn ghost sm" type="submit">Aplicar filtros</button></noscript>
