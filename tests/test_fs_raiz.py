@@ -108,3 +108,27 @@ def test_swap_del_directorio_padre_de_la_raiz_falla_cerrada(tmp_path, monkeypatc
     with pytest.raises(DestinoFueraDeRaizError):
         safe_move_en_raiz(origen, root / "Uno.cbz", root)
     assert origen.exists() and not list(fuera.rglob("*.cbz"))
+
+
+def test_temporal_sustituido_no_publica_ajeno_y_se_limpia_sin_borrarlo(tmp_path):
+    from zascarr.utils.fs import copiar_en_raiz, eliminar_en_raiz, publicar_en_raiz
+    raiz = tmp_path / "raiz"
+    raiz.mkdir()
+    origen = tmp_path / "origen.cbz"
+    origen.write_bytes(b"contenido")
+    temp = raiz / "temporal.part"
+    copia = copiar_en_raiz(origen, temp, raiz)
+    try:
+        temp.unlink()
+        temp.write_bytes(b"AJENO")
+        destino = raiz / "final.cbz"
+        with pytest.raises(DestinoFueraDeRaizError):
+            publicar_en_raiz(temp, destino, raiz, fd=copia.fd,
+                             inodo_esperado=(copia.st_dev, copia.st_ino))
+        assert not destino.exists()
+        assert temp.read_bytes() == b"AJENO"            # no se borra el ajeno
+        assert not eliminar_en_raiz(temp, raiz,
+                                    inodo_esperado=(copia.st_dev, copia.st_ino))
+        assert temp.read_bytes() == b"AJENO"
+    finally:
+        copia.cerrar()

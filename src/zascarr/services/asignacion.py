@@ -162,11 +162,10 @@ def _sha256(ruta: Path) -> str:
 
 
 def _copiar_y_verificar(origen: Path, temporal: Path, sha_esperado: str, size: int,
-                        *, raiz: Path | None = None) -> None:
-    """Copia a un temporal en la carpeta de destino y lo VERIFICA (tamaño y sha256) antes de publicarlo."""
+                        *, raiz: Path | None = None):
+    """Copia a un temporal en la carpeta de destino y lo VERIFICA antes de publicarlo."""
     if raiz is not None:
-        copiar_en_raiz(origen, temporal, raiz, sha256=sha_esperado, size=size)
-        return
+        return copiar_en_raiz(origen, temporal, raiz, sha256=sha_esperado, size=size)
     temporal.parent.mkdir(parents=True, exist_ok=True)
     comprobar_espacio(temporal.parent, size, "asignar el archivo")
     try:
@@ -206,7 +205,9 @@ def _renameat2_noreplace(origen: Path, destino: Path) -> None:
         raise OSError(e, os.strerror(e))
 
 
-def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None) -> Path | None:
+def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None,
+              fd: int | None = None, st_dev: int | None = None,
+              st_ino: int | None = None) -> Path | None:
     """Publica `temporal` como `destino` SIN poder reemplazar a nadie.
 
     `os.replace` sustituye en silencio un nombre existente, y comprobar `exists()` antes deja una ventana
@@ -218,6 +219,9 @@ def _publicar(temporal: Path, destino: Path, *, raiz: Path | None = None) -> Pat
     """
     if raiz is not None:
         try:
+            if fd is not None:
+                return publicar_en_raiz(temporal, destino, raiz, fd=fd,
+                                        inodo_esperado=(st_dev, st_ino))
             return publicar_en_raiz(temporal, destino, raiz)
         except OSError as exc:
             if exc.errno in _NO_SOPORTADO or exc.errno == errno.EPERM:
@@ -562,8 +566,13 @@ class AsignacionService:
                     return Resultado("error", "El origen cambió o desapareció antes de copiarlo; no se toca nada")
                 if not await prop.vigente():
                     return perdida
+                copia = None
                 try:
-                    await asyncio.to_thread(_copiar_y_verificar, origen, mi_temporal, op["sha256"], op["size_bytes"], raiz=raiz.path)
+                    copia = await asyncio.to_thread(
+                        _copiar_y_verificar, origen, mi_temporal, op["sha256"],
+                        op["size_bytes"], raiz=raiz.path)
+                    if copia is not None:
+                        mi_temporal = copia.path
                 except EspacioInsuficienteError as exc:
                     # La operación sigue `preparada`: se puede reintentar tras liberar espacio.
                     return Resultado("error", sanear_excepcion(exc), op["destino"])
@@ -583,7 +592,16 @@ class AsignacionService:
                     mi_temporal.unlink(missing_ok=True)
                     return perdida
                 try:
-                    publicado = await asyncio.to_thread(_publicar, mi_temporal, destino, raiz=raiz.path)
+                    try:
+                        publicado = await asyncio.to_thread(
+                            _publicar, mi_temporal, destino, raiz=raiz.path,
+                            fd=copia.fd if copia is not None else None,
+                            st_dev=copia.st_dev if copia is not None else None,
+                            st_ino=copia.st_ino if copia is not None else None)
+                    finally:
+                        if copia is not None:
+                            copia.cerrar()
+                            copia = None
                     if publicado is not None and publicado != destino:
                         if not await self._fijar_destino(op_id, publicado, prop.epoca):
                             return perdida
@@ -591,11 +609,14 @@ class AsignacionService:
                         op["destino"] = str(publicado)
                         destino = publicado
                 except FileNotFoundError:
+                    if copia is not None:
+                        copia.cerrar()
                     return perdida           # su temporal ya no está: otro ejecutor lo limpió al tomar la operación
                 except FileExistsError:
                     # Alguien (ajeno a las operaciones) ocupó el destino tras reservarlo: NO se toca. La
                     # operación se cancela y quien reintente reservará el siguiente nombre libre.
-                    mi_temporal.unlink(missing_ok=True)
+                    with contextlib.suppress(OSError):
+                        eliminar_en_raiz(mi_temporal, raiz.path)
                     if not await self._cerrar(op_id, "cancelada", prop.epoca):
                         return perdida
                     return Resultado("destino_ocupado", "Otro fichero ocupó el destino; no se tocó. Reintenta.", op["destino"])
