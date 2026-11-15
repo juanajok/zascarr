@@ -167,3 +167,59 @@ dictamen. El informe está en el árbol de trabajo sin commitear.
 | Guía UI: 200/rollback/log sin traza/URL/secretos | 2.4 |
 | §5.8 n/a | 2.5 |
 | ruff y regresión | 2.6, 3 |
+
+---
+
+## 5. Addendum de vigencia (SHA 079ca7a6) — cierre de m-1 y m-2
+
+**Fecha:** 2026-11-15 (02:25–02:40, Europe/Madrid). **Tarea:** task-53 (ronda final). **PR:** #850.
+**SHA dictaminado:** **`079ca7a6598e3010528525a6065b4c91373ec616`**, verificado: `git rev-parse HEAD` = ese
+SHA y `gh pr view 850` → `headRefOid = 079ca7a6598e3010528525a6065b4c91373ec616`, base `main`,
+`state=OPEN`, `mergeable=MERGEABLE` (`mergeStateStatus=UNSTABLE`: checks en curso). El commit incluye este
+informe de SecOps.
+
+**Delta `6e61aadc..079ca7a6`:** 3 ficheros, **+256/−11**: este informe (+169), `services/enricher.py`
+(+52/−11) y `tests/test_relleno_huecos.py` (+46). **El resto del árbol de deudas2 es idéntico**
+(`git diff --quiet` para GCD/Metron/OL, `web/arcos.py`, `web/atribucion.py`, la plantilla y los tests de
+guía/series no dio diferencias); §5.8 sigue **n/a**.
+
+### 5.1 m-1 cerrado — la rotación avanza de verdad
+
+`_enrich_huecos_por_id` asigna ahora `serie.enrichment_attempted_at = ahora` en los tres caminos:
+- serie procesada (`enricher.py:513`),
+- serie con huecos solo cubiertos por fuentes **cortadas** en el ciclo (`:508-510`; además `cortadas` se
+  excluye de `cubribles` en `:496-503`, así que una fuente cortada no cuenta como cubrible ni consume el
+  límite sin petición),
+- serie marcada `_sin_huecos_cubribles` (`:504-506`).
+
+La consulta ya ordenaba por `enrichment_attempted_at.asc().nullsfirst()` (`:452`), pero antes el campo no
+se actualizaba para estas series (las del lote primario lo marcan en `:674,736,747,758`, pero el primario
+las excluye por tener id). Ahora el lote avanza también cuando una fuente se corta. Prueba nueva
+`test_m1_secops_la_serie_procesada_avanza_en_la_rotacion` (`test_relleno_huecos.py:451-462`); suite
+`test_relleno_huecos` + `test_enricher` → **85 passed**. **m-1 cerrado.**
+
+### 5.2 m-2 cerrado — la marca está ligada a las fuentes disponibles
+
+La marca guarda ahora `{"fecha": iso, "fuentes": huella}` (`_marcar_sin_huecos_cubribles`,
+`enricher.py:299-307`), con la huella de los clientes presentes en el ciclo
+(`huella_fuentes = ",".join(sorted(...))`, `:475`). `_sin_huecos_cubribles_vigente`
+(`:271-295`) exige que la huella coincida y la fecha esté dentro de 30 días; el **formato antiguo**
+(string de fecha suelta) devuelve `False` y se reevalúa una vez. Así, encender después una fuente o
+añadir el token de Metron cambia la huella y la serie se reevalúa, mientras que con las mismas fuentes
+la marca sigue vigente y no consume lote ni red. Pruebas nuevas
+`test_m2_secops_la_marca_caduca_si_cambian_las_fuentes_disponibles` y
+`test_m2_secops_la_marca_vigente_con_mismas_fuentes_se_respeta` (`:464-500`). **m-2 cerrado.**
+
+### 5.3 Resto del dictamen y veredicto
+
+El cambio solo afecta al reloj de rotación y a la vigencia de la marca: no toca identidad/campos de la
+serie, `CAMPOS_PROHIBIDOS`/locks, clientes O2, atribución O3 ni la Guía UI. Por tanto se mantiene el
+dictamen **FAVORABLE** de §0-§4 (O2 del payload vacío como TTL de 404, O1a prefetch, O3/O4 de QA).
+
+* **Regresión:** `test_relleno_huecos` + `test_enricher` → **85 passed** en 2,32 s; `ruff check src/` →
+  *All checks passed!*. QA de referencia **7111 passed / 2289 skipped ×2**, 236 tocadas, sonda 9/9; la
+  suite completa de este SHA la está ejecutando el Lead. Sin migraciones ni cambios en `models/`.
+* **Veredicto: FAVORABLE para `079ca7a6598e3010528525a6065b4c91373ec616`**, sin condiciones: m-1 y m-2
+  cerrados; el resto del dictamen se mantiene. Este addendum aplica **solo** a este SHA; cualquier
+  commit/rebase posterior exigirá nuevo dictamen. El addendum está en el árbol de trabajo sin commitear,
+  a la espera de la PR documental.
