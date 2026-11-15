@@ -155,7 +155,7 @@ async def test_la_cortesia_del_foro_se_muestra_como_espera_no_como_sin_resultado
     orq._forum_fallback = AsyncMock(side_effect=CortesiaEnEspera(
         "foro", "foro.example:80", 25.0, "cortesia"))
     item = SimpleNamespace(id=uuid4(), status=None, last_error=None, numero=None,
-                           series_id=None)
+                           series_id=None, search_query=None)
     ajustes = SimpleNamespace(forum_enabled=True, forum_url="http://foro.example/forum",
                               forum_username="lector", prowlarr_enabled=False,
                               transmission_enabled=False, amule_enabled=False)

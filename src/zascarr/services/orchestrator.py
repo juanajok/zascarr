@@ -440,15 +440,6 @@ class Orchestrator:
             await self.db.flush()
             return None
 
-        if not candidates and forum_espera:
-            # La cortesía del foro no es «no hay nada»: se informa y se libera la marca
-            # para que el coleccionista pueda reintentar en cuanto pase la espera.
-            item.status = WishlistStatus.WANTED
-            item.last_error = MOTIVO_FORO_ESPERA
-            await self._restaurar_marca(item, marca_previa)
-            await self.db.flush()
-            return []
-
         # La relevancia se resuelve con el título local (sin el número) y los alias;
         # titulo_serie/alias_serie se cargaron antes de consultar las fuentes.
         candidates = self._relevantes(
@@ -476,6 +467,14 @@ class Orchestrator:
         ]
 
         if not candidates:
+            # Se comprueba DESPUÉS de relevancia/número/backend: un candidato de
+            # Prowlarr que se descarta no debe ocultar que el foro pidió esperar.
+            if forum_espera:
+                item.status = WishlistStatus.WANTED
+                item.last_error = MOTIVO_FORO_ESPERA
+                await self._restaurar_marca(item, marca_previa)
+                await self.db.flush()
+                return []
             item.status = WishlistStatus.WANTED  # nada encontrado todavía, no es un fallo
             # D9: distingue "no había nada" de "había algo pero el
             # backend correspondiente está apagado" — la acción del
