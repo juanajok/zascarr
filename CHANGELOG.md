@@ -73,6 +73,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Lote 2 de deudas menores (2026-11-15).** El enricher de huecos ya no se queda con las
+  primeras series por id (rota por `enrichment_attempted_at` y marca 30 días las que no tienen
+  huecos cubribles); Metron/GCD/Open Library tratan un payload vacío como «sin ficha»; la
+  atribución de relleno se muestra aunque la URL de la ficha no sea válida; y la importación de
+  guías captura también fallos de `commit` (200 con aviso, sin 500) y registra el error sin
+  trazas ni URL.
+
 - **Asistente de carpeta: «pendientes» en avisos y «archivo» para el fichero (#834).** Los avisos de carpeta sin pendientes dejan de decir «registros»; el motivo de fichero inexistente pasa a «El archivo ya no existe…». El recuento de la carpeta ya decía «pendientes» y no se toca. Sin cambios de lógica, URLs ni datos.
 
 - **V14 cerrada: migración de la UI sin restos (2026-11-14, #750).** Capturas nuevas en

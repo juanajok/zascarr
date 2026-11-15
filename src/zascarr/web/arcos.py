@@ -201,6 +201,14 @@ async def importar_guia(request: Request, fuente: str = Form(default=""),
         extractor = _EXTRACTORES_DE_GUIA[fuente](CacheHttp(async_session_factory))
         async with extractor:
             resultado = await leer_y_reconciliar(db, extractor, url)
+        if resultado is None or resultado.arco_id is None:
+            await db.rollback()
+            return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
+                fuente=fuente, url=url,
+                errores={"general": "La guía no tiene entradas legibles o no se pudo leer. "
+                                    "Comprueba la dirección y que la fuente siga encendida."}))
+        # El commit también va dentro del try: si falla, se revierte y se avisa en llano.
+        await db.commit()
     except CortesiaEnEspera as exc:
         await db.rollback()
         segundos = max(1, round(exc.espera_estimada_s))
@@ -219,19 +227,14 @@ async def importar_guia(request: Request, fuente: str = Form(default=""),
             fuente=fuente, url=url,
             errores={"general": f"No se pudo leer la guía de {nombre}. Inténtalo de nuevo "
                                 "más tarde."}))
-    except Exception:
-        logger.exception("arcos.importar_guia_failed", fuente=fuente)
+    except Exception as exc:
+        # m-2: sin traza ni URL/parámetros; solo tipo y fuente (el mensaje ya es llano).
+        logger.error("arcos.importar_guia_failed", fuente=fuente,
+                     error=type(exc).__name__)
         await db.rollback()
         return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
             fuente=fuente, url=url,
             errores={"general": "No se pudo importar la guía. Inténtalo de nuevo."}))
-    if resultado is None or resultado.arco_id is None:
-        await db.rollback()
-        return _respuesta(request, "importar_guia.html", _contexto_importar_guia(
-            fuente=fuente, url=url,
-            errores={"general": "La guía no tiene entradas legibles o no se pudo leer. "
-                                "Comprueba la dirección y que la fuente siga encendida."}))
-    await db.commit()
     motivos = _motivos_legibles(resultado.motivos)[:400]
     consulta = urlencode({
         "importada": "1",

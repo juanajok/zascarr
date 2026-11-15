@@ -66,10 +66,10 @@ def atribucion_de_relleno(series) -> list[dict[str, str]]:
         if not isinstance(entrada, dict) or not entrada.get("campos"):
             continue
         url_ficha = _url_de_ficha(entrada.get("url_ficha"), host)
-        aviso = {"fuente": fuente, "nombre": nombre, "licencia": licencia,
-                 "url_ficha": url_ficha or "", "url_licencia": url_licencia or ""}
-        if aviso["url_ficha"] and aviso["url_licencia"]:
-            avisos.append(aviso)
+        # O3: la atribución (nombre + licencia) se debe aunque la URL de ficha no valide;
+        # la plantilla pinta el texto sin enlace en ese caso.
+        avisos.append({"fuente": fuente, "nombre": nombre, "licencia": licencia,
+                       "url_ficha": url_ficha or "", "url_licencia": url_licencia or ""})
     return avisos
 
 

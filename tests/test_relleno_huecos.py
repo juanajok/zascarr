@@ -401,3 +401,96 @@ def test_m1_secops_acota_y_sanea_el_texto_de_terceros():
     assert "\x1b" not in serie.description and "\x00" not in serie.description
     url = serie.metadata_["relleno"]["metron"]["url_ficha"]
     assert url is None or len(url) <= MAX_URL_RELLENO
+
+
+# ── Deudas lote 2: O1 (lote avanza) y O2 (payload vacío) ──────────────────────────────────
+
+async def test_o1_el_lote_salta_series_sin_huecos_cubribles_y_avanza():
+    from zascarr.services.enricher import EnrichmentReport
+
+    bloqueada = dict(locked_fields=["description", "start_year", "end_year"],
+                     description=None, start_year=None, end_year=None)
+    no_cubribles = [_serie(id="a", gcd_id=10, **bloqueada),
+                    _serie(id="b", gcd_id=11, **bloqueada),
+                    _serie(id="c", gcd_id=12, **bloqueada)]
+    cubrible = _serie(id="d", gcd_id=13)
+    servicio = _servicio([*no_cubribles, cubrible])
+    gcd = _Cliente(_ficha_gcd())
+    await servicio._enrich_huecos_por_id(gcd, None, None, 1, EnrichmentReport())
+
+    assert gcd.llamadas == [13]                  # el límite no lo consumen las no cubribles
+    assert cubrible.start_year == 1940 and cubrible.end_year == 2011
+    for serie in no_cubribles:
+        assert serie.metadata_["relleno"]["_sin_huecos_cubribles"]
+        assert (serie.start_year, serie.end_year, serie.description) == (None, None, None)
+
+    # Segunda pasada: las no cubribles ya están marcadas y no vuelven a pedir ni ocupar lote.
+    gcd2 = _Cliente(_ficha_gcd())
+    await servicio._enrich_huecos_por_id(gcd2, None, None, 1, EnrichmentReport())
+    assert gcd2.llamadas == []
+
+
+async def test_o2_payload_vacio_o_sin_datos_utiles_es_none(ajustes_clientes):
+    from zascarr.services.gcd import GCDClient
+    from zascarr.services.metron import MetronClient
+    from zascarr.services.open_library import OpenLibraryClient
+
+    async with GCDClient(politica=_politica("gcd"),
+                         transporte=_transporte(lambda _r: httpx.Response(
+                             200, json={"name": ""}))) as c:
+        assert await c.get_series_por_id(1) is None
+    async with MetronClient(token="tok", politica=_politica("metron"),
+                            transporte=_transporte(lambda _r: httpx.Response(
+                                200, json={"id": 1}))) as c:
+        assert await c.get_series_por_id(1) is None
+    async with OpenLibraryClient(base_url="https://openlibrary.org",
+                                 politica=_politica("open_library"),
+                                 transporte=_transporte(lambda _r: httpx.Response(
+                                     200, json={"key": "/works/OL1W"}))) as c:
+        assert await c.get_work("OL1W") is None
+
+
+# ── m-1/m-2 de SecOps: rotación real y huella de fuentes en la marca ────────────────────────
+
+async def test_m1_secops_la_serie_procesada_avanza_en_la_rotacion():
+    from datetime import UTC, datetime
+
+    from zascarr.services.enricher import EnrichmentReport
+
+    serie = _serie(gcd_id=77)
+    servicio = _servicio([serie])
+    await servicio._enrich_huecos_por_id(_Cliente(_ficha_gcd()), None, None, 10,
+                                         EnrichmentReport())
+    assert isinstance(serie.enrichment_attempted_at, datetime)
+    assert serie.enrichment_attempted_at.tzinfo is not None
+    assert serie.enrichment_attempted_at <= datetime.now(UTC)
+
+
+async def test_m2_secops_la_marca_caduca_si_cambian_las_fuentes_disponibles():
+    from datetime import UTC, datetime
+
+    from zascarr.services.enricher import EnrichmentReport
+
+    ahora = datetime.now(UTC)
+    # Marca vieja hecha solo con GCD; ahora hay además Metron disponible.
+    marcada = _serie(id="s1", metron_id=88, gcd_id=77, metadata_={"relleno": {
+        "_sin_huecos_cubribles": {"fecha": ahora.isoformat(), "fuentes": "gcd"}}})
+    servicio = _servicio([marcada])
+    metron = _Cliente(_ficha_metron())
+    gcd = _Cliente(_ficha_gcd())
+    await servicio._enrich_huecos_por_id(gcd, metron, None, 10, EnrichmentReport())
+    assert metron.llamadas or gcd.llamadas      # se reevaluó pese a la marca vieja
+
+
+async def test_m2_secops_la_marca_vigente_con_mismas_fuentes_se_respeta():
+    from datetime import UTC, datetime
+
+    from zascarr.services.enricher import EnrichmentReport
+
+    ahora = datetime.now(UTC)
+    marcada = _serie(id="s2", gcd_id=77, metadata_={"relleno": {
+        "_sin_huecos_cubribles": {"fecha": ahora.isoformat(), "fuentes": "gcd"}}})
+    servicio = _servicio([marcada])
+    gcd = _Cliente(_ficha_gcd())
+    await servicio._enrich_huecos_por_id(gcd, None, None, 10, EnrichmentReport())
+    assert gcd.llamadas == []                    # no consume lote ni hace red
