@@ -797,7 +797,7 @@ class AsignacionService:
         if not await prop.vigente():
             return Resultado(EstadoResultado.PROPIEDAD_PERDIDA, "Otra ejecución tomó la operación", op["destino"])
         destino = Path(op["destino"])
-        with contextlib.suppress(OSError):
+        with contextlib.suppress(OSError, RaizNoDisponibleError, DestinoFueraDeRaizError):
             if (destino.is_file()
                     and await asyncio.to_thread(_sha256, destino) == op["sha256"]
                     and op.get("root_id") is not None
