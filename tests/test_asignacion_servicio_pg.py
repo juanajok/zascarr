@@ -24,7 +24,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from tests._pg import RAIZ, bd_efimera_sync, migrar_a_head, url_asyncpg
-from zascarr.models import ComicTradition, File, FileFormat, Issue, LocalAlias, Series
+from zascarr.config import get_settings
+from zascarr.models import (
+    ComicTradition,
+    File,
+    FileFormat,
+    Issue,
+    LibraryRoot,
+    LibraryRootTradition,
+    LocalAlias,
+    Series,
+)
 from zascarr.services.asignacion import AsignacionService
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -56,7 +66,9 @@ class Mundo:
 
     async def sembrar(self, nombre="Saga del Faro 12.cbz", marca="a"):
         async with self.motor.begin() as c:
-            await c.execute(text("TRUNCATE asignacion_operaciones, files, issues, series, local_aliases CASCADE"))
+            await c.execute(text(
+                "TRUNCATE asignacion_operaciones, files, issues, series, local_aliases, "
+                "library_root_traditions, library_roots CASCADE"))
         self.origen = self.lib / "_Unsorted" / nombre
         contenido = hacer_cbz(self.origen, marca)
         self.sha = hashlib.sha256(contenido).hexdigest()
@@ -64,9 +76,14 @@ class Mundo:
             serie = Series(id=uuid4(), title="Saga del Faro", tradition=ComicTradition.AMERICAN, start_year=2010)
             f = File(id=uuid4(), file_path=str(self.origen), file_name=nombre, file_format=FileFormat.CBZ,
                      file_size_bytes=len(contenido), sha256_hash=self.sha, metadata_={"match_status": "unsorted"})
-            s.add_all([serie, f])
+            raiz = LibraryRoot(id=uuid4(), name="Biblioteca", path=str(self.lib),
+                               enabled=True, is_default=True)
+            s.add_all([serie, f, raiz])
+            await s.flush()
+            for tradicion in ComicTradition:
+                s.add(LibraryRootTradition(root_id=raiz.id, tradition=tradicion))
             await s.commit()
-            self.serie_id, self.file_id = serie.id, f.id
+            self.serie_id, self.file_id, self.root_id = serie.id, f.id, raiz.id
         return self
 
     def servicio(self, **kw) -> AsignacionService:
@@ -78,10 +95,13 @@ class Mundo:
             ops = (await s.execute(text("SELECT estado, destino FROM asignacion_operaciones ORDER BY creada"))).all()
             issues = (await s.execute(select(Issue).where(Issue.series_id == self.serie_id))).scalars().all()
             alias = (await s.execute(select(LocalAlias).where(LocalAlias.series_id == self.serie_id))).scalars().all()
+            raiz_id = (await s.execute(text(
+                "SELECT root_id FROM asignacion_operaciones ORDER BY creada LIMIT 1"))).scalar()
         cbz = sorted(str(p.relative_to(self.lib)) for p in self.lib.rglob("*.cbz"))
         partes = sorted(str(p.relative_to(self.lib)) for p in self.lib.rglob("*.part*"))   # incluye `.part.<época>`
         return type("E", (), dict(
             ruta=f.file_path, issue_id=f.issue_id, ops=[o[0] for o in ops], issues=len(issues), alias=len(alias),
+            file_root_id=f.root_id, raiz_id=raiz_id,
             origen_existe=self.origen.exists(), destinos=[c for c in cbz if not c.startswith("_Unsorted")],
             cbz=cbz, partes=partes))()
 
@@ -126,16 +146,21 @@ SQL_MATAR_CONEXION_DEL_CANDADO = (
 
 
 @pytest.fixture
-async def mundo(url_bd, tmp_path):
+async def mundo(url_bd, tmp_path, monkeypatch):
     m = await Mundo(url_bd, tmp_path).sembrar()
+    monkeypatch.setenv("LIBRARY_PATH", str(m.lib))
+    monkeypatch.setenv("LIBRARY_ROOTS", str(m.lib))
+    get_settings.cache_clear()
     yield m
     await m.cerrar()
+    get_settings.cache_clear()
 
 
 def _asignado_del_todo(e, mundo):
     assert e.ops == ["limpiada"]
     assert not e.origen_existe and len(e.destinos) == 1 and e.partes == []
     assert e.ruta.endswith(e.destinos[0]) and e.issue_id is not None and e.issues == 1 and e.alias == 1
+    assert e.raiz_id is not None and e.file_root_id == e.raiz_id
     assert hashlib.sha256(Path(e.ruta).read_bytes()).hexdigest() == mundo.sha
 
 
@@ -153,6 +178,32 @@ class TestCaminoFeliz:
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         assert r.estado == "ya_asignado"
         _asignado_del_todo(await mundo.estado(), mundo)
+
+
+class TestSinRaiz:
+
+    @pytest.mark.asyncio
+    async def test_sin_raiz_no_crea_issue_ni_mueve(self, mundo):
+        async with mundo.fabrica() as s:
+            await s.execute(text("DELETE FROM library_root_traditions WHERE tradition = 'american'"))
+            await s.commit()
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        assert r.estado == "error" and "raíz" in r.motivo
+        e = await mundo.estado()
+        assert e.ops == [] and e.issues == 0 and e.origen_existe and e.ruta == str(mundo.origen)
+
+
+    @pytest.mark.asyncio
+    async def test_raiz_retirada_tras_preparar_no_mueve(self, mundo):
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        async with mundo.fabrica() as s:
+            await s.execute(text("UPDATE library_roots SET is_default = false, enabled = false"))
+            await s.commit()
+        r = await svc._ejecutar(op)
+        assert r.estado == "error" and "deshabilitada" in r.motivo
+        assert mundo.origen.exists()
+        assert not (mundo.lib / "Comics" / "Saga del Faro (2010)" / "Saga del Faro #012.cbz").exists()
 
 
 class TestMuerteDelProceso:

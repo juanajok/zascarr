@@ -14,6 +14,7 @@ import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -317,3 +318,134 @@ class RaicesService:
     @staticmethod
     def validar_conjunto(raices) -> None:
         validar_conjunto(raices)
+
+
+class RaizNoDisponibleError(RaizInvalidaError):
+    """La tradición/raíz no se puede usar para escribir; `causa` es accionable."""
+
+    def __init__(self, causa: str, *, raiz: str | None = None):
+        self.causa = causa
+        self.raiz = raiz
+        super().__init__(f"{causa}" + (f" (raíz «{raiz}»)" if raiz else ""))
+
+
+@dataclass(frozen=True)
+class RaizResuelta:
+    """Una raíz ya validada para una operación; `id` puede ser None solo en dobles de prueba."""
+    id: UUID | None
+    name: str
+    path: Path
+    host_path: str | None = None
+
+
+class FotoDeRaices:
+    """Foto inmutable del mapeo de raíces al empezar un ciclo/operación.
+
+    Una consulta, y no se cambia el destino a mitad: el ciclo del importer y una
+    asignación usan la misma foto hasta terminar.
+    """
+
+    def __init__(self, raices: list[LibraryRoot], *, validar: bool = True,
+                 por_tradicion: dict[str, LibraryRoot] | None = None):
+        self._raices = raices
+        self._validar = validar
+        self._resueltas: dict[str, RaizResuelta] = {}
+        self._defecto: LibraryRoot | None = None
+        for raiz in raices:
+            if raiz.is_default and self._defecto is None:
+                self._defecto = raiz
+        if por_tradicion is not None:
+            self._por_tradicion = dict(por_tradicion)
+        else:
+            self._por_tradicion = {}
+            for raiz in raices:
+                for asignacion in getattr(raiz, "traditions", []) or []:
+                    self._por_tradicion[ComicTradition(asignacion.tradition).value] = raiz
+
+    @classmethod
+    async def cargar(cls, db: AsyncSession) -> FotoDeRaices:
+        """Una sola consulta: raíces + mapeo de tradiciones."""
+        filas = (await db.execute(
+            select(LibraryRoot, LibraryRootTradition)
+            .outerjoin(LibraryRootTradition, LibraryRootTradition.root_id == LibraryRoot.id)
+            .order_by(LibraryRoot.created_at, LibraryRoot.id, LibraryRootTradition.tradition)
+        )).all()
+        raices: list[LibraryRoot] = []
+        por_tradicion: dict[str, LibraryRoot] = {}
+        vistos: set[str] = set()
+        for raiz, asignacion in filas:
+            clave = str(raiz.id)
+            if clave not in vistos:
+                vistos.add(clave)
+                raices.append(raiz)
+            if asignacion is not None:
+                por_tradicion[ComicTradition(asignacion.tradition).value] = raiz
+        return cls(raices, por_tradicion=por_tradicion)
+
+    @classmethod
+    def compatibilidad(cls) -> FotoDeRaices:
+        """Solo para dobles de prueba sin tabla de raíces: reproduce una instalación de una raíz."""
+        s = get_settings()
+        raiz = type("_RaizCompat", (), {})()
+        raiz.id = None
+        raiz.name = "Biblioteca"
+        raiz.path = str(s.library_path)
+        raiz.host_path = s.host_library_dir or None
+        raiz.enabled = True
+        raiz.is_default = True
+        raiz.traditions = [
+            type("_Trad", (), {"tradition": t.value})() for t in ComicTradition
+        ]
+        return cls([raiz], validar=False)
+
+    @property
+    def raices(self) -> tuple[LibraryRoot, ...]:
+        return tuple(self._raices)
+
+    def _resolver_raiz(self, raiz: LibraryRoot) -> RaizResuelta:
+        clave = str(raiz.id)
+        if clave in self._resueltas:
+            return self._resueltas[clave]
+        if not getattr(raiz, "enabled", True):
+            raise RaizNoDisponibleError("La raíz está deshabilitada.", raiz=raiz.name)
+        if self._validar:
+            try:
+                datos = validar_raiz(
+                    raiz.path, name=raiz.name, host_path=raiz.host_path or "",
+                    enabled=bool(raiz.enabled), is_default=bool(raiz.is_default),
+                    raices=self._raices, root_id=raiz.id,
+                )
+            except RaizInvalidaError as exc:
+                raise RaizNoDisponibleError(str(exc), raiz=raiz.name) from exc
+            camino = Path(datos["path"])
+        else:
+            camino = Path(raiz.path)
+        resuelta = RaizResuelta(
+            id=raiz.id if raiz.id is not None else None,
+            name=raiz.name, path=camino, host_path=raiz.host_path)
+        self._resueltas[clave] = resuelta
+        return resuelta
+
+    def por_tradicion(self, tradicion: ComicTradition | str | None) -> RaizResuelta:
+        clave = (tradicion.value if isinstance(tradicion, ComicTradition)
+                 else str(tradicion or "other"))
+        raiz = self._por_tradicion.get(clave)
+        if raiz is None:
+            # `other` puede no tener raíz explícita: no se cae a la raíz por defecto.
+            raise RaizNoDisponibleError(
+                "La tradición no tiene una raíz asignada; el archivo se queda en la cola.")
+        return self._resolver_raiz(raiz)
+
+    def por_defecto(self) -> RaizResuelta:
+        if self._defecto is None:
+            raise RaizNoDisponibleError(
+                "No hay raíz por defecto; el archivo se queda en la cola.")
+        return self._resolver_raiz(self._defecto)
+
+    def para_id(self, root_id: str | None) -> RaizResuelta:
+        if root_id is None:
+            raise RaizNoDisponibleError("La operación no tiene raíz persistida.")
+        for raiz in self._raices:
+            if str(raiz.id) == str(root_id):
+                return self._resolver_raiz(raiz)
+        raise RaizNoDisponibleError("La raíz de la operación ya no existe.")

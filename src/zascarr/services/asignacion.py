@@ -60,6 +60,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from zascarr.models import EDITION_KIND_A_FORMAT, File, Issue, IssueFormat, MetadataSource, Series
 from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.importer import build_library_path
+from zascarr.services.raices import (
+    FotoDeRaices,
+    RaizNoDisponibleError,
+    RaizResuelta,
+    raiz_de,
+)
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
@@ -294,9 +300,11 @@ class _Propiedad:
 class AsignacionService:
     def __init__(self, fabrica: async_sessionmaker[AsyncSession], biblioteca: Path, *,
                  gancho: Callable[[str], Awaitable[None]] = _no_hacer_nada,
-                 borrar: Callable[[Path], None] | None = None, max_simultaneas: int = 1):
+                 borrar: Callable[[Path], None] | None = None, max_simultaneas: int = 1,
+                 foto_raices: FotoDeRaices | None = None):
         self._fabrica = fabrica
         self._biblioteca = biblioteca
+        self._foto_raices = foto_raices
         # El límite es de TODAS las instancias que usan el mismo motor (el mismo pool), no de esta.
         self._max_simultaneas = max_simultaneas
         self._motor = fabrica.kw.get("bind")
@@ -306,6 +314,14 @@ class AsignacionService:
     @property
     def _cupo(self) -> asyncio.Semaphore:
         return _cupo_compartido(self._motor, self._max_simultaneas)
+
+    async def _foto(self, s: AsyncSession | None = None) -> FotoDeRaices:
+        """Foto del mapeo; el corte A/B no cambia de raíz a mitad de operación."""
+        if self._foto_raices is not None:
+            return self._foto_raices
+        if s is not None and isinstance(s, AsyncSession):
+            return await FotoDeRaices.cargar(s)
+        return FotoDeRaices.compatibilidad()
 
     # ── API ──────────────────────────────────────────────────────────────────
 
@@ -348,6 +364,12 @@ class AsignacionService:
             if file is None or serie is None:
                 return Resultado("no_encontrado", "Archivo o serie no encontrados")
 
+            try:
+                foto = await self._foto(s)
+                raiz = foto.por_tradicion(getattr(serie, "tradition", None))
+            except RaizNoDisponibleError as exc:
+                return Resultado(EstadoResultado.ERROR, exc.causa)
+
             viva = (await s.execute(text(
                 f"SELECT id FROM asignacion_operaciones WHERE file_id = :f AND {VIVAS}"), {"f": file_id})).first()  # noqa: S608 (solo interpola VIVAS)
             if viva is not None:
@@ -375,7 +397,7 @@ class AsignacionService:
             if (st2.st_size, st2.st_mtime_ns) != (st.st_size, st.st_mtime_ns):
                 return Resultado("error", "El archivo cambió mientras se preparaba la asignación; inténtalo de nuevo")
             canonico = build_library_path(
-                self._biblioteca, serie, issue_number, origen.suffix,
+                raiz.path, serie, issue_number, origen.suffix,
                 issue_title=issue.title if issue is not None else None,
                 issue_format=issue.format if issue is not None else None)
 
@@ -392,9 +414,9 @@ class AsignacionService:
                     async with s.begin_nested():
                         await s.execute(text(
                             "INSERT INTO asignacion_operaciones (id, file_id, estado, origen, destino, temporal, "
-                            "size_bytes, mtime_ns, sha256, series_id, issue_number, formato, aprender_alias) VALUES "
-                            "(:id, :f, 'preparada', :o, :d, :t, :sz, :mt, :sha, :s, :n, CAST(:fmt AS issue_format), :alias)"),
-                            {"id": op_id, "f": file_id, "o": str(origen), "d": str(candidato),
+                            "size_bytes, mtime_ns, sha256, series_id, issue_number, formato, aprender_alias, root_id) VALUES "
+                            "(:id, :f, 'preparada', :o, :d, :t, :sz, :mt, :sha, :s, :n, CAST(:fmt AS issue_format), :alias, :root_id)"),
+                            {"id": op_id, "f": file_id, "o": str(origen), "d": str(candidato), "root_id": raiz.id,
                              "t": str(candidato.with_name(f".{candidato.name}.{op_id.hex[:8]}.part")),
                              "sz": st.st_size, "mt": st.st_mtime_ns, "sha": sha, "s": series_id,
                              "n": issue_number, "fmt": formato.value, "alias": aprender_alias})
@@ -459,11 +481,32 @@ class AsignacionService:
             return (await s.execute(text("SELECT * FROM asignacion_operaciones WHERE id = :i"),
                                     {"i": op_id})).mappings().first()
 
+    @staticmethod
+    def _raiz_legacy(foto: FotoDeRaices, destino: Path) -> RaizResuelta:
+        """Operaciones anteriores a 0041: se reconcilian por el prefijo de su destino."""
+        raiz = raiz_de(destino, foto.raices)
+        if raiz is None:
+            raise RaizNoDisponibleError(
+                "La operación antigua no cae bajo ninguna raíz; no se mueve.")
+        return RaizResuelta(
+            id=raiz.id if raiz.id is not None else None,
+            name=raiz.name, path=Path(raiz.path), host_path=raiz.host_path)
+
     async def _continuar(self, op_id: UUID, prop: _Propiedad) -> Resultado:
         op = await self._op(op_id)
         if op is None or op["estado"] in ("limpiada", "cancelada"):
             return Resultado("ya_asignado", "Operación ya cerrada", op["destino"] if op else None)
         origen, destino = Path(op["origen"]), Path(op["destino"])
+        try:
+            async with self._fabrica() as s:
+                foto = await self._foto(s)
+            raiz = (foto.para_id(op["root_id"]) if op.get("root_id") is not None
+                    else self._raiz_legacy(foto, destino))
+            if not destino.is_relative_to(raiz.path):
+                raise RaizNoDisponibleError(
+                    "El destino de la operación ya no está bajo su raíz.", raiz=raiz.name)
+        except RaizNoDisponibleError as exc:
+            return Resultado(EstadoResultado.ERROR, exc.causa, op["destino"])
         base_temporal = Path(op["temporal"])
         mi_temporal = base_temporal.with_name(f"{base_temporal.name}.{prop.epoca}")
         perdida = Resultado("propiedad_perdida", "Otra ejecución tomó la operación; esta se detiene sin tocar nada",
@@ -601,6 +644,8 @@ class AsignacionService:
                 nombre_original = file.file_name
                 file.issue_id = issue.id
                 file.file_path = op["destino"]
+                if op.get("root_id") is not None:
+                    file.root_id = op["root_id"]
                 file.file_name = Path(op["destino"]).name
                 file.metadata_source = MetadataSource.MANUAL.value
                 await s.flush()
@@ -815,6 +860,12 @@ async def previsualizar_asignacion(
                                     motivo="El archivo ya no está en su sitio; no se puede organizar.")
     except OSError:
         return PreviaAsignacion("error", motivo="No se pudo comprobar el archivo de origen.")
+    try:
+        foto = (await FotoDeRaices.cargar(db) if isinstance(db, AsyncSession)
+                else FotoDeRaices.compatibilidad())
+        raiz = foto.por_tradicion(getattr(serie, "tradition", None))
+    except RaizNoDisponibleError as exc:
+        return PreviaAsignacion("sin_raiz", motivo=exc.causa)
 
     formato = EDITION_KIND_A_FORMAT.get(
         parse_comic_filename(file.file_name).edition_kind, IssueFormat.SINGLE_ISSUE)
@@ -831,7 +882,7 @@ async def previsualizar_asignacion(
             motivo="Ese archivo ya está en esa publicación; no hace falta moverlo.")
 
     canonico = build_library_path(
-        biblioteca, serie, numero, origen.suffix,
+        raiz.path, serie, numero, origen.suffix,
         issue_title=issue.title if issue is not None else None,
         issue_format=issue.format if issue is not None else None)
     for k in range(0, 1000):

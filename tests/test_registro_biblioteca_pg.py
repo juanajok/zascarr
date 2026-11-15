@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
+from tests._raices_pg import allowlist, sembrar_raiz
 from zascarr import database
 from zascarr.database import get_db
 from zascarr.main import app
@@ -67,8 +68,9 @@ class Mundo:
     async def sembrar(self) -> Mundo:
         async with self.motor.begin() as c:
             await c.execute(text("TRUNCATE asignacion_operaciones, files, issues, series, local_aliases, "
-                                 "runtime_settings, import_runs CASCADE"))
+                                 "runtime_settings, import_runs, library_root_traditions, library_roots CASCADE"))
             await c.execute(text("INSERT INTO runtime_settings (id, \"values\") VALUES (1, '{}')"))
+        await sembrar_raiz(self.fabrica, self.lib)
         for i in range(1, 7):
             ruta = self.lib / "Comics" / f"Coleccion {i}" / f"Obra rara {i:02d}.cbz"
             self.contenido[ruta] = _cbz(ruta, chr(96 + i))
@@ -123,6 +125,7 @@ async def mundo(url_bd, tmp_path, monkeypatch):
     m = await Mundo(url_bd, tmp_path).sembrar()
     ajustes = type("A", (), {"library_path": m.lib})()
     monkeypatch.setattr("zascarr.services.library_adopter.get_settings", lambda: ajustes)
+    allowlist(monkeypatch, m.lib)
     monkeypatch.setattr(database, "async_session_factory", m.fabrica)
     registro_biblioteca.reiniciar_para_pruebas()
     yield m

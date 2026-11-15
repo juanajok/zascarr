@@ -251,7 +251,8 @@ class ReviewService:
     async def assign_to_series(self, file_id, series_id, issue_number: str) -> File:
         """CAMINO HEREDADO: mueve el fichero con la sesión de la petición y deja el `commit` a
         `get_db` (auditoría V6a, `docs/design/auditoria-mover-y-sesion.md`: un fallo entre mover y
-        confirmar deja el fichero movido y la BD revertida). **Ya no lo usa ninguna ruta**:
+        confirmar deja el fichero movido y la BD revertida). **No tiene rutas** (deuda #114): no se
+        adapta a raíces en el corte B; se retirará aparte. **Ya no lo usa ninguna ruta**:
         `POST /ui/pendientes/{id}/asignar` va por `services/asignacion.py` (ADR 0006). Se conserva,
         con sus pruebas de B13/B15, hasta retirarlo en una limpieza aparte; **no lo llames desde
         código nuevo**."""
