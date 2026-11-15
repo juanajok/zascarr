@@ -107,6 +107,7 @@ async def test_crea_arco_con_enlaces_en_orden():
     arcos = [objeto for objeto in sesion.added if isinstance(objeto, StoryArc)]
     enlaces = [objeto for objeto in sesion.added if isinstance(objeto, StoryArcIssue)]
     assert len(arcos) == 1 and len(enlaces) == 3
+    assert resultado.arco_id == arcos[0].id
     assert arcos[0].metadata_ == {
         "origen": "reading_orders",
         "url": "https://comicbookreadingorders.com/dc/events/crisis-on-infinite-earths-reading-order/",

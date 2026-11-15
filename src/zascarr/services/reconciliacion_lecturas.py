@@ -28,7 +28,7 @@ import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from urllib.parse import urlsplit
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy import select
@@ -71,6 +71,8 @@ class ResultadoReconciliacion:
     enlazados: int
     omitidos: int
     motivos: tuple[tuple[str, int], ...] = ()
+    #: Id del arco creado/actualizado (lo usa la pantalla de importación para redirigir).
+    arco_id: UUID | None = None
 
 
 def texto_para_terminal(texto: str, maximo: int = MAX_TITULO_TERMINAL) -> str:
@@ -201,6 +203,7 @@ async def reconciliar_guia(db: AsyncSession,
     titulo = titulo_de_guia(guia)
     motivo: Counter[str] = Counter()
     arco, creado = await _upsert_arco(db, titulo, guia)
+    fila_id = arco.id
 
     # (2)-(3) Reconciliar cada entrada, en orden DOM, con enlaces 1..N.
     enlazados: list[tuple[Issue, int]] = []
@@ -281,6 +284,7 @@ async def reconciliar_guia(db: AsyncSession,
         titulo=titulo, origen=guia.sitio, url=guia.url, creado=creado,
         enlazados=len(nuevos), omitidos=omitidos,
         motivos=tuple(sorted(motivo.items())),
+        arco_id=fila_id,
     )
     logger.info("lecturas.guia_reconciliada", sitio=guia.sitio, creado=creado,
                 enlazados=resultado.enlazados, omitidos=resultado.omitidos)
