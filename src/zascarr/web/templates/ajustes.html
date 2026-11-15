@@ -271,9 +271,18 @@
         <p class="ajustes-hint">Solo se leen las referencias de los temas; ZascArr no descarga ni publica nada en el foro. La conexión puede ser HTTP: el foro decide si ofrece HTTPS.</p>
         <div class="ajustes-actions">
           <button type="submit">Guardar</button>
+          <button type="button" hx-post="/ui/ajustes/probar/foro"
+                  hx-include="closest form" hx-target="#prueba-foro"
+                  hx-swap="innerHTML" hx-indicator="#prueba-foro-espera">Probar conexión</button>
         </div>
       </form>
       <div id="resultado-foro" aria-live="polite"></div>
+      <div id="prueba-foro" aria-live="polite"></div>
+      <span id="prueba-foro-espera" class="htmx-indicator caption" aria-live="polite">Probando…</span>
+      <details class="ajustes-mas">
+        <summary>Qué hace «Probar conexión»</summary>
+        <p class="ajustes-hint">Solo inicia sesión en el foro: no busca ni descarga nada. Puede pedir esperar por cortesía; si el foro está apagado en Ajustes, la prueba funciona igual.</p>
+      </details>
     </fieldset>
 
 
