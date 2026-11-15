@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from zascarr.services.blog_feed import (
     EntradaFeed,
     buscar_en_feed,
@@ -14,7 +16,8 @@ RSS = """<?xml version="1.0"?>
 <rss version="2.0"><channel>
 <item><title>Batman 001</title><link>https://blog.example/post/1</link>
 <pubDate>Mon, 01 Jan 2024 10:00:00 GMT</pubDate>
-<enclosure url="magnet:?xt=urn:btih:abcdef0123456789&amp;dn=Batman1" type="application/x-bittorrent"/>
+<enclosure url="magnet:?xt=urn:btih:abcdef0123456789&amp;dn=Batman1"
+ type="application/x-bittorrent"/>
 </item>
 <item><title>Batman 002</title><link>https://blog.example/post/2</link>
 <description>Descarga: magnet:?xt=urn:btih:abcdef0123456789&amp;dn=Batman2</description>
@@ -114,3 +117,31 @@ def test_activo_false_no_consulta_blog(monkeypatch):
         prowlarr_enabled=False, forum_enabled=False, blog_feed_enabled=False,
         blog_feed_url=""))
     assert not llamado
+
+
+def test_la_fuente_blog_usa_el_campo_correcto_y_exige_url():
+    from zascarr.utils.cortesia import fuente_habilitada
+    s = SimpleNamespace(blog_feed_enabled=True, blog_feed_url="https://blog.example/feed.xml")
+    assert fuente_habilitada("blog", s)
+    assert not fuente_habilitada(
+        "blog", SimpleNamespace(blog_feed_enabled=True, blog_feed_url=""))
+    assert not fuente_habilitada(
+        "blog", SimpleNamespace(blog_feed_enabled=False, blog_feed_url="https://x.test/feed"))
+
+
+def test_estado_feed_rechaza_ip_literal():
+    from zascarr.services.blog_feed import estado_feed
+    assert not estado_feed("http://127.0.0.1/feed.xml")
+    assert not estado_feed("http://[::1]/feed.xml")
+    assert not estado_feed("https://blog.example:8080/feed.xml")
+    assert estado_feed("https://blog.example/feed.xml")
+
+
+async def test_descargar_publico_rechaza_dns_privado():
+    from zascarr.utils.url_portada import UrlNoPermitidaError, descargar_publico
+
+    async def resolver(_host, _puerto):
+        return ["127.0.0.1"]
+
+    with pytest.raises(UrlNoPermitidaError):
+        await descargar_publico("https://blog.example/feed.xml", resolutor=resolver)
