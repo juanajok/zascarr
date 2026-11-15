@@ -1312,3 +1312,80 @@ class TestFalloDeEscrituraAlPublicar:
         e2 = await mundo.estado()
         assert [x.estado for x in rs] == ["asignado"]
         assert e2.ops == ["limpiada"] and e2.partes == [] and not e2.origen_existe and len(e2.destinos) == 1
+
+
+class TestLimpiarSinResiduos:
+
+    @pytest.mark.asyncio
+    async def test_limpiar_root_id_null_sin_residuos_no_pendiente(self, mundo, tmp_path):
+        from types import SimpleNamespace
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        async with mundo.fabrica() as s:
+            await s.execute(text("UPDATE asignacion_operaciones SET root_id = NULL WHERE id = :i"),
+                            {"i": op_id})
+            await s.commit()
+
+        async def vigente():
+            return True
+        r = await svc._limpiar(op_id, tmp_path / "no-existe.cbz", op,
+                               SimpleNamespace(vigente=vigente, epoca=0))
+        assert r.estado == "asignado"
+        assert (await mundo.estado()).ops == ["limpiada"]
+
+    @pytest.mark.asyncio
+    async def test_limpiar_root_id_null_con_temporal_declara_residuo(self, mundo):
+        from types import SimpleNamespace
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        temporal = Path(op["temporal"])
+        temporal.parent.mkdir(parents=True, exist_ok=True)
+        temporal.write_bytes(b"AJENO")
+        async with mundo.fabrica() as s:
+            await s.execute(text("UPDATE asignacion_operaciones SET root_id = NULL WHERE id = :i"),
+                            {"i": op_id})
+            await s.commit()
+
+        async def vigente():
+            return True
+        r = await svc._limpiar(op_id, mundo.origen, op,
+                               SimpleNamespace(vigente=vigente, epoca=0))
+        assert r.estado in {"asignado_limpieza_pendiente", "reparacion_pendiente"}
+        assert temporal.read_bytes() == b"AJENO"
+
+
+class TestAjenosEnLimpieza:
+
+    @pytest.mark.asyncio
+    async def test_temporal_previo_ajeno_no_se_borra_y_continua(self, mundo):
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        base = Path(op["temporal"])
+        base.parent.mkdir(parents=True, exist_ok=True)
+        base.write_bytes(b"AJENO")
+        r = await svc._ejecutar(op_id)
+        assert r.estado == "asignado"
+        assert base.read_bytes() == b"AJENO"
+
+    @pytest.mark.asyncio
+    async def test_abandonar_no_borra_ajeno_en_destino(self, mundo):
+        from types import SimpleNamespace
+
+        from zascarr.services.asignacion import EstadoResultado, Resultado
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        destino = Path(op["destino"])
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(b"AJENO")
+
+        async def vigente():
+            return True
+        r = await svc._abandonar(op, SimpleNamespace(vigente=vigente, epoca=0),
+                                 Resultado(EstadoResultado.ERROR, "fallo conocido"))
+        assert r.estado == "error"
+        assert destino.read_bytes() == b"AJENO"
+        assert (await mundo.estado()).ops == ["cancelada"]
