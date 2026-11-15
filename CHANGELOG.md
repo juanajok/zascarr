@@ -71,6 +71,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   de HTTP sin TLS, y `LEGAL.md` lo advierte. Incluye `scripts/diagnostico_foro.py` (sin
   credenciales en pantalla) y pruebas con fixtures latin-1/cp1252 y de saturación.
 
+### Añadido
+
+- **CUR1: sagas en la ficha de serie (2026-11-15).** La ficha muestra un bloque perezoso
+  «Sagas» con las sagas en las que participa la serie y su tramo (`puesto 3 de 12` o
+  `puestos 3–4 de 12`), enlazando a `/ui/arcos/{id}`. Solo lectura sobre
+  `story_arc_issues.reading_order`; sin migración, sin tocar números ni archivos.
+
 ### Corregido
 
 - **Lote 2 de deudas menores (2026-11-15).** El enricher de huecos ya no se queda con las

@@ -588,8 +588,9 @@ class TestPresupuestoTextoU21:
     def test_navegacion_por_anclas_y_completitud_sin_ambiguedad(self):
         html = self._render()
         assert 'class="ficha-nav"' in html
-        for ancla in ("#numeros-serie", "#politica-serie", "#etiquetas-serie",
-                      "#colecciones-serie", "#coleccion-serie", "#datos-serie"):
+        for ancla in ("#numeros-serie", "#sagas-serie", "#politica-serie",
+                      "#etiquetas-serie", "#colecciones-serie", "#coleccion-serie",
+                      "#datos-serie"):
             assert f'href="{ancla}"' in html
         assert 'id="numeros-serie"' in html
         assert 'id="datos-serie"' in html
@@ -1256,6 +1257,30 @@ class TestAtribucionFandomVisible:
         assert "DC/Marvel Database" in dentro
         fuera = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[1]
         assert "Creative Commons BY-SA 3.0" in fuera
+
+
+def test_panel_sagas_muestra_posicion_y_no_pinta_si_no_hay_sagas():
+    from unittest.mock import AsyncMock, patch
+
+    from zascarr.services.arcos import SagaDeSerie
+    series = make_series(total_issues=3)
+    session = FakeSession([], series=series)
+    with patch("zascarr.web.series.sagas_de_serie", AsyncMock(return_value=[
+            SagaDeSerie("a1", "Court of Owls", True, 3, 4, 12)])), \
+            use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}/sagas")
+    assert r.status_code == 200
+    assert "Court of Owls" in r.text
+    assert "puestos 3–4 de 12" in r.text and "Cruza series" in r.text
+    assert r.headers["cache-control"] == "no-store"
+    assert 'href="/ui/arcos/a1"' in r.text
+
+    session2 = FakeSession([], series=series)
+    with patch("zascarr.web.series.sagas_de_serie", AsyncMock(return_value=[])), \
+            use_fake_session(session2) as client:
+        vacio = client.get(f"/ui/series/{series.id}/sagas")
+    assert vacio.status_code == 200 and vacio.text == ""
+    assert vacio.headers["cache-control"] == "no-store"
 
 
 def test_serie_larga_colapsa_los_numeros_y_deja_los_primeros_visibles():

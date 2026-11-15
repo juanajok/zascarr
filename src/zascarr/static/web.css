@@ -1842,6 +1842,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
    especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
 
 /* ── BL-ETQ1a (#403): etiquetas en la ficha ───────────────────────────────── */
+.series-sagas { margin: 10px 0 6px; }
+.series-sagas h2 { margin: 0 0 4px; }
+.series-sagas-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.series-sagas-lista li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .series-colecciones { margin: 10px 0 6px; }
 .series-colecciones h2 { margin: 0 0 4px; }
 .series-colecciones-lista { display: flex; flex-wrap: wrap; gap: var(--space-2); }
