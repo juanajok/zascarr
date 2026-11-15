@@ -67,6 +67,25 @@ TOPIC_PATTERN = re.compile(
     r'<a[^>]+href=["\']([^"\']*showtopic=\d+[^"\']*)["\'][^>]*>([^<]+)</a>', re.IGNORECASE
 )
 
+#: Filas reales de resultados de IPB: los enlaces de navegación («aquí explicado»,
+#: «aquí expuestos») también son `showtopic`, pero quedan fuera de estos bloques.
+RESULTADO_PATTERN = re.compile(
+    r'<!--\s*Begin Topic Entry.*?-->.*?(?=<!--\s*Begin Topic Entry|<!--\s*End Topic Entry|$)',
+    re.IGNORECASE | re.DOTALL)
+
+
+def temas_de_busqueda(html: str) -> list[tuple[str, str]]:
+    """`(href, título)` de los temas de la tabla de resultados, sin navegación.
+
+    Si el HTML no trae los comentarios de IPB (fixtures antiguos), se usa el
+    enlace global de siempre para no romper el contrato.
+    """
+    bloques = RESULTADO_PATTERN.findall(html)
+    if not bloques:
+        return TOPIC_PATTERN.findall(html)
+    return [match for bloque in bloques for match in TOPIC_PATTERN.findall(bloque)]
+
+
 MAX_SALTOS = 3
 _PUERTO_POR_DEFECTO = {"http": 80, "https": 443}
 #: Bytes que se miran buscando `<meta charset>` (los primeros de la página).
@@ -520,7 +539,7 @@ class ForumScraper:
             # igual, pero no se rompe la búsqueda ni se filtra la query al log).
             termino = quote(query, encoding="cp1252", errors="replace")
         url = (f"{self._base}/index.php?act=Search&CODE=01&keywords={termino}"
-               "&searchin=titles")
+               "&searchin=titles&forums%5B%5D=all")
         try:
             html = await self._get(url, politica=self._politica_busqueda,
                                    espera_max_s=self._espera_busqueda_s)
@@ -535,7 +554,7 @@ class ForumScraper:
             logger.warning("forum.search_failed", error=type(exc).__name__)
             return []
         results: list[ForumResult] = []
-        for href, title in TOPIC_PATTERN.findall(html)[:10]:
+        for href, title in temas_de_busqueda(html)[:10]:
             href = unescape(href)  # `&amp;` del HTML, no parte de la ruta
             try:
                 url_tema = self._resolver_enlace(href)
