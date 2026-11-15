@@ -4,7 +4,7 @@
 <p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
 <h1>Importar una guía</h1>
 <p class="subtitle">Enlaza los números de una guía de lectura con los que ya tienes. No se crean series ni números.</p>
-{% if errores.get("general") %}{{ ui.aviso("warn", errores.general, foco=true) }}{% endif %}
+{% if errores.get("general") %}<div id="importar-error">{{ ui.aviso("warn", errores.general, foco=true) }}</div>{% endif %}
 {% if fuente_apagada %}
 {{ ui.aviso("amber", "Esa fuente está apagada: enciéndela en Ajustes antes de importar. La guía no se leerá hasta entonces.") }}
 <p><a class="btn ghost sm" href="/ui/ajustes">Ir a Ajustes</a></p>
@@ -21,12 +21,12 @@
     </select>
   </label>
   <label>Dirección de la guía
-    <input type="url" name="url" value="{{ valores.url }}" maxlength="500" required
+    <input type="url" name="url" id="importar-url" value="{{ valores.url }}" maxlength="500" required
            placeholder="https://… (la URL exacta de la guía, sin parámetros)"
-           {% if errores %}aria-invalid="true" aria-describedby="importar-error"{% endif %}>
+           {% if errores %}aria-invalid="true" aria-describedby="importar-ayuda importar-error"{% else %}aria-describedby="importar-ayuda"{% endif %}>
   </label>
   <p class="muted">Ejemplos: <code>https://comicbookreadingorders.com/dc/events/…-reading-order/</code> o <code>https://www.continuityguide.net/…</code>. Copia la dirección desde el navegador.</p>
-  <p class="caption" id="importar-error">La web puede pedir esperar; no repitas la petición. La fuente debe estar encendida en Ajustes.</p>
+  <p class="caption" id="importar-ayuda">La web puede pedir esperar; no repitas la petición. La fuente debe estar encendida en Ajustes.</p>
   <div class="edicion-acciones">
     <button type="submit" class="btn primary">Importar guía</button>
     <span id="importar-espera" class="htmx-indicator caption" aria-live="polite">Leyendo la guía…</span>
