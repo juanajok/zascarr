@@ -152,3 +152,16 @@ def test_temporal_sobrescrito_in_place_no_publica_ajeno(tmp_path):
         assert temp.read_bytes() == b"AJENO"
     finally:
         copia.cerrar()
+
+
+def test_fallo_al_verificar_raiz_no_deja_unbound(tmp_path, monkeypatch):
+    raiz = tmp_path / "raiz"
+    raiz.mkdir()
+    origen = tmp_path / "origen.cbz"
+    origen.write_bytes(b"contenido")
+    def falla_readlink(_ruta):
+        raise OSError("fallo simulado")
+    monkeypatch.setattr("zascarr.utils.fs.os.readlink", falla_readlink)
+    with pytest.raises(DestinoFueraDeRaizError):
+        safe_move_en_raiz(origen, raiz / "Uno.cbz", raiz)
+    assert origen.exists()

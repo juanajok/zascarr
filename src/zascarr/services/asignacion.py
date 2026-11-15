@@ -848,9 +848,9 @@ class AsignacionService:
         if op.get("root_id") is not None:
             try:
                 raiz_limpieza = (await self._raiz_para_escritura(op)).path
-            except RaizNoDisponibleError:
+            except (RaizNoDisponibleError, DestinoFueraDeRaizError):
                 raiz_limpieza = None
-        if raiz_limpieza is None:
+        if raiz_limpieza is None and (temporales or origen.exists()):
             return Resultado("asignado_limpieza_pendiente",
                              "No se puede confinar la limpieza; se conserva el origen", op["destino"])
         for temporal in temporales:
@@ -862,7 +862,7 @@ class AsignacionService:
                                                   raiz_limpieza, inodo_esperado=inodo)
                 if not borrado and temporal.exists():
                     raise OSError("temporal no coincide con su inodo")
-            except OSError:
+            except (OSError, DestinoFueraDeRaizError):
                 return Resultado("asignado_limpieza_pendiente",
                                  "Queda un temporal sin retirar; se conserva el origen", op["destino"])
         if origen.exists():
