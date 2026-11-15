@@ -373,6 +373,8 @@ class Orchestrator:
             self._forum_candidates(query),
             return_exceptions=True,
         )
+        # `CancelledError` hereda de BaseException: no es un fallo de fuente, es la
+        # cancelación del ciclo (apagado, timeout del proceso). Se propaga tal cual.
         for resultado in (resultado_prowlarr, resultado_foro):
             if isinstance(resultado, asyncio.CancelledError):
                 raise resultado
