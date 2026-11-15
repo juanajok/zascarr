@@ -43,6 +43,15 @@ SecOps **favorable**, §5.8 no aplica (no toca `ajustes`/`seguridad`/`models`/mi
 - **Pantalla de importación de guías — cerrada (2026-11-15, PR [#846](https://github.com/juanajok/zascarr/pull/846)):** «Importar una guía» en Sagas en orden (fuente + URL, allowlist de los extractores, aviso de fuente apagada, cortesía y resultado con enlazados/omitidos); los errores y esperas se explican sin pantallas de error. Menores declarados: validación de URL antes que fuente apagada (O1), mensaje genérico (O2), commit fuera del `try` (m-1) y trazas potenciales en logs (m-2), sin impacto de seguridad.
 | **Precisión del match por volumen** (SCR3) | Requiere datos reales y ajuste fino con falsos positivos | Medir con N guías reconciliadas antes de tocarlo |
 
+## Cerradas en el lote 2 (2026-11-15, PR [#850](https://github.com/juanajok/zascarr/pull/850))
+
+- **SCR7 O1** (inanición del lote de huecos): `_enrich_huecos_por_id` rota por `enrichment_attempted_at` (actualizado al procesar) y el `limit` solo lo consumen series cubribles; las fuentes cortadas no cuentan y las series sin huecos cubribles se marcan 30 d. Menores restantes declarados: prefetch `max(limit*50, 500)` y corte transitorio que puede hacer rotar una serie sin petición.
+- **SCR7 O2**: GCD/Metron/Open Library tratan payload vacío como `None` (igual que 404), sin borrados.
+- **SCR7 O3**: la atribución de relleno se muestra aunque la URL de ficha no valide (texto sin `href` vacío ni esquemas peligrosos).
+- **Guía UI m-1/m-2**: el `commit` y la lectura van dentro del `try` (200 con aviso, `rollback`, sin 500) y el log genérico ya no vuelca trazas ni URL.
+
+Riesgo residual aceptado: O4 (la marca de 30 d también se pone tras un relleno exitoso) es lo que pide la spec de SCR7. Pendientes de la fase UI/UX: carga perezosa de «Novedades» de Herald y validación real de la lectura de temas del foro.
+
 ## Pendientes de producto
 
 - **ADR 0018** (caché HTTP y fuentes externas) sigue «Propuesto»: implementado desde SCR1; falta la
