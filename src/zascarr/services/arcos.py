@@ -63,6 +63,16 @@ class PaginaArcos:
 
 
 @dataclass(frozen=True)
+class SagaDeSerie:
+    id: str
+    title: str
+    is_crossover: bool
+    desde: int
+    hasta: int
+    total: int
+
+
+@dataclass(frozen=True)
 class DetalleArco:
     id: str
     title: str
@@ -210,6 +220,39 @@ async def pedir_arco(db: AsyncSession, arco_id: UUID) -> ResultadoPedidoArco:
     await db.flush()
     return ResultadoPedidoArco(True, anadidos=anadidos, ya_pedidos=ya,
                                en_biblioteca=biblioteca, total=len(filas))
+
+
+async def sagas_de_serie(db: AsyncSession, series_id: UUID) -> list[SagaDeSerie]:
+    """Sagas en las que participa una serie, con su primera/última posición.
+
+    Solo lee: no crea arcos ni modifica `reading_order`. Si la serie tiene varios
+    números en una saga, ``desde``/``hasta`` acotan su tramo dentro del orden.
+    """
+    total_sq = (
+        select(func.count(StoryArcIssue.issue_id))
+        .where(StoryArcIssue.story_arc_id == StoryArc.id)
+        .correlate(StoryArc)
+        .scalar_subquery()
+    )
+    filas = (await db.execute(
+        select(
+            StoryArc.id, StoryArc.title, StoryArc.is_crossover,
+            func.min(StoryArcIssue.reading_order).label("desde"),
+            func.max(StoryArcIssue.reading_order).label("hasta"),
+            total_sq.label("total"),
+        )
+        .join(StoryArcIssue, StoryArcIssue.story_arc_id == StoryArc.id)
+        .join(Issue, Issue.id == StoryArcIssue.issue_id)
+        .where(Issue.series_id == series_id)
+        .group_by(StoryArc.id, StoryArc.title, StoryArc.is_crossover)
+        .order_by(func.lower(StoryArc.title), StoryArc.id)
+    )).all()
+    return [
+        SagaDeSerie(
+            id=str(f.id), title=f.title, is_crossover=bool(f.is_crossover),
+            desde=int(f.desde), hasta=int(f.hasta), total=int(f.total))
+        for f in filas
+    ]
 
 
 @dataclass

@@ -87,6 +87,7 @@
 
 <nav class="ficha-nav" aria-label="Secciones de la ficha">
   <a class="btn ghost sm" href="#numeros-serie">Números</a>
+  <a class="btn ghost sm" href="#sagas-serie">Sagas</a>
   <a class="btn ghost sm" href="#politica-serie">Búsqueda</a>
   <a class="btn ghost sm" href="#etiquetas-serie">Etiquetas</a>
   <a class="btn ghost sm" href="#colecciones-serie">Colecciones</a>
@@ -136,7 +137,8 @@
 {% endif %}
 </section>
 
-
+<section id="sagas-serie" class="series-sagas" aria-label="Sagas de la serie"
+         hx-get="/ui/series/{{ series.id }}/sagas" hx-trigger="load" hx-swap="outerHTML"></section>
 
 {#- BL-INF6 (#592): «Elegir portada». El panel NO se pide hasta desplegarlo (cero miniaturas y
     cero consultas en la carga de la ficha): el `toggle` nativo del <details> dispara el `hx-get`.
