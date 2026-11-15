@@ -148,16 +148,18 @@ async def test_ac_cha_6_una_accion_de_otro_origen_se_rechaza():
 # ── Búsqueda: la query viaja en el charset detectado ──────────────────────────────────────
 
 async def test_la_busqueda_codifica_la_query_en_el_charset_detectado():
-    urls: list[str] = []
+    peticiones: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        urls.append(str(request.url))
+        peticiones.append(request)
         return _pagina(_bytes("cero_resultados.html"), content_type="text/html")
 
     scraper = _scraper(handler)
     scraper._charset = "iso8859-1"
     assert await scraper.use_ipb_search("Capitán", abrir_temas=False) == []
-    assert "keywords=Capit%E1n" in urls[0]
+    assert peticiones[0].method == "POST"
+    assert b"keywords=Capit%E1n" in peticiones[0].content
+    assert b"search_in=titles" in peticiones[0].content
 
 
 async def test_el_titulo_del_resultado_latin1_se_lee_sin_caracteres_rotos():
