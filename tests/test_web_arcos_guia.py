@@ -17,15 +17,20 @@ URL_RO = ("https://comicbookreadingorders.com/dc/events/"
           "crisis-on-infinite-earths-reading-order/")
 
 
-def _cliente():
+def _cliente(*, commit_error=None):
     async def _execute(_consulta):
         return SimpleNamespace(scalar_one_or_none=lambda: None)
 
+    commit = AsyncMock(side_effect=commit_error) if commit_error else AsyncMock()
+    rollback = AsyncMock()
+
     async def _db():
-        yield SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock(),
-                              execute=_execute)
+        yield SimpleNamespace(commit=commit, rollback=rollback, execute=_execute)
     app.dependency_overrides[get_db] = _db
-    return TestClient(app)
+    cliente = TestClient(app)
+    cliente._commit = commit          # type: ignore[attr-defined]
+    cliente._rollback = rollback      # type: ignore[attr-defined]
+    return cliente
 
 
 def _cerrar():
@@ -169,3 +174,54 @@ def test_la_saga_muestra_el_resumen_de_la_importacion():
     assert r.status_code == 200
     assert "Guía importada" in r.text and "3 números enlazados" in r.text
     assert "omitidos" in r.text and "números que no tienes" in r.text
+
+
+# ── Deudas lote 2: m-1 (commit dentro del try) y m-2 (log sin traza) ──────────────────────
+
+def test_m1_si_el_commit_falla_no_hay_500_y_se_revierte(monkeypatch):
+    monkeypatch.setattr("zascarr.web.arcos.fuente_habilitada", lambda *_a, **_k: True)
+    resultado = _resultado()
+    c = _cliente(commit_error=RuntimeError("fallo de BD"))
+    try:
+        with patch("zascarr.web.arcos.leer_y_reconciliar", AsyncMock(return_value=resultado)):
+            r = c.post("/ui/arcos/importar-guia",
+                       data={"fuente": "reading_orders", "url": URL_RO})
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "No se pudo importar la guía" in r.text
+    c._commit.assert_awaited()
+    c._rollback.assert_awaited()
+
+
+def test_m1_si_el_servicio_lanza_no_hay_500_y_se_revierte(monkeypatch):
+    monkeypatch.setattr("zascarr.web.arcos.fuente_habilitada", lambda *_a, **_k: True)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.leer_y_reconciliar",
+                   AsyncMock(side_effect=RuntimeError("boom"))):
+            r = c.post("/ui/arcos/importar-guia",
+                       data={"fuente": "reading_orders", "url": URL_RO})
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and "No se pudo importar la guía" in r.text
+    c._rollback.assert_awaited()
+
+
+def test_m2_el_log_generico_no_vuelca_traza_ni_url(monkeypatch):
+    import structlog
+
+    monkeypatch.setattr("zascarr.web.arcos.fuente_habilitada", lambda *_a, **_k: True)
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.leer_y_reconciliar",
+                   AsyncMock(side_effect=RuntimeError(f"fallo en {URL_RO}"))), \
+                structlog.testing.capture_logs() as registros:
+            r = c.post("/ui/arcos/importar-guia",
+                       data={"fuente": "reading_orders", "url": URL_RO})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    fallos = [x for x in registros if x["event"] == "arcos.importar_guia_failed"]
+    assert fallos and fallos[0]["fuente"] == "reading_orders"
+    assert fallos[0]["error"] == "RuntimeError"
+    assert "exc_info" not in fallos[0] and "comicbookreadingorders" not in repr(fallos)

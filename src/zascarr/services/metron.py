@@ -179,7 +179,14 @@ class MetronClient:
             data = r.json()
         except ValueError as exc:
             raise ErrorDePeticion("respuesta JSON inválida de Metron") from exc
-        return _serie_desde_raw(data) if isinstance(data, dict) else None
+        ficha = _serie_desde_raw(data) if isinstance(data, dict) else None
+        if ficha is None:
+            return None
+        # O2 (deudas SCR7): un payload vacío o sin ningún dato útil es como un 404.
+        if not (ficha.name or ficha.year_began is not None or ficha.year_ended is not None
+                or ficha.descripcion):
+            return None
+        return ficha
 
     async def get_series(self, metron_id: int) -> MetronResult | None:
         """`GET /series/{id}/` para detalle (no usado aún por el enricher)."""
