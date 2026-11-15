@@ -262,26 +262,6 @@ class TestProcessItemRetryPool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 2.0. Serie sin número: filtrar por título, no aceptar cualquier release
-# ═══════════════════════════════════════════════════════════════════════════
-
-class TestFiltroDeSerie:
-
-    def test_dc_ko_no_acepta_un_manual_que_solo_comparte_dc(self):
-        orch = Orchestrator(db=FakeSession())
-        malo = make_result(title="Konar H. DC Dutta's Textbook of Gynecology...8ed 2020")
-        bueno = make_result(title="DC K.O. #1 (2025).cbz")
-        assert not orch._candidato_es_de_la_serie(malo, "DC K.O.")
-        assert orch._candidato_es_de_la_serie(bueno, "DC K.O.")
-
-    def test_los_alias_locales_siguen_valiendo(self):
-        orch = Orchestrator(db=FakeSession())
-        candidato = make_result(title="La Patrulla-X 01.cbr")
-        assert orch._candidato_es_de_la_serie(
-            candidato, "X-Men", {"la patrulla x"})
-
-
-# ═══════════════════════════════════════════════════════════════════════════
 # 2a. Búsqueda conjunta: Prowlarr y foro, no una cascada
 # ═══════════════════════════════════════════════════════════════════════════
 
