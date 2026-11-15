@@ -280,6 +280,10 @@ def fuente_habilitada(fuente: str, ajustes=None) -> bool:
         # están las dos (mismo criterio que la decisión D-7 del benchmark de SCR2).
         return bool(getattr(s, "fandom_dc_enabled", False)
                     or getattr(s, "fandom_marvel_enabled", False))
+    if fuente == "blog":
+        # El campo se llama `blog_feed_enabled`, no `blog_enabled`; además exige URL.
+        return bool(getattr(s, "blog_feed_enabled", False)
+                    and (getattr(s, "blog_feed_url", "") or "").strip())
     atributo = f"{fuente}_enabled"
     return bool(getattr(s, atributo, False))
 

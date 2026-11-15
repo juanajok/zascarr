@@ -148,7 +148,7 @@
         <label>Dirección del feed
           <input type="url" name="blog_feed_url" value="{{ blog_feed_url }}" maxlength="500" placeholder="https://tu-blog.example/feed.xml">
         </label>
-        <p class="ajustes-hint">Sin dirección no hay ninguna fuente por defecto. Solo se aceptan enlaces http(s), magnet, ed2k o .torrent que el feed ya incluya: no se abren los posts ni se inventan enlaces.</p>
+        <p class="ajustes-hint">Sin dirección no hay ninguna fuente por defecto. Solo se aceptan enlaces magnet o ed2k que el feed ya incluya: no se abren los posts, no se sigue un .torrent y no se inventan enlaces.</p>
         <div class="ajustes-actions"><button type="submit">Guardar blog o RSS</button></div>
       </form>
       <div id="resultado-blog" aria-live="polite"></div>

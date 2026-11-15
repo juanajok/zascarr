@@ -14,7 +14,7 @@ RSS = """<?xml version="1.0"?>
 <rss version="2.0"><channel>
 <item><title>Batman 001</title><link>https://blog.example/post/1</link>
 <pubDate>Mon, 01 Jan 2024 10:00:00 GMT</pubDate>
-<enclosure url="https://blog.example/files/Batman001.torrent" type="application/x-bittorrent"/>
+<enclosure url="magnet:?xt=urn:btih:abcdef0123456789&amp;dn=Batman1" type="application/x-bittorrent"/>
 </item>
 <item><title>Batman 002</title><link>https://blog.example/post/2</link>
 <description>Descarga: magnet:?xt=urn:btih:abcdef0123456789&amp;dn=Batman2</description>
@@ -36,8 +36,8 @@ ATOM = """<?xml version="1.0"?>
 def test_parser_rss_extrae_directos_y_descarta_posts():
     entradas = parsear_feed(RSS)
     assert [e.titulo for e in entradas] == ["Batman 001", "Batman 002"]
-    assert entradas[0].tipo == "torrent"
-    assert entradas[0].descarga_url.endswith("Batman001.torrent")
+    assert entradas[0].tipo == "magnet"
+    assert "magnet:?xt=urn:btih:" in entradas[0].descarga_url
     assert entradas[1].tipo == "magnet"
     assert "magnet:?xt=urn:btih:" in entradas[1].descarga_url
 
@@ -72,6 +72,8 @@ async def test_buscar_en_feed_filtra_y_no_devuelve_post_sin_descarga(monkeypatch
     async def _descargar(*_a, **_k):
         return RSS
     monkeypatch.setattr(blog_feed, "_descargar", _descargar)
+    monkeypatch.setattr("zascarr.utils.cortesia.fuente_habilitada",
+                        lambda *_a, **_k: True)
     entradas = await buscar_en_feed("https://blog.example/feed.xml", "Batman 001")
     assert [e.titulo for e in entradas] == ["Batman 001"]
 
