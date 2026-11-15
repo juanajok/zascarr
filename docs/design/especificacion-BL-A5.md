@@ -1,7 +1,7 @@
 # Especificación — BL-A5: repartir tradiciones entre discos (#156)
 
 > **Estado: APROBADO (D1–D7). CORTES A (#844) Y B (#859) IMPLEMENTADOS; NO DESPLEGADOS. MIGRACIÓN
-> 0041 APLICADA SOLO EN LA PI DEL PO CON BACKUP, NO EN UNA INSTALACIÓN GENERAL; CORTES C–D
+> 0041 APLICADA EN LA PI DEL PO CON BACKUP, FUERA DE ESTE PR; NO IMPLICA DESPLIEGUE GENERAL; CORTES C–D
 > PENDIENTES.** Este documento es la especificación de referencia. El corte A (modelo, migración y
 > `RaicesService`) y el corte B (importer/asignación y confinamiento) están implementados y probados
 > localmente, pero este PR **no despliega** ni aplica la migración a una instalación general;
@@ -43,8 +43,8 @@ segundo disco desde la UI, y A+B sin C miente en el escaneo.
 > figuran en §2, y se autoriza el **corte A** (cimiento y migración). El corte A está implementado
 > en **#844** (ADR 0020, modelos, migración aditiva 0041 y `RaicesService`) y el corte B en **#859**
 > (importer/asignación, `safe_move` confinado, `root_id` persistido y M1). **Este PR no despliega**:
-> la migración 0041 solo está aplicada en la Pi del PO con backup (evidencia de #156), no en una
-> instalación general. Los cortes C–D siguen pendientes; **A5 no está hecho**.
+> la migración 0041 solo está aplicada en la Pi del PO con backup (evidencia de #156), **fuera de
+> este PR**; no implica despliegue general ni autorización para instalar en otras. Los cortes C–D siguen pendientes; **A5 no está hecho**.
 
 ## 1. Historia, valor y alcance
 
@@ -805,7 +805,8 @@ registra la decisión, no la sustituye.
 ### 10.3 Lo que **NO** se hace en los cortes A/B
 
 - **No se despliega** este PR: la migración 0041 solo está aplicada en la Pi del PO con backup
-  (evidencia de #156), no en una instalación general.
+  (evidencia de #156), **fuera de este PR**; no implica despliegue general ni autorización para
+  instalar en otras.
 - **No se implementa** la UI de Ajustes ni los cortes C (N raíces operativas) o D
   (Ajustes/operación).
 - No se mueven archivos existentes, no se renombran, no se borran, no se crea una raíz ausente.
@@ -839,4 +840,4 @@ registra la decisión, no la sustituye.
 
 ---
 
-*Fin de la especificación. D1–D7 aprobadas; cortes A (#844) y B (#859) implementados, no desplegados; migración 0041 aplicada solo en la Pi del PO con backup, no en una instalación general; cortes C–D pendientes; A5 no está hecho.*
+*Fin de la especificación. D1–D7 aprobadas; cortes A (#844) y B (#859) implementados, no desplegados; migración 0041 aplicada en la Pi del PO con backup, fuera de este PR, sin implicar despliegue general; cortes C–D pendientes; A5 no está hecho.*

@@ -491,16 +491,21 @@ class AsignacionService:
                 "La operación antigua no cae bajo ninguna raíz; no se mueve.")
         return foto.raiz_para_escritura(raiz.id)
 
+    async def _raiz_para_escritura(self, op) -> RaizResuelta:
+        """H3: revalida la raíz justo antes de usarla (no confía en la foto)."""
+        async with self._fabrica() as s:
+            foto = await self._foto(s)
+        if op.get("root_id") is not None:
+            return foto.raiz_para_escritura(op["root_id"])
+        return self._raiz_legacy(foto, Path(op["destino"]))
+
     async def _continuar(self, op_id: UUID, prop: _Propiedad) -> Resultado:
         op = await self._op(op_id)
         if op is None or op["estado"] in ("limpiada", "cancelada"):
             return Resultado("ya_asignado", "Operación ya cerrada", op["destino"] if op else None)
         origen, destino = Path(op["origen"]), Path(op["destino"])
         try:
-            async with self._fabrica() as s:
-                foto = await self._foto(s)
-            raiz = (foto.para_id(op["root_id"]) if op.get("root_id") is not None
-                    else self._raiz_legacy(foto, destino))
+            raiz = await self._raiz_para_escritura(op)
             if not destino.is_relative_to(raiz.path):
                 raise RaizNoDisponibleError(
                     "El destino de la operación ya no está bajo su raíz.", raiz=raiz.name)
@@ -516,6 +521,13 @@ class AsignacionService:
 
         if op["estado"] == "preparada":
             await self._gancho("tras_preparar")
+            try:
+                raiz = await self._raiz_para_escritura(op)
+                _validar_destino_en_raiz(raiz.path, destino)
+                _validar_destino_en_raiz(raiz.path, mi_temporal)
+            except (RaizNoDisponibleError, DestinoFueraDeRaizError) as exc:
+                causa = getattr(exc, "causa", None) or str(exc)
+                return Resultado(EstadoResultado.ERROR, causa, op["destino"])
             if not destino.exists():
                 try:
                     for anterior in range(1, prop.epoca):              # temporales de ejecutores anteriores

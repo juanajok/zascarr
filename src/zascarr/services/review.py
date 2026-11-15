@@ -122,8 +122,9 @@ class PaginaPendientes:
 
 
 class ReviewService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, *, foto_raices=None):
         self.db = db
+        self._foto_raices = foto_raices
         self._library: Path | None = None   # solo para dobles de prueba heredados
 
     @staticmethod
@@ -270,8 +271,9 @@ class ReviewService:
 
         try:
             legacy = getattr(self, "_library", None)
-            foto = (await FotoDeRaices.cargar(self.db) if isinstance(self.db, AsyncSession)
-                    else FotoDeRaices.compatibilidad(path=legacy))
+            foto = self._foto_raices or (
+                await FotoDeRaices.cargar(self.db) if isinstance(self.db, AsyncSession)
+                else FotoDeRaices.compatibilidad(path=legacy))
             raiz = foto.por_tradicion(getattr(series, "tradition", None))
             if raiz.id is not None:
                 raiz = foto.raiz_para_escritura(raiz.id)

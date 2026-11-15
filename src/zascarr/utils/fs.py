@@ -23,11 +23,14 @@ es la implementación de esa regla para todo lo que mueve ficheros:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import errno
 import os
 import re
 import shutil
+import stat
 import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -79,9 +82,122 @@ def _validar_destino_en_raiz(raiz: str | Path, dest: str | Path) -> Path:
 
 
 def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Path:
-    """`safe_move` confinado a `raiz`: rechaza symlinks que saquen la escritura."""
-    return safe_move(src, dest, raiz=raiz)
+    """Mueve con descriptores y `dir_fd`, sin seguir symlinks fuera de la raíz.
 
+    Abre la raíz una vez y recorre/crea los componentes con `O_NOFOLLOW |
+    O_DIRECTORY`; el temporal se crea en el mismo descriptor de directorio y se
+    publica con `os.replace(..., src_dir_fd=..., dst_dir_fd=...)`. No se elimina
+    el original si cualquier comprobación falla.
+    """
+    root_res = Path(raiz).resolve(strict=False)
+    source = Path(src)
+    destino = Path(dest)
+    if not root_res.is_dir():
+        raise DestinoFueraDeRaizError("La raíz no existe o no es un directorio.")
+    try:
+        destino_res = destino.resolve(strict=False)
+        relativo = destino_res.relative_to(root_res)
+    except (OSError, ValueError):
+        raise DestinoFueraDeRaizError("El destino no cuelga de la raíz autorizada.") from None
+    if not relativo.parts:
+        raise DestinoFueraDeRaizError("El destino no tiene nombre de archivo.")
+    if destino.is_symlink():
+        raise DestinoFueraDeRaizError("El destino final es un symlink.")
+    try:
+        root_fd = os.open(root_res, os.O_RDONLY | os.O_DIRECTORY)
+    except OSError as exc:
+        raise DestinoFueraDeRaizError("No se pudo abrir la raíz autorizada.") from exc
+    parent_fd = root_fd
+    try:
+        for parte in relativo.parts[:-1]:
+            try:
+                fd = os.open(parte, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                             dir_fd=parent_fd)
+            except FileNotFoundError:
+                os.mkdir(parte, 0o755, dir_fd=parent_fd)
+                fd = os.open(parte, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                             dir_fd=parent_fd)
+            if parent_fd != root_fd:
+                os.close(parent_fd)
+            parent_fd = fd
+        final_name = relativo.parts[-1]
+        # Nunca elegir un nombre que sea symlink (aunque sea roto).
+        try:
+            st_final = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            st_final = None
+        if st_final is not None:
+            if stat.S_ISLNK(st_final.st_mode):
+                raise DestinoFueraDeRaizError("El destino final es un symlink.")
+            stem, suffix = os.path.splitext(final_name)
+            n = 1
+            while True:
+                candidato = f"{stem} ({n}){suffix}"
+                try:
+                    st = os.stat(candidato, dir_fd=parent_fd, follow_symlinks=False)
+                except FileNotFoundError:
+                    final_name = candidato
+                    break
+                if stat.S_ISLNK(st.st_mode):
+                    raise DestinoFueraDeRaizError("Un nombre alternativo es un symlink.")
+                n += 1
+        src_parent = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            src_fd = os.open(source.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=src_parent)
+        except OSError as exc:
+            os.close(src_parent)
+            raise DestinoFueraDeRaizError("El origen es un symlink o no se puede abrir.") from exc
+        try:
+            st_src = os.fstat(src_fd)
+            # Mismo fichero: no hay nada que mover.
+            try:
+                st_dst = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                st_dst = None
+            if (st_dst is not None
+                    and (st_dst.st_dev, st_dst.st_ino) == (st_src.st_dev, st_src.st_ino)):
+                return root_res / relativo
+            comprobar_espacio(root_res, st_src.st_size, "mover a la biblioteca")
+            if st_src.st_dev == os.fstat(parent_fd).st_dev:
+                try:
+                    os.replace(source.name, final_name, src_dir_fd=src_parent,
+                               dst_dir_fd=parent_fd)
+                    return root_res / relativo.parent / final_name
+                except OSError as exc:
+                    if exc.errno != errno.EXDEV:
+                        raise
+            temp_name = f".{final_name}.{os.getpid()}.{uuid.uuid4().hex[:12]}.part"
+            temp_fd = os.open(temp_name, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+                              0o600, dir_fd=parent_fd)
+            try:
+                with os.fdopen(os.dup(src_fd), "rb") as entrada, \
+                        os.fdopen(os.dup(temp_fd), "wb") as salida:
+                    shutil.copyfileobj(entrada, salida, length=1024 * 1024)
+                    salida.flush()
+                    os.fsync(salida.fileno())
+                if os.fstat(temp_fd).st_size != st_src.st_size:
+                    raise OSError("copia incompleta: el tamaño no coincide")
+                os.close(temp_fd)
+                temp_fd = -1
+                os.replace(temp_name, final_name, src_dir_fd=parent_fd,
+                           dst_dir_fd=parent_fd)
+                os.unlink(source.name, dir_fd=src_parent)
+                return root_res / relativo.parent / final_name
+            except BaseException:
+                if temp_fd >= 0:
+                    os.close(temp_fd)
+                with contextlib.suppress(OSError):
+                    os.unlink(temp_name, dir_fd=parent_fd)
+                raise
+        finally:
+            os.close(src_fd)
+            os.close(src_parent)
+    finally:
+        if parent_fd != root_fd:
+            with contextlib.suppress(OSError):
+                os.close(parent_fd)
+        with contextlib.suppress(OSError):
+            os.close(root_fd)
 
 async def safe_move_en_raiz_async(src: str | Path, dest: str | Path,
                                  raiz: str | Path) -> Path:
@@ -169,7 +285,7 @@ def safe_move(src: str | Path, dest: str | Path, *,
     src = Path(src)
     dest = Path(dest)
     if raiz is not None:
-        _validar_destino_en_raiz(raiz, dest)
+        return safe_move_en_raiz(src, dest, raiz)
 
     # Ya está en su sitio (mismo fichero): no hay nada que mover.
     if src.resolve() == dest.resolve():

@@ -23,6 +23,7 @@ import asyncio
 import errno
 import json
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -113,7 +114,8 @@ def _mensaje_sin_rutas(exc: BaseException, path: Path) -> str:
     for absoluta, visible in reemplazos.items():
         if absoluta:
             texto = texto.replace(absoluta, visible)
-    return texto
+    # Cualquier otra ruta absoluta que venga de una causa (p. ej. la raíz).
+    return re.sub(r"(?<![\w.])/(?:[^\s'\"()]+)", "<ruta>", texto)
 
 
 def _existe(ruta: str) -> bool:
@@ -549,17 +551,19 @@ class Importer:
                 report.errors.append("El ciclo se detuvo antes de mirar el resto de las descargas")
                 break
             except Exception as exc:
-                logger.exception("importer.file_failed", file=path.name)
+                logger.error("importer.file_failed", file=path.name,
+                             error=type(exc).__name__)
                 report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
 
         # B7: revisión de la biblioteca YA importada, no de lo nuevo que
         # acaba de llegar — un paso independiente del bucle de arriba.
         try:
             comprobacion = await self._comprobar_biblioteca()
-        except Exception:
+        except Exception as exc:
             # Un fallo no marca ninguna baja, pero tampoco puede pasar por «no pasó nada»: queda
             # escrito en el informe (#231, criterio 11), sin afirmar causa.
-            logger.exception("importer.deteccion_desaparecidos_fallida")
+            logger.error("importer.deteccion_desaparecidos_fallida",
+                         error=type(exc).__name__)
             comprobacion = ComprobacionBiblioteca(
                 resultado=ResultadoComprobacion.FALLO_DETECCION, fecha=datetime.now(UTC))
         report.comprobacion = comprobacion
@@ -685,7 +689,7 @@ class Importer:
 
         if not self._library.exists() or not self._library.is_dir():
             logger.warning(
-                "importer.biblioteca_inaccesible_omitiendo_desaparecidos", ruta=str(self._library)
+                "importer.biblioteca_inaccesible_omitiendo_desaparecidos", raiz="biblioteca"
             )
             registrados = (await self._db.execute(
                 select(func.count()).select_from(File))).scalar_one()
@@ -699,7 +703,7 @@ class Importer:
         biblioteca_vacia = await asyncio.to_thread(lambda: not any(self._library.iterdir()))
         if biblioteca_vacia:
             logger.warning(
-                "importer.biblioteca_vacia_omitiendo_desaparecidos", ruta=str(self._library)
+                "importer.biblioteca_vacia_omitiendo_desaparecidos", raiz="biblioteca"
             )
             return omitida(ResultadoComprobacion.RAIZ_VACIA, len(files))
 
@@ -714,7 +718,7 @@ class Importer:
         ):
             logger.error(
                 "importer.desaparicion_masiva_anomala_abortando",
-                ausentes=len(ausentes), total_files=len(files), ruta=str(self._library),
+                ausentes=len(ausentes), total_files=len(files), raiz="biblioteca",
             )
             return omitida(ResultadoComprobacion.DESAPARICION_MASIVA, len(files), len(ausentes))
 
@@ -740,13 +744,16 @@ class Importer:
 
     async def _foto(self) -> FotoDeRaices:
         """Foto de raíces por ciclo: una consulta, aunque haya muchos archivos."""
-        if self._foto_raices is None:
+        foto = getattr(self, "_foto_raices", None)
+        if foto is None:
             if isinstance(self._db, AsyncSession):
-                self._foto_raices = await FotoDeRaices.cargar(self._db)
+                foto = await FotoDeRaices.cargar(self._db)
             else:
                 # Dobles de prueba sin tabla de raíces: reproducción de una instalación de una raíz.
-                self._foto_raices = FotoDeRaices.compatibilidad()
-        return self._foto_raices
+                foto = FotoDeRaices.compatibilidad(
+                    path=getattr(self, "_library", None))
+            self._foto_raices = foto
+        return foto
 
     async def _raiz(
         self, tradicion, *, por_defecto: bool = False
@@ -775,7 +782,7 @@ class Importer:
             )
             logger.info(
                 "importer.duplicate",
-                path=str(path),
+                file=path.name,
                 hash=outcome.tr.sha256[:12] if outcome.tr.sha256 else None,
             )
             return
@@ -795,9 +802,10 @@ class Importer:
             foto, raiz = await self._raiz(
                 getattr(series_obj, "tradition", None), por_defecto=is_unsorted)
         except RaizNoDisponibleError as exc:
-            report.errors.append(f"{path.name}: {exc.causa}")
+            causa = _mensaje_sin_rutas(exc, path)
+            report.errors.append(f"{path.name}: {causa}")
             logger.warning("importer.raiz_no_disponible", archivo=path.name,
-                           causa=exc.causa, raiz=exc.raiz)
+                           causa=causa, raiz=exc.raiz)
             return
         if is_unsorted:
             dest = raiz.path / "_Unsorted" / path.name
@@ -937,9 +945,10 @@ class Importer:
             foto, raiz = await self._raiz(
                 getattr(serie, "tradition", None), por_defecto=serie is None)
         except RaizNoDisponibleError as exc:
-            report.errors.append(f"{path.name}: {exc.causa}")
+            causa = _mensaje_sin_rutas(exc, path)
+            report.errors.append(f"{path.name}: {causa}")
             logger.warning("importer.raiz_no_disponible", archivo=path.name,
-                           causa=exc.causa, raiz=exc.raiz)
+                           causa=causa, raiz=exc.raiz)
             return
         if serie is None:
             dest = raiz.path / "_Unsorted" / path.name
