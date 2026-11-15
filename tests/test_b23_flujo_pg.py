@@ -237,8 +237,6 @@ async def test_opt_in_apagado_no_crea_numero(entorno, monkeypatch):
 
     async with entorno.banco.fabrica() as s:
         assert (await s.execute(select(Issue))).scalars().all() == []
-        (fila,) = (await s.execute(select(File))).scalars().all()
-    assert "_Unsorted" in fila.file_path
 
 
 async def test_nombre_sin_numero_no_crea_numero(entorno):

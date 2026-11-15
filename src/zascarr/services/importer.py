@@ -799,18 +799,34 @@ class Importer:
             )).scalar_one_or_none()
             if series_obj is None:
                 is_unsorted = True
-        parsed_para_destino = parse_comic_filename(path.name)
+        parsed_para_destino = parse_comic_filename(path.name, carpeta=path.parent.name)
         numero_destino: str | None = (
-            (tr.comic_info.number if tr.comic_info else None)
+            (tr.comic_info.number if tr.strong_candidate and tr.comic_info else None)
             or parsed_para_destino.issue_number
         )
-        if (not is_unsorted and result.issue_id is None
-                and getattr(ajustes, "import_create_missing_issue", False)):
-            numero_destino = await self._crear_issue_de_serie_vacia(
-                result, tr, path) or numero_destino
-        if not is_unsorted and result.issue_id is None:
-            # Sin número enlazado no se finge una serie «completa»: va a Pendientes.
+        crear_numero = bool(getattr(ajustes, "import_create_missing_issue", False))
+        if not crear_numero and result.issue_id is None:
+            # Sin la opción B23 se conserva el nombre original: es el contrato
+            # histórico de los archivos que no tienen número enlazado.
+            numero_destino = None
+        # El número se crea DESPUÉS de mover: si falla la raíz o el espacio,
+        # no puede quedar un Issue huérfano. Si ya hay catálogo, el archivo no
+        # inventa el número: va a Pendientes como discrepancia. Un especial,
+        # un pack o un nombre poco fiable tampoco identifican UNA grapa.
+        puede_crear_numero = bool(
+            numero_destino
+            and parsed_para_destino.edition_kind is None
+            and not parsed_para_destino.is_special
+            and not parsed_para_destino.is_pack
+            and (tr.strong_candidate or parsed_para_destino.confidence >= 0.7)
+        )
+        if (not is_unsorted and result.issue_id is None and crear_numero
+                and (not puede_crear_numero
+                     or await self._serie_tiene_numeros(result.series_id))):
             is_unsorted = True
+            result.status = MatchStatus.UNSORTED
+            result.notes.append(
+                "número no enlazado en una serie ya catalogada: se deja para revisar")
         try:
             foto, raiz = await self._raiz(
                 getattr(series_obj, "tradition", None), por_defecto=is_unsorted)
@@ -882,6 +898,16 @@ class Importer:
         )
         self._db.add(file_rec)
         await self._db.flush()
+        if (not is_unsorted and result.issue_id is None and crear_numero
+                and numero_destino is not None):
+            creado = await self._crear_issue_de_serie_vacia(result, tr, path)
+            if creado is not None:
+                file_rec.issue_id = result.issue_id
+                await self._db.flush()
+            else:
+                file_rec.metadata_["match_status"] = MatchStatus.UNSORTED.value
+                result.status = MatchStatus.UNSORTED
+                result.notes.append("no se pudo crear el número al importar")
         if result.issue_id is not None and not is_unsorted:
             try:
                 await reconciliar_mejora_importada(
@@ -1023,6 +1049,12 @@ class Importer:
         await self._db.flush()
         report.run_id = run.id
 
+    async def _serie_tiene_numeros(self, series_id) -> bool:
+        """¿La serie ya tiene catálogo? Se consulta antes de mover."""
+        return bool((await self._db.execute(
+            select(func.count()).select_from(Issue).where(Issue.series_id == series_id)
+        )).scalar_one())
+
     async def _crear_issue_de_serie_vacia(
         self, result: MatchResult, tr: TriageResult, path: Path
     ) -> str | None:
@@ -1033,8 +1065,11 @@ class Importer:
         """
         if result.series_id is None:
             return None
-        parsed = parse_comic_filename(path.name)
-        numero = (tr.comic_info.number if tr.comic_info else None) or parsed.issue_number
+        parsed = parse_comic_filename(path.name, carpeta=path.parent.name)
+        numero = (
+            (tr.comic_info.number if tr.strong_candidate and tr.comic_info else None)
+            or parsed.issue_number
+        )
         if not numero or parsed.edition_kind is not None or parsed.is_special or parsed.is_pack:
             return None
         if not tr.strong_candidate and parsed.confidence < 0.7:
@@ -1042,6 +1077,11 @@ class Importer:
         numero = str(numero).strip()
         if not numero or es_pack(numero):
             return None
+        # Serializa la creación por serie y evita que dos importadores creen
+        # "1" y "001" como dos filas lógicas distintas.
+        await self._db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"b23:issue:{result.series_id}"})
         existentes = (await self._db.execute(
             select(func.count()).select_from(Issue)
             .where(Issue.series_id == result.series_id)
