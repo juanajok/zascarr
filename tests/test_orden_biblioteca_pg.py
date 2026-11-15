@@ -10,7 +10,15 @@ import pytest
 
 from tests._pg import bd_efimera_sync, migrar_a_head
 from tests.test_revision_carpetas_pg import Banco
-from zascarr.models import ComicTradition, Creator, CreatorRole, Issue, IssueCreator, Series
+from zascarr.models import (
+    ComicTradition,
+    Creator,
+    CreatorRole,
+    EditionKind,
+    Issue,
+    IssueCreator,
+    Series,
+)
 from zascarr.services.series import SeriesService
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -84,6 +92,22 @@ async def test_filtro_por_autor_solo_devuelve_series_con_su_credito(entorno):
     async with entorno.fabrica() as s:
         items, total = await SeriesService(s).list_series(author_id=autor.id)
         assert total == 1 and [i.title for i in items] == ["Con autor"]
+
+
+@pytest.mark.asyncio
+async def test_filtros_idioma_y_edicion_pg(entorno):
+    async with entorno.fabrica() as s:
+        s.add_all([
+            Series(id=uuid4(), title="Español", tradition=ComicTradition.AMERICAN,
+                   language="es", edition_kind=EditionKind.OFICIAL),
+            Series(id=uuid4(), title="Inglés", tradition=ComicTradition.AMERICAN,
+                   language="en", edition_kind=EditionKind.OTRO),
+        ])
+        await s.commit()
+    async with entorno.fabrica() as s:
+        items, total = await SeriesService(s).list_series(
+            language="es", edition_kind=EditionKind.OFICIAL.value)
+        assert total == 1 and [i.title for i in items] == ["Español"]
 
 
 @pytest.mark.asyncio
