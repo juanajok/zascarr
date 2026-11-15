@@ -34,6 +34,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **CUR3: favoritos locales de series (2026-11-16).** La ficha permite marcar/desmarcar
+  una serie como favorita y Biblioteca incorpora «Solo favoritas» con estado en URL. La marca
+  es local, idempotente y no toca etiquetas, Deseados, búsqueda ni archivos. Migración 0042
+  reversible; sin sincronización externa.
 - **CUR2: filtro por autor en Biblioteca (2026-11-15).** La barra de filtros incorpora
   un buscador de autores (`/ui/biblioteca/buscar-autor`) y el filtro `author_id`, combinable
   con editorial, tradición, personaje, saga, etiquetas y lectura. Los autores de la ficha de

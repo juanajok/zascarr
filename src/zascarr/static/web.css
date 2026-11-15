@@ -811,6 +811,9 @@ button[type="submit"].btn-sugerencia {
   border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
   flex-shrink: 0;
 }
+.favorito-form { margin: var(--space-2) 0 0; }
+.filtro-favoritas { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 600; }
+.filtro-favoritas input { width: 24px; height: 24px; accent-color: var(--mag-t); }
 .series-meta { color: var(--ink-soft); font-size: var(--text-didascalia); margin: 2px 0; }
 .series-intro { margin: 0 0 6px; font-weight: 600; }
 .series-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2) 14px; align-items: center; margin: 10px 0 0; }

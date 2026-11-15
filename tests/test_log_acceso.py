@@ -349,7 +349,7 @@ class TestRotacionEfectivaConDockerCompose:
 PARAMETROS_DE_QUERY = frozenset({
     "anio", "antes", "candidata", "character_id", "clave", "consulta", "cursor", "decision", "desplazamiento", "despues",
     "cambio_vista", "limite", "limpiar", "next", "operacion", "page", "page_size", "personaje", "primero", "publisher_id", "q", "ref", "saga",
-    "autor", "author_id",
+    "autor", "author_id", "favoritos",
     "page_title", "search", "serie_id", "serie",
     # BL-FILT1 (#397): filtro de «Pendientes por carpeta» (estado de la vista, no se registra).
     "nombre", "estado", "por_confirmar", "en_conflicto",
