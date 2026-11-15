@@ -389,20 +389,25 @@ class Orchestrator:
         # dar ese tipo de motivo).
         titulo_serie = ""
         alias_serie: set[str] = set()
+        if item.series_id:
+            serie = (await self.db.execute(
+                select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
+            titulo_serie = serie.title if serie else ""
+            # B13: los alias que el coleccionista ya confirmó a mano. Un
+            # release español puede llamar "La Patrulla-X" a una serie
+            # catalogada como "X-Men"; sin ellos, la igualdad estricta
+            # descartaría el candidato bueno.
+            alias_serie = set((await self.db.execute(
+                select(LocalAlias.pattern_norm)
+                .where(LocalAlias.series_id == item.series_id,
+                       LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
+        # La relevancia se resuelve con el título local (sin el número) y los alias;
+        # se hace después de cargarlos y antes del filtro de número.
+        candidates = self._relevantes(
+            candidates, item.search_query or titulo_serie or query, alias_serie)
+
         descartados_por_numero = 0
         if item.numero is not None:
-            if item.series_id:
-                serie = (await self.db.execute(
-                    select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
-                titulo_serie = serie.title if serie else ""
-                # B13: los alias que el coleccionista ya confirmó a mano. Un
-                # release español puede llamar "La Patrulla-X" a una serie
-                # catalogada como "X-Men"; sin ellos, la igualdad estricta
-                # descartaría el candidato bueno.
-                alias_serie = set((await self.db.execute(
-                    select(LocalAlias.pattern_norm)
-                    .where(LocalAlias.series_id == item.series_id,
-                           LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
             antes = len(candidates)
             candidates = [
                 c
@@ -761,6 +766,30 @@ class Orchestrator:
         torrents.sort(key=lambda x: x[0], reverse=True)
         ed2k.sort(key=lambda x: x[0], reverse=True)
         return [r for _, r in torrents] + [r for _, r in ed2k]
+
+    @classmethod
+    def _relevantes(cls, candidates: list[SearchResult], norm: str,
+                    alias_serie: set[str] | None = None) -> list[SearchResult]:
+        """Descarta releases que no contienen TODOS los términos de la serie.
+
+        Se aplica DESPUÉS de cargar los alias locales (B13): un release con el nombre
+        español confirmado por el coleccionista no debe caer por no contener el título
+        inglés. Una consulta de una sola letra no tiene términos significativos: no filtra.
+        """
+        terminos = [t for t in normalize_series_name(norm).split() if len(t) > 1]
+        if not terminos:
+            return candidates
+        alias = alias_serie or set()
+        relevante: list[SearchResult] = []
+        for candidato in candidates:
+            parsed = parse_comic_filename(candidato.title)
+            if alias and normalize_title(parsed.series or "") in alias:
+                relevante.append(candidato)
+                continue
+            normalizado = normalize_series_name(candidato.title)
+            if all(t in normalizado for t in terminos):
+                relevante.append(candidato)
+        return relevante
 
     @staticmethod
     def _score(r: SearchResult, norm: str) -> float:
