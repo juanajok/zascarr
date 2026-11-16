@@ -32,7 +32,7 @@
 
 <div class="discovery-card-actions" role="group" aria-label="Cambiar de semana">
   <a class="btn ghost" href="/ui/novedades?semana={{ anterior }}{% if editorial %}&editorial={{ editorial | urlencode }}{% endif %}">← Semana anterior</a>
-  <span class="caption">Semana {{ etiqueta_semana }}</span>
+  <p class="caption">Semana {{ etiqueta_semana }}</p>
   <a class="btn ghost" href="/ui/novedades?semana={{ siguiente }}{% if editorial %}&editorial={{ editorial | urlencode }}{% endif %}">Semana siguiente →</a>
 </div>
 
