@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Novedades — ZascArr{% endblock %}
+{% block content %}
+<h1>Novedades</h1>
+<p class="subtitle">Lo que sale esta semana en EE. UU., según Comic Vine, cruzado con las series que sigues.</p>
+<p class="caption">Las fechas son de portada: «Anunciado» todavía no ha salido; «Publicado» sale hoy o ya ha salido. Las novedades de Norma, ECC y Panini aún no están verificadas y no se muestran.</p>
+
+{% if error %}
+  {% if apagada %}
+    {% call ui.aviso("nota") %}{{ error }} <a href="/ui/ajustes">Revisar fuentes en Ajustes</a>.{% endcall %}
+  {% else %}
+    {{ ui.aviso("amber", error) }}
+  {% endif %}
+{% endif %}
+
+<form method="get" action="/ui/novedades" class="search-form">
+  <label>Semana
+    <input type="date" name="semana" value="{{ inicio.isoformat() }}">
+  </label>
+  {% if editoriales %}
+  <label>Editorial
+    <select name="editorial">
+      <option value="">Todas</option>
+      {% for e in editoriales %}
+      <option value="{{ e }}" {% if e == editorial %}selected{% endif %}>{{ e }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <button type="submit">Ver semana</button>
+</form>
+
+<div class="discovery-card-actions" role="group" aria-label="Cambiar de semana">
+  <a class="btn ghost" href="/ui/novedades?semana={{ anterior }}{% if editorial %}&editorial={{ editorial | urlencode }}{% endif %}">← Semana anterior</a>
+  <p class="caption">Semana {{ etiqueta_semana }}</p>
+  <a class="btn ghost" href="/ui/novedades?semana={{ siguiente }}{% if editorial %}&editorial={{ editorial | urlencode }}{% endif %}">Semana siguiente →</a>
+</div>
+
+{% if semana and semana.total %}
+<p class="caption">{{ semana.total }} novedad{{ "es" if semana.total != 1 }} · {{ semana.interesantes }} de series que sigues.</p>
+{% for dia, novedades in semana.dias %}
+<section aria-labelledby="dia-{{ dia.isoformat() }}">
+  <h2 id="dia-{{ dia.isoformat() }}" class="seccion titulo-frase">{{ etiqueta_dia(dia) }}</h2>
+  <ul class="series-list">
+    {% for n in novedades %}
+    <li class="pending-card novedad-fila">
+      <div>
+        <strong>{% if n.series_id %}<a href="/ui/series/{{ n.series_id }}">{{ n.serie }}</a>{% else %}{{ n.serie }}{% endif %} #{{ n.numero }}</strong>
+        {{ ui.chip("ok", "Te interesa") if n.interes else "" }}
+        {{ ui.chip("neutro", "Publicado" if n.publicado else "Anunciado") }}
+      </div>
+      <p class="caption">
+        {% if n.editorial %}{{ n.editorial }} · {% else %}Editorial sin dato · {% endif %}
+        {% if n.url %}<a href="{{ n.url }}" target="_blank" rel="noopener noreferrer">Ver en Comic Vine<span class="sr"> (se abre en otra pestaña)</span></a>{% endif %}
+      </p>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% elif semana %}
+{{ ui.estado_vacio("No hay novedades esta semana", "Prueba otra semana o quita el filtro de editorial." if editorial else "Prueba otra semana.") }}
+{% endif %}
+
+<p class="caption">Datos de Comic Vine. ZascArr no descarga nada desde esta pantalla; solo muestra fechas y enlaces.</p>
+{% endblock %}
