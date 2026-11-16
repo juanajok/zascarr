@@ -5,6 +5,7 @@ evento: las raíces sensibles se cachean y se refrescan al arrancar/cambiar ajus
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import threading
@@ -187,10 +188,8 @@ def instalar_filtro_registros() -> None:
         logger.addFilter(FiltroSaneado())
     for handler in logging.getLogger().handlers:
         if not any(isinstance(f, FiltroSaneado) for f in handler.filters):
-            try:
+            with contextlib.suppress(Exception):  # un handler exótico no tumba el arranque
                 handler.addFilter(FiltroSaneado())
-            except Exception:  # noqa: BLE001 — un handler exótico no tumba el arranque
-                continue
 
 
 def instalar_saneo_logs() -> None:
