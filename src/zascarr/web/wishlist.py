@@ -71,6 +71,9 @@ def _row(item: Wishlist) -> dict:
         # una vez descargando/en biblioteca, esto no es la herramienta
         # para tocarlo (no hay override manual de una descarga en curso).
         "puede_buscar_ahora": item.status in (WishlistStatus.WANTED, WishlistStatus.FAILED),
+        # Descargas manuales que no enlazan (p. ej. _Unsorted → especial): se
+        # pueden dar por conseguidas a mano para no dejar el deseo colgado.
+        "puede_marcar_conseguido": item.status == WishlistStatus.DOWNLOADING,
         # D9: motivo concreto de por qué esta fila no avanza (o avanzó
         # y ya no aplica) — escrito por el orquestador, nunca inventado
         # aquí. "Sin resultados" en el badge de estado ya no es lo único
@@ -136,6 +139,19 @@ async def anadir(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = await _get_row(db, item.id)
+    return templates.TemplateResponse(request, "_fila_wishlist.html", {"row": row})
+
+
+@router.post("/{item_id}/marcar-conseguido", response_class=HTMLResponse)
+async def marcar_conseguido(item_id: UUID, request: Request,
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Cierra un deseo que ya está en la biblioteca aunque el importador no lo
+    haya ligado (p. ej. quedó en _Unsorted y luego se guardó como especial)."""
+    try:
+        await WishlistService(db).marcar_conseguido(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    row = await _get_row(db, item_id)
     return templates.TemplateResponse(request, "_fila_wishlist.html", {"row": row})
 
 

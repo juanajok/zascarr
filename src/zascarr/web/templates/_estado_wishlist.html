@@ -21,6 +21,14 @@
     Buscando en Prowlarr y en el foro… puede tardar hasta 2 minutos; no cierres la página.
   </span>
   {% endif %}
+  {% if row.puede_marcar_conseguido %}
+  <button type="button" class="btn ghost sm"
+          hx-post="/ui/wishlist/{{ row.item.id }}/marcar-conseguido"
+          hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
+          hx-confirm="¿Marcar como conseguido? Ya no se volverá a buscar.">
+    Ya lo tengo
+  </button>
+  {% endif %}
   <button type="button" class="btn-ignorar"
           hx-post="/ui/wishlist/{{ row.item.id }}/quitar"
           hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
