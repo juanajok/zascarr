@@ -604,13 +604,19 @@ async def paquete_previa(request: Request, token: str = "") -> HTMLResponse:
 
 @router.post("/paquetes/extraer", response_class=HTMLResponse)
 async def paquete_extraer(request: Request, token: str = Form("", alias="clave"),
+                          confirmo: str = Form(""),
                           db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Extrae y publica el paquete con un token de un solo uso; no borra el original."""
+    if confirmo != "si":
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html",
+            {"op": None, "error": "Confirma primero que quieres extraer una copia."}))
     try:
         paquete = await asyncio.to_thread(verificar_token_paquete, token)
         op = await crear_operacion(db, paquete)
-        await extraer_y_verificar(db, op.id, conservar_temporal=True)
-        op = await publicar_e_importar(db, op.id)
+        if op.estado is not PaqueteEstado.IMPORTADO:
+            await extraer_y_verificar(db, op.id, conservar_temporal=True)
+            op = await publicar_e_importar(db, op.id)
         return _no_store(templates.TemplateResponse(
             request, "_paquete_resultado.html", {"op": op, "error": None}))
     except (TokenPaqueteInvalido, PaqueteExtraccionError,

@@ -183,7 +183,9 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
             proc.communicate()
             raise PaqueteExtraccionError("tiempo", "La extracción tardó demasiado.") from None
         error_fichero.seek(0)
-        error_fichero.read(64 * 1024 + 1)
+        error = error_fichero.read(64 * 1024 + 1)
+        if len(error) > 64 * 1024:
+            raise PaqueteExtraccionError("salida", "La extracción escribió demasiados errores.")
         if proc.returncode != 0:
             raise PaqueteExtraccionError("extraccion", "La extracción falló.")
         salida_fichero.seek(0)
@@ -477,8 +479,9 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
     op = await s.get(PaqueteOperacion, operacion_id, with_for_update=True)
     if op is None:
         raise PaqueteExtraccionError("no_existe", "La operación no existe.")
-    if op.estado in (PaqueteEstado.VERIFICADO, PaqueteEstado.ERROR):
-        raise PaqueteExtraccionError("estado", "La operación ya terminó.")
+    if op.estado not in (PaqueteEstado.LISTANDO, PaqueteEstado.EXTRAYENDO,
+                         PaqueteEstado.VERIFICANDO):
+        raise PaqueteExtraccionError("estado", "La operación no es reanudable.")
     paquete = PaquetePendiente(
         ruta=Path(op.paquete_path),
         raiz=Path(op.paquete_path).parent,

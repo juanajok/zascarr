@@ -43,7 +43,10 @@ def _descargas() -> Path:
 
 def _nombre_reporte(linea: str) -> str:
     """El nombre real del fichero al inicio del informe formateado."""
-    return linea.split(" → ", 1)[0].strip()
+    for sep in (" → ", " — ", ": "):
+        if sep in linea:
+            return linea.split(sep, 1)[0].strip()
+    return linea.strip()
 
 
 def _validar_cadena_oculta(descargas: Path) -> Path:
@@ -56,6 +59,29 @@ def _validar_cadena_oculta(descargas: Path) -> Path:
                 raise PaquetePublicacionError(
                     "staging", "La carpeta oculta de publicación no es segura.")
     return paquetes
+
+
+def _preparar_staging(descargas: Path, op_id: str) -> Path:
+    """Abre/crea .zascarr y paquetes por dirfd y crea <op> con mkdir(dir_fd)."""
+    fd = os.open(descargas, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for nombre in (".zascarr", "paquetes"):
+            try:
+                hijo = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                               dir_fd=fd)
+            except FileNotFoundError:
+                os.mkdir(nombre, 0o700, dir_fd=fd)
+                hijo = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                               dir_fd=fd)
+            os.close(fd)
+            fd = hijo
+        os.mkdir(str(op_id), 0o700, dir_fd=fd)
+        os.close(fd)
+    except BaseException:
+        with __import__("contextlib").suppress(OSError):
+            os.close(fd)
+        raise
+    return descargas / ".zascarr" / "paquetes" / str(op_id)
 
 
 def _nombre_libre(base: Path, nombre: str) -> Path:
