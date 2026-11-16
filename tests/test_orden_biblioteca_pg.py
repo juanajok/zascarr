@@ -139,3 +139,15 @@ async def test_desempate_determinista_pg(entorno):
     async with entorno.fabrica() as s:
         items, _, _ = await SeriesService(s).list_series_paginado(page_size=10, orden="titulo_desc")
         assert [i.id for i in items] == sorted(ids, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_filtro_por_rango_de_anios_pg(entorno):
+    await _sembrar(entorno)
+    async with entorno.fabrica() as s:
+        items, total = await SeriesService(s).list_series(
+            year_from=1995, year_to=2005)
+        assert total == 1 and [i.title for i in items] == ["Alfa"]
+        ninguno, total_ninguno = await SeriesService(s).list_series(
+            year_from=1800, year_to=1850)
+        assert total_ninguno == 0 and ninguno == []

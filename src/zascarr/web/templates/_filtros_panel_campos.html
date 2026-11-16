@@ -61,6 +61,16 @@
   </select>
 </div>
 <div class="filtro-campo">
+  <label for="f-anio-desde">Desde el año</label>
+  <input type="number" id="f-anio-desde" name="anio_desde" value="{{ filtros.year_from }}"
+         min="1000" max="9999" inputmode="numeric" placeholder="1980">
+</div>
+<div class="filtro-campo">
+  <label for="f-anio-hasta">Hasta el año</label>
+  <input type="number" id="f-anio-hasta" name="anio_hasta" value="{{ filtros.year_to }}"
+         min="1000" max="9999" inputmode="numeric" placeholder="1995">
+</div>
+<div class="filtro-campo">
   <label for="f-autor">Autor</label>
   <input type="search" placeholder="Buscar autor…" id="f-autor" name="autor"
          hx-get="/ui/biblioteca/buscar-autor" hx-trigger="input changed delay:400ms, search"

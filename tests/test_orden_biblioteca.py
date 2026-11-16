@@ -59,3 +59,18 @@ def test_url_conserva_todos_los_filtros_y_vista():
                   "character_id=22222222", "story_arc_id=33333333", "etiquetas=etiqueta",
                   "leido=leyendo", "vista=lista", "orden=anio_asc", "page=1"):
         assert trozo in url
+
+
+def test_rango_de_anios_normaliza_invierte_y_descarta_invalidos():
+    f = _leer_filtros("1", "", "", "", "", "", anio_desde="1990", anio_hasta="1980")
+    assert (f.year_from, f.year_to) == ("1980", "1990")
+    assert any("intercambiado" in a for a in f.avisos)
+    malo = _leer_filtros("1", "", "", "", "", "", anio_desde="18", anio_hasta="abc")
+    assert (malo.year_from, malo.year_to) == ("", "")
+    assert len([a for a in malo.avisos if "año" in a]) == 2
+
+
+def test_rango_de_anios_va_en_la_url_canonica():
+    f = _leer_filtros("1", "", "", "", "", "", anio_desde="1980", anio_hasta="1995")
+    url = _url_pagina(f, page=1)
+    assert "anio_desde=1980" in url and "anio_hasta=1995" in url
