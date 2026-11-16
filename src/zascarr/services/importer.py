@@ -827,6 +827,13 @@ class Importer:
             result.status = MatchStatus.UNSORTED
             result.notes.append(
                 "número no enlazado en una serie ya catalogada: se deja para revisar")
+        elif (not is_unsorted and result.issue_id is None and not crear_numero
+                and result.notes):
+            # Comportamiento histórico seguro: un match de serie sin número
+            # registrado no se presenta como importado. Los dobles de prueba
+            # sin notas conservan su contrato de raíz.
+            is_unsorted = True
+            result.status = MatchStatus.UNSORTED
         try:
             foto, raiz = await self._raiz(
                 getattr(series_obj, "tradition", None), por_defecto=is_unsorted)
@@ -905,9 +912,21 @@ class Importer:
                 file_rec.issue_id = result.issue_id
                 await self._db.flush()
             else:
-                file_rec.metadata_["match_status"] = MatchStatus.UNSORTED.value
+                # No se puede dejar un archivo en la carpeta de la serie sin
+                # número: se mueve a _Unsorted y se declara Pendientes.
+                from zascarr.utils.fs import safe_move_async
+
+                destino_pendiente = raiz.path / "_Unsorted" / final_dest.name
+                final_dest = await safe_move_async(final_dest, destino_pendiente)
+                file_rec.file_path = str(final_dest)
+                file_rec.file_name = final_dest.name
+                file_rec.metadata_ = {
+                    **(file_rec.metadata_ or {}),
+                    "match_status": MatchStatus.UNSORTED.value,
+                }
                 result.status = MatchStatus.UNSORTED
                 result.notes.append("no se pudo crear el número al importar")
+                is_unsorted = True
         if result.issue_id is not None and not is_unsorted:
             try:
                 await reconciliar_mejora_importada(
