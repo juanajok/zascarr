@@ -43,7 +43,7 @@ def refrescar_raices(raices: list[str | Path] | None = None) -> None:
     """Une configuración, BD y raíces explícitas; nunca reemplaza las conocidas."""
     global _raices
     valores: list[str] = []
-    try:
+    with contextlib.suppress(Exception):  # arranque sin settings
         from zascarr.config import get_settings
         a = get_settings()
         for nombre in ("library_path", "downloads_path", "transmission_download_dir",
@@ -52,8 +52,6 @@ def refrescar_raices(raices: list[str | Path] | None = None) -> None:
             valor = getattr(a, nombre, None)
             if valor:
                 valores.append(str(valor))
-    except Exception:  # noqa: BLE001 — arranque sin settings
-        pass
     if raices:
         for x in raices:
             valores.extend(parte.strip() for parte in str(x).replace(";", ",").split(",")
