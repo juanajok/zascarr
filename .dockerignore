@@ -22,3 +22,9 @@ node_modules
 *.dump
 .coverage
 htmlcov
+# La app no lee nada de aquí en ejecución: la documentación (con ~200 capturas PNG), las pruebas y
+# los perfiles de navegador de las capturas no van a la imagen de la Pi. Los scripts de medición que
+# se ejecutan en un contenedor de un solo uso montan el checkout entero sobre /app.
+docs/
+tests/
+.chrome*
