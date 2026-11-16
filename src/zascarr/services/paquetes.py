@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 import zipfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -250,10 +251,12 @@ def verificar_token_paquete(token: str, *, ajustes=None, secret: str | None = No
         raise TokenPaqueteInvalido from exc
 
 
-def _causa_zip_nombre(nombre: str) -> str | None:
-    if nombre.startswith("/") or ".." in Path(nombre).parts:
-        return "nombre no seguro"
-    return None
+def _nombre_zip_seguro(nombre: str) -> bool:
+    if "\x00" in nombre or any(ord(c) < 32 for c in nombre):
+        return False
+    if "\\" in nombre or nombre.startswith("/") or ".." in Path(nombre).parts:
+        return False
+    return not (len(nombre) >= 2 and nombre[1] == ":")
 
 
 def listar_paquete(p: PaquetePendiente, *, temporal: Path | None = None) -> ListadoPaquete:
@@ -321,13 +324,8 @@ def _listar_zip(p: PaquetePendiente, fd: int) -> ListadoPaquete:
             for info in infos:
                 if info.filename.endswith("/"):
                     continue
-                if _causa_zip_nombre(info.filename):
-                    ignoradas.append(
-                        EntradaPaquete(
-                            info.filename, info.file_size, "otro", False, "nombre no seguro"
-                        )
-                    )
-                    continue
+                if not _nombre_zip_seguro(info.filename):
+                    raise PaqueteError("El paquete contiene nombres de archivo no seguros.")
                 if info.file_size > MAX_BYTES_ENTRADA:
                     raise PaqueteError("Un archivo de dentro es demasiado grande.")
                 if (
@@ -359,7 +357,8 @@ def _listar_zip(p: PaquetePendiente, fd: int) -> ListadoPaquete:
                     )
                     continue
                 entradas.append(EntradaPaquete(info.filename, info.file_size, tipo, True))
-    except (zipfile.BadZipFile, NotImplementedError, RuntimeError, EOFError, OSError) as exc:
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, NotImplementedError, RuntimeError,
+            EOFError, ValueError, zlib.error, OSError) as exc:
         raise PaqueteError("El paquete está dañado o truncado.") from exc
     return _agrupar(p, "ZIP", entradas, ignoradas)
 

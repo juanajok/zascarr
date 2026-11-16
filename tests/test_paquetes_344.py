@@ -238,3 +238,76 @@ def test_rar_real_desde_fd_si_hay_unar(tmp_path):
     finally:
         if abierto.fd >= 0:
             os.close(abierto.fd)
+
+
+def _zip_con(path: Path, entradas: dict[str, bytes]) -> Path:
+    return _zip(path, entradas)
+
+
+def test_tope_entradas(tmp_path, monkeypatch):
+    from zascarr.services import paquetes as modulo
+    d = Path(_ajustes(tmp_path).transmission_download_dir)
+    p = _zip(d / "muchos.zip", {f"{i}.cbz": _cbz() for i in range(3)})
+    monkeypatch.setattr(modulo, "MAX_ENTRADAS", 2)
+    with pytest.raises(PaqueteError, match="demasiados archivos"):
+        _listar(p, tmp_path)
+
+
+def test_tope_total_y_por_entrada(tmp_path, monkeypatch):
+    from zascarr.services import paquetes as modulo
+    d = Path(_ajustes(tmp_path).transmission_download_dir)
+    p = _zip(d / "p.zip", {"a.cbz": _cbz() + b"x" * 10})
+    monkeypatch.setattr(modulo, "MAX_BYTES_TOTAL", 5)
+    with pytest.raises(PaqueteError, match="tamaño excesivo"):
+        _listar(p, tmp_path)
+    monkeypatch.setattr(modulo, "MAX_BYTES_TOTAL", 8 * 1024 ** 3)
+    monkeypatch.setattr(modulo, "MAX_BYTES_ENTRADA", 5)
+    with pytest.raises(PaqueteError, match="demasiado grande"):
+        _listar(p, tmp_path)
+
+
+def test_tope_ratio(tmp_path, monkeypatch):
+    from zascarr.services import paquetes as modulo
+    d = Path(_ajustes(tmp_path).transmission_download_dir)
+    p = _zip(d / "ratio.zip", {"a.cbz": b"PK\x03\x04" + b"\x00" * 100000})
+    monkeypatch.setattr(modulo, "MAX_RATIO_LEIDA", 1)
+    with pytest.raises(PaqueteError, match="demasiado comprimido"):
+        _listar(p, tmp_path)
+
+
+def test_tope_directorio_central(tmp_path, monkeypatch):
+    from zascarr.core.formato_contenedor import CabeceraZip
+    from zascarr.services import paquetes as modulo
+    d = Path(_ajustes(tmp_path).transmission_download_dir)
+    p = _zip(d / "central.zip", {"a.cbz": _cbz()})
+    monkeypatch.setattr(modulo, "leer_cabecera_zip",
+                        lambda _p: CabeceraZip(entradas=1, tam_directorio=2 * 1024 ** 2))
+    with pytest.raises(PaqueteError, match="índice demasiado grande"):
+        _listar(p, tmp_path)
+
+
+@pytest.mark.parametrize("nombre", ["../fuera.cbz", "..\\fuera.cbz", "C:\\fuera.cbz",
+                                     "con\x01control.cbz", "/absoluto.cbz"])
+def test_nombres_hostiles_rechazan_el_paquete(tmp_path, nombre):
+    d = Path(_ajustes(tmp_path).transmission_download_dir)
+    p = _zip(d / "hostil.zip", {nombre: _cbz()})
+    with pytest.raises(PaqueteError, match="nombres de archivo no seguros"):
+        _listar(p, tmp_path)
+
+
+def test_zip_corrupto_no_es_500(tmp_path):
+    d = Path(_ajustes(tmp_path).transmission_download_dir)
+    p = d / "corrupto.zip"
+    p.write_bytes(b"PK\x03\x04" + b"basura")
+    with pytest.raises((PaqueteError, Exception)):
+        _listar(p, tmp_path)
+
+
+def test_ui_a11y_y_sin_extraccion(tmp_path):
+    from pathlib import Path as P
+    lista = P("src/zascarr/web/templates/_paquetes_descargas.html").read_text()
+    previa = P("src/zascarr/web/templates/_paquete_previa.html").read_text()
+    assert '<button type="submit">Ver qué contiene</button>' in lista
+    assert 'role="status"' in previa and 'aria-live="polite"' in previa
+    assert "Extraer" not in lista + previa
+    assert "token" not in previa.lower()
