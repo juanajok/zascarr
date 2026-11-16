@@ -104,16 +104,18 @@ listo:
 curl -fsSL https://raw.githubusercontent.com/juanajok/zascarr/main/bootstrap.sh | sudo bash
 ```
 
-Instala git y Docker si te faltan, crea un usuario de servicio `media`
-(igual que Sonarr/Radarr/Prowlarr si ya los tienes — código en `/opt`,
-nunca mezclado con tu usuario personal), descarga ZascArr en
-`/opt/zascarr/zascarr`, y te hace **4 preguntas** (pulsa `Intro` para
-aceptar lo que va entre corchetes) y una cuarta que **por defecto no abre nada**:
+Instala git y Docker si te faltan, prepara el usuario de servicio que elijas
+(`media` por defecto, igual que Sonarr/Radarr/Prowlarr si ya los tienes — código
+en `/opt`, nunca mezclado con tu usuario personal), descarga ZascArr en
+`/opt/zascarr/zascarr`, y te hace **5 preguntas** (pulsa `Intro` para aceptar lo
+que va entre corchetes):
 
 1. ¿Dónde están tus tebeos ya organizados?
 2. ¿Dónde caen tus descargas (Transmission/aMule)?
 3. ¿Idioma de la interfaz? (`es`/`en`)
-4. ¿Quieres usarlo desde otros dispositivos (móvil, tablet)? En una instalación
+4. ¿Usuario de servicio del sistema? (`media` por defecto; si no existe, lo crea
+   como usuario de sistema). Elige otro si ya usas uno para toda la suite *arr.
+5. ¿Quieres usarlo desde otros dispositivos (móvil, tablet)? En una instalación
    nueva, `Intro` = solo desde esta máquina. Si eliges abrirlo a tu red local (o
    detrás de un proxy con HTTPS), **te pide una contraseña antes de abrir nada**.
    El proxy lo pones tú: la dirección tiene que ser `https://dominio` (con puerto

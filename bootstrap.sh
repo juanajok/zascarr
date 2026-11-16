@@ -328,7 +328,9 @@ fi
 # por defecto "media" para convivir con Sonarr/Radarr/Prowlarr/Transmission.
 # Si se indicó por entorno o en una ejecución anterior, ese es el valor por
 # defecto; Intro lo acepta. El grupo se deduce del usuario si ya existe.
-USUARIO_POR_DEFECTO="${ZASCARR_USER:-$(leer_env_var ZASCARR_USER)}"
+USUARIO_ANTERIOR="$(leer_env_var ZASCARR_USER)"
+GRUPO_ANTERIOR="$(leer_env_var ZASCARR_GROUP)"
+USUARIO_POR_DEFECTO="${ZASCARR_USER:-${USUARIO_ANTERIOR}}"
 USUARIO_POR_DEFECTO="${USUARIO_POR_DEFECTO:-media}"
 read -rp "¿Usuario de servicio del sistema? [${USUARIO_POR_DEFECTO}]: " ANS_USER || true
 ZASCARR_USER="${ANS_USER:-${USUARIO_POR_DEFECTO}}"
@@ -337,16 +339,17 @@ if [[ ! "${ZASCARR_USER}" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
     die "El usuario '${ZASCARR_USER}' no es válido. Usa minúsculas, números, '_' o '-' y empieza por letra o '_'."
 fi
 
-GRUPO_POR_DEFECTO="${ZASCARR_GROUP:-$(leer_env_var ZASCARR_GROUP)}"
-if [[ -z "${GRUPO_POR_DEFECTO}" ]]; then
-    if getent passwd "${ZASCARR_USER}" >/dev/null 2>&1; then
-        GRUPO_POR_DEFECTO="$(id -gn "${ZASCARR_USER}")"
-    else
-        GRUPO_POR_DEFECTO="${ZASCARR_USER}"
-    fi
-fi
-if [[ -n "${ZASCARR_GROUP:-}" && "${ZASCARR_GROUP}" != "${GRUPO_POR_DEFECTO}" ]]; then
+# Grupo: el explícito por entorno manda. Si no, se conserva el grupo de una
+# instalación anterior SOLO si el usuario no ha cambiado; si se cambia de
+# usuario, un grupo viejo (p. ej. media) no debe arrastrarse al nuevo.
+if [[ -n "${ZASCARR_GROUP:-}" ]]; then
     GRUPO_POR_DEFECTO="${ZASCARR_GROUP}"
+elif [[ "${ZASCARR_USER}" == "${USUARIO_ANTERIOR}" && -n "${GRUPO_ANTERIOR}" ]]; then
+    GRUPO_POR_DEFECTO="${GRUPO_ANTERIOR}"
+elif getent passwd "${ZASCARR_USER}" >/dev/null 2>&1; then
+    GRUPO_POR_DEFECTO="$(id -gn "${ZASCARR_USER}")"
+else
+    GRUPO_POR_DEFECTO="${ZASCARR_USER}"
 fi
 ZASCARR_GROUP="${GRUPO_POR_DEFECTO}"
 if [[ ! "${ZASCARR_GROUP}" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
