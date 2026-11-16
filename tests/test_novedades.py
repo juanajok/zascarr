@@ -223,7 +223,7 @@ def test_la_pantalla_muestra_fuente_espanola_y_sin_numero(monkeypatch):
     assert "Panini" in r.text and "Biblioteca Conan 24" in r.text
     assert "Biblioteca Conan 24 #" not in r.text
     assert "No se pudo consultar: Norma" in r.text
-    assert "Norma y Panini" in r.text
+    assert "Norma y Panini" in r.text and "ECC" not in r.text
 
 
 async def test_encendida_sin_clave_y_sin_espanolas_no_devuelve_vacio(monkeypatch):

@@ -1,8 +1,7 @@
 # Novedades semanales — v1 USA + Norma/Panini (D5)
 
 > **Fecha:** 2026-11-16. **Alcance:** track USA/Comic Vine y track español
-> Norma/Panini. **ECC queda fuera** porque su `robots.txt` publica
-> `User-agent: * / Disallow: *`; no se salta el robots para completar la vista.
+> Norma/Panini.
 
 ## Qué hace
 
@@ -39,9 +38,6 @@
 
 ## Límites explícitos
 
-- **ECC no se incluye**: `ecccomics.com` prohíbe todo en `robots.txt` (y
-  Cloudflare devuelve 403 a clientes automáticos). Queda registrado como NOT
-  RUN, no como una editorial «sin novedades».
 - **Panini** solo se lee de su primera página de categoría; si el lote semanal
   está paginado, no se recorren páginas adicionales en esta v1.
 - **No** incluye aviso al móvil por serie seguida (E4/D5 F09): queda como
@@ -59,8 +55,7 @@
   editoriales españolas y rutas UI/API.
 - `tests/test_novedades_es.py`: parseo de fechas/títulos de Norma y Panini,
   incluido el salto diciembre→enero.
-- Spike real: Norma devolvió 11 novedades y Panini 12 el 2026-11-16; ECC
-  bloqueado por robots/Cloudflare.
+- Spike real: Norma devolvió 11 novedades y Panini 12 el 2026-11-16.
 - `tests/test_web_navegacion.py`: entrada de menú, URL, título/h1 y estructura.
 - Prueba real pendiente: Comic Vine real desde la Pi con la clave configurada y
   navegador.
