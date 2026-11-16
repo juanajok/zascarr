@@ -38,6 +38,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   año» y «Hasta el año», acotan por `start_year` y se combinan con el resto de filtros; la URL
   canónica, los chips, la limpieza y la paginación los conservan. Años inválidos se descartan y
   un rango invertido se corrige avisando. Sin etapas inventadas ni migración.
+- **«Buscar ahora» avisa de que puede tardar (2026-11-16).** El botón se deshabilita
+  mientras busca y muestra un aviso con `aria-live` («Buscando en Prowlarr y en el
+  foro… puede tardar hasta 2 minutos; no cierres la página»), porque el foro espacia
+  sus consultas. La cabecera de Deseados también lo explica.
+ (fix(ui): «Buscar ahora» avisa de que puede tardar y se deshabilita mientras trabaja)
 - **CUR6: sagas como guías con portada y progreso (2026-11-16).** El listado y la ficha
   de una saga muestran una portada tomada de su primer número miembro (servida por la caché
   local, sin hotlinking) y el progreso de lectura completada (`leídos de total`). Solo lectura:

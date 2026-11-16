@@ -15,10 +15,13 @@
   <button type="button" class="btn-buscar-ahora"
           hx-post="/ui/wishlist/{{ row.item.id }}/buscar-ahora"
           hx-target="#candidatos-{{ row.item.id }}" hx-swap="outerHTML"
-          hx-indicator="#buscando-{{ row.item.id }}">
+          hx-indicator="#buscando-{{ row.item.id }}" hx-disable="this">
     Buscar ahora
   </button>
-  <span class="htmx-indicator" id="buscando-{{ row.item.id }}">Buscando en las fuentes…</span>
+  <span class="htmx-indicator wishlist-buscando" id="buscando-{{ row.item.id }}"
+        role="status" aria-live="polite">
+    Buscando en Prowlarr y en el foro… puede tardar hasta 2 minutos; no cierres la página.
+  </span>
   {% endif %}
   <button type="button" class="btn-ignorar"
           hx-post="/ui/wishlist/{{ row.item.id }}/quitar"
