@@ -56,6 +56,7 @@ from zascarr.core.importer_triage import sha256_streaming
 from zascarr.core.matcher import normalize_title
 from zascarr.models import ImportRun, Tratamiento
 from zascarr.services.importer import COMIC_EXTS
+from zascarr.services.raices import FotoDeRaices
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -165,6 +166,24 @@ class LibraryAudit:
     def __init__(self, db: AsyncSession):
         self._db = db
         self._library: Path = get_settings().library_path
+        self._raices_paths: list[Path] = [self._library]
+
+    @property
+    def _rutas_de_escaneo(self) -> list[Path]:
+        """Compatibilidad con dobles creados por `__new__` en pruebas."""
+        return list(getattr(self, "_raices_paths", None) or [self._library])
+
+    async def _cargar_raices(self) -> None:
+        """Corta C: la auditoría recorre las raíces habilitadas, no una sola."""
+        if not isinstance(self._db, AsyncSession):
+            return
+        try:
+            foto = await FotoDeRaices.cargar(self._db)
+            rutas = [Path(r.path) for r in foto.raices if bool(getattr(r, "enabled", True))]
+            if rutas and any(str(self._library) == str(r) for r in rutas):
+                self._raices_paths = rutas
+        except Exception:  # noqa: BLE001 — una BD no disponible no inventa raíces
+            logger.warning("library_audit.raices_no_disponibles", exc_info=False)
 
     async def run(self) -> AuditReport:
         report = AuditReport(started_at=datetime.now(UTC))
@@ -173,7 +192,9 @@ class LibraryAudit:
         # en el bucle de eventos y dejaba la app sin responder durante minutos,
         # con el contenedor en `unhealthy`. Un solo salto a un hilo para todo el
         # análisis; solo persistir toca la BD y se queda en el bucle.
-        if not await asyncio.to_thread(self._library.exists):
+        await self._cargar_raices()
+        if not await asyncio.to_thread(
+                lambda: any(p.is_dir() for p in self._rutas_de_escaneo)):
             report.finished_at = datetime.now(UTC)
             return report
 
@@ -203,19 +224,20 @@ class LibraryAudit:
         Importer.scan_and_import."""
         vistos: set[tuple[int, int]] = set()
         archivos: list[tuple[Path, int]] = []
-        for ext in COMIC_EXTS:
-            for f in self._library.rglob(f"*{ext}"):
-                if not _fuera_de_zascarr(f):
-                    continue
-                try:
-                    st = f.stat()
-                except OSError:
-                    continue
-                clave = (st.st_dev, st.st_ino)
-                if clave in vistos:
-                    continue
-                vistos.add(clave)
-                archivos.append((f, st.st_size))
+        for raiz in self._rutas_de_escaneo:
+            for ext in COMIC_EXTS:
+                for f in raiz.rglob(f"*{ext}"):
+                    if not _fuera_de_zascarr(f):
+                        continue
+                    try:
+                        st = f.stat()
+                    except OSError:
+                        continue
+                    clave = (st.st_dev, st.st_ino)
+                    if clave in vistos:
+                        continue
+                    vistos.add(clave)
+                    archivos.append((f, st.st_size))
         return archivos
 
     # ── Detectores ───────────────────────────────────────────────────
@@ -305,14 +327,15 @@ class LibraryAudit:
         subcarpetas igual de vacías, informar de las 21 es ruido que
         esconde el hallazgo ("puede que falte contenido aquí")."""
         vacias: list[CarpetaVacia] = []
-        for carpeta in sorted(d for d in self._library.rglob("*")
-                              if d.is_dir() and _fuera_de_zascarr(d)):
-            if any(carpeta.is_relative_to(Path(v.ruta)) for v in vacias):
-                continue  # ya cubierta por una rama vacía de más arriba
-            if self._tiene_algun_comic(carpeta):
-                continue
-            subcarpetas = sum(1 for _ in carpeta.rglob("*") if _.is_dir())
-            vacias.append(CarpetaVacia(ruta=str(carpeta), subcarpetas=subcarpetas))
+        for raiz in self._rutas_de_escaneo:
+            for carpeta in sorted(d for d in raiz.rglob("*")
+                                  if d.is_dir() and _fuera_de_zascarr(d)):
+                if any(carpeta.is_relative_to(Path(v.ruta)) for v in vacias):
+                    continue
+                if self._tiene_algun_comic(carpeta):
+                    continue
+                subcarpetas = sum(1 for _ in carpeta.rglob("*") if _.is_dir())
+                vacias.append(CarpetaVacia(ruta=str(carpeta), subcarpetas=subcarpetas))
         report.carpetas_vacias = vacias
 
     def _tiene_algun_comic(self, carpeta: Path) -> bool:
@@ -323,50 +346,48 @@ class LibraryAudit:
         """RF-02: dos formas concretas de "parece un tebeo, no lo es para
         ZascArr" — nunca un intento de adivinar formatos nuevos."""
         hallados: list[NoReconocido] = []
-        for ext in CONTENEDORES_NO_SOPORTADOS:
-            for f in self._library.rglob(f"*{ext}"):
-                if not _fuera_de_zascarr(f):
-                    continue
-                hallados.append(NoReconocido(
-                    ruta=str(f),
-                    motivo=aviso_de_extension(ext),
-                ))
+        for raiz in self._rutas_de_escaneo:
+            for ext in CONTENEDORES_NO_SOPORTADOS:
+                for f in raiz.rglob(f"*{ext}"):
+                    if not _fuera_de_zascarr(f):
+                        continue
+                    hallados.append(NoReconocido(
+                        ruta=str(f),
+                        motivo=aviso_de_extension(ext),
+                    ))
 
         comic_exts_lower = {e.lower() for e in COMIC_EXTS}
-        for f in self._library.rglob("*"):
-            if not f.is_file():
-                continue
-            # Doble extensión: "Las guerras....cbr.zip" — el sufijo final
-            # (".zip") no es de cómic, pero el que queda debajo SÍ lo es.
-            # rglob("*.cbr") nunca lo encuentra porque el nombre no TERMINA
-            # en ".cbr" — por eso hace falta este barrido aparte.
-            suffixes = [s.lower() for s in f.suffixes]
-            if len(suffixes) >= 2 and suffixes[-1] not in comic_exts_lower \
-                    and suffixes[-2] in comic_exts_lower:
-                hallados.append(NoReconocido(
-                    ruta=str(f),
-                    motivo=f"doble extensión ({''.join(f.suffixes[-2:])}), sin descomprimir",
-                ))
+        for raiz in self._rutas_de_escaneo:
+            for f in raiz.rglob("*"):
+                if not f.is_file():
+                    continue
+                # Doble extensión: "Las guerras....cbr.zip" — el sufijo final
+                # (".zip") no es de cómic, pero el que queda debajo SÍ lo es.
+                # rglob("*.cbr") nunca lo encuentra porque el nombre no TERMINA
+                # en ".cbr" — por eso hace falta este barrido aparte.
+                suffixes = [s.lower() for s in f.suffixes]
+                if len(suffixes) >= 2 and suffixes[-1] not in comic_exts_lower \
+                        and suffixes[-2] in comic_exts_lower:
+                    hallados.append(NoReconocido(
+                        ruta=str(f),
+                        motivo=f"doble extensión ({''.join(f.suffixes[-2:])}), sin descomprimir",
+                    ))
 
         # #307: por CONTENIDO (≤ 512 B de cada fichero, solo lectura). Nunca se renombra ni se
         # registra nada.
-        # · un .cbz/.cbr/.cb7 cuyo contenido no concuerda con su nombre (p. ej. un .cbz que es un
-        # RAR);
-        # · un fichero SIN extensión que por dentro es un contenedor (ZIP, RAR, 7z, TAR): parece
-        # un tebeo y ZascArr no lo trata como tal.
-        # Un .cbr que es un ZIP NO se avisa aquí: desde #307 ZascArr sí lo lee (portada y
-        # ComicInfo).
         ya = {h.ruta for h in hallados}
-        for f in self._library.rglob("*"):
-            if not f.is_file() or not _fuera_de_zascarr(f) or f.name.startswith(".") \
-                    or str(f) in ya:
-                continue
-            ext = f.suffix.lower()
-            if ext not in ("", ".cbz", ".cbr", ".cb7"):
-                continue
-            firma = firma_de(f)
-            if tratamiento(ext, firma) is Tratamiento.AVISAR:
-                hallados.append(NoReconocido(ruta=str(f), motivo=aviso_de_formato(ext, firma)))
+        for raiz in self._rutas_de_escaneo:
+            for f in raiz.rglob("*"):
+                if not f.is_file() or not _fuera_de_zascarr(f) or f.name.startswith(".") \
+                        or str(f) in ya:
+                    continue
+                ext = f.suffix.lower()
+                if ext not in ("", ".cbz", ".cbr", ".cb7"):
+                    continue
+                firma = firma_de(f)
+                if tratamiento(ext, firma) is Tratamiento.AVISAR:
+                    hallados.append(NoReconocido(
+                        ruta=str(f), motivo=aviso_de_formato(ext, firma)))
 
         report.no_reconocidos = sorted(hallados, key=lambda n: n.ruta)
 
