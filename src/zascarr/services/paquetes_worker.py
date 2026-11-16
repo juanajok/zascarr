@@ -6,6 +6,7 @@ solo escribe en esa carpeta. Si el padre lo mata por timeout, el grupo entero mu
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -30,8 +31,12 @@ def main(argv: list[str] | None = None) -> int:
         firma=datos["firma"], estado="listo", causa="", dev=int(datos["dev"]),
         ino=int(datos["ino"]), fd=fd)
     listado = listar_paquete(paquete)
-    items = _escribir_zip(paquete, listado, temp, fd)
-    _verificar_contenido(items, temp)
+    temp_fd = os.open(temp, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        items = _escribir_zip(paquete, listado, temp, fd, temp_fd)
+        _verificar_contenido(items, temp, temp_fd)
+    finally:
+        os.close(temp_fd)
     sys.stdout.write(json.dumps(items, ensure_ascii=False))
     return 0
 

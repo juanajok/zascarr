@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 import zipfile
+import zipfile as _zip
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -31,7 +32,7 @@ from zascarr.core.formato_contenedor import (
     MAX_ENTRADA_LEIDA,
     MAX_PIXELES_PORTADA,
     Firma,
-    firma_de,
+    firma_de_bytes,
 )
 from zascarr.models import PaqueteEstado, PaqueteOperacion
 from zascarr.services.paquetes import (
@@ -179,7 +180,7 @@ def _extraer_zip_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int) -> l
 
 
 def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path,
-                  fd: int) -> list[dict]:
+                  fd: int, temp_fd: int) -> list[dict]:
     items: list[dict] = []
     try:
         z = zipfile.ZipFile(os.fdopen(os.dup(fd), "rb"))
@@ -195,12 +196,13 @@ def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
             if info.flag_bits & 0x1:
                 raise PaqueteExtraccionError("cifrado", "El paquete tiene contraseña.")
             nombre = _nombre_generado(len(items), Path(info.filename).suffix.lstrip(".") or "cbz")
-            destino = temp / nombre
             digest = hashlib.sha256()
             total = 0
             total_operacion = sum(int(i.get("bytes", 0)) for i in items)
             try:
-                with z.open(info) as entrada, open(destino, "xb") as salida:
+                salida_fd = os.open(nombre, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                                    | os.O_NOFOLLOW, 0o600, dir_fd=temp_fd)
+                with z.open(info) as entrada, os.fdopen(salida_fd, "wb") as salida:
                     while bloque := entrada.read(_BLOQUE):
                         total += len(bloque)
                         if total > MAX_BYTES_ENTRADA:
@@ -236,7 +238,7 @@ def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
 
 
 def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path,
-                  fd: int) -> list[dict]:
+                  fd: int, temp_fd: int) -> list[dict]:
     if not lector_rar.disponible():
         raise PaqueteExtraccionError("herramienta_ausente", "Falta la herramienta para leer RAR.")
     if len(listado.entradas) > lector_rar.RAR_MAX_ENTRADAS:
@@ -285,26 +287,39 @@ def _decodificar_imagen(datos: bytes) -> None:
             "imagen", "La primera imagen no se puede decodificar.") from exc
 
 
-def _verificar_contenido(items: list[dict], temp: Path) -> None:
+def _verificar_contenido(items: list[dict], temp: Path, temp_fd: int | None = None) -> None:
     """Firma/cabecera y primera imagen de cada tebeo extraído; falla cerrado."""
-    import zipfile as _zip
 
 
+    propio = temp_fd is None
+    if propio:
+        temp_fd = os.open(temp, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        _verificar_contenido_fd(items, temp, temp_fd)
+    finally:
+        if propio:
+            os.close(temp_fd)
+
+
+def _verificar_contenido_fd(items: list[dict], temp: Path, temp_fd: int) -> None:
     esperados = {i["nombre"] for i in items}
-    reales = {p.name for p in temp.iterdir() if p.is_file()}
+    reales = {n for n in os.listdir(temp_fd) if stat.S_ISREG(
+        os.stat(n, dir_fd=temp_fd, follow_symlinks=False).st_mode)}
     if reales != esperados:
         raise PaqueteExtraccionError("verificacion", "El temporal tiene ficheros inesperados.")
     for item in items:
         ruta = temp / item["nombre"]
-        ext = ruta.suffix.lower()
-        firma = firma_de(ruta)
+        ext = Path(item["nombre"]).suffix.lower()
+        fd_item = os.open(item["nombre"], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=temp_fd)
+        with os.fdopen(os.dup(fd_item), "rb") as fh:
+            firma = firma_de_bytes(fh.read(512))
         if ext == ".cbz" and firma is not Firma.ZIP:
             raise PaqueteExtraccionError("firma", "Un tebeo dice ZIP pero no lo es.")
         if ext == ".cbr" and firma is not Firma.RAR:
             raise PaqueteExtraccionError("firma", "Un tebeo dice RAR pero no lo es.")
         if firma is Firma.ZIP:
             try:
-                with _zip.ZipFile(ruta) as z:
+                with _zip.ZipFile(os.fdopen(os.dup(fd_item), "rb")) as z:
                     imagen = next((n for n in z.namelist()
                                    if Path(n).suffix.lower() in _EXTS_IMAGEN), None)
                     if imagen is None:
@@ -346,12 +361,17 @@ def _verificar_contenido(items: list[dict], temp: Path) -> None:
                         "ilegible", "La primera imagen RAR no se pudo extraer.") from exc
                 _decodificar_imagen(salida.read_bytes())
                 salida.unlink(missing_ok=True)
+        os.close(fd_item)
 
-def _verificar_items(items: list[dict], temp: Path, total_listado: int) -> None:
+
+def _verificar_items(items: list[dict], temp: Path, temp_fd: int, total_listado: int) -> None:
     total = 0
     for item in items:
-        ruta = temp / item["nombre"]
-        st = ruta.lstat()
+        try:
+            st = os.stat(item["nombre"], dir_fd=temp_fd, follow_symlinks=False)
+        except OSError as exc:
+            raise PaqueteExtraccionError(
+                "verificacion", "Un fichero extraído no es correcto.") from exc
         if not stat.S_ISREG(st.st_mode) or st.st_size != item["bytes"]:
             raise PaqueteExtraccionError("verificacion", "Un fichero extraído no es correcto.")
         if st.st_size > 2 * 1024**3:
@@ -460,15 +480,15 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
                 _extraer_zip_en_proceso, paquete, temp, paquete.fd)
         elif paquete.firma == "RAR":
             items = await asyncio.wait_for(asyncio.to_thread(
-                _escribir_rar, paquete, listado, temp, paquete.fd), timeout=900)
+                _escribir_rar, paquete, listado, temp, paquete.fd, temp_fd), timeout=900)
         else:
             raise PaqueteExtraccionError("formato", "El paquete no es RAR ni ZIP.")
-        _verificar_contenido(items, temp)
+        _verificar_contenido(items, temp, temp_fd)
         op.estado = PaqueteEstado.VERIFICANDO
         op.items = list(items)
         s.add(op)
         await s.commit()
-        _verificar_items(items, temp, listado.bytes_estimados)
+        _verificar_items(items, temp, temp_fd, listado.bytes_estimados)
         op.estado = PaqueteEstado.VERIFICADO
         op.total_entradas = len(items)
         op.total_bytes = sum(int(i["bytes"]) for i in items)
