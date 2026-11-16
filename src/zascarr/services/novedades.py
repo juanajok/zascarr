@@ -7,6 +7,7 @@ minutos. La parte de Norma/ECC/Panini queda fuera hasta verificar su HTML real.
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -21,6 +22,7 @@ from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
 from zascarr.models import Issue, Publisher, Series, Wishlist, WishlistPolicy, WishlistStatus
 from zascarr.services.comic_vine import ComicVineClient
+from zascarr.services.novedades_es import cargar_novedades_es
 
 logger = structlog.get_logger()
 
@@ -41,7 +43,7 @@ class NovedadesError(RuntimeError):
 
 @dataclass(frozen=True)
 class Novedad:
-    cv_id: int
+    cv_id: int | None
     volumen_id: int | None
     serie: str
     numero: str
@@ -51,6 +53,7 @@ class Novedad:
     url: str | None
     interes: bool
     series_id: UUID | None
+    fuente: str = "Comic Vine"
 
 
 @dataclass(frozen=True)
@@ -58,6 +61,7 @@ class Semana:
     inicio: date
     fin: date
     novedades: list[Novedad] = field(default_factory=list)
+    fuentes_fallidas: tuple[str, ...] = ()
 
     @property
     def editoriales(self) -> list[str]:
@@ -120,9 +124,60 @@ def _filas_de_series(series: list[Any]) -> tuple[dict[int, Any], dict[str, list[
     return por_cv, por_titulo
 
 
+_RE_SUFIJO_EDICION = re.compile(
+    r"^(?:#?\d|n[o]?\s*\d|vol(?:umen)?\s*\d|tomo\s*\d|book\s*\d|numero\s*\d)")
+_RE_MARCADOR_EDICION = re.compile(
+    r"^(?:ed|edicion|integral|de lujo|deluxe|omnibus|tomo|vol|volumen|book|numero|n)\b")
+
+
+def _prefijo_valido(titulo: str, base: str) -> bool:
+    """¿`titulo` es `base` + número/edición o un subtítulo con separador?
+
+    Debe aceptar «Batman 24», «Blade Runner 2019 [Ed. Integral]» y
+    «Biblioteca Conan. Conan el Bárbaro. 24», pero no «Batman Beyond 1» ni
+    «Batman Universe» (mismo prefijo, serie distinta).
+    """
+    if not base or not titulo.lower().startswith(base.lower()):
+        return False
+    resto = titulo[len(base):]
+    if not resto:
+        return True
+    if resto[0] in ".:-–—[,(":
+        return True
+    if not resto[0].isspace():
+        return False
+    norm_resto = normalize_title(resto)
+    return bool(_RE_SUFIJO_EDICION.match(norm_resto)
+                or _RE_MARCADOR_EDICION.match(norm_resto))
+
+
+def _buscar_por_titulo(titulo: str, por_titulo: dict[str, list[Any]]) -> Any | None:
+    """Casa por título exacto; si no, por prefijo + número/edición (Norma/Panini)."""
+    norm = normalize_title(titulo)
+    if not norm:
+        return None
+    exactas = por_titulo.get(norm, [])
+    if len(exactas) == 1:
+        return exactas[0]
+    candidatas: list[Any] = []
+    for filas in por_titulo.values():
+        for fila in filas:
+            if len(filas) == 1 and _prefijo_valido(titulo, fila.title or ""):
+                candidatas.append(fila)
+    if not candidatas:
+        return None
+    candidatas.sort(key=lambda f: len(f.title or ""), reverse=True)
+    if len(candidatas) == 1:
+        return candidatas[0]
+    if len(candidatas[0].title or "") > len(candidatas[1].title or ""):
+        return candidatas[0]
+    return None
+
+
 def construir_semana(
     items: list[dict[str, Any]], *, inicio: date, series: list[Any],
     wishlist_series: set[UUID], hoy: date | None = None,
+    fuentes_fallidas: tuple[str, ...] = (),
 ) -> Semana:
     """Cruce puro entre lo que publica la fuente y la biblioteca local."""
     hoy = hoy or date.today()
@@ -141,9 +196,10 @@ def construir_semana(
         volumen_id = volumen.get("id")
         titulo = str(volumen.get("name") or "").strip()
         numero = str(item.get("issue_number") or "").strip()
-        if not titulo or not numero:
+        fuente = str(item.get("fuente") or "Comic Vine")
+        if not titulo or (not numero and fuente == "Comic Vine"):
             continue
-        clave = (item.get("id"), volumen_id, numero)
+        clave = (fuente, item.get("id"), volumen_id, numero, titulo)
         if clave in vistos:
             continue
         vistos.add(clave)
@@ -151,9 +207,7 @@ def construir_semana(
         if isinstance(volumen_id, int):
             fila = por_cv.get(volumen_id)
         if fila is None:
-            candidatas = por_titulo.get(normalize_title(titulo), [])
-            if len(candidatas) == 1:
-                fila = candidatas[0]
+            fila = _buscar_por_titulo(titulo, por_titulo)
         series_id = fila.id if fila is not None else None
         interes = bool(
             fila is not None
@@ -167,13 +221,16 @@ def construir_semana(
             numero=numero,
             fecha=fecha,
             publicado=fecha <= hoy,
-            editorial=getattr(fila, "publisher_name", None) if fila is not None else None,
+            editorial=(item.get("editorial")
+                       or (getattr(fila, "publisher_name", None) if fila is not None else None)),
             url=item.get("site_detail_url"),
             interes=interes,
             series_id=series_id,
+            fuente=fuente,
         ))
     novedades.sort(key=lambda n: (n.fecha, n.serie.casefold(), n.numero))
-    return Semana(inicio=inicio, fin=fin, novedades=novedades)
+    return Semana(inicio=inicio, fin=fin, novedades=novedades,
+                  fuentes_fallidas=fuentes_fallidas)
 
 
 async def _items_de_la_semana(inicio: date, *, cliente=None) -> list[dict[str, Any]]:
@@ -194,15 +251,42 @@ async def cargar_semana(db: AsyncSession, inicio: date, *, cliente=None,
                         hoy: date | None = None) -> Semana:
     """Consulta la fuente y cruza con las series seguidas. Sin escrituras."""
     ajustes = get_settings()
-    if not getattr(ajustes, "comicvine_enabled", False):
-        raise NovedadesApagadaError("Comic Vine está apagado en Ajustes.")
-    if not getattr(ajustes, "comicvine_api_key", ""):
-        raise NovedadesApagadaError("Comic Vine no tiene clave de API.")
+    items: list[dict[str, Any]] = []
+    fuente_caida = None
+    fallos: list[str] = []
+    cv_configurado = bool(getattr(ajustes, "comicvine_enabled", False)
+                          and getattr(ajustes, "comicvine_api_key", ""))
+    if getattr(ajustes, "comicvine_enabled", False) and not cv_configurado:
+        # Encendido pero sin clave: es una fuente que falta, no «cero novedades».
+        fallos.append("Comic Vine")
+    if cv_configurado:
+        try:
+            items = await _items_de_la_semana(inicio, cliente=cliente)
+        except Exception as exc:  # noqa: BLE001 — la vista sigue con las españolas
+            logger.warning("novedades.fuente_fallida", error=type(exc).__name__)
+            fuente_caida = exc
+            fallos.append("Comic Vine")
     try:
-        items = await _items_de_la_semana(inicio, cliente=cliente)
-    except Exception as exc:  # noqa: BLE001 — la UI decide cómo mostrarlo
-        logger.warning("novedades.fuente_fallida", error=type(exc).__name__)
-        raise NovedadesError("No se pudo consultar Comic Vine.") from exc
+        es = await cargar_novedades_es(hoy=hoy or date.today())
+        for n in es.filas:
+            items.append({
+                "id": None, "issue_number": "", "cover_date": n.fecha.isoformat(),
+                "store_date": None, "site_detail_url": n.url,
+                "volume": {"id": None, "name": n.titulo},
+                "fuente": n.fuente, "editorial": n.editorial,
+            })
+        fallos.extend(es.fallos)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("novedades.es_fallida", error=type(exc).__name__)
+        fallos.append("Norma/Panini")
+        if fuente_caida is None:
+            fuente_caida = exc
+    if not items and fuente_caida is not None:
+        raise NovedadesError("No se pudo consultar ninguna fuente de novedades.") from fuente_caida
+    if not items and not cv_configurado:
+        raise NovedadesApagadaError(
+            "Comic Vine está apagado o sin clave y las editoriales españolas "
+            "no devolvieron novedades.")
     filas = list((await db.execute(
         select(Series.id, Series.title, Series.comic_vine_id, Series.wishlist_policy,
                Publisher.name.label("publisher_name"))
@@ -220,14 +304,16 @@ async def cargar_semana(db: AsyncSession, inicio: date, *, cliente=None,
         if sid is not None
     }
     return construir_semana(
-        items, inicio=inicio, series=filas, wishlist_series=wishlist_series, hoy=hoy)
+        items, inicio=inicio, series=filas, wishlist_series=wishlist_series, hoy=hoy,
+        fuentes_fallidas=tuple(sorted(set(fallos))))
 
 
 def filtrar_editorial(semana: Semana, editorial: str | None) -> Semana:
     if not editorial:
         return semana
     return Semana(inicio=semana.inicio, fin=semana.fin,
-                  novedades=[n for n in semana.novedades if n.editorial == editorial])
+                  novedades=[n for n in semana.novedades if n.editorial == editorial],
+                  fuentes_fallidas=semana.fuentes_fallidas)
 
 
 def limpiar_cache() -> None:

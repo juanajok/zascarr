@@ -86,6 +86,7 @@ async def novedades_api(
         "semana": {"inicio": visible.inicio.isoformat(), "fin": visible.fin.isoformat()},
         "total": visible.total,
         "interesantes": visible.interesantes,
+        "fuentes_fallidas": list(visible.fuentes_fallidas),
         "items": [
             {**asdict(n), "fecha": n.fecha.isoformat(),
              "series_id": str(n.series_id) if n.series_id else None}
