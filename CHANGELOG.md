@@ -130,6 +130,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Candidatos del foro con el nombre de cada fichero (2026-11-16).** Un tema con
+  varios enlaces `ed2k` (varios números/ediciones) pintaba todos los candidatos con el
+  título del tema (27 filas idénticas). Ahora el título del candidato es el nombre del
+  fichero que viaja en el enlace (y la fila muestra su formato real); el tema sigue
+  como fuente `forum:crg`. En magnet se usa el parámetro `dn`.
+
 - **Búsqueda del foro: el salto de redirección no cabía en el presupuesto (2026-11-16).**
   IPB responde `302` al POST de búsqueda y el salto de redirección volvía a esperar el
   intervalo de 25 s; con un presupuesto de 30 s solo cabía una espera, así que la búsqueda
