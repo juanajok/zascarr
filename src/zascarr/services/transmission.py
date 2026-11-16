@@ -41,12 +41,19 @@ class TransmissionClient:
             "paused": False,
         }
         data = await self._rpc("torrent-add", args)
-        added = data.get("arguments", {}).get("torrent-added") or data.get("arguments", {}).get(
-            "torrent-duplicate"
-        )
+        agregado = data.get("arguments", {}) or {}
+        added = agregado.get("torrent-added") or agregado.get("torrent-duplicate")
         if added:
             logger.info("transmission.added", name=added.get("name", ""))
-        return added
+            return added
+        # Un «torrent-add» que no devuelve torrent-added ni duplicate es un
+        # fallo que antes se perdía en silencio: el cliente devolvía None y el
+        # deseo solo decía «no se pudo enviar» (2026-11-16). Se registra el
+        # resultado y las claves de `arguments`, nunca la URL (puede llevar passkey).
+        logger.warning("transmission.add_failed",
+                       resultado=str(data.get("result"))[:80],
+                       claves=sorted(agregado.keys())[:10])
+        return None
 
     async def list_torrents(self) -> list[dict]:
         """Todos los torrents con su carpeta y sus archivos (#488: guardián de compartidos).

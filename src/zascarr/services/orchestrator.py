@@ -183,6 +183,21 @@ def _tamano_de_enlace_de_foro(url: str) -> int:
     return 0
 
 
+def _sin_duplicados_de_prowlarr(resultados: list[SearchResult]) -> list[SearchResult]:
+    """Un mismo release aparece en varios indexers con URL distinta.
+
+    Se conserva uno por (título normalizado, tamaño) — el de más seeders —;
+    un tamaño distinto es otra edición y se mantiene (2026-11-16).
+    """
+    elegidos: dict[tuple[str, int], SearchResult] = {}
+    for r in resultados:
+        clave = (normalize_series_name(r.title), int(r.size_bytes or 0))
+        previo = elegidos.get(clave)
+        if previo is None or r.seeders > previo.seeders:
+            elegidos[clave] = r
+    return list(elegidos.values())
+
+
 def _nombre_de_fichero_de_enlace(url: str) -> str:
     """Nombre del fichero que viaja dentro de un enlace ed2k o de un magnet.
 
@@ -760,6 +775,8 @@ class Orchestrator:
                 return added.get("hashString") or added.get("name") or ""
             if backend == DownloadBackend.AMULE:
                 if not await self._amule.login():
+                    logger.warning("orchestrator.send_sin_credenciales",
+                                   backend=backend.value)
                     return None
                 if not await self._amule.add_ed2k_link(result.download_url):
                     return None
@@ -802,9 +819,16 @@ class Orchestrator:
         try:
             seleccionados = prowlarr_indexers_seleccionados(settings)
             if seleccionados:
-                return await self._prowlarr.search(
-                    query, categories=COMIC_CATEGORIES, indexer_ids=seleccionados), None
-            return await self._prowlarr.search(query, categories=COMIC_CATEGORIES), None
+                encontrados = await self._prowlarr.search(
+                    query, categories=COMIC_CATEGORIES, indexer_ids=seleccionados)
+            else:
+                encontrados = await self._prowlarr.search(
+                    query, categories=COMIC_CATEGORIES)
+            sin_repetir = _sin_duplicados_de_prowlarr(encontrados)
+            if len(sin_repetir) != len(encontrados):
+                logger.info("orchestrator.prowlarr_duplicados",
+                            descartados=len(encontrados) - len(sin_repetir))
+            return sin_repetir, None
         except Exception:
             logger.exception("orchestrator.prowlarr_search_failed")
             return [], MOTIVO_FUENTE_INACCESIBLE
