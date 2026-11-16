@@ -1,8 +1,9 @@
 # Novedades semanales — v1 USA + Norma/Panini (D5)
 
 > **Fecha:** 2026-11-16. **Alcance:** track USA/Comic Vine y track español
-> Norma/Panini. **ECC queda fuera** porque su `robots.txt` publica
-> `User-agent: * / Disallow: *`; no se salta el robots para completar la vista.
+> Norma/Panini. **ECC cerró** (confirmado por el PO el 2026-11-16): no habrá
+> novedades suyas. Su web, además, publica `User-agent: * / Disallow: *`; no se
+> consulta.
 
 ## Qué hace
 
@@ -39,9 +40,8 @@
 
 ## Límites explícitos
 
-- **ECC no se incluye**: `ecccomics.com` prohíbe todo en `robots.txt` (y
-  Cloudflare devuelve 403 a clientes automáticos). Queda registrado como NOT
-  RUN, no como una editorial «sin novedades».
+- **ECC no se incluye**: cerró y no publica novedades. Su `robots.txt` también
+  prohíbe todo y Cloudflare devuelve 403, pero el motivo principal es el cierre.
 - **Panini** solo se lee de su primera página de categoría; si el lote semanal
   está paginado, no se recorren páginas adicionales en esta v1.
 - **No** incluye aviso al móvil por serie seguida (E4/D5 F09): queda como
