@@ -51,7 +51,9 @@ def refrescar_raices(raices: list[str | Path] | None = None) -> None:
                        "library_roots"):
             valor = getattr(a, nombre, None)
             if valor:
-                valores.append(str(valor))
+                for parte in str(valor).replace(";", ",").split(","):
+                    if parte.strip():
+                        valores.append(parte.strip())
     if raices:
         for x in raices:
             valores.extend(parte.strip() for parte in str(x).replace(";", ",").split(",")
@@ -169,9 +171,6 @@ class FiltroSaneado(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
         if record.name == "uvicorn.access":
             return True  # #361 ya quita la query; #369 no toca ese registro
-        if (isinstance(record.msg, str) and "WebSocket" in record.msg
-                and record.args):
-            return True  # línea de acceso ws de uvicorn (control negativo #361)
         try:
             if isinstance(record.msg, str):
                 record.msg = sanear_texto(record.msg)
@@ -237,8 +236,63 @@ def instalar_saneo_structlog() -> None:
     structlog.configure(**{**config, "processors": procesadores})
 
 
+_FABRICA_INSTALADA = False
+
+
+def _sanear_record_en_origen(record: logging.LogRecord) -> None:
+    """Sanea el LogRecord en el momento de crearlo, antes de cualquier handler."""
+    if record.name == "uvicorn.access":
+        return  # #361: su formateador necesita args intactos
+    if getattr(record, "_sec_log_saneado", False):
+        return
+    try:
+        if isinstance(record.msg, str):
+            record.msg = sanear_texto(record.msg)
+        else:
+            record.msg = sanear_valor(record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {str(k): sanear_valor(v, clave=str(k))
+                               for k, v in record.args.items()}
+            else:
+                record.args = tuple(sanear_valor(v) for v in record.args)
+        for nombre, valor in list(record.__dict__.items()):
+            if nombre.startswith("_") or nombre in {"msg", "args", "exc_info", "exc_text",
+                                                     "stack_info", "name", "levelname",
+                                                     "levelno", "pathname", "filename",
+                                                     "module", "lineno", "funcName",
+                                                     "created", "msecs", "relativeCreated",
+                                                     "thread", "threadName", "process",
+                                                     "processName", "taskName"}:
+                continue
+            record.__dict__[nombre] = sanear_valor(valor, clave=nombre)
+        if record.stack_info:
+            record.stack_info = sanear_texto(record.stack_info)
+        record._sec_log_saneado = True
+    except Exception:  # noqa: BLE001 — nunca emitir crudo
+        record.msg = "(registro omitido: saneo fallido)"
+        record.args = ()
+
+
+def instalar_fabrica_de_registros() -> None:
+    """Sanea en ORIGEN: cubre handlers/loggers creados después sin reinstalar."""
+    global _FABRICA_INSTALADA
+    if _FABRICA_INSTALADA:
+        return
+    anterior = logging.getLogRecordFactory()
+
+    def fabrica(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        record = anterior(*args, **kwargs)
+        _sanear_record_en_origen(record)
+        return record
+
+    logging.setLogRecordFactory(fabrica)
+    _FABRICA_INSTALADA = True
+
+
 def instalar_filtro_registros() -> None:
-    """Añade el filtro a uvicorn.error y handlers raíz existentes; idempotente."""
+    """Añade el filtro y la fábrica de saneo; idempotente."""
+    instalar_fabrica_de_registros()
     logger = logging.getLogger("uvicorn.error")
     if not any(isinstance(f, FiltroSaneado) for f in logger.filters):
         logger.addFilter(FiltroSaneado())

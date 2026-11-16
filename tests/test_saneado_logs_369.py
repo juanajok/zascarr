@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from zascarr.utils import registro_reciente
 from zascarr.utils.saneado_logs import (
@@ -190,3 +191,112 @@ def test_benchmark_p50_p95():
     tiempos.sort()
     assert tiempos[int(len(tiempos) * 0.95)] < 1.0
     assert statistics.median(tiempos) < 1.0
+
+
+def test_websocket_con_args_se_sanea():
+    refrescar_raices([RAIZ])
+    record = logging.LogRecord("uvicorn.error", logging.ERROR, __file__, 1,
+                               "WebSocket %s", ("/media/library/x.cbz",), None)
+    FiltroSaneado().filter(record)
+    assert "/media/library" not in str(record.msg) and "x.cbz" not in str(record.msg)
+
+
+def test_control_negativo_inventario():
+    refrescar_raices([RAIZ])
+    casos = [
+        ("importer.file_failed", {"file": "foo.cbz", "error": "/media/library/foo.cbz"}),
+        ("importer.imported", {"file": "foo.cbz", "relative": "Serie/foo.cbz"}),
+        ("importer.recuperado", {"file": "foo.cbz"}),
+        ("library_audit.hash_failed", {"path": "/media/library/foo.cbz"}),
+        ("cbz.temporal_no_borrado", {"path": "/media/library/foo.cbz"}),
+        ("discovery.source_failed", {"error": "https://host/x?token=1"}),
+        ("ajustes.test_failed", {"error": "/media/library/foo.cbz"}),
+        ("exportacion_kavita.materializar", {"destino": "/media/library/foo.cbz"}),
+        ("tagger.reconciliado", {"path": "/media/library/foo.cbz"}),
+        ("forum.search_rechazada", {"motivo": "https://host/x?token=1"}),
+        ("cover.url_rechazada", {"motivo": "https://host/x?token=1"}),
+        ("blog_feed.lectura_fallida", {"url": "https://host/x?token=1"}),
+        ("robots.parse_fallido", {"origen": "https://host/x?token=1"}),
+    ]
+    for evento, datos in casos:
+        crudo = str({"event": evento, **datos})
+        saneado = str(sanear_evento(None, "error", {"event": evento, **datos}))
+        for valor in datos.values():
+            if any(c in valor for c in ("/", "?", ".cbz", ".cbr")):
+                assert valor in crudo
+                assert valor not in saneado, (evento, saneado)
+
+
+def test_logger_exception_real_y_buffer():
+    import structlog
+
+    from zascarr.utils import registro_reciente
+    from zascarr.utils.saneado_logs import instalar_saneo_structlog
+    registro_reciente.instalar_captura()
+    instalar_saneo_structlog()
+    registro_reciente.limpiar()
+    try:
+        raise FileNotFoundError("/media/library/Serie/foo.cbz")
+    except FileNotFoundError:
+        structlog.get_logger("prueba").exception("fallo real")
+    texto = registro_reciente.texto_reciente()
+    assert "/media/library" not in texto and "foo.cbz" not in texto
+
+
+def test_aviso_y_descarga_logs_saneados():
+    dashboard = Path("src/zascarr/web/templates/dashboard.html").read_text()
+    assert "Pueden incluir rutas" not in dashboard
+    assert "se ocultan" in dashboard
+
+
+def test_websocket_con_args_saneado():
+    refrescar_raices([RAIZ])
+    record = logging.LogRecord("uvicorn.error", logging.ERROR, __file__, 1,
+                               "WebSocket /media/library/x.cbz", (42,), None)
+    FiltroSaneado().filter(record)
+    assert "/media/library" not in str(record.msg) and "x.cbz" not in str(record.msg)
+
+
+def test_handler_posterior_sin_reinstalar():
+    import io
+    refrescar_raices([RAIZ])
+    instalar_filtro_registros()
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    logger = logging.getLogger("prueba.posterior")
+    logger.propagate = False
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    try:
+        logger.error("fallo /media/library/Serie/foo.cbz")
+    finally:
+        logger.removeHandler(handler)
+    assert "/media/library" not in stream.getvalue() and "foo.cbz" not in stream.getvalue()
+
+
+def test_ruta_abs_multilinea_parentesis_y_file_url():
+    refrescar_raices([RAIZ])
+    assert "with space" not in sanear_texto("/tmp/with space/foo.jpg (permiso)")
+    assert "Permission denied" in sanear_texto("/tmp/with space/foo.jpg: Permission denied")
+    multilinea = "Error:\n/media/library/Serie/foo.cbz\nfin"
+    s = sanear_texto(multilinea)
+    assert "/media/library" not in s and "fin" in s
+    assert "/media/library" not in sanear_texto("file:///media/library/a.cbz")
+
+
+def test_library_roots_config_se_dividen(monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.utils import saneado_logs
+    monkeypatch.setenv("LIBRARY_ROOTS", "/media/a,/media/b;/config/c")
+    get_settings.cache_clear()
+    try:
+        refrescar_raices()
+        for r in ("/media/a", "/media/b", "/config/c"):
+            assert any(r in x for x in saneado_logs._raices)
+    finally:
+        get_settings.cache_clear()
+
+
+def test_codigo_app_no_se_redacta():
+    assert "/app/src/zascarr/services/x.py" in sanear_texto(
+        'File "/app/src/zascarr/services/x.py", line 10')
