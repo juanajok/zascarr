@@ -56,3 +56,18 @@ def test_el_logger_real_pasa_por_el_buffer_y_redacta():
     texto = rr.texto_reciente()
     assert "evento_real" in texto and "/media/x.cbz" not in texto
     assert "x.cbz" not in texto and "NO-SALE" not in texto
+
+
+def test_la_descarga_no_lleva_rutas_de_biblioteca():
+    """#369: el fichero /ui/logs tampoco expone rutas ni nombres de la biblioteca."""
+    import structlog
+
+    from zascarr.utils.saneado_logs import instalar_saneo_logs
+    instalar_saneo_logs()
+    rr.instalar_captura()
+    rr.limpiar()
+    structlog.get_logger("prueba.ruta").error(
+        "fallo en /media/library/Serie/foo.cbz", ruta="/media/library/Serie/foo.cbz")
+    r = TestClient(app).get("/ui/logs")
+    assert r.status_code == 200
+    assert "/media/library" not in r.text and "foo.cbz" not in r.text

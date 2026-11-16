@@ -161,8 +161,12 @@ def test_inventario_control_negativo_politica():
              "postgresql://u:p@host/db", "/config/covers/a.webp"]
     for caso in casos:
         assert caso not in sanear_texto(caso)
-        # control negativo: sin saneador el caso aparece tal cual
-        assert caso in caso
+        # control negativo real: el mismo valor en un LogRecord sin filtro se conserva
+        record = logging.LogRecord("prueba.crudo", logging.ERROR, __file__, 1,
+                                   "%s", (caso,), None)
+        assert caso in record.getMessage()
+        FiltroSaneado().filter(record)
+        assert caso not in record.getMessage()
 
 
 def test_orden_real_sanitizador_y_captura():
@@ -300,3 +304,32 @@ def test_library_roots_config_se_dividen(monkeypatch):
 def test_codigo_app_no_se_redacta():
     assert "/app/src/zascarr/services/x.py" in sanear_texto(
         'File "/app/src/zascarr/services/x.py", line 10')
+
+
+def test_fabrica_sanea_exc_info_en_handler_posterior():
+    import io
+    refrescar_raices([RAIZ])
+    instalar_filtro_registros()
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("%(message)s\n%(exc_text)s"))
+    logger = logging.getLogger("prueba.exc.posterior")
+    logger.propagate = False
+    logger.setLevel(logging.ERROR)
+    logger.addHandler(handler)
+    try:
+        try:
+            raise FileNotFoundError("/media/library/Serie/foo.cbz")
+        except FileNotFoundError:
+            logger.exception("fallo")
+    finally:
+        logger.removeHandler(handler)
+    assert "/media/library" not in stream.getvalue() and "foo.cbz" not in stream.getvalue()
+    assert "FileNotFoundError" in stream.getvalue()
+
+
+def test_ruta_desconocida_final_linea_y_guion():
+    s = sanear_texto("error en /tmp/foo.jpg - error")
+    assert "/tmp" not in s and "- error" in s
+    s2 = sanear_texto("primera /tmp/foo.jpg\nsegunda línea")
+    assert "/tmp" not in s2 and "segunda línea" in s2
