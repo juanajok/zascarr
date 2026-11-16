@@ -396,6 +396,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "fuente", "importada", "enlazados", "omitidos", "motivos",
     # #155: filtros del alta de series y selección de candidatas (estado de la vista).
     "serie_ids", "tradicion",
+    # D5 (#162): semana y editorial de Novedades (estado de la vista).
+    "semana", "editorial",
     # #797: abrir el desplegable de alta tras un error (estado de la vista).
     "abrir",
 })
