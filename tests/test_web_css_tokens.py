@@ -75,8 +75,8 @@ def test_fuera_de_root_no_queda_ningun_font_size_literal():
     declaraciones = _declaraciones(_fuera_de_root(css))
     tam = [(sel, v) for sel, prop, v in declaraciones if prop == "font-size"]
     # V14 (#750) retiró reglas muertas (`.topnav`, `.hero-state`, y en F3b la familia `.issue-chip`):
-    # el inventario baja de 140 a 130. Sigue sin poder quedar un literal.
-    assert len(tam) == 130, f"declaraciones font-size: {len(tam)}"
+    # el inventario bajó de 140 a 130. +1 por el aviso «puede tardar» de «Buscar ahora» (2026-11-16).
+    assert len(tam) == 131, f"declaraciones font-size: {len(tam)}"
     malas = [(sel, v) for sel, v in tam if not re.fullmatch(r"var\(--text-[\w-]+\)", v)]
     assert not malas, "font-size sin token:\n" + "\n".join(f"{s}: {v}" for s, v in malas)
 
