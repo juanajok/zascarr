@@ -3,7 +3,7 @@
 Lee de Comic Vine los números con `cover_date` en la semana y los cruza con las
 series seguidas (deseos activos o política de búsqueda distinta de «ninguno»).
 No escribe en la base: la vista se calcula a demanda y se cachea en memoria unos
-minutos. La parte de Norma/ECC/Panini queda fuera hasta verificar su HTML real.
+minutos. Norma y Panini se leen de sus páginas públicas.
 """
 from __future__ import annotations
 
