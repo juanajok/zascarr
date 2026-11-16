@@ -16,8 +16,22 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
-from zascarr.models import ComicTradition, File, FileFormat, ImportRun, Issue, Series
-from zascarr.services.inicio import Desglose, copias_descartadas, desglose_registrados
+from zascarr.models import (
+    ComicTradition,
+    File,
+    FileFormat,
+    ImportRun,
+    Issue,
+    ReadingProgress,
+    ReadingStatus,
+    Series,
+)
+from zascarr.services.inicio import (
+    Desglose,
+    continuar_leyendo,
+    copias_descartadas,
+    desglose_registrados,
+)
 from zascarr.services.review import ReviewService
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -106,3 +120,26 @@ async def test_las_copias_descartadas_son_las_del_ultimo_registro_no_las_del_inf
         await s.commit()
     async with fabrica() as s:
         assert await copias_descartadas(s) == 217
+
+
+@pytest.mark.asyncio
+async def test_continuar_leyendo_elige_el_ultimo_y_solo_estado_reading(fabrica):
+    async with fabrica() as s:
+        serie = Series(id=uuid4(), title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN)
+        s.add(serie)
+        await s.flush()
+        uno = Issue(id=uuid4(), series_id=serie.id, issue_number="1")
+        dos = Issue(id=uuid4(), series_id=serie.id, issue_number="2")
+        s.add_all([uno, dos])
+        await s.flush()
+        s.add_all([
+            ReadingProgress(issue_id=uno.id, status=ReadingStatus.READING,
+                            started_at=datetime(2026, 11, 15, tzinfo=UTC)),
+            ReadingProgress(issue_id=dos.id, status=ReadingStatus.READING,
+                            started_at=datetime(2026, 11, 16, tzinfo=UTC)),
+        ])
+        await s.commit()
+    async with fabrica() as s:
+        v = await continuar_leyendo(s)
+        assert v is not None
+        assert v.series_title == "Thorgal" and v.issue_number == "2"
