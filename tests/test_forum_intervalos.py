@@ -116,4 +116,5 @@ async def test_la_busqueda_tras_redireccion_de_ipb_cabe_en_el_presupuesto():
     reloj.dormidos.clear()
     assert await scraper.use_ipb_search("DC K.O.", abrir_temas=False) == []
     assert len(peticiones) >= 4                       # entrada + login + POST + GET del 302
-    assert sum(reloj.dormidos) == pytest.approx(2 * 25.0)
+    # POST: intervalo de búsqueda (25 s); el 302: ritmo de lectura (2 s), no otra búsqueda.
+    assert sum(reloj.dormidos) == pytest.approx(25.0 + 2.0)
