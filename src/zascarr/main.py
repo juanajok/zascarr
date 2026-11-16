@@ -445,6 +445,7 @@ def create_app() -> FastAPI:
     from zascarr.api.revision import router as revision_router
     from zascarr.api.series import router as series_router
     from zascarr.api.wishlist import router as wishlist_router
+    from zascarr.middleware_cuerpo import LimiteCuerpoMiddleware
     from zascarr.services.auth import AuthMiddleware
     from zascarr.web.ajustes import router as ajustes_router
     from zascarr.web.arcos import router as arcos_ui_router
@@ -481,6 +482,7 @@ def create_app() -> FastAPI:
     # siempre para que activarla desde /ui/ajustes no requiera reiniciar
     # el proceso con un middleware distinto.
     app.add_middleware(AuthMiddleware)
+    app.add_middleware(LimiteCuerpoMiddleware, max_bytes=settings.max_cuerpo_peticion_bytes)
 
     app.include_router(health_router, prefix="/api")
     app.include_router(estado_cortesia_router, prefix="/api")

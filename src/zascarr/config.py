@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # Toda petición de `utils/peticiones.py` (y por tanto `cache_http`) lee el cuerpo en
     # streaming y corta al superar este tope de bytes YA DECODIFICADOS. 4 MiB por defecto,
     # acotado a 1–16 MiB; el `.env` puede subirlo/bajarlo. No se expone en Ajustes.
+    # NFR-03 (#363): tope del cuerpo de una petición de escritura (formularios y API),
+    # comprobado en `middleware_cuerpo.py` antes de que FastAPI lo parsee. El cuerpo
+    # válido máximo de #115 mide ~73,5 KiB (token de hasta 73.229 caracteres más
+    # campos); 256 KiB deja margen >3×. Es un contrato distinto del límite del campo
+    # `token` de #115. Solo por `.env`; no se expone en Ajustes.
+    max_cuerpo_peticion_bytes: int = Field(
+        default=262_144, ge=131_072, le=8_388_608)
     max_cuerpo_transfer_bytes: int = Field(
         default=4_194_304, ge=1_048_576, le=16_777_216)
     #: Tope al `Crawl-delay` que declare un `robots.txt` (M-4, #813). Un sitio puede pedir

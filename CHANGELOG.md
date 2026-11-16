@@ -34,6 +34,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **NFR-03: límite del cuerpo de las peticiones (2026-11-16).** Middleware ASGI que
+  rechaza con 413 los cuerpos de escritura que superan 256 KiB, comprobando `Content-Length`
+  y los bytes reales (chunked o cabecera falsa) antes de que FastAPI los parsee. Tope en
+  `config.py`, por `.env`, por encima del cuerpo válido máximo de #115 (~73,5 KiB).
 - **BL-A11Y: foco, avisos y título del asistente de vinculación (2026-11-16).**
   «Marcar/Desmarcar todos» deja el foco en el recuento (sin región viva anidada); el resultado
   inmediato y el fallo enfocan su encabezado; el resultado guardado y el inmediato titulan
