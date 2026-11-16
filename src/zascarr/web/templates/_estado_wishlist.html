@@ -5,7 +5,8 @@
   {% if row.puede_reintentar %}
   <button type="button" class="btn-reintentar"
           hx-post="/ui/wishlist/{{ row.item.id }}/reintentar"
-          hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML">
+          hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
+          aria-label="Reintentar la búsqueda de {{ row.titulo }}">
     Reintentar
   </button>
   {% endif %}
@@ -13,7 +14,8 @@
   <button type="button" class="btn-buscar-ahora"
           hx-post="/ui/wishlist/{{ row.item.id }}/buscar-ahora"
           hx-target="#candidatos-{{ row.item.id }}" hx-swap="outerHTML"
-          hx-indicator="#buscando-{{ row.item.id }}" hx-disable="this">
+          hx-indicator="#buscando-{{ row.item.id }}" hx-disable="this"
+          aria-label="Buscar ahora {{ row.titulo }}">
     Buscar ahora
   </button>
   <span class="htmx-indicator wishlist-buscando" id="buscando-{{ row.item.id }}"
@@ -25,13 +27,15 @@
   <button type="button" class="btn ghost sm"
           hx-post="/ui/wishlist/{{ row.item.id }}/marcar-conseguido"
           hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
-          hx-confirm="¿Marcar como conseguido? Ya no se volverá a buscar.">
+          hx-confirm="¿Marcar como conseguido? Ya no se volverá a buscar."
+          aria-label="Marcar {{ row.titulo }} como conseguido">
     Ya lo tengo
   </button>
   {% endif %}
   <button type="button" class="btn-ignorar"
           hx-post="/ui/wishlist/{{ row.item.id }}/quitar"
           hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
-          hx-confirm="¿Quitar de la lista de deseos?">
+          hx-confirm="¿Quitar de la lista de deseos?"
+          aria-label="Quitar {{ row.titulo }} de Deseados">
     Quitar
   </button>
