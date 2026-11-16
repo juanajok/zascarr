@@ -32,7 +32,8 @@ _ABS_COMIC = re.compile(rf"(?i)(?<![\w])/(?:[^\s\"'<>/]+/)+[^\s\"'<>/]+\.({_EXT}
 _RUTA_RELATIVA = re.compile(rf"(?i)(?<![\w])[^\s\"'<>/]+(?:/[^\s\"'<>/]+)+\.({_EXT})\b")
 _ARCHIVO_SIMPLE = re.compile(rf"(?i)\b[^\s\"'<>/]+\.({_EXT})\b")
 _RUTA_ABS = re.compile(
-    r"(?<![:/\w])/(?:[^\n\"'<>]*?)(?=:\s|$|[\"';,\)\]]|\s+(?:[a-záéíóúñ]+\s))")
+    r"(?<![:/\w])/(?:[^\n\"'<>]*?)(?=:\s|$|[\"';,\)\]]|\s+\(|\s+-\s)",
+    re.MULTILINE)
 _MAX = 2000
 
 _raices: tuple[str, ...] = ()
@@ -268,6 +269,11 @@ def _sanear_record_en_origen(record: logging.LogRecord) -> None:
             record.__dict__[nombre] = sanear_valor(valor, clave=nombre)
         if record.stack_info:
             record.stack_info = sanear_texto(record.stack_info)
+        if record.exc_info and not record.exc_text:
+            record.exc_text = sanear_texto(
+                "".join(traceback.format_exception(*record.exc_info)))
+        elif record.exc_text:
+            record.exc_text = sanear_texto(record.exc_text)
         record._sec_log_saneado = True
     except Exception:  # noqa: BLE001 — nunca emitir crudo
         record.msg = "(registro omitido: saneo fallido)"
