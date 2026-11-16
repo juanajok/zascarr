@@ -361,3 +361,4 @@ def test_la_rejilla_no_pasa_de_tres_columnas():
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
     assert "grid-template-columns: repeat(4" not in css
+    assert ".novedad-portada a:focus-visible" in css
