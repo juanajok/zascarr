@@ -6,6 +6,8 @@ import zipfile
 from pathlib import Path
 
 import pytest
+
+_RAIZ_FIXTURES = Path(__file__).resolve().parents[1]
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -354,7 +356,7 @@ async def test_rar_multi_entrada_mockeado_no_reutiliza_carpeta(tmp_path, monkeyp
     assert llamadas == ["a.cbz", "b.cbz"] and len(items) == 2
 
 
-@pytest.mark.skipif(not (Path("tests/fixtures/rar/minimo_rar4.cbr").exists()),
+@pytest.mark.skipif(not (_RAIZ_FIXTURES / "tests/fixtures/rar/minimo_rar4.cbr".exists()),
                     reason="fixture RAR ausente")
 def test_fixture_rar_real_tiene_varias_entradas():
     from zascarr.utils import lector_rar
@@ -362,7 +364,7 @@ def test_fixture_rar_real_tiene_varias_entradas():
         pytest.skip("sin unar/lsar")
     import tempfile
     with tempfile.TemporaryDirectory() as casa:
-        listado = lector_rar.listar(Path("tests/fixtures/rar/minimo_rar4.cbr"),
+        listado = lector_rar.listar(_RAIZ_FIXTURES / "tests/fixtures/rar/minimo_rar4.cbr",
                                     temporal=Path(casa), max_bytes_declarados=8 * 1024 ** 3)
     assert len(listado.entradas) >= 2
     assert sum(1 for e in listado.entradas if e.nombre.lower().endswith((".cbz", ".cbr"))) == 0
@@ -393,7 +395,7 @@ def test_rar_real_extraccion_streaming_fixture(tmp_path):
     from zascarr.utils import lector_rar
     if not lector_rar.disponible():
         pytest.skip("sin unar/lsar")
-    fixture = Path("tests/fixtures/rar/solido_rar4.cbr")
+    fixture = _RAIZ_FIXTURES / "tests/fixtures/rar/solido_rar4.cbr"
     import tempfile
     with tempfile.TemporaryDirectory() as casa:
         lista = lector_rar.listar(fixture, temporal=Path(casa),
@@ -448,7 +450,7 @@ async def test_rar_real_servicio_no_contiene_tebeos(tmp_path, monkeypatch):
     from zascarr.config import get_settings
     from zascarr.services.paquetes import PaquetePendiente
     from zascarr.services.paquetes_extraccion import PaqueteExtraccionError, extraer_y_verificar
-    fixture = Path("tests/fixtures/rar/solido_rar4.cbr")
+    fixture = _RAIZ_FIXTURES / "tests/fixtures/rar/solido_rar4.cbr"
     destino = tmp_path / "p.rar"
     destino.write_bytes(fixture.read_bytes())
     st = destino.stat()
