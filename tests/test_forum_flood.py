@@ -22,7 +22,7 @@ from zascarr.services.orchestrator import (
     Orchestrator,
 )
 from zascarr.services.prowlarr import SearchResult
-from zascarr.utils.cortesia import CortesiaEnEspera, CortesiaProceso
+from zascarr.utils.cortesia import CortesiaProceso
 
 FIXTURES = Path(__file__).parent / "fixtures" / "foro"
 BASE = "http://foro.example/forum"
@@ -118,14 +118,17 @@ async def test_ac_fld_3_cero_resultados_sin_caja_es_una_lista_vacia():
     assert await scraper.use_ipb_search("Año Uno", abrir_temas=False) == []
 
 
-async def test_ac_fld_4_tras_el_flood_la_siguiente_llamada_espera_sin_red():
+async def test_ac_fld_4_tras_el_flood_la_siguiente_llamada_espera_y_reintenta():
+    """Con presupuesto para el flood corto (20-60 s) espera el bloqueo y reintenta; si el
+    foro sigue saturando, vuelve a lanzar ForumFloodControl (nunca lista vacía)."""
     scraper, peticiones = _una_busqueda(_html("flood_es.html"))
     with pytest.raises(ForumFloodControl):
         await scraper.use_ipb_search("Año Uno", abrir_temas=False)
     assert len(peticiones) == 1
-    with pytest.raises(CortesiaEnEspera):
+    with pytest.raises(ForumFloodControl):
         await scraper.use_ipb_search("Año Uno", abrir_temas=False)
-    assert len(peticiones) == 1                     # no se ha vuelto a pedir nada
+    assert len(peticiones) == 2                     # esperó y reintentó dentro del presupuesto
+    assert scraper._espera_busqueda_s >= 50.0
 
 
 # ── AC-FLD-6: el orquestador distingue espera de vacío ───────────────────────────────────
