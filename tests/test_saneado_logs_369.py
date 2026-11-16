@@ -333,3 +333,29 @@ def test_ruta_desconocida_final_linea_y_guion():
     assert "/tmp" not in s and "- error" in s
     s2 = sanear_texto("primera /tmp/foo.jpg\nsegunda línea")
     assert "/tmp" not in s2 and "segunda línea" in s2
+
+
+def test_bearer_sin_puntuacion_se_redacta():
+    assert "abc123" not in sanear_texto("Bearer abc123")
+    assert "[credencial]" in sanear_texto("Authorization Bearer abc123")
+
+
+def test_handler_posterior_con_formatter_exc_info_no_filtra():
+    import io
+    refrescar_raices([RAIZ])
+    instalar_filtro_registros()
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("%(message)s %(exc_info)s"))
+    logger = logging.getLogger("prueba.exc.formatter")
+    logger.propagate = False
+    logger.setLevel(logging.ERROR)
+    logger.addHandler(handler)
+    try:
+        try:
+            raise FileNotFoundError("/media/library/Serie/foo.cbz")
+        except FileNotFoundError:
+            logger.exception("fallo")
+    finally:
+        logger.removeHandler(handler)
+    assert "/media/library" not in stream.getvalue() and "foo.cbz" not in stream.getvalue()
