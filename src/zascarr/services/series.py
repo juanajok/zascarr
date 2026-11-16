@@ -509,8 +509,13 @@ async def numeros_poseidos_por_serie(db: AsyncSession) -> dict[UUID, set[int]]:
     """
     filas = (await db.execute(
         select(Issue.series_id, Issue.issue_number, Issue.format,
-               exists().where(File.issue_id == Issue.id,
-                              File.is_missing.is_(False)).label("disponible"))
+               or_(
+                   exists().where(File.issue_id == Issue.id,
+                                  File.is_missing.is_(False)),
+                   # Un tomo recopilatorio marca en el Issue que cubre ese número
+                   # (2026-11-16): cuenta como poseído igual que un archivo real.
+                   Issue.metadata_.has_key("cubierto_por_tomo"),
+               ).label("disponible"))
     )).all()
     por_serie: dict[UUID, set[int]] = {}
     for series_id, numero, formato, disponible in filas:
@@ -537,8 +542,11 @@ async def numeros_poseidos(db: AsyncSession, series_id: UUID) -> set[int]:
     """
     filas = (await db.execute(
         select(Issue.issue_number, Issue.format,
-               exists().where(File.issue_id == Issue.id,
-                              File.is_missing.is_(False)).label("disponible"))
+               or_(
+                   exists().where(File.issue_id == Issue.id,
+                                  File.is_missing.is_(False)),
+                   Issue.metadata_.has_key("cubierto_por_tomo"),
+               ).label("disponible"))
         .where(Issue.series_id == series_id)
     )).all()
     poseidos: set[int] = set()
