@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 tests/test_library_adopter.py
 
@@ -353,6 +354,30 @@ class TestAdopt:
         assert report.errors == ["Serie 01.cbz: no se pudo leer (OSError: Input/output error)"]
         assert report.vanished == 0
         assert llamadas["stat"] == 1          # no se intenta el segundo stat
+
+    @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_adopt_file_guarda_la_raiz_del_archivo(self, monkeypatch, tmp_path):
+        from types import SimpleNamespace
+
+        from zascarr.core.matcher import MatchResult, MatchStatus
+
+        path = tmp_path / "Manga" / "Serie" / "Tomo 01.cbz"
+        path.parent.mkdir(parents=True)
+        make_cbz(path)
+        root = SimpleNamespace(id=uuid4())
+        monkeypatch.setattr(
+            "zascarr.services.library_adopter._triage_and_match",
+            AsyncMock(return_value=_Outcome(
+                tr=TriageResult(path=path, sha256="a" * 64),
+                result=MatchResult(MatchStatus.UNSORTED))))
+        session = FakeSession([])
+        report = AdoptionReport(started_at=datetime.now(UTC))
+
+        await LibraryAdopter(db=session)._adopt_file(path, report, root=root)
+
+        fila = next(o for o in session.added if isinstance(o, File))
+        assert fila.root_id == root.id
 
     @pytest.mark.asyncio
     async def test_persiste_import_run_con_kind_adoption(self, monkeypatch, tmp_path):
