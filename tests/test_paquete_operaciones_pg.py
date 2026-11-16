@@ -404,3 +404,71 @@ def test_rar_real_extraccion_streaming_fixture(tmp_path):
         lector_rar.extraer_entrada_a(fixture, primera, salida, primera.tamano,
                                      temporal=Path(casa))
         assert salida.stat().st_size == primera.tamano
+
+
+def test_verificacion_rechaza_symlink_y_directorio_extra(tmp_path):
+    from zascarr.services.paquetes_extraccion import PaqueteExtraccionError, _verificar_contenido
+    temp = tmp_path / "t"
+    temp.mkdir()
+    (temp / "0001.cbz").write_bytes(b"PK\x03\x04")
+    (temp / "extra").symlink_to(tmp_path / "nada")
+    with pytest.raises(PaqueteExtraccionError, match="inesperados"):
+        _verificar_contenido([{"nombre": "0001.cbz", "bytes": 4}], temp)
+    (temp / "extra").unlink()
+    (temp / "dir").mkdir()
+    with pytest.raises(PaqueteExtraccionError, match="inesperados"):
+        _verificar_contenido([{"nombre": "0001.cbz", "bytes": 4}], temp)
+
+
+def test_crear_temp_limpia_si_falla_open_hijo(tmp_path, monkeypatch):
+    import os
+
+    from zascarr.services.paquetes_extraccion import _crear_temp
+    base = tmp_path / "base"
+    base.mkdir()
+    real = os.open
+    veces = {"n": 0}
+
+    def falla(nombre, flags, *a, **k):
+        if "base" not in str(nombre) and k.get("dir_fd") is not None:
+            veces["n"] += 1
+            raise OSError("fallo simulado")
+        return real(nombre, flags, *a, **k)
+    monkeypatch.setattr(os, "open", falla)
+    with pytest.raises(OSError):
+        _crear_temp(base, "x")
+    assert list(base.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_rar_real_servicio_no_contiene_tebeos(tmp_path, monkeypatch):
+    from zascarr.utils import lector_rar
+    if not lector_rar.disponible():
+        pytest.skip("sin unar/lsar")
+    from zascarr.config import get_settings
+    from zascarr.services.paquetes import PaquetePendiente
+    from zascarr.services.paquetes_extraccion import PaqueteExtraccionError, extraer_y_verificar
+    fixture = Path("tests/fixtures/rar/solido_rar4.cbr")
+    destino = tmp_path / "p.rar"
+    destino.write_bytes(fixture.read_bytes())
+    st = destino.stat()
+    p = PaquetePendiente(ruta=destino, raiz=tmp_path, relativa="p.rar",
+                         nombre="p.rar", tamano=st.st_size, mtime_ns=st.st_mtime_ns,
+                         firma="RAR", estado="listo", causa="", dev=st.st_dev, ino=st.st_ino)
+    monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
+    get_settings.cache_clear()
+    with bd_efimera_sync(URL) as url:
+        migrar_a_head(url)
+        motor = create_async_engine(url_asyncpg(url), poolclass=None)
+        fabrica = async_sessionmaker(motor, expire_on_commit=False)
+        try:
+            async with fabrica() as s:
+                op = await crear_operacion(s, p)
+                with pytest.raises(PaqueteExtraccionError):
+                    await extraer_y_verificar(s, op.id)
+                await s.refresh(op)
+                assert op.estado is PaqueteEstado.ERROR and op.temp_dir is None
+            assert destino.exists()
+        finally:
+            await motor.dispose()
+            get_settings.cache_clear()

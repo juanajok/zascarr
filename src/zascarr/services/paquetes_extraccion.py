@@ -119,7 +119,13 @@ def _crear_temp(base: Path, prefijo: str) -> tuple[Path, int]:
             raise PaqueteExtraccionError("temporal_inseguro", "La carpeta temporal cambió.")
         nombre = f"{prefijo}-{os.urandom(6).hex()}"
         os.mkdir(nombre, 0o700, dir_fd=fd)
-        hijo = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+        try:
+            hijo = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                           dir_fd=fd)
+        except BaseException:
+            with __import__("contextlib").suppress(OSError):
+                os.rmdir(nombre, dir_fd=fd)
+            raise
     finally:
         os.close(fd)
     return base / nombre, hijo
@@ -147,7 +153,8 @@ def _comprobar_original(p: PaquetePendiente) -> None:
         raise PaqueteExtraccionError("paquete_cambiado", "El paquete cambió mientras se preparaba.")
 
 
-def _extraer_zip_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int) -> list[dict]:
+def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
+                        modo: str, temp_fd: int) -> list[dict]:
     """Extrae ZIP en proceso hijo con timeout y kill de grupo; no bloquea el bucle."""
     datos = {"nombre": paquete.nombre, "tamano": paquete.tamano,
              "mtime_ns": paquete.mtime_ns, "firma": paquete.firma,
@@ -158,11 +165,12 @@ def _extraer_zip_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int) -> l
                "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
                "LANG": "C.UTF-8"}
     os.set_inheritable(fd, True)
+    os.set_inheritable(temp_fd, True)
     proc = subprocess.Popen(  # noqa: S603 — lista, sin shell, ruta absoluta
         [sys.executable, "-m", "zascarr.services.paquetes_worker", json.dumps(datos),
-         str(fd), str(temp)],
+         modo, str(fd), str(temp)],
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        env=entorno, close_fds=True, pass_fds=(fd,), start_new_session=True)
+        env=entorno, close_fds=True, pass_fds=(fd, temp_fd), start_new_session=True)
     try:
         salida, error = proc.communicate(timeout=_ZIP_TIMEOUT)
     except subprocess.TimeoutExpired:
@@ -172,6 +180,8 @@ def _extraer_zip_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int) -> l
         raise PaqueteExtraccionError("tiempo", "La extracción tardó demasiado.") from None
     if proc.returncode != 0:
         raise PaqueteExtraccionError("extraccion", "La extracción ZIP falló.")
+    if len(salida) > 1024 * 1024:
+        raise PaqueteExtraccionError("extraccion", "La extracción devolvió demasiados datos.")
     try:
         return list(json.loads(salida))
     except (ValueError, TypeError) as exc:
@@ -303,8 +313,7 @@ def _verificar_contenido(items: list[dict], temp: Path, temp_fd: int | None = No
 
 def _verificar_contenido_fd(items: list[dict], temp: Path, temp_fd: int) -> None:
     esperados = {i["nombre"] for i in items}
-    reales = {n for n in os.listdir(temp_fd) if stat.S_ISREG(
-        os.stat(n, dir_fd=temp_fd, follow_symlinks=False).st_mode)}
+    reales = set(os.listdir(temp_fd))
     if reales != esperados:
         raise PaqueteExtraccionError("verificacion", "El temporal tiene ficheros inesperados.")
     for item in items:
@@ -475,14 +484,9 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
             raise PaqueteExtraccionError("listado", exc.causa) from exc
         comprobar_espacio(base, listado.bytes_estimados or 1,
                           "extraer el paquete")
-        if paquete.firma == "ZIP":
-            items = await asyncio.to_thread(
-                _extraer_zip_en_proceso, paquete, temp, paquete.fd)
-        elif paquete.firma == "RAR":
-            items = await asyncio.wait_for(asyncio.to_thread(
-                _escribir_rar, paquete, listado, temp, paquete.fd, temp_fd), timeout=900)
-        else:
-            raise PaqueteExtraccionError("formato", "El paquete no es RAR ni ZIP.")
+        items = await asyncio.to_thread(
+            _extraer_en_proceso, paquete, temp, paquete.fd,
+            "zip" if paquete.firma == "ZIP" else "rar", temp_fd)
         _verificar_contenido(items, temp, temp_fd)
         op.estado = PaqueteEstado.VERIFICANDO
         op.items = list(items)
