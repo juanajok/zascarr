@@ -34,6 +34,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **CUR7: filtro por rango de años en Biblioteca (2026-11-16).** Dos campos, «Desde el
+  año» y «Hasta el año», acotan por `start_year` y se combinan con el resto de filtros; la URL
+  canónica, los chips, la limpieza y la paginación los conservan. Años inválidos se descartan y
+  un rango invertido se corrige avisando. Sin etapas inventadas ni migración.
 - **CUR6: sagas como guías con portada y progreso (2026-11-16).** El listado y la ficha
   de una saga muestran una portada tomada de su primer número miembro (servida por la caché
   local, sin hotlinking) y el progreso de lectura completada (`leídos de total`). Solo lectura:
