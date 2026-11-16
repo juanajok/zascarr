@@ -1008,6 +1008,13 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 15b. PRIMEROS PASOS (V4) ────────────────────────────────────────────────
    Lista numerada; el estado se ve por TEXTO (chip) además de por color/forma. */
+.continuar-leyendo { margin: 18px 0 4px; }
+.continuar-card { padding: 18px 20px; border: var(--border-panel) solid var(--ink); background: var(--paper-2); box-shadow: var(--shadow-dura); }
+.continuar-card .rotulo { margin: 0 0 4px; }
+.continuar-card h2 { margin: 0 0 4px; }
+.continuar-numero { margin: 0 0 10px; color: var(--ink-soft); }
+.continuar-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.continuar-acciones .btn { min-height: 44px; }
 .primeros-pasos { margin: 22px 0 var(--space-2); }
 .row-pasos { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
 .row-pasos h2, .seccion { font-size: var(--text-titulo-seccion); margin: 0; }

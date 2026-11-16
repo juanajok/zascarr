@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, MetadataSource, Series
-from zascarr.services.inicio import Desglose, VistaInicio
+from zascarr.services.inicio import ContinuarLeyendo, Desglose, VistaInicio
 from zascarr.services.library_adopter import EstadoAdopcion
 from zascarr.services.primeros_pasos import (
     EstadoInicio,
@@ -128,7 +128,8 @@ def _primarios_dentro_y_fuera_de_details(html: str) -> tuple[list[str], list[str
 
 def vista(*, adopcion=EstadoAdopcion.SIN_TEBEOS, registrados=0, sin_clasificar=0, seguidas=0,
           informe=None, legal=False, fuente=False, series=0, con_archivos=0, con_recuento=0,
-          huecos=0, completitud=None, ultimas=(), desglose=None, copias=0) -> VistaInicio:
+          huecos=0, completitud=None, ultimas=(), desglose=None, copias=0,
+          continuar=None) -> VistaInicio:
     """`desglose` por defecto: lo registrado que no está por revisar, clasificado."""
     if desglose is None:
         desglose = Desglose(total=registrados, clasificados=max(registrados - sin_clasificar, 0),
@@ -143,7 +144,7 @@ def vista(*, adopcion=EstadoAdopcion.SIN_TEBEOS, registrados=0, sin_clasificar=0
         ultimas_series=tuple(ultimas))
     return VistaInicio(resumen=resumen, pasos=pasos, informe=informe,
                        archivos_sin_clasificar=sin_clasificar, registrados=desglose,
-                       copias_descartadas=copias)
+                       copias_descartadas=copias, continuar=continuar)
 
 
 def pagina(v: VistaInicio) -> str:
@@ -154,6 +155,23 @@ def pagina(v: VistaInicio) -> str:
         r = client.get("/ui/")
     assert r.status_code == 200
     return r.text
+
+
+def test_continuar_leyendo_aparece_solo_si_hay_lectura_en_curso():
+    c = ContinuarLeyendo(series_id=str(uuid4()), series_title="Thorgal",
+                         issue_id=str(uuid4()), issue_number="3",
+                         issue_title="El país Qâ", current_page=5, page_count=20)
+    html = pagina(vista(registrados=1, continuar=c))
+    assert "Continuar leyendo" in html
+    assert "Thorgal" in html and "#3" in html
+    assert "5 de 20 páginas" in html
+    assert f"/ui/series/{c.series_id}/numero/{c.issue_id}" in html
+    assert f"/ui/series/{c.series_id}" in html
+
+
+def test_sin_lectura_en_curso_no_pinta_la_tarjeta():
+    html = pagina(vista(registrados=1))
+    assert "Continuar leyendo" not in html
 
 
 def texto(html: str, clase: str) -> str:
