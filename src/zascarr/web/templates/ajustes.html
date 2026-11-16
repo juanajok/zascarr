@@ -393,6 +393,24 @@
       <div id="resultado-nombres" aria-live="polite"></div>
     </fieldset>
 
+    <fieldset class="ajustes-card" id="importacion">
+      <legend>Importación</legend>
+      <p class="ajustes-desc">Qué hace ZascArr con lo que llega de Descargas.</p>
+      <form hx-post="/ui/ajustes/guardar/importacion" hx-target="#resultado-importacion" hx-swap="innerHTML">
+        <label class="legal-checkbox">
+          <input type="checkbox" name="import_create_missing_issue" value="true" {% if import_create_missing_issue %}checked{% endif %}>
+          Crear el número al importar si la serie aún no tiene catálogo
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="import_convert_cbr" value="true" {% if import_convert_cbr %}checked{% endif %}>
+          Convertir CBR a CBZ al importar
+        </label>
+        <p class="ajustes-hint">La conversión verifica el CBZ antes de apartar el CBR; si falla, el CBR se conserva. Solo afecta a importaciones nuevas.</p>
+        <div class="ajustes-actions"><button type="submit">Guardar importación</button></div>
+      </form>
+      <div id="resultado-importacion" aria-live="polite"></div>
+    </fieldset>
+
     {% include "_ajustes_seguridad.html" %}
 
     <fieldset class="ajustes-card">

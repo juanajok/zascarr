@@ -2550,6 +2550,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 #blog-rss .legal-checkbox { min-height: 44px; display: flex; align-items: center; gap: 8px; }
 #blog-rss input[type="text"], #blog-rss input[type="url"] { min-height: 44px; }
 #blog-rss .ajustes-actions button { min-height: 44px; }
+#importacion .legal-checkbox { min-height: 44px; }
+#importacion .ajustes-actions button { min-height: 44px; }
 #nombres-archivo .legal-checkbox { min-height: 44px; display: flex; align-items: center; gap: 8px; }
 #nombres-archivo .ajustes-actions button { min-height: 44px; }
 #nombres-archivo .nombres-ejemplos { margin: 8px 0; padding-left: 1.2em; }
