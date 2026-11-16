@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import stat
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.models import PaqueteEstado, PaqueteOperacion
+from zascarr.services.asignacion import _renameat2_noreplace
 from zascarr.services.importer import Importer
 
 logger = structlog.get_logger()
@@ -66,6 +68,9 @@ async def publicar_e_importar(s: AsyncSession, operacion_id: UUID) -> PaqueteOpe
         staging.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(staging.parent, 0o700)  # noqa: S103 — carpeta propia
         staging.mkdir(mode=0o700)
+        st_staging = staging.lstat()
+        if not stat.S_ISDIR(st_staging.st_mode) or staging.is_symlink():
+            raise PaquetePublicacionError("staging", "La carpeta temporal no es segura.")
         op.estado = PaqueteEstado.PUBLICANDO
         op.staging_dir = str(staging)
         op.destino_dir = str(final)
@@ -76,7 +81,12 @@ async def publicar_e_importar(s: AsyncSession, operacion_id: UUID) -> PaqueteOpe
             if not origen.is_file() or origen.is_symlink():
                 raise PaquetePublicacionError("item", "Falta un tebeo extraído.")
             shutil.copy2(origen, staging / item["nombre"])
-        os.rename(staging, final)
+        try:
+            _renameat2_noreplace(staging, final)
+        except FileExistsError:
+            final = _nombre_libre(descargas, Path(op.paquete_path).stem + " bis")
+            _renameat2_noreplace(staging, final)
+            op.destino_dir = str(final)
         op.estado = PaqueteEstado.IMPORTANDO
         s.add(op)
         await s.commit()
