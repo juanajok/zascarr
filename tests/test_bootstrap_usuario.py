@@ -27,3 +27,9 @@ def test_la_eleccion_se_persiste_en_env_para_reejecuciones():
     texto = (RAIZ / "bootstrap.sh").read_text(encoding="utf-8")
     assert 'set_env_var "ZASCARR_USER"' in texto
     assert 'set_env_var "ZASCARR_GROUP"' in texto
+
+
+def test_cambiar_de_usuario_no_arrastra_el_grupo_anterior():
+    texto = (RAIZ / "bootstrap.sh").read_text(encoding="utf-8")
+    assert "USUARIO_ANTERIOR" in texto and "GRUPO_ANTERIOR" in texto
+    assert 'ZASCARR_USER}" == "${USUARIO_ANTERIOR}' in texto
