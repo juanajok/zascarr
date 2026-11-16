@@ -1441,3 +1441,33 @@ class TestDuplicadosDelForo:
         assert len(candidatos) == 1
         assert candidatos[0].title == "Sector Lejano.cbz"
         assert candidatos[0].size_bytes == 1234
+
+
+
+class TestDuplicadosDeProwlarr:
+    @pytest.mark.asyncio
+    async def test_el_mismo_release_en_dos_indexers_se_queda_una_vez(self, monkeypatch):
+        """Absolute Wonder Woman #20 salía dos veces (mismo título/tamaño, URL
+        distinta de otro indexer). Se conserva la de más seeders (2026-11-16)."""
+        ajustes = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave",
+            "transmission_enabled": True, "amule_enabled": False,
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [
+            make_result(title="Absolute Wonder Woman #20 (2026)",
+                        url="magnet:?xt=urn:btih:aaa", seeders=3, size=100),
+            make_result(title="Absolute Wonder Woman #20 (2026)",
+                        url="magnet:?xt=urn:btih:bbb", seeders=40, size=100),
+            make_result(title="Absolute Wonder Woman #20 (2026)",
+                        url="magnet:?xt=urn:btih:ccc", seeders=5, size=200),
+        ]
+
+        resultados, motivo = await orch._prowlarr_candidates("Absolute Wonder Woman", ajustes)
+
+        assert motivo is None
+        assert len(resultados) == 2                      # 100 (mejor seeders) + 200
+        assert max(r.seeders for r in resultados if r.size_bytes == 100) == 40
