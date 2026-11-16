@@ -496,3 +496,40 @@ def test_index_avisa_si_prowlarr_esta_incompleto(monkeypatch):
         assert 'hx-target="#wishlist-list" hx-swap="beforeend"' in r.text
         assert "window.location.reload" not in r.text
         assert "this.disabled = true" in r.text
+
+
+    def test_un_deseo_descargado_se_puede_marcar_como_conseguido(self):
+        """Descarga manual que quedó en _Unsorted: el deseo no puede quedarse
+        «Descargando…» para siempre (2026-11-16)."""
+        from zascarr.models import WishlistStatus
+
+        series = Series(id=uuid4(), title="Sector Lejano", tradition=ComicTradition.AMERICAN)
+        item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+        item.series = series
+        item.issue = None
+        fila = make_wishlist_item(series, status=WishlistStatus.IMPORTED)
+        fila.id = item.id
+        fila.series = series
+        fila.issue = None
+        sesion = FakeSession(get_map={(Wishlist, item.id): item},
+                             exec_queue=[FakeExecResult([fila])])
+        with use_fake_session(sesion) as client:
+            r = client.post(f"/ui/wishlist/{item.id}/marcar-conseguido")
+        assert r.status_code == 200
+        assert item.status is WishlistStatus.IMPORTED
+        assert item.downloaded_at is not None
+        assert item.last_error is None
+
+    def test_la_fila_descargando_ofrece_ya_lo_tengo(self):
+        from zascarr.models import WishlistStatus
+
+        series = Series(id=uuid4(), title="Sector Lejano", tradition=ComicTradition.AMERICAN)
+        item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+        item.series = series
+        item.issue = None
+        sesion = FakeSession(exec_queue=[FakeExecResult([item]), FakeExecResult([])])
+        with use_fake_session(sesion) as client:
+            r = client.get("/ui/wishlist")
+        assert r.status_code == 200
+        assert "Ya lo tengo" in r.text
+        assert "/marcar-conseguido" in r.text
