@@ -655,3 +655,28 @@ def test_importar_sin_confirmacion_conserva_la_previa():
     assert "Marca la confirmación" in r.text
     assert "Batman Vol 1 #404" in r.text
     importar.assert_not_awaited()
+
+
+def test_portada_de_saga_redirige_a_la_portada_local_del_numero():
+    arco_id = uuid4()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.primera_portada_de_arco",
+                   AsyncMock(return_value=("s1", "i1"))):
+            r = c.get(f"/ui/arcos/{arco_id}/portada.jpg", follow_redirects=False)
+    finally:
+        _cerrar()
+    assert r.status_code == 307
+    assert r.headers["location"] == "/ui/series/s1/numero/i1/portada.jpg"
+    assert "http://" not in r.headers["location"] and "https://" not in r.headers["location"]
+
+
+def test_portada_de_saga_sin_miembros_responde_404_sin_cache():
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.primera_portada_de_arco", AsyncMock(return_value=None)):
+            r = c.get(f"/ui/arcos/{uuid4()}/portada.jpg", follow_redirects=False)
+    finally:
+        _cerrar()
+    assert r.status_code == 404
+    assert r.headers["cache-control"] == "no-store"
