@@ -304,10 +304,78 @@ def test_zip_corrupto_no_es_500(tmp_path):
 
 
 def test_ui_a11y_y_sin_extraccion(tmp_path):
-    from pathlib import Path as P
-    lista = P("src/zascarr/web/templates/_paquetes_descargas.html").read_text()
-    previa = P("src/zascarr/web/templates/_paquete_previa.html").read_text()
+    lista = Path("src/zascarr/web/templates/_paquetes_descargas.html").read_text()
+    previa = Path("src/zascarr/web/templates/_paquete_previa.html").read_text()
     assert '<button type="submit">Ver qué contiene</button>' in lista
     assert 'role="status"' in previa and 'aria-live="polite"' in previa
     assert "Extraer" not in lista + previa
     assert "token" not in previa.lower()
+
+
+def test_rar_top_total_y_entrada_y_entradas(tmp_path, monkeypatch):
+    from zascarr.services import paquetes as modulo
+    from zascarr.utils import lector_rar
+    a = _ajustes(tmp_path)
+    p = Path(a.transmission_download_dir) / "p.rar"
+    p.write_bytes(b"Rar!\x1a\x07\x00")
+    monkeypatch.setattr(lector_rar, "disponible", lambda: True)
+    candidato = next(x for x in detectar_paquetes(ajustes=a, secret=a.secret_key)
+                     if x.ruta == p)
+    base = lector_rar.EntradaRar(0, "a.cbz", 10, None, False, False)
+    monkeypatch.setattr(lector_rar, "listar", lambda *a, **k: lector_rar.Listado((base,)))
+    monkeypatch.setattr(modulo, "MAX_BYTES_TOTAL", 5)
+    with pytest.raises(PaqueteError, match="tamaño excesivo"):
+        listar_paquete(candidato)
+    monkeypatch.setattr(modulo, "MAX_BYTES_TOTAL", 8 * 1024 ** 3)
+    monkeypatch.setattr(modulo, "MAX_BYTES_ENTRADA", 5)
+    with pytest.raises(PaqueteError, match="demasiado grande"):
+        listar_paquete(candidato)
+    monkeypatch.setattr(modulo, "MAX_BYTES_ENTRADA", 2 * 1024 ** 3)
+    monkeypatch.setattr(lector_rar, "listar",
+                        lambda *a, **k: lector_rar.Listado(
+                            tuple(lector_rar.EntradaRar(i, "a.cbz", 1, None, False, False)
+                                  for i in range(1001))))
+    with pytest.raises(PaqueteError, match="demasiados archivos"):
+        listar_paquete(candidato)
+
+
+def test_http_corrupto_no_500(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from zascarr.main import app
+    from zascarr.services.paquetes import PaquetePendiente
+    from zascarr.web import auditoria
+    raiz = tmp_path / "d"
+    raiz.mkdir()
+    ruta = raiz / "x.zip"
+    ruta.write_bytes(b"PK\x03\x04basura")
+    st = ruta.stat()
+    p = PaquetePendiente(ruta=ruta, raiz=raiz, relativa="x.zip",
+                         nombre="x.zip", tamano=st.st_size, mtime_ns=st.st_mtime_ns,
+                         firma="ZIP", estado="listo", causa="", dev=st.st_dev, ino=st.st_ino)
+    monkeypatch.setattr(auditoria, "verificar_token_paquete", lambda _t: p)
+    r = TestClient(app).get("/ui/auditoria/paquetes/previa?token=x")
+    assert r.status_code == 200 and "dañado" in r.text
+
+
+def test_preview_rar_y_zip_distinguen_tipo(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from zascarr.main import app
+    from zascarr.services.paquetes import ListadoPaquete, PaquetePendiente
+    from zascarr.web import auditoria
+    raiz = tmp_path / "d"
+    raiz.mkdir()
+    p = PaquetePendiente(ruta=raiz / "x.rar", raiz=raiz, relativa="x.rar",
+                         nombre="x.rar", tamano=1, mtime_ns=1, firma="RAR",
+                         estado="listo", causa="", dev=1, ino=2)
+    monkeypatch.setattr(auditoria, "verificar_token_paquete", lambda _t: p)
+    monkeypatch.setattr(auditoria, "listar_paquete", lambda _p: ListadoPaquete(
+        paquete=p, formato="RAR", entradas=(), ignoradas=(), bytes_estimados=0,
+        tipo_confirmado=False))
+    r = TestClient(app).get("/ui/auditoria/paquetes/previa?token=x")
+    assert "candidatos a importar" in r.text and "se confirmará al extraer" in r.text
+    monkeypatch.setattr(auditoria, "listar_paquete", lambda _p: ListadoPaquete(
+        paquete=p, formato="ZIP", entradas=(), ignoradas=(), bytes_estimados=0,
+        tipo_confirmado=True))
+    assert "Se importarían" in TestClient(app).get("/ui/auditoria/paquetes/previa?token=x").text

@@ -10,7 +10,7 @@
           <div>
             <strong>{{ p.nombre }}</strong>
             <div class="caption">{{ p.relativa }} · {{ p.tamano|tamano }} · {{ p.firma or "sin formato" }}</div>
-            {% if p.estado != "listo" %}<div class="caption">{{ p.causa }}</div>{% endif %}
+            {% if p.estado != "listo" %}<div class="caption">{{ p.causa }} {{ p.accion }}</div>{% endif %}
           </div>
           {% if p.estado == "listo" %}
             <form method="get" action="/ui/auditoria/paquetes/previa">
