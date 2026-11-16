@@ -437,14 +437,12 @@ async def crear_operacion(s: AsyncSession, paquete: PaquetePendiente) -> Paquete
                 PaqueteOperacion.paquete_clave == clave,
                 PaqueteOperacion.estado.in_(
                     [
-                        PaqueteEstado.LISTANDO,
-                        PaqueteEstado.EXTRAYENDO,
-                        PaqueteEstado.VERIFICANDO,
-                        PaqueteEstado.PUBLICANDO,
-                        PaqueteEstado.IMPORTANDO,
+                        PaqueteEstado.LISTANDO, PaqueteEstado.EXTRAYENDO,
+                        PaqueteEstado.VERIFICANDO, PaqueteEstado.PUBLICANDO,
+                        PaqueteEstado.IMPORTANDO, PaqueteEstado.IMPORTADO,
                     ]
                 ),
-            )
+            ).order_by(PaqueteOperacion.creada.desc()).limit(1)
         )
     ).scalar_one_or_none()
     if viva is not None:
@@ -582,7 +580,11 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
         (
             await s.execute(
                 select(PaqueteOperacion).where(
-                    PaqueteOperacion.temp_dir.is_not(None))
+                    PaqueteOperacion.temp_dir.is_not(None),
+                    PaqueteOperacion.estado.in_(
+                        [PaqueteEstado.LISTANDO, PaqueteEstado.EXTRAYENDO,
+                         PaqueteEstado.VERIFICANDO, PaqueteEstado.PUBLICANDO,
+                         PaqueteEstado.IMPORTANDO, PaqueteEstado.ERROR]))
             )
         )
         .scalars()
