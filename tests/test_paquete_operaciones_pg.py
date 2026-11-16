@@ -307,3 +307,63 @@ async def test_fallo_a_mitad_limpia_y_conserva_original(tmp_path, monkeypatch):
     finally:
         await motor.dispose()
         get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_dos_creaciones_concurrentes_misma_identidad(tmp_path, monkeypatch):
+    import asyncio as _asyncio
+
+    from zascarr.config import get_settings
+    url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        async def uno():
+            async with fabrica() as s:
+                return await crear_operacion(s, paquete)
+        resultados = await _asyncio.gather(uno(), uno(), return_exceptions=True)
+        assert not any(isinstance(x, BaseException) for x in resultados)
+        assert resultados[0].id == resultados[1].id
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_rar_multi_entrada_mockeado_no_reutiliza_carpeta(tmp_path, monkeypatch):
+    from zascarr.services import paquetes_extraccion as modulo
+    from zascarr.services.paquetes import EntradaPaquete, ListadoPaquete, PaquetePendiente
+    from zascarr.utils import lector_rar
+    p = PaquetePendiente(ruta=tmp_path / "x.rar", raiz=tmp_path, relativa="x.rar",
+                         nombre="x.rar", tamano=1, mtime_ns=1, firma="RAR",
+                         estado="listo", causa="", dev=1, ino=2)
+    listado = ListadoPaquete(
+        paquete=p, formato="RAR", bytes_estimados=2,
+        entradas=(EntradaPaquete("a.cbz", 1, "CBZ", True),
+                  EntradaPaquete("b.cbz", 1, "CBZ", True)), ignoradas=())
+    monkeypatch.setattr(lector_rar, "disponible", lambda: True)
+    llamadas = []
+
+    def falso(ruta, entrada, destino, tope, *, temporal, pass_fds=()):
+        llamadas.append(entrada.nombre)
+        destino.write_bytes(b"x")
+        return 1
+    monkeypatch.setattr(lector_rar, "extraer_entrada_a", falso)
+    temp = tmp_path / "temp"
+    temp.mkdir()
+    items = modulo._escribir_rar(p, listado, temp, 10)
+    assert llamadas == ["a.cbz", "b.cbz"] and len(items) == 2
+
+
+@pytest.mark.skipif(not (Path("tests/fixtures/rar/minimo_rar4.cbr").exists()),
+                    reason="fixture RAR ausente")
+def test_fixture_rar_real_tiene_varias_entradas():
+    from zascarr.utils import lector_rar
+    if not lector_rar.disponible():
+        pytest.skip("sin unar/lsar")
+    import tempfile
+    with tempfile.TemporaryDirectory() as casa:
+        listado = lector_rar.listar(Path("tests/fixtures/rar/minimo_rar4.cbr"),
+                                    temporal=Path(casa), max_bytes_declarados=8 * 1024 ** 3)
+    assert len(listado.entradas) >= 2
+    assert sum(1 for e in listado.entradas if e.nombre.lower().endswith((".cbz", ".cbr"))) == 0
+    # El fixture legal solo contiene JPG: multi-entrada RAR de tebeos es NOT RUN
+    # (no hay creador de RAR en la imagen legal).
