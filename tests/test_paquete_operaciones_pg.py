@@ -294,7 +294,7 @@ async def test_fallo_a_mitad_limpia_y_conserva_original(tmp_path, monkeypatch):
     from zascarr.services import paquetes_extraccion as modulo
     _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
     try:
-        def falla(_items, _temp):
+        def falla(_items, _temp, _fd=None):
             raise modulo.PaqueteExtraccionError("x", "fallo simulado")
         monkeypatch.setattr(modulo, "_verificar_contenido", falla)
         async with fabrica() as s:
@@ -349,7 +349,8 @@ async def test_rar_multi_entrada_mockeado_no_reutiliza_carpeta(tmp_path, monkeyp
     monkeypatch.setattr(lector_rar, "extraer_entrada_a", falso)
     temp = tmp_path / "temp"
     temp.mkdir()
-    items = modulo._escribir_rar(p, listado, temp, 10)
+    items = modulo._escribir_rar(p, listado, temp, 10,
+                                 os.open(temp, os.O_RDONLY | os.O_DIRECTORY))
     assert llamadas == ["a.cbz", "b.cbz"] and len(items) == 2
 
 
