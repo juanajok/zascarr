@@ -103,7 +103,7 @@ async def publicar_e_importar(s: AsyncSession, operacion_id: UUID) -> PaqueteOpe
             nuevo["resultado"] = por_nombre.get(item["nombre"], "revisar")
             items.append(nuevo)
         op.items = items
-        if not reporte.errors and any(i["resultado"] == "importado" for i in items):
+        if not reporte.errors and all(i["resultado"] != "error" for i in items):
             op.estado = PaqueteEstado.IMPORTADO
             op.finalizada = datetime.now(UTC)
         else:

@@ -167,20 +167,23 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
                "LANG": "C.UTF-8"}
     os.set_inheritable(fd, True)
     os.set_inheritable(temp_fd, True)
-    salida_fichero = tempfile.TemporaryFile()  # noqa: SIM115
+    salida_fichero = tempfile.TemporaryFile(dir=temp)  # noqa: SIM115
+    error_fichero = tempfile.TemporaryFile(dir=temp)  # noqa: SIM115
     proc = subprocess.Popen(  # noqa: S603 — lista, sin shell, ruta absoluta
         [sys.executable, "-m", "zascarr.services.paquetes_worker", json.dumps(datos),
          modo, str(fd), str(temp), str(temp_fd)],
-        stdin=subprocess.DEVNULL, stdout=salida_fichero, stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL, stdout=salida_fichero, stderr=error_fichero,
         env=entorno, close_fds=True, pass_fds=(fd, temp_fd), start_new_session=True)
     try:
         try:
-            _, error = proc.communicate(timeout=_ZIP_TIMEOUT)
+            proc.communicate(timeout=_ZIP_TIMEOUT)
         except subprocess.TimeoutExpired:
             with __import__("contextlib").suppress(OSError):
                 os.killpg(proc.pid, signal.SIGKILL)
             proc.communicate()
             raise PaqueteExtraccionError("tiempo", "La extracción tardó demasiado.") from None
+        error_fichero.seek(0)
+        error_fichero.read(64 * 1024 + 1)
         if proc.returncode != 0:
             raise PaqueteExtraccionError("extraccion", "La extracción falló.")
         salida_fichero.seek(0)
@@ -189,6 +192,7 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
             raise PaqueteExtraccionError("extraccion", "La extracción devolvió demasiados datos.")
     finally:
         salida_fichero.close()
+        error_fichero.close()
     try:
         return list(json.loads(salida))
     except (ValueError, TypeError) as exc:
