@@ -6,7 +6,7 @@
     id="candidato-{{ item_id }}-{{ indice }}">
   <span class="candidato-titulo">{{ titulo }}</span>
   {% if exito %}
-  <span class="candidato-detalle">Enviado a la cola de descarga</span>
+  <span class="candidato-detalle"><strong>Enviado</strong> a la cola de descarga</span>
   {% else %}
   <span class="candidato-detalle">{{ row.motivo or "No se pudo enviar la descarga" }}</span>
   <form hx-post="/ui/wishlist/{{ item_id }}/enviar-candidato"
@@ -14,7 +14,8 @@
         hx-confirm="¿Descargar este candidato?">
     <input type="hidden" name="token" value="{{ token }}">
     <input type="hidden" name="indice" value="{{ indice }}">
-    <button type="submit" class="btn-descargar-candidato">Descargar este</button>
+    <button type="submit" class="btn-descargar-candidato" hx-disable="this"
+            aria-label="Reintentar la descarga de {{ titulo }}">Descargar este</button>
   </form>
   {% endif %}
 </li>

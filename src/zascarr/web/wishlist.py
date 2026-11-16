@@ -41,7 +41,7 @@ _ESTADO_LABEL = {
     WishlistStatus.WANTED: "Por buscar",
     WishlistStatus.SEARCHING: "Buscando…",
     WishlistStatus.DOWNLOADING: "Descargando…",
-    WishlistStatus.DOWNLOADED: "Descargando…",
+    WishlistStatus.DOWNLOADED: "Descargado",  # terminó; espera al importador
     WishlistStatus.IMPORTED: "En tu biblioteca",
     WishlistStatus.FAILED: "Sin resultados",
     # D8: lo retiró la política (dejó de querer ese número), no falló nada. Se
@@ -109,9 +109,14 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
     settings = get_settings()
     prowlarr_incompleto = bool(
         getattr(settings, "prowlarr_enabled", False) and not prowlarr_configurado(settings))
+    en_descarga = sum(
+        1 for r in rows
+        if r["item"].status in (WishlistStatus.DOWNLOADING, WishlistStatus.DOWNLOADED))
     return templates.TemplateResponse(
         request, "wishlist.html", {
             "rows": rows,
+            "total": len(rows),
+            "en_descarga": en_descarga,
             "aviso_legal_pendiente": aviso_legal_pendiente,
             "prowlarr_incompleto": prowlarr_incompleto,
         }
@@ -224,6 +229,7 @@ async def buscar_ahora(
     ]
     return templates.TemplateResponse(request, "_candidatos_wishlist.html", {
         "item_id": item_id,
+        "item_titulo": _row(item)["titulo"] if item else "",
         "candidatos": filas,
         "no_se_pudo_buscar": no_se_pudo_buscar,
         "sin_candidatos": sin_candidatos,
