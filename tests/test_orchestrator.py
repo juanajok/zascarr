@@ -1403,3 +1403,41 @@ class TestTitulosDeEnlacesDelForo:
             "DC K.O. #2 - El combate.cbr",
         ]
         assert {c.indexer for c in candidatos} == {"forum:crg"}
+
+
+class TestDuplicadosDelForo:
+    @pytest.mark.asyncio
+    async def test_el_mismo_fichero_con_codificaciones_distintas_es_uno_solo(self, monkeypatch):
+        """«Sector Lejano» aparecía dos veces: mismo hash ed2k enlazado con `%20`
+        y con espacios. La clave es el hash, no la URL (bug 2026-11-16)."""
+        from zascarr.services import forum_scraper as modulo_foro
+
+        class Foro:
+            def __init__(self, **_kw):
+                pass
+
+            async def login(self, *_a, **_k):
+                return True
+
+            async def use_ipb_search(self, *_a, **_k):
+                return [modulo_foro.ForumResult(
+                    topic_title="Sector Lejano",
+                    topic_url="http://foro.example/forum/index.php?showtopic=2",
+                    ed2k_links=[
+                        "ed2k://|file|Sector%20Lejano.cbz|1234|AABBCCDD|/",
+                        "ed2k://|file|Sector Lejano.cbz|1234|aabbccdd|/",
+                    ],
+                )]
+
+        monkeypatch.setattr(modulo_foro, "ForumScraper", Foro)
+        ajustes = get_settings().model_copy(update={
+            "forum_enabled": True, "forum_url": "http://foro.example/forum",
+            "forum_username": "lector", "forum_password": "clave",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+
+        candidatos = await Orchestrator(db=MagicMock())._forum_fallback("Sector Lejano")
+
+        assert len(candidatos) == 1
+        assert candidatos[0].title == "Sector Lejano.cbz"
+        assert candidatos[0].size_bytes == 1234
