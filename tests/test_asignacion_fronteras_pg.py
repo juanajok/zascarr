@@ -166,7 +166,7 @@ class TestFronterasDeFallo:
         r = ent.asignar()
         bd, disco = await ent.bd(), ent.disco()
         assert r.status_code == 500 and 'id="card-' in r.text         # la tarjeta sigue con su aviso
-        assert "disco de destino" not in r.text and "No se pudo asignar" in r.text
+        assert "disco de destino" not in r.text and "No se pudo organizar" in r.text
         assert disco.origen_existe and disco.destinos == []            # disco intacto
         assert bd.issue_id is None and bd.ruta == str(ent.origen)
 
