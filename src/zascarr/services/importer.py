@@ -1147,7 +1147,7 @@ class Importer:
                 logger.info("importer.conversion_omitida",
                             file_id=str(file_rec.id), motivo=vista.motivo)
                 return None
-            resultado = await servicio.confirmar(vista.token)
+            resultado = await servicio.confirmar(vista.token, forzar_compartido=True)
             if resultado.resultado not in ("convertida", "ya_convertida"):
                 logger.info("importer.conversion_no_aplicada",
                             file_id=str(file_rec.id), resultado=resultado.resultado)
