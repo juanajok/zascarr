@@ -2,6 +2,12 @@
   <h2>Qué contiene el paquete</h2>
   {% if error %}
     <p class="caption" role="status">{{ error }} {{ accion }}</p>
+    <form hx-post="/ui/auditoria/paquetes/extraer" hx-target="#paquete-resultado" hx-swap="innerHTML" hx-disable="find button">
+      <input type="hidden" name="clave" value="{{ clave_accion }}">
+      <button type="submit">Extraer e importar</button>
+    </form>
+    <p class="caption">El paquete original no se mueve ni se borra; podrás seguir viéndolo en Descargas.</p>
+    <div id="paquete-resultado" role="status" aria-live="polite"></div>
     <p><a href="/ui/auditoria">Volver a Auditoría</a></p>
   {% else %}
     <div role="status" aria-live="polite"><p class="subtitle">{% if listado.tipo_confirmado %}Se importarían {{ listado.entradas|length }} tebeos y se ignorarían {{ listado.ignoradas|length }}.{% else %}{{ listado.entradas|length }} candidatos a importar; se ignorarían {{ listado.ignoradas|length }}. En RAR, el tipo se confirmará al extraer.{% endif %} Espacio temporal estimado: {{ listado.bytes_estimados|tamano }}.</p></div>
@@ -14,6 +20,12 @@
         <li class="audit-fila"><span>{{ e.nombre }} — {{ e.causa }}</span></li>
       {% endfor %}
     </ul>
+    <form hx-post="/ui/auditoria/paquetes/extraer" hx-target="#paquete-resultado" hx-swap="innerHTML" hx-disable="find button">
+      <input type="hidden" name="clave" value="{{ clave_accion }}">
+      <button type="submit">Extraer e importar</button>
+    </form>
+    <p class="caption">El paquete original no se mueve ni se borra; podrás seguir viéndolo en Descargas.</p>
+    <div id="paquete-resultado" role="status" aria-live="polite"></div>
     <p><a href="/ui/auditoria">Volver a Auditoría</a></p>
   {% endif %}
 </section>
