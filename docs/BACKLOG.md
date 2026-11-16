@@ -1675,6 +1675,14 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
 
 **Notas de proceso:**
 
+- **Benchmark de Deseados cerrado (2026-11-16, nivel 2 §13):** ficha en
+  `docs/design/benchmark-DESEADOS-2026-11-16.md` con Sonarr 4.0.20, Radarr 7.0.3,
+  Kapowarr 1.3.2, Mylar3 0.8.3 y Suwayomi 2.4.2366 (matriz ponderada, IGUALAR/MEJORAR
+  y NOT RUN). Igualamos búsqueda/elección/estados/ruido en la Pi; quedan declarados como
+  huecos la cola/progreso unificada, la cancelación de búsqueda en curso, buscar en lote
+  varios deseos y el aviso proactivo de carpeta de descargas inválida. También se documenta
+  como **Mejorar** lo del foro+Prowlarr en una lista, el tomo que cubre 1-12 y cerrar el
+  deseo con «Ya lo tengo».
 - **«Probar conexión» del foro cerrada (2026-11-16, PR [#880](https://github.com/juanajok/zascarr/pull/880), merge `04e24c08`):** la tarjeta Foro de Ajustes permite comprobar URL/usuario/contraseña antes de guardar (contraseña en blanco = la guardada), con **solo login** (sin búsqueda), funcionando aunque el foro esté apagado y con mensajes llanos (OK, credenciales, espera por cortesía/flood, URL inválida, red), sin persistir ni mostrar credenciales. QA apto (7.181×2, sonda 13/13) y SecOps favorable con **§5.8** sobre el SHA final `7876dfeb`. Menor aceptado: hereda `espera_max_s=30` (reducible).
 - **m-1 de UI/UX cerrado (2026-11-15, PR [#875](https://github.com/juanajok/zascarr/pull/875), merge `b8faa7cc`):** el error htmx de Importar guía actualiza `aria-invalid`/`aria-describedby` del input (reemplazo out-of-band con el valor conservado y nombre accesible propio), igual que el POST completo. Suite 7.162 passed.
 - **Lectura de temas del foro validada en vivo (2026-11-15):** con el hilo `showtopic=115142` en la Pi, login OK y **27 enlaces `ed2k`** extraídos (0 `magnet`), enlaces URL-encoded; sin cambios de código. Se cierra la deuda de validación de SCR4 (queda como fixturable para regresión futura).
