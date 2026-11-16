@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 tests/test_web_ajustes.py
 
@@ -60,6 +61,12 @@ class TestIndex:
         assert r.status_code == 200
         for nombre in ("Comic Vine", "Prowlarr", "Transmission", "aMule"):
             assert nombre in r.text
+
+    def test_incluye_la_tarjeta_de_discos_de_biblioteca(self):
+        r = TestClient(app).get("/ui/ajustes")
+        assert r.status_code == 200
+        assert "Discos de la biblioteca" in r.text
+        assert "Tradición → disco" in r.text
 
     def test_incluye_la_seccion_de_seguridad_a6(self):
         client = TestClient(app)

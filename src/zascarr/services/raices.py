@@ -16,11 +16,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from zascarr.config import get_settings
-from zascarr.models import ComicTradition, LibraryRoot, LibraryRootTradition
+from zascarr.models import ComicTradition, File, LibraryRoot, LibraryRootTradition
 
 
 class RaizInvalidaError(ValueError):
@@ -464,3 +465,107 @@ class FotoDeRaices:
             if str(raiz.id) == str(root_id):
                 return self._resolver_raiz(raiz)
         raise RaizNoDisponibleError("La raíz de la operación ya no existe.")
+
+
+# ── Administración de raíces (corte D) ───────────────────────────────────────
+
+async def listar_con_tradiciones(db: AsyncSession) -> list[LibraryRoot]:
+    """Raíces con su mapeo cargado, en orden estable."""
+    return list((await db.execute(
+        select(LibraryRoot)
+        .options(selectinload(LibraryRoot.traditions))
+        .order_by(LibraryRoot.created_at, LibraryRoot.id)
+    )).scalars().all())
+
+
+def estado_de_raiz(raiz: LibraryRoot) -> str:
+    """Estado visible, derivado de la configuración y del disco (no persistido)."""
+    if not raiz.enabled:
+        return "desactivada"
+    try:
+        ruta = Path(raiz.path)
+        if not ruta.is_dir():
+            return "ausente"
+        if not os.access(ruta, os.R_OK | os.W_OK | os.X_OK):
+            return "sin_permiso"
+    except OSError:
+        return "ausente"
+    return "disponible"
+
+
+def montajes_libres(raices: Iterable[LibraryRoot]) -> list[Montaje]:
+    """Montajes autorizados que aún no son una raíz (comparación canónica)."""
+    usadas = {_resolver(r.path) for r in raices}
+    return [m for m in rutas_autorizadas() if _resolver(m.path) not in usadas]
+
+
+async def crear_raiz(
+    db: AsyncSession, *, path: str, name: str = "", host_path: str = "",
+) -> LibraryRoot:
+    """Crea una raíz SOLO si la ruta es un montaje autorizado y válido."""
+    existentes = await listar_con_tradiciones(db)
+    datos = validar_raiz(path, name=name, host_path=host_path, raices=existentes)
+    raiz = LibraryRoot(
+        name=datos["name"], path=datos["path"], host_path=datos["host_path"],
+        enabled=True, is_default=not existentes,
+    )
+    db.add(raiz)
+    await db.flush()
+    if raiz.is_default:
+        # La raíz por defecto nace con todas las tradiciones, como la migración.
+        for tradicion in ComicTradition:
+            db.add(LibraryRootTradition(root_id=raiz.id, tradition=tradicion))
+        await db.flush()
+    return raiz
+
+
+async def guardar_mapa(db: AsyncSession, asignaciones: dict[str, str | None]) -> None:
+    """Reemplaza el mapa tradición→raíz. No mueve archivos ni cambia `File.root_id`."""
+    raices = await listar_con_tradiciones(db)
+    por_id = {str(r.id): r for r in raices}
+    elegidas: list[tuple[str, UUID]] = []
+    for tradicion, root_id in asignaciones.items():
+        try:
+            valor = ComicTradition(tradicion)
+        except ValueError as exc:
+            raise RaizInvalidaError("Tradición desconocida.") from exc
+        if not root_id:
+            continue
+        raiz = por_id.get(str(root_id))
+        if raiz is None:
+            raise RaizInvalidaError("La raíz elegida no existe.")
+        if not raiz.enabled:
+            raise RaizInvalidaError("No se puede asignar una tradición a una raíz desactivada.")
+        elegidas.append((valor.value, raiz.id))
+    await db.execute(delete(LibraryRootTradition))
+    for tradicion, root_id in elegidas:
+        db.add(LibraryRootTradition(root_id=root_id, tradition=ComicTradition(tradicion)))
+    await db.flush()
+
+
+async def cambiar_habilitada(db: AsyncSession, root_id: UUID, enabled: bool) -> LibraryRoot:
+    raiz = await db.get(LibraryRoot, root_id)
+    if raiz is None:
+        raise RaizInvalidaError("La raíz no existe.")
+    if raiz.is_default and not enabled:
+        raise RaizInvalidaError(
+            "La raíz por defecto no puede desactivarse; elige otra por defecto antes.")
+    raiz.enabled = enabled
+    await db.flush()
+    return raiz
+
+
+async def borrar_raiz(db: AsyncSession, root_id: UUID) -> None:
+    """Borra solo una raíz sin archivos; con archivos manda la FK y se explica."""
+    raiz = await db.get(LibraryRoot, root_id)
+    if raiz is None:
+        raise RaizInvalidaError("La raíz no existe.")
+    n = (await db.execute(
+        select(func.count(File.id)).where(File.root_id == root_id))).scalar() or 0
+    if n:
+        raise RaizInvalidaError(
+            f"Esta raíz tiene {n} archivos registrados; desactívala o reasígnalos primero.")
+    if raiz.is_default:
+        raise RaizInvalidaError("No se puede borrar la raíz por defecto.")
+    await db.delete(raiz)
+    await db.flush()
