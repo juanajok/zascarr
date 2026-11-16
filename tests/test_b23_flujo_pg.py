@@ -247,3 +247,23 @@ async def test_nombre_sin_numero_no_crea_numero(entorno):
 
     async with entorno.banco.fabrica() as s:
         assert (await s.execute(select(Issue))).scalars().all() == []
+
+
+async def test_fallo_al_crear_numero_tras_mover_va_a_pendientes(entorno, monkeypatch):
+    import zascarr.services.importer as importer_mod
+
+    await serie_vacia(entorno)
+    un_zip(entorno.descargas / "Flash 001 (1987).cbz")
+
+    async def _no_crear(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(importer_mod.Importer, "_crear_issue_de_serie_vacia", _no_crear)
+    informe = await importar(entorno)
+
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(select(Issue))).scalars().all() == []
+        (fila,) = (await s.execute(select(File))).scalars().all()
+    assert "_Unsorted" in fila.file_path
+    assert fila.metadata_["match_status"] == "unsorted"
+    assert informe.unsorted and not informe.imported
