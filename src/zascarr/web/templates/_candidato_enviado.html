@@ -6,7 +6,7 @@
     id="candidato-{{ item_id }}-{{ indice }}">
   <span class="candidato-titulo">{{ titulo }}</span>
   {% if exito %}
-  <span class="candidato-detalle"><span class="chip">Enviado</span> a la cola de descarga</span>
+  <span class="candidato-detalle"><strong>Enviado</strong> a la cola de descarga</span>
   {% else %}
   <span class="candidato-detalle">{{ row.motivo or "No se pudo enviar la descarga" }}</span>
   <form hx-post="/ui/wishlist/{{ item_id }}/enviar-candidato"
