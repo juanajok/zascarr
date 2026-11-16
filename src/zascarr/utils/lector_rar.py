@@ -315,7 +315,8 @@ def _entrada_de(bruto: dict, posicion: int) -> EntradaRar:
     )
 
 
-def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S) -> Listado:
+def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S,
+           max_bytes_declarados: int = RAR_MAX_BYTES_DECLARADOS) -> Listado:
     """Lista un RAR con `lsar -j -json-skip-solid-information` y comprueba los topes (nº de entradas,
     bytes declarados, salida).
 
@@ -355,7 +356,7 @@ def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S)
     # tamaño negativo eludiría el tope de bytes declarados (dictamen SecOps B-1)
     if any(not 0 <= e.indice < len(entradas) or e.tamano < 0 for e in entradas):
         raise ErrorRar(MotivoRar.ILEGIBLE)
-    if len(entradas) > RAR_MAX_ENTRADAS or sum(e.tamano for e in entradas) > RAR_MAX_BYTES_DECLARADOS:
+    if len(entradas) > RAR_MAX_ENTRADAS or sum(e.tamano for e in entradas) > max_bytes_declarados:
         raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
     if any(e.cifrada for e in entradas):
         raise ErrorRar(MotivoRar.CIFRADO)

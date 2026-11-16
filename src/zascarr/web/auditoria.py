@@ -522,10 +522,14 @@ async def paquete_previa(request: Request, token: str = "") -> HTMLResponse:
     try:
         listado = await asyncio.to_thread(listar_paquete, paquete)
     except PaqueteError as exc:
+        if paquete.fd >= 0:
+            os.close(paquete.fd)
         return _no_store(templates.TemplateResponse(
             request, "_paquete_previa.html",
             {"listado": None, "error": exc.causa, "accion": exc.accion
              or "Prueba con otro paquete."}))
+    if paquete.fd >= 0:
+        os.close(paquete.fd)
     return _no_store(templates.TemplateResponse(
         request, "_paquete_previa.html", {"listado": listado, "error": None}))
 
