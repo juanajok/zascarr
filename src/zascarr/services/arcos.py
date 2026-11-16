@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.models import (
     File,
     Issue,
+    ReadingProgress,
+    ReadingStatus,
     Series,
     StoryArc,
     StoryArcIssue,
@@ -31,6 +33,7 @@ class ArcoResumen:
     is_crossover: bool
     numeros: int
     series: int
+    leidos: int = 0
     #: `metadata_["origen"]` del arco (`fandom_dc`, `reading_orders`, `continuity_guide`…);
     #: None en un arco manual. Solo se usa para la atribución del listado (SCR2 m-2).
     origen: str | None = None
@@ -46,6 +49,7 @@ class FilaArco:
     titulo: str | None
     fecha: str | None
     disponible: bool
+    leido: bool = False
 
 
 @dataclass(frozen=True)
@@ -81,6 +85,10 @@ class DetalleArco:
     filas: list[FilaArco]
     series: int
 
+    @property
+    def leidos(self) -> int:
+        return sum(1 for f in self.filas if f.leido)
+
 
 async def listar_arcos(db: AsyncSession, pagina: int = 1) -> PaginaArcos:
     total = (await db.execute(
@@ -103,9 +111,20 @@ async def listar_arcos(db: AsyncSession, pagina: int = 1) -> PaginaArcos:
                   StoryArc.metadata_["fandom_dc"].astext)
         .order_by(StoryArc.title, StoryArc.id)
         .offset(desde).limit(POR_PAGINA))).all()
+    ids = [f.id for f in filas]
+    leidos: dict = {}
+    if ids:
+        leidos = dict((await db.execute(
+            select(StoryArcIssue.story_arc_id, func.count(ReadingProgress.id))
+            .join(ReadingProgress, ReadingProgress.issue_id == StoryArcIssue.issue_id)
+            .where(StoryArcIssue.story_arc_id.in_(ids),
+                   ReadingProgress.status == ReadingStatus.COMPLETED)
+            .group_by(StoryArcIssue.story_arc_id)
+        )).all())
     resumenes = [
         ArcoResumen(str(f.id), f.title, bool(f.is_crossover),
                     int(f.numeros or 0), int(f.series or 0),
+                    int(leidos.get(f.id, 0)),
                     origen=f.origen or ("fandom_dc" if f.fandom_dc else None))
         for f in filas
     ]
@@ -116,6 +135,19 @@ async def listar_arcos(db: AsyncSession, pagina: int = 1) -> PaginaArcos:
         hay_fandom=any(fila.origen == "fandom_dc" for fila in resumenes),
         hay_guia=any(fila.origen in ("reading_orders", "continuity_guide")
                      for fila in resumenes))
+
+
+async def primera_portada_de_arco(db: AsyncSession, arco_id: UUID) -> tuple[str, str] | None:
+    """Serie y número del primer miembro con archivo disponible (o el primero, si no hay)."""
+    disponible = exists().where(File.issue_id == Issue.id, File.is_missing.is_(False))
+    fila = (await db.execute(
+        select(Issue.series_id, Issue.id)
+        .join(StoryArcIssue, StoryArcIssue.issue_id == Issue.id)
+        .where(StoryArcIssue.story_arc_id == arco_id)
+        .order_by(disponible.desc(), StoryArcIssue.reading_order)
+        .limit(1)
+    )).first()
+    return None if fila is None else (str(fila[0]), str(fila[1]))
 
 
 async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
@@ -131,9 +163,11 @@ async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
             Series.title.label("series_title"),
             exists().where(File.issue_id == Issue.id,
                            File.is_missing.is_(False)).label("disponible"),
+            ReadingProgress.status.label("lectura"),
         )
         .join(Issue, Issue.id == StoryArcIssue.issue_id)
         .join(Series, Series.id == Issue.series_id)
+        .outerjoin(ReadingProgress, ReadingProgress.issue_id == Issue.id)
         .where(StoryArcIssue.story_arc_id == arco_id)
         .order_by(StoryArcIssue.reading_order, Series.title, Issue.issue_number)
     )).all()
@@ -143,7 +177,8 @@ async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
             series_id=str(f.series_id), series=f.series_title,
             numero=f.issue_number or "Sin número", titulo=f.issue_title,
             fecha=f.release_date.isoformat() if f.release_date else None,
-            disponible=bool(f.disponible))
+            disponible=bool(f.disponible),
+            leido=f.lectura == ReadingStatus.COMPLETED)
         for f in filas
     ]
     return DetalleArco(

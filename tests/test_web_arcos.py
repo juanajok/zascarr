@@ -45,6 +45,8 @@ def test_lista_de_sagas_muestra_orden_y_salto_de_series():
         _cerrar()
     assert r.status_code == 200
     assert "Court of Owls" in r.text and "2 series" in r.text
+    assert "/ui/arcos/a1/portada.jpg" in r.text
+    assert "0 de 2 leídos" in r.text
 
 
 def test_detalle_lista_en_orden_de_lectura():
@@ -62,6 +64,8 @@ def test_detalle_lista_en_orden_de_lectura():
     assert r.status_code == 200
     assert r.text.index("Batman") < r.text.index("Nightwing")
     assert "En tu biblioteca" in r.text and "No disponible" in r.text
+    assert "/ui/arcos/a1/portada.jpg" in r.text
+    assert "0 de 2 números leídos" in r.text
 
 
 def test_detalle_de_saga_atribuye_a_fandom_con_articulo_y_licencia():
