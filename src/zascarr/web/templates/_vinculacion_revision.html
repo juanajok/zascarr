@@ -81,7 +81,7 @@
 
   <p class="vinculacion-pendiente" role="status">Actualizando la revisión… Hasta que termine, no se puede vincular.</p>
 
-  {% if accion %}<div class="vinc-accion-resultado" role="status" aria-atomic="true" data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto) }}</div>{% endif %}
+  {% if accion %}<div class="vinc-accion-resultado" tabindex="-1" autofocus data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto, viva=false) }}</div>{% endif %}
 
   {% if r.archivos %}
   <div class="vinc-masivo" role="group" aria-label="Marcar varios a la vez">

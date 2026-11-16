@@ -16,9 +16,11 @@
 
 {#- aviso(tipo, texto) o {% call aviso(tipo) %}…{% endcall %}. `tipo` ∈ nota | info | ok | amber | warn.
     `warn` usa role="alert" (asertivo); el resto, role="status" (cortés). -#}
-{% macro aviso(tipo, texto=none, rol="auto", foco=false) -%}
+{#- `viva=false` pinta el aviso sin `role`: para mensajes cuyo anuncio ya lo da el foco
+    (p. ej. el recuento de «Marcar todos»), y para no anidar regiones vivas. -#}
+{% macro aviso(tipo, texto=none, rol="auto", foco=false, viva=true) -%}
 {%- set t = tipo_aviso(tipo) -%}
-{%- set rol_final = t.rol if rol == "auto" else rol -%}
+{%- set rol_final = (t.rol if rol == "auto" else rol) if viva else "" -%}
 <div class="{{ t.clase }}"{% if rol_final %} role="{{ rol_final }}"{% endif %}{% if foco %} tabindex="-1" autofocus{% endif %}>{% if t.icono %}<span class="aviso-icono" aria-hidden="true">{{ t.icono }}</span><div>{% endif %}{% if texto is not none %}{{ texto }}{% else %}{{ caller() }}{% endif %}{% if t.icono %}</div>{% endif %}</div>
 {%- endmacro %}
 
