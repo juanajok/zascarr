@@ -342,7 +342,7 @@ async def test_rar_multi_entrada_mockeado_no_reutiliza_carpeta(tmp_path, monkeyp
     monkeypatch.setattr(lector_rar, "disponible", lambda: True)
     llamadas = []
 
-    def falso(ruta, entrada, destino, tope, *, temporal, pass_fds=()):
+    def falso(ruta, entrada, destino, tope, *, temporal, pass_fds=(), destino_dir_fd=None):
         llamadas.append(entrada.nombre)
         destino.write_bytes(b"x")
         return 1

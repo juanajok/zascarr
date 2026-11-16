@@ -26,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
         resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024,
                                                512 * 1024 * 1024))
     args = sys.argv[1:] if argv is None else argv
-    if len(args) != 4:
+    if len(args) != 5:
         return 2
     datos = json.loads(args[0])
     extraccion.MAX_BYTES_ENTRADA = int(datos["max_entrada"])
@@ -35,13 +35,13 @@ def main(argv: list[str] | None = None) -> int:
     modo = args[1]
     fd = int(args[2])
     temp = Path(args[3])
+    temp_fd = int(args[4])
     paquete = PaquetePendiente(
         ruta=Path(f"/proc/self/fd/{fd}"), raiz=temp, relativa=datos["nombre"],
         nombre=datos["nombre"], tamano=int(datos["tamano"]), mtime_ns=int(datos["mtime_ns"]),
         firma=datos["firma"], estado="listo", causa="", dev=int(datos["dev"]),
         ino=int(datos["ino"]), fd=fd)
     listado = listar_paquete(paquete)
-    temp_fd = os.open(temp, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         if modo == "zip":
             items = _escribir_zip(paquete, listado, temp, fd, temp_fd)

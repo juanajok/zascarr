@@ -16,6 +16,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import zipfile
 import zipfile as _zip
 from dataclasses import dataclass
@@ -166,22 +167,28 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
                "LANG": "C.UTF-8"}
     os.set_inheritable(fd, True)
     os.set_inheritable(temp_fd, True)
+    salida_fichero = tempfile.TemporaryFile()  # noqa: SIM115
     proc = subprocess.Popen(  # noqa: S603 — lista, sin shell, ruta absoluta
         [sys.executable, "-m", "zascarr.services.paquetes_worker", json.dumps(datos),
-         modo, str(fd), str(temp)],
-        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+         modo, str(fd), str(temp), str(temp_fd)],
+        stdin=subprocess.DEVNULL, stdout=salida_fichero, stderr=subprocess.PIPE,
         env=entorno, close_fds=True, pass_fds=(fd, temp_fd), start_new_session=True)
     try:
-        salida, error = proc.communicate(timeout=_ZIP_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        with __import__("contextlib").suppress(OSError):
-            os.killpg(proc.pid, signal.SIGKILL)
-        proc.communicate()
-        raise PaqueteExtraccionError("tiempo", "La extracción tardó demasiado.") from None
-    if proc.returncode != 0:
-        raise PaqueteExtraccionError("extraccion", "La extracción ZIP falló.")
-    if len(salida) > 1024 * 1024:
-        raise PaqueteExtraccionError("extraccion", "La extracción devolvió demasiados datos.")
+        try:
+            _, error = proc.communicate(timeout=_ZIP_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            with __import__("contextlib").suppress(OSError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            proc.communicate()
+            raise PaqueteExtraccionError("tiempo", "La extracción tardó demasiado.") from None
+        if proc.returncode != 0:
+            raise PaqueteExtraccionError("extraccion", "La extracción falló.")
+        salida_fichero.seek(0)
+        salida = salida_fichero.read(1024 * 1024 + 1)
+        if len(salida) > 1024 * 1024:
+            raise PaqueteExtraccionError("extraccion", "La extracción devolvió demasiados datos.")
+    finally:
+        salida_fichero.close()
     try:
         return list(json.loads(salida))
     except (ValueError, TypeError) as exc:
@@ -265,7 +272,7 @@ def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
             try:
                 total = lector_rar.extraer_entrada_a(
                     Path(f"/proc/self/fd/{fd}"), entrada, destino, entrada.tamano,
-                    temporal=casa, pass_fds=(fd,))
+                    temporal=casa, pass_fds=(fd,), destino_dir_fd=temp_fd)
             except lector_rar.ErrorRar as exc:
                 raise PaqueteExtraccionError(
                     "ilegible", "El paquete está dañado o cifrado.") from exc
@@ -349,7 +356,11 @@ def _verificar_contenido_fd(items: list[dict], temp: Path, temp_fd: int) -> None
                     "herramienta_ausente", "Falta la herramienta para leer RAR.")
             with lector_rar.carpeta_temporal(temp) as casa:
                 try:
-                    listado = lector_rar.listar(ruta, temporal=casa)
+                    fd_rar = os.open(item["nombre"], os.O_RDONLY | os.O_NOFOLLOW,
+                                      dir_fd=temp_fd)
+                    listado = lector_rar.listar(
+                        Path(f"/proc/self/fd/{fd_rar}"), temporal=casa,
+                        pass_fds=(fd_rar,))
                 except lector_rar.ErrorRar as exc:
                     raise PaqueteExtraccionError(
                         "ilegible", "Un tebeo RAR extraído no se puede listar.") from exc
@@ -370,6 +381,8 @@ def _verificar_contenido_fd(items: list[dict], temp: Path, temp_fd: int) -> None
                         "ilegible", "La primera imagen RAR no se pudo extraer.") from exc
                 _decodificar_imagen(salida.read_bytes())
                 salida.unlink(missing_ok=True)
+            with __import__("contextlib").suppress(OSError):
+                os.close(fd_rar)
         os.close(fd_item)
 
 
