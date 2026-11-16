@@ -7,6 +7,7 @@ Termina en `verificado` (corte 4 publica).
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 import shutil
@@ -37,6 +38,7 @@ from zascarr.services.paquetes import (
     listar_paquete,
 )
 from zascarr.utils import lector_rar
+from zascarr.utils.espacio import comprobar_espacio
 
 _EXTS_IMAGEN = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 
@@ -106,10 +108,11 @@ def _comprobar_original(p: PaquetePendiente) -> None:
         raise PaqueteExtraccionError("paquete_cambiado", "El paquete cambió mientras se preparaba.")
 
 
-def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path) -> list[dict]:
+def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path,
+                  fd: int) -> list[dict]:
     items: list[dict] = []
     try:
-        z = zipfile.ZipFile(paquete.ruta)
+        z = zipfile.ZipFile(os.fdopen(os.dup(fd), "rb"))
     except (zipfile.BadZipFile, OSError) as exc:
         raise PaqueteExtraccionError("ilegible", "El paquete está dañado.") from exc
     with z:
@@ -129,6 +132,9 @@ def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
                 with z.open(info) as entrada, open(destino, "xb") as salida:
                     while bloque := entrada.read(_BLOQUE):
                         total += len(bloque)
+                        if total > 2 * 1024 ** 3:
+                            raise PaqueteExtraccionError(
+                                "demasiado_grande", "Un fichero de dentro es demasiado grande.")
                         digest.update(bloque)
                         salida.write(bloque)
                     salida.flush()
@@ -151,7 +157,8 @@ def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
     return items
 
 
-def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path) -> list[dict]:
+def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path,
+                  fd: int) -> list[dict]:
     if not lector_rar.disponible():
         raise PaqueteExtraccionError("herramienta_ausente", "Falta la herramienta para leer RAR.")
     if len(listado.entradas) > lector_rar.RAR_MAX_ENTRADAS:
@@ -167,7 +174,8 @@ def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
             destino = temp / nombre
             try:
                 total = lector_rar.extraer_entrada_a(
-                    paquete.ruta, entrada, destino, entrada.tamano, temporal=casa)
+                    Path(f"/proc/self/fd/{fd}"), entrada, destino, entrada.tamano,
+                    temporal=casa, pass_fds=(fd,))
             except lector_rar.ErrorRar as exc:
                 raise PaqueteExtraccionError(
                     "ilegible", "El paquete está dañado o cifrado.") from exc
@@ -341,6 +349,16 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         ino=op.paquete_ino,
     )
     base = _base_temporal()
+    try:
+        fd = os.open(op.paquete_path, os.O_RDONLY | os.O_NOFOLLOW)
+        st = os.fstat(fd)
+        if (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns) != (
+                op.paquete_dev, op.paquete_ino, op.paquete_size, op.paquete_mtime_ns):
+            os.close(fd)
+            raise PaqueteExtraccionError("paquete_cambiado", "El paquete cambió antes de extraer.")
+        paquete = PaquetePendiente(**{**paquete.__dict__, "fd": fd})
+    except OSError as exc:
+        raise PaqueteExtraccionError("paquete_cambiado", "El paquete ya no está.") from exc
     temp = Path(tempfile.mkdtemp(prefix=f"{op.id}-", dir=base))
     try:
         os.chmod(temp, 0o700)
@@ -352,10 +370,14 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
             listado = listar_paquete(paquete)
         except PaqueteError as exc:
             raise PaqueteExtraccionError("listado", exc.causa) from exc
+        comprobar_espacio(base, listado.bytes_estimados or 1,
+                          "extraer el paquete")
         if paquete.firma == "ZIP":
-            items = _escribir_zip(paquete, listado, temp)
+            items = await asyncio.wait_for(asyncio.to_thread(
+                _escribir_zip, paquete, listado, temp, paquete.fd), timeout=900)
         elif paquete.firma == "RAR":
-            items = _escribir_rar(paquete, listado, temp)
+            items = await asyncio.wait_for(asyncio.to_thread(
+                _escribir_rar, paquete, listado, temp, paquete.fd), timeout=900)
         else:
             raise PaqueteExtraccionError("formato", "El paquete no es RAR ni ZIP.")
         _verificar_contenido(items, temp)
@@ -371,12 +393,16 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         op.temp_dir = None
         s.add(op)
         await s.commit()
+        with __import__("contextlib").suppress(OSError):
+            os.close(paquete.fd)
         shutil.rmtree(temp, ignore_errors=True)
         return ResultadoExtraccion(
             operacion_id=op.id, items=tuple(items), total_bytes=op.total_bytes
         )
     except BaseException:
         await s.rollback()
+        with __import__("contextlib").suppress(OSError):
+            os.close(paquete.fd)
         shutil.rmtree(temp, ignore_errors=True)
         op = await s.get(PaqueteOperacion, operacion_id)
         if op is not None:
