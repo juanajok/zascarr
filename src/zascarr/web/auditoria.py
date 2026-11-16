@@ -52,6 +52,13 @@ from zascarr.services.apartado_duplicados import (
 from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.library_adopter import EstadoAdopcion, InventarioBiblioteca, LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
+from zascarr.services.paquetes import (
+    PaqueteError,
+    TokenPaqueteInvalido,
+    detectar_paquetes,
+    listar_paquete,
+    verificar_token_paquete,
+)
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.disponibilidad import registrar_filtros
 from zascarr.web.routes import crear_templates
@@ -486,6 +493,45 @@ async def _contexto_pagina(db: AsyncSession) -> dict:
 @router.get("", response_class=HTMLResponse)
 async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     return _no_store(templates.TemplateResponse(request, "auditoria.html", await _contexto_pagina(db)))
+
+
+@router.get("/paquetes", response_class=HTMLResponse)
+async def paquetes(request: Request) -> HTMLResponse:
+    """Paquetes de Descargas: detección por firma, solo lectura."""
+    try:
+        pendientes = await asyncio.to_thread(detectar_paquetes)
+        return _no_store(templates.TemplateResponse(
+            request, "_paquetes_descargas.html", {"paquetes": pendientes, "error": None}))
+    except OSError:
+        return _no_store(templates.TemplateResponse(
+            request, "_paquetes_descargas.html",
+            {"paquetes": [], "error": "No se pudo revisar la carpeta de Descargas.",
+             "accion": "Comprueba que la carpeta existe y se puede leer."}))
+
+
+@router.get("/paquetes/previa", response_class=HTMLResponse)
+async def paquete_previa(request: Request, token: str = "") -> HTMLResponse:
+    """Vista previa del contenido declarado; no extrae ni escribe."""
+    try:
+        paquete = await asyncio.to_thread(verificar_token_paquete, token)
+    except TokenPaqueteInvalido:
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_previa.html",
+            {"listado": None, "error": "Esta vista previa ya no es válida.",
+             "accion": "Vuelve a la lista y ábrela de nuevo."}))
+    try:
+        listado = await asyncio.to_thread(listar_paquete, paquete)
+    except PaqueteError as exc:
+        if paquete.fd >= 0:
+            os.close(paquete.fd)
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_previa.html",
+            {"listado": None, "error": exc.causa, "accion": exc.accion
+             or "Prueba con otro paquete."}))
+    if paquete.fd >= 0:
+        os.close(paquete.fd)
+    return _no_store(templates.TemplateResponse(
+        request, "_paquete_previa.html", {"listado": listado, "error": None}))
 
 
 @router.post("/analizar", response_class=HTMLResponse)
