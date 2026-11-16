@@ -111,3 +111,69 @@ def test_api_devuelve_json(monkeypatch):
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert r.status_code == 200 and r.json()["total"] == 0
+
+
+async def test_la_fuente_pagina_hasta_el_total():
+    from zascarr.services.comic_vine import ComicVineClient
+
+    vistos = []
+
+    class _CV(ComicVineClient):
+        def __init__(self):
+            pass
+
+        async def _get(self, endpoint, params):
+            vistos.append(params["offset"])
+            if params["offset"] == 0:
+                return {"number_of_total_results": 3,
+                        "results": [{"id": 1}, {"id": 2}]}
+            return {"number_of_total_results": 3,
+                    "results": [{"id": 3}]}
+
+    items = await _CV().issues_by_cover_date("2026-11-16", "2026-11-22")
+    assert [i["id"] for i in items] == [1, 2, 3]
+    assert vistos == [0, 2]
+
+
+def test_la_pantalla_vacia_usa_el_estado_vacio(monkeypatch):
+    from zascarr.main import app
+    from zascarr.web import novedades as web
+
+    async def _vacia(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio)
+
+    monkeypatch.setattr(web, "cargar_semana", _vacia)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r = TestClient(app).get("/ui/novedades?semana=2026-11-18")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200 and "empty-state" in r.text
+    assert "No hay novedades esta semana" in r.text
+
+
+def test_la_vista_y_la_api_no_se_cachean(monkeypatch):
+    from zascarr.main import app
+    from zascarr.web import novedades as web
+
+    async def _cargar(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio)
+
+    monkeypatch.setattr(web, "cargar_semana", _cargar)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r_ui = TestClient(app).get("/ui/novedades")
+        r_api = TestClient(app).get("/api/novedades")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r_ui.headers["cache-control"] == "no-store"
+    assert r_api.headers["cache-control"] == "no-store"
+
+
+def test_deduplica_la_misma_novedad():
+    s = _serie("Batman", cv=1, editorial="DC")
+    item = _item(1, "1", "2026-11-17", "Batman", 1)
+    semana = construir_semana([item, dict(item)], inicio=date(2026, 11, 16),
+                              series=[s], wishlist_series=set(),
+                              hoy=date(2026, 11, 16))
+    assert semana.total == 1

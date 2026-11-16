@@ -221,17 +221,29 @@ class ComicVineClient:
         """Números con fecha de portada en el rango ISO, para Novedades (D5).
 
         `cover_date` es la fecha que Comic Vine publica para el número; no es
-        `store_date` (fecha de venta, a menudo aún vacía para futuros). El
-        contrato de campos es el mínimo para pintar la vista y casar la serie.
+        `store_date` (fecha de venta, a menudo aún vacía para futuros). Pagina
+        con `offset` hasta agotar `number_of_total_results`: una semana USA
+        normal supera los 100 números y una sola página perdería novedades.
         """
-        data = await self._get("/issues/", {
-            "filter": f"cover_date:{desde}|{hasta}",
-            "sort": "cover_date:asc",
-            "limit": min(max(1, int(limit)), 100),
-            "field_list": ("id,issue_number,cover_date,store_date,volume,"
-                           "site_detail_url"),
-        })
-        return data.get("results", [])
+        limite = min(max(1, int(limit)), 100)
+        resultados: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            data = await self._get("/issues/", {
+                "filter": f"cover_date:{desde}|{hasta}",
+                "sort": "cover_date:asc",
+                "limit": limite,
+                "offset": offset,
+                "field_list": ("id,issue_number,cover_date,store_date,volume,"
+                               "site_detail_url"),
+            })
+            pagina = data.get("results", []) or []
+            resultados.extend(pagina)
+            total = _safe_int(data.get("number_of_total_results")) or 0
+            offset += len(pagina)
+            if not pagina or offset >= total:
+                break
+        return resultados
 
     async def get_issue_detail(self, issue_id: int) -> dict[str, Any]:
         data = await self._get(
