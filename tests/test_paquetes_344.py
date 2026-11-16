@@ -118,3 +118,20 @@ def test_top_tamano_total(tmp_path):
     p = d / "inmenso.zip"
     listado = _listar(p, tmp_path)
     assert listado.entradas
+
+
+def test_ui_lista_paquetes_sin_boton_de_extraer(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from zascarr.main import app
+    from zascarr.services.paquetes import PaquetePendiente
+    from zascarr.web import auditoria
+    p = PaquetePendiente(ruta=tmp_path / "x.zip", raiz=tmp_path, relativa="x.zip",
+                         nombre="x.zip", tamano=123, mtime_ns=1, firma="ZIP",
+                         estado="listo", causa="", dev=1, ino=2, token="t")
+    monkeypatch.setattr(auditoria, "detectar_paquetes", lambda: [p])
+    r = TestClient(app).get("/ui/auditoria/paquetes")
+    assert r.status_code == 200
+    assert "Paquetes en Descargas" in r.text
+    assert "Ver qué contiene" in r.text
+    assert "Extraer e importar" not in r.text
