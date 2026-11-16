@@ -12,6 +12,7 @@ botón de probar antes de guardar.
 from __future__ import annotations
 
 from urllib.parse import urlsplit
+from uuid import UUID
 
 import httpx
 import structlog
@@ -21,6 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
+from zascarr.models import ComicTradition
+from zascarr.services import raices as servicio_raices
 from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import (
     COOKIE_NAME,
@@ -203,9 +206,136 @@ def _contexto() -> dict:
     }
 
 
+
+
+TRADICIONES_ETIQUETAS = {
+    "american": "Grapa americana",
+    "british": "Británico",
+    "manga": "Manga",
+    "manhwa": "Manhwa",
+    "manhua": "Manhua",
+    "tebeo": "Tebeo español",
+    "franco_belgian": "Franco-belga (BD)",
+    "fumetti": "Fumetti",
+    "other": "Otra",
+}
+
+
+async def _contexto_raices(db: AsyncSession) -> dict:
+    """Contexto de la tarjeta de discos; si la BD no está disponible, la página sigue."""
+    try:
+        raices = await servicio_raices.listar_con_tradiciones(db)
+        mapa = {str(t.tradition.value): str(t.root_id)
+                for r in raices for t in getattr(r, "traditions", []) or []}
+        from sqlalchemy import func, select
+
+        from zascarr.models import File
+        recuentos = dict((await db.execute(
+            select(File.root_id, func.count(File.id)).group_by(File.root_id))).all())
+        datos = []
+        for r in raices:
+            datos.append({
+                "id": str(r.id), "name": r.name, "path": r.path,
+                "host_path": r.host_path or "", "enabled": bool(r.enabled),
+                "is_default": bool(r.is_default),
+                "estado": servicio_raices.estado_de_raiz(r),
+                "archivos": int(recuentos.get(r.id, 0)),
+                "tradiciones": sorted(
+                    t.tradition.value for t in getattr(r, "traditions", []) or []),
+            })
+        return {
+            "raices_admin": datos, "mapa_tradiciones": mapa,
+            "montajes_disponibles": [
+                {"path": m.path, "host_path": m.host_path}
+                for m in servicio_raices.montajes_libres(raices)],
+            "tradiciones_admin": [
+                {"valor": t.value, "etiqueta": TRADICIONES_ETIQUETAS.get(t.value, t.value)}
+                for t in ComicTradition],
+        }
+    except Exception:  # noqa: BLE001 — la tarjeta no puede tumbar Ajustes si la BD no responde
+        logger.warning("ajustes.raices_no_disponibles", exc_info=False)
+        return {"raices_admin": [], "mapa_tradiciones": {}, "montajes_disponibles": [],
+                "tradiciones_admin": []}
+
+
 @router.get("", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    return _sin_cache(templates.TemplateResponse(request, "ajustes.html", _contexto()))
+async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    contexto = _contexto()
+    contexto.update(await _contexto_raices(db))
+    return _sin_cache(templates.TemplateResponse(request, "ajustes.html", contexto))
+
+
+@router.post("/guardar/raices", response_class=HTMLResponse)
+async def guardar_raices(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    form = await request.form()
+    asignaciones = {
+        clave.removeprefix("trad_"): (str(valor) if valor else None)
+        for clave, valor in form.items() if clave.startswith("trad_")
+    }
+    try:
+        await servicio_raices.guardar_mapa(db, asignaciones)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001 — mensaje de dominio, sin detalle técnico
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo guardar el reparto de discos.", "nombre": "Discos"})
+    return templates.TemplateResponse(
+        request, "_ajustes_guardado.html",
+        {"nombre": "Discos",
+         "aviso": ("Los archivos que ya tienes no se mueven; solo cambia "
+                   "dónde se importan los nuevos.")})
+
+
+@router.post("/raices/crear", response_class=HTMLResponse)
+async def crear_raiz(
+    request: Request, path: str = Form(...), name: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.crear_raiz(db, path=path, name=name)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo añadir el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
+
+
+@router.post("/raices/{root_id}/habilitar", response_class=HTMLResponse)
+async def habilitar_raiz(
+    request: Request, root_id: UUID, enabled: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.cambiar_habilitada(db, root_id, enabled)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo cambiar el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
+
+
+@router.post("/raices/{root_id}/borrar", response_class=HTMLResponse)
+async def borrar_raiz(
+    request: Request, root_id: UUID, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.borrar_raiz(db, root_id)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo borrar el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
 
 
 @router.post("/guardar/comic-vine", response_class=HTMLResponse)
