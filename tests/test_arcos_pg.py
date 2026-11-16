@@ -15,6 +15,8 @@ from zascarr.models import (
     File,
     FileFormat,
     Issue,
+    ReadingProgress,
+    ReadingStatus,
     Series,
     StoryArc,
     StoryArcIssue,
@@ -57,14 +59,18 @@ async def test_arco_cruza_series_y_respeta_reading_order():
                     StoryArcIssue(story_arc_id=arco.id, issue_id=i2.id, reading_order=2),
                     StoryArcIssue(story_arc_id=arco.id, issue_id=i1.id, reading_order=1),
                 ])
+                s.add(ReadingProgress(issue_id=i1.id, status=ReadingStatus.COMPLETED))
                 await s.commit()
                 pagina = await listar_arcos(s)
                 assert pagina.total == 1 and pagina.filas[0].numeros == 2
                 assert pagina.filas[0].series == 2 and pagina.filas[0].is_crossover
+                assert pagina.filas[0].leidos == 1
                 detalle = await detalle_arco(s, arco.id)
                 assert [f.series for f in detalle.filas] == ["Batman", "Nightwing"]
                 assert [f.orden for f in detalle.filas] == [1, 2]
                 assert detalle.filas[0].disponible is True
+                assert detalle.leidos == 1 and detalle.filas[0].leido is True
+                assert detalle.filas[1].leido is False
                 sagas = await sagas_de_serie(s, a.id)
                 assert len(sagas) == 1
                 assert sagas[0].title == "Court of Owls"
