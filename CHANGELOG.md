@@ -34,6 +34,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **«Por revisar» sugiere la serie cuando el nombre no trae número (2026-11-16).**
+  Tomos, especiales y aniversarios (`Sector Lejano (Young Animals - ECC) [GVS]
+  [22 Aniversario CRG].cbz`) se quedaban en `_Unsorted` sin ninguna pista. El matcher
+  sigue sin inventar el número, pero guarda la serie reconocida como candidata: la
+  tarjeta de Pendientes la ofrece con un clic y basta escribir el número y pulsar
+  «Organizar» para mover el fichero a la carpeta de la serie (se crea si no existe).
+
 - **NFR-03: límite del cuerpo de las peticiones (2026-11-16).** Middleware ASGI que
   rechaza con 413 los cuerpos de escritura que superan 256 KiB, comprobando `Content-Length`
   y los bytes reales (chunked o cabecera falsa) antes de que FastAPI los parsee. Tope en
