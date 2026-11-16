@@ -72,7 +72,7 @@ def _tipo_de_excepcion(exc_info: Any) -> str:
         if isinstance(exc_info, BaseException):
             return type(exc_info).__name__
     except Exception:  # noqa: BLE001
-        pass
+        return ERROR
     return ERROR
 
 
