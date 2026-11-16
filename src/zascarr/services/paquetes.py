@@ -70,6 +70,7 @@ class PaquetePendiente:
     ino: int
     token: str = ""
     fd: int = -1
+    accion: str = ""
 
 
 @dataclass(frozen=True)
@@ -126,10 +127,13 @@ def _candidato(
     firma = firma_de(ruta)
     estado = "listo"
     causa = ""
+    accion = ""
     if _MULTIVOLUMEN.search(nombre):
-        estado, causa = "multivolumen", "Está dividido en varios archivos."
+        estado, causa, accion = ("multivolumen", "Está dividido en varios archivos.",
+                                 "Reúne todas las partes antes de abrirlo.")
     elif firma not in (Firma.ZIP, Firma.RAR):
-        estado, causa = "no_legible", "No es un paquete legible."
+        estado, causa, accion = ("no_legible", "No es un paquete legible.",
+                                 "Prueba con otro archivo de Descargas.")
     try:
         rel = str(ruta.relative_to(raiz))
     except ValueError:
@@ -144,6 +148,7 @@ def _candidato(
         firma=_firma_texto(firma),
         estado=estado,
         causa=causa,
+        accion=accion,
         dev=st.st_dev,
         ino=st.st_ino,
     )
@@ -245,8 +250,8 @@ def verificar_token_paquete(token: str, *, ajustes=None, secret: str | None = No
             raise TokenPaqueteInvalido
         return PaquetePendiente(ruta=ruta, raiz=raiz, relativa=str(ruta.relative_to(raiz)),
                                 nombre=ruta.name, tamano=d["sz"], mtime_ns=d["mt"],
-                                firma=firma, estado="listo", causa="", dev=d["dev"],
-                                ino=d["ino"], token=token, fd=fd)
+                                firma=firma, estado="listo", causa="", accion="",
+                                dev=d["dev"], ino=d["ino"], token=token, fd=fd)
     except (ValueError, KeyError, TypeError, OSError, UnicodeError) as exc:
         raise TokenPaqueteInvalido from exc
 

@@ -343,7 +343,8 @@ def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S,
     argv = ([lsar, "-j", _FLAG_SIN_SOLIDOS, str(ruta)] if con_flag
             else [lsar, "-j", str(ruta)])
     codigo, salida, error = _ejecutar(
-        argv, home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
+        argv, home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO,
+        pass_fds=pass_fds)
     if con_flag and _opcion_desconocida(codigo, salida, error):
         _decidir_soporte(False)
         codigo, salida, error = _ejecutar(
