@@ -448,7 +448,8 @@ def carpeta_temporal(base: Path):
 
 
 def extraer_entrada_a(ruta: Path, entrada: EntradaRar, destino: Path, tope: int, *,
-                      temporal: Path, timeout: float = RAR_TIMEOUT_EXTRAER_S) -> int:
+                      temporal: Path, timeout: float = RAR_TIMEOUT_EXTRAER_S,
+                      pass_fds: tuple[int, ...] = ()) -> int:
     """Extrae UNA entrada por índice y la copia EN STREAMING a `destino` (sin cargarla entera).
 
     Verifica tamaño y CRC contra el listado mientras copia. `temporal` es una carpeta propia y
@@ -467,7 +468,8 @@ def extraer_entrada_a(ruta: Path, entrada: EntradaRar, destino: Path, tope: int,
     codigo, salida, error = _ejecutar(
         [unar, "-D", "-f", "-i", "-o", str(trabajo), str(ruta), str(entrada.indice)],
         home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_ERROR,
-        vigilar=trabajo, tope_escrito=min(tope, entrada.tamano) + 1)
+        vigilar=trabajo, tope_escrito=min(tope, entrada.tamano) + 1,
+        pass_fds=pass_fds)
     if codigo != 0:
         raise ErrorRar(_motivo_por_mensaje(error + salida))
     fichero = _unico_fichero_regular(trabajo)
