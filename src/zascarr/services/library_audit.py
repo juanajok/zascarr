@@ -235,7 +235,11 @@ class LibraryAudit:
                 try:
                     digest = sha256_streaming(ruta)
                 except OSError as exc:
-                    logger.warning("library_audit.hash_failed", inodo=getattr(exc, "st_ino", None),
+                    try:
+                        inodo = ruta.stat(follow_symlinks=False).st_ino
+                    except OSError:
+                        inodo = None
+                    logger.warning("library_audit.hash_failed", inodo=inodo,
                                    formato=ruta.suffix.lstrip(".") or "sin_extension",
                                    error_tipo=type(exc).__name__)
                     continue
