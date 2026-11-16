@@ -710,10 +710,20 @@ async def deshacer_duplicados(request: Request, operacion: str = Form(...),
 
 
 @router.post("/duplicados/carpetas", response_class=HTMLResponse)
-async def revisar_carpetas(request: Request, ruta_a: str = Form(...),
-                           ruta_b: str = Form(...),
+async def revisar_carpetas(request: Request, ruta_a: str = Form(default=""),
+                           ruta_b: str = Form(default=""),
+                           par: int | None = Form(default=None),
                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Detalle de la pareja; no escribe ni preselecciona qué carpeta se queda."""
+    if par is not None and (not ruta_a or not ruta_b):
+        informe = await _ultimo_informe(db)
+        crudos = (informe or {}).get("carpetas_repetidas") or []
+        if not 0 <= par < len(crudos):
+            return _no_store(templates.TemplateResponse(
+                request, "_carpetas_detalle.html",
+                {"error": "Esa pareja de carpetas ya no está en el informe."}))
+        ruta_a = str(crudos[par].get("ruta_a") or "")
+        ruta_b = str(crudos[par].get("ruta_b") or "")
     try:
         detalle = await analizar_par(ruta_a, ruta_b, Path(get_settings().library_path))
     except (ApartadoError, OSError) as exc:
