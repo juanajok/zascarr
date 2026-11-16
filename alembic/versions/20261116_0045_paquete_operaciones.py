@@ -1,6 +1,6 @@
 """BL-PACK1: operaciones durables de extracción de paquetes (#344).
 
-Revision ID: 0044
+Revision ID: 0045
 Revises: 0043
 """
 from __future__ import annotations
@@ -10,8 +10,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "0044"
-down_revision = "0043"
+revision = "0045"
+down_revision = "0044"
 branch_labels = None
 depends_on = None
 

@@ -1,4 +1,4 @@
-"""#344 corte 3: migración 0044 y extracción/verificación durable."""
+"""#344 corte 3: migración 0045 y extracción/verificación durable."""
 from __future__ import annotations
 
 import os
@@ -28,7 +28,7 @@ def _cbz(path: Path) -> None:
         z.writestr("001.png", _PNG)
 
 
-def test_migracion_0044_upgrade_downgrade():
+def test_migracion_0045_upgrade_downgrade():
     with bd_efimera_sync(URL) as url:
         migrar_a_head(url)
         alembic(url, "downgrade", "0043")
