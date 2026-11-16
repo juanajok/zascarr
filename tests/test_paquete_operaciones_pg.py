@@ -587,3 +587,57 @@ async def test_publicar_importa_grapas_reales_y_conserva_original(tmp_path, monk
     finally:
         await motor.dispose()
         get_settings.cache_clear()
+
+
+def test_importer_no_ve_staging_oculto(tmp_path):
+    from zascarr.utils.fs import listar_comics
+    d = tmp_path / "descargas"
+    (d / ".zascarr" / "paquetes" / "op").mkdir(parents=True)
+    (d / ".zascarr" / "paquetes" / "op" / "a.cbz").write_bytes(b"x")
+    (d / "visible.cbz").write_bytes(b"x")
+    assert [p.name for p in listar_comics([d], {".cbz"})] == ["visible.cbz"]
+
+
+@pytest.mark.asyncio
+async def test_publicacion_fallida_no_marca_importado_y_limpia_staging(tmp_path, monkeypatch):
+    import os
+
+    from zascarr.config import get_settings
+    from zascarr.models import PaqueteEstado
+    from zascarr.services import paquetes_publicacion as pub
+    from zascarr.services.paquetes_extraccion import extraer_y_verificar
+    d = tmp_path / "descargas"
+    d.mkdir()
+    p = d / "p.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("a.cbz", _cbz_bytes())
+    ajustes = type("A", (), {})()
+    ajustes.transmission_download_dir = str(d)
+    ajustes.amule_incoming_dir = ""
+    ajustes.downloads_path = ""
+    ajustes.secret_key = "k"
+    paquete = detectar_paquetes(ajustes=ajustes, secret="k")[0]
+    monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
+    monkeypatch.setenv("TRANSMISSION_DOWNLOAD_DIR", str(d))
+    get_settings.cache_clear()
+    migrar_a_head(URL)
+    motor = create_async_engine(url_asyncpg(URL), poolclass=None)
+    fabrica = async_sessionmaker(motor, expire_on_commit=False)
+    try:
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            await extraer_y_verificar(s, op.id, conservar_temporal=True)
+            async def explota(self, *, disparador="automatico"):
+                raise RuntimeError("importer roto")
+            monkeypatch.setattr("zascarr.services.importer.Importer.scan_and_import", explota)
+            with pytest.raises(RuntimeError):
+                await pub.publicar_e_importar(s, op.id)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.ERROR
+            staging = d / ".zascarr" / "paquetes"
+            assert not staging.exists() or not list(staging.glob("*"))
+    finally:
+        await motor.dispose()
+        os.environ.pop("COVERS_CACHE_PATH", None)
+        os.environ.pop("TRANSMISSION_DOWNLOAD_DIR", None)
+        get_settings.cache_clear()
