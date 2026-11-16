@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import File, Issue, IssueFormat, Series
@@ -134,6 +135,7 @@ class EspecialesService:
         }
         if cubiertos:
             archivo.metadata_["numeros_cubiertos"] = cubiertos
+            await self._marcar_numeros_cubiertos(serie.id, cubiertos, archivo.id)
 
         if mover:
             from zascarr.services.importer import build_library_path
@@ -154,3 +156,35 @@ class EspecialesService:
 
         await self.db.flush()
         return issue
+
+    async def _marcar_numeros_cubiertos(self, series_id, numeros: list[str],
+                                        file_id) -> None:
+        """Marca en cada Issue cubierto que un tomo lo recopila.
+
+        Si el número no existe en el catálogo de la serie se crea una fila mínima
+        (sin título) para poder contarlo; no se inventa un archivo. La consulta de
+        «poseídos» ya existente lo trata como presente con la marca
+        `cubierto_por_tomo` (2026-11-16, decisión del PO).
+        """
+        existentes = (await self.db.execute(
+            select(Issue).where(Issue.series_id == series_id))).scalars().all()
+        por_numero = {
+            int(str(i.issue_number)): i for i in existentes
+            if str(i.issue_number or "").strip().isdigit()
+        }
+        for numero in numeros:
+            issue = por_numero.get(int(numero))
+            if issue is None:
+                issue = Issue(
+                    series_id=series_id,
+                    issue_number=str(numero),
+                    format=IssueFormat.SINGLE_ISSUE,
+                    metadata_={"origen": "tomo", "cubierto_por_tomo": str(file_id)},
+                    locked_fields=["series_id"],
+                )
+                self.db.add(issue)
+            else:
+                issue.metadata_ = {
+                    **(issue.metadata_ or {}),
+                    "cubierto_por_tomo": str(file_id),
+                }

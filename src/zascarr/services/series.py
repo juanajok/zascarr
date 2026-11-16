@@ -509,8 +509,13 @@ async def numeros_poseidos_por_serie(db: AsyncSession) -> dict[UUID, set[int]]:
     """
     filas = (await db.execute(
         select(Issue.series_id, Issue.issue_number, Issue.format,
-               exists().where(File.issue_id == Issue.id,
-                              File.is_missing.is_(False)).label("disponible"))
+               or_(
+                   exists().where(File.issue_id == Issue.id,
+                                  File.is_missing.is_(False)),
+                   # Un tomo recopilatorio marca en el Issue que cubre ese número
+                   # (2026-11-16): cuenta como poseído igual que un archivo real.
+                   Issue.metadata_.has_key("cubierto_por_tomo"),
+               ).label("disponible"))
     )).all()
     por_serie: dict[UUID, set[int]] = {}
     for series_id, numero, formato, disponible in filas:
@@ -519,18 +524,6 @@ async def numeros_poseidos_por_serie(db: AsyncSession) -> dict[UUID, set[int]]:
         n = numero_de_grapa(numero, formato)
         if n is not None:
             por_serie.setdefault(series_id, set()).add(n)
-    # Tomos recopilatorios: un especial sin número puede declarar qué números
-    # cubre (`metadata.numeros_cubiertos`); cuentan como poseídos (2026-11-16).
-    cubiertos = (await db.execute(
-        select(Issue.series_id, File.metadata_)
-        .join(File, File.issue_id == Issue.id)
-        .where(File.is_missing.is_(False),
-               File.metadata_.has_key("numeros_cubiertos"))
-    )).all()
-    for series_id, meta in cubiertos:
-        for n in (meta or {}).get("numeros_cubiertos") or []:
-            if str(n).strip().isdigit():
-                por_serie.setdefault(series_id, set()).add(int(str(n)))
     return por_serie
 
 
@@ -549,8 +542,11 @@ async def numeros_poseidos(db: AsyncSession, series_id: UUID) -> set[int]:
     """
     filas = (await db.execute(
         select(Issue.issue_number, Issue.format,
-               exists().where(File.issue_id == Issue.id,
-                              File.is_missing.is_(False)).label("disponible"))
+               or_(
+                   exists().where(File.issue_id == Issue.id,
+                                  File.is_missing.is_(False)),
+                   Issue.metadata_.has_key("cubierto_por_tomo"),
+               ).label("disponible"))
         .where(Issue.series_id == series_id)
     )).all()
     poseidos: set[int] = set()
@@ -560,17 +556,6 @@ async def numeros_poseidos(db: AsyncSession, series_id: UUID) -> set[int]:
         n = numero_de_grapa(numero, formato)
         if n is not None:
             poseidos.add(n)
-    # Un tomo recopilatorio sin número cubre los números que declara.
-    cubiertos = (await db.execute(
-        select(File.metadata_)
-        .join(Issue, Issue.id == File.issue_id)
-        .where(Issue.series_id == series_id, File.is_missing.is_(False),
-               File.metadata_.has_key("numeros_cubiertos"))
-    )).scalars().all()
-    for meta in cubiertos:
-        for n in (meta or {}).get("numeros_cubiertos") or []:
-            if str(n).strip().isdigit():
-                poseidos.add(int(str(n)))
     return poseidos
 
 
