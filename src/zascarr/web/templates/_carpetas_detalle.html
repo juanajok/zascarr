@@ -48,8 +48,8 @@
 {% endif %}
 
 <form method="post" action="/ui/auditoria/duplicados/carpetas/previsualizar" class="carpetas-form">
-  <input type="hidden" name="ruta_a" value="{{ ruta_a }}">
-  <input type="hidden" name="ruta_b" value="{{ ruta_b }}">
+  <input type="hidden" name="ruta_a" value="{{ d.ruta_a }}">
+  <input type="hidden" name="ruta_b" value="{{ d.ruta_b }}">
   <fieldset class="audit-block">
     <legend>¿Qué carpeta se queda?</legend>
     <p class="audit-why">Ninguna viene marcada. Elige tú; la otra solo pierde los comunes idénticos.</p>
