@@ -34,6 +34,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Especiales sin número en `Serie/Especiales/` (2026-11-16).** «Por revisar» ofrece
+  «Guardar como especial (sin número)» cuando la serie está reconocida: crea el Issue
+  sin número, enlaza el archivo y lo **mueve** a `…/Serie (Año)/Especiales/<archivo>`
+  (la carpeta se crea si no existe), saliendo de `_Unsorted`. Formatos: novela
+  gráfica, tomo, tapa dura u ómnibus. La ruta existía en el servicio pero no estaba
+  expuesta en la tarjeta.
+
 - **«Por revisar» sugiere la serie cuando el nombre no trae número (2026-11-16).**
   Tomos, especiales y aniversarios (`Sector Lejano (Young Animals - ECC) [GVS]
   [22 Aniversario CRG].cbz`) se quedaban en `_Unsorted` sin ninguna pista. El matcher
