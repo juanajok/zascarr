@@ -12,7 +12,6 @@ import hashlib
 import os
 import shutil
 import stat
-import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -93,6 +92,31 @@ def _base_temporal() -> Path:
         except OSError:
             continue
     return real
+
+
+def _crear_temp(base: Path, prefijo: str) -> Path:
+    """Crea la subcarpeta con dir_fd verificado; no sigue un symlink plantado en la base."""
+    fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        real = Path(os.path.realpath(f"/proc/self/fd/{fd}"))
+        if real != base:
+            raise PaqueteExtraccionError("temporal_inseguro", "La carpeta temporal cambió.")
+        nombre = f"{prefijo}-{os.urandom(6).hex()}"
+        os.mkdir(nombre, 0o700, dir_fd=fd)
+        comprobado = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+        os.close(comprobado)
+    finally:
+        os.close(fd)
+    return base / nombre
+
+
+def _borrar_temp(ruta: Path) -> bool:
+    try:
+        shutil.rmtree(ruta)
+        return True
+    except OSError:
+        logger.warning("paquetes.temporal_sin_borrar", error="limpieza")
+        return False
 
 
 def _nombre_generado(indice: int, tipo: str) -> str:
@@ -359,7 +383,7 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         paquete = PaquetePendiente(**{**paquete.__dict__, "fd": fd})
     except OSError as exc:
         raise PaqueteExtraccionError("paquete_cambiado", "El paquete ya no está.") from exc
-    temp = Path(tempfile.mkdtemp(prefix=f"{op.id}-", dir=base))
+    temp = _crear_temp(base, str(op.id))
     try:
         os.chmod(temp, 0o700)
         op.temp_dir = str(temp)
@@ -395,7 +419,13 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         await s.commit()
         with __import__("contextlib").suppress(OSError):
             os.close(paquete.fd)
-        shutil.rmtree(temp, ignore_errors=True)
+        if not _borrar_temp(temp):
+            op = await s.get(PaqueteOperacion, operacion_id)
+            if op is not None:
+                op.temp_dir = str(temp)
+                s.add(op)
+                await s.commit()
+            raise PaqueteExtraccionError("limpieza", "El temporal no se pudo borrar.")
         return ResultadoExtraccion(
             operacion_id=op.id, items=tuple(items), total_bytes=op.total_bytes
         )
@@ -403,7 +433,7 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         await s.rollback()
         with __import__("contextlib").suppress(OSError):
             os.close(paquete.fd)
-        shutil.rmtree(temp, ignore_errors=True)
+        borrado = _borrar_temp(temp)
         op = await s.get(PaqueteOperacion, operacion_id)
         if op is not None:
             op.estado = PaqueteEstado.ERROR
@@ -411,7 +441,7 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
             op.error_mensaje = getattr(
                 __import__("sys").exc_info()[1], "mensaje", "No se pudo extraer."
             )
-            op.temp_dir = None
+            op.temp_dir = None if borrado else str(temp)
             s.add(op)
             await s.commit()
         raise
@@ -437,13 +467,24 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
         .all()
     )
     for op in vivas:
+        borrado = True
         if op.temp_dir:
-            shutil.rmtree(op.temp_dir, ignore_errors=True)
+            borrado = _borrar_temp(Path(op.temp_dir))
         op.estado = PaqueteEstado.ERROR
         op.error_codigo = "interrumpida"
         op.error_mensaje = "La extracción se interrumpió; se puede reintentar."
-        op.temp_dir = None
+        op.temp_dir = None if borrado else op.temp_dir
         s.add(op)
     if vivas:
         await s.commit()
+    try:
+        base = _base_temporal()
+        referenciados = {Path(x) for x in (await s.execute(
+            select(PaqueteOperacion.temp_dir).where(
+                PaqueteOperacion.temp_dir.is_not(None)))).scalars()}
+        for hijo in base.iterdir():
+            if hijo not in referenciados and hijo.is_dir():
+                _borrar_temp(hijo)
+    except OSError:
+        logger.warning("paquetes.barrido_temporales_fallido")
     return len(vivas)
