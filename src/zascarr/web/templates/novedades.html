@@ -48,15 +48,15 @@
   <ul class="novedades-dia">
     {% for n in novedades %}
     <li class="novedad-card">
-      {% if n.series_id %}
-      <a class="novedad-portada" href="/ui/series/{{ n.series_id }}" aria-label="Abrir la serie {{ n.serie }}">
-        {{ ui.portada(n.serie, n.series_id, "/ui/series/%s/portada?v=2" % n.series_id, carga="lazy") }}
-      </a>
-      {% else %}
       <div class="novedad-portada">
+        {% if n.series_id %}
+        <a href="/ui/series/{{ n.series_id }}" aria-label="Abrir la serie {{ n.serie }}">
+          {{ ui.portada(n.serie, n.series_id, "/ui/series/%s/portada?v=2" % n.series_id if n.tiene_portada else none, carga="lazy") }}
+        </a>
+        {% else %}
         {{ ui.portada(n.serie, none, none, carga="lazy") }}
+        {% endif %}
       </div>
-      {% endif %}
       <div class="novedad-cuerpo">
         <strong class="novedad-titulo">
           {% if n.series_id %}<a href="/ui/series/{{ n.series_id }}">{{ n.serie }}</a>{% else %}{{ n.serie }}{% endif %}{% if n.numero %} #{{ n.numero }}{% endif %}
