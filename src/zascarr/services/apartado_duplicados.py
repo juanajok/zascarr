@@ -9,6 +9,7 @@ permite deshacer sin sobrescribir.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import os
 from collections.abc import Iterable, Sequence
@@ -30,6 +31,7 @@ from zascarr.models import (
     ApartadoOperacion,
     File,
 )
+from zascarr.services.raices import es_componente_de
 from zascarr.services.tokens_revision import (
     MAX_GRUPOS_APARTAR,
     ApartarFirmada,
@@ -139,9 +141,25 @@ class ApartadoDuplicadosService:
         self._db = db
         self._settings = settings or get_settings()
         self._library = Path(self._settings.library_path)
+        # Corte C: cada copia se aparta en la cuarentena de SU raíz. La raíz global
+        # sigue siendo el fallback de una instalación de una sola raíz.
+        extra = [
+            Path(p.strip()) for p in
+            (str(getattr(self._settings, "library_roots", "") or "")).split(",")
+            if p.strip() and Path(p.strip()).is_absolute()
+        ]
+        self._raices = [self._library, *extra]
         self._secret = secret if secret is not None else getattr(self._settings, "secret_key", "")
 
     # ── rutas y token ─────────────────────────────────────────────────────
+    def _raiz_de(self, ruta: Path) -> Path:
+        candidatas = []
+        for r in self._raices:
+            with contextlib.suppress(Exception):
+                if es_componente_de(ruta, r):
+                    candidatas.append(r)
+        return max(candidatas, key=lambda r: len(Path(r).parts)) if candidatas else self._library
+
     def _relativa(self, ruta: str | Path) -> tuple[Path, str]:
         p = Path(ruta)
         if not p.is_absolute():
@@ -150,7 +168,7 @@ class ApartadoDuplicadosService:
             raise GrupoRechazado("no_regular", "No se sigue un enlace simbólico.")
         try:
             p = p.resolve(strict=False)
-            root = self._library.resolve()
+            root = self._raiz_de(p).resolve()
         except OSError as exc:
             raise GrupoRechazado("ruta_invalida", "La ruta no es válida.") from exc
         if root != p and root not in p.parents:
@@ -217,10 +235,11 @@ class ApartadoDuplicadosService:
         except OSError:
             return 0
 
-    def _base_cuarentena(self, operacion: UUID) -> Path:
-        """Cuarentena real, resuelta: nunca fuera de la biblioteca (symlink incluido)."""
-        raiz = self._library.resolve()
-        base = self._library / ".zascarr" / "apartados" / str(operacion)
+    def _base_cuarentena(self, operacion: UUID, raiz: Path | None = None) -> Path:
+        """Cuarentena real de la raíz indicada (o la global), resuelta y en su montura."""
+        origen = raiz or self._library
+        raiz = origen.resolve()
+        base = origen / ".zascarr" / "apartados" / str(operacion)
         real = base.resolve(strict=False)
         if real != raiz and raiz not in real.parents:
             raise GrupoRechazado("cuarentena_fuera", "La cuarentena queda fuera de la biblioteca.")
@@ -371,7 +390,7 @@ class ApartadoDuplicadosService:
             file_original = detalle.get("file_original")
             if file_original is None:
                 file_original = await self._file_original_previo(paths, keep)
-            destino_base = self._base_cuarentena(op.id)
+            destinos: dict[str, Path] = {}
             if detalle.get("file_original") != file_original:
                 detalle["file_original"] = file_original
                 grupo.detalle = detalle
@@ -384,12 +403,14 @@ class ApartadoDuplicadosService:
                 if i == keep:
                     continue
                 rel = Path(rutas_rel[i])
-                destino = destino_base / rel
+                base_item = self._base_cuarentena(op.id, self._raiz_de(origen))
+                destino = base_item / rel
+                destinos[rutas_rel[i]] = destino
                 if rutas_rel[i] in items_previos and destino.exists() and not origen.exists():
                     continue
                 if destino.exists():
                     raise GrupoRechazado("destino_ocupado", "La cuarentena ya tiene esa ruta.")
-                referencia = destino_base if destino_base.exists() else self._library
+                referencia = base_item if base_item.exists() else self._raiz_de(origen)
                 if origen.stat().st_dev != referencia.stat().st_dev:
                     raise GrupoRechazado("montura_distinta", "La cuarentena está en otra montura.")
                 destino.parent.mkdir(parents=True, exist_ok=True)
@@ -412,7 +433,7 @@ class ApartadoDuplicadosService:
                     fila.sha256_hash = grupo.sha256
                     fila.file_mtime_ns = stat_keep.st_mtime_ns
             detalle["items"] = [
-                {"ruta": rutas_rel[i], "estado": "movido", "destino": str(destino_base / Path(rutas_rel[i]))}
+                {"ruta": rutas_rel[i], "estado": "movido", "destino": str(destinos[rutas_rel[i]])}
                 for i in range(len(paths)) if i != keep
             ]
             detalle["file_original"] = file_original
@@ -538,7 +559,6 @@ class ApartadoDuplicadosService:
             items = list(detalle.get("items") or [])
             rutas_rel = list(detalle.get("rutas") or [])
             keep = int(detalle.get("keep_index", 0))
-            base = self._base_cuarentena(op.id)
             if not detalle.get("file_original"):
                 try:
                     detalle["file_original"] = await self._file_original_previo(
@@ -547,7 +567,9 @@ class ApartadoDuplicadosService:
                     detalle["file_original"] = None
             if not items and rutas_rel:
                 items = [
-                    {"ruta": rel, "estado": "pendiente", "destino": str(base / Path(rel))}
+                    {"ruta": rel, "estado": "pendiente",
+                     "destino": str(self._base_cuarentena(
+                         op.id, self._raiz_de(self._relativa(rel)[0])) / Path(rel))}
                     for i, rel in enumerate(rutas_rel) if i != keep
                 ]
             movidos = 0

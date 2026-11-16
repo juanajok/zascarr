@@ -38,6 +38,7 @@ from zascarr.services.conversion_cbr import (
     analizar,
     construir_cbz,
 )
+from zascarr.services.raices import es_componente_de
 from zascarr.services.tagger import bloqueo_de_fichero, motor_de
 from zascarr.services.tokens_revision import (
     ConversionFirmada,
@@ -202,12 +203,29 @@ def _copiar_permisos(destino: Path, original: os.stat_result) -> None:
         os.chown(destino, original.st_uid, original.st_gid)
 
 
-def _cuarentena(settings) -> Path:
-    return Path(settings.library_path) / ".zascarr" / "originales"
+def _raices(settings) -> list[Path]:
+    """Raíces de biblioteca configuradas para esta instalación."""
+    base = Path(settings.library_path)
+    extra = [
+        Path(p.strip()) for p in (str(getattr(settings, "library_roots", "") or "")).split(",")
+        if p.strip() and Path(p.strip()).is_absolute()
+    ]
+    return [base, *[p for p in extra if p != base]]
 
 
-def _diario(settings) -> Path:
-    return Path(settings.library_path) / ".zascarr" / "diario"
+def _raiz_de(settings, ruta: str | Path | None) -> Path:
+    if ruta is None:
+        return Path(settings.library_path)
+    candidatas = [r for r in _raices(settings) if es_componente_de(ruta, r)]
+    return max(candidatas, key=lambda r: len(r.parts)) if candidatas else Path(settings.library_path)
+
+
+def _cuarentena(settings, ruta: str | Path | None = None) -> Path:
+    return _raiz_de(settings, ruta) / ".zascarr" / "originales"
+
+
+def _diario(settings, ruta: str | Path | None = None) -> Path:
+    return _raiz_de(settings, ruta) / ".zascarr" / "diario"
 
 
 def _conflicto(motivo: MotivoConversion, mensaje: str | None = None) -> ResultadoConversion:
@@ -404,7 +422,7 @@ class ConversionDeArchivo:
                 if _sha256(ruta) != firmada.sha256:
                     return _conflicto(MotivoConversion.PROPUESTA_DESACTUALIZADA,
                                       "El archivo cambió mientras se preparaba la conversión.")
-                cuarentena = _cuarentena(self._settings) / str(f.id) / firmada.operacion
+                cuarentena = _cuarentena(self._settings, f.file_path) / str(f.id) / firmada.operacion
                 try:
                     comprobar_espacio(destino.parent, max(analisis.estimado_salida, 1), "conversión")
                 except EspacioInsuficienteError as exc:
@@ -583,7 +601,7 @@ class ConversionDeArchivo:
         entrada cuando ha reparado el original o la fila.
         """
         try:
-            base = _diario(self._settings) / str(f.id)
+            base = _diario(self._settings, f.file_path) / str(f.id)
             base.mkdir(parents=True, exist_ok=True)
             diario = base / f"{firmada.operacion}.json"
             diario.write_text(json.dumps({
@@ -719,7 +737,7 @@ class ConversionDeArchivo:
                                        "omitida", shared.estado.value, aviso, advertencia=aviso)
         original = conv.get("original") or {}
         origen = Path(original.get("ruta", ""))
-        apartado = _cuarentena(self._settings) / str(f.id) / firmada.operacion / "deshecho" / destino.name
+        apartado = _cuarentena(self._settings, f.file_path) / str(f.id) / firmada.operacion / "deshecho" / destino.name
         apartado.parent.mkdir(parents=True, exist_ok=True)
         self._diario_escribir(
             f, firmada, "deshaciendo", apartado, ruta_original=restaurar, destino=destino,
@@ -834,19 +852,20 @@ class ConversionDeArchivo:
         async with self._cerrojo_ciclo() as libre:
             if not libre:
                 return 0
-            base = _cuarentena(self._settings)
-            if not base.exists():
-                return 0
             borrados = 0
-            for operacion in sorted(base.glob("*/*")):
-                if borrados >= lote:
-                    break
-                if operacion.is_dir():
-                    padre = operacion.parent
-                    shutil.rmtree(operacion, ignore_errors=True)
-                    with contextlib.suppress(OSError):
-                        padre.rmdir()
-                    borrados += 1
+            for raiz in _raices(self._settings):
+                base = _cuarentena(self._settings, raiz)
+                if not base.exists():
+                    continue
+                for operacion in sorted(base.glob("*/*")):
+                    if borrados >= lote:
+                        return borrados
+                    if operacion.is_dir():
+                        padre = operacion.parent
+                        shutil.rmtree(operacion, ignore_errors=True)
+                        with contextlib.suppress(OSError):
+                            padre.rmdir()
+                        borrados += 1
             return borrados
 
     async def reconciliar_diario(self) -> int:
@@ -956,11 +975,12 @@ class ConversionDeArchivo:
                     and f.sha256_hash == sha_original)
 
     async def _reconciliar_diario_sin_cerrojo(self) -> int:
-        base = _diario(self._settings)
-        if not base.exists():
+        bases = [_diario(self._settings, raiz) for raiz in _raices(self._settings)]
+        entradas = [e for base in bases if base.exists() for e in base.glob("*/*.json")]
+        if not entradas:
             return 0
         resueltas = 0
-        for entrada in sorted(base.glob("*/*.json")):
+        for entrada in sorted(entradas):
             try:
                 datos = json.loads(entrada.read_text(encoding="utf-8"))
             except (OSError, ValueError):
@@ -1060,21 +1080,22 @@ class ConversionDeArchivo:
 
     async def resumen_originales(self) -> tuple[int, int]:
         """(cuántos originales apartados, bytes que ocupan). Solo lee el disco."""
-        base = _cuarentena(self._settings)
+        bases = [_cuarentena(self._settings, raiz) for raiz in _raices(self._settings)]
 
         def _contar() -> tuple[int, int]:
-            if not base.is_dir():
-                return (0, 0)
             cuantos = 0
             total = 0
-            for operacion in base.glob("*/*"):
-                if not operacion.is_dir():
+            for base in bases:
+                if not base.is_dir():
                     continue
-                cuantos += 1
-                for fichero in operacion.rglob("*"):
-                    if fichero.is_file():
-                        with contextlib.suppress(OSError):
-                            total += fichero.stat().st_size
+                for operacion in base.glob("*/*"):
+                    if not operacion.is_dir():
+                        continue
+                    cuantos += 1
+                    for fichero in operacion.rglob("*"):
+                        if fichero.is_file():
+                            with contextlib.suppress(OSError):
+                                total += fichero.stat().st_size
             return cuantos, total
 
         return await asyncio.to_thread(_contar)
