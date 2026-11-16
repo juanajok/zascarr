@@ -757,6 +757,10 @@ button[type="submit"].btn-sugerencia {
 /* El panel de candidatos de «Buscar ahora» ocupa su propia línea, pero solo cuando tiene
    contenido: vacío no debe forzar una línea (12 px de hueco) en cada fila. */
 .wishlist-row .candidatos-wishlist:not(:empty) { flex: 1 1 100%; }
+/* UX 2026-11-16: al añadir sin recargar, el texto de «lista vacía» desaparece
+   en cuanto la lista tiene filas (selector de hermano siguiente). */
+p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
+
 /* UX 2026-11-16: el estado vive en su propio contenedor (para actualizarlo sin
    tirar el panel de candidatos), pero no cambia el reparto flex de la fila. */
 .wishlist-estado { display: contents; }
