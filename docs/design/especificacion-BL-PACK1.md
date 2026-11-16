@@ -24,7 +24,7 @@ mano** que se abra, vea qué trae y que las grapas `.cbz`/`.cbr` entren por el f
 La propuesta separa **derivar** de **persistir**: la lista de paquetes pendientes se deriva del
 sistema de ficheros (sin tabla ni migración); la operación de extracción, su progreso, su
 verificación, su resultado y la supresión del paquete ya importado necesitan una **tabla durable
-`paquete_operaciones` (migración 0044 aditiva)**, porque no se pueden derivar de forma fiable y
+`paquete_operaciones` (migración 0045 aditiva)**, porque no se pueden derivar de forma fiable y
 sin ella un paquete ya procesado reaparecería como pendiente y una muerte a mitad no tendría
 comprobante. La extracción va a un temporal **fuera de biblioteca y Descargas**, con topes antes
 de escribir y verificación entrada a entrada; solo después se publica una carpeta de entrada en
@@ -99,11 +99,11 @@ es un informe de pantalla truncado a 200 y no sirve para reanudar (mismo motivo 
 §D3). Un diario JSON en el temporal no sobrevive de forma fiable a la limpieza y no permite
 consultar la UI.
 
-### 2.2 Qué se persiste (migración propuesta 0044)
+### 2.2 Qué se persiste (migración propuesta 0045)
 
 La extracción **sí** necesita estado durable: progreso, causas, reanudación/reintento, evitar dos
 extracciones del mismo paquete y **suprimir de pendientes** un paquete ya importado. Se propone
-una migración **0044** (siguiente tras la cabeza actual `0043_idioma_edicion`), **aditiva y
+una migración **0045** (siguiente tras la cabeza actual `0045_apartado_modo_enlace`), **aditiva y
 reversible**:
 
 ```text
@@ -147,7 +147,7 @@ paquete_operaciones
   guarda archivos. Una limpieza de filas antiguas es una decisión posterior (no automática en
   #344). `temp_dir`/`staging_dir` se intentan borrar al terminar y al arrancar si quedaron
   huérfanos; la fila no apunta a ellos después.
-- **Migración:** `0044_paquete_operaciones.py`, enum Postgres explícito y `down` que elimina la
+- **Migración:** `0045_paquete_operaciones.py`, enum Postgres explícito y `down` que elimina la
   tabla/tipo. **No se aplica en este encargo**; sin ella, la rebanada de extracción no se
   implementa (solo lectura/listado, §8).
 
@@ -467,9 +467,9 @@ verificará durante la extracción en el corte 3; no se afirma que sea un tebeo 
 | Limpieza | excepción, timeout, muerte simulada | Temp borrado; sin ficheros a medias |
 | Textos UX | causas/acciones | Sin jerga; causa+acción; reglas de presupuesto |
 
-### 6.2 Postgres real (si se autoriza 0044)
+### 6.2 Postgres real (si se autoriza 0045)
 
-- Migración `0044`: tabla/enum/índice parcial; `upgrade`/`downgrade`; no toca `File`/biblioteca.
+- Migración `0045`: tabla/enum/índice parcial; `upgrade`/`downgrade`; no toca `File`/biblioteca.
 - Identidad/`paquete_clave`: dos operaciones vivas de la misma identidad → una sola; paquete
   cambiado → nueva identidad.
 - Estados: `listando→…→importado`; fallo → `error`; reintento; idempotencia por token/id.
@@ -509,7 +509,7 @@ verificará durante la extracción en el corte 3; no se afirma que sea un tebeo 
 - **PASS:** lectura del issue #344, #305/#308, `benchmark-BL-PACK1-paquetes.md`, benchmark de formatos, contrato #307, ADR 0015 y
   código de importer/lector/auditoría; contrato y pruebas definidos; sin ejecución.
 - **FAIL:** ninguno de la spec. Un fallo real solo aparece al implementar/probar.
-- **NOT RUN:** detección/listado/extracción reales, migración 0044, pruebas, paquetes reales,
+- **NOT RUN:** detección/listado/extracción reales, migración 0045, pruebas, paquetes reales,
   Pi, navegador, `unar` con paquetes (seguridad/vulnerabilidades y bomba real), multivolumen,
   extracción RAR5 sólida, y la ficha `benchmark-BL-PACK1-paquetes.md` (no existe en `79238696`;
   se cita cuando se incorpore, sin duplicar).
@@ -544,10 +544,10 @@ posterior exige actualizarla y abrir decisión nueva.
 |---|---|---|---|---|
 | **1 · Detección y pendientes** | `PaquetePendiente` derivado de Descargas; firma; lista/estado; UI sección; sin abrir/extractar; sin migración | No (solo lectura) | **M** | AC1, AC6 (lista), AC9/10 parcial |
 | **2 · Listado, topes y vista previa** | Listar ZIP/RAR sin escribir; topes; nested/cifrado/multivolumen/incompleto; vista previa y token; sin migración | No (aún no extrae) | **M/L** | AC1, AC2, AC3, AC8 (listado), AC10 |
-| **3 · Extracción y verificación durable** | Migración 0044; temporal/proceso; verificación entrada a entrada; estado/reanudación; limpieza | Parcial | **L** | AC4, AC5, AC7, AC8 |
+| **3 · Extracción y verificación durable** | Migración 0045; temporal/proceso; verificación entrada a entrada; estado/reanudación; limpieza | Parcial | **L** | AC4, AC5, AC7, AC8 |
 | **4 · Publicar, importar y UI completa** | Carpeta de entrada, importer normal, resultado por grupo, progreso, reintento, supresión de pendientes, navegador | Sí, con 1-4 | **M/L** | AC6, AC7, AC9, AC10, AC3 UI |
 
-**Dependencias:** 1 → 2 → 3 → 4. Sin migración 0044, el corte 3 no se implementa y #344 no se
+**Dependencias:** 1 → 2 → 3 → 4. Sin migración 0045, el corte 3 no se implementa y #344 no se
 cierra; los cortes 1-2 pueden entregarse como lectura/preview, pero no cumplen el objetivo de
 importar. **No hay un corte que cierre #344 sin extracción + importación.**
 
@@ -620,7 +620,7 @@ insumo para el PO y para quien implemente.
 - `src/zascarr/services/library_audit.py:134,324-369` (avisos de contenedores; no procesa
   Descargas); `src/zascarr/web/auditoria.py` (pantalla de Auditoría).
 - `src/zascarr/models/__init__.py:103-158,836,1256` (`FileFormat`/`Firma`/`MotivoRar`, `File`,
-  `ImportRun`); migración actual `0043_idioma_edicion` (la nueva sería 0044).
+  `ImportRun`); migración actual `0045_apartado_modo_enlace` (la nueva sería 0045).
 - `docs/BACKLOG.md:98` (B10/BL-CNV ya repartida; #344 no duplica conversión).
 - [`benchmark-BL-PACK1-paquetes.md`](benchmark-BL-PACK1-paquetes.md): ficha de referencias y
   seguridad de esta historia; sus cortes técnicos (§7) se corresponden con los funcionales de §8.
