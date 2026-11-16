@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Vista previa de unir copias — ZascArr{% endblock %}
+{% block content %}
+<h1>Vista previa de unir copias</h1>
+<p class="subtitle">
+  Revisa lo que se va a enlazar. Las dos rutas seguirán existiendo y compartirán el mismo contenido.
+  <strong>No se borra nada:</strong> la copia sustituida queda en la cuarentena y se puede deshacer.
+</p>
+{% set p = previsualizacion %}
+{% if p.sin_eleccion %}
+<p class="audit-why" role="alert">No has elegido ninguna copia que se quede. No se ha preparado nada.</p>
+<p><a class="btn ghost" href="/ui/auditoria">Volver a Duplicados</a></p>
+{% else %}
+{% if p.rechazos %}
+<div class="audit-why" role="alert">
+  <p>Algunos grupos no se pueden preparar:</p>
+  <ul>{% for r in p.rechazos %}<li>{{ r.motivo }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if p.entradas %}
+<p>Se enlazarán <strong>{{ p.archivos }}</strong> copias.
+  La cuarentena seguirá ocupando espacio hasta que la vacíes: no se anuncia como espacio liberado.</p>
+<form method="post" action="/ui/auditoria/duplicados/confirmar">
+  <input type="hidden" name="accion" value="enlazar">
+  {% for item in p.entradas %}
+  <section class="duplicado-preview">
+    <h2>Grupo {{ loop.index }}</h2>
+    <p>Se queda: <span class="duplicado-ruta">{{ item.ruta_keep }}</span></p>
+    <p>Se enlazan a esa copia:</p>
+    <ul>{% for r in item.rutas_enlazadas %}<li class="duplicado-ruta">{{ r }}</li>{% endfor %}</ul>
+    <p class="audit-detail">{{ item.catalogo_cambio }}</p>
+    <input type="hidden" name="token" value="{{ item.token }}">
+    <input type="hidden" name="grupos" value="{{ item.grupo_json }}">
+  </section>
+  {% endfor %}
+  <p class="audit-why"><strong>Las dos rutas seguirán existiendo.</strong> Kavita y otros lectores
+    pueden mostrarlas por separado; una copia de seguridad que no conserve enlaces duros volverá a
+    ocupar el doble; cambiar el contenido de una cambia la otra.</p>
+  <button type="submit" class="btn primary">Confirmar y unir</button>
+  <a class="btn ghost" href="/ui/auditoria">Cancelar</a>
+</form>
+{% else %}
+<p class="audit-why" role="alert">No queda ningún grupo válido para unir.</p>
+<p><a class="btn ghost" href="/ui/auditoria">Volver a Duplicados</a></p>
+{% endif %}
+<p class="audit-detail">La cuarentena está en <code>{{ p.cuarentena.ruta | ruta_visible }}</code> y ahora ocupa
+  {{ p.cuarentena.bytes | tamano }} ({{ p.cuarentena.archivos }} archivos).</p>
+{% endif %}
+{% endblock %}

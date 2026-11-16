@@ -50,6 +50,7 @@ from zascarr.services.apartado_duplicados import (
     TokenApartadoInvalido,
 )
 from zascarr.services.conversion import ConversionDeArchivo
+from zascarr.services.enlace_duplicados import EnlaceDuplicadosService
 from zascarr.services.library_adopter import EstadoAdopcion, InventarioBiblioteca, LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
 from zascarr.services.paquetes import (
@@ -88,7 +89,11 @@ templates.env.filters["tamano"] = _tamano
 def _motivo_apartado(motivo: str | None) -> str:
     """Motivos internos del servicio A en lenguaje llano (sin códigos)."""
     return {
-        "contenido_cambiado": "El contenido de una copia cambió; no se ha apartado.",
+        "contenido_cambiado": "El contenido de una copia cambió; no se ha completado.",
+        "catalogo_incoherente": "El catálogo no coincide con las copias; no se ha tocado nada.",
+        "no_regular": "Alguna copia ya no es un archivo normal o es un enlace simbólico.",
+        "vacio": "Alguna copia está vacía.",
+        "tamano_distinto": "Las copias ya no tienen el mismo tamaño.",
         "catalogo_ambiguo": "El catálogo tiene más de una ficha para este grupo; no se ha movido nada.",
         "sitio_ocupado": "El sitio original está ocupado; no se ha sobrescrito nada.",
         "cuarentena_ausente": "La copia apartada ya no está en la cuarentena.",
@@ -320,6 +325,13 @@ def _no_store(respuesta):
     return respuesta
 
 
+def _uuid(valor: str) -> UUID | None:
+    try:
+        return UUID(str(valor))
+    except (ValueError, TypeError):
+        return None
+
+
 @dataclass
 class CopiaDuplicado:
     ruta_rel: str
@@ -472,11 +484,15 @@ async def _operaciones_apartadas(db: AsyncSession) -> list[dict]:
         return []
     return [{"id": str(op.id), "creada": _texto_fecha(op.creada.timestamp() if op.creada else None),
              "grupos": len(op.grupos or []), "archivos": op.total_archivos,
-             "bytes": op.total_bytes} for op in ops]
+             "bytes": op.total_bytes, "modo": op.modo} for op in ops]
 
 
 def _servicio_apartado(db: AsyncSession) -> ApartadoDuplicadosService:
     return ApartadoDuplicadosService(db, secret=get_settings().secret_key)
+
+
+def _servicio_enlace(db: AsyncSession) -> EnlaceDuplicadosService:
+    return EnlaceDuplicadosService(db, secret=get_settings().secret_key)
 
 
 def _informe_en_dict(informe) -> dict | None:
@@ -543,7 +559,8 @@ async def analizar(request: Request, db: AsyncSession = Depends(get_db)) -> HTML
 
 
 @router.post("/duplicados/previsualizar", response_class=HTMLResponse)
-async def previsualizar_duplicados(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def previsualizar_duplicados(request: Request, accion: str = Form(default="apartar"),
+                                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Prepara uno o varios grupos elegidos. Valida con el servicio A y NO escribe."""
     informe = await _ultimo_informe(db)
     datos = await request.form()
@@ -553,6 +570,7 @@ async def previsualizar_duplicados(request: Request, db: AsyncSession = Depends(
             seleccion[clave[5:]] = str(valor)
     crudos = informe.get("mismo_contenido") if informe else []
     servicio = _servicio_apartado(db)
+    servicio_enlace = _servicio_enlace(db)
     items = []
     rechazos = []
     if not seleccion:
@@ -573,42 +591,47 @@ async def previsualizar_duplicados(request: Request, db: AsyncSession = Depends(
             rechazos.append({"grupo": sha, "motivo": "La copia elegida ya no está en la lista."})
             continue
         try:
-            vista = await servicio.previsualizar(sha, rutas, keep)
+            vista = await (servicio_enlace.previsualizar(sha, rutas, keep)
+                           if accion == "enlazar" else servicio.previsualizar(sha, rutas, keep))
         except (ApartadoError, OSError, ValueError) as exc:
             rechazos.append({"grupo": sha, "motivo": str(exc)})
             continue
         relativas = [_ruta_relativa(str(p)) for p in vista.rutas]
-        movidas = [r for i, r in enumerate(relativas) if i != vista.keep_index]
+        cambiadas = [r for i, r in enumerate(relativas) if i != vista.keep_index]
         filas = await _filas_catalogo(db, [str(p) for p in vista.rutas])
         if len(filas) > 1:
-            cambio = "El catálogo tiene más de una ficha para este grupo: no se podrá apartar hasta resolverlo."
+            cambio = "El catálogo tiene más de una ficha para este grupo: no se podrá unir hasta resolverlo."
         elif not filas:
             cambio = "Sin cambios en el catálogo: ninguna de estas copias está vinculada."
         elif str(vista.rutas[vista.keep_index]) in filas:
             cambio = "Sin cambios en el catálogo: la copia que se queda ya es la vinculada."
         else:
-            cambio = "El catálogo pasará a apuntar a la copia que se queda; conservará su serie y número."
+            cambio = "Sin cambios en el catálogo: la copia vinculada sigue existiendo."
         items.append({
             "token": vista.token, "sha256": sha,
             "grupo_json": json.dumps({"sha256": sha, "rutas": relativas,
                                       "keep_index": vista.keep_index}, ensure_ascii=False),
-            "rutas_apartadas": movidas, "bytes": vista.bytes_liberados,
-            "catalogo_cambio": cambio,
+            "rutas_apartadas": cambiadas, "rutas_enlazadas": cambiadas,
+            "ruta_keep": relativas[vista.keep_index], "bytes": vista.bytes_liberados,
+            "catalogo_cambio": cambio, "modo": accion,
         })
     contexto = {"previsualizacion": {
         "entradas": items, "bytes": sum(i["bytes"] for i in items), "rechazos": rechazos,
         "archivos": sum(len(i["rutas_apartadas"]) for i in items), "sin_eleccion": False,
+        "accion": accion,
         "cuarentena": await asyncio.to_thread(_resumen_cuarentena),
     }}
-    return _no_store(templates.TemplateResponse(request, "_duplicados_previsualizacion.html", contexto))
+    plantilla = "_enlace_previsualizacion.html" if accion == "enlazar" else "_duplicados_previsualizacion.html"
+    return _no_store(templates.TemplateResponse(request, plantilla, contexto))
 
 
 @router.post("/duplicados/confirmar", response_class=HTMLResponse)
 async def confirmar_duplicados(request: Request, token: list[str] = Form(default=[]),
                                grupos: list[str] = Form(default=[]),
+                               accion: str = Form(default="apartar"),
                                db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Confirma cada grupo previsualizado; un grupo rechazado no tumba los demás."""
-    servicio = _servicio_apartado(db)
+    servicio = _servicio_enlace(db) if accion == "enlazar" else _servicio_apartado(db)
     resultados = []
     for token_firmado, crudo in zip(token, grupos, strict=False):
         try:
@@ -619,6 +642,7 @@ async def confirmar_duplicados(request: Request, token: list[str] = Form(default
             resultados.append({"error": str(exc)})
     contexto = {"resultados": resultados, "operaciones": await _operaciones_apartadas(db),
                 "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}
+    contexto["modo"] = accion
     return _no_store(templates.TemplateResponse(request, "_duplicados_resultado.html", contexto))
 
 
@@ -626,14 +650,23 @@ async def confirmar_duplicados(request: Request, token: list[str] = Form(default
 async def deshacer_duplicados(request: Request, operacion: str = Form(...),
                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Deshace una operación confirmada; nunca sobrescribe."""
-    servicio = _servicio_apartado(db)
+    op = None
+    if _uuid(operacion):
+        try:
+            resultado_op = await db.execute(
+                select(ApartadoOperacion).where(ApartadoOperacion.id == UUID(operacion)))
+            op = resultado_op.scalar_one_or_none()
+        except (AttributeError, TypeError):
+            op = None
+    modo = getattr(op, "modo", "apartar") if op is not None else "apartar"
+    servicio = _servicio_enlace(db) if modo == "enlazar" else _servicio_apartado(db)
     try:
         resultado = await servicio.deshacer(operacion)
         contexto = {"resultado_deshacer": resultado, "operaciones": await _operaciones_apartadas(db),
-                    "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}
+                    "cuarentena": await asyncio.to_thread(_resumen_cuarentena), "modo": modo}
     except (ApartadoError, TokenApartadoInvalido, ValueError) as exc:
         contexto = {"error_deshacer": str(exc), "operaciones": await _operaciones_apartadas(db),
-                    "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}
+                    "cuarentena": await asyncio.to_thread(_resumen_cuarentena), "modo": modo}
     return _no_store(templates.TemplateResponse(request, "_duplicados_resultado.html", contexto))
 
 
