@@ -71,7 +71,8 @@ async def test_cargar_apagada_no_consulta(monkeypatch):
     from zascarr.services import novedades
 
     async def _sin_es(**kw):
-        return []
+        from zascarr.services.novedades_es import ResultadoES
+        return ResultadoES()
 
     monkeypatch.setattr(novedades, "get_settings", lambda: SimpleNamespace(
         comicvine_enabled=False, comicvine_api_key="x"))
@@ -198,3 +199,28 @@ def test_las_editoriales_españolas_entran_en_la_misma_semana():
     assert (n.fuente, n.editorial, n.numero, n.interes) == (
         "Panini", "Panini Comics", "", True)
     assert n.publicado is False
+
+
+def test_la_pantalla_muestra_fuente_espanola_y_sin_numero(monkeypatch):
+    from zascarr.main import app
+    from zascarr.services.novedades import Novedad
+    from zascarr.web import novedades as web
+
+    async def _cargar(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio, novedades=[Novedad(
+            cv_id=None, volumen_id=None, serie="Biblioteca Conan 24", numero="",
+            fecha=inicio, publicado=False, editorial="Panini Comics",
+            url="https://panini.es/x", interes=True, series_id=None,
+            fuente="Panini")], fuentes_fallidas=("Norma",))
+
+    monkeypatch.setattr(web, "cargar_semana", _cargar)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r = TestClient(app).get("/ui/novedades?semana=2026-11-23")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    assert "Panini" in r.text and "Biblioteca Conan 24" in r.text
+    assert "Biblioteca Conan 24 #" not in r.text
+    assert "No se pudo consultar: Norma" in r.text
+    assert "Norma y Panini" in r.text

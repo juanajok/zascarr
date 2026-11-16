@@ -60,6 +60,7 @@ class Semana:
     inicio: date
     fin: date
     novedades: list[Novedad] = field(default_factory=list)
+    fuentes_fallidas: tuple[str, ...] = ()
 
     @property
     def editoriales(self) -> list[str]:
@@ -147,6 +148,7 @@ def _buscar_por_titulo(titulo: str, por_titulo: dict[str, list[Any]]) -> Any | N
 def construir_semana(
     items: list[dict[str, Any]], *, inicio: date, series: list[Any],
     wishlist_series: set[UUID], hoy: date | None = None,
+    fuentes_fallidas: tuple[str, ...] = (),
 ) -> Semana:
     """Cruce puro entre lo que publica la fuente y la biblioteca local."""
     hoy = hoy or date.today()
@@ -198,7 +200,8 @@ def construir_semana(
             fuente=fuente,
         ))
     novedades.sort(key=lambda n: (n.fecha, n.serie.casefold(), n.numero))
-    return Semana(inicio=inicio, fin=fin, novedades=novedades)
+    return Semana(inicio=inicio, fin=fin, novedades=novedades,
+                  fuentes_fallidas=fuentes_fallidas)
 
 
 async def _items_de_la_semana(inicio: date, *, cliente=None) -> list[dict[str, Any]]:
@@ -221,29 +224,35 @@ async def cargar_semana(db: AsyncSession, inicio: date, *, cliente=None,
     ajustes = get_settings()
     items: list[dict[str, Any]] = []
     fuente_caida = None
+    fallos: list[str] = []
     if getattr(ajustes, "comicvine_enabled", False) and getattr(ajustes, "comicvine_api_key", ""):
         try:
             items = await _items_de_la_semana(inicio, cliente=cliente)
         except Exception as exc:  # noqa: BLE001 — la vista sigue con las españolas
             logger.warning("novedades.fuente_fallida", error=type(exc).__name__)
             fuente_caida = exc
+            fallos.append("Comic Vine")
     try:
         es = await cargar_novedades_es(hoy=hoy or date.today())
-        for n in es:
+        for n in es.filas:
             items.append({
                 "id": None, "issue_number": "", "cover_date": n.fecha.isoformat(),
                 "store_date": None, "site_detail_url": n.url,
                 "volume": {"id": None, "name": n.titulo},
                 "fuente": n.fuente, "editorial": n.editorial,
             })
+        fallos.extend(es.fallos)
     except Exception as exc:  # noqa: BLE001
         logger.warning("novedades.es_fallida", error=type(exc).__name__)
+        fallos.append("Norma/Panini")
         if fuente_caida is None:
             fuente_caida = exc
     if not items and fuente_caida is not None:
         raise NovedadesError("No se pudo consultar ninguna fuente de novedades.") from fuente_caida
     if not items and not getattr(ajustes, "comicvine_enabled", False):
-        raise NovedadesApagadaError("Comic Vine está apagado y no hay novedades españolas.")
+        raise NovedadesApagadaError(
+            "Comic Vine está apagado o sin clave y las editoriales españolas "
+            "no devolvieron novedades.")
     filas = list((await db.execute(
         select(Series.id, Series.title, Series.comic_vine_id, Series.wishlist_policy,
                Publisher.name.label("publisher_name"))
@@ -261,14 +270,16 @@ async def cargar_semana(db: AsyncSession, inicio: date, *, cliente=None,
         if sid is not None
     }
     return construir_semana(
-        items, inicio=inicio, series=filas, wishlist_series=wishlist_series, hoy=hoy)
+        items, inicio=inicio, series=filas, wishlist_series=wishlist_series, hoy=hoy,
+        fuentes_fallidas=tuple(sorted(set(fallos))))
 
 
 def filtrar_editorial(semana: Semana, editorial: str | None) -> Semana:
     if not editorial:
         return semana
     return Semana(inicio=semana.inicio, fin=semana.fin,
-                  novedades=[n for n in semana.novedades if n.editorial == editorial])
+                  novedades=[n for n in semana.novedades if n.editorial == editorial],
+                  fuentes_fallidas=semana.fuentes_fallidas)
 
 
 def limpiar_cache() -> None:
