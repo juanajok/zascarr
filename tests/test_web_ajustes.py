@@ -701,3 +701,18 @@ class TestBlogRss:
                 app.dependency_overrides.pop(get_db, None)
             assert r.status_code == 200 and "no es válida" in r.text
             assert s.blog_feed_url == antes
+
+
+    def test_importacion_guarda_los_dos_interruptores(self, restaurar_settings):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/importacion", data={
+                "import_create_missing_issue": "true",
+                "import_convert_cbr": "true",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "guardado" in r.text.lower()
+        s = get_settings()
+        assert s.import_create_missing_issue is True
+        assert s.import_convert_cbr is True
