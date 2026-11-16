@@ -22,6 +22,7 @@ from zascarr.utils.saneado_logs import (
     instalar_filtro_registros,
     instalar_saneo_structlog,
     refrescar_raices,
+    refrescar_raices_db,
 )
 
 # BL-E5 (#164): búfer acotado para que el dashboard pueda descargar los últimos
@@ -340,6 +341,7 @@ async def lifespan(app: FastAPI):
             await RuntimeSettingsService(session).ensure_secret_key()
             await session.commit()
         logger.info("zascarr.db_connected")
+        await refrescar_raices_db(async_session_factory)
     except Exception:
         logger.exception("zascarr.db_unavailable_at_startup")
         app.state.db_degraded = True

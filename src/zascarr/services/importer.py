@@ -551,8 +551,12 @@ class Importer:
                 report.errors.append("El ciclo se detuvo antes de mirar el resto de las descargas")
                 break
             except Exception as exc:
+                try:
+                    inodo = path.stat(follow_symlinks=False).st_ino
+                except OSError:
+                    inodo = None
                 logger.error(
-                    "importer.file_failed",
+                    "importer.file_failed", inodo=inodo,
                     formato=path.suffix.lstrip(".") or "sin_extension",
                     error_tipo=type(exc).__name__)
                 report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
@@ -784,6 +788,7 @@ class Importer:
             )
             logger.info(
                 "importer.duplicate",
+                inodo=path.stat(follow_symlinks=False).st_ino,
                 formato=path.suffix.lstrip(".") or "sin_extension",
             )
             return
@@ -1158,7 +1163,8 @@ class Importer:
                             file_id=str(file_rec.id), resultado=resultado.resultado)
                 return None
             ruta = Path(file_rec.file_path)
-            logger.info("importer.conversion_ok", file_id=str(file_rec.id), destino=str(ruta))
+            logger.info("importer.conversion_ok", file_id=str(file_rec.id),
+                        formato=ruta.suffix.lstrip(".") or "sin_extension")
             return ruta
         except Exception:  # noqa: BLE001 — nunca se pierde el CBR por una conversión
             logger.exception("importer.conversion_fallida", file_id=str(file_rec.id))
