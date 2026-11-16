@@ -17,7 +17,13 @@ from sqlalchemy.pool import NullPool
 from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
 from tests._raices_pg import allowlist, sembrar_raiz
 from zascarr.models import (
-    ComicTradition, File, FileFormat, ImportRun, Issue, IssueFormat, Series,
+    ComicTradition,
+    File,
+    FileFormat,
+    ImportRun,
+    Issue,
+    IssueFormat,
+    Series,
 )
 from zascarr.services import comprobacion_disco as servicio
 from zascarr.services.comprobacion_disco import FaseCicloDisco
