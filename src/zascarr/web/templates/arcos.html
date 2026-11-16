@@ -18,9 +18,10 @@
 <ul class="arcos-lista">
   {% for a in pagina.filas %}
   <li class="arco-fila">
+    {{ ui.portada(a.title, a.id, "/ui/arcos/%s/portada.jpg" % a.id, "arco-miniatura", "lazy") }}
     <a href="/ui/arcos/{{ a.id }}">{{ a.title }}</a>
     {% if a.is_crossover %}{{ ui.chip("info", "Crossover") }}{% endif %}
-    <span class="muted">{{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }} · {{ a.series }} {{ "serie" if a.series == 1 else "series" }}</span>
+    <span class="muted">{{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }} · {{ a.series }} {{ "serie" if a.series == 1 else "series" }} · {{ a.leidos }} de {{ a.numeros }} leídos</span>
   </li>
   {% endfor %}
 </ul>
