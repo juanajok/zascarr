@@ -584,7 +584,8 @@ button.primary,
   border-radius: var(--radius-panel);
   background: var(--paper);
 }
-.candidatos-lista { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
+.candidatos-lista { list-style: none; margin: 0 0 var(--space-2); padding: 0; max-height: 60vh; overflow-y: auto; }
+.candidatos-resumen { margin: 0 0 var(--space-1); }
 .candidato-fila {
   display: flex;
   align-items: center;
@@ -765,6 +766,13 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
    tirar el panel de candidatos), pero no cambia el reparto flex de la fila. */
 .wishlist-estado { display: contents; }
 .candidato-enviado { opacity: .7; }
+@media (max-width: 640px) {
+  .candidato-fila { flex-wrap: wrap; }
+  .candidato-titulo { flex: 1 1 100%; order: 1; }
+  .candidato-detalle { white-space: normal; flex: 1 1 100%; order: 2; }
+  .candidato-fila form { order: 3; width: 100%; margin: 0; }
+  .candidato-fila .btn-descargar-candidato { width: 100%; }
+}
 
 /* UX 2026-11-16: el aviso de «puede tardar» ocupa su propia línea, sin apretar la fila. */
 .wishlist-buscando {
