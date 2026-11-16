@@ -204,8 +204,13 @@ async def test_dos_raices_importan_cada_tradicion_a_la_suya(ent, tmp_path, monke
         await s.execute(text(
             "DELETE FROM library_root_traditions WHERE tradition = 'manga'"))
         s.add(LibraryRootTradition(root_id=rid, tradition=ComicTradition.MANGA))
-        s.add(Series(id=_uuid4(), title="Manga Test", start_year=2020,
+        serie_id = _uuid4()
+        s.add(Series(id=serie_id, title="Manga Test", start_year=2020,
                      tradition=ComicTradition.MANGA))
+        await s.flush()
+        issue_id = _uuid4()
+        s.add(Issue(id=issue_id, series_id=serie_id, issue_number="1",
+                    format=IssueFormat.SINGLE_ISSUE))
         await s.commit()
     monkeypatch.setenv("LIBRARY_ROOTS", f"{ent.lib},{manga_dir}")
     get_settings.cache_clear()
@@ -216,7 +221,7 @@ async def test_dos_raices_importan_cada_tradicion_a_la_suya(ent, tmp_path, monke
         await s.commit()
     assert informe.error_count == 0
     async with ent.banco.fabrica() as s:
-        fila = (await s.execute(select(File).where(File.file_name == fuente.name))).scalar_one()
+        fila = (await s.execute(select(File).where(File.issue_id == issue_id))).scalar_one()
     assert str(fila.root_id) == str(rid)
     assert Path(fila.file_path).is_relative_to(manga_dir)
     assert not Path(fila.file_path).is_relative_to(ent.lib)
