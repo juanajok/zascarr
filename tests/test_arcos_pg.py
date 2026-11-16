@@ -24,7 +24,13 @@ from zascarr.models import (
     WishlistOrigin,
     WishlistStatus,
 )
-from zascarr.services.arcos import detalle_arco, listar_arcos, pedir_arco, sagas_de_serie
+from zascarr.services.arcos import (
+    detalle_arco,
+    listar_arcos,
+    pedir_arco,
+    primera_portada_de_arco,
+    sagas_de_serie,
+)
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
@@ -77,6 +83,52 @@ async def test_arco_cruza_series_y_respeta_reading_order():
                 assert (sagas[0].desde, sagas[0].hasta, sagas[0].total) == (1, 1, 2)
                 assert sagas[0].is_crossover is True
                 assert await sagas_de_serie(s, uuid4()) == []
+        finally:
+            await motor.dispose()
+
+
+@pytest.mark.asyncio
+async def test_primera_portada_elige_miembro_disponible_y_cae_al_primero():
+    async with bd_efimera(TEST_DATABASE_URL) as url:
+        alembic(url, "upgrade", "head")
+        motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
+        fab = async_sessionmaker(motor, expire_on_commit=False)
+        try:
+            async with fab() as s:
+                serie = Series(id=uuid4(), title="Batman")
+                s.add(serie)
+                await s.flush()
+                i1 = Issue(id=uuid4(), series_id=serie.id, issue_number="1", volume=1)
+                i2 = Issue(id=uuid4(), series_id=serie.id, issue_number="2", volume=1)
+                s.add_all([i1, i2])
+                await s.flush()
+                arco = StoryArc(id=uuid4(), title="Saga con portada")
+                s.add(arco)
+                await s.flush()
+                s.add_all([
+                    StoryArcIssue(story_arc_id=arco.id, issue_id=i1.id, reading_order=1),
+                    StoryArcIssue(story_arc_id=arco.id, issue_id=i2.id, reading_order=2),
+                ])
+                s.add(File(id=uuid4(), file_path="/lib/b2.cbz", file_name="b2.cbz",
+                           file_format=FileFormat.CBZ, issue_id=i2.id, is_missing=False))
+                await s.commit()
+                # i2 es el único disponible: gana al orden de lectura de i1.
+                assert await primera_portada_de_arco(s, arco.id) == (str(serie.id), str(i2.id))
+                s.add(File(id=uuid4(), file_path="/lib/b1.cbz", file_name="b1.cbz",
+                           file_format=FileFormat.CBZ, issue_id=i1.id, is_missing=False))
+                await s.commit()
+                # Ambos disponibles: manda el orden de lectura.
+                assert await primera_portada_de_arco(s, arco.id) == (str(serie.id), str(i1.id))
+                # Sin archivo disponible, cae al primer miembro; no devuelve None.
+                for f in (await s.execute(select(File))).scalars().all():
+                    f.is_missing = True
+                await s.commit()
+                assert await primera_portada_de_arco(s, arco.id) == (str(serie.id), str(i1.id))
+                # Una saga sin miembros no tiene portada.
+                vacia = StoryArc(id=uuid4(), title="Saga vacía")
+                s.add(vacia)
+                await s.commit()
+                assert await primera_portada_de_arco(s, vacia.id) is None
         finally:
             await motor.dispose()
 
