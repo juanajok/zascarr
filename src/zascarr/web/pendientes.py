@@ -729,6 +729,7 @@ async def vincular_especial(
     series_id: UUID = Form(...),
     titulo: str = Form(...),
     formato: str = Form("graphic_novel"),
+    numeros: str = Form(""),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """Vincula un archivo como publicación sin número (especial/tomo).
@@ -738,7 +739,8 @@ async def vincular_especial(
     """
     try:
         await EspecialesService(db).vincular_especial(
-            file_id, series_id, titulo, formato, mover=True)
+            file_id, series_id, titulo, formato, mover=True,
+            numeros_cubiertos=numeros)
         await db.commit()
     except EspecialSinNumeroError as exc:
         aviso = {"tipo": "warn", "texto": str(exc)}
