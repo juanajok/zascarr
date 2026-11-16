@@ -171,6 +171,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Transmission: un `torrent-add` rechazado ya no se pierde en silencio (2026-11-16).**
+  `add_torrent` devolvía `None` sin registrar nada; el deseo solo decía «no se pudo
+  enviar». Ahora se registra `transmission.add_failed` con el resultado del RPC y las
+  claves de la respuesta (nunca la URL, que puede llevar passkey).
+- **Candidatos de Prowlarr duplicados (2026-11-16).** El mismo release aparecía dos
+  veces si lo listaban varios indexers (mismo título y tamaño, URL distinta). Se
+  conserva uno —el de más seeders— por título normalizado y tamaño; un tamaño
+  distinto es otra edición y se mantiene.
+
 - **Abreviaturas con puntos en el nombre del fichero (2026-11-16).** `DC K.O. #1…cbz`
   se parseaba como serie «DC K O» y el matcher no encontraba la serie «DC K.O.»:
   el fichero caía en `_Unsorted` aunque el deseo apuntara a ella. Ahora los puntos
