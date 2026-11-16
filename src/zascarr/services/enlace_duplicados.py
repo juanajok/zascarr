@@ -83,6 +83,9 @@ class EnlaceDuplicadosService(ApartadoDuplicadosService):
                 raise GrupoRechazado("contenido_cambiado", "El contenido cambió; vuelve a previsualizar.")
         if len({p.stat().st_dev for p in paths}) != 1:
             raise GrupoRechazado("montura_distinta", "Las copias están en discos distintos.")
+        for p in paths:
+            if not os.access(p.parent, os.W_OK):
+                raise GrupoRechazado("sin_permiso", "No hay permiso para escribir en esa carpeta.")
         if paths[keep].stat().st_size != paths[0].stat().st_size:
             raise GrupoRechazado("tamano_distinto", "Las copias ya no son idénticas.")
         return sha, paths, rels, keep

@@ -1,6 +1,6 @@
 # Especificación — BL-DUP2: unir copias idénticas con enlace duro (#265)
 
-**Estado:** implementación en curso. Depende de BL-DUP0 (benchmark y ADR 0017) y BL-DUP1
+**Estado:** implementada; pendiente de verificación manual en navegador sobre la biblioteca real. Depende de BL-DUP0 (benchmark y ADR 0017) y BL-DUP1
 (cuarentena, comprobantes y deshacer).
 
 ## Contrato
@@ -48,7 +48,8 @@ operaciones mientras la cuarentena siga existiendo.
 
 - `tests/test_enlace_duplicados_pg.py`: preview sin escritura, enlace de dos/tres copias,
   inodo compartido, cuarentena, catálogo sin duplicados, `EXDEV`, contenido cambiado,
-  compensación, idempotencia y deshacer.
+  compensación, idempotencia y deshacer; además, permisos de carpeta y monturas distintas
+  reales (`/dev/shm` frente a `/tmp`, con `skip` si no aplica).
 - `tests/test_web_duplicados_264.py`: vista previa y confirmación de enlace.
 - `tests/test_migracion_apartado_pg.py`: columna `modo` en la migración.
 
