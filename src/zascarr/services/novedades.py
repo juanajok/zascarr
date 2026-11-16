@@ -126,6 +126,29 @@ def _filas_de_series(series: list[Any]) -> tuple[dict[int, Any], dict[str, list[
 
 _RE_SUFIJO_EDICION = re.compile(
     r"^(?:#?\d|n[o]?\s*\d|vol(?:umen)?\s*\d|tomo\s*\d|book\s*\d|numero\s*\d)")
+_RE_MARCADOR_EDICION = re.compile(
+    r"^(?:ed|edicion|integral|de lujo|deluxe|omnibus|tomo|vol|volumen|book|numero|n)\b")
+
+
+def _prefijo_valido(titulo: str, base: str) -> bool:
+    """¿`titulo` es `base` + número/edición o un subtítulo con separador?
+
+    Debe aceptar «Batman 24», «Blade Runner 2019 [Ed. Integral]» y
+    «Biblioteca Conan. Conan el Bárbaro. 24», pero no «Batman Beyond 1» ni
+    «Batman Universe» (mismo prefijo, serie distinta).
+    """
+    if not base or not titulo.lower().startswith(base.lower()):
+        return False
+    resto = titulo[len(base):]
+    if not resto:
+        return True
+    if resto[0] in ".:-–—[,(":
+        return True
+    if not resto[0].isspace():
+        return False
+    norm_resto = normalize_title(resto)
+    return bool(_RE_SUFIJO_EDICION.match(norm_resto)
+                or _RE_MARCADOR_EDICION.match(norm_resto))
 
 
 def _buscar_por_titulo(titulo: str, por_titulo: dict[str, list[Any]]) -> Any | None:
@@ -136,19 +159,18 @@ def _buscar_por_titulo(titulo: str, por_titulo: dict[str, list[Any]]) -> Any | N
     exactas = por_titulo.get(norm, [])
     if len(exactas) == 1:
         return exactas[0]
-    candidatas = [fila for clave, filas in por_titulo.items()
-                  if norm.startswith(clave + " ")
-                  and _RE_SUFIJO_EDICION.match(norm[len(clave):].strip())
-                  and len(filas) == 1
-                  for fila in filas]
+    candidatas: list[Any] = []
+    for filas in por_titulo.values():
+        for fila in filas:
+            if len(filas) == 1 and _prefijo_valido(titulo, fila.title or ""):
+                candidatas.append(fila)
+    if not candidatas:
+        return None
+    candidatas.sort(key=lambda f: len(f.title or ""), reverse=True)
     if len(candidatas) == 1:
         return candidatas[0]
-    if len(candidatas) > 1:
-        # El prefijo más largo es el que más se parece; si hay empate, no se adivina.
-        candidatas.sort(key=lambda f: len(normalize_title(f.title or "")), reverse=True)
-        if len(candidatas) == 1 or len(normalize_title(candidatas[0].title)) > len(
-                normalize_title(candidatas[1].title)):
-            return candidatas[0]
+    if len(candidatas[0].title or "") > len(candidatas[1].title or ""):
+        return candidatas[0]
     return None
 
 
