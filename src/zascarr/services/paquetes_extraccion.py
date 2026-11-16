@@ -9,9 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import shutil
+import signal
 import stat
+import subprocess
+import sys
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +45,8 @@ from zascarr.services.paquetes import (
 )
 from zascarr.utils import lector_rar
 from zascarr.utils.espacio import comprobar_espacio
+
+_ZIP_TIMEOUT = 120
 
 _EXTS_IMAGEN = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 
@@ -73,13 +79,6 @@ def clave_identidad(p: PaquetePendiente) -> str:
 def _base_temporal() -> Path:
     ajustes = get_settings()
     base = Path(ajustes.covers_cache_path) / ".paquetes"
-    base.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(base, 0o700)
-    fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        real = Path(os.path.realpath(f"/proc/self/fd/{fd}"))
-    finally:
-        os.close(fd)
     prohibidas: list[Path] = []
     for valor in (getattr(ajustes, "library_path", None),
                   getattr(ajustes, "transmission_download_dir", None),
@@ -87,18 +86,31 @@ def _base_temporal() -> Path:
                   getattr(ajustes, "downloads_path", None)):
         if valor:
             prohibidas.append(Path(valor))
+    padre = base.parent.resolve(strict=False)
     for prohibida in prohibidas:
-        try:
-            if real == prohibida or prohibida in real.parents:
-                raise PaqueteExtraccionError(
-                    "temporal_inseguro", "El temporal está dentro de una carpeta vigilada.")
-        except OSError:
-            continue
+        if padre == prohibida or prohibida in padre.parents:
+            raise PaqueteExtraccionError(
+                "temporal_inseguro", "El temporal está dentro de una carpeta vigilada.")
+    if not base.exists():
+        base.mkdir(parents=True, mode=0o700, exist_ok=True)
+    try:
+        fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as exc:
+        raise PaqueteExtraccionError(
+            "temporal_inseguro", "La carpeta temporal no es segura.") from exc
+    try:
+        real = Path(os.path.realpath(f"/proc/self/fd/{fd}"))
+        if real != base:
+            raise PaqueteExtraccionError(
+                "temporal_inseguro", "La carpeta temporal cambió.")
+        os.fchmod(fd, 0o700)
+    finally:
+        os.close(fd)
     return real
 
 
-def _crear_temp(base: Path, prefijo: str) -> Path:
-    """Crea la subcarpeta con dir_fd verificado; no sigue un symlink plantado en la base."""
+def _crear_temp(base: Path, prefijo: str) -> tuple[Path, int]:
+    """Crea la subcarpeta con dir_fd verificado y devuelve (ruta, fd abierto)."""
     fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         real = Path(os.path.realpath(f"/proc/self/fd/{fd}"))
@@ -106,11 +118,10 @@ def _crear_temp(base: Path, prefijo: str) -> Path:
             raise PaqueteExtraccionError("temporal_inseguro", "La carpeta temporal cambió.")
         nombre = f"{prefijo}-{os.urandom(6).hex()}"
         os.mkdir(nombre, 0o700, dir_fd=fd)
-        comprobado = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
-        os.close(comprobado)
+        hijo = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
     finally:
         os.close(fd)
-    return base / nombre
+    return base / nombre, hijo
 
 
 def _borrar_temp(ruta: Path) -> bool:
@@ -133,6 +144,38 @@ def _comprobar_original(p: PaquetePendiente) -> None:
         raise PaqueteExtraccionError("paquete_cambiado", "El paquete ya no está.") from exc
     if (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns) != (p.dev, p.ino, p.tamano, p.mtime_ns):
         raise PaqueteExtraccionError("paquete_cambiado", "El paquete cambió mientras se preparaba.")
+
+
+def _extraer_zip_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int) -> list[dict]:
+    """Extrae ZIP en proceso hijo con timeout y kill de grupo; no bloquea el bucle."""
+    datos = {"nombre": paquete.nombre, "tamano": paquete.tamano,
+             "mtime_ns": paquete.mtime_ns, "firma": paquete.firma,
+             "dev": paquete.dev, "ino": paquete.ino,
+             "max_entrada": MAX_BYTES_ENTRADA, "max_total": MAX_BYTES_TOTAL,
+             "max_ratio": MAX_RATIO_LEIDA}
+    entorno = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+               "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+               "LANG": "C.UTF-8"}
+    os.set_inheritable(fd, True)
+    proc = subprocess.Popen(  # noqa: S603 — lista, sin shell, ruta absoluta
+        [sys.executable, "-m", "zascarr.services.paquetes_worker", json.dumps(datos),
+         str(fd), str(temp)],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        env=entorno, close_fds=True, pass_fds=(fd,), start_new_session=True)
+    try:
+        salida, error = proc.communicate(timeout=_ZIP_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        with __import__("contextlib").suppress(OSError):
+            os.killpg(proc.pid, signal.SIGKILL)
+        proc.communicate()
+        raise PaqueteExtraccionError("tiempo", "La extracción tardó demasiado.") from None
+    if proc.returncode != 0:
+        raise PaqueteExtraccionError("extraccion", "La extracción ZIP falló.")
+    try:
+        return list(json.loads(salida))
+    except (ValueError, TypeError) as exc:
+        raise PaqueteExtraccionError(
+            "extraccion", "La extracción ZIP no devolvió resultado.") from exc
 
 
 def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path,
@@ -394,7 +437,12 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         paquete = PaquetePendiente(**{**paquete.__dict__, "fd": fd})
     except OSError as exc:
         raise PaqueteExtraccionError("paquete_cambiado", "El paquete ya no está.") from exc
-    temp = _crear_temp(base, str(op.id))
+    try:
+        temp, temp_fd = _crear_temp(base, str(op.id))
+    except BaseException:
+        with __import__("contextlib").suppress(OSError):
+            os.close(paquete.fd)
+        raise
     try:
         os.chmod(temp, 0o700)
         op.temp_dir = str(temp)
@@ -408,8 +456,8 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         comprobar_espacio(base, listado.bytes_estimados or 1,
                           "extraer el paquete")
         if paquete.firma == "ZIP":
-            items = await asyncio.wait_for(asyncio.to_thread(
-                _escribir_zip, paquete, listado, temp, paquete.fd), timeout=900)
+            items = await asyncio.to_thread(
+                _extraer_zip_en_proceso, paquete, temp, paquete.fd)
         elif paquete.firma == "RAR":
             items = await asyncio.wait_for(asyncio.to_thread(
                 _escribir_rar, paquete, listado, temp, paquete.fd), timeout=900)
@@ -430,6 +478,8 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         await s.commit()
         with __import__("contextlib").suppress(OSError):
             os.close(paquete.fd)
+        with __import__("contextlib").suppress(OSError):
+            os.close(temp_fd)
         if not _borrar_temp(temp):
             op = await s.get(PaqueteOperacion, operacion_id)
             if op is not None:
@@ -444,6 +494,8 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         await s.rollback()
         with __import__("contextlib").suppress(OSError):
             os.close(paquete.fd)
+        with __import__("contextlib").suppress(OSError):
+            os.close(temp_fd)
         borrado = _borrar_temp(temp)
         op = await s.get(PaqueteOperacion, operacion_id)
         if op is not None:
