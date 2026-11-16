@@ -150,6 +150,7 @@ def test_la_pantalla_vacia_usa_el_estado_vacio(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
     assert r.status_code == 200 and "empty-state" in r.text
     assert "No hay novedades esta semana" in r.text
+    assert "filtro de editorial" not in r.text
 
 
 def test_la_vista_y_la_api_no_se_cachean(monkeypatch):
