@@ -21,6 +21,7 @@ from zascarr.services.arcos import (
     listar_arcos,
     mover_numero,
     pedir_arco,
+    primera_portada_de_arco,
     quitar_numero,
 )
 from zascarr.services.arcos_fuentes import (
@@ -416,6 +417,17 @@ async def importar_arco(request: Request, page_title: str = Form(default=""),
         return _respuesta(request, "previa_arco_fuente.html", contexto)
     await db.commit()
     return _redirigir(f"/ui/arcos/{resultado.arco_id}?guardado=importada")
+
+
+@router.get("/{arco_id}/portada.jpg")
+async def portada_de_arco(arco_id: UUID, db: AsyncSession = Depends(get_db)) -> Response:
+    """Miniatura de la saga desde su primer número miembro; nunca una URL externa directa."""
+    fila = await primera_portada_de_arco(db, arco_id)
+    if fila is None:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    series_id, issue_id = fila
+    return RedirectResponse(
+        f"/ui/series/{series_id}/numero/{issue_id}/portada.jpg", status_code=307)
 
 
 @router.get("/{arco_id}", response_class=HTMLResponse)
