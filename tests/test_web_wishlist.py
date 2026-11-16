@@ -481,3 +481,18 @@ def test_index_avisa_si_prowlarr_esta_incompleto(monkeypatch):
         assert 'hx-disable="this"' in r.text
         assert 'role="status" aria-live="polite"' in r.text
         assert "puede tardar hasta 2 minutos" in r.text
+
+
+    def test_anadir_deseo_inserta_la_fila_sin_recargar_la_pagina(self, monkeypatch):
+        """UX 2026-11-16: el botón recargaba con un hook que no se ejecutaba y la fila
+        no aparecía hasta refrescar a mano. Ahora se inserta al final de la lista."""
+        series = Series(id=uuid4(), title="DC K.O.", tradition=ComicTradition.AMERICAN)
+        monkeypatch.setattr(
+            "zascarr.web.wishlist.WishlistService.search_series",
+            AsyncMock(return_value=[series]))
+        with use_fake_session(FakeSession()) as client:
+            r = client.get("/ui/wishlist/buscar-serie", params={"q": "DC"})
+        assert r.status_code == 200
+        assert 'hx-target="#wishlist-list" hx-swap="beforeend"' in r.text
+        assert "window.location.reload" not in r.text
+        assert "this.disabled = true" in r.text

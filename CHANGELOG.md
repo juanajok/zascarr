@@ -135,6 +135,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Añadir a Deseados muestra la fila al instante (2026-11-16).** El botón dependía
+  de un `window.location.reload()` en un hook de htmx que no llegaba a ejecutarse:
+  el deseo se creaba, pero había que refrescar la página para verlo. Ahora la fila
+  se inserta al final de la lista (`hx-target="#wishlist-list"`, `beforeend`), el
+  botón queda «Añadido» y deshabilitado, y el texto de lista vacía desaparece solo.
+
 - **Candidatos del foro con el nombre de cada fichero (2026-11-16).** Un tema con
   varios enlaces `ed2k` (varios números/ediciones) pintaba todos los candidatos con el
   título del tema (27 filas idénticas). Ahora el título del candidato es el nombre del
