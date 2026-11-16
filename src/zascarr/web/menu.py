@@ -36,6 +36,7 @@ ENTRADAS: tuple[Entrada, ...] = (
     Entrada("colecciones", "Colecciones", "/ui/colecciones", "Mi colección", "colecciones"),
     Entrada("duplicados", "Duplicados", "/ui/auditoria", "Mi colección", "duplicados"),
     Entrada("descubrir", "Descubrir", "/ui/descubrir", "Añadir", "descubrir"),
+    Entrada("novedades", "Novedades", "/ui/novedades", "Añadir", "novedades"),
     Entrada("deseados", "Deseados", "/ui/wishlist", "Añadir", "deseados",
             movil_principal=True, contador="deseados"),
     Entrada("estado", "Estado", "/estado", "Sistema", "estado",
@@ -55,6 +56,7 @@ _PREFIJOS: tuple[tuple[str, str], ...] = (
     ("/ui/vistas", "revisar"),     # Vistas de trabajo cuelga de Por revisar (pendientes.html)
     ("/ui/auditoria", "duplicados"),
     ("/ui/descubrir", "descubrir"),
+    ("/ui/novedades", "novedades"),
     ("/ui/wishlist", "deseados"),
     ("/ui/ajustes", "ajustes"),
     ("/estado", "estado"),
