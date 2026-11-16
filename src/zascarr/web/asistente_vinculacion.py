@@ -706,8 +706,10 @@ async def confirmar(
     contexto = _contexto_de_la_confirmacion(token)
     base = {**contexto, "cursor_actual": cursor_actual, "inicio": INICIO,
             "pagina": f"{_entero(pagina_desde)}–{_entero(pagina_hasta)}" if _entero(pagina_hasta) else None}
-    plantilla = "asistente_vinculacion.html" if "hx-request" not in request.headers else "_vinculacion_resultado.html"
+    es_htmx = "hx-request" in request.headers
+    plantilla = "asistente_vinculacion.html" if not es_htmx else "_vinculacion_resultado.html"
     base["titulo_serie"] = await _titulo_de_la_serie(db, contexto["series_id"])
+    base.update({"oob_cabecera": es_htmx, "foco_resultado": es_htmx})
     def pagina_de_fallo(codigo: str, mensaje: str) -> HTMLResponse:
         titulo, definitivo, repetible = FALLOS.get(codigo, ("No se pudo vincular", True, False))
         return _sin_cache(templates.TemplateResponse(request, plantilla, {

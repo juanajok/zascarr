@@ -34,6 +34,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **BL-A11Y: foco, avisos y título del asistente de vinculación (2026-11-16).**
+  «Marcar/Desmarcar todos» deja el foco en el recuento (sin región viva anidada); el resultado
+  inmediato y el fallo enfocan su encabezado; el resultado guardado y el inmediato titulan
+  «Resultado de la vinculación». El paso 3 pasa a «Vincular y ver el resultado» en todo el
+  recorrido. Sin JS propio ni cambios de contrato HTMX.
 - **BL-DUP3: resolver una carpeta repetida o contenida (2026-11-16).** «Duplicados»
   permite revisar una pareja de carpetas: muestra comunes idénticos, comunes con contenido
   distinto y lo que solo está en cada lado. Solo se apartan los comunes idénticos de la carpeta
