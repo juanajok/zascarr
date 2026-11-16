@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Novedades</h1>
 <p class="subtitle">Lo que sale esta semana en EE. UU., según Comic Vine, cruzado con las series que sigues.</p>
-<p class="caption">Las fechas son de portada: «Anunciado» todavía no ha salido; «Publicado» sale hoy o ya ha salido. Las novedades de Norma, ECC y Panini aún no están verificadas y no se muestran.</p>
+<p class="caption">«Anunciado» todavía no ha salido; «Publicado» sale hoy o ya ha salido. Comic Vine da la fecha de portada; Norma y Panini, su fecha de venta. ECC no se consulta: su robots.txt prohíbe el acceso.</p>
 
 {% if error %}
   {% if apagada %}
@@ -51,7 +51,7 @@
       </div>
       <p class="caption">
         {% if n.editorial %}{{ n.editorial }} · {% else %}Editorial sin dato · {% endif %}
-        {% if n.url %}<a href="{{ n.url }}" target="_blank" rel="noopener noreferrer">Ver en Comic Vine<span class="sr"> (se abre en otra pestaña)</span></a>{% endif %}
+        {% if n.url %}<a href="{{ n.url }}" target="_blank" rel="noopener noreferrer">Ver en {{ n.fuente }}<span class="sr"> (se abre en otra pestaña)</span></a>{% endif %}
       </p>
     </li>
     {% endfor %}

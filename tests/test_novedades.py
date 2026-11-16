@@ -70,8 +70,12 @@ def test_semana_iso_acepta_fecha_y_cae_en_lunes():
 async def test_cargar_apagada_no_consulta(monkeypatch):
     from zascarr.services import novedades
 
+    async def _sin_es(**kw):
+        return []
+
     monkeypatch.setattr(novedades, "get_settings", lambda: SimpleNamespace(
         comicvine_enabled=False, comicvine_api_key="x"))
+    monkeypatch.setattr(novedades, "cargar_novedades_es", _sin_es)
     with pytest.raises(novedades.NovedadesApagadaError):
         await novedades.cargar_semana(SimpleNamespace(), date(2026, 11, 16))
 
@@ -178,3 +182,19 @@ def test_deduplica_la_misma_novedad():
                               series=[s], wishlist_series=set(),
                               hoy=date(2026, 11, 16))
     assert semana.total == 1
+
+
+def test_las_editoriales_españolas_entran_en_la_misma_semana():
+    s = _serie("Biblioteca Conan", cv=None, editorial="Panini")
+    item = {
+        "id": None, "issue_number": "", "cover_date": "2026-11-26",
+        "store_date": None, "site_detail_url": "https://panini.es/x",
+        "volume": {"id": None, "name": "Biblioteca Conan 24"},
+        "fuente": "Panini", "editorial": "Panini Comics",
+    }
+    semana = construir_semana([item], inicio=date(2026, 11, 23), series=[s],
+                              wishlist_series={s.id}, hoy=date(2026, 11, 16))
+    n = semana.novedades[0]
+    assert (n.fuente, n.editorial, n.numero, n.interes) == (
+        "Panini", "Panini Comics", "", True)
+    assert n.publicado is False
