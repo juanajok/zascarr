@@ -54,5 +54,6 @@ def test_el_logger_real_pasa_por_el_buffer_y_redacta():
     rr.limpiar()
     structlog.get_logger("prueba").info("evento_real", token="NO-SALE", ruta="/media/x.cbz")
     texto = rr.texto_reciente()
-    assert "evento_real" in texto and "/media/x.cbz" in texto
+    assert "evento_real" in texto and "/media/x.cbz" not in texto
+    assert "[ruta]" in texto
     assert "NO-SALE" not in texto

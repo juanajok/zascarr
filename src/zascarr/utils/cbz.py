@@ -48,6 +48,7 @@ from zascarr.core.comicinfo_write import (
 )
 from zascarr.core.formato_contenedor import EntradaNoLegible, leer_acotado
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
+from zascarr.utils.log_privacidad import ruta_para_log
 
 logger = structlog.get_logger()
 
@@ -96,7 +97,7 @@ def _limpiar_temporales_viejos(path: Path) -> None:
                     with contextlib.suppress(OSError):
                         os.unlink(entrada.path)
     except OSError:
-        logger.warning("cbz.limpieza_temporales_fallida", dir=str(path.parent))
+        logger.warning("cbz.limpieza_temporales_fallida", dir=ruta_para_log(path.parent))
 
 
 # ── lectura ─────────────────────────────────────────────────────────────────
@@ -168,7 +169,7 @@ def _reescribir(path: Path, xml: bytes) -> None:
 
     # mkstemp crea el fichero con O_EXCL: nombre único y sin truncar nada.
     fd, nombre_temporal = tempfile.mkstemp(
-        dir=str(path.parent), prefix=_prefijo_temporal(path), suffix=SUFIJO_TMP,
+        dir=ruta_para_log(path.parent), prefix=_prefijo_temporal(path), suffix=SUFIJO_TMP,
     )
     temporal = Path(nombre_temporal)
     try:
@@ -201,7 +202,7 @@ def _reescribir(path: Path, xml: bytes) -> None:
             finally:
                 os.close(pfd)
         except OSError:
-            logger.warning("cbz.fsync_dir_fallido", dir=str(path.parent))
+            logger.warning("cbz.fsync_dir_fallido", dir=ruta_para_log(path.parent))
     except CbzError:
         _limpiar(temporal)
         raise
@@ -233,4 +234,4 @@ def _limpiar(temporal: Path) -> None:
     try:
         temporal.unlink(missing_ok=True)
     except OSError:
-        logger.warning("cbz.temporal_no_borrado", path=str(temporal))
+        logger.warning("cbz.temporal_no_borrado", path=ruta_para_log(temporal))

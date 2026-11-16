@@ -57,6 +57,9 @@ from zascarr.core.matcher import normalize_title
 from zascarr.models import ImportRun, Tratamiento
 from zascarr.services.importer import COMIC_EXTS
 from zascarr.services.raices import FotoDeRaices
+
+from zascarr.utils.log_privacidad import error_para_log, nombre_para_log
+
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -257,7 +260,9 @@ class LibraryAudit:
                 try:
                     digest = sha256_streaming(ruta)
                 except OSError as exc:
-                    logger.warning("library_audit.hash_failed", path=str(ruta), error=str(exc))
+                    logger.warning("library_audit.hash_failed",
+                                   archivo=nombre_para_log(ruta.name),
+                                   error=error_para_log(exc))
                     continue
                 report.files_hashed += 1
                 report.bytes_hashed += size

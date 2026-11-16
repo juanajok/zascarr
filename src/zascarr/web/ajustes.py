@@ -52,6 +52,7 @@ from zascarr.utils.cortesia import (
     FuenteApagada,
     politica_de,
 )
+from zascarr.utils.log_privacidad import error_para_log
 from zascarr.utils.nombres_biblioteca import PRESETS
 from zascarr.utils.peticiones import (
     ErrorDePeticion,
@@ -1078,7 +1079,8 @@ async def _test_prowlarr(url: str, api_key: str) -> tuple[bool, str]:
             return False, "Prowlarr respondió: clave de API rechazada."
         return False, f"Prowlarr respondió HTTP {r.status_code}."
     except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="prowlarr", error=str(exc))
+        logger.warning("ajustes.test_failed", integracion="prowlarr",
+                           error=error_para_log(exc))
         return False, _mensaje_conexion_fallida(exc)
 
 
@@ -1106,7 +1108,8 @@ async def _test_transmission(url: str, username: str, password: str) -> tuple[bo
             return True, "Conexión correcta."
         return False, "Transmission no confirmó la sesión."
     except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="transmission", error=str(exc))
+        logger.warning("ajustes.test_failed", integracion="transmission",
+                           error=error_para_log(exc))
         return False, _mensaje_conexion_fallida(exc)
 
 
@@ -1123,5 +1126,6 @@ async def _test_amule(url: str, password: str) -> tuple[bool, str]:
             return True, "Conexión correcta."
         return False, "aMule no devolvió sesión — revisa la contraseña."
     except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="amule", error=str(exc))
+        logger.warning("ajustes.test_failed", integracion="amule",
+                           error=error_para_log(exc))
         return False, _mensaje_conexion_fallida(exc)

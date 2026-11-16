@@ -52,6 +52,7 @@ from zascarr.services.metron import MetronClient
 from zascarr.services.open_library import OpenLibraryClient
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
+from zascarr.utils.log_privacidad import error_para_log
 from zascarr.utils.peticiones import ReintentosAgotados, RespuestaNoTransitoria
 
 logger = structlog.get_logger()
@@ -238,7 +239,7 @@ def _clasificar_outcome(fuente: MetadataSource, nombre: str,
                   else "Metron no ha aceptado el token.")
         return _estado(fuente, FUENTE_CONFIGURACION_INCOMPLETA, motivo), [], []
     if isinstance(outcome, BaseException):
-        logger.warning("discovery.source_failed", source=nombre, error=str(outcome))
+        logger.warning("discovery.source_failed", source=nombre, error=error_para_log(outcome))
         return (_estado(fuente, FUENTE_FALLO_TRANSITORIO, "No ha respondido ahora mismo."),
                 [], [f"{nombre}: no se pudo consultar ahora mismo."])
     if outcome:

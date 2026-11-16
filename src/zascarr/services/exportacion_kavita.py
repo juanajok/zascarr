@@ -39,6 +39,7 @@ from zascarr.core.exportacion_kavita import ArchivoFuente, PlanExportacion, plan
 from zascarr.models import Collection, File, ImportRun, Issue, Series, collection_series
 from zascarr.services.tagger import TaggerService
 from zascarr.utils.cbz import leer_comicinfo, reescribir_con_xml
+from zascarr.utils.log_privacidad import ruta_para_log
 
 logger = structlog.get_logger()
 
@@ -403,7 +404,8 @@ def _materializar(
             raise
         except Exception:
             errores += 1
-            logger.exception("exportacion_kavita.materializar_falló", destino=str(destino))
+            logger.exception("exportacion_kavita.materializar_falló",
+                             destino=ruta_para_log(destino))
     modo_global = "mixed" if len(modos) > 1 else (next(iter(modos)) if modos else "hardlink")
     return entradas, omitidos, colisiones, deriva, errores, copiados, modo_global
 

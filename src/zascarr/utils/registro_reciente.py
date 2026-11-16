@@ -20,6 +20,8 @@ from typing import Any
 
 import structlog
 
+from zascarr.utils.log_privacidad import sanear_evento
+
 MAX_EVENTOS = 500
 MAX_BYTES = 256 * 1024
 _SIN_REGISTROS = "No hay registros recientes de la aplicación.\n"
@@ -98,6 +100,7 @@ def capturar(_logger: Any, _metodo: str, evento: dict[str, Any]) -> dict[str, An
     (timestamp y nivel incluidos) y no altera la salida normal a stdout.
     """
     try:
+        evento = sanear_evento(_logger, _metodo, evento)
         copia = {str(k): _sanear_campo(str(k), v) for k, v in evento.items()}
         with _lock:
             _eventos.append(copia)
@@ -117,14 +120,19 @@ def instalar_captura() -> None:
         return
     config = structlog.get_config()
     procesadores = list(config.get("processors") or [])
+    if not any(getattr(p, "__name__", "") == "sanear_evento" for p in procesadores):
+        if procesadores:
+            procesadores.insert(len(procesadores) - 1, sanear_evento)
+        else:
+            procesadores.append(sanear_evento)
     if not any(getattr(p, "__name__", "") == "capturar" for p in procesadores):
         if procesadores:
             procesadores.insert(len(procesadores) - 1, capturar)
         else:
             procesadores.append(capturar)
-        config = dict(config)
-        config["processors"] = procesadores
-        structlog.configure(**config)
+    config = dict(config)
+    config["processors"] = procesadores
+    structlog.configure(**config)
     _instalado = True
 
 

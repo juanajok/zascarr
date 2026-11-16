@@ -50,6 +50,7 @@ from zascarr.utils.cortesia import (
     cortesia_de_proceso,
     origen_normalizado,
 )
+from zascarr.utils.log_privacidad import error_para_log
 from zascarr.utils.peticiones import (
     DemasiadasRedirecciones,
     RedireccionNoPermitida,
@@ -588,7 +589,7 @@ class ForumScraper:
         try:
             html = await self._buscar_ipb(query)
         except OrigenNoPermitidoError as exc:
-            logger.warning("forum.search_rechazada", motivo=str(exc))
+            logger.warning("forum.search_rechazada", error=error_para_log(exc))
             return []
         except (CortesiaEnEspera, FuenteApagada):
             # AC-16: una espera o una fuente apagada NO es «sin resultados» ni un fallo.
@@ -606,7 +607,7 @@ class ForumScraper:
                 url_tema = self._resolver_enlace(href)
             except OrigenNoPermitidoError as exc:
                 logger.warning("forum.enlace_rechazado", host=_host_para_log(href),
-                               motivo=str(exc))
+                               error=error_para_log(exc))
                 continue
             title = unescape(title).strip()
             if not abrir_temas:
@@ -616,7 +617,7 @@ class ForumScraper:
                 topic_html = await self._get(url_tema)
                 results.append(self._enlaces_del_tema(topic_html, url_tema, title))
             except OrigenNoPermitidoError as exc:
-                logger.warning("forum.tema_rechazado", motivo=str(exc))
+                logger.warning("forum.tema_rechazado", error=error_para_log(exc))
             except (CortesiaEnEspera, FuenteApagada):
                 raise
             except Exception as exc:

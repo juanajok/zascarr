@@ -44,6 +44,7 @@ from zascarr.utils.cortesia import (
     fuente_habilitada,
 )
 from zascarr.utils.espacio import comprobar_espacio
+from zascarr.utils.log_privacidad import error_para_log
 from zascarr.utils.portada_rar import es_rar_candidato
 from zascarr.utils.url_portada import (
     ESPERA_MAX_PORTADA_S,
@@ -341,7 +342,8 @@ async def fetch_and_cache_cover(url: str, dest: Path, *,
             return False
         except UrlNoPermitidaError as exc:
             # Solo el host y el código: la URL entera puede llevar credenciales o claves.
-            logger.warning("cover.url_rechazada", host=host_para_log(url), motivo=str(exc))
+            logger.warning("cover.url_rechazada", host=host_para_log(url),
+                           error=error_para_log(exc))
             return False
         except Exception:
             logger.warning("cover.fetch_failed", host=host_para_log(url))

@@ -16,6 +16,7 @@ from zascarr.services.ciclo_importador import ejecutar_ciclo_y_avisar
 from zascarr.utils import lector_rar
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
+from zascarr.utils.log_privacidad import FiltroLogsSinRutas
 from zascarr.utils.portada_rar import barrer_temporales
 from zascarr.utils.registro_reciente import instalar_captura
 
@@ -31,6 +32,8 @@ logger = structlog.get_logger()
 # dependa de la configuración de fuera.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+# SEC-LOG (#369): las trazas de uvicorn no publican mensajes con rutas.
+logging.getLogger("uvicorn.error").addFilter(FiltroLogsSinRutas())
 
 STATIC_DIR = Path(__file__).parent / "static"
 

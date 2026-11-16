@@ -14,6 +14,7 @@ import httpx
 import structlog
 
 from zascarr.services.prowlarr import SearchResult
+from zascarr.utils.log_privacidad import url_para_log
 from zascarr.utils.url_portada import analizar_url, descargar_publico
 
 logger = structlog.get_logger()
@@ -177,7 +178,8 @@ async def buscar_en_feed(
     try:
         xml_texto = await _descargar(url, cliente)
     except (httpx.HTTPError, OSError) as exc:
-        logger.warning("blog_feed.lectura_fallida", url=url, motivo=type(exc).__name__)
+        logger.warning("blog_feed.lectura_fallida", url=url_para_log(url),
+                           motivo=type(exc).__name__)
         return []
     if not xml_texto:
         return []

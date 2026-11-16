@@ -87,6 +87,7 @@ from zascarr.services.relacion_confirmada import (
 )
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.fs import recorrer_comics
+from zascarr.utils.log_privacidad import nombre_para_log
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -1032,7 +1033,7 @@ class LibraryAdopter:
             report.added_rows.append((outcome.recuperar.id, str(path), ruta_previa, previa_ausente))
             report.registered.append(f"{path.name} — reenlazado (recuperado)")
             report.relinked += 1
-            logger.info("library_adopter.reenlazado", path=str(path))
+            logger.info("library_adopter.reenlazado", archivo=nombre_para_log(path.name))
             return
         if outcome.duplicate_of:
             report.duplicates.append(f"{path.name} — duplicado de {outcome.duplicate_of}, descartado")
@@ -1090,7 +1091,7 @@ class LibraryAdopter:
             report.unsorted.append(f"{path.name} (pendiente de revisar) — {motivo}")
         else:
             report.registered.append(f"{path.name} — serie sugerida, falta confirmar número y edición")
-        logger.info("library_adopter.registered", path=str(path), status=result.status)
+        logger.info("library_adopter.registered", archivo=nombre_para_log(path.name), status=result.status)
 
     async def _persist_run(self, report: AdoptionReport, kind: str = "adoption") -> UUID:
         run = ImportRun(

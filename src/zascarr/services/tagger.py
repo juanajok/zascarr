@@ -62,6 +62,7 @@ from zascarr.utils.cbz import (
     VerificacionError,
     leer_comicinfo,
 )
+from zascarr.utils.log_privacidad import nombre_para_log
 
 logger = structlog.get_logger()
 
@@ -493,7 +494,8 @@ class TaggerService:
             if sha != file.sha256_hash or file.file_size_bytes != st.st_size:
                 reconciliado = True
                 if not simular:
-                    logger.info("tagger.reconciliado", file_id=file.id, path=str(path))
+                    logger.info("tagger.reconciliado", file_id=file.id,
+                                archivo=nombre_para_log(path.name))
                     file.sha256_hash = sha
                     file.file_size_bytes = st.st_size
                     file.file_mtime_ns = st.st_mtime_ns  # BL-R9: el stat describe el hash

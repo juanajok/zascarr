@@ -65,6 +65,7 @@ from zascarr.services.raices import (
 from zascarr.services.upgrades import reconciliar_mejora_importada
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
 from zascarr.utils.fs import listar_comics, safe_move_en_raiz_async, sanitize_segment
+from zascarr.utils.log_privacidad import nombre_para_log, ruta_para_log
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.utils.nombres_biblioteca import construir_nombre, es_pack
 
@@ -556,7 +557,7 @@ class Importer:
                 report.errors.append("El ciclo se detuvo antes de mirar el resto de las descargas")
                 break
             except Exception as exc:
-                logger.error("importer.file_failed", file=path.name,
+                logger.error("importer.file_failed", file=nombre_para_log(path.name),
                              error=type(exc).__name__)
                 report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
 
@@ -829,7 +830,7 @@ class Importer:
             )
             logger.info(
                 "importer.duplicate",
-                file=path.name,
+                file=nombre_para_log(path.name),
                 hash=outcome.tr.sha256[:12] if outcome.tr.sha256 else None,
             )
             return
@@ -887,8 +888,8 @@ class Importer:
         except RaizNoDisponibleError as exc:
             causa = _mensaje_sin_rutas(exc, path)
             report.errors.append(f"{path.name}: {causa}")
-            logger.warning("importer.raiz_no_disponible", archivo=path.name,
-                           causa=causa, raiz=exc.raiz)
+            logger.warning("importer.raiz_no_disponible", archivo=nombre_para_log(path.name),
+                           causa=causa, raiz=ruta_para_log(exc.raiz))
             return
         if is_unsorted:
             dest = raiz.path / "_Unsorted" / path.name
@@ -902,7 +903,9 @@ class Importer:
                 comprobar_espacio, raiz.path, path.stat().st_size, "importar a la biblioteca")
         except EspacioInsuficienteError as exc:
             report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
-            logger.warning("importer.raiz_sin_espacio", archivo=path.name, raiz=raiz.name)
+            logger.warning("importer.raiz_sin_espacio",
+                           archivo=nombre_para_log(path.name),
+                           raiz=nombre_para_log(raiz.name))
             return
         except OSError as exc:
             report.errors.append(
@@ -999,8 +1002,10 @@ class Importer:
             sufijo = f" (ComicInfo: {'; '.join(avisos)})" if avisos else ""
             report.imported.append(
                 f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)}{sufijo}")
-        logger.info("importer.imported", file=path.name, root=raiz.name,
-                    relative=str(final_dest.relative_to(raiz.path)), status=result.status)
+        logger.info("importer.imported", file=nombre_para_log(path.name),
+                    root=nombre_para_log(raiz.name),
+                    relative=ruta_para_log(final_dest.relative_to(raiz.path)),
+                    status=result.status)
 
     async def _aplicar_comicinfo(
             self, result: MatchResult, tr: TriageResult, ruta: Path) -> list[str]:
@@ -1060,8 +1065,8 @@ class Importer:
         except RaizNoDisponibleError as exc:
             causa = _mensaje_sin_rutas(exc, path)
             report.errors.append(f"{path.name}: {causa}")
-            logger.warning("importer.raiz_no_disponible", archivo=path.name,
-                           causa=causa, raiz=exc.raiz)
+            logger.warning("importer.raiz_no_disponible", archivo=nombre_para_log(path.name),
+                           causa=causa, raiz=ruta_para_log(exc.raiz))
             return
         if serie is None:
             dest = raiz.path / "_Unsorted" / path.name
@@ -1086,8 +1091,9 @@ class Importer:
         prefijo_raiz = "" if len(foto.raices) <= 1 else f"{raiz.name}: "
         report.imported.append(
             f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)} (recuperado)")
-        logger.info("importer.recuperado", file=path.name, root=raiz.name,
-                    relative=str(final_dest.relative_to(raiz.path)))
+        logger.info("importer.recuperado", file=nombre_para_log(path.name),
+                    root=nombre_para_log(raiz.name),
+                    relative=ruta_para_log(final_dest.relative_to(raiz.path)))
 
     async def _persist_run(self, report: ImportReport) -> None:
         run = ImportRun(
@@ -1200,7 +1206,8 @@ class Importer:
                             file_id=str(file_rec.id), resultado=resultado.resultado)
                 return None
             ruta = Path(file_rec.file_path)
-            logger.info("importer.conversion_ok", file_id=str(file_rec.id), destino=str(ruta))
+            logger.info("importer.conversion_ok", file_id=str(file_rec.id),
+                        destino=ruta_para_log(ruta))
             return ruta
         except Exception:  # noqa: BLE001 — nunca se pierde el CBR por una conversión
             logger.exception("importer.conversion_fallida", file_id=str(file_rec.id))
