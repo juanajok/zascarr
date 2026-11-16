@@ -58,7 +58,8 @@ def test_ac_int_2_y_4_el_constructor_toma_ambas_politicas_de_settings():
     assert scraper._politica.intervalo_min_s == 2.0
     assert scraper._politica_busqueda.intervalo_min_s == 25.0
     assert scraper._politica_busqueda.max_intentos == 1
-    assert scraper._espera_busqueda_s == 30.0
+    # 2 × intervalo (POST + redirección de IPB) + margen: 60 s (bug 2026-11-16).
+    assert scraper._espera_busqueda_s == 60.0
 
 
 async def test_ac_int_3_dos_busquedas_seguidas_esperan_veinticinco_segundos():
@@ -78,3 +79,42 @@ async def test_la_lectura_no_espera_los_veinticinco_de_la_busqueda():
     assert scraper._politica.intervalo_min_s == 0.0
     assert await scraper.use_ipb_search("Año Uno", abrir_temas=False) == []
     assert reloj.dormidos == []                 # primera petición: no espera
+
+
+async def test_la_busqueda_tras_redireccion_de_ipb_cabe_en_el_presupuesto():
+    """IPB responde 302 al POST de búsqueda: el salto vuelve a esperar el intervalo.
+
+    Con presupuesto de una sola espera (30 s) el salto se rechazaba y el foro no buscaba
+    nunca (bug 2026-11-16). Debe completarse con ~2 × intervalo.
+    """
+    reloj = Reloj()
+    peticiones: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        peticiones.append(request)
+        url = str(request.url)
+        if "act=Login" in url:
+            return httpx.Response(302, headers={
+                "location": "/forum/index.php",
+                "set-cookie": "member_id=1; Path=/"})
+        if "act=Search" in url and request.method == "POST":
+            return httpx.Response(302, headers={
+                "location": "/forum/index.php?act=Search&CODE=02&searchid=1"})
+        if "act=Search" in url:
+            return httpx.Response(200, content=VACIA,
+                                  headers={"content-type": "text/html; charset=utf-8"})
+        return httpx.Response(
+            200, content=b"<html><form action='?act=Login&CODE=01&s=S1'></form></html>",
+            headers={"content-type": "text/html; charset=utf-8"})
+
+    scraper = ForumScraper(
+        BASE, crear_cliente=lambda: httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), follow_redirects=False),
+        cortesia=CortesiaProceso(reloj=reloj, dormir=reloj.dormir),
+        reloj=reloj, dormir=reloj.dormir, espera_max_s=300.0)
+    assert await scraper.login("usuario", "clave") is True
+    reloj.dormidos.clear()
+    assert await scraper.use_ipb_search("DC K.O.", abrir_temas=False) == []
+    assert len(peticiones) >= 4                       # entrada + login + POST + GET del 302
+    # POST: intervalo de búsqueda (25 s); el 302: ritmo de lectura (2 s), no otra búsqueda.
+    assert sum(reloj.dormidos) == pytest.approx(25.0 + 2.0)

@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
-from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -113,12 +112,12 @@ class TestForoSinTurno:
     async def test_un_bloqueo_mayor_que_el_presupuesto_no_devuelve_lista_vacia(self):
         """AC-16: la espera no es «sin resultados» y no se registra como fallo."""
         mundo = Mundo(lambda r: httpx.Response(200, text=HTML))
-        mundo.lim.bloquear("foro", f"{BASE}:443", 60.0, motivo="429")
+        mundo.lim.bloquear("foro", f"{BASE}:443", 90.0, motivo="429")
         with structlog.testing.capture_logs() as registros, \
                 pytest.raises(CortesiaEnEspera) as exc:
             await mundo.scraper(espera_max_s=5.0).use_ipb_search("thorgal")
         assert exc.value.fuente == "foro" and exc.value.motivo == "bloqueo_fuente"
-        assert exc.value.espera_estimada_s >= 5.0
+        assert exc.value.espera_estimada_s >= 60.0
         assert mundo.peticiones == []
         assert not any(r["event"] == "forum.search_failed" for r in registros)
 

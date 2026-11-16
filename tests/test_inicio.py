@@ -57,6 +57,7 @@ def _cola(*, archivos=0, sin_clasificar=0, seguidas=0, informe=None, legal=None,
         _Fila(first=informe),         # último informe de duplicados
         _Fila(first=registro),        # último registro de la biblioteca (copias descartadas)
         _Fila(uno=legal),             # aviso legal
+        _Fila(first=None),            # continuar leyendo (sin lectura en curso)
     ]
 
 
@@ -134,7 +135,9 @@ class TestCargarInicio:
                             AsyncMock(return_value=3))
         monkeypatch.setattr(inicio.WishlistService, "count_active",
                             AsyncMock(side_effect=AssertionError("cuenta peticiones")))
-        sesion = FakeSession(_cola()[:-4] + _cola()[-3:])   # sin la consulta de deseados
+        # sin la consulta de deseados (índice 7), pero con todo lo demás
+        cola = _cola()
+        sesion = FakeSession(cola[:7] + cola[8:])
         v = await inicio.cargar_inicio(sesion)
         assert next(p for p in v.pasos.pasos if p.clave is ClavePaso.SERIES).titulo == (
             "Sigues 3 series")
@@ -171,6 +174,18 @@ class TestCargarInicio:
         sesion.commit = None
         sesion.flush = None
         await inicio.cargar_inicio(sesion)
+
+
+@pytest.mark.asyncio
+async def test_continuar_leyendo_usa_el_ultimo_numero_en_lectura():
+    progreso = SimpleNamespace(current_page=7)
+    issue = SimpleNamespace(id="i1", series_id="s1", issue_number="3",
+                            title="El país Qâ", page_count=48)
+    serie = SimpleNamespace(id="s1", title="Thorgal")
+    v = await inicio.continuar_leyendo(FakeSession([_Fila(first=(progreso, issue, serie))]))
+    assert v is not None
+    assert (v.series_title, v.issue_number, v.current_page, v.page_count) == (
+        "Thorgal", "3", 7, 48)
 
 
 class TestFuenteDeBusqueda:

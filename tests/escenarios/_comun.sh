@@ -112,10 +112,11 @@ STUB
 
 # Ejecuta el instalador REAL (bootstrap.sh) con el `docker` de pega. Salida en ${W}/salida.{out,err}.
 ejecutar_instalador() {
-    local raiz="$1"
-    printf '%s\n%s\n%s\n' "${W}/biblioteca" "${W}/descargas" es | \
+    local raiz="$1" usuario="${2:-${SVC}}"
+    # A7: la cuarta respuesta es el usuario de servicio; vacía = valor por defecto.
+    printf '%s\n%s\n%s\n%s\n' "${W}/biblioteca" "${W}/descargas" es "${usuario}" | \
         env PATH="${W}/bin:${PATH}" STUB_LOG="${W}/docker.log" _ZASCARR_YA_ACTUALIZADO=1 \
-            ZASCARR_DATA_DIR="${W}/datos" ZASCARR_USER="${SVC}" ZASCARR_GROUP="${SVC}" \
+            ZASCARR_DATA_DIR="${W}/datos" ZASCARR_USER="${usuario}" ZASCARR_GROUP="${usuario}" \
             bash "${raiz}/zascarr/bootstrap.sh" >"${W}/salida.out" 2>"${W}/salida.err"
     RC=$?
 }
