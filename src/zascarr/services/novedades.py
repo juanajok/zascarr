@@ -21,6 +21,7 @@ from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
 from zascarr.models import Issue, Publisher, Series, Wishlist, WishlistPolicy, WishlistStatus
 from zascarr.services.comic_vine import ComicVineClient
+from zascarr.services.novedades_es import cargar_novedades_es
 
 logger = structlog.get_logger()
 
@@ -41,7 +42,7 @@ class NovedadesError(RuntimeError):
 
 @dataclass(frozen=True)
 class Novedad:
-    cv_id: int
+    cv_id: int | None
     volumen_id: int | None
     serie: str
     numero: str
@@ -51,6 +52,7 @@ class Novedad:
     url: str | None
     interes: bool
     series_id: UUID | None
+    fuente: str = "Comic Vine"
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,28 @@ def _filas_de_series(series: list[Any]) -> tuple[dict[int, Any], dict[str, list[
     return por_cv, por_titulo
 
 
+def _buscar_por_titulo(titulo: str, por_titulo: dict[str, list[Any]]) -> Any | None:
+    """Casa por título exacto; si no, por prefijo único (Norma/Panini no dan número)."""
+    norm = normalize_title(titulo)
+    if not norm:
+        return None
+    exactas = por_titulo.get(norm, [])
+    if len(exactas) == 1:
+        return exactas[0]
+    candidatas = [fila for clave, filas in por_titulo.items()
+                  if norm.startswith(clave + " ") and len(filas) == 1
+                  for fila in filas]
+    if len(candidatas) == 1:
+        return candidatas[0]
+    if len(candidatas) > 1:
+        # El prefijo más largo es el que más se parece; si hay empate, no se adivina.
+        candidatas.sort(key=lambda f: len(normalize_title(f.title or "")), reverse=True)
+        if len(candidatas) == 1 or len(normalize_title(candidatas[0].title)) > len(
+                normalize_title(candidatas[1].title)):
+            return candidatas[0]
+    return None
+
+
 def construir_semana(
     items: list[dict[str, Any]], *, inicio: date, series: list[Any],
     wishlist_series: set[UUID], hoy: date | None = None,
@@ -141,9 +165,10 @@ def construir_semana(
         volumen_id = volumen.get("id")
         titulo = str(volumen.get("name") or "").strip()
         numero = str(item.get("issue_number") or "").strip()
-        if not titulo or not numero:
+        fuente = str(item.get("fuente") or "Comic Vine")
+        if not titulo or (not numero and fuente == "Comic Vine"):
             continue
-        clave = (item.get("id"), volumen_id, numero)
+        clave = (fuente, item.get("id"), volumen_id, numero, titulo)
         if clave in vistos:
             continue
         vistos.add(clave)
@@ -151,9 +176,7 @@ def construir_semana(
         if isinstance(volumen_id, int):
             fila = por_cv.get(volumen_id)
         if fila is None:
-            candidatas = por_titulo.get(normalize_title(titulo), [])
-            if len(candidatas) == 1:
-                fila = candidatas[0]
+            fila = _buscar_por_titulo(titulo, por_titulo)
         series_id = fila.id if fila is not None else None
         interes = bool(
             fila is not None
@@ -167,10 +190,12 @@ def construir_semana(
             numero=numero,
             fecha=fecha,
             publicado=fecha <= hoy,
-            editorial=getattr(fila, "publisher_name", None) if fila is not None else None,
+            editorial=(item.get("editorial")
+                       or (getattr(fila, "publisher_name", None) if fila is not None else None)),
             url=item.get("site_detail_url"),
             interes=interes,
             series_id=series_id,
+            fuente=fuente,
         ))
     novedades.sort(key=lambda n: (n.fecha, n.serie.casefold(), n.numero))
     return Semana(inicio=inicio, fin=fin, novedades=novedades)
@@ -194,15 +219,31 @@ async def cargar_semana(db: AsyncSession, inicio: date, *, cliente=None,
                         hoy: date | None = None) -> Semana:
     """Consulta la fuente y cruza con las series seguidas. Sin escrituras."""
     ajustes = get_settings()
-    if not getattr(ajustes, "comicvine_enabled", False):
-        raise NovedadesApagadaError("Comic Vine está apagado en Ajustes.")
-    if not getattr(ajustes, "comicvine_api_key", ""):
-        raise NovedadesApagadaError("Comic Vine no tiene clave de API.")
+    items: list[dict[str, Any]] = []
+    fuente_caida = None
+    if getattr(ajustes, "comicvine_enabled", False) and getattr(ajustes, "comicvine_api_key", ""):
+        try:
+            items = await _items_de_la_semana(inicio, cliente=cliente)
+        except Exception as exc:  # noqa: BLE001 — la vista sigue con las españolas
+            logger.warning("novedades.fuente_fallida", error=type(exc).__name__)
+            fuente_caida = exc
     try:
-        items = await _items_de_la_semana(inicio, cliente=cliente)
-    except Exception as exc:  # noqa: BLE001 — la UI decide cómo mostrarlo
-        logger.warning("novedades.fuente_fallida", error=type(exc).__name__)
-        raise NovedadesError("No se pudo consultar Comic Vine.") from exc
+        es = await cargar_novedades_es(hoy=hoy or date.today())
+        for n in es:
+            items.append({
+                "id": None, "issue_number": "", "cover_date": n.fecha.isoformat(),
+                "store_date": None, "site_detail_url": n.url,
+                "volume": {"id": None, "name": n.titulo},
+                "fuente": n.fuente, "editorial": n.editorial,
+            })
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("novedades.es_fallida", error=type(exc).__name__)
+        if fuente_caida is None:
+            fuente_caida = exc
+    if not items and fuente_caida is not None:
+        raise NovedadesError("No se pudo consultar ninguna fuente de novedades.") from fuente_caida
+    if not items and not getattr(ajustes, "comicvine_enabled", False):
+        raise NovedadesApagadaError("Comic Vine está apagado y no hay novedades españolas.")
     filas = list((await db.execute(
         select(Series.id, Series.title, Series.comic_vine_id, Series.wishlist_policy,
                Publisher.name.label("publisher_name"))
