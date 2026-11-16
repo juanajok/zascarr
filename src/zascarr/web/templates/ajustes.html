@@ -371,7 +371,7 @@
       {% for r in raices_admin %}
       <div class="ajuste-raiz" data-raiz="{{ r.id }}">
         <p><strong>{{ r.name }}</strong> <span class="ajustes-hint">{{ r.host_path or r.path }}</span></p>
-        <p><span class="chip">{{ r.estado }}</span>{% if r.is_default %} <span class="chip">Por defecto</span>{% endif %}
+        <p>{{ ui.chip("info", r.estado) }}{% if r.is_default %} {{ ui.chip("neutro", "Por defecto") }}{% endif %}
           <span class="ajustes-hint">{{ r.archivos }} archivos</span></p>
         <p class="ajustes-hint">Tradiciones: {{ r.tradiciones | join(", ") or "ninguna" }}</p>
         {% if not r.is_default %}
