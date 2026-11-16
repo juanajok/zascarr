@@ -975,6 +975,9 @@ def _valores_serie(series: Series, valores: dict | None = None) -> dict:
         "publisher": series.publisher.name if series.publisher else "",
         "description": series.description or "",
         "total_issues": "" if series.total_issues is None else str(series.total_issues),
+        "language": getattr(series, "language", "") or "",
+        "edition_kind": (getattr(series, "edition_kind", None).value
+                         if getattr(series, "edition_kind", None) else ""),
     }
 
 
@@ -999,11 +1002,13 @@ async def editar_serie_guardar(
     title: str = Form(default=""), start_year: str = Form(default=""),
     end_year: str = Form(default=""), publisher: str = Form(default=""),
     description: str = Form(default=""), total_issues: str = Form(default=""),
+    language: str = Form(default=""), edition_kind: str = Form(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     resultado = await guardar_serie_manual(
         db, series_id, title=title, start_year=start_year, end_year=end_year,
-        publisher=publisher, description=description, total_issues=total_issues)
+        publisher=publisher, description=description, total_issues=total_issues,
+        language=language, edition_kind=edition_kind)
     series = (await db.execute(select(Series).options(selectinload(Series.publisher))
                                .where(Series.id == series_id))).scalar_one()
     if not resultado.ok:
@@ -1012,7 +1017,8 @@ async def editar_serie_guardar(
             "series": series, "valores": {
                 "title": title, "start_year": start_year, "end_year": end_year,
                 "publisher": publisher, "description": description,
-                "total_issues": total_issues},
+                "total_issues": total_issues, "language": language,
+                "edition_kind": edition_kind},
             "errores": resultado.errores, "campos_manuales": campos_manuales(series.metadata_),
         })
         respuesta.headers["Cache-Control"] = "no-store"

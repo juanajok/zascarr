@@ -33,6 +33,14 @@ from zascarr.database import Base
 
 # ── Enums ──────────────────────────────────────────────────────────────────────
 
+class EditionKind(enum.StrEnum):
+    """Tipo de edición declarado por el coleccionista; nunca se infiere."""
+    OFICIAL = "oficial"
+    TRADUMAQUETA = "tradumaqueta"
+    ESCANEO_PROPIO = "escaneo_propio"
+    OTRO = "otro"
+
+
 class ComicTradition(enum.StrEnum):
     AMERICAN      = "american"
     FRANCO_BELGIAN = "franco_belgian"
@@ -534,6 +542,12 @@ class Series(Base):
     #: Marca local del coleccionista; no se sincroniza con ninguna fuente.
     favorite: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"))
+    #: CUR4: idioma ISO cuando consta (p. ej. «es», «en»); NULL = sin dato.
+    language: Mapped[str | None] = mapped_column(String(10))
+    #: CUR4: tipo de edición declarado; NULL = sin dato.
+    edition_kind: Mapped[EditionKind | None] = mapped_column(
+        Enum(EditionKind, name="edition_kind",
+             values_callable=lambda e: [m.value for m in e]), nullable=True)
     #: Referencia humana derivada (título + año + volumen). No única, no es
     #: identidad y no sustituye a `title`/`title_norm`.
     reference_name: Mapped[str | None] = mapped_column(
