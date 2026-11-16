@@ -9,7 +9,7 @@
 {% set quitar = request.query_params.get("quitar") %}
 {% set quitar_valido = quitar if quitar in (
   "q", "tradition", "publisher_id", "character_id", "story_arc_id", "author_id",
-  "favoritos", "leido", "etiquetas",
+  "favoritos", "idioma", "edicion", "leido", "etiquetas",
   "coleccion", "todos"
 ) else none %}
 {% if es_fragmento %}

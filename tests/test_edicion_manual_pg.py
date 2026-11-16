@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tests._pg import alembic, bd_efimera, url_asyncpg
-from zascarr.models import Issue, IssueFormat, MetadataSource, Series
+from zascarr.models import EditionKind, Issue, IssueFormat, MetadataSource, Series
 from zascarr.services.edicion_manual import (
     desbloquear_numero,
     desbloquear_serie,
@@ -79,6 +79,37 @@ async def test_validaciones_no_escriben_nada():
                 assert {"title", "start_year", "total_issues"} <= set(r.errores)
                 await s.refresh(serie)
                 assert serie.title == "Original" and serie.locked_fields == []
+        finally:
+            await motor.dispose()
+
+
+@pytest.mark.asyncio
+async def test_idioma_y_edicion_se_normalizan_y_marcan_manual():
+    async with bd_efimera(TEST_DATABASE_URL) as url:
+        alembic(url, "upgrade", "head")
+        motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
+        fab = async_sessionmaker(motor, expire_on_commit=False)
+        try:
+            async with fab() as s:
+                serie = Series(id=uuid4(), title="Idioma", locked_fields=[])
+                s.add(serie)
+                await s.commit()
+                r = await guardar_serie(
+                    s, serie.id, title="Idioma", start_year="", end_year="",
+                    publisher="", description="", total_issues="",
+                    language="ES", edition_kind="oficial")
+                assert r.ok
+                await s.commit()
+                await s.refresh(serie)
+                assert serie.language == "es"
+                assert serie.edition_kind == EditionKind.OFICIAL
+                assert {"language", "edition_kind"} <= set(serie.locked_fields)
+                malo = await guardar_serie(
+                    s, serie.id, title="Idioma", start_year="", end_year="",
+                    publisher="", description="", total_issues="",
+                    language="español", edition_kind="mala")
+                assert not malo.ok
+                assert {"language", "edition_kind"} <= set(malo.errores)
         finally:
             await motor.dispose()
 
