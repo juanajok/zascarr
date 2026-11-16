@@ -1075,6 +1075,10 @@ class ApartadoOperacion(Base):
     #: Raíz de la cuarentena (#156); las operaciones antiguas quedan NULL.
     root_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("library_roots.id", ondelete="RESTRICT"))
+    #: `apartar` mueve la copia a cuarentena; `enlazar` además deja un enlace
+    #: duro a la copia que se queda. Las operaciones antiguas son `apartar`.
+    modo: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="apartar", server_default="apartar")
     estado: Mapped[ApartadoEstado] = mapped_column(
         Enum(ApartadoEstado, name="apartado_estado",
              values_callable=lambda obj: [e.value for e in obj]),
