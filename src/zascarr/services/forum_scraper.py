@@ -343,7 +343,11 @@ class ForumScraper:
         self._politica_busqueda = politica_busqueda or PoliticaFuente(
             "foro", "Foro", max(0.0, intervalo_busqueda), max_intentos=1,
             max_redirecciones=MAX_SALTOS)
-        self._espera_busqueda_s = max(30.0, self._politica_busqueda.intervalo_min_s + 5.0)
+        # La búsqueda paga DOS esperas: el POST y el salto de redirección que devuelve IPB
+        # (ambos con el intervalo de búsqueda; fuente y host comparten ritmo). Con 30 s
+        # solo cabía una espera y el foro no buscaba nunca (bug 2026-11-16, DC K.O.).
+        self._espera_busqueda_s = max(
+            2.0 * self._politica_busqueda.intervalo_min_s + 10.0, 60.0)
         self._cortesia = cortesia
         self._reloj = reloj
         self._dormir = dormir
