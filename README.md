@@ -107,7 +107,7 @@ curl -fsSL https://raw.githubusercontent.com/juanajok/zascarr/main/bootstrap.sh 
 Instala git y Docker si te faltan, crea un usuario de servicio `media`
 (igual que Sonarr/Radarr/Prowlarr si ya los tienes — código en `/opt`,
 nunca mezclado con tu usuario personal), descarga ZascArr en
-`/opt/zascarr/zascarr`, y te hace **3 preguntas** (pulsa `Intro` para
+`/opt/zascarr/zascarr`, y te hace **4 preguntas** (pulsa `Intro` para
 aceptar lo que va entre corchetes) y una cuarta que **por defecto no abre nada**:
 
 1. ¿Dónde están tus tebeos ya organizados?
@@ -147,7 +147,9 @@ de tu colección.
 > contenedores en `ZASCARR_DATA_DIR` (por defecto `/var/lib/zascarr`), y el
 > usuario de servicio —dueño de las carpetas de datos de los contenedores (portadas, estado
 > de la VPN)— en `ZASCARR_USER`/`ZASCARR_GROUP` (por defecto `media`). Ese usuario **no** es
-> dueño del código ni de la configuración.
+> dueño del código ni de la configuración. El instalador **pregunta el usuario**; si no existe,
+> lo crea como usuario de sistema. `ZASCARR_USER`/`ZASCARR_GROUP` siguen sirviendo para
+> instalaciones desatendidas o para fijar el valor por defecto.
 > Cambia lo que necesites antes de instalar:
 > ```bash
 > export ZASCARR_ROOT=/opt/Zascarr ZASCARR_DATA_DIR=/var/lib/zascarr ZASCARR_USER=media ZASCARR_GROUP=media
