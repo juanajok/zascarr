@@ -164,3 +164,34 @@ async def test_la_cortesia_del_foro_se_muestra_como_espera_no_como_sin_resultado
     assert item.last_error == MOTIVO_FORO_ESPERA
     assert item.status is WishlistStatus.WANTED
     orq.db.flush.assert_awaited()
+
+
+async def test_si_prowlarr_trajo_pero_se_descarto_la_espera_lo_dice(monkeypatch):
+    """Bug UX 2026-11-16: el aviso del foro tapaba que Prowlarr sí había respondido
+    y que sus resultados se descartaron."""
+    from zascarr.models import WishlistStatus
+    from zascarr.services.orchestrator import (
+        MOTIVO_ESPERA_CON_DESCARTES, Orchestrator,
+    )
+    from zascarr.services.prowlarr import SearchResult
+    orq = Orchestrator(db=SimpleNamespace(flush=AsyncMock(), execute=AsyncMock(), commit=AsyncMock()))
+    orq._build_query = AsyncMock(return_value="DC K.O.")
+    orq._marcar_busqueda = AsyncMock()
+    orq._forum_fallback = AsyncMock(side_effect=CortesiaEnEspera(
+        "foro", "foro.example:80", 25.0, "cortesia"))
+    orq._prowlarr_candidates = AsyncMock(return_value=([
+        SearchResult(title="Manual de ginecología", indexer="x",
+                     download_url="magnet:?xt=urn:btih:abc", size_bytes=1,
+                     seeders=5, category="books"),
+    ], None))
+    item = SimpleNamespace(id=uuid4(), status=None, last_error=None, numero=None,
+                           series_id=None, search_query="DC K.O.")
+    ajustes = SimpleNamespace(forum_enabled=True, forum_url="http://foro.example/forum",
+                              forum_username="lector", prowlarr_enabled=True,
+                              transmission_enabled=True, amule_enabled=False,
+                              blog_feed_enabled=False)
+    monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+
+    assert await orq._search_and_rank(item) == []
+    assert item.last_error == MOTIVO_ESPERA_CON_DESCARTES
+    assert item.status is WishlistStatus.WANTED
