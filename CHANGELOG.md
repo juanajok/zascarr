@@ -34,6 +34,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **BL-DUP3: resolver una carpeta repetida o contenida (2026-11-16).** «Duplicados»
+  permite revisar una pareja de carpetas: muestra comunes idénticos, comunes con contenido
+  distinto y lo que solo está en cada lado. Solo se apartan los comunes idénticos de la carpeta
+  que no se queda, con la cuarentena y el deshacer de BL-DUP1; si queda vacía, se ofrece
+  apartarla también. No se fusionan carpetas ni se toca lo que solo está en un lado. Sin migración.
 - **Varias descargas desde un mismo «Buscar ahora» (2026-11-16).** Al descargar un
   candidato ya no desaparece el resto de la lista: se actualiza solo el estado de la
   fila y ese candidato (marcado «Enviado a la cola de descarga»), de modo que se pueden

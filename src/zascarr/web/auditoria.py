@@ -22,11 +22,12 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -48,6 +49,12 @@ from zascarr.services.apartado_duplicados import (
     ApartadoError,
     GrupoEntrada,
     TokenApartadoInvalido,
+)
+from zascarr.services.carpetas_duplicadas import (
+    analizar_par,
+    apartar_carpeta_vacia,
+    deshacer_carpeta,
+    previsualizar_carpetas,
 )
 from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.enlace_duplicados import EnlaceDuplicadosService
@@ -498,7 +505,8 @@ async def _operaciones_apartadas(db: AsyncSession) -> list[dict]:
             select(ApartadoOperacion)
             .options(selectinload(ApartadoOperacion.grupos))
             .where(ApartadoOperacion.estado == ApartadoEstado.CONFIRMADA,
-                   ApartadoOperacion.total_archivos > 0)
+                   or_(ApartadoOperacion.total_archivos > 0,
+                       ApartadoOperacion.modo == "carpeta"))
             .order_by(ApartadoOperacion.creada.desc())
             .limit(10)
         )
@@ -684,13 +692,99 @@ async def deshacer_duplicados(request: Request, operacion: str = Form(...),
     modo = getattr(op, "modo", "apartar") if op is not None else "apartar"
     servicio = _servicio_enlace(db) if modo == "enlazar" else _servicio_apartado(db)
     try:
-        resultado = await servicio.deshacer(operacion)
+        if modo == "carpeta":
+            await deshacer_carpeta(db, operacion,
+                                   library=Path(get_settings().library_path))
+            resultado = SimpleNamespace(estado="deshecha", motivo=None)
+        else:
+            resultado = await servicio.deshacer(operacion)
         contexto = {"resultado_deshacer": resultado, "operaciones": await _operaciones_apartadas(db),
                     "cuarentena": await asyncio.to_thread(_resumen_cuarentena), "modo": modo}
     except (ApartadoError, TokenApartadoInvalido, ValueError) as exc:
         contexto = {"error_deshacer": str(exc), "operaciones": await _operaciones_apartadas(db),
                     "cuarentena": await asyncio.to_thread(_resumen_cuarentena), "modo": modo}
     return _no_store(templates.TemplateResponse(request, "_duplicados_resultado.html", contexto))
+
+
+# ── BL-DUP3 (#266): resolver una carpeta repetida o contenida ───────────────
+
+
+@router.post("/duplicados/carpetas", response_class=HTMLResponse)
+async def revisar_carpetas(request: Request, ruta_a: str = Form(default=""),
+                           ruta_b: str = Form(default=""),
+                           par: int | None = Form(default=None),
+                           db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Detalle de la pareja; no escribe ni preselecciona qué carpeta se queda."""
+    if par is not None and (not ruta_a or not ruta_b):
+        informe = await _ultimo_informe(db)
+        crudos = (informe or {}).get("carpetas_repetidas") or []
+        if not 0 <= par < len(crudos):
+            return _no_store(templates.TemplateResponse(
+                request, "_carpetas_detalle.html",
+                {"error": "Esa pareja de carpetas ya no está en el informe."}))
+        ruta_a = str(crudos[par].get("ruta_a") or "")
+        ruta_b = str(crudos[par].get("ruta_b") or "")
+    try:
+        detalle = await analizar_par(ruta_a, ruta_b, Path(get_settings().library_path))
+    except (ApartadoError, OSError) as exc:
+        return _no_store(templates.TemplateResponse(
+            request, "_carpetas_detalle.html",
+            {"error": str(exc), "ruta_a": ruta_a, "ruta_b": ruta_b}))
+    return _no_store(templates.TemplateResponse(
+        request, "_carpetas_detalle.html",
+        {"detalle": detalle, "ruta_a": ruta_a, "ruta_b": ruta_b}))
+
+
+@router.post("/duplicados/carpetas/previsualizar", response_class=HTMLResponse)
+async def previsualizar_carpetas_dup(request: Request, ruta_a: str = Form(...),
+                                     ruta_b: str = Form(...), keep: str = Form(...),
+                                     db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Firma un grupo DUP1 por cada archivo común idéntico; no escribe."""
+    try:
+        vista = await previsualizar_carpetas(
+            db, ruta_a, ruta_b, keep,
+            library=Path(get_settings().library_path),
+            secret=get_settings().secret_key)
+    except (ApartadoError, OSError, ValueError) as exc:
+        return _no_store(templates.TemplateResponse(
+            request, "_carpetas_detalle.html",
+            {"error": str(exc), "ruta_a": ruta_a, "ruta_b": ruta_b}))
+    return _no_store(templates.TemplateResponse(
+        request, "_carpetas_previsualizacion.html",
+        {"vista": vista,
+         "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}))
+
+
+@router.post("/duplicados/carpetas/confirmar", response_class=HTMLResponse)
+async def confirmar_carpetas_dup(
+    request: Request, token: list[str] = Form(default=[]),
+    grupos: list[str] = Form(default=[]), ruta_apartar: str = Form(default=""),
+    apartar_vacia: str = Form(default=""), db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Aparta solo los comunes idénticos; la carpeta vacía es una acción aparte."""
+    servicio = _servicio_apartado(db)
+    resultados = []
+    for token_firmado, crudo in zip(token, grupos, strict=False):
+        try:
+            datos = json.loads(crudo)
+            entrada = GrupoEntrada(datos["sha256"], tuple(datos["rutas"]), int(datos["keep_index"]))
+            resultados.append(await servicio.confirmar(token_firmado, [entrada]))
+        except (ApartadoError, TokenApartadoInvalido, ValueError, KeyError, TypeError) as exc:
+            resultados.append({"error": str(exc)})
+    carpeta = None
+    if apartar_vacia and ruta_apartar:
+        try:
+            operacion = await apartar_carpeta_vacia(
+                db, ruta_apartar, library=Path(get_settings().library_path),
+                secret=get_settings().secret_key)
+            carpeta = {"operacion": operacion}
+        except (ApartadoError, OSError, ValueError) as exc:
+            carpeta = {"error": str(exc)}
+    contexto = {"resultados": resultados, "carpeta": carpeta,
+                "operaciones": await _operaciones_apartadas(db),
+                "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}
+    return _no_store(templates.TemplateResponse(
+        request, "_carpetas_resultado.html", contexto))
 
 
 # ── BL-CNV2b: originales apartados de las conversiones ───────────────────────
