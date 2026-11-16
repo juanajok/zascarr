@@ -737,7 +737,8 @@ async def vincular_especial(
     operación es manual y no pasa por el matcher.
     """
     try:
-        await EspecialesService(db).vincular_especial(file_id, series_id, titulo, formato)
+        await EspecialesService(db).vincular_especial(
+            file_id, series_id, titulo, formato, mover=True)
         await db.commit()
     except EspecialSinNumeroError as exc:
         aviso = {"tipo": "warn", "texto": str(exc)}
@@ -750,7 +751,13 @@ async def vincular_especial(
         return templates.TemplateResponse(
             request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
             status_code=400)
-    return HTMLResponse(RECONTAR_MENU)
+    return templates.TemplateResponse(request, "_accion_ok.html", {
+        "titulo": "Guardado como especial.",
+        "texto": "Se ha movido a la carpeta «Especiales» de la serie.",
+        "series_id": series_id,
+        "deshacer_url": None,
+        "recontar_menu": RECONTAR_MENU,
+    })
 
 
 @router.post("/{file_id}/ignorar", response_class=HTMLResponse)
