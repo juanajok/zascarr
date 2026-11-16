@@ -1,10 +1,9 @@
-"""Novedades de editoriales españolas (D5): Norma y Panini, sin ECC.
+"""Novedades de editoriales españolas (D5): Norma y Panini.
 
-Solo se leen páginas públicas que su `robots.txt` permite. ECC devuelve hoy
-`User-agent: * / Disallow: *` en `ecccomics.com`, así que no se consulta: no se
-salta el robots para «completar» la vista. Norma se lee de `/cuando-sale/…`
-(no de `/novedades/`, que está deshabilitado para todos en su robots). Panini
-se lee de la categoría pública de cómics, que ordena por fecha de lanzamiento.
+Solo se leen páginas públicas que su `robots.txt` permite. Norma se lee de
+`/cuando-sale/…` (no de `/novedades/`, que está deshabilitado para todos en su
+robots). Panini se lee de la categoría pública de cómics, que ordena por fecha
+de lanzamiento.
 """
 from __future__ import annotations
 
@@ -184,7 +183,7 @@ async def cargar_panini(hoy: date | None = None, *, cache=None, robots=None) -> 
 
 async def cargar_novedades_es(hoy: date | None = None, *, cache=None,
                               robots=None) -> ResultadoES:
-    """Norma y Panini. ECC no se consulta: su robots.txt prohíbe todo."""
+    """Norma y Panini."""
     hoy = hoy or date.today()
     guardado = _CACHE.get(hoy)
     if guardado is not None and time.monotonic() - guardado[0] < _TTL_S:
