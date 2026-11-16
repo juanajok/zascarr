@@ -45,3 +45,21 @@ async def test_la_busqueda_envia_indexer_ids_repetidos():
     await ProwlarrClient(transporte=httpx.MockTransport(responder)).search(
         "Batman", categories=[7030, 7020], indexer_ids=[3, 7])
     assert "indexerIds=3" in visto["url"] and "indexerIds=7" in visto["url"]
+
+
+@pytest.mark.asyncio
+async def test_la_busqueda_usa_guid_o_magnet_cuando_falta_download_url():
+    def responder(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[
+            {"title": "Krazy Kat", "indexer": "TPB", "downloadUrl": None,
+             "guid": "magnet:?xt=urn:btih:abc", "magnetUrl": "http://prowlarr/1/download"},
+            {"title": "Otro", "indexer": "Knaben", "downloadUrl": None,
+             "guid": "https://knaben.example/item/1",
+             "magnetUrl": "http://prowlarr/63/download?x=1"},
+            {"title": "Sin enlace", "indexer": "X", "downloadUrl": None, "guid": ""},
+        ])
+
+    resultados = await ProwlarrClient(transporte=httpx.MockTransport(responder)).search("Krazy Kat")
+    assert resultados[0].download_url == "magnet:?xt=urn:btih:abc"
+    assert resultados[1].download_url == "http://prowlarr/63/download?x=1"
+    assert resultados[2].download_url == ""
