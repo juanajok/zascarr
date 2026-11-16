@@ -528,3 +528,62 @@ async def test_publica_importa_y_consume_temporal(tmp_path, monkeypatch):
         for k in ("COVERS_CACHE_PATH", "TRANSMISSION_DOWNLOAD_DIR", "LIBRARY_PATH"):
             os.environ.pop(k, None)
         get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_publicar_importa_grapas_reales_y_conserva_original(tmp_path, monkeypatch):
+    from tests._raices_pg import allowlist, sembrar_raiz
+    from zascarr.config import get_settings
+    from zascarr.models import PaqueteEstado
+    from zascarr.services import paquetes_publicacion as pub
+    from zascarr.services.paquetes_extraccion import extraer_y_verificar
+
+    d = tmp_path / "descargas"
+    d.mkdir()
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    p = d / "paquete.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("01.cbz", _cbz_bytes())
+        import io as _io
+        buf = _io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as cbz2:
+            cbz2.writestr("001.png", _PNG)
+            cbz2.writestr("002.png", _PNG)
+        z.writestr("02.cbz", buf.getvalue())
+        z.writestr("leeme.txt", b"ruido")
+    antes = (p.read_bytes(), p.stat().st_mtime_ns)
+    ajustes = type("A", (), {})()
+    ajustes.transmission_download_dir = str(d)
+    ajustes.amule_incoming_dir = ""
+    ajustes.downloads_path = ""
+    ajustes.secret_key = "k"
+    paquete = detectar_paquetes(ajustes=ajustes, secret="k")[0]
+    allowlist(monkeypatch, lib)
+    monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
+    monkeypatch.setenv("TRANSMISSION_DOWNLOAD_DIR", str(d))
+    get_settings.cache_clear()
+    url = URL
+    migrar_a_head(url)
+    motor = create_async_engine(url_asyncpg(url), poolclass=None)
+    fabrica = async_sessionmaker(motor, expire_on_commit=False)
+    try:
+        async with fabrica() as limpia:
+            await limpia.execute(text(
+                "TRUNCATE files, issues, series, library_root_traditions, library_roots CASCADE"))
+            await limpia.commit()
+        await sembrar_raiz(fabrica, lib)
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            await extraer_y_verificar(s, op.id, conservar_temporal=True)
+            op = await pub.publicar_e_importar(s, op.id)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.IMPORTADO
+            assert all(i["resultado"] in {"importado", "revisar", "duplicado"}
+                       for i in op.items)
+        assert (p.read_bytes(), p.stat().st_mtime_ns) == antes
+        assert len(list(lib.rglob("*.cbz"))) == 2
+        assert not list(lib.rglob("leeme.txt"))
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
