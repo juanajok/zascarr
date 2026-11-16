@@ -996,6 +996,18 @@ class AsignacionOperacion(Base):
     )
 
 
+class PaqueteEstado(enum.StrEnum):
+    """Estado durable de una extracción de paquete (#344). Corte 3 termina en `verificado`."""
+    LISTANDO = "listando"
+    EXTRAYENDO = "extrayendo"
+    VERIFICANDO = "verificando"
+    VERIFICADO = "verificado"
+    PUBLICANDO = "publicando"
+    IMPORTANDO = "importando"
+    IMPORTADO = "importado"
+    ERROR = "error"
+
+
 class ApartadoEstado(enum.StrEnum):
     """Estado persistido de una operación de apartar duplicados (ADR 0017, 0030)."""
     EN_CURSO = "en_curso"
@@ -1578,3 +1590,50 @@ class RevisionBorrador(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now())
     caduca: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     __table_args__ = (Index("ix_revision_borradores_caduca", "caduca"),)
+
+
+class PaqueteOperacion(Base):
+    """Comprobante durable de extracción/verificación de un paquete de Descargas (#344).
+
+    No guarda el token ni publica nada: el original permanece intacto. `items` es el progreso
+    por fichero; los temporales se borran al terminar y al arrancar si quedaron huérfanos.
+    """
+    __tablename__ = "paquete_operaciones"
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    paquete_clave: Mapped[str] = mapped_column(String(200), nullable=False)
+    paquete_path: Mapped[str] = mapped_column(Text, nullable=False)
+    paquete_dev: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    paquete_ino: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    paquete_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    paquete_mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    firma: Mapped[str] = mapped_column(String(10), nullable=False)
+    estado: Mapped[PaqueteEstado] = mapped_column(
+        Enum(PaqueteEstado, name="paquete_estado",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=PaqueteEstado.LISTANDO,
+        server_default=PaqueteEstado.LISTANDO.value)
+    temp_dir: Mapped[str | None] = mapped_column(Text)
+    staging_dir: Mapped[str | None] = mapped_column(Text)
+    destino_dir: Mapped[str | None] = mapped_column(Text)
+    items: Mapped[list] = mapped_column(JSONB, nullable=False, default=list,
+                                        server_default=text("'[]'::jsonb"))
+    total_entradas: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0")
+    total_bytes: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0")
+    error_codigo: Mapped[str | None] = mapped_column(String(80))
+    error_mensaje: Mapped[str | None] = mapped_column(Text)
+    creada: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(),
+                                             nullable=False)
+    actualizada: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    finalizada: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        Index("ix_paquete_operaciones_clave", "paquete_clave"),
+        Index("ix_paquete_operaciones_estado", "estado"),
+        Index("ix_paquete_operaciones_creada", "creada"),
+        Index(
+            "uq_paquete_operaciones_viva", "paquete_clave", unique=True,
+            postgresql_where=text(
+                "estado IN ('listando','extrayendo','verificando','publicando','importando')")),
+    )
