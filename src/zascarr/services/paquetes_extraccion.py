@@ -281,9 +281,12 @@ def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
                 raise PaqueteExtraccionError(
                     "ilegible", "El paquete está dañado o cifrado.") from exc
             h = hashlib.sha256()
-            with open(destino, "rb") as f:
-                while bloque := f.read(_BLOQUE):
+            fd_out = os.open(nombre, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=temp_fd)
+            try:
+                while bloque := os.read(fd_out, _BLOQUE):
                     h.update(bloque)
+            finally:
+                os.close(fd_out)
             items.append({"nombre": nombre, "origen": entrada.nombre, "bytes": total,
                           "sha256": h.hexdigest(), "estado": "verificado"})
     return items
@@ -328,66 +331,84 @@ def _verificar_contenido_fd(items: list[dict], temp: Path, temp_fd: int) -> None
     if reales != esperados:
         raise PaqueteExtraccionError("verificacion", "El temporal tiene ficheros inesperados.")
     for item in items:
-        ruta = temp / item["nombre"]
+
         ext = Path(item["nombre"]).suffix.lower()
         fd_item = os.open(item["nombre"], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=temp_fd)
-        with os.fdopen(os.dup(fd_item), "rb") as fh:
-            firma = firma_de_bytes(fh.read(512))
-        if ext == ".cbz" and firma is not Firma.ZIP:
-            raise PaqueteExtraccionError("firma", "Un tebeo dice ZIP pero no lo es.")
-        if ext == ".cbr" and firma is not Firma.RAR:
-            raise PaqueteExtraccionError("firma", "Un tebeo dice RAR pero no lo es.")
-        if firma is Firma.ZIP:
-            try:
-                with _zip.ZipFile(os.fdopen(os.dup(fd_item), "rb")) as z:
-                    imagen = next((n for n in z.namelist()
-                                   if Path(n).suffix.lower() in _EXTS_IMAGEN), None)
-                    if imagen is None:
-                        raise PaqueteExtraccionError("sin_imagen", "Un tebeo no tiene páginas.")
-                    if z.getinfo(imagen).file_size > MAX_ENTRADA_LEIDA:
-                        raise PaqueteExtraccionError(
-                            "tamano", "La primera página es demasiado grande.")
-                    datos = z.read(imagen)
-                    _decodificar_imagen(datos)
-            except PaqueteExtraccionError:
-                raise
-            except Exception as exc:  # noqa: BLE001
-                raise PaqueteExtraccionError(
-                    "ilegible", "Un tebeo extraído no se puede abrir.") from exc
-        elif firma is Firma.RAR:
-            if not lector_rar.disponible():
-                raise PaqueteExtraccionError(
-                    "herramienta_ausente", "Falta la herramienta para leer RAR.")
-            with lector_rar.carpeta_temporal(temp) as casa:
+        try:
+            with os.fdopen(os.dup(fd_item), "rb") as fh:
+                firma = firma_de_bytes(fh.read(512))
+            if ext == ".cbz" and firma is not Firma.ZIP:
+                raise PaqueteExtraccionError("firma", "Un tebeo dice ZIP pero no lo es.")
+            if ext == ".cbr" and firma is not Firma.RAR:
+                raise PaqueteExtraccionError("firma", "Un tebeo dice RAR pero no lo es.")
+            if firma is Firma.ZIP:
                 try:
+                    with _zip.ZipFile(os.fdopen(os.dup(fd_item), "rb")) as z:
+                        imagen = next((n for n in z.namelist()
+                                       if Path(n).suffix.lower() in _EXTS_IMAGEN), None)
+                        if imagen is None:
+                            raise PaqueteExtraccionError("sin_imagen", "Un tebeo no tiene páginas.")
+                        if z.getinfo(imagen).file_size > MAX_ENTRADA_LEIDA:
+                            raise PaqueteExtraccionError(
+                                "tamano", "La primera página es demasiado grande.")
+                        datos = z.read(imagen)
+                        _decodificar_imagen(datos)
+                except PaqueteExtraccionError:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    raise PaqueteExtraccionError(
+                        "ilegible", "Un tebeo extraído no se puede abrir.") from exc
+            elif firma is Firma.RAR:
+                if not lector_rar.disponible():
+                    raise PaqueteExtraccionError(
+                        "herramienta_ausente", "Falta la herramienta para leer RAR.")
+                with lector_rar.carpeta_temporal(temp) as casa:
                     fd_rar = os.open(item["nombre"], os.O_RDONLY | os.O_NOFOLLOW,
-                                      dir_fd=temp_fd)
-                    listado = lector_rar.listar(
-                        Path(f"/proc/self/fd/{fd_rar}"), temporal=casa,
-                        pass_fds=(fd_rar,))
-                except lector_rar.ErrorRar as exc:
-                    raise PaqueteExtraccionError(
-                        "ilegible", "Un tebeo RAR extraído no se puede listar.") from exc
-                entrada = next((e for e in listado.entradas
-                                if not e.es_directorio and not e.cifrada
-                                and Path(e.nombre).suffix.lower() in _EXTS_IMAGEN), None)
-                if entrada is None:
-                    raise PaqueteExtraccionError("sin_imagen", "Un tebeo no tiene páginas.")
-                if entrada.tamano > MAX_ENTRADA_LEIDA:
-                    raise PaqueteExtraccionError(
-                            "tamano", "La primera página es demasiado grande.")
-                salida = casa / "imagen"
-                try:
-                    lector_rar.extraer_entrada_a(ruta, entrada, salida, MAX_ENTRADA_LEIDA,
-                                                temporal=casa)
-                except lector_rar.ErrorRar as exc:
-                    raise PaqueteExtraccionError(
-                        "ilegible", "La primera imagen RAR no se pudo extraer.") from exc
-                _decodificar_imagen(salida.read_bytes())
-                salida.unlink(missing_ok=True)
-            with __import__("contextlib").suppress(OSError):
-                os.close(fd_rar)
-        os.close(fd_item)
+                                     dir_fd=temp_fd)
+                    try:
+                        try:
+                            listado = lector_rar.listar(
+                                Path(f"/proc/self/fd/{fd_rar}"), temporal=casa,
+                                pass_fds=(fd_rar,))
+                        except lector_rar.ErrorRar as exc:
+                            raise PaqueteExtraccionError(
+                                "ilegible", "Un tebeo RAR extraído no se puede listar.") from exc
+                        entrada = next((e for e in listado.entradas
+                                        if not e.es_directorio and not e.cifrada
+                                        and Path(e.nombre).suffix.lower() in _EXTS_IMAGEN), None)
+                        if entrada is None:
+                            raise PaqueteExtraccionError(
+                                "sin_imagen", "Un tebeo no tiene páginas.")
+                        if entrada.tamano > MAX_ENTRADA_LEIDA:
+                            raise PaqueteExtraccionError(
+                                "tamano", "La primera página es demasiado grande.")
+                        salida = temp / f"imagen-{fd_rar}"
+                        try:
+                            lector_rar.extraer_entrada_a(
+                                Path(f"/proc/self/fd/{fd_rar}"), entrada, salida,
+                                MAX_ENTRADA_LEIDA, temporal=casa,
+                                pass_fds=(fd_rar,), destino_dir_fd=temp_fd)
+                        except lector_rar.ErrorRar as exc:
+                            raise PaqueteExtraccionError(
+                                "ilegible", "La primera imagen RAR no se pudo extraer.") from exc
+                        fd_img = os.open(salida.name, os.O_RDONLY | os.O_NOFOLLOW,
+                                         dir_fd=temp_fd)
+                        try:
+                            datos = b""
+                            while bloque := os.read(fd_img, 1024 * 1024):
+                                datos += bloque
+                                if len(datos) > MAX_ENTRADA_LEIDA:
+                                    raise PaqueteExtraccionError(
+                                        "tamano", "La primera página es demasiado grande.")
+                            _decodificar_imagen(datos)
+                        finally:
+                            os.close(fd_img)
+                            with __import__("contextlib").suppress(OSError):
+                                os.unlink(salida.name, dir_fd=temp_fd)
+                    finally:
+                        os.close(fd_rar)
+        finally:
+            os.close(fd_item)
 
 
 def _verificar_items(items: list[dict], temp: Path, temp_fd: int, total_listado: int) -> None:
