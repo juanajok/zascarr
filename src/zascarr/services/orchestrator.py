@@ -155,6 +155,34 @@ MOTIVO_CLIENTE_INACCESIBLE = (
 MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
 
 
+def _clave_de_enlace_de_foro(url: str) -> str:
+    """Identidad del fichero: hash ed2k/btih, no la URL.
+
+    El mismo fichero puede estar enlazado dos veces con distinta codificación
+    (`%20` vs espacio) y la deduplicación por URL cruda lo dejaba duplicado en
+    «Buscar ahora» (bug UX 2026-11-16: Sector Lejano, dos filas idénticas).
+    """
+    if url.startswith("ed2k://|file|"):
+        partes = url.split("|")
+        if len(partes) >= 5 and partes[4]:
+            return "ed2k:" + partes[4].strip().lower()
+    if url.startswith("magnet:?"):
+        parametros = parse_qs(url[len("magnet:?"):])
+        xt = (parametros.get("xt") or [""])[0]
+        if xt.lower().startswith("urn:btih:"):
+            return "magnet:" + xt.rsplit(":", 1)[-1].lower()
+    return "url:" + url
+
+
+def _tamano_de_enlace_de_foro(url: str) -> int:
+    """Tamaño declarado en un enlace ed2k (bytes); 0 si no se puede leer."""
+    if url.startswith("ed2k://|file|"):
+        partes = url.split("|")
+        if len(partes) >= 4 and partes[3].isdigit():
+            return int(partes[3])
+    return 0
+
+
 def _nombre_de_fichero_de_enlace(url: str) -> str:
     """Nombre del fichero que viaja dentro de un enlace ed2k o de un magnet.
 
@@ -814,12 +842,14 @@ class Orchestrator:
             vistos: set[str] = set()
             for fr in await scraper.use_ipb_search(query):
                 for enlace in (*fr.ed2k_links, *fr.magnet_links):
-                    if enlace in vistos:
+                    clave = _clave_de_enlace_de_foro(enlace)
+                    if clave in vistos:
                         continue
-                    vistos.add(enlace)
+                    vistos.add(clave)
                     nombre = _nombre_de_fichero_de_enlace(enlace)
                     encontrados.append(SearchResult(
-                        nombre or fr.topic_title, "forum:crg", enlace, 0,
+                        nombre or fr.topic_title, "forum:crg", enlace,
+                        _tamano_de_enlace_de_foro(enlace),
                         1 if enlace.lower().startswith("magnet:?") else 0, "comics"
                     ))
             return encontrados
