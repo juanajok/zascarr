@@ -70,6 +70,29 @@
   <p class="procedencia muted">Todavía no has mirado tu disco en busca de repetidos.</p>
   {% endif %}
 
+  {% if v.continuar %}
+  {% set c = v.continuar %}
+  <section class="continuar-leyendo" aria-labelledby="h-continuar">
+    <div class="continuar-card">
+      <p class="rotulo">Continuar leyendo</p>
+      <h2 id="h-continuar" class="titulo-frase">{{ c.series_title }}</h2>
+      <p class="continuar-numero">#{{ c.issue_number }}{% if c.issue_title %} · {{ c.issue_title }}{% endif %}</p>
+      {% if c.page_count and c.current_page %}
+      {% set pct = (c.current_page * 100 / c.page_count)|round|int %}
+      <div class="barra-lectura" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+           aria-valuenow="{{ pct }}" aria-label="Leído: {{ pct }}% ({{ c.current_page }} de {{ c.page_count }} páginas)">
+        <span class="barra-lectura-relleno" style="width: {{ pct }}%"></span>
+      </div>
+      <p class="barra-lectura-texto">{{ c.current_page }} de {{ c.page_count }} páginas</p>
+      {% endif %}
+      <div class="continuar-acciones">
+        <a class="btn" href="/ui/series/{{ c.series_id }}/numero/{{ c.issue_id }}">Seguir con este número</a>
+        <a class="btn ghost sm" href="/ui/series/{{ c.series_id }}">Ver la serie</a>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
   <section class="primeros-pasos" aria-labelledby="h-pasos">
     {% if pasos.completo %}
     {#- La acción recomendada se queda FUERA del bloque plegado: un botón dentro de un <details>

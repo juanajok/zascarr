@@ -34,6 +34,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **CUR5: «Continuar leyendo» en Inicio (2026-11-16).** Si hay algún número marcado
+  «Leyendo», el Inicio muestra una tarjeta con serie, número y progreso de páginas, con enlace
+  directo al número y a la ficha de la serie. Solo estado local: sin telemetría ni fuentes;
+  una consulta y sin migración.
 - **CUR4: idioma y edición de la serie (2026-11-16).** Campos estructurados opcionales
   `language` (código corto normalizado) y `edition_kind` (oficial, tradumaqueta, escaneo
   propio u otro), editables a mano, visibles en la ficha y filtrables en Biblioteca. No se

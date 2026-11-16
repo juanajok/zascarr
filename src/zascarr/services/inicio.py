@@ -26,7 +26,14 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.models import File, ImportRun
+from zascarr.models import (
+    File,
+    ImportRun,
+    Issue,
+    ReadingProgress,
+    ReadingStatus,
+    Series,
+)
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.library_adopter import LibraryAdopter
 from zascarr.services.orchestrator import hay_fuente_de_busqueda
@@ -82,6 +89,18 @@ class Desglose:
 
 
 @dataclass(frozen=True)
+class ContinuarLeyendo:
+    """Último número marcado «Leyendo»: solo estado local, sin telemetría."""
+    series_id: str
+    series_title: str
+    issue_id: str
+    issue_number: str
+    issue_title: str | None
+    current_page: int = 0
+    page_count: int | None = None
+
+
+@dataclass(frozen=True)
 class VistaInicio:
     resumen: ResumenBiblioteca
     pasos: PrimerosPasos
@@ -94,6 +113,7 @@ class VistaInicio:
     informe_hace: str | None = None
     #: Si la mirada es vieja, el Inicio ofrece repetirla junto a la fecha.
     informe_antiguo: bool = False
+    continuar: ContinuarLeyendo | None = None
 
 
 async def ultimo_informe(db: AsyncSession) -> InformeDisco | None:
@@ -145,6 +165,27 @@ async def copias_descartadas(db: AsyncSession) -> int:
     return (fila[0] or 0) if fila else 0
 
 
+async def continuar_leyendo(db: AsyncSession) -> ContinuarLeyendo | None:
+    """Una sola consulta: el número en «Leyendo» más reciente, con serie y número."""
+    fila = (await db.execute(
+        select(ReadingProgress, Issue, Series)
+        .join(Issue, Issue.id == ReadingProgress.issue_id)
+        .join(Series, Series.id == Issue.series_id)
+        .where(ReadingProgress.status == ReadingStatus.READING)
+        .order_by(ReadingProgress.started_at.desc().nullslast(),
+                  ReadingProgress.id.desc())
+        .limit(1)
+    )).first()
+    if fila is None:
+        return None
+    progreso, issue, serie = fila
+    return ContinuarLeyendo(
+        series_id=str(serie.id), series_title=serie.title,
+        issue_id=str(issue.id), issue_number=issue.issue_number or "Sin número",
+        issue_title=issue.title, current_page=int(progreso.current_page or 0),
+        page_count=issue.page_count)
+
+
 async def cargar_inicio(db: AsyncSession) -> VistaInicio:
     resumen = await resumen_biblioteca(db)
     desglose = await desglose_registrados(db)
@@ -154,6 +195,7 @@ async def cargar_inicio(db: AsyncSession) -> VistaInicio:
     informe = await ultimo_informe(db)
     copias = await copias_descartadas(db)
     legal = await is_acknowledged(db)
+    continuar = await continuar_leyendo(db)
     pasos = calcular_primeros_pasos(EstadoInicio(
         adopcion=adopcion,
         archivos_registrados=desglose.total,
@@ -168,4 +210,5 @@ async def cargar_inicio(db: AsyncSession) -> VistaInicio:
                        archivos_sin_clasificar=desglose.por_revisar,
                        registrados=desglose, copias_descartadas=copias,
                        informe_hace=hace_cuanto(informe.fecha, ahora) if informe else None,
-                       informe_antiguo=bool(informe and informe_antiguo(informe.fecha, ahora)))
+                       informe_antiguo=bool(informe and informe_antiguo(informe.fecha, ahora)),
+                       continuar=continuar)
