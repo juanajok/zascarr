@@ -102,7 +102,6 @@ if [[ ! -f "${_SD}/docker-compose.yml" ]]; then
 
     instalar_git_si_falta
     instalar_docker_si_falta
-    asegurar_usuario_servicio
 
     # Mismo patrón que el resto de la suite *arr (Sonarr/Radarr/Prowlarr...):
     # código en /opt, propiedad del usuario de servicio (media por defecto),
@@ -261,7 +260,6 @@ echo -e "${B}====================================${N}\n"
 # ── Comprobaciones previas (A2): cada fallo explica causa y solución, y lo
 # ── que se puede instalar solo, se instala solo. ──
 instalar_docker_si_falta
-asegurar_usuario_servicio
 
 info "Comprobando que el demonio de Docker está en marcha..."
 docker info >/dev/null 2>&1 || die \
@@ -325,6 +323,39 @@ if [[ "${APP_LOCALE}" != "es" && "${APP_LOCALE}" != "en" ]]; then
     warn "Idioma '${APP_LOCALE}' no reconocido, uso 'es'."
     APP_LOCALE="es"
 fi
+
+# A7: usuario/grupo de SERVICIO. Mismo patrón que ARR_USER de la suite *arr:
+# por defecto "media" para convivir con Sonarr/Radarr/Prowlarr/Transmission.
+# Si se indicó por entorno o en una ejecución anterior, ese es el valor por
+# defecto; Intro lo acepta. El grupo se deduce del usuario si ya existe.
+USUARIO_ANTERIOR="$(leer_env_var ZASCARR_USER)"
+GRUPO_ANTERIOR="$(leer_env_var ZASCARR_GROUP)"
+USUARIO_POR_DEFECTO="${ZASCARR_USER:-${USUARIO_ANTERIOR}}"
+USUARIO_POR_DEFECTO="${USUARIO_POR_DEFECTO:-media}"
+read -rp "¿Usuario de servicio del sistema? [${USUARIO_POR_DEFECTO}]: " ANS_USER || true
+ZASCARR_USER="${ANS_USER:-${USUARIO_POR_DEFECTO}}"
+
+if [[ ! "${ZASCARR_USER}" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+    die "El usuario '${ZASCARR_USER}' no es válido. Usa minúsculas, números, '_' o '-' y empieza por letra o '_'."
+fi
+
+# Grupo: el explícito por entorno manda. Si no, se conserva el grupo de una
+# instalación anterior SOLO si el usuario no ha cambiado; si se cambia de
+# usuario, un grupo viejo (p. ej. media) no debe arrastrarse al nuevo.
+if [[ -n "${ZASCARR_GROUP:-}" ]]; then
+    GRUPO_POR_DEFECTO="${ZASCARR_GROUP}"
+elif [[ "${ZASCARR_USER}" == "${USUARIO_ANTERIOR}" && -n "${GRUPO_ANTERIOR}" ]]; then
+    GRUPO_POR_DEFECTO="${GRUPO_ANTERIOR}"
+elif getent passwd "${ZASCARR_USER}" >/dev/null 2>&1; then
+    GRUPO_POR_DEFECTO="$(id -gn "${ZASCARR_USER}")"
+else
+    GRUPO_POR_DEFECTO="${ZASCARR_USER}"
+fi
+ZASCARR_GROUP="${GRUPO_POR_DEFECTO}"
+if [[ ! "${ZASCARR_GROUP}" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+    die "El grupo '${ZASCARR_GROUP}' no es válido. Usa minúsculas, números, '_' o '-'."
+fi
+asegurar_usuario_servicio
 
 HOST_LIBRARY_DIR="${LIBRARY}"
 # Bug real (reportado): antes se añadía "/downloads" y "/aMule/Incoming" a
@@ -399,6 +430,9 @@ set_env_var "HOST_DOWNLOADS_DIR" "${HOST_DOWNLOADS_DIR}"
 set_env_var "HOST_AMULE_INCOMING_DIR" "${HOST_AMULE_INCOMING_DIR}"
 set_env_var "APP_LOCALE" "${APP_LOCALE}"
 set_env_var "ZASCARR_DATA_DIR" "${ZASCARR_DATA_DIR}"
+# A7: recordar la elección para las reejecuciones (el contenedor usa PUID/PGID).
+set_env_var "ZASCARR_USER" "${ZASCARR_USER}"
+set_env_var "ZASCARR_GROUP" "${ZASCARR_GROUP}"
 
 # Bug real (reportado): el contenedor corre fijo como UID 1000, pero
 # ZASCARR_USER es un usuario de SISTEMA (useradd --system) — Debian le
