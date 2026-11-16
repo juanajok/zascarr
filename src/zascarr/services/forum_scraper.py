@@ -600,14 +600,17 @@ class ForumScraper:
         results: list[ForumResult] = []
         for href, title in temas_de_busqueda(html)[:10]:
             href = unescape(href)  # `&amp;` del HTML, no parte de la ruta
+            # El título viene del HTML de una página de resultados: `&lt;`/`&amp;` deben
+            # quedar como texto (si no, la UI muestra «&lt; Superman &gt;»).
             try:
                 url_tema = self._resolver_enlace(href)
             except OrigenNoPermitidoError as exc:
                 logger.warning("forum.enlace_rechazado", host=_host_para_log(href),
                                motivo=str(exc))
                 continue
+            title = unescape(title).strip()
             if not abrir_temas:
-                results.append(ForumResult(title.strip(), url_tema))
+                results.append(ForumResult(title, url_tema))
                 continue
             try:
                 topic_html = await self._get(url_tema)
