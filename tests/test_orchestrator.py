@@ -9,7 +9,7 @@ Transmission/aMule ni Prowlarr reales.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -1344,3 +1344,62 @@ class TestRelevanciaDeBusqueda:
         alias = {"patrulla x"}
         candidato = make_result(title="La Patrulla-X 012 (1985).cbz", seeders=2)
         assert orch._relevantes([candidato], "X-Men 12", alias) == [candidato]
+
+
+# ── Títulos de candidatos del foro (UX 2026-11-16) ─────────────────────────
+
+class TestTitulosDeEnlacesDelForo:
+    def test_ed2k_usa_el_nombre_del_fichero_desescaped(self):
+        from zascarr.services.orchestrator import _nombre_de_fichero_de_enlace
+        url = ("ed2k://|file|DC%20K.O.%20%231%20-%20S%C3%BAbete%20al%20ring.cbr"
+               "|123456|AABBCC|/")
+        assert _nombre_de_fichero_de_enlace(url) == "DC K.O. #1 - Súbete al ring.cbr"
+
+    def test_magnet_usa_el_parametro_dn(self):
+        from zascarr.services.orchestrator import _nombre_de_fichero_de_enlace
+        assert _nombre_de_fichero_de_enlace(
+            "magnet:?xt=urn:btih:abc&dn=DC+K.O.+%231.cbz") == "DC K.O. #1.cbz"
+
+    def test_sin_nombre_devuelve_vacio(self):
+        from zascarr.services.orchestrator import _nombre_de_fichero_de_enlace
+        assert _nombre_de_fichero_de_enlace("ed2k://|file|") == ""
+        assert _nombre_de_fichero_de_enlace("magnet:?xt=urn:btih:abc") == ""
+
+    @pytest.mark.asyncio
+    async def test_cada_enlace_del_mismo_tema_se_distingue_por_su_fichero(self, monkeypatch):
+        """Antes todos los candidatos de un tema salían con el título del TEMA (27 filas
+        idénticas en «Buscar ahora», bug UX 2026-11-16)."""
+        from zascarr.services import forum_scraper as modulo_foro
+
+        class Foro:
+            def __init__(self, **_kw):
+                pass
+
+            async def login(self, *_a, **_k):
+                return True
+
+            async def use_ipb_search(self, *_a, **_k):
+                return [modulo_foro.ForumResult(
+                    topic_title="DC K.O. (serie + orden de lectura)",
+                    topic_url="http://foro.example/forum/index.php?showtopic=1",
+                    ed2k_links=[
+                        "ed2k://|file|DC%20K.O.%20%231%20-%20S%C3%BAbete%20al%20ring.cbr"
+                        "|1|A|/",
+                        "ed2k://|file|DC%20K.O.%20%232%20-%20El%20combate.cbr|1|B|/",
+                    ],
+                )]
+
+        monkeypatch.setattr(modulo_foro, "ForumScraper", Foro)
+        ajustes = get_settings().model_copy(update={
+            "forum_enabled": True, "forum_url": "http://foro.example/forum",
+            "forum_username": "lector", "forum_password": "clave",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+
+        candidatos = await Orchestrator(db=MagicMock())._forum_fallback("DC K.O.")
+
+        assert [c.title for c in candidatos] == [
+            "DC K.O. #1 - Súbete al ring.cbr",
+            "DC K.O. #2 - El combate.cbr",
+        ]
+        assert {c.indexer for c in candidatos} == {"forum:crg"}
