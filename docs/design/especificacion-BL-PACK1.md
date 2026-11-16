@@ -2,7 +2,7 @@
 
 > **Estado: DISEÑO PROPUESTO. NO IMPLEMENTADO. MIGRACIÓN NO AUTORIZADA NI APLICADA.** Este
 > documento no escribe código, no extrae paquetes, no toca Descargas, la biblioteca, la BD ni
-> producción. Las decisiones del PO de §7 están **pendientes**; se recomiendan, no se aprueban.
+> producción. Las **decisiones del PO de §7 están aprobadas el 2026-11-16**: extraer/importar/limpiar, conservar siempre el original y multivolumen en otra historia.
 > **Base:** `origin/main` `79238696` (2026-11-16), worktree `.squad/wt-344`. La ficha de benchmark
 > paralela `benchmark-BL-PACK1-paquetes.md` **no existe en este SHA**; se cita cuando se incorpore
 > y **esta spec no duplica sus tablas**. Insumos: issue #344 (10 AC), spike #305, evaluación #308,
@@ -506,7 +506,7 @@ paquete_operaciones
 
 ---
 
-## 7. Decisiones del PO (pendientes)
+## 7. Decisiones del PO (aprobadas el 2026-11-16)
 
 | # | Decisión | Opciones | Recomendación | Estado |
 |---|---|---|---|---|
@@ -514,9 +514,10 @@ paquete_operaciones
 | 2 | **¿Original tras importación verificada?** | (a) conservar siempre; (b) ofrecer mover a papelera; (c) borrar | **(a) conservar siempre**; no hay borrado ni papelera en #344. Una limpieza explícita es otra historia/ADR | **PENDIENTE** |
 | 3 | **¿Multivolumen en esta historia o la siguiente?** | (a) ahora; (b) siguiente | **(b) siguiente.** A5 detecta `.partN.rar`/`.r00` y rechaza con causa; implementar la unión de volúmenes añade superficie y no está en el alcance del issue | **PENDIENTE** |
 
-**Ninguna está aprobada.** Si el PO elige (b) en 1 o 2, cambia el contrato de limpieza/original
-y hay que actualizar esta spec antes de implementar; si elige multivolumen ahora, se amplía el
-alcance y la estimación. La recomendación de producto no sustituye la decisión.
+**Aprobadas por el PO el 2026-11-16:** (1a) extraer a temporal, importar y limpiar; (2a) conservar
+siempre el original; (3b) multivolumen en una historia siguiente (aquí se rechaza con causa). El
+contrato de limpieza/original de esta spec queda fijado por estas decisiones; cualquier cambio
+posterior exige actualizarla y abrir decisión nueva.
 
 ---
 
