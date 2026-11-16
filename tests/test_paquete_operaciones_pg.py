@@ -458,7 +458,7 @@ async def test_rar_real_servicio_no_contiene_tebeos(tmp_path, monkeypatch):
                          firma="RAR", estado="listo", causa="", dev=st.st_dev, ino=st.st_ino)
     monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
     get_settings.cache_clear()
-    with bd_efimera_sync(URL) as url:
+    async with bd_efimera(URL) as url:
         migrar_a_head(url)
         motor = create_async_engine(url_asyncpg(url), poolclass=None)
         fabrica = async_sessionmaker(motor, expire_on_commit=False)
