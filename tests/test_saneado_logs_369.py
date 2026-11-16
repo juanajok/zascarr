@@ -359,3 +359,60 @@ def test_handler_posterior_con_formatter_exc_info_no_filtra():
     finally:
         logger.removeHandler(handler)
     assert "/media/library" not in stream.getvalue() and "foo.cbz" not in stream.getvalue()
+
+
+def test_json_entrecomillado_y_msg_no_str():
+    assert "secreto" not in sanear_texto('{"password": "secreto"}')
+    assert "secreto" not in sanear_texto('"api_key": "secreto"')
+    record = logging.LogRecord("prueba.objeto", logging.ERROR, __file__, 1,
+                               Path("/media/library/Serie/foo.cbz"), (), None)
+    FiltroSaneado().filter(record)
+    assert "/media/library" not in str(record.msg) and "foo.cbz" not in str(record.msg)
+
+
+def test_inventario_control_negativo_con_registro_real():
+    """Cada fila del inventario, con un LogRecord real: crudo filtra, saneado no."""
+    from zascarr.utils.saneado_logs import _sanear_record_en_origen
+    casos = [
+        ("importer.file_failed", {"file": "/media/library/a.cbz", "error": "x.cbz"}),
+        ("importer.imported", {"file": "/media/library/a.cbz"}),
+        ("importer.recuperado", {"file": "/media/library/a.cbz"}),
+        ("library_audit.hash_failed", {"path": "/media/library/a.cbz"}),
+        ("cbz.temporal_no_borrado", {"path": "/media/library/a.cbz"}),
+        ("discovery.source_failed", {"error": "https://host/x?token=1"}),
+        ("ajustes.test_failed", {"error": "/media/library/a.cbz"}),
+        ("exportacion_kavita.materializar", {"destino": "/media/library/a.cbz"}),
+        ("tagger.reconciliado", {"path": "/media/library/a.cbz"}),
+        ("forum.search_rechazada", {"motivo": "https://host/x?token=1"}),
+        ("cover.url_rechazada", {"motivo": "https://host/x?token=1"}),
+        ("blog_feed.lectura_fallida", {"url": "https://host/x?token=1"}),
+        ("robots.parse_fallido", {"origen": "https://host/x?token=1"}),
+    ]
+    for evento, datos in casos:
+        record = logging.LogRecord("zascarr.inventario", logging.ERROR, __file__, 1,
+                                   evento, (), None)
+        record.__dict__.update(datos)
+        crudo = f"{record.getMessage()} {record.__dict__}"
+        assert any(v in crudo for v in datos.values()), evento
+        _sanear_record_en_origen(record)
+        saneado = f"{record.getMessage()} {record.__dict__}"
+        for valor in datos.values():
+            assert valor not in saneado, (evento, valor, saneado)
+
+
+def test_stdout_y_buffer_con_logger_real(capsys):
+    import structlog
+
+    from zascarr.utils import registro_reciente
+    from zascarr.utils.saneado_logs import instalar_saneo_logs
+    instalar_saneo_logs()
+    registro_reciente.instalar_captura()
+    registro_reciente.limpiar()
+    try:
+        raise FileNotFoundError("/media/library/Serie/foo.cbz")
+    except FileNotFoundError:
+        structlog.get_logger("prueba.stdout").exception("fallo real")
+    salida = capsys.readouterr()
+    assert "/media/library" not in salida.out and "foo.cbz" not in salida.out
+    texto = registro_reciente.texto_reciente()
+    assert "/media/library" not in texto and "foo.cbz" not in texto
