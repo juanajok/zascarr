@@ -41,6 +41,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   enlace no se encola dos veces y el estado/`download_ref` del deseo siguen apuntando a
   la primera descarga; las extra las recoge el importador.
 
+
+
+- **BL-DUP2: unir copias idénticas con enlace duro (2026-11-16).** En «Duplicados»,
+  «Unir con enlace duro» reemplaza cada copia sobrante por un enlace a la que se queda: ambas
+  rutas siguen existiendo y comparten el mismo contenido. La copia original pasa por la
+  cuarentena de BL-DUP1 y la operación se puede deshacer; no se libera espacio hasta vaciarla.
+  La opción solo aparece si hay misma montura y permiso de escritura. Migración 0044 aditiva.
+
 - **CUR7: filtro por rango de años en Biblioteca (2026-11-16).** Dos campos, «Desde el
   año» y «Hasta el año», acotan por `start_year` y se combinan con el resto de filtros; la URL
   canónica, los chips, la limpieza y la paginación los conservan. Años inválidos se descartan y

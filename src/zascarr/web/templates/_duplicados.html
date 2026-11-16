@@ -36,7 +36,11 @@
     </p>
     <div class="duplicados-acciones">
       <button type="submit" class="btn">Ver vista previa</button>
+      {% if duplicados.enlace_disponible %}
       <button type="submit" class="btn ghost" name="accion" value="enlazar">Unir con enlace duro</button>
+      {% else %}
+      <p class="audit-detail" role="status">No se puede unir con enlace duro: {{ duplicados.enlace_motivo }}</p>
+      {% endif %}
     </div>
   </form>
   {% else %}
