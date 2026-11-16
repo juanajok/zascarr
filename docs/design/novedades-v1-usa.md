@@ -32,6 +32,8 @@
 | Caché | Una entrada por lunes; no se cachean datos de usuario (solo la respuesta de la fuente). |
 | Paginación | Se piden páginas de 100 con `offset` hasta agotar el total de Comic Vine. |
 | Cabeceras | UI y API responden `Cache-Control: no-store` (incluyen qué series sigue la persona). |
+| Fuentes caídas | `Semana.fuentes_fallidas` viaja a la UI y al JSON; no se presenta una fuente ausente como «sin novedades». |
+| Robots/caché | Norma y Panini pasan por `pedir_con_cache` + `GestorRobots`; el cuerpo se cachea 6 h y el resultado 30 min. |
 | Privacidad | No se registran títulos consultados ni la URL pedida. |
 | Frecuencia | La caché de 30 min evita repetir la llamada al abrir/refrescar; no hay job semanal todavía. |
 

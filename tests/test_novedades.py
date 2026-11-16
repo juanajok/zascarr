@@ -224,3 +224,34 @@ def test_la_pantalla_muestra_fuente_espanola_y_sin_numero(monkeypatch):
     assert "Biblioteca Conan 24 #" not in r.text
     assert "No se pudo consultar: Norma" in r.text
     assert "Norma y Panini" in r.text
+
+
+async def test_encendida_sin_clave_y_sin_espanolas_no_devuelve_vacio(monkeypatch):
+    from zascarr.services import novedades
+    from zascarr.services.novedades_es import ResultadoES
+
+    async def _sin_es(**kw):
+        return ResultadoES()
+
+    monkeypatch.setattr(novedades, "get_settings", lambda: SimpleNamespace(
+        comicvine_enabled=True, comicvine_api_key=""))
+    monkeypatch.setattr(novedades, "cargar_novedades_es", _sin_es)
+    with pytest.raises(novedades.NovedadesApagadaError):
+        await novedades.cargar_semana(SimpleNamespace(), date(2026, 11, 16))
+
+
+def test_api_expone_las_fuentes_que_faltan(monkeypatch):
+    from zascarr.main import app
+    from zascarr.web import novedades as web
+
+    async def _cargar(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio, fuentes_fallidas=("Norma",))
+
+    monkeypatch.setattr(web, "cargar_semana", _cargar)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r = TestClient(app).get("/api/novedades?semana=2026-11-18")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    assert r.json()["fuentes_fallidas"] == ["Norma"]
