@@ -177,7 +177,9 @@ async def buscar_en_feed(
     try:
         xml_texto = await _descargar(url, cliente)
     except (httpx.HTTPError, OSError) as exc:
-        logger.warning("blog_feed.lectura_fallida", url=url, motivo=type(exc).__name__)
+        logger.warning("blog_feed.lectura_fallida",
+                       host=(urlsplit(url).hostname or ""),
+                       motivo=type(exc).__name__)
         return []
     if not xml_texto:
         return []

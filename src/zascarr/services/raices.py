@@ -381,6 +381,8 @@ class FotoDeRaices:
                 raices.append(raiz)
             if asignacion is not None:
                 por_tradicion[ComicTradition(asignacion.tradition).value] = raiz
+        from zascarr.utils.saneado_logs import refrescar_raices
+        refrescar_raices([r.path for r in raices])
         return cls(raices, por_tradicion=por_tradicion)
 
     @classmethod
