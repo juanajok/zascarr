@@ -103,11 +103,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 ### Corregido
 
 - **Búsqueda del foro: el salto de redirección no cabía en el presupuesto (2026-11-16).**
-  IPB responde `302` al POST de búsqueda y el salto de redirección vuelve a esperar el
+  IPB responde `302` al POST de búsqueda y el salto de redirección volvía a esperar el
   intervalo de 25 s; con un presupuesto de 30 s solo cabía una espera, así que la búsqueda
-  se saltaba siempre («el foro pidió esperar») y no encontraba series como DC K.O. El
-  presupuesto ahora cubre las dos esperas (2 × intervalo + margen). Como efecto, una
-  búsqueda manual del foro puede tardar ~50 s; el ciclo automático no se ve afectado.
+  se saltaba siempre («el foro pidió esperar») y no encontraba series como DC K.O. Ahora
+  los **saltos de redirección se cobran con la política de lectura** (2 s), no con el
+  intervalo de búsqueda: son parte de la misma búsqueda. El presupuesto además cubre dos
+  esperas (60 s) por si la cadena de saltos es más larga. Una búsqueda manual tarda ~27 s.
 
 - **Lote 2 de deudas menores (2026-11-15).** El enricher de huecos ya no se queda con las
   primeras series por id (rota por `enrichment_attempted_at` y marca 30 días las que no tienen

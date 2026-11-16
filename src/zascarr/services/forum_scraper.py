@@ -374,6 +374,7 @@ class ForumScraper:
     async def _pedir(self, url: str, *, client: httpx.AsyncClient | None = None,
                      datos=None, form: bool = False,
                      politica: PoliticaFuente | None = None,
+                     politica_redireccion: PoliticaFuente | None = None,
                      espera_max_s: float | None = None,
                      form_charset: str | None = None) -> httpx.Response:
         """Una petición por la envoltura común; reutiliza el cliente si se pasa uno."""
@@ -383,6 +384,7 @@ class ForumScraper:
             return await pedir_con_cortesia(
                 cliente, "POST" if form else "GET", url,
                 politica=politica or self._politica,
+                politica_redireccion=politica_redireccion,
                 espera_max_s=self._espera_max_s if espera_max_s is None else espera_max_s,
                 datos=datos, form=form, form_charset=form_charset,
                 cabeceras=self._cabeceras(url),
@@ -573,6 +575,8 @@ class ForumScraper:
             f"{self._base}/index.php?act=Search&CODE=01",
             datos=datos, form=True,
             politica=self._politica_busqueda,
+            # El 302 de IPB no es otra búsqueda: sus saltos se cobran a ritmo de lectura.
+            politica_redireccion=self._politica,
             espera_max_s=self._espera_busqueda_s,
             form_charset=self._charset or "cp1252")
         texto = self._decodificar(respuesta)
