@@ -427,7 +427,8 @@ async def portada_de_arco(arco_id: UUID, db: AsyncSession = Depends(get_db)) -> 
         return Response(status_code=404, headers={"Cache-Control": "no-store"})
     series_id, issue_id = fila
     return RedirectResponse(
-        f"/ui/series/{series_id}/numero/{issue_id}/portada.jpg", status_code=307)
+        f"/ui/series/{series_id}/numero/{issue_id}/portada.jpg", status_code=307,
+        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/{arco_id}", response_class=HTMLResponse)
