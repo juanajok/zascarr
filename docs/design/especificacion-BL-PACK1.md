@@ -442,6 +442,14 @@ paquete_operaciones
 
 ---
 
+### 5.x Excepción de clasificación en RAR (cortes 1-2)
+
+En ZIP, cada entrada `.cbz/.cbr` se clasifica por **firma** (lectura acotada de sus primeros bytes
+sin extraer). En RAR, el listado de `lsar` no expone los bytes de la entrada y extraerla queda fuera
+de estos cortes: la vista previa clasifica por la extensión declarada y lo muestra como
+«candidatos a importar», con el aviso «en RAR, el tipo se confirmará al extraer». La firma real se
+verificará durante la extracción en el corte 3; no se afirma que sea un tebeo hasta entonces.
+
 ## 6. Plan de pruebas
 
 ### 6.1 Unitarias (sin BD)

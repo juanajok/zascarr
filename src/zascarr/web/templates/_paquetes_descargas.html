@@ -13,7 +13,10 @@
             {% if p.estado != "listo" %}<div class="caption">{{ p.causa }}</div>{% endif %}
           </div>
           {% if p.estado == "listo" %}
-            <a class="btn" href="/ui/auditoria/paquetes/previa?token={{ p.token }}">Ver qué contiene</a>
+            <form method="get" action="/ui/auditoria/paquetes/previa">
+              <input type="hidden" name="token" value="{{ p.token }}">
+              <button type="submit">Ver qué contiene</button>
+            </form>
           {% endif %}
         </li>
       {% endfor %}

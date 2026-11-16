@@ -87,6 +87,7 @@ class ListadoPaquete:
     entradas: tuple[EntradaPaquete, ...]
     ignoradas: tuple[EntradaPaquete, ...]
     bytes_estimados: int
+    tipo_confirmado: bool = True
 
 
 def _firma_texto(firma: Firma) -> str:
@@ -282,6 +283,8 @@ def _agrupar(
     formato: str,
     entradas: list[EntradaPaquete],
     ignoradas: list[EntradaPaquete],
+    *,
+    tipo_confirmado: bool = True,
 ) -> ListadoPaquete:
     if not entradas:
         raise PaqueteError("No contiene tebeos.", "Prueba con otro paquete de Descargas.")
@@ -291,6 +294,7 @@ def _agrupar(
         entradas=tuple(entradas),
         ignoradas=tuple(ignoradas),
         bytes_estimados=sum(e.tamano for e in entradas),
+        tipo_confirmado=tipo_confirmado,
     )
 
 
@@ -370,7 +374,7 @@ def _listar_rar(p: PaquetePendiente, fd: int, *, temporal: Path | None = None) -
     try:
         listado = lector_rar.listar(
             Path(f"/proc/self/fd/{fd}"), temporal=casa,
-            max_bytes_declarados=MAX_BYTES_TOTAL,
+            max_bytes_declarados=MAX_BYTES_TOTAL, pass_fds=(fd,),
         )
     except lector_rar.ErrorRar as exc:
         raise PaqueteError(
@@ -397,4 +401,4 @@ def _listar_rar(p: PaquetePendiente, fd: int, *, temporal: Path | None = None) -
             ignoradas.append(EntradaPaquete(e.nombre, e.tamano, "otro", False, "no es un tebeo"))
             continue
         entradas.append(EntradaPaquete(e.nombre, e.tamano, ext[1:].upper(), True))
-    return _agrupar(p, "RAR", entradas, ignoradas)
+    return _agrupar(p, "RAR", entradas, ignoradas, tipo_confirmado=False)

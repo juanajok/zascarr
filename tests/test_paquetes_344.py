@@ -179,7 +179,7 @@ def test_html_no_expone_ruta_absoluta(tmp_path, monkeypatch):
     monkeypatch.setattr(auditoria, "detectar_paquetes", lambda: [p])
     r = TestClient(app).get("/ui/auditoria/paquetes")
     assert r.status_code == 200 and str(tmp_path) not in r.text
-    assert "token=" in r.text and str(raiz) not in r.text
+    assert "name=\"token\"" in r.text and str(raiz) not in r.text
 
 
 def test_rar_top_y_herramienta_ausente(tmp_path, monkeypatch):
@@ -218,6 +218,23 @@ def test_listado_usa_fd_y_no_reabre_symlink(tmp_path):
     try:
         listado = listar_paquete(abierto)
         assert [e.nombre for e in listado.entradas] == ["a.cbz"]
+    finally:
+        if abierto.fd >= 0:
+            os.close(abierto.fd)
+
+
+def test_rar_real_desde_fd_si_hay_unar(tmp_path):
+    from zascarr.utils import lector_rar
+    if not lector_rar.disponible():
+        pytest.skip("sin unar/lsar")
+    a = _ajustes(tmp_path)
+    destino = Path(a.transmission_download_dir) / "minimo.rar"
+    destino.write_bytes(Path("tests/fixtures/rar/minimo_rar4.cbr").read_bytes())
+    candidato = detectar_paquetes(ajustes=a, secret=a.secret_key)[0]
+    abierto = verificar_token_paquete(candidato.token, ajustes=a)
+    try:
+        with pytest.raises(PaqueteError, match="No contiene tebeos"):
+            listar_paquete(abierto)
     finally:
         if abierto.fd >= 0:
             os.close(abierto.fd)
