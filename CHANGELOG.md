@@ -140,6 +140,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   título del tema (27 filas idénticas). Ahora el título del candidato es el nombre del
   fichero que viaja en el enlace (y la fila muestra su formato real); el tema sigue
   como fuente `forum:crg`. En magnet se usa el parámetro `dn`.
+- **aMule: el enlace se envía con el formulario real de su web (2026-11-16).**
+  `add_ed2k_link` usaba `GET /amuleweb/?ed2k=…`, que en el phpUI de aMule no
+  existe: respondía HTTP 200 con una página de error de ~458 bytes y el enlace
+  nunca se encolaba (síntoma: «le doy descargar y en aMule no aparece nada»).
+  Ahora hace `POST /footer.php` con los campos del formulario real
+  (`ed2klink`, `selectcat`, `Submit`) y desescapa el nombre URL-encoded del
+  foro (`%20` → espacio), que es lo que haría el navegador.
+ (fix(amule): añadir enlaces con el formulario POST real de footer.php)
 
 - **Búsqueda del foro: el salto de redirección no cabía en el presupuesto (2026-11-16).**
   IPB responde `302` al POST de búsqueda y el salto de redirección volvía a esperar el
