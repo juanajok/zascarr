@@ -367,3 +367,39 @@ def test_fixture_rar_real_tiene_varias_entradas():
     assert sum(1 for e in listado.entradas if e.nombre.lower().endswith((".cbz", ".cbr"))) == 0
     # El fixture legal solo contiene JPG: multi-entrada RAR de tebeos es NOT RUN
     # (no hay creador de RAR en la imagen legal).
+
+
+@pytest.mark.asyncio
+async def test_timeout_worker_mata_y_limpia(tmp_path, monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.services import paquetes_extraccion as modulo
+    _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        monkeypatch.setattr(modulo, "_ZIP_TIMEOUT", 0.001)
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            with pytest.raises(modulo.PaqueteExtraccionError):
+                await extraer_y_verificar(s, op.id)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.ERROR and op.temp_dir is None
+        assert paquete.ruta.exists()
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
+
+
+def test_rar_real_extraccion_streaming_fixture(tmp_path):
+    from zascarr.utils import lector_rar
+    if not lector_rar.disponible():
+        pytest.skip("sin unar/lsar")
+    fixture = Path("tests/fixtures/rar/solido_rar4.cbr")
+    import tempfile
+    with tempfile.TemporaryDirectory() as casa:
+        lista = lector_rar.listar(fixture, temporal=Path(casa),
+                                  max_bytes_declarados=8 * 1024 ** 3)
+        assert len(lista.entradas) >= 2
+        salida = tmp_path / "primera"
+        primera = lista.entradas[0]
+        lector_rar.extraer_entrada_a(fixture, primera, salida, primera.tamano,
+                                     temporal=Path(casa))
+        assert salida.stat().st_size == primera.tamano
