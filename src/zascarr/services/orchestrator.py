@@ -131,6 +131,11 @@ MOTIVO_FUENTE_INACCESIBLE = (
 MOTIVO_SIN_RESULTADOS = "No se encontró nada en las fuentes activas"
 #: SCR4: el foro pidió esperar (Search Flood Control) — no es «sin resultados».
 MOTIVO_FORO_ESPERA = "El foro pidió esperar unos segundos; se reintentará"
+#: El foro esperaba Y además Prowlarr trajo cosas que se descartaron: decir solo
+#: «el foro pidió esperar» ocultaba el motivo real (bug de UX 2026-11-16).
+MOTIVO_ESPERA_CON_DESCARTES = (
+    "El foro pidió esperar unos segundos y los resultados de Prowlarr no eran utilizables; "
+    "se reintentará")
 MOTIVO_CANDIDATO_RECHAZADO = (
     "Se encontró algo, pero ningún cliente de descarga está activo — revisa Ajustes"
 )
@@ -471,7 +476,10 @@ class Orchestrator:
             # Prowlarr que se descarta no debe ocultar que el foro pidió esperar.
             if forum_espera:
                 item.status = WishlistStatus.WANTED
-                item.last_error = MOTIVO_FORO_ESPERA
+                # Si Prowlarr sí respondió pero todo se descartó, no mentir con un
+                # «el foro pidió esperar» que oculta de dónde venir el problema.
+                item.last_error = (
+                    MOTIVO_ESPERA_CON_DESCARTES if unicos else MOTIVO_FORO_ESPERA)
                 await self._restaurar_marca(item, marca_previa)
                 await self.db.flush()
                 return []
