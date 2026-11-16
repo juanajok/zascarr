@@ -452,9 +452,10 @@ class LibraryAdopter:
                     en_lote.by_other_run += 1
                 else:
                     async with self._db.begin_nested():
-                        await self._adopt_file(
-                            path, en_lote, pistas.get(path.name),
-                            root=raiz_de(path, foto.raices))
+                        # La raíz se pasa por el atributo (no por argumento) para no cambiar
+                        # la firma que dobles antiguos de `_adopt_file` sustituyen.
+                        self._root_en_curso = raiz_de(path, foto.raices)
+                        await self._adopt_file(path, en_lote, pistas.get(path.name))
             except IntegrityError as exc:
                 if _restriccion(exc) == "files_file_path_key":      # la registró otra ejecución a la vez
                     en_lote.by_other_run += 1
@@ -991,6 +992,8 @@ class LibraryAdopter:
         self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None,
         *, root=None,
     ) -> None:
+        if root is None:
+            root = getattr(self, "_root_en_curso", None)
         # El hash se lee de los bytes que hay AHORA: si el archivo cambia mientras se lee, ese hash ya no lo describe y NO se registra (se
         # compara tamaño y fecha antes y después; un cambio que conserve ambos no se detecta, ver docs/design/registro-incremental-326.md).
         antes = await asyncio.to_thread(path.stat)
