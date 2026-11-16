@@ -445,3 +445,52 @@ def carpeta_temporal(base: Path):
         yield carpeta
     finally:
         shutil.rmtree(carpeta, ignore_errors=True)
+
+
+def extraer_entrada_a(ruta: Path, entrada: EntradaRar, destino: Path, tope: int, *,
+                      temporal: Path, timeout: float = RAR_TIMEOUT_EXTRAER_S) -> int:
+    """Extrae UNA entrada por índice y la copia EN STREAMING a `destino` (sin cargarla entera).
+
+    Verifica tamaño y CRC contra el listado mientras copia. `temporal` es una carpeta propia y
+    vacía; `destino` debe estar dentro de un temporal del llamador (se abre con O_EXCL).
+    """
+    unar = _localizar("unar")
+    if unar is None:
+        raise ErrorRar(MotivoRar.HERRAMIENTA_AUSENTE)
+    _exigir_ruta_absoluta(ruta)
+    if entrada.indice < 0 or entrada.tamano < 0:
+        raise ErrorRar(MotivoRar.ILEGIBLE)
+    if entrada.es_directorio or entrada.tamano > tope:
+        raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
+    trabajo = temporal / f"salida-{entrada.indice}"
+    trabajo.mkdir(mode=0o700)
+    codigo, salida, error = _ejecutar(
+        [unar, "-D", "-f", "-i", "-o", str(trabajo), str(ruta), str(entrada.indice)],
+        home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_ERROR,
+        vigilar=trabajo, tope_escrito=min(tope, entrada.tamano) + 1)
+    if codigo != 0:
+        raise ErrorRar(_motivo_por_mensaje(error + salida))
+    fichero = _unico_fichero_regular(trabajo)
+    try:
+        estado = fichero.lstat()
+        if estado.st_size != entrada.tamano or estado.st_size > tope:
+            raise ErrorRar(MotivoRar.ILEGIBLE)
+        crc = 0
+        total = 0
+        with open(fichero, "rb") as entrada_f, open(destino, "xb") as salida_f:
+            while bloque := entrada_f.read(1024 * 1024):
+                total += len(bloque)
+                crc = zlib.crc32(bloque, crc)
+                salida_f.write(bloque)
+            salida_f.flush()
+            os.fsync(salida_f.fileno())
+        if total != entrada.tamano or total > tope:
+            raise ErrorRar(MotivoRar.ILEGIBLE)
+        if entrada.crc32 is not None and crc != entrada.crc32:
+            raise ErrorRar(MotivoRar.ILEGIBLE)
+        return total
+    except OSError as exc:
+        raise ErrorRar(MotivoRar.ILEGIBLE) from exc
+    finally:
+        with contextlib.suppress(OSError):
+            fichero.unlink()

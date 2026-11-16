@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
+from zascarr.core.formato_contenedor import Firma, firma_de
 from zascarr.models import PaqueteEstado, PaqueteOperacion
 from zascarr.services.paquetes import (
     ListadoPaquete,
@@ -160,6 +161,43 @@ def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
     return items
 
 
+def _verificar_contenido(items: list[dict], temp: Path) -> None:
+    """Firma/cabecera y primera imagen de cada tebeo extraído; falla cerrado."""
+    import io
+    import zipfile as _zip
+
+    from PIL import Image
+
+    esperados = {i["nombre"] for i in items}
+    reales = {p.name for p in temp.iterdir() if p.is_file()}
+    if reales != esperados:
+        raise PaqueteExtraccionError("verificacion", "El temporal tiene ficheros inesperados.")
+    for item in items:
+        ruta = temp / item["nombre"]
+        ext = ruta.suffix.lower()
+        firma = firma_de(ruta)
+        if ext == ".cbz" and firma is not Firma.ZIP:
+            raise PaqueteExtraccionError("firma", "Un tebeo dice ZIP pero no lo es.")
+        if ext == ".cbr" and firma is not Firma.RAR:
+            raise PaqueteExtraccionError("firma", "Un tebeo dice RAR pero no lo es.")
+        if firma is Firma.ZIP:
+            try:
+                with _zip.ZipFile(ruta) as z:
+                    imagen = next((n for n in z.namelist()
+                                   if Path(n).suffix.lower() in
+                                   {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}), None)
+                    if imagen is None:
+                        raise PaqueteExtraccionError("sin_imagen", "Un tebeo no tiene páginas.")
+                    datos = z.read(imagen)
+                    with Image.open(io.BytesIO(datos)) as img:
+                        img.verify()
+            except PaqueteExtraccionError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — cualquier cabecera/imagen rota
+                raise PaqueteExtraccionError(
+                    "ilegible", "Un tebeo extraído no se puede abrir.") from exc
+
+
 def _verificar_items(items: list[dict], temp: Path, total_listado: int) -> None:
     total = 0
     for item in items:
@@ -248,6 +286,7 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
             items = _escribir_rar(paquete, listado, temp)
         else:
             raise PaqueteExtraccionError("formato", "El paquete no es RAR ni ZIP.")
+        _verificar_contenido(items, temp)
         op.estado = PaqueteEstado.VERIFICANDO
         op.items = list(items)
         s.add(op)

@@ -336,6 +336,17 @@ async def lifespan(app: FastAPI):
         app.state.db_degraded = True
 
     if not app.state.db_degraded:
+        # #344: operaciones de paquetes que quedaron vivas en un arranque anterior y sus
+        # temporales; se marcan error para que se puedan reintentar. Nunca impide arrancar.
+        try:
+            from zascarr.services.paquetes_extraccion import limpiar_huerfanos
+            async with async_session_factory() as session:
+                limpiadas = await limpiar_huerfanos(session)
+            if limpiadas:
+                logger.info("paquetes.huerfanos_limpiados", cantidad=limpiadas)
+        except Exception:
+            logger.exception("paquetes.huerfanos_limpieza_fallida")
+
         # #478/#564: consumir el diario de conversión de una ejecución anterior. Si una
         # conversión murió entre apartar el original y publicar, se restaura; si murió
         # después de publicar, se repara la fila. Sin esto, el diario crecería sin fin.
