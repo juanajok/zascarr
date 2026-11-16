@@ -322,6 +322,7 @@ async def _enviar(cliente: httpx.AsyncClient, metodo: str, url: str, *,
 
 
 async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: PoliticaFuente,
+                                politica_redireccion: PoliticaFuente | None = None,
                                 deadline: float | None, hosts_redireccion,
                                 datos, cabeceras, cortesia, reloj, motivo: str,
                                 form: bool, permitir_apagada: bool,
@@ -336,15 +337,21 @@ async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: Pol
     espera_total = 0.0
     origen_actual = origen_inicial
     for salto in range(0, politica.max_redirecciones + 1):
+        # Un salto de redirección no es otra búsqueda: se cobra con la política de lectura
+        # (`politica_redireccion`), no con el intervalo de búsqueda (bug foro 2026-11-16:
+        # POST 25 s + salto 25 s no cabían en el presupuesto y la búsqueda se saltaba).
+        politica_salto = politica if salto == 0 else (politica_redireccion or politica)
+        if politica_salto is not politica:
+            cortesia.registrar_politica(politica_salto)
         # La puerta de «fuente apagada» se comprueba antes de CADA salto, no solo antes del
         # primer intento: si se apaga mientras se sigue una redirección, no se envía.
-        if not permitir_apagada and not fuente_habilitada(politica.fuente):
-            raise FuenteApagada(politica.fuente)
+        if not permitir_apagada and not fuente_habilitada(politica_salto.fuente):
+            raise FuenteApagada(politica_salto.fuente)
         host = origen_actual                    # §3.2: (esquema, host, puerto)
         restante = None if deadline is None else deadline - reloj()
         if restante is not None and restante <= 0:
-            raise CortesiaEnEspera(politica.fuente, host, 0.0, motivo)
-        espera = await cortesia.esperar(politica.fuente, host, motivo=motivo,
+            raise CortesiaEnEspera(politica_salto.fuente, host, 0.0, motivo)
+        espera = await cortesia.esperar(politica_salto.fuente, host, motivo=motivo,
                                         espera_max_s=restante)
         espera_total += espera.espera_s
         # La fuente pudo apagarse DURANTE la espera: se vuelve a mirar justo antes de enviar.
@@ -387,6 +394,7 @@ def _es_transitorio(codigo: int) -> bool:
 async def pedir_con_cortesia(
     cliente: httpx.AsyncClient, metodo: str, url: str, *,
     politica: PoliticaFuente,
+    politica_redireccion: PoliticaFuente | None = None,
     espera_max_s: float,
     hosts_redireccion=None,
     datos=None,
@@ -419,7 +427,8 @@ async def pedir_con_cortesia(
         espera_s_intento = 0.0
         try:
             respuesta, espera_s_intento, origen_final = await _seguir_redirecciones(
-                cliente, metodo, url, politica=politica, deadline=deadline,
+                cliente, metodo, url, politica=politica,
+                politica_redireccion=politica_redireccion, deadline=deadline,
                 hosts_redireccion=hosts_redireccion, datos=datos, cabeceras=cabeceras,
                 cortesia=servicio, reloj=reloj,
                 motivo="cortesia" if intento == 1 else "reintento",

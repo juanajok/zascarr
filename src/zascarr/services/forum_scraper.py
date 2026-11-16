@@ -343,7 +343,11 @@ class ForumScraper:
         self._politica_busqueda = politica_busqueda or PoliticaFuente(
             "foro", "Foro", max(0.0, intervalo_busqueda), max_intentos=1,
             max_redirecciones=MAX_SALTOS)
-        self._espera_busqueda_s = max(30.0, self._politica_busqueda.intervalo_min_s + 5.0)
+        # La búsqueda paga DOS esperas: el POST y el salto de redirección que devuelve IPB
+        # (ambos con el intervalo de búsqueda; fuente y host comparten ritmo). Con 30 s
+        # solo cabía una espera y el foro no buscaba nunca (bug 2026-11-16, DC K.O.).
+        self._espera_busqueda_s = max(
+            2.0 * self._politica_busqueda.intervalo_min_s + 10.0, 60.0)
         self._cortesia = cortesia
         self._reloj = reloj
         self._dormir = dormir
@@ -370,6 +374,7 @@ class ForumScraper:
     async def _pedir(self, url: str, *, client: httpx.AsyncClient | None = None,
                      datos=None, form: bool = False,
                      politica: PoliticaFuente | None = None,
+                     politica_redireccion: PoliticaFuente | None = None,
                      espera_max_s: float | None = None,
                      form_charset: str | None = None) -> httpx.Response:
         """Una petición por la envoltura común; reutiliza el cliente si se pasa uno."""
@@ -379,6 +384,7 @@ class ForumScraper:
             return await pedir_con_cortesia(
                 cliente, "POST" if form else "GET", url,
                 politica=politica or self._politica,
+                politica_redireccion=politica_redireccion,
                 espera_max_s=self._espera_max_s if espera_max_s is None else espera_max_s,
                 datos=datos, form=form, form_charset=form_charset,
                 cabeceras=self._cabeceras(url),
@@ -569,6 +575,8 @@ class ForumScraper:
             f"{self._base}/index.php?act=Search&CODE=01",
             datos=datos, form=True,
             politica=self._politica_busqueda,
+            # El 302 de IPB no es otra búsqueda: sus saltos se cobran a ritmo de lectura.
+            politica_redireccion=self._politica,
             espera_max_s=self._espera_busqueda_s,
             form_charset=self._charset or "cp1252")
         texto = self._decodificar(respuesta)
