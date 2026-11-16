@@ -34,6 +34,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Pasada de UI/UX en Deseados (2026-11-16).** Introducción más corta y «¿Cómo funciona?»
+  plegado (menos ruido antes de la acción), indicador «Buscando series…» al buscar,
+  resumen «N deseos · M en descarga», estado vacío con siguiente paso, nombres
+  accesibles en todos los botones de la fila, y panel de candidatos con cabecera
+  («N resultados — elige uno o varios»), scroll para listas largas, «Enviado» como chip,
+  botón de descarga deshabilitado mientras envía y apilado correcto en móvil.
+  DOWNLOADED ya dice «Descargado» (antes «Descargando…», que confundía con la descarga
+  en curso).
+
 - **Tomo recopilatorio: números que cubre (2026-11-16).** Al guardar un especial sin
   número se puede indicar un rango (`1-12`, `1,3,5-7`): el tomo queda como publicación
   sin número pero esos números **cuentan como poseídos**, dejan de ser huecos y no se

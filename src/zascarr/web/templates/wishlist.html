@@ -2,8 +2,13 @@
 {% block title %}Deseados — ZascArr{% endblock %}
 {% block content %}
 <h1>Deseados</h1>
-<p class="subtitle">Marca una serie que ya tengas catalogada como deseada y el sistema la busca, la descarga y la importa solo.</p>
-<p class="caption">El ciclo automático busca periódicamente en Prowlarr y en el foro configurado; «Buscar ahora» lanza ambas búsquedas al momento y puede tardar un par de minutos: el foro espacia sus consultas para no saturarlo.</p>
+<p class="subtitle">Marca series que ya tengas catalogadas: ZascArr las busca, descarga e importa por ti.</p>
+<details class="wishlist-como">
+  <summary>¿Cómo funciona?</summary>
+  <p class="caption">El ciclo automático busca en Prowlarr y en el foro configurado. «Buscar ahora» lanza
+    ambas búsquedas al momento y puede tardar hasta un par de minutos: el foro espacia sus consultas
+    para no saturarlo.</p>
+</details>
 
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
 {% if prowlarr_incompleto %}
@@ -23,11 +28,17 @@
        hx-get="/ui/wishlist/buscar-serie"
        hx-trigger="input changed delay:400ms, search"
        hx-target="#resultados-wishlist"
-       hx-swap="innerHTML">
+       hx-swap="innerHTML"
+       hx-indicator="#buscando-series">
+<span class="htmx-indicator caption" id="buscando-series"
+      role="status" aria-live="polite">Buscando series…</span>
 <div id="resultados-wishlist" class="series-results"></div>
 
 {% if not rows %}
-<p class="empty">Nada en la lista de deseos todavía.</p>
+<p class="empty">Nada en la lista de deseos todavía. Busca una serie arriba y pulsa «Añadir a deseados».</p>
+{% else %}
+<p class="muted wishlist-resumen">{{ total }} deseo{{ 's' if total != 1 }}
+  {% if en_descarga %}· {{ en_descarga }} en descarga{% endif %}</p>
 {% endif %}
 
 <div class="wishlist-list" id="wishlist-list">
