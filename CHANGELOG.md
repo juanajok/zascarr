@@ -40,6 +40,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   vuelven a buscar. Se guarda en `metadata.numeros_cubiertos` del archivo (sin
   migración); `numeros_poseidos`/dashboard lo incluyen. Tope de 300 números y rangos
   invertidos rechazados.
+- **«Ya lo tengo» para desechos descargados que el importador no enlaza (2026-11-16).**
+  Una descarga manual que acaba en `_Unsorted` (sin Issue) dejaba el deseo en
+  «Descargando…» para siempre, porque la comprobación automática solo lo cierra si ve
+  un fichero ligado a la serie importado después de añadir el deseo. Ahora esos deseos
+  muestran **«Ya lo tengo»**: lo marca como importado a mano, sin volver a buscarlo.
+ (feat(deseos): botón «Ya lo tengo» para descargas que el importador no enlaza)
 
 - **Especiales sin número en `Serie/Especiales/` (2026-11-16).** «Por revisar» ofrece
   «Guardar como especial (sin número)» cuando la serie está reconocida: crea el Issue
