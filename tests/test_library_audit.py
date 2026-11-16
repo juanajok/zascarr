@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 tests/test_library_audit.py
 
@@ -259,3 +260,27 @@ class TestInforme:
 
         assert report.files_scanned == 0
         assert not report.hay_hallazgos
+
+
+def test_auditoria_recorre_dos_raices_y_deduplica_por_inodo(tmp_path):
+    """Corte C: la auditoría no se queda en la raíz global."""
+    from datetime import UTC, datetime
+
+    from zascarr.services.library_audit import AuditReport, LibraryAudit
+
+    a, b = tmp_path / "A", tmp_path / "B"
+    a.mkdir()
+    b.mkdir()
+    (a / "uno.cbz").write_bytes(b"x" * 100)
+    (b / "dos.cbz").write_bytes(b"x" * 100)
+
+    class _Db:
+        pass
+
+    auditoria = LibraryAudit.__new__(LibraryAudit)
+    auditoria._db = _Db()
+    auditoria._library = a
+    auditoria._raices_paths = [a, b]
+    informe = AuditReport(started_at=datetime.now(UTC))
+    auditoria._analizar(informe)
+    assert informe.files_scanned == 2
