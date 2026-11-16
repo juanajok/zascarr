@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Resultado de carpetas — ZascArr{% endblock %}
+{% block content %}
+<h1>Resultado: carpetas repetidas</h1>
+{% for r in resultados %}
+<section class="audit-block">
+  {% if r.error is defined %}
+  <p class="audit-why" role="alert">No se pudo aplicar una parte: {{ r.error }}</p>
+  {% else %}
+  <h2>Archivos comunes</h2>
+  <p>Estado: <strong>{{ "Listo" if r.estado == "confirmada" else r.estado }}</strong> · {{ r.total_archivos }} archivo(s).</p>
+  {% for g in r.grupos %}
+  <p class="audit-detail">{% if g.estado == "movido" %}Apartado: {{ g.movidos }} archivo(s).{% elif g.estado == "rechazado" %}No se ha apartado: {{ g.motivo | motivo_apartado }}.{% else %}{{ g.estado }}.{% endif %}</p>
+  {% endfor %}
+  {% if r.estado == "confirmada" %}
+  <form method="post" action="/ui/auditoria/duplicados/deshacer">
+    <input type="hidden" name="operacion" value="{{ r.operacion }}">
+    <button type="submit" class="btn ghost sm">Deshacer el apartado</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</section>
+{% endfor %}
+{% if carpeta %}
+<section class="audit-block">
+  {% if carpeta.error is defined %}
+  <p class="audit-why" role="alert">No se pudo apartar la carpeta vacía: {{ carpeta.error }}</p>
+  {% else %}
+  <h2>Carpeta vacía</h2>
+  <p>La carpeta se ha apartado a la cuarentena; no se ha borrado.</p>
+  <form method="post" action="/ui/auditoria/duplicados/deshacer">
+    <input type="hidden" name="operacion" value="{{ carpeta.operacion }}">
+    <button type="submit" class="btn ghost sm">Deshacer el apartado de la carpeta</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+<p class="audit-detail">La cuarentena ocupa {{ cuarentena.bytes | tamano }} ({{ cuarentena.archivos }} archivos). No se borra automáticamente.</p>
+<p><a class="btn ghost" href="/ui/auditoria">Volver a Duplicados</a></p>
+{% endblock %}
