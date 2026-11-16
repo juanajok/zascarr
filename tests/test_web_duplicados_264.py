@@ -236,3 +236,14 @@ def test_confirmar_enlace_usa_el_servicio_de_enlace(tmp_path, monkeypatch):
     assert r.status_code == 200
     assert "Resultado de unir copias" in r.text
     assert "Enlace" in r.text or "enlace" in r.text
+
+
+def test_unir_no_aparece_si_las_copias_no_se_pueden_enlazar(tmp_path, monkeypatch):
+    g = grupo(tmp_path)
+    monkeypatch.setattr("zascarr.web.auditoria._puede_enlazar",
+                        lambda _rutas: (False, "Están en discos distintos."))
+    with use_fake_session(FakeSession([FakeExecResult(informe_falso([g]))])) as c:
+        r = c.get("/ui/auditoria")
+    assert r.status_code == 200
+    assert 'name="accion" value="enlazar"' not in r.text
+    assert "Están en discos distintos" in r.text

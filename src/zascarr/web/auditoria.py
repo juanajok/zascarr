@@ -348,6 +348,24 @@ class GrupoDuplicado:
     size_bytes: int
     bytes_recuperables: int
     copias: list[CopiaDuplicado]
+    enlace_posible: bool = False
+    enlace_motivo: str | None = None
+
+
+def _puede_enlazar(rutas: list[str]) -> tuple[bool, str | None]:
+    """Misma montura y permiso de escritura en las carpetas que se sustituyen."""
+    if len(rutas) < 2:
+        return False, "Hacen falta al menos dos copias."
+    try:
+        dispositivos = {Path(r).stat().st_dev for r in rutas}
+    except OSError:
+        return False, "Alguna copia ya no está."
+    if len(dispositivos) != 1:
+        return False, "Están en discos distintos."
+    for ruta in rutas:
+        if not os.access(Path(ruta).parent, os.W_OK):
+            return False, "No hay permiso para escribir en esa carpeta."
+    return True, None
 
 
 def _texto_fecha(segundos: float | None) -> str:
@@ -446,10 +464,15 @@ async def _contexto_duplicados(db: AsyncSession, informe: dict | None) -> dict:
                     catalogo=_texto_catalogo(fila), nombre=_pista_nombre(p.name),
                     fila=fila is not None,
                 ))
-            grupos.append(GrupoDuplicado(sha, size, size * max(0, len(rutas) - 1), copias))
+            posible, motivo = await asyncio.to_thread(_puede_enlazar, rutas)
+            grupos.append(GrupoDuplicado(
+                sha, size, size * max(0, len(rutas) - 1), copias, posible, motivo))
     cuarentena = await asyncio.to_thread(_resumen_cuarentena)
     operaciones = await _operaciones_apartadas(db)
-    return {"grupos": grupos, "cuarentena": cuarentena, "operaciones": operaciones}
+    enlace_disponible = bool(grupos) and all(g.enlace_posible for g in grupos)
+    enlace_motivo = next((g.enlace_motivo for g in grupos if not g.enlace_posible), None)
+    return {"grupos": grupos, "cuarentena": cuarentena, "operaciones": operaciones,
+            "enlace_disponible": enlace_disponible, "enlace_motivo": enlace_motivo}
 
 
 def _resumen_cuarentena() -> dict:

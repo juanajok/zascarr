@@ -14,7 +14,7 @@ from sqlalchemy import select, text
 from tests._pg import bd_efimera_sync, migrar_a_head
 from tests.test_revision_carpetas_pg import Banco
 from zascarr.models import ApartadoEstado, ApartadoOperacion, File, FileFormat
-from zascarr.services.apartado_duplicados import TokenApartadoInvalido
+from zascarr.services.apartado_duplicados import GrupoRechazado, TokenApartadoInvalido
 from zascarr.services.enlace_duplicados import EnlaceDuplicadosService
 from zascarr.services.tokens_revision import (
     GrupoFirmado,
@@ -237,3 +237,45 @@ async def test_token_de_apartar_no_sirve_para_enlazar(banco, tmp_path):
         with pytest.raises(TokenApartadoInvalido):
             await _servicio(s, library).confirmar(
                 token, [{"sha256": sha, "rutas": [str(p) for p in rutas], "keep_index": 0}])
+
+
+@pytest.mark.asyncio
+async def test_permiso_de_escritura_se_rechaza_antes_de_tocar(banco, tmp_path):
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("como root los permisos no bloquean la escritura")
+    library = _lib(tmp_path)
+    rutas = [library / "A" / "uno.cbz", library / "B" / "dos.cbz"]
+    sha = await _sha(rutas[0])
+    rutas[1].parent.chmod(0o500)
+    try:
+        async with banco.fabrica() as s:
+            with pytest.raises(GrupoRechazado) as exc:
+                await _servicio(s, library).previsualizar(sha, [str(p) for p in rutas], 0)
+        assert exc.value.motivo == "sin_permiso"
+        assert rutas[0].exists() and rutas[1].exists()
+    finally:
+        rutas[1].parent.chmod(0o700)
+
+
+@pytest.mark.asyncio
+async def test_discos_distintos_se_rechazan_con_fs_real(banco, tmp_path):
+    shm = Path("/dev/shm")
+    if not shm.is_dir():
+        pytest.skip("no hay /dev/shm para probar otra montura")
+    a = shm / f"zascarr-dup2-{uuid4().hex}.cbz"
+    b = tmp_path / f"zascarr-dup2-{uuid4().hex}.cbz"
+    a.write_bytes(b"misma-copia")
+    b.write_bytes(b"misma-copia")
+    try:
+        if a.stat().st_dev == b.stat().st_dev:
+            pytest.skip("las rutas de prueba están en la misma montura")
+        sha = await _sha(a)
+        servicio = EnlaceDuplicadosService(
+            None, settings=SimpleNamespace(library_path=Path("/"), secret_key=SECRET),
+            secret=SECRET)
+        with pytest.raises(GrupoRechazado) as exc:
+            await servicio.previsualizar(sha, [str(a), str(b)], 0)
+        assert exc.value.motivo == "montura_distinta"
+    finally:
+        a.unlink(missing_ok=True)
+        b.unlink(missing_ok=True)
