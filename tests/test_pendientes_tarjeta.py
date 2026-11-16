@@ -185,3 +185,4 @@ def test_la_tarjeta_ofrece_guardar_como_especial_sin_numero():
     assert f'value="{serie_id}"' in tarjeta
     assert "/especial" in tarjeta
     assert "Especiales" in tarjeta
+    assert "Números que recopila" in tarjeta
