@@ -19,10 +19,16 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.core.formato_contenedor import Firma, firma_de
+from zascarr.core.formato_contenedor import (
+    MAX_ENTRADA_LEIDA,
+    MAX_PIXELES_PORTADA,
+    Firma,
+    firma_de,
+)
 from zascarr.models import PaqueteEstado, PaqueteOperacion
 from zascarr.services.paquetes import (
     ListadoPaquete,
@@ -31,6 +37,8 @@ from zascarr.services.paquetes import (
     listar_paquete,
 )
 from zascarr.utils import lector_rar
+
+_EXTS_IMAGEN = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 
 logger = structlog.get_logger()
 
@@ -59,10 +67,30 @@ def clave_identidad(p: PaquetePendiente) -> str:
 
 
 def _base_temporal() -> Path:
-    base = Path(get_settings().covers_cache_path) / ".paquetes"
+    ajustes = get_settings()
+    base = Path(ajustes.covers_cache_path) / ".paquetes"
     base.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(base, 0o700)
-    return base
+    fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        real = Path(os.path.realpath(f"/proc/self/fd/{fd}"))
+    finally:
+        os.close(fd)
+    prohibidas: list[Path] = []
+    for valor in (getattr(ajustes, "library_path", None),
+                  getattr(ajustes, "transmission_download_dir", None),
+                  getattr(ajustes, "amule_incoming_dir", None),
+                  getattr(ajustes, "downloads_path", None)):
+        if valor:
+            prohibidas.append(Path(valor))
+    for prohibida in prohibidas:
+        try:
+            if real == prohibida or prohibida in real.parents:
+                raise PaqueteExtraccionError(
+                    "temporal_inseguro", "El temporal está dentro de una carpeta vigilada.")
+        except OSError:
+            continue
+    return real
 
 
 def _nombre_generado(indice: int, tipo: str) -> str:
@@ -135,38 +163,46 @@ def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
                 continue
             if entrada.tamano > 2 * 1024**3:
                 raise PaqueteExtraccionError("demasiado_grande", "Un fichero es demasiado grande.")
-            try:
-                datos = lector_rar.leer_entrada(
-                    paquete.ruta, entrada, entrada.tamano + 1, temporal=casa
-                )
-            except lector_rar.ErrorRar as exc:
-                raise PaqueteExtraccionError(
-                    "ilegible", "El paquete está dañado o cifrado."
-                ) from exc
             nombre = _nombre_generado(len(items), entrada.nombre.rsplit(".", 1)[-1] or "cbz")
             destino = temp / nombre
-            with open(destino, "xb") as f:
-                f.write(datos)
-                f.flush()
-                os.fsync(f.fileno())
-            items.append(
-                {
-                    "nombre": nombre,
-                    "origen": entrada.nombre,
-                    "bytes": len(datos),
-                    "sha256": hashlib.sha256(datos).hexdigest(),
-                    "estado": "verificado",
-                }
-            )
+            try:
+                total = lector_rar.extraer_entrada_a(
+                    paquete.ruta, entrada, destino, entrada.tamano, temporal=casa)
+            except lector_rar.ErrorRar as exc:
+                raise PaqueteExtraccionError(
+                    "ilegible", "El paquete está dañado o cifrado.") from exc
+            h = hashlib.sha256()
+            with open(destino, "rb") as f:
+                while bloque := f.read(_BLOQUE):
+                    h.update(bloque)
+            items.append({"nombre": nombre, "origen": entrada.nombre, "bytes": total,
+                          "sha256": h.hexdigest(), "estado": "verificado"})
     return items
+
+
+def _decodificar_imagen(datos: bytes) -> None:
+    import io
+
+    from PIL import Image
+
+    try:
+        with Image.open(io.BytesIO(datos)) as img:
+            ancho, alto = img.size
+            if ancho * alto > MAX_PIXELES_PORTADA:
+                raise PaqueteExtraccionError(
+                    "pixeles", "La primera página tiene demasiados píxeles.")
+            img.load()
+    except PaqueteExtraccionError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise PaqueteExtraccionError(
+            "imagen", "La primera imagen no se puede decodificar.") from exc
 
 
 def _verificar_contenido(items: list[dict], temp: Path) -> None:
     """Firma/cabecera y primera imagen de cada tebeo extraído; falla cerrado."""
-    import io
     import zipfile as _zip
 
-    from PIL import Image
 
     esperados = {i["nombre"] for i in items}
     reales = {p.name for p in temp.iterdir() if p.is_file()}
@@ -184,19 +220,46 @@ def _verificar_contenido(items: list[dict], temp: Path) -> None:
             try:
                 with _zip.ZipFile(ruta) as z:
                     imagen = next((n for n in z.namelist()
-                                   if Path(n).suffix.lower() in
-                                   {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}), None)
+                                   if Path(n).suffix.lower() in _EXTS_IMAGEN), None)
                     if imagen is None:
                         raise PaqueteExtraccionError("sin_imagen", "Un tebeo no tiene páginas.")
+                    if z.getinfo(imagen).file_size > MAX_ENTRADA_LEIDA:
+                        raise PaqueteExtraccionError(
+                            "tamano", "La primera página es demasiado grande.")
                     datos = z.read(imagen)
-                    with Image.open(io.BytesIO(datos)) as img:
-                        img.verify()
+                    _decodificar_imagen(datos)
             except PaqueteExtraccionError:
                 raise
-            except Exception as exc:  # noqa: BLE001 — cualquier cabecera/imagen rota
+            except Exception as exc:  # noqa: BLE001
                 raise PaqueteExtraccionError(
                     "ilegible", "Un tebeo extraído no se puede abrir.") from exc
-
+        elif firma is Firma.RAR:
+            if not lector_rar.disponible():
+                raise PaqueteExtraccionError(
+                    "herramienta_ausente", "Falta la herramienta para leer RAR.")
+            with lector_rar.carpeta_temporal(temp) as casa:
+                try:
+                    listado = lector_rar.listar(ruta, temporal=casa)
+                except lector_rar.ErrorRar as exc:
+                    raise PaqueteExtraccionError(
+                        "ilegible", "Un tebeo RAR extraído no se puede listar.") from exc
+                entrada = next((e for e in listado.entradas
+                                if not e.es_directorio and not e.cifrada
+                                and Path(e.nombre).suffix.lower() in _EXTS_IMAGEN), None)
+                if entrada is None:
+                    raise PaqueteExtraccionError("sin_imagen", "Un tebeo no tiene páginas.")
+                if entrada.tamano > MAX_ENTRADA_LEIDA:
+                    raise PaqueteExtraccionError(
+                            "tamano", "La primera página es demasiado grande.")
+                salida = casa / "imagen"
+                try:
+                    lector_rar.extraer_entrada_a(ruta, entrada, salida, MAX_ENTRADA_LEIDA,
+                                                temporal=casa)
+                except lector_rar.ErrorRar as exc:
+                    raise PaqueteExtraccionError(
+                        "ilegible", "La primera imagen RAR no se pudo extraer.") from exc
+                _decodificar_imagen(salida.read_bytes())
+                salida.unlink(missing_ok=True)
 
 def _verificar_items(items: list[dict], temp: Path, total_listado: int) -> None:
     total = 0
@@ -244,7 +307,16 @@ async def crear_operacion(s: AsyncSession, paquete: PaquetePendiente) -> Paquete
         estado=PaqueteEstado.LISTANDO,
     )
     s.add(op)
-    await s.commit()
+    try:
+        await s.commit()
+    except IntegrityError:
+        await s.rollback()
+        viva = (await s.execute(select(PaqueteOperacion).where(
+            PaqueteOperacion.paquete_clave == clave,
+            PaqueteOperacion.estado.in_([PaqueteEstado.LISTANDO, PaqueteEstado.EXTRAYENDO,
+                                         PaqueteEstado.VERIFICANDO, PaqueteEstado.PUBLICANDO,
+                                         PaqueteEstado.IMPORTANDO])))).scalar_one()
+        return viva
     await s.refresh(op)
     return op
 
