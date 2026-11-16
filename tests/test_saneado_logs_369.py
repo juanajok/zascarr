@@ -11,6 +11,7 @@ from zascarr.utils.saneado_logs import (
     refrescar_raices,
     sanear_evento,
     sanear_texto,
+    sanear_valor,
 )
 
 RAIZ = "/media/library"
@@ -68,3 +69,61 @@ def test_buffer_guarda_saneado():
     from zascarr.utils.registro_reciente import capturar
     capturar(None, "info", saneado)
     assert "/media/library" not in registro_reciente.texto_reciente()
+
+
+def test_absolutas_espacios_relativa_y_url_bd():
+    refrescar_raices(["/media/library"])
+    assert "/tmp" not in sanear_texto("/tmp/with space/foo.cbz")
+    assert "Serie" not in sanear_texto("Serie/foo.cbz")
+    assert "user:pass" not in sanear_texto("postgresql+asyncpg://user:pass@host/db")
+    assert "host/[url]" in sanear_texto("postgresql+asyncpg://user:pass@host/db")
+
+
+def test_valores_path_excepcion_y_objetos():
+    from pathlib import Path
+    assert "/media" not in str(sanear_valor(Path("/media/library/a.cbz")))
+    assert "/media" not in str(sanear_valor(FileNotFoundError("/media/library/a.cbz")))
+
+    class Raro:
+        def __repr__(self):
+            return "/media/library/raro.cbz"
+    assert "/media" not in str(sanear_valor(Raro()))
+
+
+def test_filtro_extra_stack_y_handler_posterior():
+    refrescar_raices([RAIZ])
+    record = logging.LogRecord("x", logging.INFO, __file__, 1, "ok", (), None)
+    record.extra = "/media/library/a.cbz"
+    record.stack_info = "File \"/media/library/a.cbz\""
+    FiltroSaneado().filter(record)
+    assert "/media/library" not in record.extra and "/media/library" not in record.stack_info
+    handler = logging.StreamHandler()
+    logging.getLogger().addHandler(handler)
+    try:
+        instalar_filtro_registros()
+        assert any(isinstance(f, FiltroSaneado) for f in handler.filters)
+    finally:
+        logging.getLogger().removeHandler(handler)
+
+
+def test_caplog_5xx_real_sin_ruta(caplog):
+    refrescar_raices([RAIZ])
+    instalar_filtro_registros()
+    logger = logging.getLogger("uvicorn.error")
+    with caplog.at_level(logging.ERROR, logger="uvicorn.error"):
+        try:
+            raise FileNotFoundError("/media/library/Serie/foo.cbz")
+        except FileNotFoundError:
+            logger.exception("Exception in ASGI application")
+    assert caplog.records and caplog.records[0].levelno == logging.ERROR
+    assert "/media/library" not in caplog.text
+
+
+def test_benchmark_saneo():
+    import time
+    refrescar_raices([RAIZ])
+    texto = "x " * 500
+    inicio = time.perf_counter()
+    for _ in range(10_000):
+        sanear_texto(texto)
+    assert time.perf_counter() - inicio < 10

@@ -105,7 +105,7 @@ def capturar(_logger: Any, _metodo: str, evento: dict[str, Any]) -> dict[str, An
         with _lock:
             _eventos.append(copia)
     except Exception:  # noqa: BLE001 — un fallo del búfer nunca tumba la petición
-        return evento
+        return {"event": "log.saneo_fallido"}
     return evento
 
 

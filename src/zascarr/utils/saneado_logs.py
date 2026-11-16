@@ -17,7 +17,7 @@ import structlog
 
 _CLAVE_SECRETA = re.compile(
     r"(?i)(password|passwd|contrase(?:n|ñ)a|secret|token|api[_-]?key|authorization|cookie|bearer|session)")
-_URL = re.compile(r"(?i)\b(https?|ftp)://(?:[^/@\s]+@)?([^/\s?#:]+)[^\s\"'<>]*")
+_URL = re.compile(r"(?i)\b([A-Za-z][A-Za-z0-9+.-]*)://(?:[^/@\s]+@)?([^/\s?#:]+)[^\s\"'<>]*")
 _URL_SIN_ESQUEMA = re.compile(r"(?i)\b(?:www\.)[^\s\"'<>]+")
 _CREDENCIAL = re.compile(
     r"(?i)((?:password|passwd|contrase(?:n|ñ)a|secret|token|api[_-]?key|authorization|cookie|session)"
@@ -25,8 +25,9 @@ _CREDENCIAL = re.compile(
 _BEARER = re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+")
 _EXT = r"(?:cbz|cbr|cb7|pdf|epub)"
 _ABS_COMIC = re.compile(rf"(?i)(?<![\w])/(?:[^\s\"'<>/]+/)+[^\s\"'<>/]+\.({_EXT})\b")
+_RUTA_RELATIVA = re.compile(rf"(?i)(?<![\w])[^\s\"'<>/]+(?:/[^\s\"'<>/]+)+\.({_EXT})\b")
 _ARCHIVO_SIMPLE = re.compile(rf"(?i)\b[^\s\"'<>/]+\.({_EXT})\b")
-_RUTA_ABS = re.compile(r"(?<!\w)/(?:[^\s\"'<>/]+/)*[^\s\"'<>/]*")
+_RUTA_ABS = re.compile(r"(?<![:/\w])/(?:[^\n\"'<>]*[^\s\"'<>])?")
 _MAX = 2000
 
 _raices: tuple[str, ...] = ()
@@ -50,7 +51,9 @@ def refrescar_raices(raices: list[str | Path] | None = None) -> None:
         except Exception:  # noqa: BLE001 — arranque sin settings
             valores = []
     else:
-        valores = [str(x) for x in raices]
+        for x in raices:
+            valores.extend(parte.strip() for parte in str(x).replace(";", ",").split(",")
+                           if parte.strip())
     normalizadas = set()
     for valor in valores:
         try:
@@ -82,12 +85,20 @@ def sanear_texto(texto: str, *, raices: tuple[str, ...] | None = None) -> str:
         texto = texto[:_MAX] + "…"
     try:
         resultado = _redactar_credenciales(texto)
-        resultado = _redactar_url(resultado)
+        urls: list[str] = []
+        def guardar(m: re.Match[str]) -> str:
+            urls.append(_redactar_url(m.group(0)))
+            return f"\x00URL{len(urls)-1}\x00"
+        resultado = _URL.sub(guardar, resultado)
         for raiz in (raices if raices is not None else _raices):
             if raiz in resultado:
-                resultado = re.sub(re.escape(raiz) + r"[^\s\"'<>]*", "[ruta]", resultado)
+                resultado = re.sub(re.escape(raiz) + r"[^\n\"'<>]*", "[ruta]", resultado)
         resultado = _ABS_COMIC.sub("[archivo]", resultado)
+        resultado = _RUTA_ABS.sub("[ruta]", resultado)
+        resultado = _RUTA_RELATIVA.sub("[ruta]", resultado)
         resultado = _ARCHIVO_SIMPLE.sub("[archivo]", resultado)
+        for i, url in enumerate(urls):
+            resultado = resultado.replace(f"\x00URL{i}\x00", url)
         return resultado
     except Exception:  # noqa: BLE001 — falla cerrado
         return "[no_saneado]"
@@ -106,7 +117,18 @@ def sanear_valor(valor: Any, *, clave: str = "", profundidad: int = 0) -> Any:
                     for k, v in valor.items()}
         if isinstance(valor, (list, tuple)):
             return [sanear_valor(v, clave=clave, profundidad=profundidad + 1) for v in valor]
-        return valor
+        if isinstance(valor, Path):
+            return sanear_texto(str(valor))
+        if isinstance(valor, BaseException):
+            return sanear_texto(f"{type(valor).__name__}: {valor}")
+        if isinstance(valor, bytes):
+            return sanear_texto(valor.decode("utf-8", "replace"))
+        if isinstance(valor, (int, float, bool)) or valor is None:
+            return valor
+        try:
+            return sanear_texto(repr(valor))
+        except Exception:  # noqa: BLE001
+            return "[no_saneado]"
     except Exception:  # noqa: BLE001
         return "[no_saneado]"
 
@@ -130,6 +152,9 @@ class FiltroSaneado(logging.Filter):
     """Filtro stdlib/uvicorn: sanea msg, args y exc_text sin silenciar el evento."""
 
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        if record.name == "uvicorn.access" or (
+                isinstance(record.msg, str) and "WebSocket" in record.msg):
+            return True  # #361 ya quita la query; #369 no toca ese registro
         try:
             if isinstance(record.msg, str):
                 record.msg = sanear_texto(record.msg)
@@ -141,6 +166,16 @@ class FiltroSaneado(logging.Filter):
                     }
                 else:
                     record.args = tuple(sanear_valor(v) for v in record.args)
+            for nombre, valor in list(record.__dict__.items()):
+                if nombre in {"msg", "args", "exc_info", "exc_text", "stack_info",
+                              "name", "levelname", "levelno", "pathname", "filename",
+                              "module", "lineno", "funcName", "created", "msecs",
+                              "relativeCreated", "thread", "threadName", "process",
+                              "processName", "taskName"}:
+                    continue
+                record.__dict__[nombre] = sanear_valor(valor, clave=nombre)
+            if record.stack_info:
+                record.stack_info = sanear_texto(record.stack_info)
             if record.exc_info and not record.exc_text:
                 record.exc_text = sanear_texto(
                     "".join(traceback.format_exception(*record.exc_info)))
@@ -166,18 +201,20 @@ def instalar_saneo_structlog() -> None:
     """Inserta el saneador antes del renderer y del capturador; idempotente."""
     config = structlog.get_config()
     procesadores = list(config.get("processors") or [])
+    if not procesadores:
+        procesadores = [structlog.processors.format_exc_info,
+                        structlog.dev.ConsoleRenderer()]
     if any(_marcado(p) for p in procesadores):
         return
-    tiene_exc = any(getattr(p, "__name__", "") in {"format_exc_info", "ExceptionRenderer"}
-                    for p in procesadores)
-    if not tiene_exc:
-        procesadores.insert(max(0, len(procesadores) - 1), structlog.processors.format_exc_info)
-    indice = len(procesadores) - 1
-    for i, p in enumerate(procesadores):
-        if getattr(p, "__name__", "") == "capturar":
-            indice = i
-            break
-    procesadores.insert(indice, sanear_evento)
+    if not any(getattr(p, "__name__", "") in {"format_exc_info", "ExceptionRenderer"}
+               for p in procesadores):
+        procesadores.insert(0, structlog.processors.format_exc_info)
+    captura = next((i for i, p in enumerate(procesadores)
+                    if getattr(p, "__name__", "") == "capturar"), None)
+    if captura is not None:
+        procesadores.insert(captura, sanear_evento)
+    else:
+        procesadores.insert(max(0, len(procesadores) - 1), sanear_evento)
     structlog.configure(**{**config, "processors": procesadores})
 
 
@@ -186,7 +223,10 @@ def instalar_filtro_registros() -> None:
     logger = logging.getLogger("uvicorn.error")
     if not any(isinstance(f, FiltroSaneado) for f in logger.filters):
         logger.addFilter(FiltroSaneado())
+    uvicorn_handlers = {id(h) for h in logging.getLogger("uvicorn").handlers}
     for handler in logging.getLogger().handlers:
+        if id(handler) in uvicorn_handlers:
+            continue
         if not any(isinstance(f, FiltroSaneado) for f in handler.filters):
             with contextlib.suppress(Exception):  # un handler exótico no tumba el arranque
                 handler.addFilter(FiltroSaneado())
@@ -196,3 +236,16 @@ def instalar_saneo_logs() -> None:
     refrescar_raices()
     instalar_saneo_structlog()
     instalar_filtro_registros()
+
+
+async def refrescar_raices_db(fabrica) -> None:
+    """Refresca el cache con las raíces de la BD; se llama al arrancar/cambiar raíces."""
+    try:
+        from sqlalchemy import select
+
+        from zascarr.models import LibraryRoot
+        async with fabrica() as s:
+            rutas = list((await s.execute(select(LibraryRoot.path))).scalars())
+        refrescar_raices(rutas)
+    except Exception:  # noqa: BLE001 — un fallo al refrescar no tumba el arranque
+        return

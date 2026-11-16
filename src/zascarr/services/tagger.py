@@ -871,7 +871,7 @@ class TaggerService:
                     f"con la fila de `File` sin actualizar y se reconcilian solos "
                     f"en la siguiente pasada")
                 logger.error("tagger.lote_abortado", escritos=informe.escritos,
-                             motivo_tipo="codigo")
+                             file_id=str(file.id), motivo_tipo="codigo")
                 break
             if r.gasta_cupo:
                 procesados += 1
