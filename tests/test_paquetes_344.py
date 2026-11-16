@@ -1,6 +1,7 @@
 """#344 BL-PACK1 cortes 1-2: detección, listado y tokens de paquetes de Descargas."""
 from __future__ import annotations
 
+import os
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from zascarr.services.paquetes import (
+    TTL_SEGUNDOS,
     PaqueteError,
     TokenPaqueteInvalido,
     detectar_paquetes,
@@ -135,3 +137,87 @@ def test_ui_lista_paquetes_sin_boton_de_extraer(tmp_path, monkeypatch):
     assert "Paquetes en Descargas" in r.text
     assert "Ver qué contiene" in r.text
     assert "Extraer e importar" not in r.text
+
+
+def test_token_caducado_y_replay(tmp_path):
+    a = _ajustes(tmp_path)
+    _zip(Path(a.transmission_download_dir) / "p.zip", {"a.cbz": _cbz()})
+    candidato = detectar_paquetes(ajustes=a, secret=a.secret_key, ahora=100)[0]
+    with pytest.raises(TokenPaqueteInvalido):
+        verificar_token_paquete(candidato.token, ajustes=a, ahora=100 + TTL_SEGUNDOS + 1)
+    c2 = detectar_paquetes(ajustes=a, secret=a.secret_key)[0]
+    assert verificar_token_paquete(c2.token, ajustes=a).estado == "listo"
+    with pytest.raises(TokenPaqueteInvalido):
+        verificar_token_paquete(c2.token, ajustes=a)       # replay
+
+
+def test_token_symlink_falla_cerrado(tmp_path):
+    a = _ajustes(tmp_path)
+    d = Path(a.transmission_download_dir)
+    p = _zip(d / "p.zip", {"a.cbz": _cbz()})
+    candidato = detectar_paquetes(ajustes=a, secret=a.secret_key)[0]
+    fuera = tmp_path / "fuera.zip"
+    _zip(fuera, {"a.cbz": _cbz()})
+    p.unlink()
+    p.symlink_to(fuera)
+    with pytest.raises(TokenPaqueteInvalido):
+        verificar_token_paquete(candidato.token, ajustes=a)
+
+
+def test_html_no_expone_ruta_absoluta(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from zascarr.main import app
+    from zascarr.services.paquetes import PaquetePendiente, crear_token_paquete
+    from zascarr.web import auditoria
+    raiz = tmp_path / "descargas"
+    raiz.mkdir()
+    p = PaquetePendiente(ruta=raiz / "x.zip", raiz=raiz, relativa="x.zip",
+                         nombre="x.zip", tamano=123, mtime_ns=1, firma="ZIP",
+                         estado="listo", causa="", dev=1, ino=2)
+    p = PaquetePendiente(**{**p.__dict__, "token": crear_token_paquete(p)})
+    monkeypatch.setattr(auditoria, "detectar_paquetes", lambda: [p])
+    r = TestClient(app).get("/ui/auditoria/paquetes")
+    assert r.status_code == 200 and str(tmp_path) not in r.text
+    assert "token=" in r.text and str(raiz) not in r.text
+
+
+def test_rar_top_y_herramienta_ausente(tmp_path, monkeypatch):
+    from zascarr.utils import lector_rar
+
+    a = _ajustes(tmp_path)
+    p = Path(a.transmission_download_dir) / "p.rar"
+    p.write_bytes(b"Rar!\x1a\x07\x00")
+    monkeypatch.setattr(lector_rar, "disponible", lambda: False)
+    with pytest.raises(PaqueteError, match="herramienta"):
+        _listar(p, tmp_path)
+    monkeypatch.setattr(lector_rar, "disponible", lambda: True)
+    entradas = (lector_rar.EntradaRar(0, "a.cbz", 10, None, False, False),)
+    monkeypatch.setattr(lector_rar, "listar", lambda *a, **k: lector_rar.Listado(entradas))
+    listado = _listar(p, tmp_path)
+    assert listado.formato == "RAR" and [e.nombre for e in listado.entradas] == ["a.cbz"]
+
+
+def test_rar_multivolumen_no_es_candidato(tmp_path):
+    a = _ajustes(tmp_path)
+    (Path(a.transmission_download_dir) / "p.r00").write_bytes(b"Rar!\x1a\x07\x00")
+    vistos = detectar_paquetes(ajustes=a, secret=a.secret_key)
+    assert len(vistos) == 1 and vistos[0].estado == "multivolumen"
+
+
+def test_listado_usa_fd_y_no_reabre_symlink(tmp_path):
+    a = _ajustes(tmp_path)
+    d = Path(a.transmission_download_dir)
+    p = _zip(d / "p.zip", {"a.cbz": _cbz()})
+    candidato = detectar_paquetes(ajustes=a, secret=a.secret_key)[0]
+    abierto = verificar_token_paquete(candidato.token, ajustes=a)
+    fuera = tmp_path / "fuera.zip"
+    _zip(fuera, {"ajeno.cbz": _cbz(b"ajeno")})
+    p.unlink()
+    p.symlink_to(fuera)
+    try:
+        listado = listar_paquete(abierto)
+        assert [e.nombre for e in listado.entradas] == ["a.cbz"]
+    finally:
+        if abierto.fd >= 0:
+            os.close(abierto.fd)

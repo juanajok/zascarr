@@ -6,11 +6,11 @@ contenido con topes. No toca la biblioteca, no crea temporales de extracción y 
 
 from __future__ import annotations
 
-import base64
-import json
 import os
 import re
+import secrets
 import tempfile
+import threading
 import time
 import zipfile
 from dataclasses import dataclass
@@ -20,7 +20,6 @@ import structlog
 
 from zascarr.config import get_settings
 from zascarr.core.formato_contenedor import (
-    EXT_CONTENEDOR,
     MAX_DIRECTORIO_CENTRAL,
     MAX_ENTRADAS,
     MAX_RATIO_LEIDA,
@@ -29,7 +28,6 @@ from zascarr.core.formato_contenedor import (
     firma_de_bytes,
     leer_cabecera_zip,
 )
-from zascarr.services.auth import sign_token, verify_token
 from zascarr.utils import lector_rar
 
 logger = structlog.get_logger()
@@ -39,7 +37,7 @@ PROPOSITO = "paquete_descarga"
 MAX_BYTES_TOTAL = 8 * 1024**3
 MAX_BYTES_ENTRADA = 2 * 1024**3
 RAR_MAX_ENTRADAS = 1000
-_EXT_ANIDADO = EXT_CONTENEDOR - {".cbz", ".cbr"}
+_EXT_ANIDADO = {".rar", ".zip"}
 _MULTIVOLUMEN = re.compile(r"(?i)(?:\.part\d+\.rar|\.r\d{2,3})$")
 
 
@@ -70,6 +68,7 @@ class PaquetePendiente:
     dev: int
     ino: int
     token: str = ""
+    fd: int = -1
 
 
 @dataclass(frozen=True)
@@ -120,15 +119,15 @@ def _candidato(
         return None
     nombre = ruta.name
     extension = ruta.suffix.lower()
-    if extension not in {".zip", ".rar"}:
+    if extension not in {".zip", ".rar"} and not _MULTIVOLUMEN.search(nombre):
         return None
     firma = firma_de(ruta)
     estado = "listo"
     causa = ""
-    if firma not in (Firma.ZIP, Firma.RAR):
-        estado, causa = "no_legible", "No es un paquete legible."
-    elif _MULTIVOLUMEN.search(nombre):
+    if _MULTIVOLUMEN.search(nombre):
         estado, causa = "multivolumen", "Está dividido en varios archivos."
+    elif firma not in (Firma.ZIP, Firma.RAR):
+        estado, causa = "no_legible", "No es un paquete legible."
     try:
         rel = str(ruta.relative_to(raiz))
     except ValueError:
@@ -184,78 +183,68 @@ def detectar_paquetes(
     return sorted(salida, key=lambda x: (x.nombre.lower(), str(x.ruta)))
 
 
-def crear_token_paquete(
-    p: PaquetePendiente, secret: str, *, ahora: float | None = None, ttl: int = TTL_SEGUNDOS
-) -> str:
-    if not secret:
-        raise ValueError("No hay clave del servidor con la que firmar")
-    datos = {
-        "r": str(p.raiz),
-        "n": p.nombre,
-        "rel": p.relativa,
-        "sz": p.tamano,
-        "mt": p.mtime_ns,
-        "dev": p.dev,
-        "ino": p.ino,
-        "f": p.firma,
-    }
-    payload = {
-        "p": PROPOSITO,
-        "d": datos,
-        "exp": int((time.time() if ahora is None else ahora) + ttl),
-    }
-    crudo = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
-    return sign_token(base64.urlsafe_b64encode(crudo).decode(), secret)
+_TOKENS: dict[str, tuple[float, dict]] = {}
+_TOKENS_LOCK = threading.Lock()
 
 
-def verificar_token_paquete(
-    token: str, *, ajustes=None, secret: str | None = None, ahora: float | None = None
-) -> PaquetePendiente:
-    a = ajustes or get_settings()
-    clave = a.secret_key if secret is None else secret
-    if not token or not clave:
-        raise TokenPaqueteInvalido
-    crudo = verify_token(token, clave)
-    if crudo is None:
-        raise TokenPaqueteInvalido
+def _limpiar_tokens(ahora: float) -> None:
+    for clave, (_exp, _datos) in list(_TOKENS.items()):
+        if _exp < ahora:
+            _TOKENS.pop(clave, None)
+
+
+def crear_token_paquete(p: PaquetePendiente, secret: str = "", *, ahora: float | None = None,
+                        ttl: int = TTL_SEGUNDOS) -> str:
+    """Token opaco: el estado (ruta e identidad) vive solo en este proceso."""
+    token = secrets.token_urlsafe(32)
+    exp = (time.time() if ahora is None else ahora) + ttl
+    datos = {"ruta": str(p.ruta), "raiz": str(p.raiz), "dev": p.dev, "ino": p.ino,
+             "sz": p.tamano, "mt": p.mtime_ns, "f": p.firma}
+    with _TOKENS_LOCK:
+        _limpiar_tokens(time.time() if ahora is None else ahora)
+        _TOKENS[token] = (exp, datos)
+    return token
+
+
+def _abrir_identidad(ruta: Path, esperado: tuple[int, int, int, int]) -> int:
+    fd = os.open(ruta, os.O_RDONLY | os.O_NOFOLLOW)
     try:
-        payload = json.loads(base64.urlsafe_b64decode(crudo.encode()))
-        if payload["p"] != PROPOSITO or int(payload["exp"]) < int(
-            time.time() if ahora is None else ahora
-        ):
+        st = os.fstat(fd)
+        if (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns) != esperado:
             raise TokenPaqueteInvalido
-        d = payload["d"]
-        raiz = Path(d["r"])
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def verificar_token_paquete(token: str, *, ajustes=None, secret: str | None = None,
+                            ahora: float | None = None) -> PaquetePendiente:
+    a = ajustes or get_settings()
+    momento = time.time() if ahora is None else ahora
+    if not token or not isinstance(token, str):
+        raise TokenPaqueteInvalido
+    with _TOKENS_LOCK:
+        entrada = _TOKENS.pop(token, None)          # un solo uso: replay rechazado
+    if entrada is None or entrada[0] < momento:
+        raise TokenPaqueteInvalido
+    d = entrada[1]
+    try:
+        raiz = Path(d["raiz"])
         if raiz not in _raices_descargas(a):
             raise TokenPaqueteInvalido
-        ruta = (raiz / d["rel"]).resolve(strict=False)
-        if ruta.parent != raiz and raiz not in ruta.parents:
+        ruta = Path(d["ruta"])
+        if raiz not in ruta.parents:
             raise TokenPaqueteInvalido
-        st = ruta.stat(follow_symlinks=False)
-        if (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns) != (
-            d["dev"],
-            d["ino"],
-            d["sz"],
-            d["mt"],
-        ):
-            raise TokenPaqueteInvalido
+        fd = _abrir_identidad(ruta, (d["dev"], d["ino"], d["sz"], d["mt"]))
         firma = _firma_texto(firma_de(ruta))
         if firma != d["f"]:
+            os.close(fd)
             raise TokenPaqueteInvalido
-        return PaquetePendiente(
-            ruta=ruta,
-            raiz=raiz,
-            relativa=d["rel"],
-            nombre=d["n"],
-            tamano=st.st_size,
-            mtime_ns=st.st_mtime_ns,
-            firma=firma,
-            estado="listo",
-            causa="",
-            dev=st.st_dev,
-            ino=st.st_ino,
-            token=token,
-        )
+        return PaquetePendiente(ruta=ruta, raiz=raiz, relativa=str(ruta.relative_to(raiz)),
+                                nombre=ruta.name, tamano=d["sz"], mtime_ns=d["mt"],
+                                firma=firma, estado="listo", causa="", dev=d["dev"],
+                                ino=d["ino"], token=token, fd=fd)
     except (ValueError, KeyError, TypeError, OSError, UnicodeError) as exc:
         raise TokenPaqueteInvalido from exc
 
@@ -269,11 +258,23 @@ def _causa_zip_nombre(nombre: str) -> str | None:
 def listar_paquete(p: PaquetePendiente, *, temporal: Path | None = None) -> ListadoPaquete:
     if p.estado != "listo":
         raise PaqueteError(p.causa or "No se puede leer este paquete.")
-    if p.firma == "ZIP":
-        return _listar_zip(p)
-    if p.firma == "RAR":
-        return _listar_rar(p, temporal=temporal)
-    raise PaqueteError("No es un paquete legible.")
+    fd = p.fd
+    propio = fd < 0
+    if propio:
+        try:
+            fd = _abrir_identidad(p.ruta, (p.dev, p.ino, p.tamano, p.mtime_ns))
+        except (OSError, TokenPaqueteInvalido) as exc:
+            raise PaqueteError("El paquete cambió o ya no está.") from exc
+    try:
+        if p.firma == "ZIP":
+            return _listar_zip(p, fd)
+        if p.firma == "RAR":
+            return _listar_rar(p, fd, temporal=temporal)
+        raise PaqueteError("No es un paquete legible.")
+    finally:
+        if propio:
+            with __import__("contextlib").suppress(OSError):
+                os.close(fd)
 
 
 def _agrupar(
@@ -293,8 +294,8 @@ def _agrupar(
     )
 
 
-def _listar_zip(p: PaquetePendiente) -> ListadoPaquete:
-    cab = leer_cabecera_zip(p.ruta)
+def _listar_zip(p: PaquetePendiente, fd: int) -> ListadoPaquete:
+    cab = leer_cabecera_zip(Path(f"/proc/self/fd/{fd}"))
     if cab is None:
         raise PaqueteError("El paquete está dañado o truncado.")
     if cab.entradas > MAX_ENTRADAS:
@@ -302,7 +303,7 @@ def _listar_zip(p: PaquetePendiente) -> ListadoPaquete:
     if cab.tam_directorio > MAX_DIRECTORIO_CENTRAL:
         raise PaqueteError("El paquete tiene un índice demasiado grande.")
     try:
-        with zipfile.ZipFile(p.ruta) as z:
+        with zipfile.ZipFile(os.fdopen(os.dup(fd), "rb")) as z:
             infos = z.infolist()
             if len(infos) > MAX_ENTRADAS:
                 raise PaqueteError("El paquete tiene demasiados archivos.")
@@ -354,22 +355,28 @@ def _listar_zip(p: PaquetePendiente) -> ListadoPaquete:
                     )
                     continue
                 entradas.append(EntradaPaquete(info.filename, info.file_size, tipo, True))
-    except zipfile.BadZipFile as exc:
+    except (zipfile.BadZipFile, NotImplementedError, RuntimeError, EOFError, OSError) as exc:
         raise PaqueteError("El paquete está dañado o truncado.") from exc
-    except OSError as exc:
-        raise PaqueteError("No se pudo leer el paquete.") from exc
     return _agrupar(p, "ZIP", entradas, ignoradas)
 
 
-def _listar_rar(p: PaquetePendiente, *, temporal: Path | None = None) -> ListadoPaquete:
-    with tempfile.TemporaryDirectory(prefix="zascarr-paquete-") as casa:
-        try:
-            listado = lector_rar.listar(p.ruta, temporal=Path(casa))
-        except lector_rar.ErrorRar as exc:
-            raise PaqueteError(
-                "No se pudo leer el paquete RAR.",
-                "Comprueba que el paquete está completo y sin contraseña.",
-            ) from exc
+def _listar_rar(p: PaquetePendiente, fd: int, *, temporal: Path | None = None) -> ListadoPaquete:
+    if not lector_rar.disponible():
+        raise PaqueteError(
+            "Falta la herramienta para leer RAR.",
+            "Instala unar y lsar en el servidor.",
+        )
+    casa = Path(tempfile.gettempdir()) if temporal is None else temporal
+    try:
+        listado = lector_rar.listar(
+            Path(f"/proc/self/fd/{fd}"), temporal=casa,
+            max_bytes_declarados=MAX_BYTES_TOTAL,
+        )
+    except lector_rar.ErrorRar as exc:
+        raise PaqueteError(
+            "No se pudo leer el paquete RAR.",
+            "Comprueba que el paquete está completo y sin contraseña.",
+        ) from exc
     if len(listado.entradas) > RAR_MAX_ENTRADAS:
         raise PaqueteError("El paquete tiene demasiados archivos.")
     if sum(e.tamano for e in listado.entradas) > MAX_BYTES_TOTAL:
