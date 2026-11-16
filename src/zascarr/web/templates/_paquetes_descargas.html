@@ -1,0 +1,24 @@
+<section class="audit-block" id="paquetes-descargas">
+  <h2>Paquetes en Descargas</h2>
+  <p class="subtitle">Aquí ves los paquetes RAR o ZIP que esperan en Descargas; nada se mueve ni se extrae.</p>
+  {% if error %}
+    <p class="caption" role="status">{{ error }} {{ accion }}</p>
+  {% elif paquetes %}
+    <ul class="audit-lista">
+      {% for p in paquetes %}
+        <li class="audit-fila">
+          <div>
+            <strong>{{ p.nombre }}</strong>
+            <div class="caption">{{ p.relativa }} · {{ p.tamano|tamano }} · {{ p.firma or "sin formato" }}</div>
+            {% if p.estado != "listo" %}<div class="caption">{{ p.causa }}</div>{% endif %}
+          </div>
+          {% if p.estado == "listo" %}
+            <a class="btn" href="/ui/auditoria/paquetes/previa?token={{ p.token }}">Ver qué contiene</a>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="caption" role="status">No hay paquetes en Descargas.</p>
+  {% endif %}
+</section>
