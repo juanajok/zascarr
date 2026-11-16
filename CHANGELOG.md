@@ -145,6 +145,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   el fichero caía en `_Unsorted` aunque el deseo apuntara a ella. Ahora los puntos
   entre letras sueltas («DC K.O.», «S.H.I.E.L.D.») se colapsan antes de separar por
   puntos, así que quedan «DC KO»/«SHIELD» y el match exacto con `title_norm` funciona.
+- **Candidatos del foro duplicados (2026-11-16).** Un mismo fichero podía estar
+  enlazado dos veces en el tema con distinta codificación (`%20` frente a espacio):
+  se deduplicaba por URL cruda y aparecía dos veces en «Buscar ahora» (Sector Lejano).
+  Ahora la identidad es el **hash** `ed2k`/`btih`. Además se lee el tamaño declarado
+  en el enlace (la fila ya no muestra «0 Bytes»: muestra el tamaño o «tamaño
+  desconocido»).
+ (fix(foro): deduplicar candidatos por hash y mostrar el tamaño del enlace)
 
 - **Añadir a Deseados muestra la fila al instante (2026-11-16).** El botón dependía
   de un `window.location.reload()` en un hook de htmx que no llegaba a ejecutarse:
