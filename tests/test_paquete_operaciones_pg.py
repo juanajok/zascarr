@@ -515,7 +515,7 @@ async def test_publica_importa_y_consume_temporal(tmp_path, monkeypatch):
 
             async def falso(self, *, disparador="automatico"):
                 return ImportReport(started_at=datetime.now(UTC),
-                                    imported=[str(d / "x" / "0001.cbz")])
+                                    imported=["0001.cbz → Biblioteca/0001.cbz"])
             monkeypatch.setattr("zascarr.services.importer.Importer.scan_and_import", falso)
             op = await pub.publicar_e_importar(s, op.id)
             await s.refresh(op)
@@ -641,3 +641,64 @@ async def test_publicacion_fallida_no_marca_importado_y_limpia_staging(tmp_path,
         os.environ.pop("COVERS_CACHE_PATH", None)
         os.environ.pop("TRANSMISSION_DOWNLOAD_DIR", None)
         get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_huerfanos_respeta_verificado_e_importado(tmp_path, monkeypatch):
+    import os
+
+    from zascarr.config import get_settings
+    from zascarr.services.paquetes_extraccion import limpiar_huerfanos
+    d = tmp_path / "d"
+    d.mkdir()
+    p = d / "p.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("a.cbz", _cbz_bytes())
+    ajustes = type("A", (), {})()
+    ajustes.transmission_download_dir = str(d)
+    ajustes.amule_incoming_dir = ""
+    ajustes.downloads_path = ""
+    ajustes.secret_key = "k"
+    paquete = detectar_paquetes(ajustes=ajustes, secret="k")[0]
+    monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
+    get_settings.cache_clear()
+    motor = create_async_engine(url_asyncpg(URL), poolclass=None)
+    fabrica = async_sessionmaker(motor, expire_on_commit=False)
+    try:
+        async with fabrica() as limpia:
+            await limpia.execute(text("TRUNCATE paquete_operaciones"))
+            await limpia.commit()
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            temp = tmp_path / "config" / ".paquetes" / "guardado"
+            temp.mkdir(parents=True)
+            op.temp_dir = str(temp)
+            op.estado = PaqueteEstado.VERIFICADO
+            s.add(op)
+            await s.commit()
+            assert await limpiar_huerfanos(s) == 0
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.VERIFICADO and temp.exists()
+            op.estado = PaqueteEstado.IMPORTADO
+            s.add(op)
+            await s.commit()
+            op2 = await crear_operacion(s, paquete)
+            assert op2.id == op.id
+    finally:
+        await motor.dispose()
+        os.environ.pop("COVERS_CACHE_PATH", None)
+        get_settings.cache_clear()
+
+
+def test_staging_symlink_rechaza_publicacion(tmp_path):
+    from zascarr.services.paquetes_publicacion import (
+        PaquetePublicacionError,
+        _validar_cadena_oculta,
+    )
+    d = tmp_path / "d"
+    d.mkdir()
+    fuera = tmp_path / "fuera"
+    fuera.mkdir()
+    (d / ".zascarr").symlink_to(fuera, target_is_directory=True)
+    with pytest.raises(PaquetePublicacionError, match="no es segura"):
+        _validar_cadena_oculta(d)

@@ -619,6 +619,11 @@ async def paquete_extraer(request: Request, token: str = Form("", alias="clave")
             request, "_paquete_resultado.html",
             {"op": None, "error": getattr(exc, "mensaje", None)
              or "No se pudo completar la operación."}))
+    except Exception:  # noqa: BLE001 — no filtrar detalles internos
+        logger.exception("paquetes.extraer_inesperado")
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html",
+            {"op": None, "error": "No se pudo completar la operación. Inténtalo de nuevo."}))
 
 
 @router.post("/analizar", response_class=HTMLResponse)
