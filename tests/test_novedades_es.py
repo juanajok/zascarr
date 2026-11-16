@@ -71,3 +71,49 @@ def test_panini_parsea_fecha_yy_titulo():
         ("Otro", date(2026, 12, 3)),
     ]
     assert filas[0].fuente == "Panini" and filas[0].url.endswith(".html")
+
+
+async def test_una_editorial_caida_se_declara_sin_tumbar_la_otra(monkeypatch):
+    from zascarr.services import novedades_es
+
+    async def _norma_falla(*a, **kw):
+        raise RuntimeError("caída")
+
+    async def _panini_ok(*a, **kw):
+        return novedades_es.ResultadoES(filas=[novedades_es.NovedadES(
+            "Panini", "Una", date(2026, 11, 26), "https://x", "Panini Comics")])
+
+    monkeypatch.setattr(novedades_es, "cargar_norma", _norma_falla)
+    monkeypatch.setattr(novedades_es, "cargar_panini", _panini_ok)
+    novedades_es.limpiar_cache()
+    r = await novedades_es.cargar_novedades_es(date(2026, 11, 16))
+    assert [f.fuente for f in r.filas] == ["Panini"] and r.fallos == ["Norma"]
+
+
+async def test_norma_informa_de_sus_rutas_caidas(monkeypatch):
+    from zascarr.services import novedades_es
+
+    async def _falla(*a, **kw):
+        raise RuntimeError("caída")
+
+    monkeypatch.setattr(novedades_es, "_pedir", _falla)
+    r = await novedades_es.cargar_norma(date(2026, 11, 16), cache=object(), robots=object())
+    assert r.filas == [] and r.fallos == ["Norma"]
+
+
+async def test_las_peticiones_pasan_por_robots_y_cache(monkeypatch):
+    from types import SimpleNamespace
+
+    from zascarr.services import novedades_es
+
+    visto = {}
+
+    async def _cache(cliente, metodo, url, **kw):
+        visto.update(kw)
+        return SimpleNamespace(text="<html></html>")
+
+    monkeypatch.setattr(novedades_es, "pedir_con_cache", _cache)
+    robots, cache = object(), object()
+    await novedades_es._pedir("https://www.normaeditorial.com/cuando-sale/manga",
+                              cache=cache, robots=robots)
+    assert visto["robots"] is robots and visto["cache"] is cache
