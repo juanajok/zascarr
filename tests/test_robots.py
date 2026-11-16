@@ -228,7 +228,7 @@ class TestTopeCrawlDelay:
         assert len(avisos) == 1
         assert avisos[0]["declarado_s"] == 86400.0
         assert avisos[0]["recortado_s"] == 60.0 and avisos[0]["maximo_s"] == 60.0
-        assert "://" in avisos[0]["origen"] and "/api" not in avisos[0]["origen"]
+        assert avisos[0]["host"] and "://" not in avisos[0]["host"]
         assert len(descargas.urls) == 1             # no hay segunda descarga
 
     async def test_ac_02_un_delay_menor_no_se_recorta_ni_avisa(self, monkeypatch):

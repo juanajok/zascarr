@@ -18,10 +18,19 @@ from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_c
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
 from zascarr.utils.portada_rar import barrer_temporales
 from zascarr.utils.registro_reciente import instalar_captura
+from zascarr.utils.saneado_logs import (
+    instalar_filtro_registros,
+    instalar_saneo_structlog,
+    refrescar_raices,
+)
 
 # BL-E5 (#164): búfer acotado para que el dashboard pueda descargar los últimos
 # eventos sin depender de Docker ni de una shell. No cambia el formato de stdout.
+# #369: el saneador va ANTES de la captura para que el búfer no guarde rutas.
+instalar_saneo_structlog()
+refrescar_raices()
 instalar_captura()
+instalar_filtro_registros()
 logger = structlog.get_logger()
 
 # `httpx` registra cada petición a nivel INFO con la URL COMPLETA, y en Telegram

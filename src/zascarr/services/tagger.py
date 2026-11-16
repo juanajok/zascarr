@@ -493,7 +493,7 @@ class TaggerService:
             if sha != file.sha256_hash or file.file_size_bytes != st.st_size:
                 reconciliado = True
                 if not simular:
-                    logger.info("tagger.reconciliado", file_id=file.id, path=str(path))
+                    logger.info("tagger.reconciliado", file_id=file.id)
                     file.sha256_hash = sha
                     file.file_size_bytes = st.st_size
                     file.file_mtime_ns = st.st_mtime_ns  # BL-R9: el stat describe el hash
@@ -871,7 +871,7 @@ class TaggerService:
                     f"con la fila de `File` sin actualizar y se reconcilian solos "
                     f"en la siguiente pasada")
                 logger.error("tagger.lote_abortado", escritos=informe.escritos,
-                             motivo=r.motivo)
+                             motivo_tipo="codigo")
                 break
             if r.gasta_cupo:
                 procesados += 1

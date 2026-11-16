@@ -235,7 +235,9 @@ class LibraryAudit:
                 try:
                     digest = sha256_streaming(ruta)
                 except OSError as exc:
-                    logger.warning("library_audit.hash_failed", path=str(ruta), error=str(exc))
+                    logger.warning("library_audit.hash_failed",
+                                   formato=ruta.suffix.lstrip(".") or "sin_extension",
+                                   error_tipo=type(exc).__name__)
                     continue
                 report.files_hashed += 1
                 report.bytes_hashed += size
