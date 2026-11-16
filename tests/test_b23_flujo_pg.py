@@ -15,6 +15,7 @@ from sqlalchemy import select
 from tests._pg import bd_efimera_sync, migrar_a_head
 from tests._raices_pg import allowlist, sembrar_raiz
 from tests.test_revision_carpetas_pg import Banco
+from zascarr.config import get_settings
 from zascarr.models import ComicTradition, File, Issue, Series
 from zascarr.services import importer as mod
 from zascarr.services.importer import Importer
@@ -68,8 +69,13 @@ async def entorno(url_bd, tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "get_settings", lambda: ajustes)
     allowlist(monkeypatch, lib)
     await sembrar_raiz(b.fabrica, lib)
-    yield SimpleNamespace(banco=b, lib=lib, descargas=descargas)
-    await b.cerrar()
+    try:
+        yield SimpleNamespace(banco=b, lib=lib, descargas=descargas)
+    finally:
+        await b.cerrar()
+        # `allowlist` cambia LIBRARY_ROOTS y limpia la caché al entrar; hay que
+        # limpiarla también al salir para no contaminar el siguiente archivo.
+        get_settings.cache_clear()
 
 
 async def serie_vacia(entorno, titulo="Flash", anio=1987) -> str:
