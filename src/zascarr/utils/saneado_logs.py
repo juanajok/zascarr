@@ -89,8 +89,6 @@ def sanear_texto(texto: str, *, raices: tuple[str, ...] | None = None) -> str:
         return texto
     if len(texto) > _MAX:
         texto = texto[:_MAX] + "…"
-    if not any(c in texto for c in "/:@=.#'\""):
-        return texto
     try:
         resultado = _redactar_credenciales(texto)
         resultado = _FILE_URL.sub("file:///[ruta]", resultado)
@@ -274,6 +272,8 @@ def _sanear_record_en_origen(record: logging.LogRecord) -> None:
                 "".join(traceback.format_exception(*record.exc_info)))
         elif record.exc_text:
             record.exc_text = sanear_texto(record.exc_text)
+        # Un formatter que use %(exc_info)s no debe poder imprimir la tupla cruda.
+        record.exc_info = None
         record._sec_log_saneado = True
     except Exception:  # noqa: BLE001 — nunca emitir crudo
         record.msg = "(registro omitido: saneo fallido)"
