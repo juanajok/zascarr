@@ -221,7 +221,7 @@ class TestResultadosRecuperables:
             r = await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
         monkeypatch.setattr(AsyncSession, "commit", original)
         assert r.status_code == 503
-        assert 'id="card-' in r.text and "No se pudo confirmar la asignación" in r.text
+        assert 'id="card-' in r.text and "No se pudo confirmar la organización" in r.text
         assert "se cayó" not in r.text and "reintentará solo" not in r.text
         e = await mundo.estado()
         assert e.ops == ["preparada"] and e.issue_id is None          # operación VIVA, sin confirmar
@@ -277,7 +277,7 @@ class TestRespuestasExhaustivas:
     def test_la_reparacion_pendiente_no_afirma_que_se_asigno_con_una_copia_danada(self):
         """Incluye el caso «BD desviada», no solo una copia dañada."""
         texto = RESPUESTAS[EstadoResultado.REPARACION_PENDIENTE].texto
-        assert texto.startswith("La asignación necesita revisión; se ha conservado el original")
+        assert texto.startswith("La organización necesita revisión; se ha conservado el original")
         assert "copia nueva" not in texto
 
     def test_estado_desconocido_no_queda_mudo(self):

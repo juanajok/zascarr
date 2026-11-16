@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, File, FileFormat, Series
-from zascarr.web.pendientes import RECONTAR_MENU
+from zascarr.web.pendientes import RECONTAR_MENU, RESPUESTA_INESPERADA, RESPUESTAS
 
 
 class FakeScalarResult:
@@ -266,6 +266,13 @@ class TestLaAsignacionSeRotulaOrganizar:
         previa = (Path(__import__("zascarr.web", fromlist=["x"]).__file__).parent
                   / "templates" / "_previa_asignacion.html").read_text(encoding="utf-8")
         assert 'hx-post="/ui/pendientes/{{ file_id }}/asignar"' in previa
+
+
+def test_los_mensajes_visibles_de_la_ruta_que_mueve_dicen_organizar():
+    """#112 criterio 2: la ruta que mueve y renombra nunca se presenta como «asignar»."""
+    textos = [r.texto for r in RESPUESTAS.values()] + [RESPUESTA_INESPERADA.texto]
+    assert not [t for t in textos if "asign" in t.lower()]
+    assert any("organiz" in t.lower() for t in textos)
 
 
 class TestFragmentoDeRecuento:

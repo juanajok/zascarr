@@ -556,7 +556,7 @@ class Respuesta:
 
 
 _TEXTO_ERROR_GENERICO = (
-    "No se pudo asignar este archivo y el original no se ha tocado. Recarga la página y vuelve a "
+    "No se pudo organizar este archivo y el original no se ha tocado. Recarga la página y vuelve a "
     "intentarlo; si sigue igual, mira Estado."
 )
 _R = EstadoResultado
@@ -566,13 +566,13 @@ RESPUESTAS: dict[EstadoResultado, Respuesta] = {
     _R.ASIGNADO: Respuesta(200, asignado=True),
     _R.YA_ASIGNADO: Respuesta(200, asignado=True),
     _R.ASIGNADO_LIMPIEZA_PENDIENTE: Respuesta(
-        200, "Asignado. El archivo original sigue en la carpeta de revisión y se intentará retirar "
-             "al reiniciar ZascArr.", "amber", asignado=True),
+        200, "Organizado. El archivo original sigue en la carpeta de revisión y se intentará "
+             "retirar al reiniciar ZascArr.", "amber", asignado=True),
     _R.REPARACION_PENDIENTE: Respuesta(
-        200, "La asignación necesita revisión; se ha conservado el original. ZascArr volverá a "
+        200, "La organización necesita revisión; se ha conservado el original. ZascArr volverá a "
              "comprobarla al reiniciar.", "amber", asignado=True),
     _R.COLISION_EDICION: Respuesta(
-        409, f"No se asigna: {MOTIVO_COLISION_EDICION}. Ese número ya existe como otra edición "
+        409, f"No se organiza: {MOTIVO_COLISION_EDICION}. Ese número ya existe como otra edición "
              "(por ejemplo una grapa y un recopilatorio). Elige otro número o revísalo a mano."),
     _R.NO_ENCONTRADO: Respuesta(400, "El archivo o la serie ya no existen. Recarga la página."),
     _R.DATOS_NO_VALIDOS: Respuesta(400, "Escribe el número del tebeo antes de confirmar."),
@@ -580,15 +580,15 @@ RESPUESTAS: dict[EstadoResultado, Respuesta] = {
         409, "Otro archivo ocupó el nombre de destino mientras se copiaba. No se ha tocado nada; "
              "inténtalo de nuevo."),
     _R.YA_EN_CURSO: Respuesta(
-        409, "Este archivo ya se está asignando. Espera unos segundos y recarga.", "info"),
+        409, "Este archivo ya se está organizando. Espera unos segundos y recarga.", "info"),
     _R.PROPIEDAD_PERDIDA: Respuesta(
-        409, "Este archivo ya se está asignando. Espera unos segundos y recarga.", "info"),
+        409, "Este archivo ya se está organizando. Espera unos segundos y recarga.", "info"),
     _R.PENDIENTE: Respuesta(
-        503, "No se pudo confirmar la asignación. Tus archivos están a salvo. Se reintentará al "
-             "reiniciar ZascArr o al volver a asignar este archivo.", "amber"),
+        503, "No se pudo confirmar la organización. Tus archivos están a salvo. Se reintentará al "
+             "reiniciar ZascArr o al volver a organizar este archivo.", "amber"),
     _R.PENDIENTE_DE_COMPROBAR: Respuesta(
-        503, "No se pudo comprobar si la asignación se guardó. No se ha borrado nada; se "
-             "comprobará al reiniciar ZascArr o al volver a asignar este archivo.", "amber"),
+        503, "No se pudo comprobar si la organización se guardó. No se ha borrado nada; se "
+             "comprobará al reiniciar ZascArr o al volver a organizar este archivo.", "amber"),
     _R.ERROR: Respuesta(500, _TEXTO_ERROR_GENERICO),
 }
 
