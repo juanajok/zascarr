@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Novedades</h1>
 <p class="subtitle">Lo que sale esta semana en EE. UU. y España, según Comic Vine, Norma y Panini, cruzado con las series que sigues.</p>
-<p class="caption">«Anunciado» todavía no ha salido; «Publicado» sale hoy o ya ha salido. Comic Vine da la fecha de portada; Norma y Panini, su fecha de venta. ECC cerró y no publica novedades.</p>
+<p class="caption">«Anunciado» todavía no ha salido; «Publicado» sale hoy o ya ha salido. Comic Vine da la fecha de portada; Norma y Panini, su fecha de venta.</p>
 
 {% if semana and semana.fuentes_fallidas %}
 {{ ui.aviso("amber", "No se pudo consultar: " ~ (semana.fuentes_fallidas | join(", ")) ~ ". El resto de la semana sí se muestra; vuelve a intentarlo más tarde.") }}
@@ -67,5 +67,5 @@
 {{ ui.estado_vacio("No hay novedades esta semana", "Prueba otra semana o quita el filtro de editorial." if editorial else "Prueba otra semana.") }}
 {% endif %}
 
-<p class="caption">Datos de Comic Vine, Norma y Panini. ECC cerró y no publica novedades. ZascArr no descarga nada desde esta pantalla; solo muestra fechas y enlaces.</p>
+<p class="caption">Datos de Comic Vine, Norma y Panini. ZascArr no descarga nada desde esta pantalla; solo muestra fechas y enlaces.</p>
 {% endblock %}
