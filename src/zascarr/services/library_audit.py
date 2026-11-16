@@ -168,6 +168,11 @@ class LibraryAudit:
         self._library: Path = get_settings().library_path
         self._raices_paths: list[Path] = [self._library]
 
+    @property
+    def _rutas_de_escaneo(self) -> list[Path]:
+        """Compatibilidad con dobles creados por `__new__` en pruebas."""
+        return list(getattr(self, "_raices_paths", None) or [self._library])
+
     async def _cargar_raices(self) -> None:
         """Corta C: la auditoría recorre las raíces habilitadas, no una sola."""
         if not isinstance(self._db, AsyncSession):
@@ -189,7 +194,7 @@ class LibraryAudit:
         # análisis; solo persistir toca la BD y se queda en el bucle.
         await self._cargar_raices()
         if not await asyncio.to_thread(
-                lambda: any(p.is_dir() for p in self._raices_paths)):
+                lambda: any(p.is_dir() for p in self._rutas_de_escaneo)):
             report.finished_at = datetime.now(UTC)
             return report
 
@@ -219,7 +224,7 @@ class LibraryAudit:
         Importer.scan_and_import."""
         vistos: set[tuple[int, int]] = set()
         archivos: list[tuple[Path, int]] = []
-        for raiz in self._raices_paths:
+        for raiz in self._rutas_de_escaneo:
             for ext in COMIC_EXTS:
                 for f in raiz.rglob(f"*{ext}"):
                     if not _fuera_de_zascarr(f):
@@ -322,7 +327,7 @@ class LibraryAudit:
         subcarpetas igual de vacías, informar de las 21 es ruido que
         esconde el hallazgo ("puede que falte contenido aquí")."""
         vacias: list[CarpetaVacia] = []
-        for raiz in self._raices_paths:
+        for raiz in self._rutas_de_escaneo:
             for carpeta in sorted(d for d in raiz.rglob("*")
                                   if d.is_dir() and _fuera_de_zascarr(d)):
                 if any(carpeta.is_relative_to(Path(v.ruta)) for v in vacias):
@@ -341,7 +346,7 @@ class LibraryAudit:
         """RF-02: dos formas concretas de "parece un tebeo, no lo es para
         ZascArr" — nunca un intento de adivinar formatos nuevos."""
         hallados: list[NoReconocido] = []
-        for raiz in self._raices_paths:
+        for raiz in self._rutas_de_escaneo:
             for ext in CONTENEDORES_NO_SOPORTADOS:
                 for f in raiz.rglob(f"*{ext}"):
                     if not _fuera_de_zascarr(f):
@@ -352,7 +357,7 @@ class LibraryAudit:
                     ))
 
         comic_exts_lower = {e.lower() for e in COMIC_EXTS}
-        for raiz in self._raices_paths:
+        for raiz in self._rutas_de_escaneo:
             for f in raiz.rglob("*"):
                 if not f.is_file():
                     continue
@@ -371,7 +376,7 @@ class LibraryAudit:
         # #307: por CONTENIDO (≤ 512 B de cada fichero, solo lectura). Nunca se renombra ni se
         # registra nada.
         ya = {h.ruta for h in hallados}
-        for raiz in self._raices_paths:
+        for raiz in self._rutas_de_escaneo:
             for f in raiz.rglob("*"):
                 if not f.is_file() or not _fuera_de_zascarr(f) or f.name.startswith(".") \
                         or str(f) in ya:
