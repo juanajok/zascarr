@@ -37,7 +37,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, unquote, unquote_plus, urlsplit
 from uuid import uuid4
 
 import structlog
@@ -153,6 +153,26 @@ MOTIVO_CLIENTE_INACCESIBLE = (
     "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
 )
 MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
+
+
+def _nombre_de_fichero_de_enlace(url: str) -> str:
+    """Nombre del fichero que viaja dentro de un enlace ed2k o de un magnet.
+
+    Cada enlace de un mismo tema del foro es un número/edición distinta: usar el
+    título del TEMA para todos pintaba N candidatos idénticos en «Buscar ahora»
+    (bug UX 2026-11-16). El nombre del fichero los distingue y además da el
+    formato real (CBZ/CBR) a la fila.
+    """
+    if url.startswith("ed2k://|file|"):
+        partes = url.split("|")
+        if len(partes) >= 3 and partes[2]:
+            return unquote_plus(partes[2]).strip()[:200]
+        return ""
+    if url.startswith("magnet:?"):
+        parametros = parse_qs(url[len("magnet:?"):])
+        nombre = (parametros.get("dn") or [""])[0]
+        return unquote(nombre).strip()[:200]
+    return ""
 
 #: D10 (2026-11-16): URLs ya enviadas a mano por ítem. El coleccionista puede querer
 #: VARIOS candidatos de una misma búsqueda (varios números + un tie-in): cada envío
@@ -797,8 +817,9 @@ class Orchestrator:
                     if enlace in vistos:
                         continue
                     vistos.add(enlace)
+                    nombre = _nombre_de_fichero_de_enlace(enlace)
                     encontrados.append(SearchResult(
-                        fr.topic_title, "forum:crg", enlace, 0,
+                        nombre or fr.topic_title, "forum:crg", enlace, 0,
                         1 if enlace.lower().startswith("magnet:?") else 0, "comics"
                     ))
             return encontrados
