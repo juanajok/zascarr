@@ -110,7 +110,7 @@ def test_verificacion_interna_rechaza_firma_y_primera_imagen(tmp_path):
     (temp / "0001.cbz").unlink()
     with zipfile.ZipFile(temp / "0001.cbz", "w") as z:
         z.writestr("001.jpg", b"no es imagen")
-    with pytest.raises(PaqueteExtraccionError, match="no se puede abrir"):
+    with pytest.raises(PaqueteExtraccionError, match="no se puede decodificar"):
         _verificar_contenido([{"nombre": "0001.cbz", "bytes": 13}], temp)
 
 
