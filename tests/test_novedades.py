@@ -255,3 +255,19 @@ def test_api_expone_las_fuentes_que_faltan(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
     assert r.status_code == 200
     assert r.json()["fuentes_fallidas"] == ["Norma"]
+
+
+def test_el_prefijo_solo_casa_si_lo_que_sigue_es_numero_o_edicion():
+    s = _serie("Batman", cv=None)
+    inicio = date(2026, 11, 23)
+    def _item(titulo):
+        return {"id": None, "issue_number": "", "cover_date": "2026-11-26",
+                "site_detail_url": None, "volume": {"id": None, "name": titulo},
+                "fuente": "Panini", "editorial": "Panini Comics"}
+    semana = construir_semana([_item("Batman Beyond 1"), _item("Batman Universe"),
+                               _item("Batman 24")],
+                              inicio=inicio, series=[s], wishlist_series={s.id},
+                              hoy=date(2026, 11, 16))
+    por_titulo = {n.serie: n.interes for n in semana.novedades}
+    assert por_titulo == {"Batman Beyond 1": False, "Batman Universe": False,
+                          "Batman 24": True}

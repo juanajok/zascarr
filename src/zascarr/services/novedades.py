@@ -7,6 +7,7 @@ minutos. La parte de Norma/ECC/Panini queda fuera hasta verificar su HTML real.
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -123,8 +124,12 @@ def _filas_de_series(series: list[Any]) -> tuple[dict[int, Any], dict[str, list[
     return por_cv, por_titulo
 
 
+_RE_SUFIJO_EDICION = re.compile(
+    r"^(?:#?\d|n[o]?\s*\d|vol(?:umen)?\s*\d|tomo\s*\d|book\s*\d|numero\s*\d)")
+
+
 def _buscar_por_titulo(titulo: str, por_titulo: dict[str, list[Any]]) -> Any | None:
-    """Casa por título exacto; si no, por prefijo único (Norma/Panini no dan número)."""
+    """Casa por título exacto; si no, por prefijo + número/edición (Norma/Panini)."""
     norm = normalize_title(titulo)
     if not norm:
         return None
@@ -132,7 +137,9 @@ def _buscar_por_titulo(titulo: str, por_titulo: dict[str, list[Any]]) -> Any | N
     if len(exactas) == 1:
         return exactas[0]
     candidatas = [fila for clave, filas in por_titulo.items()
-                  if norm.startswith(clave + " ") and len(filas) == 1
+                  if norm.startswith(clave + " ")
+                  and _RE_SUFIJO_EDICION.match(norm[len(clave):].strip())
+                  and len(filas) == 1
                   for fila in filas]
     if len(candidatas) == 1:
         return candidatas[0]
