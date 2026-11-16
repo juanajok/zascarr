@@ -240,3 +240,70 @@ async def test_disco_lleno_deja_error_y_limpia(tmp_path, monkeypatch):
             await motor.dispose()
             os.environ.pop("COVERS_CACHE_PATH", None)
             get_settings.cache_clear()
+
+
+async def _con_paquete(tmp_path, monkeypatch):
+    from sqlalchemy import text as _text
+
+    from zascarr.config import get_settings
+    motor = create_async_engine(url_asyncpg(URL), poolclass=None)
+    fabrica = async_sessionmaker(motor, expire_on_commit=False)
+    async with fabrica() as s:
+        await s.execute(_text("TRUNCATE paquete_operaciones"))
+        await s.commit()
+    d = tmp_path / "d"
+    d.mkdir()
+    p = d / "p.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("a.cbz", _cbz_bytes() + b"x" * 200)
+    ajustes = type("A", (), {})()
+    ajustes.transmission_download_dir = str(d)
+    ajustes.amule_incoming_dir = ""
+    ajustes.downloads_path = ""
+    ajustes.secret_key = "k"
+    paquete = detectar_paquetes(ajustes=ajustes, secret="k")[0]
+    monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
+    get_settings.cache_clear()
+    return URL, motor, fabrica, paquete
+
+
+@pytest.mark.asyncio
+async def test_bomba_aborta_durante_escritura_y_limpia(tmp_path, monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.services import paquetes_extraccion as modulo
+    _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        monkeypatch.setattr(modulo, "MAX_BYTES_ENTRADA", 5)
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            with pytest.raises(modulo.PaqueteExtraccionError):
+                await extraer_y_verificar(s, op.id)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.ERROR and op.temp_dir is None
+        assert paquete.ruta.exists()
+        base = tmp_path / "config" / ".paquetes"
+        assert not list(base.glob("*")) if base.exists() else True
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_fallo_a_mitad_limpia_y_conserva_original(tmp_path, monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.services import paquetes_extraccion as modulo
+    _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        def falla(_items, _temp):
+            raise modulo.PaqueteExtraccionError("x", "fallo simulado")
+        monkeypatch.setattr(modulo, "_verificar_contenido", falla)
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            with pytest.raises(modulo.PaqueteExtraccionError):
+                await extraer_y_verificar(s, op.id)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.ERROR and op.temp_dir is None
+        assert paquete.ruta.exists()
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()

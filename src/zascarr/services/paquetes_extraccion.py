@@ -31,6 +31,9 @@ from zascarr.core.formato_contenedor import (
 )
 from zascarr.models import PaqueteEstado, PaqueteOperacion
 from zascarr.services.paquetes import (
+    MAX_BYTES_ENTRADA,
+    MAX_BYTES_TOTAL,
+    MAX_RATIO_LEIDA,
     ListadoPaquete,
     PaqueteError,
     PaquetePendiente,
@@ -152,13 +155,21 @@ def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
             destino = temp / nombre
             digest = hashlib.sha256()
             total = 0
+            total_operacion = sum(int(i.get("bytes", 0)) for i in items)
             try:
                 with z.open(info) as entrada, open(destino, "xb") as salida:
                     while bloque := entrada.read(_BLOQUE):
                         total += len(bloque)
-                        if total > 2 * 1024 ** 3:
+                        if total > MAX_BYTES_ENTRADA:
                             raise PaqueteExtraccionError(
                                 "demasiado_grande", "Un fichero de dentro es demasiado grande.")
+                        ratio = total / max(info.compress_size, 1)
+                        if info.compress_size and ratio > MAX_RATIO_LEIDA:
+                            raise PaqueteExtraccionError(
+                                "ratio", "El paquete está demasiado comprimido.")
+                        if total_operacion + total > MAX_BYTES_TOTAL:
+                            raise PaqueteExtraccionError(
+                                "tamano_total", "El paquete extraído es demasiado grande.")
                         digest.update(bloque)
                         salida.write(bloque)
                     salida.flush()
