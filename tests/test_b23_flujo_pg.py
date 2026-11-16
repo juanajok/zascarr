@@ -133,7 +133,9 @@ async def test_cbr_importado_se_convierte_y_el_origen_de_descargas_ya_no_esta(en
     from zascarr.services.compartidos import Decision, EstadoComparticion
 
     async def _no_compartido(*_a, **_k):
-        return Decision(EstadoComparticion.NO_COMPARTIDO, "prueba", ())
+        # aMule no permite saber qué comparte: el guardián falla cerrado y la
+        # conversión automática opt-in debe poder aplicarse igualmente.
+        return Decision(EstadoComparticion.NO_SE_SABE, "aMule no permite saberlo", ())
 
     monkeypatch.setattr(conversion, "estado_de_comparticion", _no_compartido)
     ajustes = mod.get_settings()
