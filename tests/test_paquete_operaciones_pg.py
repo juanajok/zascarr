@@ -6,8 +6,6 @@ import zipfile
 from pathlib import Path
 
 import pytest
-
-_RAIZ_FIXTURES = Path(__file__).resolve().parents[1]
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -16,6 +14,7 @@ from zascarr.models import PaqueteEstado, PaqueteOperacion
 from zascarr.services.paquetes import detectar_paquetes
 from zascarr.services.paquetes_extraccion import crear_operacion, extraer_y_verificar
 
+_RAIZ_FIXTURES = Path(__file__).resolve().parents[1]
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL")
 
@@ -356,7 +355,7 @@ async def test_rar_multi_entrada_mockeado_no_reutiliza_carpeta(tmp_path, monkeyp
     assert llamadas == ["a.cbz", "b.cbz"] and len(items) == 2
 
 
-@pytest.mark.skipif(not (_RAIZ_FIXTURES / "tests/fixtures/rar/minimo_rar4.cbr".exists()),
+@pytest.mark.skipif(not ((_RAIZ_FIXTURES / "tests/fixtures/rar/minimo_rar4.cbr").exists()),
                     reason="fixture RAR ausente")
 def test_fixture_rar_real_tiene_varias_entradas():
     from zascarr.utils import lector_rar
