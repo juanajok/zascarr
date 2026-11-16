@@ -59,7 +59,7 @@
 </section>
 {% endfor %}
 {% elif semana %}
-{{ ui.estado_vacio("No hay novedades esta semana", "Prueba otra semana o quita el filtro de editorial.") }}
+{{ ui.estado_vacio("No hay novedades esta semana", "Prueba otra semana o quita el filtro de editorial." if editorial else "Prueba otra semana.") }}
 {% endif %}
 
 <p class="caption">Datos de Comic Vine. ZascArr no descarga nada desde esta pantalla; solo muestra fechas y enlaces.</p>
