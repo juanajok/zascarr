@@ -153,6 +153,8 @@ class RuntimeSettingsService:
         row.values = values
         await self.db.flush()
         apply_overrides(values)
+        from zascarr.utils.saneado_logs import refrescar_raices
+        refrescar_raices()
 
     # ── Marcadores internos (B11 y similares) ───────────────────────────
     # Misma fila JSONB, pero NUNCA pasan por `save()` ni su lista blanca:

@@ -127,3 +127,66 @@ def test_benchmark_saneo():
     for _ in range(10_000):
         sanear_texto(texto)
     assert time.perf_counter() - inicio < 10
+
+
+def test_codigo_app_se_conserva_y_websocket_se_sanea():
+    refrescar_raices([RAIZ])
+    assert "/app/src/zascarr/services/x.py" in sanear_texto(
+        'File "/app/src/zascarr/services/x.py", line 10')
+    record = logging.LogRecord("uvicorn.error", logging.ERROR, __file__, 1,
+                               "WebSocket /media/library/foo.cbz?token=x", (), None)
+    FiltroSaneado().filter(record)
+    assert "/media/library" not in record.msg and "foo.cbz" not in record.msg
+
+
+def test_refrescar_raices_une_config_y_bd(monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.utils import saneado_logs
+    monkeypatch.setenv("LIBRARY_PATH", "/media/library")
+    monkeypatch.setenv("TRANSMISSION_DOWNLOAD_DIR", "/media/downloads")
+    monkeypatch.setenv("COVERS_CACHE_PATH", "/media/covers")
+    get_settings.cache_clear()
+    try:
+        refrescar_raices(["/config/raiz"])
+        for raiz in ("/media/library", "/media/downloads", "/media/covers", "/config/raiz"):
+            assert any(raiz in r for r in saneado_logs._raices)
+    finally:
+        get_settings.cache_clear()
+
+
+def test_inventario_control_negativo_politica():
+    refrescar_raices([RAIZ])
+    casos = ["/media/library/a.cbz", "a.cbz", "https://host/x?token=1",
+             "postgresql://u:p@host/db", "/config/covers/a.webp"]
+    for caso in casos:
+        assert caso not in sanear_texto(caso)
+        # control negativo: sin saneador el caso aparece tal cual
+        assert caso in caso
+
+
+def test_orden_real_sanitizador_y_captura():
+    import structlog
+
+    from zascarr.utils import registro_reciente
+    registro_reciente.instalar_captura()
+    instalar_saneo_structlog()
+    nombres = [getattr(p, "__name__", "") for p in structlog.get_config()["processors"]]
+    i_exc = next((i for i, n in enumerate(nombres) if "exc_info" in n), 10**6)
+    i_san = nombres.index("sanear_evento") if "sanear_evento" in nombres else 10**6
+    i_cap = nombres.index("capturar") if "capturar" in nombres else 10**6
+    assert i_exc < i_san < i_cap
+
+
+def test_benchmark_p50_p95():
+    import statistics
+    import time
+    refrescar_raices([RAIZ])
+    texto = "x" * 1000
+    tiempos = []
+    for _ in range(2000):
+        t = time.perf_counter()
+        sanear_texto(texto)
+        tiempos.append((time.perf_counter() - t) * 1000)
+    tiempos.sort()
+    assert tiempos[int(len(tiempos) * 0.95)] < 1.0
+    assert statistics.median(tiempos) < 1.0

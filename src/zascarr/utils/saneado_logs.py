@@ -17,8 +17,12 @@ import structlog
 
 _CLAVE_SECRETA = re.compile(
     r"(?i)(password|passwd|contrase(?:n|ñ)a|secret|token|api[_-]?key|authorization|cookie|bearer|session)")
+_FILE_URL = re.compile(r"(?i)file://[^\s\"'<>]+")
 _URL = re.compile(r"(?i)\b([A-Za-z][A-Za-z0-9+.-]*)://(?:[^/@\s]+@)?([^/\s?#:]+)[^\s\"'<>]*")
 _URL_SIN_ESQUEMA = re.compile(r"(?i)\b(?:www\.)[^\s\"'<>]+")
+_CREDENCIAL_CITA = re.compile(
+    r"(?i)([\"\']?(?:password|passwd|secret|token|api[_-]?key|authorization|cookie)[\"\']?"
+    r"\s*[=:]\s*)([\"\'])[^\"\']*\2")
 _CREDENCIAL = re.compile(
     r"(?i)((?:password|passwd|contrase(?:n|ñ)a|secret|token|api[_-]?key|authorization|cookie|session)"
     r"\s*[=:]\s*)[^\s,;\"']+")
@@ -27,7 +31,8 @@ _EXT = r"(?:cbz|cbr|cb7|pdf|epub)"
 _ABS_COMIC = re.compile(rf"(?i)(?<![\w])/(?:[^\s\"'<>/]+/)+[^\s\"'<>/]+\.({_EXT})\b")
 _RUTA_RELATIVA = re.compile(rf"(?i)(?<![\w])[^\s\"'<>/]+(?:/[^\s\"'<>/]+)+\.({_EXT})\b")
 _ARCHIVO_SIMPLE = re.compile(rf"(?i)\b[^\s\"'<>/]+\.({_EXT})\b")
-_RUTA_ABS = re.compile(r"(?<![:/\w])/(?:[^\n\"'<>]*[^\s\"'<>])?")
+_RUTA_ABS = re.compile(
+    r"(?<![:/\w])/(?:[^\n\"'<>]*?)(?=:\s|$|[\"';,\)\]]|\s+(?:[a-záéíóúñ]+\s))")
 _MAX = 2000
 
 _raices: tuple[str, ...] = ()
@@ -35,22 +40,21 @@ _lock = threading.Lock()
 
 
 def refrescar_raices(raices: list[str | Path] | None = None) -> None:
-    """Cachea las raíces sensibles. Nunca se llama desde el procesador."""
+    """Une configuración, BD y raíces explícitas; nunca reemplaza las conocidas."""
     global _raices
     valores: list[str] = []
-    if raices is None:
-        try:
-            from zascarr.config import get_settings
-            a = get_settings()
-            for nombre in ("library_path", "downloads_path", "transmission_download_dir",
-                           "amule_incoming_dir", "covers_cache_path", "export_path",
-                           "library_roots"):
-                valor = getattr(a, nombre, None)
-                if valor:
-                    valores.append(str(valor))
-        except Exception:  # noqa: BLE001 — arranque sin settings
-            valores = []
-    else:
+    try:
+        from zascarr.config import get_settings
+        a = get_settings()
+        for nombre in ("library_path", "downloads_path", "transmission_download_dir",
+                       "amule_incoming_dir", "covers_cache_path", "export_path",
+                       "library_roots"):
+            valor = getattr(a, nombre, None)
+            if valor:
+                valores.append(str(valor))
+    except Exception:  # noqa: BLE001 — arranque sin settings
+        pass
+    if raices:
         for x in raices:
             valores.extend(parte.strip() for parte in str(x).replace(";", ",").split(",")
                            if parte.strip())
@@ -73,6 +77,7 @@ def _redactar_url(texto: str) -> str:
 
 
 def _redactar_credenciales(texto: str) -> str:
+    texto = _CREDENCIAL_CITA.sub(r'\1\2[credencial]\2', texto)
     texto = _CREDENCIAL.sub(r"\1[credencial]", texto)
     return _BEARER.sub(r"\1[credencial]", texto)
 
@@ -83,8 +88,18 @@ def sanear_texto(texto: str, *, raices: tuple[str, ...] | None = None) -> str:
         return texto
     if len(texto) > _MAX:
         texto = texto[:_MAX] + "…"
+    if not any(c in texto for c in "/:@=.#'\""):
+        return texto
     try:
         resultado = _redactar_credenciales(texto)
+        resultado = _FILE_URL.sub("file:///[ruta]", resultado)
+        codigo: list[str] = []
+        for patron in (r"/app/src/zascarr/[^\s\"'<>]*",
+                       re.escape(str(Path(__file__).resolve().parents[1])) + r"/[^\s\"'<>]*"):
+            def guardar_codigo(m: re.Match[str]) -> str:
+                codigo.append(m.group(0))
+                return f"\x00CODIGO{len(codigo)-1}\x00"
+            resultado = re.sub(patron, guardar_codigo, resultado)
         urls: list[str] = []
         def guardar(m: re.Match[str]) -> str:
             urls.append(_redactar_url(m.group(0)))
@@ -99,6 +114,8 @@ def sanear_texto(texto: str, *, raices: tuple[str, ...] | None = None) -> str:
         resultado = _ARCHIVO_SIMPLE.sub("[archivo]", resultado)
         for i, url in enumerate(urls):
             resultado = resultado.replace(f"\x00URL{i}\x00", url)
+        for i, trozo in enumerate(codigo):
+            resultado = resultado.replace(f"\x00CODIGO{i}\x00", trozo)
         return resultado
     except Exception:  # noqa: BLE001 — falla cerrado
         return "[no_saneado]"
@@ -152,12 +169,16 @@ class FiltroSaneado(logging.Filter):
     """Filtro stdlib/uvicorn: sanea msg, args y exc_text sin silenciar el evento."""
 
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
-        if record.name == "uvicorn.access" or (
-                isinstance(record.msg, str) and "WebSocket" in record.msg):
+        if record.name == "uvicorn.access":
             return True  # #361 ya quita la query; #369 no toca ese registro
+        if (isinstance(record.msg, str) and "WebSocket" in record.msg
+                and record.args):
+            return True  # línea de acceso ws de uvicorn (control negativo #361)
         try:
             if isinstance(record.msg, str):
                 record.msg = sanear_texto(record.msg)
+            else:
+                record.msg = sanear_valor(record.msg)
             if record.args:
                 if isinstance(record.args, dict):
                     record.args = {
@@ -223,6 +244,9 @@ def instalar_filtro_registros() -> None:
     logger = logging.getLogger("uvicorn.error")
     if not any(isinstance(f, FiltroSaneado) for f in logger.filters):
         logger.addFilter(FiltroSaneado())
+    raiz = logging.getLogger()
+    if not any(isinstance(f, FiltroSaneado) for f in raiz.filters):
+        raiz.addFilter(FiltroSaneado())
     uvicorn_handlers = {id(h) for h in logging.getLogger("uvicorn").handlers}
     for handler in logging.getLogger().handlers:
         if id(handler) in uvicorn_handlers:
