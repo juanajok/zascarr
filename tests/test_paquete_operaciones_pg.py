@@ -183,3 +183,60 @@ async def test_identidad_duplicado_cambiado_y_huerfanos(tmp_path):
     finally:
         os.environ.pop("COVERS_CACHE_PATH", None)
         get_settings.cache_clear()
+
+
+def test_base_temporal_rechaza_symlink(tmp_path, monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.services.paquetes_extraccion import PaqueteExtraccionError, _base_temporal
+    config = tmp_path / "config"
+    config.mkdir()
+    fuera = tmp_path / "fuera"
+    fuera.mkdir()
+    (config / ".paquetes").symlink_to(fuera, target_is_directory=True)
+    monkeypatch.setenv("COVERS_CACHE_PATH", str(config))
+    get_settings.cache_clear()
+    try:
+        with pytest.raises((PaqueteExtraccionError, OSError)):
+            _base_temporal()
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_disco_lleno_deja_error_y_limpia(tmp_path, monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.services import paquetes_extraccion as modulo
+    from zascarr.utils.espacio import EspacioInsuficienteError
+    async with bd_efimera(URL) as url:
+        migrar_a_head(url)
+        motor = create_async_engine(url_asyncpg(url), poolclass=None)
+        fabrica = async_sessionmaker(motor, expire_on_commit=False)
+        try:
+            d = tmp_path / "d"
+            d.mkdir()
+            p = d / "p.zip"
+            with zipfile.ZipFile(p, "w") as z:
+                z.writestr("a.cbz", _cbz_bytes())
+            ajustes = type("A", (), {})()
+            ajustes.transmission_download_dir = str(d)
+            ajustes.amule_incoming_dir = ""
+            ajustes.downloads_path = ""
+            ajustes.secret_key = "k"
+            paquete = detectar_paquetes(ajustes=ajustes, secret="k")[0]
+            monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
+            get_settings.cache_clear()
+
+            def sin_espacio(*_a, **_k):
+                raise EspacioInsuficienteError(bytes_libres=0, bytes_necesarios=1, contexto="x")
+
+            monkeypatch.setattr(modulo, "comprobar_espacio", sin_espacio)
+            async with fabrica() as s:
+                op = await crear_operacion(s, paquete)
+                with pytest.raises(EspacioInsuficienteError):
+                    await extraer_y_verificar(s, op.id)
+                await s.refresh(op)
+                assert op.estado is PaqueteEstado.ERROR and op.temp_dir is None
+        finally:
+            await motor.dispose()
+            os.environ.pop("COVERS_CACHE_PATH", None)
+            get_settings.cache_clear()
