@@ -47,6 +47,27 @@ class SearchResult:
     publish_date: str | None = None
 
 
+def _url_de_descarga(item: dict) -> str:
+    """URL que puede consumir un cliente: torrent/http, magnet o eD2K.
+
+    Prowlarr deja `downloadUrl` a null en indexers que solo publican magnet (TPB,
+    Knaben): el enlace real viaja en `guid` (magnet) o en `magnetUrl` (proxy HTTP).
+    Antes se enviaba la cadena vacía a Transmission; el candidato era inservible.
+    """
+    descarga = item.get("downloadUrl")
+    if isinstance(descarga, str) and descarga.strip().startswith(
+            ("http://", "https://", "magnet:", "ed2k://")):
+        return descarga.strip()
+    guid = item.get("guid")
+    if isinstance(guid, str) and guid.strip().startswith(("magnet:", "ed2k://")):
+        return guid.strip()
+    magnet = item.get("magnetUrl")
+    if isinstance(magnet, str) and magnet.strip().startswith(
+            ("http://", "https://", "magnet:", "ed2k://")):
+        return magnet.strip()
+    return ""
+
+
 class ProwlarrClient:
     def __init__(self, transporte: httpx.AsyncBaseTransport | None = None):
         s = get_settings()
@@ -74,7 +95,7 @@ class ProwlarrClient:
         results = [SearchResult(
             title=item.get("title", ""),
             indexer=item.get("indexer", ""),
-            download_url=item.get("downloadUrl", ""),
+            download_url=_url_de_descarga(item),
             size_bytes=item.get("size", 0),
             seeders=item.get("seeders", 0),
             category=str(item.get("categories", [{}])[0].get("name", "")),
