@@ -17,6 +17,7 @@ decisión irreversible que la historia se propone no tomar sola.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 from dataclasses import dataclass
@@ -549,13 +550,12 @@ async def paquetes(request: Request, db: AsyncSession = Depends(get_db)) -> HTML
     """Paquetes de Descargas: detección por firma, solo lectura."""
     try:
         pendientes = await asyncio.to_thread(detectar_paquetes)
-        try:
+        importadas: set[str] = set()
+        with contextlib.suppress(Exception):
             importadas = set((await db.execute(
                 select(PaqueteOperacion.paquete_clave).where(
                     PaqueteOperacion.estado == PaqueteEstado.IMPORTADO))).scalars())
-            pendientes = [p for p in pendientes if clave_identidad(p) not in importadas]
-        except Exception:  # noqa: BLE001 — sin BD se listan los pendientes igual
-            pass
+        pendientes = [p for p in pendientes if clave_identidad(p) not in importadas]
         return _no_store(templates.TemplateResponse(
             request, "_paquetes_descargas.html", {"paquetes": pendientes, "error": None}))
     except OSError:
