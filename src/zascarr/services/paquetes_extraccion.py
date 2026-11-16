@@ -87,7 +87,7 @@ def _base_temporal() -> Path:
                   getattr(ajustes, "amule_incoming_dir", None),
                   getattr(ajustes, "downloads_path", None)):
         if valor:
-            prohibidas.append(Path(valor))
+            prohibidas.append(Path(valor).resolve(strict=False))
     padre = base.parent.resolve(strict=False)
     for prohibida in prohibidas:
         if padre == prohibida or prohibida in padre.parents:
@@ -167,20 +167,23 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
                "LANG": "C.UTF-8"}
     os.set_inheritable(fd, True)
     os.set_inheritable(temp_fd, True)
-    salida_fichero = tempfile.TemporaryFile()  # noqa: SIM115
+    salida_fichero = tempfile.TemporaryFile(dir=temp)  # noqa: SIM115
+    error_fichero = tempfile.TemporaryFile(dir=temp)  # noqa: SIM115
     proc = subprocess.Popen(  # noqa: S603 — lista, sin shell, ruta absoluta
         [sys.executable, "-m", "zascarr.services.paquetes_worker", json.dumps(datos),
          modo, str(fd), str(temp), str(temp_fd)],
-        stdin=subprocess.DEVNULL, stdout=salida_fichero, stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL, stdout=salida_fichero, stderr=error_fichero,
         env=entorno, close_fds=True, pass_fds=(fd, temp_fd), start_new_session=True)
     try:
         try:
-            _, error = proc.communicate(timeout=_ZIP_TIMEOUT)
+            proc.communicate(timeout=_ZIP_TIMEOUT)
         except subprocess.TimeoutExpired:
             with __import__("contextlib").suppress(OSError):
                 os.killpg(proc.pid, signal.SIGKILL)
             proc.communicate()
             raise PaqueteExtraccionError("tiempo", "La extracción tardó demasiado.") from None
+        error_fichero.seek(0)
+        error_fichero.read(64 * 1024 + 1)
         if proc.returncode != 0:
             raise PaqueteExtraccionError("extraccion", "La extracción falló.")
         salida_fichero.seek(0)
@@ -189,6 +192,7 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
             raise PaqueteExtraccionError("extraccion", "La extracción devolvió demasiados datos.")
     finally:
         salida_fichero.close()
+        error_fichero.close()
     try:
         return list(json.loads(salida))
     except (ValueError, TypeError) as exc:
@@ -449,7 +453,8 @@ async def crear_operacion(s: AsyncSession, paquete: PaquetePendiente) -> Paquete
     return op
 
 
-async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoExtraccion:
+async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
+                             conservar_temporal: bool = False) -> ResultadoExtraccion:
     op = await s.get(PaqueteOperacion, operacion_id, with_for_update=True)
     if op is None:
         raise PaqueteExtraccionError("no_existe", "La operación no existe.")
@@ -510,13 +515,16 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         op.total_entradas = len(items)
         op.total_bytes = sum(int(i["bytes"]) for i in items)
         op.finalizada = __import__("datetime").datetime.now(__import__("datetime").UTC)
-        op.temp_dir = None
+        op.temp_dir = str(temp) if conservar_temporal else None
         s.add(op)
         await s.commit()
         with __import__("contextlib").suppress(OSError):
             os.close(paquete.fd)
         with __import__("contextlib").suppress(OSError):
             os.close(temp_fd)
+        if conservar_temporal:
+            return ResultadoExtraccion(
+                operacion_id=op.id, items=tuple(items), total_bytes=op.total_bytes)
         if not _borrar_temp(temp):
             op = await s.get(PaqueteOperacion, operacion_id)
             if op is not None:
@@ -553,14 +561,7 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
         (
             await s.execute(
                 select(PaqueteOperacion).where(
-                    PaqueteOperacion.estado.in_(
-                        [
-                            PaqueteEstado.LISTANDO,
-                            PaqueteEstado.EXTRAYENDO,
-                            PaqueteEstado.VERIFICANDO,
-                        ]
-                    )
-                )
+                    PaqueteOperacion.temp_dir.is_not(None))
             )
         )
         .scalars()
@@ -576,6 +577,19 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
         op.temp_dir = None if borrado else op.temp_dir
         s.add(op)
     if vivas:
+        await s.commit()
+    # PUBLICANDO/IMPORTANDO interrumpidos: limpiar staging y marcar reintentable.
+    atascadas = (await s.execute(select(PaqueteOperacion).where(
+        PaqueteOperacion.estado.in_(
+            [PaqueteEstado.PUBLICANDO, PaqueteEstado.IMPORTANDO])))).scalars().all()
+    for op in atascadas:
+        if op.staging_dir:
+            _borrar_temp(Path(op.staging_dir))
+        op.estado = PaqueteEstado.ERROR
+        op.error_codigo = "interrumpida"
+        op.error_mensaje = "La publicación se interrumpió; se puede reintentar."
+        s.add(op)
+    if atascadas:
         await s.commit()
     try:
         base = _base_temporal()
