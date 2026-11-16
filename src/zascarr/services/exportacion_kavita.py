@@ -412,7 +412,7 @@ def _materializar(
             raise
         except Exception:
             errores += 1
-            logger.exception("exportacion_kavita.materializar_falló", destino=str(destino))
+            logger.exception("exportacion_kavita.materializar_falló", file_id=str(accion.file_id))
     modo_global = "mixed" if len(modos) > 1 else (next(iter(modos)) if modos else "hardlink")
     return entradas, omitidos, colisiones, deriva, errores, copiados, modo_global
 

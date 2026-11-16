@@ -277,7 +277,8 @@ class TestConUvicornReal:
         cabeceras = {"Connection": "Upgrade", "Upgrade": "websocket", "Sec-WebSocket-Version": "13",
                      "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="}
         salida = _servir_y_pedir(cmd, [(f"/ui/descubrir?{QUERY}", cabeceras)], RAIZ)
-        assert CENTINELAS["clave"] in salida, salida[-1200:]
+        # #369 sanea la traza de uvicorn.error: la query ya no se filtra al log.
+        assert CENTINELAS["clave"] not in salida, salida[-1200:]
 
     def test_control_negativo_sin_el_filtro_el_detector_si_ve_la_query(self, tmp_path):
         """Una aplicación ASGI mínima bajo el MISMO uvicorn y los mismos argumentos, pero SIN el filtro: el centinela debe

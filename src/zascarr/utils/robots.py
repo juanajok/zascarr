@@ -195,7 +195,8 @@ class GestorRobots:
         if math.isinf(valor) or valor > maximo:
             if origen not in self._avisos_crawl:
                 self._avisos_crawl.add(origen)
-                logger.warning("robots.crawl_delay_recortado", origen=origen,
+                logger.warning("robots.crawl_delay_recortado",
+                                host=(urlsplit(origen).hostname or ""),
                                declarado_s=valor, recortado_s=maximo, maximo_s=maximo)
             return maximo
         return valor
@@ -252,7 +253,7 @@ class GestorRobots:
             try:
                 parser = Protego.parse(texto)
             except Exception:
-                logger.warning("robots.parse_fallido", origen=origen)
+                logger.warning("robots.parse_fallido", host=(urlsplit(origen).hostname or ""))
                 return EntradaRobots("unreachable_disallow", None,
                                      ahora + self.TTL_UNREACHABLE_S)
             return EntradaRobots("parsed", parser, ahora + self.TTL_OK_S)

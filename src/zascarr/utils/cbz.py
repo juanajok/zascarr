@@ -96,7 +96,7 @@ def _limpiar_temporales_viejos(path: Path) -> None:
                     with contextlib.suppress(OSError):
                         os.unlink(entrada.path)
     except OSError:
-        logger.warning("cbz.limpieza_temporales_fallida", dir=str(path.parent))
+        logger.warning("cbz.limpieza_temporales_fallida", fase="limpieza")
 
 
 # ── lectura ─────────────────────────────────────────────────────────────────
@@ -201,7 +201,7 @@ def _reescribir(path: Path, xml: bytes) -> None:
             finally:
                 os.close(pfd)
         except OSError:
-            logger.warning("cbz.fsync_dir_fallido", dir=str(path.parent))
+            logger.warning("cbz.fsync_dir_fallido", fase="fsync")
     except CbzError:
         _limpiar(temporal)
         raise
@@ -233,4 +233,4 @@ def _limpiar(temporal: Path) -> None:
     try:
         temporal.unlink(missing_ok=True)
     except OSError:
-        logger.warning("cbz.temporal_no_borrado", path=str(temporal))
+        logger.warning("cbz.temporal_no_borrado", fase="limpieza")
