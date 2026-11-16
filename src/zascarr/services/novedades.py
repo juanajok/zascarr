@@ -225,7 +225,12 @@ async def cargar_semana(db: AsyncSession, inicio: date, *, cliente=None,
     items: list[dict[str, Any]] = []
     fuente_caida = None
     fallos: list[str] = []
-    if getattr(ajustes, "comicvine_enabled", False) and getattr(ajustes, "comicvine_api_key", ""):
+    cv_configurado = bool(getattr(ajustes, "comicvine_enabled", False)
+                          and getattr(ajustes, "comicvine_api_key", ""))
+    if getattr(ajustes, "comicvine_enabled", False) and not cv_configurado:
+        # Encendido pero sin clave: es una fuente que falta, no «cero novedades».
+        fallos.append("Comic Vine")
+    if cv_configurado:
         try:
             items = await _items_de_la_semana(inicio, cliente=cliente)
         except Exception as exc:  # noqa: BLE001 — la vista sigue con las españolas
@@ -249,7 +254,7 @@ async def cargar_semana(db: AsyncSession, inicio: date, *, cliente=None,
             fuente_caida = exc
     if not items and fuente_caida is not None:
         raise NovedadesError("No se pudo consultar ninguna fuente de novedades.") from fuente_caida
-    if not items and not getattr(ajustes, "comicvine_enabled", False):
+    if not items and not cv_configurado:
         raise NovedadesApagadaError(
             "Comic Vine está apagado o sin clave y las editoriales españolas "
             "no devolvieron novedades.")
