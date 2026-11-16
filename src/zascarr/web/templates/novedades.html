@@ -45,19 +45,32 @@
 {% for dia, novedades in semana.dias %}
 <section aria-labelledby="dia-{{ dia.isoformat() }}">
   <h2 id="dia-{{ dia.isoformat() }}" class="seccion titulo-frase">{{ etiqueta_dia(dia) }}</h2>
-  <ul class="series-list">
+  <ul class="novedades-dia">
     {% for n in novedades %}
-    <li class="pending-card novedad-fila">
-      <div>
-        <strong>{% if n.series_id %}<a href="/ui/series/{{ n.series_id }}">{{ n.serie }}</a>{% else %}{{ n.serie }}{% endif %}{% if n.numero %} #{{ n.numero }}{% endif %}</strong>
-        {{ ui.chip("info", n.fuente) }}
-        {{ ui.chip("ok", "Te interesa") if n.interes else "" }}
-        {{ ui.chip("neutro", "Publicado" if n.publicado else "Anunciado") }}
+    <li class="novedad-card">
+      {% if n.series_id %}
+      <a class="novedad-portada" href="/ui/series/{{ n.series_id }}" aria-label="Abrir la serie {{ n.serie }}">
+        {{ ui.portada(n.serie, n.series_id, "/ui/series/%s/portada?v=2" % n.series_id, carga="lazy") }}
+      </a>
+      {% else %}
+      <div class="novedad-portada">
+        {{ ui.portada(n.serie, none, none, carga="lazy") }}
       </div>
-      <p class="caption">
-        {% if n.editorial %}{{ n.editorial }} · {% else %}Editorial sin dato · {% endif %}
-        {% if n.url %}<a href="{{ n.url }}" target="_blank" rel="noopener noreferrer">Ver en {{ n.fuente }}<span class="sr"> (se abre en otra pestaña)</span></a>{% endif %}
-      </p>
+      {% endif %}
+      <div class="novedad-cuerpo">
+        <strong class="novedad-titulo">
+          {% if n.series_id %}<a href="/ui/series/{{ n.series_id }}">{{ n.serie }}</a>{% else %}{{ n.serie }}{% endif %}{% if n.numero %} #{{ n.numero }}{% endif %}
+        </strong>
+        <div class="novedad-chips">
+          {{ ui.chip("info", n.fuente) }}
+          {{ ui.chip("ok", "Te interesa") if n.interes else "" }}
+          {{ ui.chip("neutro", "Publicado" if n.publicado else "Anunciado") }}
+        </div>
+        <p class="novedad-meta">
+          {% if n.editorial %}{{ n.editorial }}{% else %}Editorial sin dato{% endif %}
+          {% if n.url %} · <a href="{{ n.url }}" target="_blank" rel="noopener noreferrer">Ver en {{ n.fuente }}<span class="sr"> (se abre en otra pestaña)</span></a>{% endif %}
+        </p>
+      </div>
     </li>
     {% endfor %}
   </ul>
