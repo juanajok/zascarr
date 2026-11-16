@@ -365,6 +365,62 @@
 
   <h2 class="ajustes-acto" id="ajustes-propio">Tu ZascArr</h2>
 
+    <fieldset class="ajustes-card ajustes-card--ancha" id="discos-biblioteca">
+      <legend>Discos de la biblioteca</legend>
+      <p class="ajustes-desc">Reparte tus tradiciones entre los discos que ya tienes montados. Los archivos actuales no se mueven.</p>
+      {% for r in raices_admin %}
+      <div class="ajuste-raiz" data-raiz="{{ r.id }}">
+        <p><strong>{{ r.name }}</strong> <span class="ajustes-hint">{{ r.host_path or r.path }}</span></p>
+        <p><span class="chip">{{ r.estado }}</span>{% if r.is_default %} <span class="chip">Por defecto</span>{% endif %}
+          <span class="ajustes-hint">{{ r.archivos }} archivos</span></p>
+        <p class="ajustes-hint">Tradiciones: {{ r.tradiciones | join(", ") or "ninguna" }}</p>
+        {% if not r.is_default %}
+        <form hx-post="/ui/ajustes/raices/{{ r.id }}/habilitar" hx-target="#resultado-discos" hx-swap="innerHTML">
+          <input type="hidden" name="enabled" value="{{ 'false' if r.enabled else 'true' }}">
+          <button type="submit" class="btn ghost sm">{{ 'Desactivar' if r.enabled else 'Activar' }}</button>
+        </form>
+        {% endif %}
+        {% if not r.is_default and r.archivos == 0 %}
+        <form hx-post="/ui/ajustes/raices/{{ r.id }}/borrar" hx-target="#resultado-discos" hx-swap="innerHTML">
+          <button type="submit" class="btn ghost sm">Borrar</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      <form hx-post="/ui/ajustes/guardar/raices" hx-target="#resultado-discos" hx-swap="innerHTML">
+        <div role="group" aria-labelledby="mapa-tradiciones">
+          <h3 id="mapa-tradiciones" class="ajustes-subgrupo">Tradición → disco</h3>
+          {% for t in tradiciones_admin %}
+          <label>{{ t.etiqueta }}
+            <select name="trad_{{ t.valor }}">
+              <option value="">Sin disco asignado</option>
+              {% for r in raices_admin if r.enabled %}
+              <option value="{{ r.id }}" {% if mapa_tradiciones.get(t.valor) == r.id %}selected{% endif %}>{{ r.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="ajustes-actions"><button type="submit">Guardar reparto</button></div>
+      </form>
+
+      {% if montajes_disponibles %}
+      <form hx-post="/ui/ajustes/raices/crear" hx-target="#resultado-discos" hx-swap="innerHTML">
+        <label>Disco montado
+          <select name="path" required>
+            {% for m in montajes_disponibles %}<option value="{{ m.path }}">{{ m.host_path or m.path }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Nombre <input type="text" name="name" maxlength="80" placeholder="Manga"></label>
+        <div class="ajustes-actions"><button type="submit">Añadir disco</button></div>
+      </form>
+      {% else %}
+      <p class="ajustes-hint">Para añadir otro disco, móntalo en el servidor y reinicia ZascArr; aquí solo se gestionan discos ya montados.</p>
+      {% endif %}
+      <div id="resultado-discos" aria-live="polite"></div>
+    </fieldset>
+
     <fieldset class="ajustes-card" id="nombres-archivo">
       <legend>Nombres de archivo</legend>
       <p class="ajustes-desc">Cómo se llaman los archivos que organices a partir de ahora. La biblioteca que ya tienes no se renombra.</p>
