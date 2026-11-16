@@ -140,6 +140,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Abreviaturas con puntos en el nombre del fichero (2026-11-16).** `DC K.O. #1…cbz`
+  se parseaba como serie «DC K O» y el matcher no encontraba la serie «DC K.O.»:
+  el fichero caía en `_Unsorted` aunque el deseo apuntara a ella. Ahora los puntos
+  entre letras sueltas («DC K.O.», «S.H.I.E.L.D.») se colapsan antes de separar por
+  puntos, así que quedan «DC KO»/«SHIELD» y el match exacto con `title_norm` funciona.
+
 - **Añadir a Deseados muestra la fila al instante (2026-11-16).** El botón dependía
   de un `window.location.reload()` en un hook de htmx que no llegaba a ejecutarse:
   el deseo se creaba, pero había que refrescar la página para verlo. Ahora la fila
