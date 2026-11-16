@@ -169,7 +169,7 @@ def _reescribir(path: Path, xml: bytes) -> None:
 
     # mkstemp crea el fichero con O_EXCL: nombre único y sin truncar nada.
     fd, nombre_temporal = tempfile.mkstemp(
-        dir=ruta_para_log(path.parent), prefix=_prefijo_temporal(path), suffix=SUFIJO_TMP,
+        dir=path.parent, prefix=_prefijo_temporal(path), suffix=SUFIJO_TMP,
     )
     temporal = Path(nombre_temporal)
     try:

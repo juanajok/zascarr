@@ -717,7 +717,7 @@ class Importer:
                     "nombre": str(raiz.name), "resultado": "", "archivos": len(archivos),
                     "ausentes": None}
             if not await asyncio.to_thread(ruta.is_dir):
-                logger.warning("importer.raiz_inaccesible_omitiendo_desaparecidos", raiz=raiz.name)
+                logger.warning("importer.raiz_inaccesible_omitiendo_desaparecidos", raiz=nombre_para_log(raiz.name))
                 info["resultado"] = ResultadoComprobacion.RAIZ_INACCESIBLE.value
                 ausentes_total = None
                 estados.append(info)
@@ -729,7 +729,7 @@ class Importer:
                 continue
             vacia = await asyncio.to_thread(lambda ruta=ruta: not any(ruta.iterdir()))
             if vacia:
-                logger.warning("importer.raiz_vacia_omitiendo_desaparecidos", raiz=raiz.name)
+                logger.warning("importer.raiz_vacia_omitiendo_desaparecidos", raiz=nombre_para_log(raiz.name))
                 info["resultado"] = ResultadoComprobacion.RAIZ_VACIA.value
                 estados.append(info)
                 continue
@@ -742,7 +742,7 @@ class Importer:
                 and len(ausentes) > len(archivos) * UMBRAL_DESAPARICION_MASIVA_FRACCION
             ):
                 logger.error("importer.desaparicion_masiva_anomala_abortando",
-                             ausentes=len(ausentes), total_files=len(archivos), raiz=raiz.name)
+                             ausentes=len(ausentes), total_files=len(archivos), raiz=nombre_para_log(raiz.name))
                 info["resultado"] = ResultadoComprobacion.DESAPARICION_MASIVA.value
                 info["ausentes"] = len(ausentes)
                 estados.append(info)

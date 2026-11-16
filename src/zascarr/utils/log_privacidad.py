@@ -114,6 +114,11 @@ class FiltroLogsSinRutas(logging.Filter):
     """Filtro para logs estándar (uvicorn.error): mensaje y tipo, sin traza con rutas."""
 
     def filter(self, record: logging.LogRecord) -> bool:
+        # Solo las trazas de excepción: los mensajes normales de uvicorn (p. ej.
+        # el handshake de WebSocket) son parte del contrato de #361 y no llevan
+        # la traza con rutas.
+        if not record.exc_info:
+            return True
         try:
             record.msg = sanear_texto(str(record.msg))
             if record.args:

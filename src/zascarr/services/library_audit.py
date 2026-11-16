@@ -57,9 +57,7 @@ from zascarr.core.matcher import normalize_title
 from zascarr.models import ImportRun, Tratamiento
 from zascarr.services.importer import COMIC_EXTS
 from zascarr.services.raices import FotoDeRaices
-
 from zascarr.utils.log_privacidad import error_para_log, nombre_para_log
-
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
