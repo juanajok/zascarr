@@ -416,3 +416,18 @@ def test_stdout_y_buffer_con_logger_real(capsys):
     assert "/media/library" not in salida.out and "foo.cbz" not in salida.out
     texto = registro_reciente.texto_reciente()
     assert "/media/library" not in texto and "foo.cbz" not in texto
+
+
+def test_filtro_invalida_exc_info_en_registro_directo():
+    import io
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("%(message)s %(exc_info)s"))
+    try:
+        raise FileNotFoundError("/media/library/Serie/foo.cbz")
+    except FileNotFoundError as exc:
+        record = logging.LogRecord("prueba.directo", logging.ERROR, __file__, 1,
+                                   "fallo directo", (), (type(exc), exc, exc.__traceback__))
+    FiltroSaneado().filter(record)
+    handler.emit(record)
+    assert "/media/library" not in stream.getvalue() and "foo.cbz" not in stream.getvalue()

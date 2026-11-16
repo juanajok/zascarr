@@ -35,6 +35,9 @@ _RUTA_ABS = re.compile(
     r"(?<![:/\w])/(?:[^\n\"'<>]*?)(?=:\s|$|[\"';,\)\]]|\s+\(|\s+-\s)",
     re.MULTILINE)
 _MAX = 2000
+#: Prefiltro barato: si no hay nada con pinta sensible, no se recorren los regex.
+_SOSPECHOSO = re.compile(
+    r"[/:@=.#'\"\\]|(?i:bearer|password|passwd|contrase|secret|token|api[_-]?key|authorization|cookie|session)")
 
 _raices: tuple[str, ...] = ()
 _lock = threading.Lock()
@@ -89,6 +92,8 @@ def sanear_texto(texto: str, *, raices: tuple[str, ...] | None = None) -> str:
         return texto
     if len(texto) > _MAX:
         texto = texto[:_MAX] + "…"
+    if not _SOSPECHOSO.search(texto):
+        return texto
     try:
         resultado = _redactar_credenciales(texto)
         resultado = _FILE_URL.sub("file:///[ruta]", resultado)
@@ -198,11 +203,13 @@ class FiltroSaneado(logging.Filter):
                     "".join(traceback.format_exception(*record.exc_info)))
             elif record.exc_text:
                 record.exc_text = sanear_texto(record.exc_text)
+            record.exc_info = None  # un formatter de %(exc_info)s no ve la tupla cruda
             return True
         except Exception:  # noqa: BLE001
             record.msg = "(registro omitido: saneo fallido)"
             record.args = ()
             record.exc_text = "(traza omitida: saneo fallido)"
+            record.exc_info = None
             return True
 
 
@@ -278,6 +285,7 @@ def _sanear_record_en_origen(record: logging.LogRecord) -> None:
     except Exception:  # noqa: BLE001 — nunca emitir crudo
         record.msg = "(registro omitido: saneo fallido)"
         record.args = ()
+        record.exc_info = None
 
 
 def instalar_fabrica_de_registros() -> None:
