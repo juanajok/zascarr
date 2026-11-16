@@ -226,7 +226,7 @@ async def cancelar_busqueda(item_id: UUID) -> HTMLResponse:
              dependencies=[Depends(require_legal_acknowledgment)])
 async def enviar_candidato(
     item_id: UUID, request: Request, db: AsyncSession = Depends(get_db),
-    token: str = Form(...),
+    token: str = Form(...), indice: int = Form(0),
 ) -> HTMLResponse:
     item = await db.get(Wishlist, item_id)
     if not item:
@@ -238,6 +238,15 @@ async def enviar_candidato(
         raise HTTPException(
             status_code=400, detail="Candidato no válido o caducado — vuelve a buscar"
         )
-    await Orchestrator(db).send_manual_candidate(item, candidato)
+    exito = await Orchestrator(db).send_manual_candidate(item, candidato)
+    # Se actualiza SOLO el estado de la fila (OOB) y el candidato pulsado: el resto de
+    # candidatos del preview sigue visible para enviar varios sin repetir la búsqueda.
     row = await _get_row(db, item_id)
-    return templates.TemplateResponse(request, "_fila_wishlist.html", {"row": row})
+    return templates.TemplateResponse(request, "_candidato_enviado.html", {
+        "row": row,
+        "item_id": item_id,
+        "indice": indice,
+        "titulo": candidato.title,
+        "token": token,
+        "exito": exito,
+    })

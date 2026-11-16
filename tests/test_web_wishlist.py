@@ -281,6 +281,11 @@ class TestBuscarAhora:
         assert "Batman #1.cbz" in r.text
         assert "Descargar este" in r.text
         assert "CBZ" in r.text
+        # UX 2026-11-16: cada candidato identificable y el envío reemplaza SOLO su <li>,
+        # para poder descargar varios sin perder la lista.
+        assert f'id="candidato-{item.id}-0"' in r.text
+        assert 'name="indice" value="0"' in r.text
+        assert 'hx-target="closest li"' in r.text
 
     def test_sin_candidatos_muestra_el_motivo_de_d9(self, monkeypatch):
         item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED,
@@ -352,6 +357,7 @@ class TestEnviarCandidato:
         series = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN)
         item = Wishlist(id=uuid4(), series_id=series.id, status=WishlistStatus.WANTED)
         row_item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+        row_item.id = item.id   # `_get_row` lo busca por id: el estado es el MISMO ítem
         row_item.series = series
         row_item.issue = None
         enviado = AsyncMock(return_value=True)
@@ -369,6 +375,12 @@ class TestEnviarCandidato:
         candidato_enviado = enviado.await_args.args[1]
         assert candidato_enviado.title == "Batman #1.cbz"
         assert candidato_enviado.download_url == "magnet:?xt=urn:btih:abc"
+        # El resto de candidatos NO se pierde: solo se actualiza el estado (OOB) y este li.
+        assert f'hx-swap-oob="outerHTML:#estado-fila-{item.id}"' in r.text
+        assert f'id="candidato-{item.id}-0"' in r.text
+        assert "candidato-enviado" in r.text
+        assert "Enviado a la cola de descarga" in r.text
+        assert 'class="wishlist-row"' not in r.text
 
     def test_item_inexistente_da_404(self):
         item_id = uuid4()
