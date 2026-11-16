@@ -452,3 +452,20 @@ def test_index_avisa_si_prowlarr_esta_incompleto(monkeypatch):
     assert r.status_code == 200
     assert "Prowlarr está encendido pero le falta la URL o la clave" in r.text
     assert "Revisar Prowlarr en Ajustes" in r.text
+
+
+    def test_buscar_ahora_avisa_de_que_puede_tardar_y_se_deshabilita(self):
+        """UX 2026-11-16: con el foro espaciado, la búsqueda manual tarda ~1-2 min; debe verse
+        que trabaja (indicador con aria-live) y el botón no debe poder pulsarse dos veces."""
+        series = Series(id=uuid4(), title="DC K.O.", tradition=ComicTradition.AMERICAN)
+        item = make_wishlist_item(series, status=WishlistStatus.WANTED)
+        item.series = series
+        item.issue = None
+        sesion = FakeSession(exec_queue=[FakeExecResult([item]), FakeExecResult([])])
+        with use_fake_session(sesion) as client:
+            r = client.get("/ui/wishlist")
+        assert r.status_code == 200
+        assert 'hx-post="/ui/wishlist/' in r.text and "buscar-ahora" in r.text
+        assert 'hx-disable="this"' in r.text
+        assert 'role="status" aria-live="polite"' in r.text
+        assert "puede tardar hasta 2 minutos" in r.text

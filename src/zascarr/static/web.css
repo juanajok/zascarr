@@ -757,6 +757,13 @@ button[type="submit"].btn-sugerencia {
 /* El panel de candidatos de «Buscar ahora» ocupa su propia línea, pero solo cuando tiene
    contenido: vacío no debe forzar una línea (12 px de hueco) en cada fila. */
 .wishlist-row .candidatos-wishlist:not(:empty) { flex: 1 1 100%; }
+/* UX 2026-11-16: el aviso de «puede tardar» ocupa su propia línea, sin apretar la fila. */
+.wishlist-buscando {
+  flex: 1 1 100%;
+  margin-top: 4px;
+  font-size: var(--text-secundario);
+  color: var(--ink-soft);
+}
 
 /* ── 12. FICHA DE SERIE (C2) ─────────────────────────────────────────────── */
 .issue-grid { display: flex; flex-wrap: wrap; gap: 7px; margin: var(--space-2) 0 20px; }
