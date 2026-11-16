@@ -87,7 +87,7 @@ def _base_temporal() -> Path:
                   getattr(ajustes, "amule_incoming_dir", None),
                   getattr(ajustes, "downloads_path", None)):
         if valor:
-            prohibidas.append(Path(valor))
+            prohibidas.append(Path(valor).resolve(strict=False))
     padre = base.parent.resolve(strict=False)
     for prohibida in prohibidas:
         if padre == prohibida or prohibida in padre.parents:
@@ -561,14 +561,7 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
         (
             await s.execute(
                 select(PaqueteOperacion).where(
-                    PaqueteOperacion.estado.in_(
-                        [
-                            PaqueteEstado.LISTANDO,
-                            PaqueteEstado.EXTRAYENDO,
-                            PaqueteEstado.VERIFICANDO,
-                        ]
-                    )
-                )
+                    PaqueteOperacion.temp_dir.is_not(None))
             )
         )
         .scalars()
@@ -584,6 +577,19 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
         op.temp_dir = None if borrado else op.temp_dir
         s.add(op)
     if vivas:
+        await s.commit()
+    # PUBLICANDO/IMPORTANDO interrumpidos: limpiar staging y marcar reintentable.
+    atascadas = (await s.execute(select(PaqueteOperacion).where(
+        PaqueteOperacion.estado.in_(
+            [PaqueteEstado.PUBLICANDO, PaqueteEstado.IMPORTANDO])))).scalars().all()
+    for op in atascadas:
+        if op.staging_dir:
+            _borrar_temp(Path(op.staging_dir))
+        op.estado = PaqueteEstado.ERROR
+        op.error_codigo = "interrumpida"
+        op.error_mensaje = "La publicación se interrumpió; se puede reintentar."
+        s.add(op)
+    if atascadas:
         await s.commit()
     try:
         base = _base_temporal()

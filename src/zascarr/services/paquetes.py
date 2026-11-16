@@ -173,7 +173,11 @@ def detectar_paquetes(
         except OSError:
             continue
         for carpeta, dirs, ficheros in recorrido:
-            dirs[:] = [d for d in dirs if not (Path(carpeta) / d).is_symlink()]
+            if ".zascarr" in Path(carpeta).parts:
+                dirs[:] = []
+                continue
+            dirs[:] = [d for d in dirs if not (Path(carpeta) / d).is_symlink()
+                       and d != ".zascarr"]
             for fichero in ficheros:
                 p = Path(carpeta) / fichero
                 try:
