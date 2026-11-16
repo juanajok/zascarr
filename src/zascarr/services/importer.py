@@ -1176,7 +1176,7 @@ def build_library_path(library: Path, series: Series, issue_number: str | None,
                        suffix: str, fallback_name: str | None = None,
                        *, issue_title: str | None = None,
                        issue_format: IssueFormat | str | None = None,
-                       pack: bool = False) -> Path:
+                       pack: bool = False, especial: bool = False) -> Path:
     """Ruta canónica /library/{tradición}/{Serie (Año)}/{Serie #NNN.ext}.
 
     Compartida entre el importer (issue_number viene de ComicInfo.xml, si
@@ -1211,5 +1211,9 @@ def build_library_path(library: Path, series: Series, issue_number: str | None,
             filename = f"{safe_title} #{num}{suffix}"
     else:
         filename = fallback_name or f"{safe_title}{suffix}"
+        if especial:
+            # Especiales/tomos sin número: van a su propia carpeta dentro de la
+            # serie (decisión del PO, 2026-11-16), no al _Unsorted general.
+            folder = f"{folder}/Especiales"
 
     return library / tradition_folder / folder / filename

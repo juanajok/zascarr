@@ -8,6 +8,8 @@ No crea Issues el matcher: este camino es SOLO manual. Ver ADR 0016.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import File, Issue, IssueFormat, Series
@@ -35,11 +37,14 @@ class EspecialesService:
         series_id,
         titulo: str,
         formato: IssueFormat | str = IssueFormat.GRAPHIC_NOVEL,
+        *,
+        mover: bool = False,
     ) -> Issue:
         """Crea (o reutiliza) un Issue sin número y enlaza el archivo.
 
-        No mueve ni renombra el archivo. El llamador es responsable del commit;
-        este servicio solo hace flush.
+        Con `mover=True` lo mueve a `…/{Serie (Año)}/Especiales/{archivo}` (carpeta
+        de la serie, creada si no existe). Sin `mover`, no toca el archivo. El
+        llamador es responsable del commit; este servicio solo hace flush.
         """
         titulo = (titulo or "").strip()
         if not titulo:
@@ -85,5 +90,23 @@ class EspecialesService:
             "sin_numero": True,
             "match_status": "manual_especial",
         }
+
+        if mover:
+            from zascarr.services.importer import build_library_path
+            from zascarr.services.raices import raiz_por_tradicion
+            from zascarr.utils.fs import safe_move_async
+
+            raiz = await raiz_por_tradicion(self.db, serie.tradition)
+            if raiz is None:
+                raise EspecialSinNumeroError(
+                    "No hay una raíz de biblioteca activa para esa tradición")
+            origen = Path(archivo.file_path)
+            destino = build_library_path(
+                Path(raiz.path), serie, None, origen.suffix,
+                fallback_name=origen.name, especial=True)
+            final = await safe_move_async(origen, destino)
+            archivo.file_path = str(final)
+            archivo.file_name = final.name
+
         await self.db.flush()
         return issue
