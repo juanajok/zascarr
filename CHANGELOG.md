@@ -34,6 +34,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Tomo recopilatorio: números que cubre (2026-11-16).** Al guardar un especial sin
+  número se puede indicar un rango (`1-12`, `1,3,5-7`): el tomo queda como publicación
+  sin número pero esos números **cuentan como poseídos**, dejan de ser huecos y no se
+  vuelven a buscar. Se guarda en `metadata.numeros_cubiertos` del archivo (sin
+  migración); `numeros_poseidos`/dashboard lo incluyen. Tope de 300 números y rangos
+  invertidos rechazados.
+
 - **Especiales sin número en `Serie/Especiales/` (2026-11-16).** «Por revisar» ofrece
   «Guardar como especial (sin número)» cuando la serie está reconocida: crea el Issue
   sin número, enlaza el archivo y lo **mueve** a `…/Serie (Año)/Especiales/<archivo>`
