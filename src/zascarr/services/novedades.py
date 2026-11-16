@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
-from zascarr.models import Publisher, Series, Wishlist, WishlistPolicy, WishlistStatus
+from zascarr.models import Issue, Publisher, Series, Wishlist, WishlistPolicy, WishlistStatus
 from zascarr.services.comic_vine import ComicVineClient
 
 logger = structlog.get_logger()
@@ -129,6 +129,7 @@ def construir_semana(
     fin = inicio + timedelta(days=6)
     por_cv, por_titulo = _filas_de_series(series)
     novedades: list[Novedad] = []
+    vistos: set[tuple] = set()
     for item in items:
         try:
             fecha = date.fromisoformat(str(item.get("cover_date")))
@@ -142,6 +143,10 @@ def construir_semana(
         numero = str(item.get("issue_number") or "").strip()
         if not titulo or not numero:
             continue
+        clave = (item.get("id"), volumen_id, numero)
+        if clave in vistos:
+            continue
+        vistos.add(clave)
         fila = None
         if isinstance(volumen_id, int):
             fila = por_cv.get(volumen_id)
@@ -203,12 +208,17 @@ async def cargar_semana(db: AsyncSession, inicio: date, *, cliente=None,
                Publisher.name.label("publisher_name"))
         .outerjoin(Publisher, Series.publisher_id == Publisher.id)
     )).all())
-    wishlist_series = set((await db.execute(
-        select(Wishlist.series_id)
-        .where(Wishlist.series_id.is_not(None),
-               Wishlist.status != WishlistStatus.RETIRADO)
-        .distinct()
-    )).scalars().all())
+    # Un deseo puede apuntar a la serie o a un número (issue_id, series_id
+    # NULL). Para «Te interesa» cuenta la serie del número, no solo series_id.
+    deseos = (await db.execute(
+        select(Wishlist.series_id, Issue.series_id.label("issue_series_id"))
+        .outerjoin(Issue, Wishlist.issue_id == Issue.id)
+        .where(Wishlist.status != WishlistStatus.RETIRADO)
+    )).all()
+    wishlist_series = {
+        sid for fila in deseos for sid in (fila.series_id, fila.issue_series_id)
+        if sid is not None
+    }
     return construir_semana(
         items, inicio=inicio, series=filas, wishlist_series=wishlist_series, hoy=hoy)
 

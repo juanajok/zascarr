@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,22 +59,28 @@ async def novedades(
         "anterior": (inicio - timedelta(days=7)).isoformat(),
         "siguiente": (inicio + timedelta(days=7)).isoformat(),
     }
-    return templates.TemplateResponse(request, "novedades.html", contexto)
+    respuesta = templates.TemplateResponse(request, "novedades.html", contexto)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 @api_router.get("")
 async def novedades_api(
+    response: Response,
     semana: str | None = Query(default=None),
     editorial: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    response.headers["Cache-Control"] = "no-store"
     inicio = semana_iso(semana)
     try:
         completa = await cargar_semana(db, inicio)
     except NovedadesApagadaError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail=str(exc),
+                            headers={"Cache-Control": "no-store"}) from exc
     except NovedadesError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail=str(exc),
+                            headers={"Cache-Control": "no-store"}) from exc
     visible = filtrar_editorial(completa, editorial)
     return {
         "semana": {"inicio": visible.inicio.isoformat(), "fin": visible.fin.isoformat()},

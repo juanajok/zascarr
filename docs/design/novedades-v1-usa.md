@@ -25,6 +25,8 @@
 | Fuente apagada | Si Comic Vine está apagado o sin clave, la vista lo dice y no consulta. |
 | Editorial | Solo se conoce si el volumen casa con una serie local; el resto muestra «Editorial sin dato» y no entra en el filtro. |
 | Caché | Una entrada por lunes; no se cachean datos de usuario (solo la respuesta de la fuente). |
+| Paginación | Se piden páginas de 100 con `offset` hasta agotar el total de Comic Vine. |
+| Cabeceras | UI y API responden `Cache-Control: no-store` (incluyen qué series sigue la persona). |
 | Privacidad | No se registran títulos consultados ni la URL pedida. |
 | Frecuencia | La caché de 30 min evita repetir la llamada al abrir/refrescar; no hay job semanal todavía. |
 

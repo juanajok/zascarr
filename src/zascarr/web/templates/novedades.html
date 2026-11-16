@@ -3,11 +3,11 @@
 {% block content %}
 <h1>Novedades</h1>
 <p class="subtitle">Lo que sale esta semana en EE. UU., según Comic Vine, cruzado con las series que sigues.</p>
-<p class="caption">Las fechas son de portada: «Anunciado» todavía no ha salido; «Publicado» ya tiene fecha pasada. Las novedades de Norma, ECC y Panini aún no están verificadas y no se muestran.</p>
+<p class="caption">Las fechas son de portada: «Anunciado» todavía no ha salido; «Publicado» sale hoy o ya ha salido. Las novedades de Norma, ECC y Panini aún no están verificadas y no se muestran.</p>
 
 {% if error %}
   {% if apagada %}
-    {{ ui.aviso("nota", error) }}
+    {% call ui.aviso("nota") %}{{ error }} <a href="/ui/ajustes">Revisar fuentes en Ajustes</a>.{% endcall %}
   {% else %}
     {{ ui.aviso("amber", error) }}
   {% endif %}
@@ -27,7 +27,7 @@
     </select>
   </label>
   {% endif %}
-  <button type="submit">Ver</button>
+  <button type="submit">Ver semana</button>
 </form>
 
 <div class="discovery-card-actions" role="group" aria-label="Cambiar de semana">
@@ -59,7 +59,7 @@
 </section>
 {% endfor %}
 {% elif semana %}
-<p class="empty">No hay novedades en esta semana para ese filtro.</p>
+{{ ui.estado_vacio("No hay novedades esta semana", "Prueba otra semana o quita el filtro de editorial.") }}
 {% endif %}
 
 <p class="caption">Datos de Comic Vine. ZascArr no descarga nada desde esta pantalla; solo muestra fechas y enlaces.</p>
