@@ -308,7 +308,7 @@ def test_ui_a11y_y_sin_extraccion(tmp_path):
     previa = Path("src/zascarr/web/templates/_paquete_previa.html").read_text()
     assert '<button type="submit">Ver qué contiene</button>' in lista
     assert 'role="status"' in previa and 'aria-live="polite"' in previa
-    assert "Extraer" not in lista + previa
+    assert "Extraer e importar" in previa
     assert "token" not in previa.lower()
 
 

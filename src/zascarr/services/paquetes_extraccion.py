@@ -449,7 +449,8 @@ async def crear_operacion(s: AsyncSession, paquete: PaquetePendiente) -> Paquete
     return op
 
 
-async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoExtraccion:
+async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
+                             conservar_temporal: bool = False) -> ResultadoExtraccion:
     op = await s.get(PaqueteOperacion, operacion_id, with_for_update=True)
     if op is None:
         raise PaqueteExtraccionError("no_existe", "La operación no existe.")
@@ -510,13 +511,16 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID) -> ResultadoE
         op.total_entradas = len(items)
         op.total_bytes = sum(int(i["bytes"]) for i in items)
         op.finalizada = __import__("datetime").datetime.now(__import__("datetime").UTC)
-        op.temp_dir = None
+        op.temp_dir = str(temp) if conservar_temporal else None
         s.add(op)
         await s.commit()
         with __import__("contextlib").suppress(OSError):
             os.close(paquete.fd)
         with __import__("contextlib").suppress(OSError):
             os.close(temp_fd)
+        if conservar_temporal:
+            return ResultadoExtraccion(
+                operacion_id=op.id, items=tuple(items), total_bytes=op.total_bytes)
         if not _borrar_temp(temp):
             op = await s.get(PaqueteOperacion, operacion_id)
             if op is not None:

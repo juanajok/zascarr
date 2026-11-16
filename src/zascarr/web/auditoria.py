@@ -39,6 +39,8 @@ from zascarr.models import (
     File,
     ImportRun,
     Issue,
+    PaqueteEstado,
+    PaqueteOperacion,
     Series,
 )
 from zascarr.services import registro_biblioteca, rescan_biblioteca
@@ -56,10 +58,18 @@ from zascarr.services.library_audit import LibraryAudit
 from zascarr.services.paquetes import (
     PaqueteError,
     TokenPaqueteInvalido,
+    crear_token_paquete,
     detectar_paquetes,
     listar_paquete,
     verificar_token_paquete,
 )
+from zascarr.services.paquetes_extraccion import (
+    PaqueteExtraccionError,
+    clave_identidad,
+    crear_operacion,
+    extraer_y_verificar,
+)
+from zascarr.services.paquetes_publicacion import PaquetePublicacionError, publicar_e_importar
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.disponibilidad import registrar_filtros
 from zascarr.web.routes import crear_templates
@@ -535,10 +545,17 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
 
 
 @router.get("/paquetes", response_class=HTMLResponse)
-async def paquetes(request: Request) -> HTMLResponse:
+async def paquetes(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Paquetes de Descargas: detección por firma, solo lectura."""
     try:
         pendientes = await asyncio.to_thread(detectar_paquetes)
+        try:
+            importadas = set((await db.execute(
+                select(PaqueteOperacion.paquete_clave).where(
+                    PaqueteOperacion.estado == PaqueteEstado.IMPORTADO))).scalars())
+            pendientes = [p for p in pendientes if clave_identidad(p) not in importadas]
+        except Exception:  # noqa: BLE001 — sin BD se listan los pendientes igual
+            pass
         return _no_store(templates.TemplateResponse(
             request, "_paquetes_descargas.html", {"paquetes": pendientes, "error": None}))
     except OSError:
@@ -569,8 +586,29 @@ async def paquete_previa(request: Request, token: str = "") -> HTMLResponse:
              or "Prueba con otro paquete."}))
     if paquete.fd >= 0:
         os.close(paquete.fd)
+    clave_accion = crear_token_paquete(paquete)
     return _no_store(templates.TemplateResponse(
-        request, "_paquete_previa.html", {"listado": listado, "error": None}))
+        request, "_paquete_previa.html",
+        {"listado": listado, "error": None, "clave_accion": clave_accion}))
+
+
+@router.post("/paquetes/extraer", response_class=HTMLResponse)
+async def paquete_extraer(request: Request, token: str = Form("", alias="clave"),
+                          db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Extrae y publica el paquete con un token de un solo uso; no borra el original."""
+    try:
+        paquete = await asyncio.to_thread(verificar_token_paquete, token)
+        op = await crear_operacion(db, paquete)
+        await extraer_y_verificar(db, op.id, conservar_temporal=True)
+        op = await publicar_e_importar(db, op.id)
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html", {"op": op, "error": None}))
+    except (TokenPaqueteInvalido, PaqueteExtraccionError,
+            PaquetePublicacionError) as exc:
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html",
+            {"op": None, "error": getattr(exc, "mensaje", None)
+             or "No se pudo completar la operación."}))
 
 
 @router.post("/analizar", response_class=HTMLResponse)

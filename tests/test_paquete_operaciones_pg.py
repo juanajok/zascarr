@@ -473,3 +473,58 @@ async def test_rar_real_servicio_no_contiene_tebeos(tmp_path, monkeypatch):
         finally:
             await motor.dispose()
             get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_publica_importa_y_consume_temporal(tmp_path, monkeypatch):
+    import os
+    from datetime import UTC, datetime
+
+    from zascarr.config import get_settings
+    from zascarr.models import PaqueteEstado
+    from zascarr.services import paquetes_publicacion as pub
+    from zascarr.services.importer import ImportReport
+    from zascarr.services.paquetes_extraccion import extraer_y_verificar
+
+    d = tmp_path / "descargas"
+    d.mkdir()
+    p = d / "paquete.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("a.cbz", _cbz_bytes())
+        z.writestr("leeme.txt", b"x")
+    ajustes = type("A", (), {})()
+    ajustes.transmission_download_dir = str(d)
+    ajustes.amule_incoming_dir = ""
+    ajustes.downloads_path = ""
+    ajustes.secret_key = "k"
+    paquete = detectar_paquetes(ajustes=ajustes, secret="k")[0]
+    monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
+    monkeypatch.setenv("TRANSMISSION_DOWNLOAD_DIR", str(d))
+    monkeypatch.setenv("LIBRARY_PATH", str(tmp_path / "lib"))
+    get_settings.cache_clear()
+    url = URL
+    migrar_a_head(url)
+    motor = create_async_engine(url_asyncpg(url), poolclass=None)
+    fabrica = async_sessionmaker(motor, expire_on_commit=False)
+    try:
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            await extraer_y_verificar(s, op.id, conservar_temporal=True)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.VERIFICADO and op.temp_dir
+
+            async def falso(self, *, disparador="automatico"):
+                return ImportReport(started_at=datetime.now(UTC),
+                                    imported=[str(d / "x" / "0001.cbz")])
+            monkeypatch.setattr("zascarr.services.importer.Importer.scan_and_import", falso)
+            op = await pub.publicar_e_importar(s, op.id)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.IMPORTADO
+            assert op.destino_dir and Path(op.destino_dir).is_dir()
+            assert op.items[0]["resultado"] == "importado"
+        assert p.exists() and p.read_bytes()
+    finally:
+        await motor.dispose()
+        for k in ("COVERS_CACHE_PATH", "TRANSMISSION_DOWNLOAD_DIR", "LIBRARY_PATH"):
+            os.environ.pop(k, None)
+        get_settings.cache_clear()
