@@ -20,20 +20,21 @@ def test_el_hash_es_el_md5_hexadecimal_que_espera_amuleweb():
     assert hash_contrasena_amuleweb(CONTRASENA) == HASH
 
 
-def test_ajustes_usa_la_misma_funcion():
-    """CLAUDE.md §3.1.1: la prueba de conexión de Ajustes no duplica el protocolo."""
+def test_ajustes_usa_el_mismo_cliente():
+    """CLAUDE.md §3.1.1: la prueba de conexión no duplica el protocolo."""
     from zascarr.web import ajustes
 
-    assert ajustes.hash_contrasena_amuleweb is hash_contrasena_amuleweb
+    assert ajustes.AMuleClient is AMuleClient
 
 
 class _Respuesta:
     cookies = {"amuleweb_session_id": "abc"}
     headers: dict = {}
+    text = "aMule control panel"
 
 
 class _Cliente:
-    enviado: dict = {}
+    enviados: list[dict] = []
 
     def __init__(self, *a, **kw):
         pass
@@ -45,7 +46,7 @@ class _Cliente:
         return False
 
     async def post(self, url, data):
-        _Cliente.enviado = data
+        _Cliente.enviados.append(data)
         return _Respuesta()
 
 
@@ -56,7 +57,41 @@ async def test_el_login_envia_el_hash_y_no_lo_escribe_en_los_logs(monkeypatch):
     cliente._base, cliente._password = "http://127.0.0.1:4711", CONTRASENA
     with structlog.testing.capture_logs() as registros:
         assert await cliente.login()
-    esperado = hash_contrasena_amuleweb(CONTRASENA)
-    assert _Cliente.enviado == {"p": esperado}
+    # El amuleweb real espera `pass`; no se manda el hash en el primer intento.
+    assert _Cliente.enviados[0] == {"pass": CONTRASENA, "submit": "Submit"}
     texto = repr(registros)
-    assert esperado not in texto and CONTRASENA not in texto
+    assert hash_contrasena_amuleweb(CONTRASENA) not in texto and CONTRASENA not in texto
+
+
+class _ClienteLoginAntiguo:
+    """El formato heredado (`p` = MD5) sigue aceptándose si el actual no entra."""
+    enviados: list[dict] = []
+
+    def __init__(self, *a, **kw):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, data):
+        _ClienteLoginAntiguo.enviados.append(data)
+        if "pass" in data:
+            r = _Respuesta()
+            r.text = '<form name="login"><input name="pass"></form>'
+            return r
+        return _Respuesta()
+
+
+@pytest.mark.asyncio
+async def test_el_login_antiguo_con_p_tambien_funciona(monkeypatch):
+    monkeypatch.setattr(amule_mod.httpx, "AsyncClient", _ClienteLoginAntiguo)
+    cliente = AMuleClient()
+    cliente._base, cliente._password = "http://127.0.0.1:4711", CONTRASENA
+    assert await cliente.login()
+    assert _ClienteLoginAntiguo.enviados == [
+        {"pass": CONTRASENA, "submit": "Submit"},
+        {"p": hash_contrasena_amuleweb(CONTRASENA)},
+    ]
