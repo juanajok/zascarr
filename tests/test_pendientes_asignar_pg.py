@@ -9,6 +9,7 @@ sin `TEST_DATABASE_URL`.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import httpx
 import pytest
@@ -298,7 +299,8 @@ class TestEspecialSinNumero:
                       "formato": "graphic_novel"},
                 headers=HTMX,
             )
-        assert r.status_code == 200 and r.text == RECONTAR_MENU
+        assert r.status_code == 200
+        assert "Guardado como especial" in r.text and RECONTAR_MENU in r.text
         async with mundo.fabrica() as s:
             issue = (await s.execute(text(
                 "SELECT issue_number, title, format::text FROM issues "
@@ -309,7 +311,9 @@ class TestEspecialSinNumero:
         assert issue.issue_number is None
         assert issue.title == "Bad Weekend"
         assert issue.format == "graphic_novel"
-        assert path == before
+        # El especial se organiza en «Especiales» de la serie (comportamiento actual);
+        # ya no se queda en su ruta de origen.
+        assert path != before and Path(path).exists()
 
     async def test_single_issue_se_rechaza_y_el_archivo_sigue_pendiente(self, mundo, cliente_de):
         async with cliente_de() as c:

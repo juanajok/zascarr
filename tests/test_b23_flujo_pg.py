@@ -205,7 +205,8 @@ async def test_flujo_elegir_candidato_descargar_importar(entorno, monkeypatch):
         orch._transmission = TransmissionFalso()
         item = await s.get(Wishlist, item_id)
         vistos = await orch.preview_candidates(item)
-        assert len(vistos) == 2
+        # #963: el mismo release en dos indexers es una sola candidata.
+        assert len(vistos) == 1
         elegido = vistos[-1]
         assert await orch.send_manual_candidate(item, elegido)
         assert enviados == [elegido.download_url]
