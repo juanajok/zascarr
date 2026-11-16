@@ -42,6 +42,20 @@ from zascarr.web.routes import crear_templates
 
 RAIZ = Path(__file__).resolve().parents[1]
 PLANTILLAS = RAIZ / "src" / "zascarr" / "web" / "templates"
+
+
+@pytest.fixture(autouse=True)
+def _novedades_sin_red(monkeypatch):
+    """La página de Novedades consulta editoriales; en tests de navegación, sin red."""
+    from datetime import date
+
+    from zascarr.services.novedades import Semana
+    from zascarr.web import novedades
+
+    async def _vacia(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=date.fromordinal(inicio.toordinal() + 6))
+
+    monkeypatch.setattr(novedades, "cargar_semana", _vacia)
 CSS = (RAIZ / "src" / "zascarr" / "static" / "web.css").read_text(encoding="utf-8")
 FRAGMENTO = "/ui/_nav/estado"
 
