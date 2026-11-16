@@ -4,7 +4,7 @@
     <p class="caption" role="status">{{ error }} {{ accion }}</p>
     <p><a href="/ui/auditoria">Volver a Auditoría</a></p>
   {% else %}
-    <p class="subtitle">{% if listado.tipo_confirmado %}Se importarían {{ listado.entradas|length }} tebeos y se ignorarían {{ listado.ignoradas|length }}.{% else %}{{ listado.entradas|length }} candidatos a importar; se ignorarían {{ listado.ignoradas|length }}. En RAR, el tipo se confirmará al extraer.{% endif %} Espacio temporal estimado: {{ listado.bytes_estimados|tamano }}.</p>
+    <div role="status" aria-live="polite"><p class="subtitle">{% if listado.tipo_confirmado %}Se importarían {{ listado.entradas|length }} tebeos y se ignorarían {{ listado.ignoradas|length }}.{% else %}{{ listado.entradas|length }} candidatos a importar; se ignorarían {{ listado.ignoradas|length }}. En RAR, el tipo se confirmará al extraer.{% endif %} Espacio temporal estimado: {{ listado.bytes_estimados|tamano }}.</p></div>
     <p class="caption" role="status">El paquete original no se mueve ni se borra.</p>
     <ul class="audit-lista">
       {% for e in listado.entradas %}
