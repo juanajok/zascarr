@@ -195,7 +195,8 @@ def turno():
 
 
 def _ejecutar(argv: list[str], *, home: Path, timeout: float, tope_salida: int,
-              vigilar: Path | None = None, tope_escrito: int | None = None) -> tuple[int, bytes, bytes]:
+              vigilar: Path | None = None, tope_escrito: int | None = None,
+              pass_fds: tuple[int, ...] = ()) -> tuple[int, bytes, bytes]:
     """Lanza `argv` sin shell, en grupo propio, y devuelve `(código, stdout, stderr)`. Un solo lector
     vivo en todo el proceso: el turno se espera como mucho `RAR_ESPERA_TURNO_S`, si no `OCUPADO`.
 
@@ -204,17 +205,22 @@ def _ejecutar(argv: list[str], *, home: Path, timeout: float, tope_salida: int,
     arranca, `OCUPADO` si no hubo turno."""
     with turno():
         return _ejecutar_con_turno(argv, home=home, timeout=timeout, tope_salida=tope_salida,
-                                   vigilar=vigilar, tope_escrito=tope_escrito)
+                                   vigilar=vigilar, tope_escrito=tope_escrito,
+                                   pass_fds=pass_fds)
 
 
 def _ejecutar_con_turno(argv: list[str], *, home: Path, timeout: float, tope_salida: int,
-                        vigilar: Path | None, tope_escrito: int | None) -> tuple[int, bytes, bytes]:
+                        vigilar: Path | None, tope_escrito: int | None,
+                        pass_fds: tuple[int, ...] = ()) -> tuple[int, bytes, bytes]:
     """Con el turno ya tomado: lanza, vigila y mata el grupo (ver `_ejecutar`)."""
     entorno = {"PATH": _ENTORNO_PATH, "HOME": str(home), "LANG": "C.UTF-8", "TMPDIR": str(home)}
+    for descriptor in pass_fds:
+        os.set_inheritable(descriptor, True)
     try:
         proc = subprocess.Popen(                      # noqa: S603 — sin shell, lista, ruta absoluta
             argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env=entorno, cwd=home, start_new_session=True, close_fds=True)
+            env=entorno, cwd=home, start_new_session=True, close_fds=True,
+            pass_fds=pass_fds)
     except OSError as exc:
         raise ErrorRar(MotivoRar.HERRAMIENTA_AUSENTE) from exc
     salida, error = bytearray(), bytearray()
@@ -315,7 +321,9 @@ def _entrada_de(bruto: dict, posicion: int) -> EntradaRar:
     )
 
 
-def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S) -> Listado:
+def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S,
+           max_bytes_declarados: int = RAR_MAX_BYTES_DECLARADOS,
+           pass_fds: tuple[int, ...] = ()) -> Listado:
     """Lista un RAR con `lsar -j -json-skip-solid-information` y comprueba los topes (nº de entradas,
     bytes declarados, salida).
 
@@ -335,12 +343,14 @@ def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S)
     argv = ([lsar, "-j", _FLAG_SIN_SOLIDOS, str(ruta)] if con_flag
             else [lsar, "-j", str(ruta)])
     codigo, salida, error = _ejecutar(
-        argv, home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
+        argv, home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO,
+        pass_fds=pass_fds)
     if con_flag and _opcion_desconocida(codigo, salida, error):
         _decidir_soporte(False)
         codigo, salida, error = _ejecutar(
             [lsar, "-j", str(ruta)],
-            home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
+            home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO,
+            pass_fds=pass_fds)
     elif con_flag and codigo == 0:
         _decidir_soporte(True)
     if codigo != 0:
@@ -355,7 +365,7 @@ def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S)
     # tamaño negativo eludiría el tope de bytes declarados (dictamen SecOps B-1)
     if any(not 0 <= e.indice < len(entradas) or e.tamano < 0 for e in entradas):
         raise ErrorRar(MotivoRar.ILEGIBLE)
-    if len(entradas) > RAR_MAX_ENTRADAS or sum(e.tamano for e in entradas) > RAR_MAX_BYTES_DECLARADOS:
+    if len(entradas) > RAR_MAX_ENTRADAS or sum(e.tamano for e in entradas) > max_bytes_declarados:
         raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
     if any(e.cifrada for e in entradas):
         raise ErrorRar(MotivoRar.CIFRADO)

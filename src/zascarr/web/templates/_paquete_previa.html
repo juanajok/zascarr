@@ -1,0 +1,19 @@
+<section class="audit-block" id="paquete-previa">
+  <h2>Qué contiene el paquete</h2>
+  {% if error %}
+    <p class="caption" role="status">{{ error }} {{ accion }}</p>
+    <p><a href="/ui/auditoria">Volver a Auditoría</a></p>
+  {% else %}
+    <div role="status" aria-live="polite"><p class="subtitle">{% if listado.tipo_confirmado %}Se importarían {{ listado.entradas|length }} tebeos y se ignorarían {{ listado.ignoradas|length }}.{% else %}{{ listado.entradas|length }} candidatos a importar; se ignorarían {{ listado.ignoradas|length }}. En RAR, el tipo se confirmará al extraer.{% endif %} Espacio temporal estimado: {{ listado.bytes_estimados|tamano }}.</p></div>
+    <p class="caption" role="status">El paquete original no se mueve ni se borra.</p>
+    <ul class="audit-lista">
+      {% for e in listado.entradas %}
+        <li class="audit-fila"><span>{{ e.nombre }}</span><span>{{ e.tamano|tamano }} · {{ e.tipo }}</span></li>
+      {% endfor %}
+      {% for e in listado.ignoradas %}
+        <li class="audit-fila"><span>{{ e.nombre }} — {{ e.causa }}</span></li>
+      {% endfor %}
+    </ul>
+    <p><a href="/ui/auditoria">Volver a Auditoría</a></p>
+  {% endif %}
+</section>
