@@ -153,6 +153,22 @@ MOTIVO_CLIENTE_INACCESIBLE = (
     "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
 )
 MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
+
+#: D10 (2026-11-16): URLs ya enviadas a mano por ítem. El coleccionista puede querer
+#: VARIOS candidatos de una misma búsqueda (varios números + un tie-in): cada envío
+#: extra no debe pisar el estado ni repetir el mismo enlace. En memoria (un worker).
+_ENVIADOS_MANUAL: dict[str, set[str]] = {}
+_MAX_ITEMS_ENVIADOS_MANUAL = 500
+
+
+def _ya_enviado(item_id, download_url: str) -> bool:
+    return download_url in _ENVIADOS_MANUAL.get(str(item_id), set())
+
+
+def _marcar_enviado(item_id, download_url: str) -> None:
+    _ENVIADOS_MANUAL.setdefault(str(item_id), set()).add(download_url)
+    while len(_ENVIADOS_MANUAL) > _MAX_ITEMS_ENVIADOS_MANUAL:
+        _ENVIADOS_MANUAL.pop(next(iter(_ENVIADOS_MANUAL)))
 MOTIVO_CANDIDATO_INVALIDO = (
     "Ese candidato ya no es válido — vuelve a buscar y elige uno de la lista actual"
 )
@@ -549,7 +565,33 @@ class Orchestrator:
         entonces reevalúa el WHERE), así que como mucho una petición ve
         su fila afectada — la otra ve 0 filas y no llega a enviar nada.
         """
+        if _ya_enviado(item.id, candidate.download_url):
+            # Doble clic/reenvío del MISMO candidato: no se encola dos veces. No impide
+            # enviar otros candidatos distintos del mismo preview (2026-11-16).
+            item.last_error = MOTIVO_CANDIDATO_INVALIDO
+            await self.db.flush()
+            return False
+
         if item.status not in (WishlistStatus.WANTED, WishlistStatus.FAILED):
+            if item.status == WishlistStatus.DOWNLOADING:
+                # Envío EXTRA desde el mismo «Buscar ahora»: no se toca el estado ni
+                # `download_ref` (siguen apuntando a la primera descarga); el importador
+                # recogerá también los ficheros de los envíos extra.
+                settings = get_settings()
+                backend = _detect_backend(candidate.download_url)
+                if not self._backend_enabled(backend, settings):
+                    item.last_error = MOTIVO_CANDIDATO_RECHAZADO
+                    await self.db.flush()
+                    return False
+                ref = await self._send(backend, candidate)
+                if ref is None:
+                    item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+                    await self.db.flush()
+                    return False
+                _marcar_enviado(item.id, candidate.download_url)
+                logger.info("orchestrator.download_started", title=candidate.title,
+                            backend=backend.value, manual=True, extra=True)
+                return True
             item.last_error = MOTIVO_CANDIDATO_INVALIDO
             await self.db.flush()
             return False
@@ -598,6 +640,7 @@ class Orchestrator:
         item.download_backend = backend.value
         item.download_ref = ref
         item.last_error = None
+        _marcar_enviado(item.id, candidate.download_url)
         # Hora de la BD (FR-23).
         item.last_searched_at = (await self.db.execute(select(func.now()))).scalar_one()
         await self.db.flush()

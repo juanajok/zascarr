@@ -9,7 +9,7 @@ Transmission/aMule ni Prowlarr reales.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -548,11 +548,8 @@ class TestBusquedaManual:
 
     @pytest.mark.asyncio
     async def test_no_reenvia_si_el_item_ya_no_esta_en_estado_accionable(self):
-        """Hallazgo de revisión (2026-09-26): sin este guardarraíl, una
-        doble confirmación (doble clic, un token reenviado dentro de su
-        ventana de validez) podía encolar la misma descarga otra vez
-        sobre un item que ya está DOWNLOADING/IMPORTED."""
-        item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
+        """Un item IMPORTED (u otro estado final) no admite más descargas manuales."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.IMPORTED)
         orch = Orchestrator(db=FakeSession())
         orch._transmission = AsyncMock()
         candidato = make_result(seeders=10)
@@ -560,9 +557,42 @@ class TestBusquedaManual:
         result = await orch.send_manual_candidate(item, candidato)
 
         assert result is False
-        assert item.status == WishlistStatus.DOWNLOADING  # sin tocar
+        assert item.status == WishlistStatus.IMPORTED  # sin tocar
         assert item.last_error == MOTIVO_CANDIDATO_INVALIDO
         orch._transmission.add_torrent.assert_not_called()
+
+    async def test_descarga_extra_del_mismo_preview_si_es_otro_candidato(self):
+        """UX 2026-11-16: desde un mismo «Buscar ahora» se pueden enviar VARIOS
+        candidatos (varios números + un tie-in) sin perder la lista."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "b" * 40}
+        candidato = make_result(seeders=10, url="magnet:?xt=urn:btih:" + "c" * 40)
+
+        ajustes = get_settings().model_copy(update={"transmission_enabled": True})
+        with patch("zascarr.services.orchestrator.get_settings", return_value=ajustes):
+            result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is True
+        assert item.status == WishlistStatus.DOWNLOADING  # no se toca
+        orch._transmission.add_torrent.assert_awaited_once()
+
+    async def test_el_mismo_candidato_no_se_encola_dos_veces(self):
+        """El doble clic/reenvío del MISMO enlace sigue rechazándose."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        # Reclamación atómica (UPDATE) del primer envío: 1 fila afectada.
+        orch = Orchestrator(db=FakeSession(queue=[FakeExecResult([], rowcount=1)]))
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "d" * 40}
+        candidato = make_result(seeders=10, url="magnet:?xt=urn:btih:" + "e" * 40)
+        ajustes = get_settings().model_copy(update={"transmission_enabled": True})
+
+        with patch("zascarr.services.orchestrator.get_settings", return_value=ajustes):
+            assert await orch.send_manual_candidate(item, candidato) is True
+            assert item.status == WishlistStatus.DOWNLOADING
+            assert await orch.send_manual_candidate(item, candidato) is False
+        assert orch._transmission.add_torrent.await_count == 1
 
     @pytest.mark.asyncio
     async def test_pierde_la_reclamacion_atomica_no_envia_nada(self):

@@ -34,6 +34,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Varias descargas desde un mismo «Buscar ahora» (2026-11-16).** Al descargar un
+  candidato ya no desaparece el resto de la lista: se actualiza solo el estado de la
+  fila y ese candidato (marcado «Enviado a la cola de descarga»), de modo que se pueden
+  encolar varios números o un tie-in sin repetir la búsqueda de minutos. El mismo
+  enlace no se encola dos veces y el estado/`download_ref` del deseo siguen apuntando a
+  la primera descarga; las extra las recoge el importador.
+
 - **CUR7: filtro por rango de años en Biblioteca (2026-11-16).** Dos campos, «Desde el
   año» y «Hasta el año», acotan por `start_year` y se combinan con el resto de filtros; la URL
   canónica, los chips, la limpieza y la paginación los conservan. Años inválidos se descartan y
