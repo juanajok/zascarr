@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Carpetas repetidas — ZascArr{% endblock %}
+{% block content %}
+<h1>Carpetas repetidas</h1>
+{% if error %}
+<div class="audit-why" role="alert">{{ error }}</div>
+<p><a class="btn ghost" href="/ui/auditoria">Volver a Duplicados</a></p>
+{% else %}
+{% set d = detalle %}
+<p class="subtitle">Compara las dos carpetas antes de decidir. Nada se mueve todavía.</p>
+<div class="carpetas-par">
+  <div><span class="rotulo">Carpeta A</span><div class="audit-path">{{ d.ruta_a | ruta_visible }}</div></div>
+  <div><span class="rotulo">Carpeta B</span><div class="audit-path">{{ d.ruta_b | ruta_visible }}</div></div>
+</div>
+<p class="audit-detail">{{ d.comunes_identicos|length }} comunes idénticos · {{ d.comunes_distintos|length }} comunes con contenido distinto · {{ d.solo_en_a|length }} solo en A · {{ d.solo_en_b|length }} solo en B.</p>
+
+{% if d.comunes_identicos %}
+<section class="audit-block">
+  <h2>Comunes idénticos</h2>
+  <p class="audit-why">Solo estos se pueden apartar de la carpeta que no se quede. Se mueven a la cuarentena y se pueden deshacer.</p>
+  <ul class="carpetas-archivos">
+    {% for a in d.comunes_identicos %}<li>{{ a.nombre }} · {{ a.tamano | tamano }}</li>{% endfor %}
+  </ul>
+</section>
+{% else %}
+<p class="audit-why">No hay archivos comunes con contenido idéntico que apartar.</p>
+{% endif %}
+
+{% if d.comunes_distintos %}
+<section class="audit-block">
+  <h2>Mismo nombre, contenido distinto</h2>
+  <p class="audit-why">No se tocan: pueden ser otra edición o release. Se revisan aparte en el caso de contenido distinto.</p>
+  <ul class="carpetas-archivos">
+    {% for a in d.comunes_distintos %}<li>{{ a.nombre }}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if d.solo_en_a or d.solo_en_b %}
+<section class="audit-block">
+  <h2>Solo en una carpeta</h2>
+  <p class="audit-why">No se tocan en esta acción.</p>
+  <ul class="carpetas-archivos">
+    {% for n in d.solo_en_a %}<li>A · {{ n }}</li>{% endfor %}
+    {% for n in d.solo_en_b %}<li>B · {{ n }}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<form method="post" action="/ui/auditoria/duplicados/carpetas/previsualizar" class="carpetas-form">
+  <input type="hidden" name="ruta_a" value="{{ ruta_a }}">
+  <input type="hidden" name="ruta_b" value="{{ ruta_b }}">
+  <fieldset class="audit-block">
+    <legend>¿Qué carpeta se queda?</legend>
+    <p class="audit-why">Ninguna viene marcada. Elige tú; la otra solo pierde los comunes idénticos.</p>
+    <label><input type="radio" name="keep" value="a" required> Se queda A · {{ d.ruta_a | ruta_visible }}</label>
+    <label><input type="radio" name="keep" value="b" required> Se queda B · {{ d.ruta_b | ruta_visible }}</label>
+  </fieldset>
+  <button type="submit" class="btn">Ver vista previa</button>
+  <a class="btn ghost" href="/ui/auditoria">Cancelar</a>
+</form>
+{% endif %}
+{% endblock %}

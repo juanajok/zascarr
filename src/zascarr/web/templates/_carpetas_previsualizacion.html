@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Vista previa de carpetas — ZascArr{% endblock %}
+{% block content %}
+<h1>Vista previa: apartar lo que sobra</h1>
+{% set v = vista %}
+{% set d = v.detalle %}
+<p class="subtitle">Solo se apartarán los comunes idénticos de la carpeta que no se queda. Lo que está solo en un lado y lo que tiene contenido distinto no se toca.</p>
+{% if v.entradas %}
+<p>Se apartarán <strong>{{ v.archivos }}</strong> archivos de <span class="duplicado-ruta">{{ v.carpeta_a_apartar }}</span>.</p>
+<form method="post" action="/ui/auditoria/duplicados/carpetas/confirmar" class="carpetas-form">
+  {% for e in v.entradas %}
+  <div class="duplicado-preview">
+    <p class="duplicado-ruta">{{ e.ruta_apartar }}</p>
+    <input type="hidden" name="token" value="{{ e.token }}">
+    <input type="hidden" name="grupos" value="{{ e.grupo_json }}">
+  </div>
+  {% endfor %}
+  {% if v.quedara_vacia %}
+  <input type="hidden" name="ruta_apartar" value="{{ v.carpeta_a_apartar }}">
+  <label class="audit-block"><input type="checkbox" name="apartar_vacia" value="1"> La carpeta que queda vacía también se aparta (a la cuarentena, no se borra).</label>
+  {% endif %}
+  <p class="audit-why"><strong>No se borra nada.</strong> Puedes deshacer el apartado mientras la cuarentena siga ahí.</p>
+  <button type="submit" class="btn primary">Confirmar y apartar</button>
+  <a class="btn ghost" href="/ui/auditoria">Cancelar</a>
+</form>
+{% else %}
+<p class="audit-why" role="status">No hay archivos comunes idénticos que apartar en esta pareja.</p>
+{% if v.quedara_vacia %}
+<form method="post" action="/ui/auditoria/duplicados/carpetas/confirmar" class="carpetas-form">
+  <input type="hidden" name="ruta_apartar" value="{{ v.carpeta_a_apartar }}">
+  <input type="hidden" name="apartar_vacia" value="1">
+  <button type="submit" class="btn">Apartar la carpeta vacía</button>
+</form>
+{% endif %}
+<p><a class="btn ghost" href="/ui/auditoria">Volver a Duplicados</a></p>
+{% endif %}
+<p class="audit-detail">La cuarentena está en <code>{{ cuarentena.ruta | ruta_visible }}</code> y ocupa {{ cuarentena.bytes | tamano }} ({{ cuarentena.archivos }} archivos).</p>
+{% endblock %}

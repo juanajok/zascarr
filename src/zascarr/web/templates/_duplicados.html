@@ -58,10 +58,10 @@
   <ul class="duplicados-operaciones">
     {% for op in duplicados.operaciones %}
     <li>
-      <span>{{ op.creada }} · {{ op.grupos }} grupo{{ 's' if op.grupos != 1 }} · {{ op.bytes | tamano }}</span>
+      <span>{{ op.creada }} · {% if op.modo == 'carpeta' %}1 carpeta{% else %}{{ op.grupos }} grupo{{ 's' if op.grupos != 1 }} · {{ op.bytes | tamano }}{% endif %}</span>
       <form method="post" action="/ui/auditoria/duplicados/deshacer" class="duplicados-deshacer">
         <input type="hidden" name="operacion" value="{{ op.id }}">
-        <button type="submit" class="btn ghost sm">{% if op.modo == 'enlazar' %}Deshacer el enlace{% else %}Deshacer el apartado{% endif %}</button>
+        <button type="submit" class="btn ghost sm">{% if op.modo == 'enlazar' %}Deshacer el enlace{% elif op.modo == 'carpeta' %}Deshacer el apartado de la carpeta{% else %}Deshacer el apartado{% endif %}</button>
       </form>
     </li>
     {% endfor %}
