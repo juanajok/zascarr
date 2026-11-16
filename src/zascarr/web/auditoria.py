@@ -17,7 +17,6 @@ decisión irreversible que la historia se propone no tomar sola.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import os
 from dataclasses import dataclass
@@ -75,6 +74,7 @@ from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.disponibilidad import registrar_filtros
 from zascarr.web.routes import crear_templates
 
+logger = __import__('structlog').get_logger()
 templates = crear_templates()
 registrar_filtros(templates)
 
@@ -551,10 +551,12 @@ async def paquetes(request: Request, db: AsyncSession = Depends(get_db)) -> HTML
     try:
         pendientes = await asyncio.to_thread(detectar_paquetes)
         importadas: set[str] = set()
-        with contextlib.suppress(Exception):
+        try:
             importadas = set((await db.execute(
                 select(PaqueteOperacion.paquete_clave).where(
                     PaqueteOperacion.estado == PaqueteEstado.IMPORTADO))).scalars())
+        except Exception:  # noqa: BLE001 — solo el fallback sin BD
+            logger.warning("paquetes.lista_sin_bd")
         pendientes = [p for p in pendientes if clave_identidad(p) not in importadas]
         return _no_store(templates.TemplateResponse(
             request, "_paquetes_descargas.html", {"paquetes": pendientes, "error": None}))
