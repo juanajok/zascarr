@@ -9,6 +9,7 @@ permite deshacer sin sobrescribir.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import os
 from collections.abc import Iterable, Sequence
@@ -154,11 +155,9 @@ class ApartadoDuplicadosService:
     def _raiz_de(self, ruta: Path) -> Path:
         candidatas = []
         for r in self._raices:
-            try:
+            with contextlib.suppress(Exception):
                 if es_componente_de(ruta, r):
                     candidatas.append(r)
-            except Exception:  # noqa: BLE001 — una allowlist de prueba puede traer una raíz inválida
-                continue
         return max(candidatas, key=lambda r: len(Path(r).parts)) if candidatas else self._library
 
     def _relativa(self, ruta: str | Path) -> tuple[Path, str]:
