@@ -172,3 +172,16 @@ async def test_el_titulo_del_resultado_latin1_se_lee_sin_caracteres_rotos():
     resultados = await scraper.use_ipb_search("Año", abrir_temas=False)
     assert [r.topic_title for r in resultados] == ["Año Uno: Capitán", "Capitán Año"]
     assert all("�" not in r.topic_title for r in resultados)
+
+
+async def test_el_titulo_del_resultado_desescapa_entidades_html():
+    """La página de resultados trae `&lt;`/`&amp;`: la UI no debe mostrar la entidad."""
+    html = ("<html><a href='index.php?showtopic=1'>"
+            "&lt; Superman &gt; DC K.O. &amp; Flash</a></html>").encode("iso-8859-1")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _pagina(html, content_type="text/html")
+
+    scraper = _scraper(handler)
+    resultados = await scraper.use_ipb_search("DC K.O.", abrir_temas=False)
+    assert [r.topic_title for r in resultados] == ["< Superman > DC K.O. & Flash"]

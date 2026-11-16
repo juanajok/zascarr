@@ -14,9 +14,18 @@
 {{ ui.aviso("info", "No había números nuevos que pedir: " ~ pedido.ya_pedidos ~ " ya estaban pedidos y " ~ pedido.en_biblioteca ~ " ya están en tu biblioteca.", foco=true) }}
 {% endif %}
 {% endif %}
-{% set titulo_largo = arco.title.split() | length > 3 %}<h1{% if titulo_largo %} class="titulo-frase"{% endif %}>{{ arco.title }}</h1>
-<p class="subtitle">Orden de lectura{% if arco.is_crossover %} · cruza varias series{% endif %}.</p>
-{% if arco.description %}<p>{{ arco.description }}</p>{% endif %}
+<div class="arco-cabecera">
+  {{ ui.portada(arco.title, arco.id, "/ui/arcos/%s/portada.jpg" % arco.id, "arco-portada", "lazy") }}
+  <div>
+    {% set titulo_largo = arco.title.split() | length > 3 %}<h1{% if titulo_largo %} class="titulo-frase"{% endif %}>{{ arco.title }}</h1>
+    <p class="subtitle">Orden de lectura{% if arco.is_crossover %} · cruza varias series{% endif %}.</p>
+    {% if arco.description %}<p>{{ arco.description }}</p>{% endif %}
+  </div>
+</div>
+{% set total_arco = arco.filas | length %}
+{% if total_arco %}
+<p class="arco-progreso">{{ ui.progreso(arco.leidos, total_arco, "Leídos de la saga") }} {{ arco.leidos }} de {{ total_arco }} {{ "número leído" if arco.leidos == 1 else "números leídos" }}</p>
+{% endif %}
 {% if fuente_guia %}
 <p class="muted">Guía de lectura: <a href="{{ fuente_guia.url }}" target="_blank" rel="noopener noreferrer">{{ fuente_guia.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>.</p>
 {% endif %}
