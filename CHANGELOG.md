@@ -171,6 +171,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Transmission: si la carpeta configurada no existe, usa la suya (2026-11-16).**
+  Caso real: Ajustes apuntaba a `/media/downloads/comics`, que no existía en el host, y
+  Transmission rechazaba cada `torrent-add` en silencio. Ahora se registra
+  `transmission.download_dir_invalido` y se **reintenta sin `download-dir`** (carpeta por
+  defecto de Transmission), que el importador ve por el montaje de descargas. Si también
+  falla, queda `transmission.add_failed` con el motivo del RPC.
+
 - **Transmission: un `torrent-add` rechazado ya no se pierde en silencio (2026-11-16).**
   `add_torrent` devolvía `None` sin registrar nada; el deseo solo decía «no se pudo
   enviar». Ahora se registra `transmission.add_failed` con el resultado del RPC y las

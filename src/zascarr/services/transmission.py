@@ -35,21 +35,38 @@ class TransmissionClient:
 
     async def add_torrent(self, url: str, download_dir: str | None = None) -> dict | None:
         s = get_settings()
-        args = {
+        dir_configurado = download_dir or s.transmission_download_dir
+        data = await self._rpc("torrent-add", {
             "filename": url,
-            "download-dir": download_dir or s.transmission_download_dir,
+            "download-dir": dir_configurado,
             "paused": False,
-        }
-        data = await self._rpc("torrent-add", args)
+        })
         agregado = data.get("arguments", {}) or {}
         added = agregado.get("torrent-added") or agregado.get("torrent-duplicate")
         if added:
             logger.info("transmission.added", name=added.get("name", ""))
             return added
+
         # Un «torrent-add» que no devuelve torrent-added ni duplicate es un
-        # fallo que antes se perdía en silencio: el cliente devolvía None y el
-        # deseo solo decía «no se pudo enviar» (2026-11-16). Se registra el
-        # resultado y las claves de `arguments`, nunca la URL (puede llevar passkey).
+        # fallo que antes se perdía en silencio (2026-11-16). El caso habitual
+        # es una `download-dir` que no existe en el host: se reintenta con la
+        # carpeta por defecto de Transmission, que el importador también ve a
+        # través del montaje de descargas, en vez de dejar el deseo colgado.
+        logger.warning("transmission.download_dir_invalido",
+                       carpeta=dir_configurado,
+                       resultado=str(data.get("result"))[:80])
+        if dir_configurado:
+            data = await self._rpc("torrent-add", {
+                "filename": url,
+                "paused": False,
+            })
+            agregado = data.get("arguments", {}) or {}
+            added = (agregado.get("torrent-added")
+                     or agregado.get("torrent-duplicate"))
+            if added:
+                logger.info("transmission.added_carpeta_por_defecto",
+                            name=added.get("name", ""))
+                return added
         logger.warning("transmission.add_failed",
                        resultado=str(data.get("result"))[:80],
                        claves=sorted(agregado.keys())[:10])
