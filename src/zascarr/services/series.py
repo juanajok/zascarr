@@ -81,6 +81,8 @@ class SeriesService:
         solo_favoritas: bool = False,
         language: str | None = None,
         edition_kind: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -149,6 +151,10 @@ class SeriesService:
             query = query.where(Series.language == language)
         if edition_kind:
             query = query.where(Series.edition_kind == edition_kind)
+        if year_from is not None:
+            query = query.where(Series.start_year >= year_from)
+        if year_to is not None:
+            query = query.where(Series.start_year <= year_to)
 
         # BL-ETQ1b: EXISTS/NOT EXISTS por token; nunca JOIN+DISTINCT.
         for normalizado in etiquetas_positivas:
@@ -252,6 +258,8 @@ class SeriesService:
         solo_favoritas: bool = False,
         language: str | None = None,
         edition_kind: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -269,6 +277,8 @@ class SeriesService:
             solo_favoritas=solo_favoritas,
             language=language,
             edition_kind=edition_kind,
+            year_from=year_from,
+            year_to=year_to,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
@@ -290,6 +300,8 @@ class SeriesService:
         solo_favoritas: bool = False,
         language: str | None = None,
         edition_kind: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -311,6 +323,8 @@ class SeriesService:
             solo_favoritas=solo_favoritas,
             language=language,
             edition_kind=edition_kind,
+            year_from=year_from,
+            year_to=year_to,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,

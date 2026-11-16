@@ -55,7 +55,8 @@ def test_panel_tiene_labels_visibles_y_los_siete_filtros():
         ("Tradición", "f-tradition"), ("Editorial", "f-publisher"),
         ("Lectura", "f-leido"), ("Personaje", "f-personaje"),
         ("Saga", "f-saga"), ("Autor", "f-autor"), ("Idioma", "f-idioma"),
-        ("Edición", "f-edicion"), ("Etiquetas", "f-etiquetas"),
+        ("Edición", "f-edicion"), ("Desde el año", "f-anio-desde"),
+        ("Hasta el año", "f-anio-hasta"), ("Etiquetas", "f-etiquetas"),
     ):
         assert f'<label for="{campo}">{etiqueta}</label>' in panel
     assert "<noscript>" in panel and "Aplicar filtros" in panel
