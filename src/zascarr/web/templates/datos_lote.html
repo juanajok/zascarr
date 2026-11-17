@@ -8,6 +8,11 @@
 {% if sin_fuentes %}{{ ui.aviso("amber", "No hay fuentes de metadatos activas. Enciéndelas en Ajustes para buscar fichas.") }}{% endif %}
 {% if recolectando %}{{ ui.aviso("ok", "Se ha lanzado la búsqueda de fichas de fuentes para hasta 20 series en segundo plano. Vuelve a cargar esta pantalla en unos minutos.") }}{% endif %}
 {% if lanzado %}{{ ui.aviso("ok", "Se ha lanzado el relleno de huecos seguros de hasta 20 series. Puedes seguir usando ZascArr; no se resuelven conflictos.") }}{% endif %}
+{% if barrida_aviso %}{{ ui.aviso("ok", "Barrida inicial lanzada para todas las series con ID. El progreso se actualiza aquí.") }}{% endif %}
+<section class="pending-card" aria-labelledby="barrida-inicial">
+  <h2 id="barrida-inicial" class="titulo-frase">Barrida inicial</h2>
+  {% include "_barrida_estado.html" %}
+</section>
 <div class="pending-card">
   <p><strong>{{ total_con_ficha }}</strong> series con alguna ficha de fuente recogida · <strong>{{ total_con_procedencia }}</strong> series con procedencia por campo.</p>
   {% if series %}
@@ -24,7 +29,7 @@
   {% endif %}
   <div class="audit-acciones">
     <form method="post" action="/ui/datos/recolectar">
-      <button type="submit" class="btn primary">Buscar fichas de fuentes (hasta 20 series)</button>
+      <button type="submit" class="btn ghost">Buscar fichas de fuentes (hasta 20 series)</button>
     </form>
     {% if series %}
     <form method="post" action="/ui/datos/rellenar">

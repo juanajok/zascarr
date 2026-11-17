@@ -5,7 +5,6 @@ cuántas filas de procedencia hay. No construye planes ni escribe.
 """
 from __future__ import annotations
 
-import asyncio
 from uuid import UUID
 
 import structlog
@@ -18,6 +17,13 @@ from zascarr.database import async_session_factory, get_db
 from zascarr.models import EntitySourceRecord, FieldProvenance, Series
 from zascarr.services.consolidacion.adaptadores import abrir_adaptadores
 from zascarr.services.consolidacion.aplicador import Aplicador, PlanCaducadoError
+from zascarr.services.consolidacion.barrida import (
+    BLOQUEO_RECOLECCION,
+    barrida_en_curso,
+    ejecutar_barrida,
+    estado_barrida,
+    iniciar_barrida,
+)
 from zascarr.services.consolidacion.consulta import cargar_contexto
 from zascarr.services.consolidacion.recolector import Recolector
 from zascarr.web.routes import crear_templates
@@ -28,14 +34,11 @@ router = APIRouter(prefix="/ui/datos", tags=["ui"])
 templates = crear_templates()
 
 
-_RECOLECCION_EN_CURSO = asyncio.Lock()
-
-
 async def _recolectar_en_segundo_plano(limite: int = 20) -> None:
     """Busca fichas de fuentes para series con ID; no aplica metadatos."""
-    if _RECOLECCION_EN_CURSO.locked():
+    if barrida_en_curso() or BLOQUEO_RECOLECCION.locked():
         return
-    async with _RECOLECCION_EN_CURSO:
+    async with BLOQUEO_RECOLECCION:
         abierto = await abrir_adaptadores()
         try:
             async with async_session_factory() as db:
@@ -49,6 +52,8 @@ async def _recolectar_en_segundo_plano(limite: int = 20) -> None:
 
 async def _rellenar_en_segundo_plano(series_ids: list[str]) -> None:
     """Rellena huecos seguros de un lote acotado; no resuelve conflictos."""
+    if barrida_en_curso() or BLOQUEO_RECOLECCION.locked():
+        return
     async with async_session_factory() as db:
         for raw in series_ids:
             try:
@@ -64,6 +69,7 @@ async def _rellenar_en_segundo_plano(series_ids: list[str]) -> None:
 @router.get("", response_class=HTMLResponse)
 async def lote(request: Request, lanzado: str = Query(default=""),
                recolectando: str = Query(default=""), sin_fuentes: str = Query(default=""),
+               barrida: str = Query(default=""),
                db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     con_ficha = select(EntitySourceRecord.entity_id).where(
         EntitySourceRecord.entity_type == "series").distinct()
@@ -84,7 +90,34 @@ async def lote(request: Request, lanzado: str = Query(default=""),
         "lanzado": lanzado == "1",
         "recolectando": recolectando == "1",
         "sin_fuentes": sin_fuentes == "1",
+        "barrida": estado_barrida(),
+        "barrida_aviso": barrida == "1",
     })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/barrida")
+async def lanzar_barrida(background: BackgroundTasks) -> RedirectResponse:
+    if not iniciar_barrida():
+        return RedirectResponse("/ui/datos?barrida=ocupada", status_code=303)
+    abierto = await abrir_adaptadores()
+    try:
+        hay_fuentes = bool(abierto["adaptadores"])
+    finally:
+        await abierto["pila"].aclose()
+    if not hay_fuentes:
+        from zascarr.services.consolidacion.barrida import marcar_sin_fuentes
+        marcar_sin_fuentes()
+        return RedirectResponse("/ui/datos?sin_fuentes=1", status_code=303)
+    background.add_task(ejecutar_barrida)
+    return RedirectResponse("/ui/datos?barrida=1", status_code=303)
+
+
+@router.get("/barrida/estado", response_class=HTMLResponse)
+async def barrida_estado(request: Request) -> HTMLResponse:
+    respuesta = templates.TemplateResponse(
+        request, "_barrida_estado.html", {"barrida": estado_barrida()})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 
