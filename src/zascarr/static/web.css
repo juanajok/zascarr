@@ -2600,6 +2600,44 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .arcos-importar-form .legal-checkbox { min-height: 44px; display: flex; align-items: center; gap: 8px; }
 .arcos-importar-form { display: grid; gap: 10px; margin-top: 14px; }
 
+/* ── D5: tarjetas de Novedades con portada ───────────────────────────────────
+   La portada es la de la serie local si el número casa; si no, `ui.portada`
+   pinta su marcador (trama + inicial), nunca una imagen externa. La rejilla
+   es fluida: 1 columna en móvil, 2–3 en escritorio, sin recortar el título. */
+.novedades-dia {
+  list-style: none; margin: var(--space-2) 0 0; padding: 0;
+  display: grid; gap: var(--space-2); grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .novedades-dia { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1000px) {
+  .novedades-dia { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.novedad-card {
+  display: flex; gap: var(--space-2); min-width: 0;
+  background: var(--paper-2); border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-panel); overflow: hidden;
+}
+.novedad-portada { display: block; flex: 0 0 74px; color: inherit; text-decoration: none; }
+.novedad-portada a { display: block; }
+.novedad-portada a:focus-visible { outline: 3px solid var(--ink); outline-offset: -3px; }
+.novedad-portada .portada {
+  width: 74px; border-right: var(--border-panel) solid var(--ink);
+}
+.novedad-cuerpo {
+  min-width: 0; padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  display: flex; flex-direction: column; gap: var(--space-1);
+}
+.novedad-titulo { display: block; font-size: var(--text-boton); line-height: 1.25; overflow-wrap: anywhere; }
+.novedad-titulo a { color: var(--ink); }
+.novedad-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.novedad-meta { margin: 0; color: var(--ink-soft); font-size: var(--text-secundario); overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .novedad-portada, .novedad-portada .portada { flex-basis: 62px; width: 62px; }
+  .novedad-cuerpo { padding-right: var(--space-1); }
+}
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
