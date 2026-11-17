@@ -595,6 +595,8 @@ async def _contexto(
         coleccion=filtros.coleccion,
         page=pagina,
         vista=filtros.vista,
+        densidad=filtros.densidad,
+        modo=filtros.modo,
         avisos=tuple(avisos),
     )
     activos = _filtros_activos(filtros_finales, nombres)

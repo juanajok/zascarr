@@ -2788,8 +2788,11 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .library-grid-compacta { grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr)); }
 .library-grid-compacta .library-card-body { padding: var(--space-1) var(--space-2); }
 .library-card-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-1) var(--space-2); }
-.barra-densidad-opcion { display: inline-flex; align-items: center; min-height: 32px; padding: 0 var(--space-2); border: var(--border-chip) solid transparent; border-radius: var(--radius-pill); color: var(--ink); font-size: var(--text-secundario); text-decoration: none; }
+.barra-densidad-opcion { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--space-2); border: var(--border-chip) solid transparent; border-radius: var(--radius-pill); color: var(--ink); font-size: var(--text-secundario); text-decoration: none; }
 .barra-densidad-opcion:hover, .barra-densidad-opcion:focus-visible { border-color: var(--ink); }
+.barra-densidad-opcion.barra-vista-opcion-actual { background: var(--ink); color: var(--paper); }
+.barra-densidad-texto { display: inline; }
+@media (max-width: 520px) { .barra-densidad-texto { font-size: var(--text-secundario); } }
 .chip-filtro { text-decoration: none; }
 .chip-filtro:focus-visible { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
 

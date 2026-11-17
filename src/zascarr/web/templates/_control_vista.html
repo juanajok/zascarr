@@ -27,6 +27,6 @@
   <a class="barra-densidad-opcion{% if densidad == valor %} barra-vista-opcion-actual{% endif %}"
      href="{{ url }}" hx-get="{{ frag }}" hx-target="#rejilla" hx-swap="innerHTML"
      {% if densidad == valor %}aria-current="true"{% endif %}
-     title="Densidad {{ etiqueta|lower }}"><span class="barra-vista-texto">{{ etiqueta }}</span></a>
+     title="Densidad {{ etiqueta|lower }}"><span class="barra-densidad-texto">{{ etiqueta }}</span></a>
   {% endfor %}
 </div>
