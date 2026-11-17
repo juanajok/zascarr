@@ -206,3 +206,33 @@ def test_restaurar_tiene_entorno_y_cerrojo_escribible():
     assert "f /run/zascarr-ops.lock 0600 root root -" in (
         REPO / "deploy/systemd/zascarr-ops.tmpfiles.conf").read_text()
     assert '=~ ^[0-9]{8}_[0-9]{6}$' in envoltorio
+
+
+def test_la_unidad_de_restauracion_no_deja_marcadores_y_escribe_en_la_carpeta_de_copias(entorno):
+    """F-16/QA: sin `BACKUP_DIR` definido, `@BACKUP_DIR@` quedaba sin sustituir (o vacío) y con
+    `ProtectSystem=strict` el script no podía escribir en la carpeta de copias."""
+    import re
+
+    r = _correr(entorno, "--yes")
+    assert r.returncode == 0, r.stderr
+    unidad = (entorno["tmp"] / "units" / "zascarr-restaurar@.service").read_text()
+    assert "@BACKUP_DIR@" not in unidad and "@BACKUP_STATUS_DIR@" not in unidad
+    assert not re.search(r"@[A-Z_]+@", unidad), unidad          # ningún marcador sin sustituir
+    assert "ProtectSystem=strict" in unidad
+    assert f"{entorno['datos']}/backup-status" in unidad
+    assert "/var/backups/zascarr/postgres" in unidad            # valor por defecto de _comun.sh/instalar_backup.sh
+    readwrite = next(linea for linea in unidad.splitlines() if linea.startswith("ReadWritePaths="))
+    assert "/var/backups/zascarr/postgres" in readwrite
+
+
+def test_backup_dir_del_env_se_usa_en_la_unidad_de_restauracion(entorno):
+    """Si `/etc/default/zascarr` (o el entorno) fija `BACKUP_DIR`, la unidad debe escribir ahí y no en el fijo."""
+    env_file = entorno["tmp"] / "zascarr.env"
+    env_file.write_text("BACKUP_DIR=/srv/copias-zascarr\n", encoding="utf-8")
+    r = _correr(entorno, "--yes", env_extra={"ENV_FILE": str(env_file)})
+    assert r.returncode == 0, r.stderr
+    unidad = (entorno["tmp"] / "units" / "zascarr-restaurar@.service").read_text()
+    readwrite = next(linea for linea in unidad.splitlines() if linea.startswith("ReadWritePaths="))
+    assert "/srv/copias-zascarr" in readwrite
+    assert "/var/backups/zascarr/postgres" not in readwrite
+    assert "@BACKUP_DIR@" not in unidad
