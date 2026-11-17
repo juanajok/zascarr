@@ -65,6 +65,11 @@ DATA_DIR="${ZASCARR_DATA_DIR:-$(leer_env ZASCARR_DATA_DIR)}"
 DATA_DIR="${DATA_DIR:-/var/lib/zascarr}"
 OPS_DIR="${DATA_DIR}/ops"
 BACKUP_STATUS_DIR="${BACKUP_STATUS_DIR:-${DATA_DIR}/backup-status}"
+# La unidad de restauración necesita escribir la copia previa en `BACKUP_DIR` (con `ProtectSystem=strict`).
+# Mismo valor por defecto que `_comun.sh`/`instalar_backup.sh`; si el `.env` lo fija, se usa ese. Sin esto, el
+# marcador `@BACKUP_DIR@` se sustituía por vacío y el script no podía crear `rollback-safety_<TS>` (F-16/QA).
+BACKUP_DIR="${BACKUP_DIR:-$(leer_env BACKUP_DIR)}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/zascarr/postgres}"
 
 # El grupo es el del usuario de servicio (PGID del .env): nunca root por defecto, y si no existe se aborta
 # antes de crear nada.
@@ -90,7 +95,11 @@ sustituir() {
     texto="${texto//@ZASCARR_DATA_DIR@/${DATA_DIR}}"
     texto="${texto//@GRUPO@/${GRUPO}}"
     texto="${texto//@BACKUP_STATUS_DIR@/${BACKUP_STATUS_DIR}}"
-    texto="${texto//@BACKUP_DIR@/${BACKUP_DIR:-$(leer_env BACKUP_DIR)}}"
+    texto="${texto//@BACKUP_DIR@/${BACKUP_DIR}}"
+    if [[ "${texto}" =~ @[A-Z_]+@ ]]; then
+        echo "La unidad $1 deja marcadores sin sustituir; no se instala." >&2
+        return 1
+    fi
     printf '%s' "${texto}"
 }
 
