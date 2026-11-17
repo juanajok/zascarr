@@ -1157,7 +1157,12 @@ async def _test_transmission(
         if not isinstance(datos, dict):
             return False, "Transmission devolvió una respuesta inesperada.", False
         if datos.get("result") == "success":
-            real = (datos.get("arguments") or {}).get("download-dir")
+            argumentos = datos.get("arguments")
+            if not isinstance(argumentos, dict):
+                return False, "Transmission devolvió una respuesta inesperada.", False
+            real = argumentos.get("download-dir")
+            if real is not None and not isinstance(real, str):
+                return False, "Transmission devolvió una respuesta inesperada.", False
             aviso = _aviso_de_carpeta_transmission(download_dir, real)
             if aviso:
                 return True, aviso, True
