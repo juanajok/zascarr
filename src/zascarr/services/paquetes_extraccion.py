@@ -156,7 +156,8 @@ def _comprobar_original(p: PaquetePendiente) -> None:
 
 
 def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
-                        modo: str, temp_fd: int) -> list[dict]:
+                        modo: str, temp_fd: int, progreso=None,
+                        total: int = 0) -> list[dict]:
     """Extrae ZIP en proceso hijo con timeout y kill de grupo; no bloquea el bucle."""
     datos = {"nombre": paquete.nombre, "tamano": paquete.tamano,
              "mtime_ns": paquete.mtime_ns, "firma": paquete.firma,
@@ -191,6 +192,23 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
         env=entorno, close_fds=True, pass_fds=(fd, temp_fd), start_new_session=True)
     vigilante = threading.Thread(target=_vigilar_salida, daemon=True)
     vigilante.start()
+    parar_progreso = threading.Event()
+
+    def _vigilar_progreso() -> None:
+        ruta = temp / ".progreso"
+        vistos = -1
+        while not parar_progreso.wait(0.2):
+            try:
+                valor = int(ruta.read_text(encoding="ascii").strip() or "0")
+            except (OSError, ValueError):
+                continue
+            if valor != vistos and progreso is not None:
+                vistos = valor
+                with __import__("contextlib").suppress(Exception):
+                    progreso(valor, total)
+
+    hilo_progreso = threading.Thread(target=_vigilar_progreso, daemon=True)
+    hilo_progreso.start()
     try:
         try:
             proc.communicate(timeout=_ZIP_TIMEOUT)
@@ -211,6 +229,8 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
             raise PaqueteExtraccionError("extraccion", "La extracción devolvió demasiados datos.")
     finally:
         parar.set()
+        parar_progreso.set()
+        hilo_progreso.join(timeout=0.5)
         vigilante.join(timeout=1)
         salida_fichero.close()
         error_fichero.close()
@@ -222,7 +242,7 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
 
 
 def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path,
-                  fd: int, temp_fd: int) -> list[dict]:
+                  fd: int, temp_fd: int, progreso=None) -> list[dict]:
     items: list[dict] = []
     try:
         z = zipfile.ZipFile(os.fdopen(os.dup(fd), "rb"))
@@ -276,11 +296,13 @@ def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
                     "estado": "verificado",
                 }
             )
+            if progreso is not None:
+                progreso(len(items))
     return items
 
 
 def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path,
-                  fd: int, temp_fd: int) -> list[dict]:
+                  fd: int, temp_fd: int, progreso=None) -> list[dict]:
     if not lector_rar.disponible():
         raise PaqueteExtraccionError("herramienta_ausente", "Falta la herramienta para leer RAR.")
     if len(listado.entradas) > lector_rar.RAR_MAX_ENTRADAS:
@@ -310,6 +332,8 @@ def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
                 os.close(fd_out)
             items.append({"nombre": nombre, "origen": entrada.nombre, "bytes": total,
                           "sha256": h.hexdigest(), "estado": "verificado"})
+            if progreso is not None:
+                progreso(len(items))
     return items
 
 
@@ -494,7 +518,8 @@ async def crear_operacion(s: AsyncSession, paquete: PaquetePendiente) -> Paquete
 
 
 async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
-                             conservar_temporal: bool = False) -> ResultadoExtraccion:
+                             conservar_temporal: bool = False,
+                             progreso=None) -> ResultadoExtraccion:
     op = await s.get(PaqueteOperacion, operacion_id, with_for_update=True)
     if op is None:
         raise PaqueteExtraccionError("no_existe", "La operación no existe.")
@@ -547,9 +572,17 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
             raise PaqueteExtraccionError("listado", exc.causa) from exc
         comprobar_espacio(base, listado.bytes_estimados or 1,
                           "extraer el paquete")
+        total_items = sum(1 for e in listado.entradas if e.se_importa)
+
+        def _progreso(hechos: int, total: int) -> None:
+            if progreso is not None:
+                progreso(hechos, total or total_items)
+
         items = await asyncio.to_thread(
             _extraer_en_proceso, paquete, temp, paquete.fd,
-            "zip" if paquete.firma == "ZIP" else "rar", temp_fd)
+            "zip" if paquete.firma == "ZIP" else "rar", temp_fd,
+            _progreso, total_items)
+        _progreso(len(items), total_items)
         _verificar_contenido(items, temp, temp_fd)
         op.estado = PaqueteEstado.VERIFICANDO
         op.items = list(items)
