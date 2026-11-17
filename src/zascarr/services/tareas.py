@@ -165,7 +165,7 @@ def marcar_visto(tid: str) -> None:
         t = _tareas.get(tid)
         if t is not None and t.estado is EstadoTarea.ERROR:
             t.visto = True
-            t._fin = _ahora(None)
+            t._fin = _ahora(None) - RETENCION_S
 
 
 def _publicable(t: Tarea, ahora: float) -> bool:
@@ -185,15 +185,24 @@ def snapshot(*, ahora: float | None = None, incluir_recientes: bool = False) -> 
             if (t.estado is EstadoTarea.EN_CURSO
                     and (datetime.now(UTC) - t.actualizada).total_seconds() >= ATASCADA_S):
                 estado = "atascada"
+            atascada = estado == "atascada"
+            pct = None
+            if t.total and t.hechos is not None and t.total > 0:
+                pct = round(t.hechos * 100 / t.total)
             salida.append({"id": t.id, "tipo": t.tipo.value, "titulo": t.titulo,
                            "fase": t.fase, "hechos": t.hechos, "total": t.total,
-                           "estado": estado, "iniciada": t.iniciada.isoformat(),
+                           "pct": pct, "unidad": "archivos" if t.total else None,
+                           "estado": estado, "atascada": atascada,
+                           "iniciada": t.iniciada.isoformat(),
                            "actualizada": t.actualizada.isoformat(), "enlace": t.enlace,
                            "detalle": t.detalle, "run_id": t.run_id, "visto": t.visto})
         activas = sum(1 for x in salida if x["estado"] in {"en_curso", "atascada"})
         errores = sum(1 for x in salida if x["estado"] == "error")
-        return {"version": 1, "tareas": salida, "activas": activas,
-                "errores": errores, "hay_tareas": bool(salida)}
+        return {"version": 1, "generado": datetime.now(UTC).isoformat(),
+                "tareas": salida, "activas": activas, "errores": errores,
+                "hay_tareas": bool(salida),
+                "resumen": {"total": len(salida), "en_curso": activas,
+                            "con_error": errores, "hay_tareas": bool(salida)}}
 
 
 def limpiar_al_arrancar() -> None:
@@ -204,3 +213,14 @@ def limpiar_al_arrancar() -> None:
 
 def _reset_para_pruebas() -> None:
     limpiar_al_arrancar()
+
+
+def iniciar_descargas(*, total: int | None = None) -> Tarea | None:
+    """Adaptador C2 para el ciclo de descargas de Deseados (sin % global)."""
+    return iniciar("descarga", total=total, enlace="/ui/wishlist#wishlist-progreso",
+                   origen="descargas")
+
+
+def iniciar_copia() -> Tarea | None:
+    """Adaptador C2 para copia/verificación externa (indeterminada)."""
+    return iniciar("copia", enlace="/estado#copias", origen="copia")

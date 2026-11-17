@@ -43,7 +43,7 @@ def test_retencion_y_error_hasta_visto():
     tareas.error(t.id, tipo_error="OSError")
     assert tareas.snapshot(incluir_recientes=True)["errores"] == 1
     tareas.marcar_visto(t.id)
-    assert tareas.snapshot(incluir_recientes=True)["errores"] == 1
+    assert tareas.snapshot(incluir_recientes=True)["errores"] == 0
 
 
 def test_concurrencia():
@@ -75,7 +75,9 @@ def test_api_json_y_fragmento():
     cliente = TestClient(app)
     r = cliente.get("/api/tareas")
     assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
-    assert r.json()["version"] == 1 and r.json()["activas"] == 1
+    cuerpo = r.json()
+    assert cuerpo["version"] == 1 and cuerpo["resumen"]["en_curso"] == 1
+    assert set(cuerpo) == {"version", "generado", "resumen", "tareas"}
     f = cliente.get("/ui/_tareas")
     assert f.status_code == 200 and 'role="status"' in f.text
     assert "<progress" in f.text and "Ahora" in f.text
@@ -86,5 +88,5 @@ def test_plantilla_y_sin_datos_sensibles():
     base = Path("src/zascarr/web/templates/base.html").read_text()
     frag = Path("src/zascarr/web/templates/_tareas.html").read_text()
     assert 'id="tareas-global"' in base and "/ui/_tareas" in base
-    assert "aria-live" in frag and "progress" in frag
+    assert 'aria-live="polite"' in base and "progress" in frag
     assert "str(exc)" not in frag
