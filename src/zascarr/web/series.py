@@ -56,7 +56,17 @@ from zascarr.services.colecciones import colecciones_de_serie, etiqueta_politica
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
 from zascarr.services.consolidacion.aplicador import Aplicador, PlanCaducadoError
+from zascarr.services.consolidacion.aplicador_issue import (
+    AplicadorIssue,
+    PlanIssueCaducadoError,
+)
 from zascarr.services.consolidacion.consulta import cargar_contexto
+from zascarr.services.consolidacion.consulta_issue import (
+    IssueNoEncontradoError as IssueCCMNoEncontradoError,
+)
+from zascarr.services.consolidacion.consulta_issue import (
+    cargar_contexto_issue,
+)
 from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.discrepancias import (
     clave_valida,
@@ -103,7 +113,6 @@ from zascarr.services.lectura import (
     TEXTOS_LECTURA,
     EstadoInvalidoError,
     EstadoLectura,
-    IssueNoEncontradoError,
     NotaInvalidaError,
     ValoracionInvalidaError,
     lectura_de,
@@ -785,6 +794,152 @@ async def datos_rol(series_id: UUID, fuente: str = Form(...), rol: str = Form(..
     await db.flush()
     await db.commit()
     return _redirect_datos(series_id)
+
+
+# ── CCM-4 (#1003): «Completar datos» de un número ───────────────────────────────────────────────
+
+_ETIQUETAS_ISSUE = {
+    "title": "Título",
+    "release_date": "Fecha",
+    "page_count": "Páginas",
+    "isbn": "ISBN",
+    "synopsis": "Sinopsis",
+}
+
+
+def _roles_issue(issue: Issue, serie: Series) -> list[dict]:
+    salida = []
+    for fuente, columna in _FUENTE_ID.items():
+        if not getattr(issue, columna, None):
+            continue
+        salida.append({"fuente": fuente, "nombre": NOMBRE_DE_FUENTE.get(fuente, fuente),
+                       "rol": rol_de(serie, fuente).value})
+    return salida
+
+
+async def _datos_numero(db: AsyncSession, series_id: UUID, issue_id: UUID) -> dict:
+    contexto = await cargar_contexto_issue(db, series_id, issue_id)
+    plan = contexto.plan()
+    provs = (await db.execute(
+        select(FieldProvenance).where(
+            FieldProvenance.entity_type == "issue",
+            FieldProvenance.entity_id == issue_id)
+    )).scalars().all()
+    proc = {p.field: p for p in provs}
+    return {
+        "series": contexto.serie, "issue": contexto.issue, "plan": plan,
+        "roles": _roles_issue(contexto.issue, contexto.serie),
+        "etiquetas": _ETIQUETAS_ISSUE,
+        "estados": _ESTADOS_CCM,
+        "huecos": tuple(c for c in plan.cambios if c.estado == "anadir"),
+        "conflictos": tuple(c for c in plan.cambios if c.estado == "conflicto"),
+        "bloqueados": tuple(c for c in plan.cambios if c.estado == "bloqueado"),
+        "sin_dato": tuple(c for c in plan.cambios if c.estado == "sin_dato"),
+        "procedencia": proc,
+        "nombres_fuente": NOMBRE_DE_FUENTE,
+        "con_ficha": bool(contexto.registros),
+    }
+
+
+@router.get("/{series_id}/numero/{issue_id}/datos", response_class=HTMLResponse)
+async def datos_numero(series_id: UUID, issue_id: UUID, request: Request,
+                       guardado: str = Query(default=""),
+                       elegido: str = Query(default=""),
+                       db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    try:
+        contexto = await _datos_numero(db, series_id, issue_id)
+    except IssueCCMNoEncontradoError:
+        raise HTTPException(status_code=404, detail="Número no encontrado") from None
+    contexto.update({
+        "guardado": f"Guardados {guardado} cambios." if guardado.isdigit() and guardado != "0" else "",
+        "elegido": f"Elegido el dato de {NOMBRE_DE_FUENTE.get(elegido, elegido)}." if elegido else "",
+    })
+    respuesta = templates.TemplateResponse(request, "datos_numero.html", contexto)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+def _redirect_numero(series_id: UUID, issue_id: UUID, *, guardado: str = "",
+                     elegido: str = "", error: str = "") -> RedirectResponse:
+    destino = f"/ui/series/{series_id}/numero/{issue_id}/datos"
+    if guardado:
+        destino += f"?guardado={guardado}"
+    elif elegido:
+        destino += f"?elegido={elegido}"
+    elif error:
+        destino += f"?error={error}"
+    return RedirectResponse(destino, status_code=303)
+
+
+@router.post("/{series_id}/numero/{issue_id}/datos/aplicar")
+async def datos_numero_aplicar(series_id: UUID, issue_id: UUID,
+                               db: AsyncSession = Depends(get_db)):
+    try:
+        contexto = await _datos_numero(db, series_id, issue_id)
+        resultado = await AplicadorIssue(db).aplicar(contexto["plan"])
+        await db.commit()
+    except (IssueCCMNoEncontradoError, PlanIssueCaducadoError):
+        await db.rollback()
+        return _redirect_numero(series_id, issue_id, error="caducado")
+    return _redirect_numero(series_id, issue_id, guardado=str(resultado.aplicados))
+
+
+@router.post("/{series_id}/numero/{issue_id}/datos/elegir")
+async def datos_numero_elegir(series_id: UUID, issue_id: UUID,
+                              campo: str = Form(...), fuente: str = Form(...),
+                              db: AsyncSession = Depends(get_db)):
+    from dataclasses import replace
+
+    from zascarr.core.consolidacion.ambitos import CAMPOS_ISSUE
+    if campo not in CAMPOS_ISSUE:
+        raise HTTPException(status_code=400, detail="Campo no válido")
+    try:
+        contexto = await _datos_numero(db, series_id, issue_id)
+        plan = contexto["plan"]
+        plan = replace(plan, cambios=tuple(
+            replace(c, seleccionado=next(
+                (x for x in c.candidatos if x.fuente == fuente), c.seleccionado))
+            if c.campo == campo else c for c in plan.cambios))
+        await AplicadorIssue(db).aplicar(plan)
+        await db.commit()
+    except (IssueCCMNoEncontradoError, PlanIssueCaducadoError):
+        await db.rollback()
+        return _redirect_numero(series_id, issue_id, error="caducado")
+    return _redirect_numero(series_id, issue_id, elegido=fuente)
+
+
+@router.post("/{series_id}/numero/{issue_id}/datos/mantener")
+async def datos_numero_mantener(series_id: UUID, issue_id: UUID,
+                                campo: str = Form(...), fuente: str = Form(...),
+                                db: AsyncSession = Depends(get_db)):
+    from zascarr.core.consolidacion.ambitos import CAMPOS_ISSUE
+    if campo not in CAMPOS_ISSUE:
+        raise HTTPException(status_code=400, detail="Campo no válido")
+    try:
+        await AplicadorIssue(db).registrar_descarte(issue_id, campo, fuente)
+        await db.commit()
+    except IssueCCMNoEncontradoError:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail="Número no encontrado") from None
+    return _redirect_numero(series_id, issue_id, guardado="0")
+
+
+@router.post("/{series_id}/numero/{issue_id}/datos/rol")
+async def datos_numero_rol(series_id: UUID, issue_id: UUID,
+                           fuente: str = Form(...), rol: str = Form(...),
+                           db: AsyncSession = Depends(get_db)):
+    if fuente not in _FUENTE_ID or rol not in ROLES:
+        raise HTTPException(status_code=400, detail="Rol no válido")
+    # El rol se guarda en la serie (es el vínculo de identidad), no en el número.
+    serie = await _serie_o_404(db, series_id)
+    metadata = dict(serie.metadata_ or {})
+    roles = dict(metadata.get("vinculos_rol") or {})
+    roles[fuente] = rol
+    metadata["vinculos_rol"] = roles
+    serie.metadata_ = metadata
+    await db.flush()
+    await db.commit()
+    return _redirect_numero(series_id, issue_id)
 
 
 # ── BL-R4 (#233): «Mantener lo mío» sobre una discrepancia concreta ───────────────────────────────
@@ -1469,7 +1624,7 @@ async def marcar_leido(series_id: UUID, issue_id: UUID, request: Request,
         extras["nota"] = nota
     try:
         lectura = await marcar(db, issue_id, estado, series_id=series_id, **extras)
-    except IssueNoEncontradoError:
+    except IssueCCMNoEncontradoError:
         raise HTTPException(status_code=404, detail="Número no encontrado") from None
     except (EstadoInvalidoError, ValoracionInvalidaError, NotaInvalidaError) as exc:
         if request.headers.get("HX-Request") == "true":

@@ -45,7 +45,7 @@ def valor_comparable(campo: str, valor: object) -> object:
     """Normaliza para comparar, sin decidir todavía qué se aplica."""
     if valor is None:
         return None
-    if campo in {"start_year", "end_year", "total_issues"}:
+    if campo in {"start_year", "end_year", "total_issues", "page_count"}:
         try:
             return int(str(valor).strip())
         except (TypeError, ValueError):
