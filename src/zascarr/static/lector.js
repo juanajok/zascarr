@@ -89,6 +89,8 @@
     raiz.dataset.sentido = sentido;
     raiz.dataset.desplazamiento = String(desplazamiento);
     raiz.dataset.pagina = String(pagina);
+    const fin = document.getElementById("fin");
+    if (fin) fin.hidden = visibles[visibles.length - 1] < total;
     menuBoton.setAttribute("aria-expanded", String(!menu.hidden));
     desplazar.hidden = modo !== "doble";
     for (const boton of document.querySelectorAll("[data-modo]")) {

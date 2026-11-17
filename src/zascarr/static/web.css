@@ -2781,7 +2781,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .lector-menu .btn { width: 100%; }
 }
 
-
 /* #1058: densidades de la biblioteca */
 .library-grid-grande { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); }
 .library-grid-intermedia { grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); }
@@ -2795,6 +2794,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (max-width: 520px) { .barra-densidad-texto { font-size: var(--text-secundario); } }
 .chip-filtro { text-decoration: none; }
 .chip-filtro:focus-visible { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
+
+/* BL-LEC3 (#826): tarjeta de «fin del tebeo». */
+.lector-fin { width: 100%; max-width: 42rem; display: grid; gap: var(--space-2);
+  padding: var(--space-3); border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-panel); background: var(--paper); }
+.lector-fin[hidden] { display: none; }
+.lector-fin h2 { margin: 0; }
+.lector-fin p { margin: 0; }
+
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
