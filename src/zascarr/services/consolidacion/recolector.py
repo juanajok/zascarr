@@ -18,13 +18,20 @@ from zascarr.core.consolidacion.tipos import (
     EstadoFetch,
     FichaRecolectada,
 )
-from zascarr.models import EntitySourceRecord, Series
+from zascarr.models import EntitySourceRecord, Issue, Series
 
 #: Columna de `Series` que guarda el ID de cada fuente de la Fase 1.
 COLUMNA_ID = {
     "comic_vine": "comic_vine_id",
     "tebeosfera": "tebeosfera_slug",
     "gcd": "gcd_id",
+}
+COLUMNA_ID_ISSUE = {
+    "comic_vine": "comic_vine_id",
+    "tebeosfera": "tebeosfera_slug",
+    "gcd": "gcd_id",
+    "fandom_dc": "fandom_dc_slug",
+    "fandom_marvel": "fandom_marvel_slug",
 }
 
 
@@ -55,12 +62,12 @@ class Recolector:
         self._adaptadores = adaptadores
         self._ahora = ahora
 
-    async def _hash_previo(self, series_id: object, fuente: str,
-                           external_id: str) -> str | None:
+    async def _hash_previo(self, entity_id: object, fuente: str,
+                           external_id: str, *, entity_type: str = "series") -> str | None:
         return (await self._db.execute(
             select(EntitySourceRecord.payload_hash).where(
-                EntitySourceRecord.entity_type == "series",
-                EntitySourceRecord.entity_id == series_id,
+                EntitySourceRecord.entity_type == entity_type,
+                EntitySourceRecord.entity_id == entity_id,
                 EntitySourceRecord.source == fuente,
                 EntitySourceRecord.external_id == external_id,
             )
@@ -80,10 +87,11 @@ class Recolector:
             ],
         }
 
-    async def _guardar(self, series_id: object, ficha: FichaRecolectada) -> None:
+    async def _guardar(self, entity_id: object, ficha: FichaRecolectada, *,
+                       entity_type: str = "series") -> None:
         statement = pg_insert(EntitySourceRecord).values(
-            entity_type="series",
-            entity_id=series_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
             source=ficha.fuente,
             external_id=ficha.external_id,
             source_url=ficha.url,
@@ -146,3 +154,45 @@ class Recolector:
         for serie in series:
             informes.append(await self.recolectar_serie(serie))
         return informes
+
+
+    async def recolectar_issue(self, issue: Issue) -> InformeRecoleccion:
+        """Consulta las fuentes asociadas de un número y guarda la evidencia."""
+        informe = InformeRecoleccion(str(issue.id))
+        for fuente, adaptador in self._adaptadores.items():
+            columna = COLUMNA_ID_ISSUE.get(fuente)
+            if columna is None:
+                continue
+            externo = getattr(issue, columna, None)
+            if externo is None or str(externo).strip() == "":
+                continue
+            external_id = str(externo)
+            try:
+                previo = await self._hash_previo(
+                    issue.id, fuente, external_id, entity_type="issue")
+                resultado = await adaptador.fetch_issue(
+                    external_id, hash_previo=previo)
+            except Exception as exc:  # noqa: BLE001
+                informe.resultados.append(ResultadoRecoleccion(
+                    fuente, EstadoFetch.ERROR_RED, detalle=type(exc).__name__))
+                continue
+            if resultado.estado is EstadoFetch.OK and resultado.ficha is not None:
+                await self._guardar(issue.id, resultado.ficha, entity_type="issue")
+                informe.resultados.append(ResultadoRecoleccion(
+                    fuente, resultado.estado, guardado=True))
+            else:
+                informe.resultados.append(ResultadoRecoleccion(
+                    fuente, resultado.estado, detalle=resultado.detalle_error))
+        return informe
+
+    async def recolectar_lote_issues(self, limite: int = 20) -> list[InformeRecoleccion]:
+        issues = (await self._db.execute(
+            select(Issue).where(
+                (Issue.comic_vine_id.is_not(None))
+                | (Issue.tebeosfera_slug.is_not(None))
+                | (Issue.gcd_id.is_not(None))
+                | (Issue.fandom_dc_slug.is_not(None))
+                | (Issue.fandom_marvel_slug.is_not(None))
+            ).order_by(Issue.id).limit(limite)
+        )).scalars().all()
+        return [await self.recolectar_issue(issue) for issue in issues]
