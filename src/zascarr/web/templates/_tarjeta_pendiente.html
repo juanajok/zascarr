@@ -34,8 +34,8 @@
         {{ ui.chip(nivel, pct ~ "% de coincidencia") }}
       </div>
 
-      <form class="assign-form" method="post"
-            action="/ui/pendientes/{{ c.file.id }}/vincular"
+      <form class="assign-form" method="get"
+            action="/ui/pendientes/{{ c.file.id }}/asignar/previa"
             hx-get="/ui/pendientes/{{ c.file.id }}/asignar/previa"
             hx-target="#previa-{{ c.file.id }}" hx-swap="innerHTML"
             hx-disable="find button">
