@@ -683,6 +683,8 @@ async def _procesar_paquete(op_id: str) -> None:
         async with database.async_session_factory() as s:
             op = await s.get(PaqueteOperacion, UUID(op_id))
             if op is None or op.estado is PaqueteEstado.IMPORTADO:
+                if tarea is not None:
+                    tareas.terminar(tarea.id, resumen="Paquete ya importado")
                 return
             if tarea is not None:
                 tareas.actualizar(tarea.id, fase="Extrayendo", total=op.total_entradas or None)
