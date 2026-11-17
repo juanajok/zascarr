@@ -7,6 +7,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **La descarga de registros pasa de Inicio a Estado (2026-11-17).** Inicio deja de
+  mostrar «Descargar logs» y su aviso, que competían con la tarea principal. El acceso vive
+  en **Estado → Registro de la aplicación**, con texto llano y la garantía de saneado de #369.
+  El endpoint `/ui/logs` no cambia.
 - **Ficha de serie: números primero y densidad (2026-11-14).** Los números pasan justo
   después de la cabecera; «Retirar de mi biblioteca» se pliega; «Otras fuentes» desaparece si
   no hay fuente; las rejillas de más de 30 números se colapsan con «Ver los N que faltan /
