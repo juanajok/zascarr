@@ -4,10 +4,9 @@
   {% elif sin_candidatos %}
   <p class="candidatos-vacio">{{ motivo }}</p>
   {% else %}
-  <p class="candidatos-resumen"><strong>{{ candidatos | length }}
-    resultado{{ 's' if candidatos | length != 1 }}</strong>
+  <p class="candidatos-resumen"><strong>{{ candidatos | length }} resultado{{ 's' if candidatos | length != 1 }}</strong>
     <span class="muted">— elige uno o varios; se envían al cliente de descarga.</span></p>
-  <ul class="candidatos-lista" aria-label="Resultados para {{ item_titulo }}">
+  <ul class="candidatos-lista" aria-label="Resultados encontrados{% if item_titulo %} para {{ item_titulo }}{% endif %}">
     {% for fila in candidatos %}
     <li class="candidato-fila" id="candidato-{{ item_id }}-{{ loop.index0 }}">
       <span class="candidato-titulo">{{ fila.c.title }}</span>
