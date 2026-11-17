@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -448,6 +449,28 @@ async def _causa_de_coleccion(db: AsyncSession, series: Series) -> str | None:
     return None
 
 
+def _fuentes_de_seguimiento_activas() -> bool:
+    """¿Hay alguna fuente configurada para detectar números nuevos?"""
+    settings = get_settings()
+    return bool(
+        (getattr(settings, "forum_enabled", False)
+         and getattr(settings, "forum_url", "")
+         and getattr(settings, "forum_username", ""))
+        or (getattr(settings, "prowlarr_enabled", False)
+            and getattr(settings, "prowlarr_api_key", ""))
+    )
+
+
+def _contexto_seguimiento(series: Series, *,
+                          aviso_legal_pendiente: bool | None = None,
+                          activacion_bloqueada: bool = False) -> dict:
+    return {
+        "aviso_legal_pendiente": aviso_legal_pendiente,
+        "activacion_bloqueada_por_aviso": activacion_bloqueada,
+        "fuentes_descarga_activas": _fuentes_de_seguimiento_activas(),
+    }
+
+
 async def _contexto_politica(db: AsyncSession, series: Series,
                              querer=None, retirados_ahora: int | None = None,
                              aviso_legal_pendiente: bool | None = None) -> dict:
@@ -546,6 +569,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "coleccion_version": version_de_decision(series),
         "conflicto_coleccion": conflicto_con_politica(series),
         **politica,
+        "fuentes_descarga_activas": _fuentes_de_seguimiento_activas(),
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
         "archivos_por_numero": archivos,
         "formatos_legibles": FORMATOS_LEGIBLES,
@@ -923,6 +947,43 @@ async def cambiar_politica(series_id: UUID, request: Request,
     return templates.TemplateResponse(
         request, "_politica_serie.html", {"series": series, **contexto}
     )
+
+
+@router.post("/{series_id}/seguimiento", response_class=HTMLResponse)
+async def cambiar_seguimiento(
+    series_id: UUID, request: Request,
+    follow_new_issues: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#993: activa/desactiva el seguimiento de números nuevos de una serie.
+
+    Independiente de `wishlist_policy`: no la lee ni la escribe. Desactivar
+    siempre se permite (y no borra deseos pendientes); activar exige el acuse
+    legal, igual que la política. `follow_new_issues_since` solo se fija en la
+    transición false→true y se conserva al desactivar.
+    """
+    series = (await db.execute(
+        select(Series).where(Series.id == series_id))).scalar_one_or_none()
+    if not series:
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    if follow_new_issues:
+        if not await is_acknowledged(db):
+            return templates.TemplateResponse(
+                request, "_seguimiento_serie.html", {
+                    "series": series,
+                    **_contexto_seguimiento(
+                        series, aviso_legal_pendiente=True,
+                        activacion_bloqueada=True),
+                })
+        if not series.follow_new_issues:
+            series.follow_new_issues_since = datetime.now(UTC)
+    series.follow_new_issues = follow_new_issues
+    await db.flush()
+    return templates.TemplateResponse(
+        request, "_seguimiento_serie.html", {
+            "series": series,
+            **_contexto_seguimiento(series, aviso_legal_pendiente=False),
+        })
 
 
 @router.post("/{series_id}/nota")

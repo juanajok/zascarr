@@ -170,6 +170,13 @@ services:
       - LOG_JSON=${LOG_JSON:-true}
       # BL-R9: cadencia del rescan de la biblioteca (1440 = una vez al día; 0 lo apaga).
       - RESCAN_INTERVAL_MINUTES=${RESCAN_INTERVAL_MINUTES:-1440}
+      # #993: seguimiento de números nuevos (config por .env, sin UI en v1).
+      - SEGUIMIENTO_INTERVAL_MINUTES=${SEGUIMIENTO_INTERVAL_MINUTES:-45}
+      - SEGUIMIENTO_MAX_TEMAS=${SEGUIMIENTO_MAX_TEMAS:-10}
+      - SEGUIMIENTO_MAX_SERIES_PROWLARR=${SEGUIMIENTO_MAX_SERIES_PROWLARR:-10}
+      - SEGUIMIENTO_MAX_DESEOS=${SEGUIMIENTO_MAX_DESEOS:-10}
+      - SEGUIMIENTO_MAX_AVISOS=${SEGUIMIENTO_MAX_AVISOS:-5}
+      - SEGUIMIENTO_RETENCION_DIAS=${SEGUIMIENTO_RETENCION_DIAS:-90}
       # A6/E6: sin estas dos, lo que el operador pone en el .env NO llega al
       # contenedor (que no monta el .env). ALLOWED_HOSTS no tiene otra vía: no está
       # en Ajustes, y sin él quien entra por un nombre de equipo recibe 403 en todo.
