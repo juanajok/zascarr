@@ -133,6 +133,12 @@
     paginaBVisible = !esApaisada(imagen);
     pinta();
   });
+  imagenB.addEventListener("load", () => {
+    if (modo === "doble" && paginaBVisible && esApaisada(imagenB)) {
+      paginaBVisible = false;
+      pinta();
+    }
+  });
   anterior.addEventListener("click", retroceder);
   siguiente.addEventListener("click", avanzar);
   menuBoton.addEventListener("click", alternarMenu);
