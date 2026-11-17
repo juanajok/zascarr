@@ -967,6 +967,12 @@ async def probar_transmission(
     password = _secreto_o_guardado(transmission_password, "transmission_password")
     carpeta = (transmission_download_dir or "").strip() or getattr(
         get_settings(), "transmission_download_dir", "")
+    if carpeta and not _carpeta_de_descargas_valida(carpeta):
+        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+            "ok": False,
+            "mensaje": "La carpeta de descargas debe ser una ruta absoluta del host "
+                       "(no la raíz «/», sin «..» ni caracteres de control).",
+        })
     ok, mensaje, aviso = await _test_transmission(
         transmission_url.rstrip("/"), transmission_username, password, carpeta
     )
@@ -1102,6 +1108,8 @@ def _carpeta_de_descargas_valida(ruta: str) -> bool:
     """Ruta absoluta del host, sin «..» ni caracteres de control."""
     if not ruta.startswith("/") or ".." in PurePosixPath(ruta).parts:
         return False
+    if PurePosixPath(ruta) == PurePosixPath("/"):
+        return False          # la raíz del host no es una carpeta de descargas válida
     return not any(ord(c) < 32 for c in ruta)
 
 
@@ -1142,7 +1150,12 @@ async def _test_transmission(
             return False, "Transmission respondió: usuario o contraseña rechazados.", False
         if r.status_code != 200:
             return False, f"Transmission respondió HTTP {r.status_code}.", False
-        datos = r.json()
+        try:
+            datos = r.json()
+        except ValueError:
+            return False, "Transmission devolvió una respuesta que no es JSON.", False
+        if not isinstance(datos, dict):
+            return False, "Transmission devolvió una respuesta inesperada.", False
         if datos.get("result") == "success":
             real = (datos.get("arguments") or {}).get("download-dir")
             aviso = _aviso_de_carpeta_transmission(download_dir, real)

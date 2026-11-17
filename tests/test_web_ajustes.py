@@ -121,6 +121,20 @@ class TestGuardar:
 class TestGuardarSeguridad:
     """A6: nunca dejar la app en un modo que nadie pueda desbloquear."""
 
+    def test_guardar_transmission_carpeta_valida_aplica(self, restaurar_settings):
+        """B-1 (SecOps): el campo está en la whitelist y Guardar no da 500."""
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/transmission", data={
+                "transmission_url": "http://transmission-test:9091",
+                "transmission_download_dir": "/media/Descargas/torrents/completos",
+                "transmission_enabled": "true",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200
+        assert get_settings().transmission_download_dir == "/media/Descargas/torrents/completos"
+
     def test_activar_password_sin_ninguna_contrasena_no_guarda(self, restaurar_settings):
         app.dependency_overrides[get_db] = _override_get_db(FakeSession())
         try:
@@ -288,6 +302,26 @@ class TestProbar:
         r = client.post("/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": ""})
         assert "✗" in r.text
         assert "Falta la clave" in r.text
+
+    def test_transmission_respuesta_no_json_no_revienta(self, monkeypatch):
+        """m-1 de SecOps: 200 que no es JSON no puede dar 500."""
+        import httpx
+
+        self._cliente_falso(monkeypatch, lambda _r: httpx.Response(200, text="<html>no json</html>"))
+        r = TestClient(app).post("/ui/ajustes/probar/transmission", data={
+            "transmission_url": "http://transmission-test:9091",
+            "transmission_download_dir": "/media/Descargas/torrents/completos",
+        })
+        assert r.status_code == 200
+        assert "no es JSON" in r.text
+
+    def test_transmission_carpeta_raiz_no_es_valida(self):
+        r = TestClient(app).post("/ui/ajustes/probar/transmission", data={
+            "transmission_url": "http://transmission-test:9091",
+            "transmission_download_dir": "/",
+        })
+        assert r.status_code == 200
+        assert "no la raíz" in r.text
 
     def test_comic_vine_conexion_correcta(self, monkeypatch):
         import httpx
