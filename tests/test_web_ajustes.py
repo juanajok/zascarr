@@ -315,6 +315,22 @@ class TestProbar:
         assert r.status_code == 200
         assert "no es JSON" in r.text
 
+    def test_transmission_arguments_o_download_dir_anomalos_no_revientan(self, monkeypatch):
+        """m-1 residual de SecOps: JSON objeto con arguments/ download-dir de tipo raro."""
+        import httpx
+
+        for anomala in (
+            {"result": "success", "arguments": "x"},
+            {"result": "success", "arguments": {"download-dir": 123}},
+        ):
+            self._cliente_falso(monkeypatch, lambda _r, datos=anomala: httpx.Response(200, json=datos))
+            r = TestClient(app).post("/ui/ajustes/probar/transmission", data={
+                "transmission_url": "http://transmission-test:9091",
+                "transmission_download_dir": "/media/Comics",
+            })
+            assert r.status_code == 200
+            assert "respuesta inesperada" in r.text
+
     def test_transmission_carpeta_raiz_no_es_valida(self):
         r = TestClient(app).post("/ui/ajustes/probar/transmission", data={
             "transmission_url": "http://transmission-test:9091",
