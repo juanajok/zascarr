@@ -11,11 +11,19 @@ from typing import Any
 
 from zascarr.config import get_settings
 from zascarr.core.consolidacion.normalizadores import (
+    normalizar_anilist_serie,
     normalizar_comic_vine_serie,
+    normalizar_fandom_serie,
     normalizar_gcd_serie,
+    normalizar_metron_serie,
+    normalizar_open_library_serie,
     normalizar_tebeosfera_serie,
+    raw_acotado_anilist,
     raw_acotado_comic_vine,
+    raw_acotado_fandom,
     raw_acotado_gcd,
+    raw_acotado_metron,
+    raw_acotado_open_library,
     raw_acotado_tebeosfera,
 )
 from zascarr.core.consolidacion.tipos import (
@@ -24,8 +32,12 @@ from zascarr.core.consolidacion.tipos import (
     ResultadoFetch,
     hash_payload,
 )
+from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient
+from zascarr.services.fandom import FandomClient
 from zascarr.services.gcd import GCDClient
+from zascarr.services.metron import MetronClient
+from zascarr.services.open_library import OpenLibraryClient
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 
@@ -162,6 +174,116 @@ class AdaptadorGCD:
         )
 
 
+class AdaptadorAniList:
+    nombre = "anilist"
+    capacidades_serie = frozenset({"title", "start_year", "total_issues", "description"})
+    licencia = "AniList Terms of Use (no comercial)"
+
+    def __init__(self, cliente: AniListClient):
+        self._cliente = cliente
+
+    async def fetch_serie(self, external_id: str, *, hash_previo: str | None = None):
+        try:
+            anilist_id = int(external_id)
+        except (TypeError, ValueError):
+            return ResultadoFetch(EstadoFetch.ERROR_PARSEO, detalle_error="id_no_numerico")
+        try:
+            ficha = await self._cliente.get_manga(anilist_id)
+        except Exception as exc:  # noqa: BLE001
+            return _error(exc)
+        if ficha is None:
+            return ResultadoFetch(EstadoFetch.NO_ENCONTRADO)
+        return _ficha(
+            fuente=self.nombre, external_id=str(anilist_id),
+            url=getattr(ficha, "site_url", None), licencia=self.licencia,
+            raw=raw_acotado_anilist(ficha),
+            normalizado=normalizar_anilist_serie(ficha),
+            hash_previo=hash_previo, ahora=datetime.now(UTC),
+        )
+
+
+class AdaptadorMetron:
+    nombre = "metron"
+    capacidades_serie = frozenset({
+        "title", "start_year", "end_year", "publisher_name", "language",
+        "total_issues", "description",
+    })
+    licencia = "CC BY-SA 4.0 (Metron)"
+
+    def __init__(self, cliente: MetronClient):
+        self._cliente = cliente
+
+    async def fetch_serie(self, external_id: str, *, hash_previo: str | None = None):
+        try:
+            metron_id = int(external_id)
+        except (TypeError, ValueError):
+            return ResultadoFetch(EstadoFetch.ERROR_PARSEO, detalle_error="id_no_numerico")
+        try:
+            ficha = await self._cliente.get_series(metron_id)
+        except Exception as exc:  # noqa: BLE001
+            return _error(exc)
+        if ficha is None:
+            return ResultadoFetch(EstadoFetch.NO_ENCONTRADO)
+        return _ficha(
+            fuente=self.nombre, external_id=str(metron_id),
+            url=getattr(ficha, "site_url", None), licencia=self.licencia,
+            raw=raw_acotado_metron(ficha),
+            normalizado=normalizar_metron_serie(ficha),
+            hash_previo=hash_previo, ahora=datetime.now(UTC),
+        )
+
+
+class AdaptadorOpenLibrary:
+    nombre = "open_library"
+    capacidades_serie = frozenset({
+        "title", "start_year", "publisher_name", "language",
+    })
+    licencia = "Open Library: datos de Internet Archive; ver términos"
+
+    def __init__(self, cliente: OpenLibraryClient):
+        self._cliente = cliente
+
+    async def fetch_serie(self, external_id: str, *, hash_previo: str | None = None):
+        try:
+            ficha = await self._cliente.get_work(str(external_id))
+        except Exception as exc:  # noqa: BLE001
+            return _error(exc)
+        if ficha is None:
+            return ResultadoFetch(EstadoFetch.NO_ENCONTRADO)
+        return _ficha(
+            fuente=self.nombre, external_id=str(external_id),
+            url=getattr(ficha, "site_url", None), licencia=self.licencia,
+            raw=raw_acotado_open_library(ficha),
+            normalizado=normalizar_open_library_serie(ficha),
+            hash_previo=hash_previo, ahora=datetime.now(UTC),
+        )
+
+
+class AdaptadorFandom:
+    licencia = "Fandom: texto CC BY-SA; portadas fair use"
+
+    def __init__(self, cliente: FandomClient, fuente: str):
+        self._cliente = cliente
+        self.nombre = fuente
+        self.capacidades_serie = frozenset({
+            "title", "start_year", "end_year", "total_issues", "description",
+        })
+
+    async def fetch_serie(self, external_id: str, *, hash_previo: str | None = None):
+        try:
+            ficha = await self._cliente.get_volume(str(external_id), incluir_portada=False)
+        except Exception as exc:  # noqa: BLE001
+            return _error(exc)
+        if ficha is None:
+            return ResultadoFetch(EstadoFetch.NO_ENCONTRADO)
+        return _ficha(
+            fuente=self.nombre, external_id=str(external_id), url=None,
+            licencia=self.licencia, raw=raw_acotado_fandom(ficha),
+            normalizado=normalizar_fandom_serie(ficha),
+            hash_previo=hash_previo, ahora=datetime.now(UTC),
+        )
+
+
 async def abrir_adaptadores(settings=None) -> dict[str, Any]:
     """Abre solo las fuentes encendidas con datos de configuración suficientes.
 
@@ -184,6 +306,30 @@ async def abrir_adaptadores(settings=None) -> dict[str, Any]:
         if getattr(ajustes, "gcd_enabled", False):
             adaptadores["gcd"] = AdaptadorGCD(
                 await pila.enter_async_context(GCDClient()))
+        if getattr(ajustes, "anilist_enabled", False):
+            adaptadores["anilist"] = AdaptadorAniList(
+                await pila.enter_async_context(AniListClient()))
+        if (getattr(ajustes, "metron_enabled", False)
+                and str(getattr(ajustes, "metron_token", "") or "").strip()):
+            adaptadores["metron"] = AdaptadorMetron(
+                await pila.enter_async_context(MetronClient()))
+        if getattr(ajustes, "open_library_enabled", False):
+            adaptadores["open_library"] = AdaptadorOpenLibrary(
+                await pila.enter_async_context(OpenLibraryClient()))
+        dc = bool(getattr(ajustes, "fandom_dc_enabled", False))
+        marvel = bool(getattr(ajustes, "fandom_marvel_enabled", False))
+        if dc or marvel:
+            from zascarr.database import async_session_factory
+            from zascarr.utils.cache_http import CacheHttp
+            cache = CacheHttp(async_session_factory)
+            if dc:
+                adaptadores["fandom_dc"] = AdaptadorFandom(
+                    await pila.enter_async_context(
+                        FandomClient("dc.fandom.com", cache=cache)), "fandom_dc")
+            if marvel:
+                adaptadores["fandom_marvel"] = AdaptadorFandom(
+                    await pila.enter_async_context(
+                        FandomClient("marvel.fandom.com", cache=cache)), "fandom_marvel")
     except BaseException:
         await pila.aclose()
         raise
