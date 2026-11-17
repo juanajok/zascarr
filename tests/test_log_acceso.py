@@ -386,7 +386,7 @@ PARAMETROS_DE_QUERY = frozenset({
     # F1 (#636/#272): número en la vista previa de organizar (GET, solo lectura).
     "issue_number",
     # BL-INF5 (#591): aviso de guardado al volver de la edición manual.
-    "guardado", "elegido", "lanzado", "recolectado", "sin_fuentes", "recolectando",
+    "guardado", "elegido", "lanzado", "recolectado", "sin_fuentes", "recolectando", "barrida",
     # BL-PACK1 (#344): token firmado de la vista previa de un paquete de Descargas.
     "token",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).

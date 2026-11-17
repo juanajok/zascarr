@@ -20,6 +20,7 @@ from zascarr.core.consolidacion.tipos import (
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import EntitySourceRecord, FieldProvenance, Series
+from zascarr.services.consolidacion.barrida import EstadoBarrida
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Postgres real)")
@@ -83,6 +84,7 @@ async def test_pantalla_muestra_roles_conflictos_y_huecos(banco):
     async with cliente() as c:
         lote = await c.get("/ui/datos")
     assert lote.status_code == 200 and "Revisar datos" in lote.text
+    assert "Barrida inicial" in lote.text and "Barrida inicial completa" in lote.text
 
 
 @pytest.mark.asyncio
@@ -200,3 +202,39 @@ async def test_lote_lanza_recoleccion_en_segundo_plano(banco, monkeypatch):
         r = await c.post("/ui/datos/recolectar")
         assert r.status_code == 303
     assert llamado == [20]
+
+
+
+@pytest.mark.asyncio
+async def test_lanzar_barrida_completa_en_segundo_plano(banco, monkeypatch):
+    llamado = []
+
+    async def _falso_ejecutar():
+        llamado.append(True)
+
+    class _Pila:
+        async def aclose(self):
+            return None
+
+    async def _abrir():
+        return {"adaptadores": {"comic_vine": object()}, "pila": _Pila()}
+
+    monkeypatch.setattr("zascarr.web.datos.iniciar_barrida", lambda: True)
+    monkeypatch.setattr("zascarr.web.datos.ejecutar_barrida", _falso_ejecutar)
+    monkeypatch.setattr("zascarr.web.datos.abrir_adaptadores", _abrir)
+    async with cliente() as c:
+        r = await c.post("/ui/datos/barrida")
+        assert r.status_code == 303
+    assert llamado == [True]
+
+
+@pytest.mark.asyncio
+async def test_estado_de_barrida_se_puede_consultar(banco, monkeypatch):
+    estado = EstadoBarrida(estado="completada", total=3, procesadas=3,
+                           recolectadas=2, aplicados=4, conflictos=1,
+                           series_conflictos=({"id": "x", "titulo": "Serie", "campos": 1},))
+    monkeypatch.setattr("zascarr.web.datos.estado_barrida", lambda: estado)
+    async with cliente() as c:
+        r = await c.get("/ui/datos/barrida/estado")
+    assert r.status_code == 200
+    assert "Barrida inicial terminada" in r.text and "Serie" in r.text
