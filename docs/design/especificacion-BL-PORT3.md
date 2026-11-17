@@ -161,7 +161,7 @@ Origen: I = issue #418, B = benchmark aceptado, E = evaluación de `unar` (§6),
 - FR-18 (estado) MIENTRAS dos peticiones pidan a la vez la portada de la misma serie, el sistema deberá hacer **una sola** generación y servir el resultado a ambas. *(evita doble coste cuando la ficha y la rejilla se solapan; Q-11)*
 
 **Sustituir lo ya guardado (D-2)**
-- FR-19 (ubicuo) `[D-2]` La caché de portadas **de serie sacadas de un archivo** pasará a `covers/v3/<serie>.jpg`; lo que haya en `covers/v2` **no se sirve** ni se borra automáticamente. *(CACHE_VERSION, BL-PORT1 FR-03)*
+- FR-19 (ubicuo) `[D-2]` La caché de portadas **de serie sacadas de un archivo** pasará a `covers/v3/<serie>.jpg`; lo que haya en `covers/v2` **no se sirve mientras haya un archivo que dé portada** ni se borra automáticamente. **Enmienda #506/#529 (cruce BL-PORT5/#435):** si no hay archivo disponible, `v2` se sirve como respaldo de solo lectura, sin copiarla y con `no-store` cuando el lector está ocupado; el literal de la versión vive en `CACHE_VERSION_ANTERIOR`. *(CACHE_VERSION, BL-PORT1 FR-03)*
 - FR-20 (ubicuo) `[D-2]` La portada **externa** (`cover_url`) se guardará **fuera de `v3`** (`covers/externa/<serie>.jpg`), de modo que una petición sin portada de archivo siga evaluando los candidatos (barato gracias a FR-11) y una serie cuyo primer archivo pase a ser legible **cambie sola** a la portada de archivo. Si el PO elige la opción A de D-2, este FR se sustituye por «la externa se guarda en `v3` como hoy» y se acepta que no cambia sola.
 - FR-21 (ubicuo) La caché antigua `covers/<serie>.jpg` sigue siendo un respaldo de solo lectura que no se copia. *(BL-PORT1 Q-1, sin cambios)*
 
@@ -278,7 +278,7 @@ Nada nuevo: el `<img>` de Biblioteca/Inicio/ficha muestra la portada de su archi
 - AC-28 *(BR-03)* `tratamiento()` de un RAR sigue siendo «solo hash» y ningún campo de `files.metadata` nuevo aparece tras generar una portada.
 
 **Sustitución (D-2)**
-- AC-29 *(FR-19)* Dada una serie con `covers/v2/<id>.jpg` (cualquiera), cuando se pide la portada, entonces `v2` no se sirve y se genera `v3`; `v2` no se borra.
+- AC-29 *(FR-19)* Dada una serie con `covers/v2/<id>.jpg` (cualquiera), cuando se pide la portada y hay un archivo que da portada, entonces `v2` no se sirve y se genera `v3`; `v2` no se borra. **Enmienda #506/#529 (BL-PORT5):** sin archivo disponible, `v2` se sirve como respaldo (con `no-store` si el lector está ocupado).
 - AC-30 *(FR-20)* Dada una serie sin portada de archivo y con `cover_url`, cuando se pide, entonces la externa se guarda en `covers/externa/` y **no** en `v3`; cuando después su primer archivo pasa a ser legible, entonces la petición siguiente genera `v3` del archivo y lo sirve.
 - AC-31 *(FR-21)* La caché antigua se sirve solo si no hay `v3` ni candidato utilizable, y no se copia.
 
