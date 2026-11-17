@@ -17,6 +17,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.core.comicinfo_write import MAX_COMICINFO_BYTES
 from zascarr.core.formato_contenedor import (
     IMAGE_EXTS,
     MAX_ENTRADAS,
@@ -225,9 +226,11 @@ def _manga_del_archivo(path: Path) -> str | None:
         with zipfile.ZipFile(path) as zf:
             for info in zf.infolist():
                 if Path(info.filename).name.lower() == "comicinfo.xml":
-                    datos = leer_acotado(zf, info)
+                    if info.file_size > MAX_COMICINFO_BYTES:
+                        return None
+                    datos = leer_acotado(zf, info, tope=MAX_COMICINFO_BYTES)
                     return parse_comic_info(datos).manga
-    except (OSError, zipfile.BadZipFile, EntradaNoLegible, ValueError):
+    except (OSError, zipfile.BadZipFile, EntradaNoLegible, ValueError, SyntaxError):
         return None
     return None
 
@@ -244,7 +247,8 @@ async def sentido_de_lectura(db: AsyncSession, file_id: UUID) -> tuple[str, str]
     manga = await asyncio.to_thread(_manga_del_archivo, Path(f.file_path))
     if manga == "YesAndRightToLeft":
         return "rtl", "comicinfo"
-    if serie is not None and serie.tradition.value == "manga":
+    tradicion = getattr(getattr(serie, "tradition", None), "value", None)
+    if tradicion == "manga":
         return "rtl", "tradicion"
     return "ltr", "tradicion"
 

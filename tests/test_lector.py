@@ -198,3 +198,20 @@ async def test_un_cbz_convertido_con_formato_viejo_es_legible(tmp_path):
     db = FakeSession(exec_queue=[FakeExecResult([f])])
     filas = await lector.archivos_legibles(db, f.issue_id)
     assert [a.id for a in filas] == [str(f.id)]
+
+
+def test_comicinfo_roto_no_tumba_el_lector(tmp_path):
+    ruta = tmp_path / "roto.cbz"
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("ComicInfo.xml", b"<ComicInfo><Manga>YesAndRightToLeft")
+        z.writestr("01.jpg", _jpeg())
+    assert lector._manga_del_archivo(ruta) is None
+
+
+def test_comicinfo_demasiado_grande_se_ignora(tmp_path):
+    ruta = tmp_path / "grande.cbz"
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("ComicInfo.xml", b"<ComicInfo><Manga>YesAndRightToLeft</Manga></ComicInfo>"
+                                   + b" " * (lector.MAX_COMICINFO_BYTES + 10))
+        z.writestr("01.jpg", _jpeg())
+    assert lector._manga_del_archivo(ruta) is None
