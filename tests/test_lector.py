@@ -260,7 +260,7 @@ def test_estado_rar_listo(tmp_path, monkeypatch):
     f = _rar_file(tmp_path)
 
     class Cache:
-        async def preparar(self, _f):
+        def estado(self, _f):
             return Estado("listo")
 
     monkeypatch.setattr(wlector, "CACHE", Cache())

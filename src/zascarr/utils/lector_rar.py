@@ -22,6 +22,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -30,7 +31,7 @@ import threading
 import time
 import zlib
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import structlog
 
@@ -108,6 +109,7 @@ class EntradaRar:
     crc32: int | None
     es_directorio: bool
     cifrada: bool
+    es_enlace: bool = False
 
 
 @dataclass(frozen=True)
@@ -319,6 +321,7 @@ def _entrada_de(bruto: dict, posicion: int) -> EntradaRar:
         crc32=_crc_de(bruto),
         es_directorio=bool(_entero(bruto.get("XADIsDirectory"))),
         cifrada=bool(_entero(bruto.get("XADIsEncrypted"))),
+        es_enlace=bool(_entero(bruto.get("XADIsLink"))),
     )
 
 
@@ -517,6 +520,17 @@ class ImagenExtraida:
     tamano: int
 
 
+def _exigir_nombre_seguro(nombre: str) -> None:
+    """Valida el nombre de una entrada ANTES de llamar a `unar` (anti zip-slip)."""
+    if not nombre or "\x00" in nombre or "\\" in nombre:
+        raise ErrorRar(MotivoRar.ILEGIBLE)
+    if nombre.startswith("/") or re.match(r"^[A-Za-z]:", nombre):
+        raise ErrorRar(MotivoRar.ILEGIBLE)
+    partes = PurePosixPath(nombre).parts
+    if not partes or any(parte in ("", ".", "..") for parte in partes):
+        raise ErrorRar(MotivoRar.ILEGIBLE)
+
+
 def extraer_completo(ruta: Path, destino: Path, *, temporal: Path,
                      timeout: float, max_bytes: int, max_ficheros: int) -> tuple[ImagenExtraida, ...]:
     """Extrae el RAR ENTERO al directorio vacío `destino`, con el turno único compartido.
@@ -532,6 +546,10 @@ def extraer_completo(ruta: Path, destino: Path, *, temporal: Path,
     destino.mkdir(mode=0o700, parents=True, exist_ok=False)
     with turno():  # listado + extracción completos bajo el mismo turno
         listado = listar(ruta, temporal=temporal, max_bytes_declarados=max_bytes)
+        if any(e.es_enlace for e in listado.entradas):
+            raise ErrorRar(MotivoRar.ILEGIBLE)
+        for entrada in listado.entradas:
+            _exigir_nombre_seguro(entrada.nombre)
         imagenes = [e for e in listado.entradas
                     if not e.es_directorio and Path(e.nombre).suffix.lower() in IMAGE_EXTS
                     and Path(e.nombre).name.lower() not in RUIDO]
@@ -555,6 +573,8 @@ def extraer_completo(ruta: Path, destino: Path, *, temporal: Path,
             raise ErrorRar(MotivoRar.ILEGIBLE)
         if not actual.is_file():
             continue
+        if actual.lstat().st_nlink != 1:
+            raise ErrorRar(MotivoRar.ILEGIBLE)
         resuelta = actual.resolve()
         if not str(resuelta).startswith(str(raiz) + os.sep):
             raise ErrorRar(MotivoRar.ILEGIBLE)

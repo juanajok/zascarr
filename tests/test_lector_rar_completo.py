@@ -74,3 +74,49 @@ def test_sin_imagenes_falla(tmp_path, monkeypatch):
             ruta, tmp_path / "salida", temporal=temporal, timeout=10,
             max_bytes=1000, max_ficheros=10)
     assert exc.value.motivo is MotivoRar.SIN_IMAGENES
+
+
+def test_rechaza_nombres_con_travesia_antes_de_unar(tmp_path, monkeypatch):
+    ruta = _rar(tmp_path)
+    temporal = tmp_path / "tmp"
+    temporal.mkdir()
+    llamadas = []
+
+    def falso_listar(*_a, **_k):
+        return lector_rar.Listado((
+            lector_rar.EntradaRar(0, "../fuera.jpg", 10, None, False, False),))
+
+    def falso_ejecutar(*_a, **_k):
+        llamadas.append(1)
+        return 0, b"", b""
+
+    monkeypatch.setattr(lector_rar, "_localizar", lambda n: f"/usr/bin/{n}")
+    monkeypatch.setattr(lector_rar, "listar", falso_listar)
+    monkeypatch.setattr(lector_rar, "_ejecutar_con_turno", falso_ejecutar)
+    with pytest.raises(lector_rar.ErrorRar):
+        lector_rar.extraer_completo(ruta, tmp_path / "salida", temporal=temporal,
+                                     timeout=10, max_bytes=1000, max_ficheros=10)
+    assert llamadas == []
+
+
+def test_rechaza_enlace_del_listado_antes_de_unar(tmp_path, monkeypatch):
+    ruta = _rar(tmp_path)
+    temporal = tmp_path / "tmp"
+    temporal.mkdir()
+    llamadas = []
+
+    def falso_listar(*_a, **_k):
+        return lector_rar.Listado((
+            lector_rar.EntradaRar(0, "01.jpg", 10, None, False, False, True),))
+
+    def falso_ejecutar(*_a, **_k):
+        llamadas.append(1)
+        return 0, b"", b""
+
+    monkeypatch.setattr(lector_rar, "_localizar", lambda n: f"/usr/bin/{n}")
+    monkeypatch.setattr(lector_rar, "listar", falso_listar)
+    monkeypatch.setattr(lector_rar, "_ejecutar_con_turno", falso_ejecutar)
+    with pytest.raises(lector_rar.ErrorRar):
+        lector_rar.extraer_completo(ruta, tmp_path / "salida", temporal=temporal,
+                                     timeout=10, max_bytes=1000, max_ficheros=10)
+    assert llamadas == []

@@ -31,7 +31,7 @@ from zascarr.core.formato_contenedor import (
 )
 from zascarr.core.importer_triage import parse_comic_info
 from zascarr.models import File, Issue, ReadingProgress, ReadingStatus, Series
-from zascarr.services.cache_lectura import CacheLectura
+from zascarr.services.cache_lectura import CacheError, CacheLectura
 from zascarr.utils.cover import puede_dar_portada
 
 
@@ -211,7 +211,10 @@ async def pagina(db: AsyncSession, file_id: UUID, n: int) -> RecursoPagina:
     if es_rar_real(f):
         if not (await asyncio.to_thread(CACHE._paginas, f)):
             raise ArchivoNoLegibleError("El tebeo todavía se está preparando.")
-        datos, content_type = await asyncio.to_thread(CACHE.leer_pagina, f, n)
+        try:
+            datos, content_type = await asyncio.to_thread(CACHE.leer_pagina, f, n)
+        except CacheError as exc:
+            raise ArchivoNoLegibleError(str(exc)) from exc
         return RecursoPagina(datos, content_type, _etag(f, n, path))
     recurso = await asyncio.to_thread(_leer_pagina, path, n)
     return RecursoPagina(recurso.datos, recurso.content_type, _etag(f, n, path))
@@ -226,7 +229,13 @@ async def total_paginas(db: AsyncSession, file_id: UUID) -> int:
 
 async def guardar_progreso(db: AsyncSession, file_id: UUID, n: int) -> None:
     f = await _abrir(db, file_id)
-    total = len(await asyncio.to_thread(_listado, Path(f.file_path)))
+    if es_rar_real(f):
+        paginas = await asyncio.to_thread(CACHE._paginas, f)
+        total = len(paginas)
+    else:
+        total = len(await asyncio.to_thread(_listado, Path(f.file_path)))
+    if total == 0:
+        raise ArchivoNoLegibleError("El tebeo todavía se está preparando.")
     n = max(1, min(int(n), total))
     progreso = (await db.execute(
         select(ReadingProgress).where(ReadingProgress.issue_id == f.issue_id)
