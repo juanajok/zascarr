@@ -286,11 +286,14 @@ def cached_image_response(request: Request, data: bytes, content_type: str, etag
     personal, no contenido público cacheable por un proxy intermedio."""
     if request.headers.get("if-none-match") == etag:
         return Response(
-            status_code=304, headers={"ETag": etag, "Cache-Control": "private, max-age=86400"}
+            status_code=304, headers={"ETag": etag,
+                                      "Cache-Control": "private, max-age=86400",
+                                      "X-Robots-Tag": "noindex"}
         )
     return Response(
         content=data, media_type=content_type,
-        headers={"ETag": etag, "Cache-Control": "private, max-age=86400"},
+        headers={"ETag": etag, "Cache-Control": "private, max-age=86400",
+                 "X-Robots-Tag": "noindex"},
     )
 
 

@@ -57,6 +57,7 @@ class TestCachedImageResponse:
 
     def test_sin_if_none_match_devuelve_200_con_cabeceras(self):
         response = cached_image_response(make_request(), b"data", "image/jpeg", '"123"')
+        assert response.headers["X-Robots-Tag"] == "noindex"
         assert response.status_code == 200
         assert response.headers["etag"] == '"123"'
         assert response.headers["cache-control"] == "private, max-age=86400"

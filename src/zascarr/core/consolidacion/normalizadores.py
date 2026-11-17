@@ -129,3 +129,104 @@ def raw_acotado_gcd(ficha: object) -> dict[str, Any]:
         "publishing_format": _texto(_leer(ficha, "publishing_format")),
         "binding": _texto(_leer(ficha, "binding")),
     })
+
+
+def normalizar_anilist_serie(ficha: object) -> dict[str, Any]:
+    """AniList: solo serie manga; no hay número de grapa.
+
+    `chapters` es un recuento de capítulos, no de grapas: se expone como
+    `total_issues` únicamente porque es el contador que ya usa el enricher para
+    manga; no se usa para huecos de una edición de grapa.
+    """
+    titulo = _texto(_leer(ficha, "title_english")) or _texto(_leer(ficha, "title_romaji"))
+    return {"edition_scope": _sin_vacios({
+        "title": titulo,
+        "start_year": _anio(_leer(ficha, "start_year")),
+        "total_issues": _entero(_leer(ficha, "chapters")),
+    }), "work_scope": _sin_vacios({
+        "description": _texto(_leer(ficha, "description")),
+    })}
+
+
+def raw_acotado_anilist(ficha: object) -> dict[str, Any]:
+    return _sin_vacios({
+        "anilist_id": _entero(_leer(ficha, "anilist_id")),
+        "title_romaji": _texto(_leer(ficha, "title_romaji")),
+        "title_english": _texto(_leer(ficha, "title_english")),
+        "start_year": _anio(_leer(ficha, "start_year")),
+        "chapters": _entero(_leer(ficha, "chapters")),
+        "volumes": _entero(_leer(ficha, "volumes")),
+        "site_url": _texto(_leer(ficha, "site_url")),
+    })
+
+
+def normalizar_metron_serie(ficha: object) -> dict[str, Any]:
+    """Metron: serie/edición; el país no viene y no se inventa."""
+    return {"edition_scope": _sin_vacios({
+        "title": _texto(_leer(ficha, "name")),
+        "start_year": _anio(_leer(ficha, "year_began")),
+        "end_year": _anio(_leer(ficha, "year_ended")),
+        "publisher_name": _texto(_leer(ficha, "publisher")),
+        "language": _texto(_leer(ficha, "language")),
+        "total_issues": _entero(_leer(ficha, "issue_count")),
+    }), "work_scope": _sin_vacios({
+        "description": _texto(_leer(ficha, "descripcion")),
+    })}
+
+
+def raw_acotado_metron(ficha: object) -> dict[str, Any]:
+    return _sin_vacios({
+        "metron_id": _entero(_leer(ficha, "metron_id")),
+        "name": _texto(_leer(ficha, "name")),
+        "year_began": _anio(_leer(ficha, "year_began")),
+        "year_ended": _anio(_leer(ficha, "year_ended")),
+        "issue_count": _entero(_leer(ficha, "issue_count")),
+        "publisher": _texto(_leer(ficha, "publisher")),
+        "language": _texto(_leer(ficha, "language")),
+        "site_url": _texto(_leer(ficha, "site_url")),
+    })
+
+
+def normalizar_open_library_serie(ficha: object) -> dict[str, Any]:
+    """Open Library: obra/tomo; nunca una grapa."""
+    return {"edition_scope": _sin_vacios({
+        "title": _texto(_leer(ficha, "title")),
+        "start_year": _anio(_leer(ficha, "start_year")),
+        "publisher_name": _texto(_leer(ficha, "editorial")),
+        "language": _texto(_leer(ficha, "idioma")),
+    }), "work_scope": _sin_vacios({
+        "description": _texto(_leer(ficha, "description")),
+    })}
+
+
+def raw_acotado_open_library(ficha: object) -> dict[str, Any]:
+    return _sin_vacios({
+        "work_id": _texto(_leer(ficha, "work_id")),
+        "title": _texto(_leer(ficha, "title")),
+        "start_year": _anio(_leer(ficha, "start_year")),
+        "editorial": _texto(_leer(ficha, "editorial")),
+        "idioma": _texto(_leer(ficha, "idioma")),
+        "site_url": _texto(_leer(ficha, "site_url")),
+    })
+
+
+def normalizar_fandom_serie(ficha: object) -> dict[str, Any]:
+    return {"edition_scope": _sin_vacios({
+        "title": _texto(_leer(ficha, "title")),
+        "start_year": _anio(_leer(ficha, "start_year")),
+        "end_year": _anio(_leer(ficha, "end_year")),
+        "total_issues": _entero(_leer(ficha, "total_issues")),
+    }), "work_scope": _sin_vacios({
+        "description": _texto(_leer(ficha, "description")),
+    })}
+
+
+def raw_acotado_fandom(ficha: object) -> dict[str, Any]:
+    return _sin_vacios({
+        "page_title": _texto(_leer(ficha, "page_title")),
+        "title": _texto(_leer(ficha, "title")),
+        "start_year": _anio(_leer(ficha, "start_year")),
+        "end_year": _anio(_leer(ficha, "end_year")),
+        "total_issues": _entero(_leer(ficha, "total_issues")),
+        "kind": _texto(_leer(ficha, "kind")),
+    })

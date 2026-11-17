@@ -144,6 +144,18 @@ class BorradoresRevision:
                 series_id=fila.series_id)
         return salida
 
+    async def purgar_caducados(self, *, ahora: datetime | None = None) -> int:
+        """Borra los borradores cuya `caduca` ya pasó; devuelve cuántos.
+
+        Se llama desde el ciclo de mantenimiento, no en cada lectura. Los
+        borradores son solo marcas recuperables; no borra revisiones, números
+        ni archivos.
+        """
+        resultado = await self.db.execute(
+            sa.delete(RevisionBorrador).where(
+                RevisionBorrador.caduca <= (ahora or datetime.now(UTC))))
+        return int(resultado.rowcount or 0)
+
     async def borrar(self, *, clave: str, series_id: str) -> None:
         try:
             sid = UUID(series_id)
