@@ -110,6 +110,7 @@ URLS_RECHAZADAS = [
     "https://comicvine.gamespot.com.evil.example/x.jpg", "https://evilcbsistatic.com/x.jpg",
     "https://notanilist.co/x.jpg", "https://anilist.co.evil.example/x.jpg", "https://tebeosfera.com.mx/x.jpg",
     "https://evil.example/comicvine.gamespot.com/x.jpg",
+    "https://www.tebeosfera.com/imagenes/x.jpg",
     # caracteres raros
     "https://comicvine.gamespot.com/x y.jpg", "https://comicvine.gamespot.com/x\n.jpg",
     "https://comicvine.gamespot.com/x\t.jpg", "https://comicvine.gamespot.com。evil.example/x.jpg",
@@ -118,7 +119,8 @@ URLS_RECHAZADAS = [
 
 URLS_ACEPTADAS = [
     CV, "http://comicvine.gamespot.com/a/x.jpg", "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/x.jpg",
-    "https://www.tebeosfera.com/imagenes/x.jpg", "https://files1.comics.org/img/x.jpg",
+    # E5: Tebeosfera ya no se descarga como portada; sí sigue como fuente de metadatos.
+    "https://files1.comics.org/img/x.jpg",
     "https://COMICVINE.gamespot.com/x.jpg", "https://comicvine.gamespot.com./x.jpg",
     "https://comicvine.gamespot.com:443/x.jpg", "http://comicvine.gamespot.com:80/x.jpg",
     "https://static.cbsistatic.com/x.jpg?a=1&b=2",
