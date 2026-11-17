@@ -80,6 +80,11 @@ class SerieSugerida(BaseModel):
     titulo: str
     anio: int | None
     puntuacion: float
+    #: Registros con sugerencia en el grupo y cuántos de ellos apuntan a esta serie (#382).
+    n_sugeridos: int = 0
+    n_de_la_serie: int = 0
+    #: Series distintas sugeridas por el grupo (#382): decide «otra serie»/«otras series».
+    n_series_distintas: int = 0
 
 
 class Senal(BaseModel):
@@ -639,6 +644,8 @@ class RevisionCarpetas:
         titulo, anio = series[elegida]
         return SerieSugerida(
             series_id=str(elegida), titulo=titulo, anio=anio, puntuacion=min(por_serie[elegida]),
+            n_sugeridos=len(sugeridos), n_de_la_serie=len(por_serie[elegida]),
+            n_series_distintas=len(por_serie),
         ), len(por_serie)
 
     @staticmethod

@@ -134,30 +134,50 @@
 {% else %}
 <div class="library-grid">
   {% for series in items %}
-  <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}">
-    {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id) }}
-    {% set leidos = series.lectura_leidos|default(0, true) %}
-    {% set total_lectura = series.lectura_total|default(0, true) %}
-    {% if total_lectura %}
-    {% set pct = (leidos * 100 / total_lectura)|round|int %}
-    <div class="library-card-progreso">
-      <div class="barra-lectura" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-           aria-valuenow="{{ pct }}" aria-label="Leído: {{ pct }}% ({{ leidos }} de {{ total_lectura }} números)">
-        <span class="barra-lectura-relleno" style="width: {{ pct }}%"></span>
+  {% set numeros = numeros_tarjetas.get(series.id, none) %}
+  <div class="library-card" id="serie-{{ series.id }}">
+    <a class="library-card-enlace" href="{{ url_serie(series.id) }}">
+      {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id) }}
+      {% set leidos = series.lectura_leidos|default(0, true) %}
+      {% set total_lectura = series.lectura_total|default(0, true) %}
+      {% if total_lectura %}
+      {% set pct = (leidos * 100 / total_lectura)|round|int %}
+      <div class="library-card-progreso">
+        <div class="barra-lectura" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="{{ pct }}" aria-label="Leído: {{ pct }}% ({{ leidos }} de {{ total_lectura }} números)">
+          <span class="barra-lectura-relleno" style="width: {{ pct }}%"></span>
+        </div>
+        <p class="barra-lectura-texto">{{ pct }}% leído · {{ leidos }} de {{ total_lectura }}</p>
       </div>
-      <p class="barra-lectura-texto">{{ pct }}% leído · {{ leidos }} de {{ total_lectura }}</p>
+      {% endif %}
+      <div class="library-card-body">
+        <div class="library-card-title" title="{{ series.title }}">{{ series.title }}</div>
+        {% set tradicion_tarjeta = series.tradition|tradicion %}
+        <div class="library-card-meta">
+          {% if series.start_year %}{{ series.start_year }}{% endif %}
+          {% if series.start_year and tradicion_tarjeta %}·{% endif %}
+          {% if tradicion_tarjeta %}{{ tradicion_tarjeta }}{% endif %}
+        </div>
+      </div>
+    </a>
+    {% if numeros and numeros.numeros %}
+    <div class="library-card-numeros" aria-label="Primeros números de {{ series.title }}">
+      {% for n in numeros.numeros %}
+      <span class="chip-previa">
+        <a class="chip-enlace" href="/ui/series/{{ series.id }}/numero/{{ n.id }}"
+           hx-get="/ui/series/{{ series.id }}/numero/{{ n.id }}/previa"
+           hx-trigger="mouseenter delay:150ms, focusin delay:150ms" hx-target="#previa-t-{{ n.id }}" hx-swap="innerHTML">{{ ui.chip("ok", "#" ~ n.numero) }}<span class="sr"> ver información del número {{ n.numero }}</span></a>
+        <span class="previa-numero" id="previa-t-{{ n.id }}" aria-hidden="true"></span>
+      </span>
+      {% endfor %}
+      {% set extra = numeros.total - (numeros.numeros|length) %}
+      {% if extra > 0 %}
+      <a class="chip-enlace" href="{{ url_serie(series.id) }}"
+         title="Ver los {{ numeros.total }} números en la ficha">{{ ui.chip("neutro", "+" ~ extra) }}<span class="sr"> números más; abre la ficha de {{ series.title }}</span></a>
+      {% endif %}
     </div>
     {% endif %}
-    <div class="library-card-body">
-      <div class="library-card-title" title="{{ series.title }}">{{ series.title }}</div>
-      {% set tradicion_tarjeta = series.tradition|tradicion %}
-      <div class="library-card-meta">
-        {% if series.start_year %}{{ series.start_year }}{% endif %}
-        {% if series.start_year and tradicion_tarjeta %}·{% endif %}
-        {% if tradicion_tarjeta %}{{ tradicion_tarjeta }}{% endif %}
-      </div>
-    </div>
-  </a>
+  </div>
   {% endfor %}
 </div>
 {% endif %}

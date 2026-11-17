@@ -103,6 +103,35 @@ class Notifier:
             return ResultadoEnvio(ok=False, motivo=type(exc).__name__)
         return ResultadoEnvio(ok=True)
 
+    def _texto_novedades(self, novedades: list[tuple[str, int]]) -> tuple[str, str]:
+        n = len(novedades)
+        plural = "" if n == 1 else "s"
+        titulo = f"ZascArr: {n} número{plural} nuevo{plural} detectado{plural}"
+        if not getattr(self._settings, "webhook_incluir_nombres", False):
+            return titulo, "Abre ZascArr para ver qué series que sigues tienen números nuevos."
+        cuerpo = "\n".join(f"- {titulo_serie} #{numero}"
+                            for titulo_serie, numero in novedades[:_MAX_LINEAS])
+        if n > _MAX_LINEAS:
+            cuerpo += f"\n… y {n - _MAX_LINEAS} más"
+        return titulo, cuerpo
+
+    async def notify_novedades(self, novedades: list[tuple[str, int]]) -> ResultadoEnvio:
+        """Aviso «número nuevo detectado»: una sola llamada por pasada.
+
+        Mejor esfuerzo tras el commit; sin URL, enlaces ni datos del foro. Los
+        nombres solo se incluyen si `webhook_incluir_nombres` está activo.
+        """
+        if not novedades or not getattr(self._settings, "webhook_enabled", False):
+            return ResultadoEnvio(ok=False, motivo="avisos apagados o sin novedades")
+        titulo, cuerpo = self._texto_novedades(novedades)
+        resultado = await self.enviar(titulo, cuerpo)
+        if resultado.ok:
+            logger.info("notifier.sent", type=self._settings.webhook_type)
+        else:
+            logger.warning("notifier.send_failed", type=self._settings.webhook_type,
+                           motivo=resultado.motivo)
+        return resultado
+
     async def notify_imported(self, files: list[str]) -> ResultadoEnvio:
         """Avisa si hay archivos nuevos y el webhook está activo. Nunca propaga:
         es mejor esfuerzo tras el commit."""

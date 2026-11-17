@@ -55,6 +55,12 @@ def restaurar_settings():
 
 class TestIndex:
 
+    def test_incluye_carpeta_de_descargas_de_transmission(self):
+        client = TestClient(app)
+        r = client.get("/ui/ajustes")
+        assert 'name="transmission_download_dir"' in r.text
+        assert "La ruta tal como la ve Transmission en la Pi" in r.text
+
     def test_pagina_responde_200_con_las_cuatro_integraciones(self):
         client = TestClient(app)
         r = client.get("/ui/ajustes")
@@ -114,6 +120,20 @@ class TestGuardar:
 
 class TestGuardarSeguridad:
     """A6: nunca dejar la app en un modo que nadie pueda desbloquear."""
+
+    def test_guardar_transmission_carpeta_valida_aplica(self, restaurar_settings):
+        """B-1 (SecOps): el campo está en la whitelist y Guardar no da 500."""
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/transmission", data={
+                "transmission_url": "http://transmission-test:9091",
+                "transmission_download_dir": "/media/Descargas/torrents/completos",
+                "transmission_enabled": "true",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200
+        assert get_settings().transmission_download_dir == "/media/Descargas/torrents/completos"
 
     def test_activar_password_sin_ninguna_contrasena_no_guarda(self, restaurar_settings):
         app.dependency_overrides[get_db] = _override_get_db(FakeSession())
@@ -282,6 +302,42 @@ class TestProbar:
         r = client.post("/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": ""})
         assert "✗" in r.text
         assert "Falta la clave" in r.text
+
+    def test_transmission_respuesta_no_json_no_revienta(self, monkeypatch):
+        """m-1 de SecOps: 200 que no es JSON no puede dar 500."""
+        import httpx
+
+        self._cliente_falso(monkeypatch, lambda _r: httpx.Response(200, text="<html>no json</html>"))
+        r = TestClient(app).post("/ui/ajustes/probar/transmission", data={
+            "transmission_url": "http://transmission-test:9091",
+            "transmission_download_dir": "/media/Descargas/torrents/completos",
+        })
+        assert r.status_code == 200
+        assert "no es JSON" in r.text
+
+    def test_transmission_arguments_o_download_dir_anomalos_no_revientan(self, monkeypatch):
+        """m-1 residual de SecOps: JSON objeto con arguments/ download-dir de tipo raro."""
+        import httpx
+
+        for anomala in (
+            {"result": "success", "arguments": "x"},
+            {"result": "success", "arguments": {"download-dir": 123}},
+        ):
+            self._cliente_falso(monkeypatch, lambda _r, datos=anomala: httpx.Response(200, json=datos))
+            r = TestClient(app).post("/ui/ajustes/probar/transmission", data={
+                "transmission_url": "http://transmission-test:9091",
+                "transmission_download_dir": "/media/Comics",
+            })
+            assert r.status_code == 200
+            assert "respuesta inesperada" in r.text
+
+    def test_transmission_carpeta_raiz_no_es_valida(self):
+        r = TestClient(app).post("/ui/ajustes/probar/transmission", data={
+            "transmission_url": "http://transmission-test:9091",
+            "transmission_download_dir": "/",
+        })
+        assert r.status_code == 200
+        assert "no la raíz" in r.text
 
     def test_comic_vine_conexion_correcta(self, monkeypatch):
         import httpx

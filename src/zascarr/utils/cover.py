@@ -67,6 +67,8 @@ SERIES_COVER_MAX_WIDTH = 600
 #: Un cambio de ancho objetivo o de algoritmo exige subir la versión, porque la ruta es lo que
 #: separa una caché vieja de una nueva (FR-03). `v3` (#418): solo portadas sacadas de un archivo.
 CACHE_VERSION = "v3"
+#: Caché anterior de BL-PORT1, conservada como respaldo de solo lectura (#506). No se borra.
+CACHE_VERSION_ANTERIOR = "v2"
 
 #: #418: carpeta (dentro de `covers/`) de las portadas EXTERNAS de `cover_url`. `v3` guarda
 #: solo portadas sacadas de un archivo: así una serie con externa pequeña cambia sola a la de su

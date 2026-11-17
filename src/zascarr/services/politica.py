@@ -141,7 +141,7 @@ async def querer_de_serie(
     manuales = (await db.execute(
         select(Wishlist.issue_id, Wishlist.numero)
         .where(Wishlist.series_id == series.id)
-        .where(Wishlist.origen == WishlistOrigin.MANUAL)
+        .where(Wishlist.origen.in_([WishlistOrigin.MANUAL, WishlistOrigin.SEGUIMIENTO]))
         .where(Wishlist.status.not_in(ESTADOS_TERMINADOS))
     )).all()
 

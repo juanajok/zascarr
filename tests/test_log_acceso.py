@@ -386,7 +386,7 @@ PARAMETROS_DE_QUERY = frozenset({
     # F1 (#636/#272): número en la vista previa de organizar (GET, solo lectura).
     "issue_number",
     # BL-INF5 (#591): aviso de guardado al volver de la edición manual.
-    "guardado",
+    "guardado", "elegido", "lanzado",
     # BL-PACK1 (#344): token firmado de la vista previa de un paquete de Descargas.
     "token",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
@@ -399,8 +399,12 @@ PARAMETROS_DE_QUERY = frozenset({
     "serie_ids", "tradicion",
     # D5 (#162): semana y editorial de Novedades (estado de la vista).
     "semana", "editorial",
+    # Por revisar: filtro y tamaño de página (estado de la vista).
+    "solo_sugerencia", "tamano",
     # #797: abrir el desplegable de alta tras un error (estado de la vista).
     "abrir",
+    # Logs persistidos: filtros de fecha/hora/evento (solo lectura, saneados).
+    "fecha", "hora", "evento",
 })
 
 

@@ -872,7 +872,8 @@ class TestTextosC6:
     def test_efecto_diferido_sin_nombrar_la_fuente(self, monkeypatch):
         from zascarr.config import get_settings
 
-        settings = get_settings().model_copy(update={"comicvine_enabled": True})
+        settings = get_settings().model_copy(update={
+            "comicvine_enabled": True, "comicvine_api_key": "clave"})
         monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
         series = make_series(total_issues=120, metadata_source=None)
         series.tradition = ComicTradition.AMERICAN
@@ -880,6 +881,18 @@ class TestTextosC6:
         bloque = self._bloque(self._ficha(series, computable=False))
         assert "Si llega a conocerse el total" in bloque
         assert "Comic Vine" not in bloque
+
+    def test_sin_clave_no_promete_el_enlace_de_comic_vine(self, monkeypatch):
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(update={
+            "comicvine_enabled": True, "comicvine_api_key": ""})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=120, metadata_source=None)
+        series.tradition = ComicTradition.AMERICAN
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False))
+        assert "Si llega a conocerse el total" not in bloque
 
     def test_cabecera_y_un_solo_dato_tecnico(self):
         series = make_series(total_issues=120, metadata_source=MetadataSource.ANILIST.value)
@@ -926,7 +939,8 @@ class TestTextosC6:
         """Sin aviso aceptado no habrá búsquedas aunque llegue el total: no se promete que ZascArr buscará."""
         from zascarr.config import get_settings
 
-        settings = get_settings().model_copy(update={"comicvine_enabled": True})
+        settings = get_settings().model_copy(update={
+            "comicvine_enabled": True, "comicvine_api_key": "clave"})
         monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
         series = make_series(total_issues=120, metadata_source=None)
         series.tradition = ComicTradition.AMERICAN

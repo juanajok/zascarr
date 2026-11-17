@@ -157,11 +157,26 @@ services:
       - COPIAS_FILE=/run/backup-status/copias.json
       - OMITIDA_FILE=/run/backup-status/omitida.json
       - COVERS_CACHE_PATH=/config/covers
+      # Logs persistidos/rotados para consultar incidencias anteriores desde la UI.
+      - LOG_DIR=/config/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-5242880}
+      - LOG_BACKUPS=${LOG_BACKUPS:-3}
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-30}
       # #418 (ADR 0015): interruptor del lector de .cbr con `unar` (por defecto, encendido)
       - LECTOR_RAR_ENABLED=${LECTOR_RAR_ENABLED:-true}
       - TZ=${TZ:-Europe/Madrid}
+      # Observabilidad: nivel real de structlog y formato JSON/consola.
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_JSON=${LOG_JSON:-true}
       # BL-R9: cadencia del rescan de la biblioteca (1440 = una vez al día; 0 lo apaga).
       - RESCAN_INTERVAL_MINUTES=${RESCAN_INTERVAL_MINUTES:-1440}
+      # #993: seguimiento de números nuevos (config por .env, sin UI en v1).
+      - SEGUIMIENTO_INTERVAL_MINUTES=${SEGUIMIENTO_INTERVAL_MINUTES:-45}
+      - SEGUIMIENTO_MAX_TEMAS=${SEGUIMIENTO_MAX_TEMAS:-10}
+      - SEGUIMIENTO_MAX_SERIES_PROWLARR=${SEGUIMIENTO_MAX_SERIES_PROWLARR:-10}
+      - SEGUIMIENTO_MAX_DESEOS=${SEGUIMIENTO_MAX_DESEOS:-10}
+      - SEGUIMIENTO_MAX_AVISOS=${SEGUIMIENTO_MAX_AVISOS:-5}
+      - SEGUIMIENTO_RETENCION_DIAS=${SEGUIMIENTO_RETENCION_DIAS:-90}
       # A6/E6: sin estas dos, lo que el operador pone en el .env NO llega al
       # contenedor (que no monta el .env). ALLOWED_HOSTS no tiene otra vía: no está
       # en Ajustes, y sin él quien entra por un nombre de equipo recibe 403 en todo.
@@ -188,6 +203,7 @@ services:
       # BL-OPS1 (FR-28): el único volumen nuevo, de solo lectura (socket y clave del auxiliar). Nada de docker.sock.
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/ops:/run/zascarr-ops:ro
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/covers:/config/covers
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/logs:/config/logs
     # #418 (ADR 0015): esta app abre con `unar` archivos de terceros que llegan por P2P. Sin
     # `no-new-privileges` ningún proceso del contenedor puede ganar privilegios (setuid); el tope de
     # procesos (`deploy.resources.limits.pids`, abajo) acota una bifurcación descontrolada. El arranque

@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -25,9 +26,11 @@ from sqlalchemy.orm import selectinload
 
 from zascarr.api.series import huecos_de_serie, numeros_poseidos
 from zascarr.config import get_settings
+from zascarr.core.consolidacion.ambitos import CAMPOS_SERIE, ROLES, rol_de
 from zascarr.database import get_db
 from zascarr.models import (
     Collection,
+    FieldProvenance,
     File,
     Issue,
     MotivoRar,
@@ -52,6 +55,8 @@ from zascarr.services.coleccion import (
 from zascarr.services.colecciones import colecciones_de_serie, etiqueta_politica
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
+from zascarr.services.consolidacion.aplicador import Aplicador, PlanCaducadoError
+from zascarr.services.consolidacion.consulta import cargar_contexto
 from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.discrepancias import (
     clave_valida,
@@ -177,7 +182,9 @@ from zascarr.services.vinculacion import (
 )
 from zascarr.utils.cover import (
     CACHE_VERSION,
+    CACHE_VERSION_ANTERIOR,
     CARPETA_EXTERNA,
+    MAX_BYTES_PORTADA_PREVIA,
     SERIES_COVER_MAX_WIDTH,
     cached_image_response,
     es_candidato_de_portada,
@@ -404,7 +411,8 @@ async def _veredicto(db: AsyncSession, series: Series, querer, politica: Wishlis
     """Qué dice el veredicto de la política (C6, FR-09/27/28/29). Precedencia con la política ACTIVA, donde cada nivel
     anula los siguientes: aviso legal pendiente > R = 0 > serie no calculable > cota de tiempo."""
     k = len(querer.numeros)
-    r = get_settings().politica_busquedas_por_hora
+    ajustes = get_settings()
+    r = ajustes.politica_busquedas_por_hora
     if politica == WishlistPolicy.NONE:
         return {"tipo": "ninguno", "no_calculable": razon_de_no_calculable(series) is not None}
     if k >= 1 and aviso_pendiente:
@@ -416,7 +424,8 @@ async def _veredicto(db: AsyncSession, series: Series, querer, politica: Wishlis
         # búsquedas posibles (R > 0 y aviso aceptado); en condicional y sin nombrar la fuente.
         diferido = (not querer.computable and r > 0 and not aviso_pendiente
                     and politica in (WishlistPolicy.MISSING, WishlistPolicy.ALL)
-                    and puede_enlazarse_con_comic_vine(series, get_settings().comicvine_enabled))
+                    and puede_enlazarse_con_comic_vine(
+                        series, ajustes.comicvine_enabled, ajustes.comicvine_api_key))
         return {"tipo": "motivo", "fuente": querer.fuente if not querer.computable else None,
                 "diferido": diferido}
     if k >= 1:
@@ -444,6 +453,28 @@ async def _causa_de_coleccion(db: AsyncSession, series: Series) -> str | None:
     if impulsos:
         return f"La colección «{impulsos[0].name}» fuerza a buscar los números que faltan."
     return None
+
+
+def _fuentes_de_seguimiento_activas() -> bool:
+    """¿Hay alguna fuente configurada para detectar números nuevos?"""
+    settings = get_settings()
+    return bool(
+        (getattr(settings, "forum_enabled", False)
+         and getattr(settings, "forum_url", "")
+         and getattr(settings, "forum_username", ""))
+        or (getattr(settings, "prowlarr_enabled", False)
+            and getattr(settings, "prowlarr_api_key", ""))
+    )
+
+
+def _contexto_seguimiento(series: Series, *,
+                          aviso_legal_pendiente: bool | None = None,
+                          activacion_bloqueada: bool = False) -> dict:
+    return {
+        "aviso_legal_pendiente": aviso_legal_pendiente,
+        "activacion_bloqueada_por_aviso": activacion_bloqueada,
+        "fuentes_descarga_activas": _fuentes_de_seguimiento_activas(),
+    }
 
 
 async def _contexto_politica(db: AsyncSession, series: Series,
@@ -544,6 +575,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "coleccion_version": version_de_decision(series),
         "conflicto_coleccion": conflicto_con_politica(series),
         **politica,
+        "fuentes_descarga_activas": _fuentes_de_seguimiento_activas(),
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
         "archivos_por_numero": archivos,
         "formatos_legibles": FORMATOS_LEGIBLES,
@@ -563,6 +595,196 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
     # #233/BL-R4: el aviso de una propuesta sin aplicar y sus acciones no se sirven de caché.
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
+
+
+# ── CCM (#1002): «Completar datos» y roles de las fuentes ──────────────────────────────────────
+
+_ETIQUETAS_CCM = {
+    "title": "Título",
+    "start_year": "Año de inicio",
+    "end_year": "Año de fin",
+    "publisher_name": "Editorial",
+    "language": "Idioma",
+    "total_issues": "Números en total",
+    "description": "Sinopsis",
+}
+_FUENTE_ID = {
+    "comic_vine": "comic_vine_id",
+    "anilist": "anilist_id",
+    "tebeosfera": "tebeosfera_slug",
+    "gcd": "gcd_id",
+    "metron": "metron_id",
+    "open_library": "open_library_id",
+    "fandom_dc": "fandom_dc_slug",
+    "fandom_marvel": "fandom_marvel_slug",
+}
+_ESTADOS_CCM = {
+    "anadir": "Listo para añadir",
+    "actualizar_misma_fuente": "La fuente corrigió su dato",
+    "acuerdo": "Las fuentes coinciden",
+    "conservar": "Se conserva el actual",
+    "conflicto": "Hay discrepancia",
+    "bloqueado": "Protegido",
+    "sin_dato": "Sin datos",
+}
+
+
+async def _procedencia_ccm(db: AsyncSession, series_id: UUID) -> tuple[dict, dict]:
+    filas = (await db.execute(
+        select(FieldProvenance).where(
+            FieldProvenance.entity_type == "series",
+            FieldProvenance.entity_id == series_id,
+        )
+    )).scalars().all()
+    return {f.field: (f.value if isinstance(f.value, dict) else None) for f in filas}, {
+        f.field: f for f in filas}
+
+
+def _roles_ccm(series: Series, contexto) -> list[dict]:
+    con_ficha = {r.fuente for r in contexto.registros}
+    salida = []
+    for fuente, columna in _FUENTE_ID.items():
+        if not getattr(series, columna, None):
+            continue
+        salida.append({
+            "fuente": fuente,
+            "nombre": NOMBRE_DE_FUENTE.get(fuente, fuente),
+            "rol": rol_de(series, fuente).value,
+            "tiene_ficha": fuente in con_ficha,
+        })
+    return salida
+
+
+async def _datos_ccm(db: AsyncSession, series_id: UUID) -> dict:
+    contexto = await cargar_contexto(db, series_id)
+    prov, filas = await _procedencia_ccm(db, series_id)
+    plan = contexto.plan()
+    serie = contexto.serie
+    return {
+        "series": serie,
+        "plan": plan,
+        "roles": _roles_ccm(serie, contexto),
+        "procedencia": procedencia_de_serie(serie, field_provenance=prov),
+        "procedencia_filas": filas,
+        "etiquetas": _ETIQUETAS_CCM,
+        "estados": _ESTADOS_CCM,
+        "huecos": tuple(c for c in plan.cambios if c.estado == "anadir"),
+        "conflictos": tuple(c for c in plan.cambios if c.estado == "conflicto"),
+        "bloqueados": tuple(c for c in plan.cambios if c.estado == "bloqueado"),
+        "sin_dato": tuple(c for c in plan.cambios if c.estado == "sin_dato"),
+        "con_ficha": bool(contexto.registros),
+        "nombres_fuente": NOMBRE_DE_FUENTE,
+    }
+
+
+def _redirect_datos(series_id: UUID, *, guardado: str = "", elegido: str = "",
+                    error: str = "") -> RedirectResponse:
+    destino = f"/ui/series/{series_id}/datos"
+    if guardado:
+        destino += f"?guardado={guardado}"
+    elif elegido:
+        destino += f"?elegido={elegido}"
+    elif error:
+        destino += f"?error={error}"
+    return RedirectResponse(destino, status_code=303)
+
+
+@router.get("/{series_id}/datos", response_class=HTMLResponse)
+async def datos_serie(series_id: UUID, request: Request,
+                      guardado: str = Query(default=""),
+                      elegido: str = Query(default=""),
+                      error: str = Query(default=""),
+                      db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    try:
+        contexto = await _datos_ccm(db, series_id)
+    except Exception as exc:  # noqa: BLE001 — 404 controlado para una serie inexistente
+        if exc.__class__.__name__ == "SerieNoEncontradaError":
+            raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+        raise
+    avisos = {
+        "caducado": "La ficha cambió desde que abriste esta pantalla. No se ha cambiado nada; vuelve a cargarla.",
+        "sin_ficha": "No hay fichas de fuentes asociadas para esta serie.",
+    }
+    contexto.update({
+        "guardado": f"Guardados {guardado} cambios." if guardado.isdigit() and guardado != "0" else "",
+        "elegido": f"Elegido el dato de {NOMBRE_DE_FUENTE.get(elegido, elegido)}." if elegido else "",
+        "error": avisos.get(error, ""),
+    })
+    respuesta = templates.TemplateResponse(request, "datos_serie.html", contexto)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/datos/aplicar", response_class=HTMLResponse)
+async def datos_aplicar(series_id: UUID, db: AsyncSession = Depends(get_db)):
+    try:
+        contexto = await _datos_ccm(db, series_id)
+        resultado = await Aplicador(db).aplicar(contexto["plan"])
+        await db.commit()
+    except PlanCaducadoError:
+        await db.rollback()
+        return _redirect_datos(series_id, error="caducado")
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ == "SerieNoEncontradaError":
+            await db.rollback()
+            raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+        raise
+    return _redirect_datos(series_id, guardado=str(resultado.aplicados))
+
+
+@router.post("/{series_id}/datos/elegir", response_class=HTMLResponse)
+async def datos_elegir(series_id: UUID, campo: str = Form(...), fuente: str = Form(...),
+                       db: AsyncSession = Depends(get_db)):
+    if campo not in CAMPOS_SERIE:
+        raise HTTPException(status_code=400, detail="Campo no válido")
+    try:
+        contexto = await _datos_ccm(db, series_id)
+        resultado = await Aplicador(db).aplicar(
+            contexto["plan"], decisiones={campo: fuente}, solo_campos={campo})
+        await db.commit()
+    except PlanCaducadoError:
+        await db.rollback()
+        return _redirect_datos(series_id, error="caducado")
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ == "SerieNoEncontradaError":
+            await db.rollback()
+            raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+        raise
+    if not resultado.campos:
+        return _redirect_datos(series_id, error="sin_ficha")
+    return _redirect_datos(series_id, elegido=fuente)
+
+
+@router.post("/{series_id}/datos/mantener", response_class=HTMLResponse)
+async def datos_mantener(series_id: UUID, campo: str = Form(...), fuente: str = Form(...),
+                          db: AsyncSession = Depends(get_db)):
+    if campo not in CAMPOS_SERIE:
+        raise HTTPException(status_code=400, detail="Campo no válido")
+    try:
+        await Aplicador(db).registrar_descarte(series_id, campo, fuente)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ == "SerieNoEncontradaError":
+            await db.rollback()
+            raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+        raise
+    return _redirect_datos(series_id, guardado="0")
+
+
+@router.post("/{series_id}/datos/rol", response_class=HTMLResponse)
+async def datos_rol(series_id: UUID, fuente: str = Form(...), rol: str = Form(...),
+                    db: AsyncSession = Depends(get_db)):
+    if fuente not in _FUENTE_ID or rol not in ROLES:
+        raise HTTPException(status_code=400, detail="Rol no válido")
+    serie = await _serie_o_404(db, series_id)
+    metadata = dict(serie.metadata_ or {})
+    roles = dict(metadata.get("vinculos_rol") or {})
+    roles[fuente] = rol
+    metadata["vinculos_rol"] = roles
+    serie.metadata_ = metadata
+    await db.flush()
+    await db.commit()
+    return _redirect_datos(series_id)
 
 
 # ── BL-R4 (#233): «Mantener lo mío» sobre una discrepancia concreta ───────────────────────────────
@@ -921,6 +1143,43 @@ async def cambiar_politica(series_id: UUID, request: Request,
     return templates.TemplateResponse(
         request, "_politica_serie.html", {"series": series, **contexto}
     )
+
+
+@router.post("/{series_id}/seguimiento", response_class=HTMLResponse)
+async def cambiar_seguimiento(
+    series_id: UUID, request: Request,
+    follow_new_issues: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#993: activa/desactiva el seguimiento de números nuevos de una serie.
+
+    Independiente de `wishlist_policy`: no la lee ni la escribe. Desactivar
+    siempre se permite (y no borra deseos pendientes); activar exige el acuse
+    legal, igual que la política. `follow_new_issues_since` solo se fija en la
+    transición false→true y se conserva al desactivar.
+    """
+    series = (await db.execute(
+        select(Series).where(Series.id == series_id))).scalar_one_or_none()
+    if not series:
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    if follow_new_issues:
+        if not await is_acknowledged(db):
+            return templates.TemplateResponse(
+                request, "_seguimiento_serie.html", {
+                    "series": series,
+                    **_contexto_seguimiento(
+                        series, aviso_legal_pendiente=True,
+                        activacion_bloqueada=True),
+                })
+        if not series.follow_new_issues:
+            series.follow_new_issues_since = datetime.now(UTC)
+    series.follow_new_issues = follow_new_issues
+    await db.flush()
+    return templates.TemplateResponse(
+        request, "_seguimiento_serie.html", {
+            "series": series,
+            **_contexto_seguimiento(series, aviso_legal_pendiente=False),
+        })
 
 
 @router.post("/{series_id}/nota")
@@ -1370,7 +1629,7 @@ async def portada(series_id: UUID, request: Request,
 
     covers = get_settings().covers_cache_path
     v3_path = covers / CACHE_VERSION / f"{series_id}.jpg"
-    v2_path = covers / "v2" / f"{series_id}.jpg"
+    v2_path = covers / CACHE_VERSION_ANTERIOR / f"{series_id}.jpg"
     legacy_path = covers / f"{series_id}.jpg"
     externa_path = covers / CARPETA_EXTERNA / f"{series_id}.jpg"
 
@@ -1391,9 +1650,9 @@ async def portada(series_id: UUID, request: Request,
             etag = _etag_de_bytes(previa.datos)
         return cached_image_response(request, previa.datos, "image/jpeg", etag)
 
-    if await asyncio.to_thread(v3_path.exists):
-        data = await asyncio.to_thread(v3_path.read_bytes)
-        return cached_image_response(request, data, "image/jpeg", _etag_for(v3_path))
+    data_v3 = await asyncio.to_thread(_leer_cache_de_portada, v3_path)
+    if data_v3 is not None:
+        return cached_image_response(request, data_v3, "image/jpeg", _etag_for(v3_path))
 
     # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya no
     # está en disco — sin este filtro, la portada podía intentar (y
@@ -1414,8 +1673,9 @@ async def portada(series_id: UUID, request: Request,
     # sigue siendo mejor que el marcador y que el respaldo viejo. Se sirve sin copiarla ni borrarla.
     # Con el lector ocupado es un sustituto pasajero: no se cachea (la próxima petición puede
     # generar la `v3` correcta).
-    if await asyncio.to_thread(v2_path.exists):
-        data = await asyncio.to_thread(v2_path.read_bytes)
+    data_v2 = await asyncio.to_thread(_leer_cache_de_portada, v2_path)
+    if data_v2 is not None:
+        data = data_v2
         if ocupado:
             return Response(content=data, media_type="image/jpeg",
                             headers={"Cache-Control": "no-store"})
@@ -1424,8 +1684,9 @@ async def portada(series_id: UUID, request: Request,
     # Respaldo: la caché antigua (240/320) se sirve sin red y no se copia. Si hay un archivo
     # utilizable se regenera arriba; esta rama es para archivos ausentes o ilegibles, o series que ya
     # solo conservan la caché vieja (Q-1 del PO).
-    if await asyncio.to_thread(legacy_path.exists):
-        data = await asyncio.to_thread(legacy_path.read_bytes)
+    data_legacy = await asyncio.to_thread(_leer_cache_de_portada, legacy_path)
+    if data_legacy is not None:
+        data = data_legacy
         if ocupado:
             return Response(content=data, media_type="image/jpeg",
                             headers={"Cache-Control": "no-store"})
@@ -1434,8 +1695,9 @@ async def portada(series_id: UUID, request: Request,
     # #418: la portada externa vive APARTE de `v3`: mientras no haya portada de archivo se siguen
     # evaluando los candidatos (barato: los fallidos están marcados) y la serie cambia sola cuando uno
     # se hace legible.
-    if await asyncio.to_thread(externa_path.exists):
-        data = await asyncio.to_thread(externa_path.read_bytes)
+    data_externa = await asyncio.to_thread(_leer_cache_de_portada, externa_path)
+    if data_externa is not None:
+        data = data_externa
         if ocupado:
             return Response(content=data, media_type="image/jpeg",
                             headers={"Cache-Control": "no-store"})
@@ -1447,17 +1709,36 @@ async def portada(series_id: UUID, request: Request,
             and await fetch_and_cache_cover(series.cover_url, externa_path,
                                             ancho=SERIES_COVER_MAX_WIDTH,
                                             motivo_fallo=motivo_fallo)):
-        data = await asyncio.to_thread(externa_path.read_bytes)
-        if ocupado:
-            return Response(content=data, media_type="image/jpeg",
-                            headers={"Cache-Control": "no-store"})
-        return cached_image_response(request, data, "image/jpeg", _etag_for(externa_path))
+        data = await asyncio.to_thread(_leer_cache_de_portada, externa_path)
+        if data is not None:
+            if ocupado:
+                return Response(content=data, media_type="image/jpeg",
+                                headers={"Cache-Control": "no-store"})
+            return cached_image_response(request, data, "image/jpeg", _etag_for(externa_path))
 
     # Una espera de cortesía no es un «no hay portada» definitivo: el navegador no debe
     # cachear la ausencia (mañana podría descargarse).
     # Tampoco lo es un lector ocupado (#418): la portada puede salir en cuanto quede libre.
-    cabeceras = {"Cache-Control": "no-store"} if ("cortesia" in motivo_fallo or ocupado) else None
+    sin_lector = (not get_settings().lector_rar_enabled) or not lector_rar_disponible()
+    cabeceras = ({"Cache-Control": "no-store"}
+                 if ("cortesia" in motivo_fallo or ocupado or sin_lector) else None)
     raise HTTPException(status_code=404, detail="Sin portada disponible", headers=cabeceras)
+
+
+def _leer_cache_de_portada(path: Path) -> bytes | None:
+    """Lee una caché de portada con el mismo tope que las previas (FR-09/AC-29).
+
+    Una imagen mayor que `MAX_BYTES_PORTADA_PREVIA` no es una portada de ZascArr: no se
+    sube a memoria en la Pi; se ignora y la cascada sigue.
+    """
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        if path.stat().st_size > MAX_BYTES_PORTADA_PREVIA:
+            return None
+        return path.read_bytes()
+    except OSError:
+        return None
 
 
 def _etag_for(path: Path) -> str:

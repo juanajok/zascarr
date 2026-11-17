@@ -133,7 +133,7 @@ _RUTAS_DIAGNOSTICO = {"/api/health", "/estado", "/login", "/legal"}
 # menú) o el 503 HTML del arranque degradado serían peores que no responder. Para estas rutas, en
 # lugar de redirigir o de servir el 503, el middleware responde `204 No Content` VACÍO: sin datos,
 # sin diagnóstico, sin página. NO son rutas de diagnóstico (esas se sirven sin comprobar la sesión).
-RUTAS_FRAGMENTO_SILENCIOSO = frozenset({"/ui/_nav/estado"})
+RUTAS_FRAGMENTO_SILENCIOSO = frozenset({"/ui/_nav/estado", "/ui/_tareas"})
 
 
 # ── CSRF / Origen / Host (ficha benchmark-seguridad-auth-origen-host) ─────────
