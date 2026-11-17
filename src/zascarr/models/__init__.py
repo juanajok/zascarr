@@ -1153,7 +1153,7 @@ class Wishlist(Base):
             "series_id IS NOT NULL OR issue_id IS NOT NULL", name="wishlist_target_check"
         ),
         Index("uq_wishlist_seguimiento_numero", "series_id", "numero", unique=True,
-              postgresql_where=text("origen::text = 'seguimiento' AND numero IS NOT NULL")),
+              postgresql_where=text("origen <> 'manual' AND numero IS NOT NULL")),
     )
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     series_id: Mapped[str | None] = mapped_column(

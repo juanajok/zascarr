@@ -1,4 +1,4 @@
-"""#993: migración 0047 (seguimiento) aditiva y reversible (Postgres real)."""
+"""#993: migraciones 0047+0048 (seguimiento) aditivas y reversibles (Postgres real)."""
 from __future__ import annotations
 
 import asyncio
@@ -46,7 +46,9 @@ def test_columnas_enum_tabla_e_indice_y_downgrade():
         assert tabla and tabla[0][0] is not None
         indice = _consultar_sync(url,
             "SELECT indexdef FROM pg_indexes WHERE indexname='uq_wishlist_seguimiento_numero'")
-        assert indice and "WHERE" in indice[0][0] and "seguimiento" in indice[0][0]
+        # El predicado no puede nombrar el valor de enum nuevo en la misma
+        # transacción: cubre politica+seguimiento excluyendo manual.
+        assert indice and "WHERE" in indice[0][0] and "manual" in indice[0][0]
 
         alembic(url, "downgrade", "0046")
         assert _consultar_sync(url,
