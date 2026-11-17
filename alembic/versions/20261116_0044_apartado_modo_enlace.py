@@ -1,7 +1,7 @@
 """Modo de las operaciones de duplicados: apartar o enlazar (#265).
 
 Revision ID: 0044
-Revises: 0041
+Revises: 0043
 
 Aditiva y reversible. Las operaciones existentes quedan como `apartar`.
 """
