@@ -137,9 +137,12 @@ class TestRegistroEnLaPagina:
         from zascarr.services import registro_biblioteca
         registro_biblioteca.reiniciar_para_pruebas()
         marcada = type("Fila", (), {"values": {"_library_adoption_done": True}})()
-        # `puede_registrar` + `evaluar` (valores crudos, último informe) + `estado` del fragmento.
-        session = FakeSession([FakeExecResult(marcada), FakeExecResult({"_library_adoption_done": True}),
-                               FakeExecResult(None), FakeExecResult(marcada)])
+        # `evaluar` (valores + último informe) + `puede_registrar` (marcador) + `_fragmento_registro`
+        # (evaluar otra vez + estado del marcador).
+        session = FakeSession([
+            FakeExecResult({}), FakeExecResult(None), FakeExecResult(marcada),
+            FakeExecResult({}), FakeExecResult(None), FakeExecResult(marcada),
+        ])
         with use_fake_session(session) as client:
             r = client.post("/ui/auditoria/adoptar")
         assert r.status_code == 200

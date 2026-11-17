@@ -269,8 +269,8 @@ class TestNadaRecogeFicherosNuevosDeLaBiblioteca:
         from zascarr.services.runtime_settings import RuntimeSettingsService
 
         async def hecha(_self, clave, *a, **k):
-            return clave == mod._MARCADOR_HECHO
-        monkeypatch.setattr(RuntimeSettingsService, "get_flag", hecha)
+            return (clave == mod._MARCADOR_HECHO, True)
+        monkeypatch.setattr(RuntimeSettingsService, "get_valor_sin_crear", hecha)
         monkeypatch.setattr(mod, "get_settings", lambda: SimpleNamespace(library_path=tmp_path))
         adopter = mod.LibraryAdopter(db=None)
         assert await adopter.estado() is mod.EstadoAdopcion.HECHA and await adopter.puede_registrar() is False
