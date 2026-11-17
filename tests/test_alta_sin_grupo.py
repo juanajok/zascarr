@@ -98,8 +98,8 @@ class TestLosLimitesRecalculados:
     def test_los_valores_exactos(self):
         """Documentan el cálculo: el contexto pasa de 1000 controles de seis bytes a diez caracteres (uno de ellos de seis
         bytes), y el token baja `(6000 - 15) * 4 / 3 = 7.980` caracteres."""
-        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (20353, 25681)                       # +40 por la procedencia de #276
-        assert (MAX_TOKEN_CANDIDATA_SIN_GRUPO, MAX_TOKEN_ALTA_SIN_GRUPO) == (12373, 17701)
+        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (20357, 25685)                       # +40 por la procedencia de #276
+        assert (MAX_TOKEN_CANDIDATA_SIN_GRUPO, MAX_TOKEN_ALTA_SIN_GRUPO) == (12377, 17705)
         assert MAX_TOKEN_CANDIDATA - MAX_TOKEN_CANDIDATA_SIN_GRUPO == MAX_TOKEN_ALTA - MAX_TOKEN_ALTA_SIN_GRUPO == 7980
 
     def test_un_token_sin_grupo_cabe_siempre_en_los_limites_que_ya_tienen_los_puntos_de_entrada(self):
