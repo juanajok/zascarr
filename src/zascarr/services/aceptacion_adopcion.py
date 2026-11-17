@@ -238,6 +238,10 @@ async def _revisar(db: AsyncSession, run_id: UUID, count: int, *, en_marcha: boo
     valores, marcador, tiene_marcador, aceptacion = await _leer_marcador(db)
     if tiene_marcador and marcador is not True:
         return await _resultado(db, run_id, count, 409, "corrupt_flag")
+    if not tiene_marcador and CLAVE_ACEPTACION in valores:
+        # Registro huérfano: GET y POST deben contar la misma historia. Sin una
+        # decisión explícita de reparación no se sobrescribe el registro.
+        return await _resultado(db, run_id, count, 409, "orphan_record")
     if tiene_marcador and marcador is True:
         if CLAVE_ACEPTACION in valores and aceptacion is None:
             return await _resultado(db, run_id, count, 409, "corrupt_record")

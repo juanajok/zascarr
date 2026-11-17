@@ -1,4 +1,4 @@
-{% from "_asistente_macros.html" import cabecera_vinculacion %}{% if oob_cabecera %}{{ cabecera_vinculacion(true, true) }}{% endif %}
+{% from "_asistente_macros.html" import cabecera_vinculacion %}{% if oob_cabecera %}<title>Resultado de la vinculación — ZascArr</title>{{ cabecera_vinculacion(true, true) }}{% endif %}
 {#- Lo que pasó al confirmar (#120). Serie y grupo salen del token firmado; la página, del formulario (solo presentación).
     Nunca se dice «completado» sin que el servicio lo haya confirmado, y un resultado parcial no se presenta como completo. -#}
 {% macro volver(clave, series_id, cursor_actual, inicio, texto) -%}
@@ -16,7 +16,7 @@
 
   {% if fallo %}
   <section class="card" aria-labelledby="res-fallo">
-    <h3 id="res-fallo" class="titulo-frase">{{ fallo.titulo }}</h3>
+    <h3 id="res-fallo" class="titulo-frase"{% if foco_resultado %} tabindex="-1" autofocus{% endif %}>{{ fallo.titulo }}</h3>
     {{ ui.aviso("warn", fallo.mensaje) }}
     <div class="vinc-acciones">
       {% if fallo.repetible and token %}
@@ -43,7 +43,7 @@
   {% else %}
   {% set t = informe.totales %}
   <section class="card" aria-labelledby="res-resultado">
-    <h3 id="res-resultado" class="titulo-frase">
+    <h3 id="res-resultado" class="titulo-frase"{% if foco_resultado %} tabindex="-1" autofocus{% endif %}>
       {% if informe.global_ == "vinculados_todos" %}Hecho: todos los archivos quedaron vinculados
       {% elif informe.global_ == "vinculados_parcialmente" %}Vinculación parcial: quedaron archivos sin vincular
       {% else %}No se vinculó ningún archivo{% endif %}

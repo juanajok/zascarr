@@ -696,7 +696,8 @@ class TestColorMixSoloDondeSeDeclara:
     def test_los_estados_de_la_hoja_usan_su_token(self):
         """Los fondos que eran mezclas (`.suggestion`, `.aviso.ok`, `.legal-notice-info`)."""
         fondos = {sel: valor for sel, prop, valor in declaraciones() if prop == "background"}
-        assert fondos[".suggestion"] == "var(--ok-bg)"
+        # 2026-11-17: la sugerencia es un panel neutro; el estado va en un chip.
+        assert fondos[".suggestion"] == "var(--paper)"
         assert fondos[".aviso.ok"] == "var(--ok-bg)"
         assert fondos[".legal-notice-info"] == "var(--info-bg)"
 

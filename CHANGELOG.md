@@ -7,6 +7,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **La descarga de registros pasa de Inicio a Estado (2026-11-17).** Inicio deja de
+  mostrar «Descargar logs» y su aviso, que competían con la tarea principal. El acceso vive
+  en **Estado → Registro de la aplicación**, con texto llano y la garantía de saneado de #369.
+  El endpoint `/ui/logs` no cambia.
 - **Ficha de serie: números primero y densidad (2026-11-14).** Los números pasan justo
   después de la cabecera; «Retirar de mi biblioteca» se pliega; «Otras fuentes» desaparece si
   no hay fuente; las rejillas de más de 30 números se colapsan con «Ver los N que faltan /
@@ -34,6 +38,88 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Ajustes → Transmission: carpeta de descargas y aviso de incoherencia (2026-11-17).**
+  Se puede editar la carpeta que ZascArr pasa a Transmission (ruta del **host**). «Probar
+  conexión» compara esa carpeta con la que Transmission tiene configurada y, si difieren,
+  avisa con las dos rutas (si la de ZascArr no existe en la Pi, los envíos fallarán).
+  Se valida que la ruta sea absoluta y sin «..».
+- **Cancelar la espera de «Buscar ahora» y buscar en lote (2026-11-17).** Durante la
+  búsqueda manual aparece «Cancelar búsqueda», que aborta la petición del navegador
+  (htmx:abort); avisa de que lo ya enviado no se deshace. Además, cada deseo buscable
+  tiene checkbox y la barra «Buscar seleccionados» lanza hasta 8 búsquedas seguidas y
+  rellena cada panel de resultados (OOB) sin cambiar el estado ni enviar descargas; la
+  ruta conserva el aviso legal y el tope avisa antes de buscar.
+ (feat(deseos): cancelar búsqueda en curso y buscar en lote (hasta 8))
+
+- **Logs persistidos, rotados y consultables (2026-11-17).** `LOG_DIR` guarda un fichero
+  JSONL por día (5 MiB, 3 backups por día, retención 30 días) con los eventos ya saneados.
+  `GET /ui/logs/visor` permite filtrar por fecha/hora/evento y descargar el subconjunto;
+  `/ui/logs` conserva el búfer si no hay ficheros. Ver
+  `docs/design/logs-persistencia-rotacion.md`.
+- **Logs estructurados y correlacionables (2026-11-17).** `LOG_LEVEL` y `LOG_JSON` ya tienen
+  efecto: JSON por defecto (consola legible si `LOG_JSON=false`), `timestamp` ISO-8601 UTC,
+  `level` una sola vez y `request_id`/`method`/`path` en cada petición (cabecera
+  `X-Request-ID`). Los resúmenes de ciclo incluyen `run_id` y `duracion_ms`; los hits de caché
+  y duplicados por archivo bajan a DEBUG para que INFO sea señal. La descarga `/ui/logs` deja
+  de repetir `level=info`. Benchmark y matriz en `docs/design/benchmark-logs-zascarr.md`.
+- **Cola/progreso de Deseados en la propia pantalla (2026-11-17).** Cuando hay deseos
+  en descarga, Deseados muestra un panel «Descargas en curso» que se refresca solo
+  (cada 30 s) y lee **una vez** Transmission por refresco: barra de progreso y
+  porcentaje para los torrents, estado para aMule (su web no expone progreso). Cierra
+  el hueco declarado en el benchmark de Deseados (§13) sin depender de abrir el cliente.
+
+
+
+- **Consistencia del registro de adopción (2026-11-17).** El marcador solo cuenta si es
+  exactamente `true`: un valor corrupto ya no se presenta como «biblioteca registrada» ni
+  habilita el registro incremental. Un registro de aceptación huérfano (sin marcador) se
+  rechaza con aviso y no se sobrescribe por un POST directo. Sin migración.
+
+- **Pasada de UI/UX en Deseados (2026-11-16).** Introducción más corta y «¿Cómo funciona?»
+  plegado (menos ruido antes de la acción), indicador «Buscando series…» al buscar,
+  resumen «N deseos · M en descarga», estado vacío con siguiente paso, nombres
+  accesibles en todos los botones de la fila, y panel de candidatos con cabecera
+  («N resultados — elige uno o varios»), scroll para listas largas, «Enviado» como chip,
+  botón de descarga deshabilitado mientras envía y apilado correcto en móvil.
+  DOWNLOADED ya dice «Descargado» (antes «Descargando…», que confundía con la descarga
+  en curso).
+
+- **Tomo recopilatorio: números que cubre (2026-11-16).** Al guardar un especial sin
+  número se puede indicar un rango (`1-12`, `1,3,5-7`): el tomo queda como publicación
+  sin número pero esos números **cuentan como poseídos**, dejan de ser huecos y no se
+  vuelven a buscar. Se guarda en `metadata.numeros_cubiertos` del archivo (sin
+  migración); `numeros_poseidos`/dashboard lo incluyen. Tope de 300 números y rangos
+  invertidos rechazados.
+- **«Ya lo tengo» para desechos descargados que el importador no enlaza (2026-11-16).**
+  Una descarga manual que acaba en `_Unsorted` (sin Issue) dejaba el deseo en
+  «Descargando…» para siempre, porque la comprobación automática solo lo cierra si ve
+  un fichero ligado a la serie importado después de añadir el deseo. Ahora esos deseos
+  muestran **«Ya lo tengo»**: lo marca como importado a mano, sin volver a buscarlo.
+ (feat(deseos): botón «Ya lo tengo» para descargas que el importador no enlaza)
+
+- **Especiales sin número en `Serie/Especiales/` (2026-11-16).** «Por revisar» ofrece
+  «Guardar como especial (sin número)» cuando la serie está reconocida: crea el Issue
+  sin número, enlaza el archivo y lo **mueve** a `…/Serie (Año)/Especiales/<archivo>`
+  (la carpeta se crea si no existe), saliendo de `_Unsorted`. Formatos: novela
+  gráfica, tomo, tapa dura u ómnibus. La ruta existía en el servicio pero no estaba
+  expuesta en la tarjeta.
+
+- **«Por revisar» sugiere la serie cuando el nombre no trae número (2026-11-16).**
+  Tomos, especiales y aniversarios (`Sector Lejano (Young Animals - ECC) [GVS]
+  [22 Aniversario CRG].cbz`) se quedaban en `_Unsorted` sin ninguna pista. El matcher
+  sigue sin inventar el número, pero guarda la serie reconocida como candidata: la
+  tarjeta de Pendientes la ofrece con un clic y basta escribir el número y pulsar
+  «Organizar» para mover el fichero a la carpeta de la serie (se crea si no existe).
+
+- **NFR-03: límite del cuerpo de las peticiones (2026-11-16).** Middleware ASGI que
+  rechaza con 413 los cuerpos de escritura que superan 256 KiB, comprobando `Content-Length`
+  y los bytes reales (chunked o cabecera falsa) antes de que FastAPI los parsee. Tope en
+  `config.py`, por `.env`, por encima del cuerpo válido máximo de #115 (~73,5 KiB).
+- **BL-A11Y: foco, avisos y título del asistente de vinculación (2026-11-16).**
+  «Marcar/Desmarcar todos» deja el foco en el recuento (sin región viva anidada); el resultado
+  inmediato y el fallo enfocan su encabezado; el resultado guardado y el inmediato titulan
+  «Resultado de la vinculación». El paso 3 pasa a «Vincular y ver el resultado» en todo el
+  recorrido. Sin JS propio ni cambios de contrato HTMX.
 - **BL-DUP3: resolver una carpeta repetida o contenida (2026-11-16).** «Duplicados»
   permite revisar una pareja de carpetas: muestra comunes idénticos, comunes con contenido
   distinto y lo que solo está en cada lado. Solo se apartan los comunes idénticos de la carpeta
@@ -135,11 +221,79 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **C6-O1: la ficha y el enriquecedor comparten la condición de Comic Vine (2026-11-17).**
+  La predicción de enlace exige ahora clave utilizable, no tener identidad externa (incluidas
+  Fandom) y respetar el plazo de reintento; usa las mismas condiciones SQL que el enriquecedor.
+  Una prueba PG de paridad falla si Python y SQL discrepan. Sin cambios en el flujo de enriquecimiento.
+- **Backoff propio tras un fallo de envío en Deseados (2026-11-17).** Un fallo del
+  cliente de descargas (`_send` sin referencia) ya no deja el deseo esperando el
+  cooldown global de 6 h junto con todos los demás: se reintenta a los 10 min, 30 min,
+  2 h y 6 h (tope), con dos columnas nuevas en `wishlist` (`retry_count` y
+  `next_retry_at`, migración 0046). Un envío correcto —automático, manual o extra—
+  limpia el backoff, y «Reintentar» lo salta; «sin resultados» y «candidato rechazado»
+  no lo activan porque no son fallos del cliente.
+ (feat(deseos): backoff persistente tras fallos de envío (10m/30m/2h/6h))
+
+- **«Buscar ahora» devolvía 500 (2026-11-17).** La etiqueta de resultados construía el
+  título con `_row(item)` sobre un `item` cargado sin relaciones precargadas; en async
+  eso lanza `MissingGreenlet`. Ahora la ruta no toca `item.series`/`item.issue`: usa la
+  consulta guardada (`search_query`) para la etiqueta, con prueba de regresión que falla
+  si se accede a una relación perezosa.
+
+- **El fallo de envío nombra al cliente que no responde (2026-11-17).** El deseo decía
+  «No se pudo enviar a ningún cliente de descarga», sin distinguir Transmission de aMule.
+  Ahora el motivo es «Transmission no respondió — se reintentará más tarde» o «aMule no
+  respondió — se reintentará más tarde» según el backend del candidato (el genérico queda
+  solo para un backend desconocido). Aplica al ciclo automático y a las descargas manuales.
+
+- **Transmission: si la carpeta configurada no existe, usa la suya (2026-11-16).**
+  Caso real: Ajustes apuntaba a `/media/downloads/comics`, que no existía en el host, y
+  Transmission rechazaba cada `torrent-add` en silencio. Ahora se registra
+  `transmission.download_dir_invalido` y se **reintenta sin `download-dir`** (carpeta por
+  defecto de Transmission), que el importador ve por el montaje de descargas. Si también
+  falla, queda `transmission.add_failed` con el motivo del RPC.
+
+- **Transmission: un `torrent-add` rechazado ya no se pierde en silencio (2026-11-16).**
+  `add_torrent` devolvía `None` sin registrar nada; el deseo solo decía «no se pudo
+  enviar». Ahora se registra `transmission.add_failed` con el resultado del RPC y las
+  claves de la respuesta (nunca la URL, que puede llevar passkey).
+- **Candidatos de Prowlarr duplicados (2026-11-16).** El mismo release aparecía dos
+  veces si lo listaban varios indexers (mismo título y tamaño, URL distinta). Se
+  conserva uno —el de más seeders— por título normalizado y tamaño; un tamaño
+  distinto es otra edición y se mantiene.
+
+- **Abreviaturas con puntos en el nombre del fichero (2026-11-16).** `DC K.O. #1…cbz`
+  se parseaba como serie «DC K O» y el matcher no encontraba la serie «DC K.O.»:
+  el fichero caía en `_Unsorted` aunque el deseo apuntara a ella. Ahora los puntos
+  entre letras sueltas («DC K.O.», «S.H.I.E.L.D.») se colapsan antes de separar por
+  puntos, así que quedan «DC KO»/«SHIELD» y el match exacto con `title_norm` funciona.
+- **Candidatos del foro duplicados (2026-11-16).** Un mismo fichero podía estar
+  enlazado dos veces en el tema con distinta codificación (`%20` frente a espacio):
+  se deduplicaba por URL cruda y aparecía dos veces en «Buscar ahora» (Sector Lejano).
+  Ahora la identidad es el **hash** `ed2k`/`btih`. Además se lee el tamaño declarado
+  en el enlace (la fila ya no muestra «0 Bytes»: muestra el tamaño o «tamaño
+  desconocido»).
+ (fix(foro): deduplicar candidatos por hash y mostrar el tamaño del enlace)
+
+- **Añadir a Deseados muestra la fila al instante (2026-11-16).** El botón dependía
+  de un `window.location.reload()` en un hook de htmx que no llegaba a ejecutarse:
+  el deseo se creaba, pero había que refrescar la página para verlo. Ahora la fila
+  se inserta al final de la lista (`hx-target="#wishlist-list"`, `beforeend`), el
+  botón queda «Añadido» y deshabilitado, y el texto de lista vacía desaparece solo.
+
 - **Candidatos del foro con el nombre de cada fichero (2026-11-16).** Un tema con
   varios enlaces `ed2k` (varios números/ediciones) pintaba todos los candidatos con el
   título del tema (27 filas idénticas). Ahora el título del candidato es el nombre del
   fichero que viaja en el enlace (y la fila muestra su formato real); el tema sigue
   como fuente `forum:crg`. En magnet se usa el parámetro `dn`.
+- **aMule: el enlace se envía con el formulario real de su web (2026-11-16).**
+  `add_ed2k_link` usaba `GET /amuleweb/?ed2k=…`, que en el phpUI de aMule no
+  existe: respondía HTTP 200 con una página de error de ~458 bytes y el enlace
+  nunca se encolaba (síntoma: «le doy descargar y en aMule no aparece nada»).
+  Ahora hace `POST /footer.php` con los campos del formulario real
+  (`ed2klink`, `selectcat`, `Submit`) y desescapa el nombre URL-encoded del
+  foro (`%20` → espacio), que es lo que haría el navegador.
+ (fix(amule): añadir enlaces con el formulario POST real de footer.php)
 
 - **Búsqueda del foro: el salto de redirección no cabía en el presupuesto (2026-11-16).**
   IPB responde `302` al POST de búsqueda y el salto de redirección volvía a esperar el

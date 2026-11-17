@@ -143,6 +143,12 @@ class TestAviso:
         html = render(env, '{% call ui.aviso("info") %}Mira <a href="/x">esto</a>{% endcall %}')
         assert any(e[0] == "a" and e[1]["href"] == "/x" for e in parsear(html).elementos)
 
+    def test_viva_false_quita_la_region_viva_sin_cambiar_el_aspecto(self, env):
+        html = render(env, '{{ ui.aviso("ok", "Mensaje", viva=false) }}')
+        cont = parsear(html).elementos[0]
+        assert cont[1].get("role") is None
+        assert "aviso" in clases(cont) and "ok" in clases(cont)
+
     def test_con_texto_plano_lo_escapa(self, env):
         html = render(env, '{{ ui.aviso("warn", t) }}', t="<b>ojo</b>")
         assert "<b>" not in html and "&lt;b&gt;" in html

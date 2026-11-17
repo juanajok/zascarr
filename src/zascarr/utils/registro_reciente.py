@@ -20,6 +20,8 @@ from typing import Any
 
 import structlog
 
+from zascarr.utils.saneado_logs import sanear_evento, sanear_texto
+
 MAX_EVENTOS = 500
 MAX_BYTES = 256 * 1024
 _SIN_REGISTROS = "No hay registros recientes de la aplicación.\n"
@@ -98,11 +100,12 @@ def capturar(_logger: Any, _metodo: str, evento: dict[str, Any]) -> dict[str, An
     (timestamp y nivel incluidos) y no altera la salida normal a stdout.
     """
     try:
-        copia = {str(k): _sanear_campo(str(k), v) for k, v in evento.items()}
+        saneado = sanear_evento(None, "", evento)
+        copia = {str(k): _sanear_campo(str(k), v) for k, v in saneado.items()}
         with _lock:
             _eventos.append(copia)
     except Exception:  # noqa: BLE001 — un fallo del búfer nunca tumba la petición
-        return evento
+        return {"event": "log.saneo_fallido"}
     return evento
 
 
@@ -138,7 +141,7 @@ def _linea(evento: dict[str, Any]) -> str:
     fecha = _texto(evento.get("timestamp") or datetime.now(UTC).isoformat())
     nivel = _texto(evento.get("log_level", "info")).upper()
     nombre = _texto(evento.get("event", "(sin evento)"))
-    omitidas = {"timestamp", "log_level", "event", "exc_info"}
+    omitidas = {"timestamp", "log_level", "level", "logger", "logger_name", "event", "exc_info"}
     extras = [
         f"{clave}={_texto(valor)}"
         for clave, valor in evento.items()
@@ -150,7 +153,7 @@ def _linea(evento: dict[str, Any]) -> str:
     excepcion = _excepcion(evento)
     if excepcion:
         linea += "\n" + excepcion
-    return _sin_secretos(linea)
+    return sanear_texto(_sin_secretos(linea))
 
 
 def texto_reciente() -> str:

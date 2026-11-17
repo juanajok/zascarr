@@ -33,6 +33,7 @@ FICHEROS_DEL_SCRIPT = (
     "docker-compose.yml",
     "scripts/_comun.sh",
     "scripts/_espacio.sh",            # _comun.sh la carga (#123b)
+    "scripts/_cerrojo.sh",            # _comun.sh la carga (BL-OPS1)
     "scripts/_credenciales.sh",       # _comun.sh la carga (ADR 0012)
     "scripts/_rutas.sh",
     "scripts/uninstall.sh",

@@ -403,7 +403,7 @@ class TestPoliticaDeBorrado:
 
 async def sembrar_a_0016(url: str) -> dict:
     """Datos reales del esquema ANTERIOR: serie, issues (con decisión manual), archivos, alias y wishlist."""
-    from zascarr.models import Wishlist, WishlistStatus
+    from zascarr.models import WishlistStatus
     motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
     fab = async_sessionmaker(motor, expire_on_commit=False)
     async with fab() as s:
@@ -417,7 +417,7 @@ async def sembrar_a_0016(url: str) -> dict:
         f_ignorado = File(id=uuid4(), file_path="/lib/_Unsorted/suelto.cbz", file_name="suelto.cbz",
                           file_format=FileFormat.CBZ, sha256_hash="b" * 64, review_dismissed=True,
                           metadata_={"match_status": "unsorted", "review_motivo": "colision"})
-        deseo = Wishlist(id=uuid4(), series_id=serie_id, status=WishlistStatus.WANTED)
+        deseo_id = uuid4()
         # La serie por SQL explícito: el modelo actual tiene `kind` (0027), que en 0016 no existe.
         await s.execute(text(
             "INSERT INTO series (id, title, tradition, start_year) "
@@ -452,7 +452,12 @@ async def sembrar_a_0016(url: str) -> dict:
             "INSERT INTO local_aliases (id, pattern_norm, series_id) "
             "VALUES (:id, :patron, :sid)"),
             {"id": str(uuid4()), "patron": "saga del faro", "sid": str(serie_id)})
-        s.add(deseo)
+        # Wishlist por SQL: el modelo actual tiene `retry_count`/`next_retry_at`
+        # (0046), que en 0016 no existen; el INSERT del ORM las incluiría.
+        await s.execute(text(
+            "INSERT INTO wishlist (id, series_id, status, priority) "
+            "VALUES (:id, :sid, :estado, 1)"),
+            {"id": str(deseo_id), "sid": str(serie_id), "estado": WishlistStatus.WANTED.value})
         await s.commit()
         ids = {"serie": serie_id, "manual": manual.id, "f_manual": f_manual.id, "f_ignorado": f_ignorado.id}
     await motor.dispose()

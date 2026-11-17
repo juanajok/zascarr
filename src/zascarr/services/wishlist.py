@@ -72,13 +72,34 @@ class WishlistService:
             raise ValueError("Item no encontrado")
         await self.db.delete(item)
 
+    async def marcar_conseguido(self, item_id: UUID) -> Wishlist:
+        """Cierra a mano un deseo que ya está en la biblioteca.
+
+        Para descargas manuales que el importador dejó en `_Unsorted` (sin
+        Issue): la comprobación automática no las verá ligadas a la serie y el
+        deseo se quedaría «Descargando…» para siempre (2026-11-16).
+        """
+        from datetime import UTC, datetime
+
+        item = await self.db.get(Wishlist, item_id)
+        if not item:
+            raise ValueError("Item no encontrado")
+        item.status = WishlistStatus.IMPORTED
+        item.downloaded_at = datetime.now(UTC)
+        item.last_error = None
+        await self.db.flush()
+        return item
+
     async def retry(self, item_id: UUID) -> Wishlist:
         """Reintento manual desde la UI: salta el cooldown de
-        process_wishlist limpiando last_searched_at."""
+        process_wishlist limpiando last_searched_at y, desde T-62, también el
+        backoff de envío (el coleccionista manda: no espera 10 min/6 h)."""
         item = await self.db.get(Wishlist, item_id)
         if not item:
             raise ValueError("Item no encontrado")
         item.status = WishlistStatus.WANTED
         item.last_searched_at = None
+        item.retry_count = 0
+        item.next_retry_at = None
         await self.db.flush()
         return item

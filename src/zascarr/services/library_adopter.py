@@ -79,6 +79,7 @@ from zascarr.services.importer import (
     _triage_and_match,
     serialize_candidates,
 )
+from zascarr.services.raices import FotoDeRaices, es_componente_de, raiz_de
 from zascarr.services.relacion_confirmada import (
     es_protegida,
     estado_de_relacion,
@@ -105,6 +106,8 @@ class EstadoAdopcion(StrEnum):
     HECHA = "hecha"                      # ya se ejecutó (marcador): aunque registrara 0
     CATALOGO_PREVIO = "catalogo_previo"  # ya hay series sin haber adoptado: no se ofrece
     SIN_TEBEOS = "sin_tebeos"            # la carpeta no existe o no contiene ningún cómic
+    MARCADOR_INVALIDO = "marcador_invalido"  # hay marcador pero no es exactamente `true`: no se autoriza nada
+    ACEPTACION_HUERFANA = "aceptacion_huerfana"  # registro de aceptación sin marcador: no se sobrescribe
 
 
 @dataclass
@@ -290,20 +293,46 @@ class LibraryAdopter:
         self._library: Path = get_settings().library_path
         self._incremental = False      # #326: lo fija `adopt(alcance=...)`; cambia cómo se trata una coincidencia ambigua de contenido
 
+    async def _foto_raices(self) -> FotoDeRaices:
+        """Foto del mapeo de raíces; los dobles sin tabla conservan una sola raíz."""
+        if isinstance(self._db, AsyncSession):
+            foto = await FotoDeRaices.cargar(self._db)
+            if foto.raices and any(str(self._library) == str(r.path) for r in foto.raices):
+                return foto
+        return FotoDeRaices.compatibilidad(path=self._library)
+
+    @staticmethod
+    def _rutas_habilitadas(foto: FotoDeRaices) -> list[Path]:
+        return [Path(r.path) for r in foto.raices if bool(getattr(r, "enabled", True))]
+
+    async def _recorrer(self) -> tuple[object, FotoDeRaices]:
+        """Recorre SOLO raíces habilitadas; una ausente no se crea ni detiene las demás."""
+        foto = await self._foto_raices()
+        rutas = self._rutas_habilitadas(foto)
+        if not rutas:
+            rutas = [self._library]
+        return await asyncio.to_thread(recorrer_comics, rutas, COMIC_EXTS), foto
+
     async def estado(self) -> EstadoAdopcion:
         """Por qué la adopción corre o no (V4: el Inicio necesita distinguirlo; `should_run` solo
         dice sí/no). Comprobado en este orden porque el marcador y el conteo de `series` son
         consultas baratas y listar la biblioteca no lo es."""
         from zascarr.services.runtime_settings import RuntimeSettingsService
 
-        if await RuntimeSettingsService(self._db).get_flag(_MARCADOR_HECHO):
-            return EstadoAdopcion.HECHA
+        presente, marcador = await RuntimeSettingsService(
+            self._db).get_valor_sin_crear(_MARCADOR_HECHO)
+        if presente:
+            if marcador is True:
+                return EstadoAdopcion.HECHA
+            return EstadoAdopcion.MARCADOR_INVALIDO
         total_series = (await self._db.execute(select(func.count(Series.id)))).scalar() or 0
         # E/S de disco (en red, cada llamada es una ida y vuelta): a un hilo. Se mira ANTES de decidir
         # CATALOGO_PREVIO: con catálogo previo solo se ofrece el registro si hay tebeos que registrar.
-        if not await asyncio.to_thread(self._library.exists):
+        foto = await self._foto_raices()
+        rutas = self._rutas_habilitadas(foto)
+        if not await asyncio.to_thread(lambda: any(p.is_dir() for p in rutas)):
             return EstadoAdopcion.SIN_TEBEOS
-        if await asyncio.to_thread(self._primer_comic) is None:
+        if await asyncio.to_thread(self._primer_comic, rutas) is None:
             return EstadoAdopcion.SIN_TEBEOS
         if total_series > 0:
             return EstadoAdopcion.CATALOGO_PREVIO
@@ -336,12 +365,12 @@ class LibraryAdopter:
 
     async def inventario(self) -> InventarioBiblioteca:
         """Qué hay en la carpeta frente a lo ya registrado, sin leer el contenido de ningún archivo."""
-        recorrido = await asyncio.to_thread(recorrer_comics, [self._library], COMIC_EXTS)
+        recorrido, foto = await self._recorrer()
         archivos = recorrido.archivos
         registradas = await self._rutas_registradas()
         en_disco = {str(a) for a in archivos}
-        prefijo = str(self._library).rstrip("/") + "/"
-        accesible = await asyncio.to_thread(self._library.is_dir)
+        rutas = self._rutas_habilitadas(foto)
+        accesible = await asyncio.to_thread(lambda: any(p.is_dir() for p in rutas))
         return InventarioBiblioteca(
             carpeta_accesible=accesible,
             ilegibles=recorrido.ilegibles,
@@ -354,16 +383,20 @@ class LibraryAdopter:
             nuevos=sum(1 for a in en_disco if a not in registradas),
             # Con un recorrido incompleto «no la veo» no es «ya no está»: no se fabrican bajas.
             registrados_sin_fichero=0 if recorrido.ilegibles else sum(
-                1 for r in registradas if r.startswith(prefijo) and r not in en_disco),
+                1 for r in registradas
+                if any(es_componente_de(r, p) for p in rutas) and r not in en_disco),
         )
 
-    def _primer_comic(self) -> Path | None:
-        for ext in COMIC_EXTS:
-            try:
-                return next(f for f in self._library.rglob(f"*{ext}")
-                            if ".zascarr" not in f.parts)
-            except StopIteration:
+    def _primer_comic(self, rutas: list[Path] | None = None) -> Path | None:
+        for raiz in (rutas or [self._library]):
+            if not raiz.is_dir():
                 continue
+            for ext in COMIC_EXTS:
+                try:
+                    return next(f for f in raiz.rglob(f"*{ext}")
+                                if ".zascarr" not in f.parts)
+                except StopIteration:
+                    continue
         return None
 
     async def adopt(
@@ -388,7 +421,7 @@ class LibraryAdopter:
         report = AdoptionReport(started_at=datetime.now(UTC))
 
         # Dedupe por inodo y recorrido en un hilo: ver `recorrer_comics`.
-        recorrido = await asyncio.to_thread(recorrer_comics, [self._library], COMIC_EXTS)
+        recorrido, foto = await self._recorrer()
         files = recorrido.archivos
         report.unreadable = recorrido.ilegibles
         report.files_scanned = len(files)
@@ -425,6 +458,9 @@ class LibraryAdopter:
                     en_lote.by_other_run += 1
                 else:
                     async with self._db.begin_nested():
+                        # La raíz se pasa por el atributo (no por argumento) para no cambiar
+                        # la firma que dobles antiguos de `_adopt_file` sustituyen.
+                        self._root_en_curso = raiz_de(path, foto.raices)
                         await self._adopt_file(path, en_lote, pistas.get(path.name))
             except IntegrityError as exc:
                 if _restriccion(exc) == "files_file_path_key":      # la registró otra ejecución a la vez
@@ -496,7 +532,7 @@ class LibraryAdopter:
         report = RescanReport(started_at=datetime.now(UTC), disparador=disparador)
 
         # Un solo paseo de rutas (sin leer contenido) en un hilo (CLAUDE.md §4).
-        recorrido = await asyncio.to_thread(recorrer_comics, [self._library], COMIC_EXTS)
+        recorrido, _foto = await self._recorrer()
         files = recorrido.archivos
         report.files_scanned = len(files)
         report.unreadable = recorrido.ilegibles
@@ -959,8 +995,11 @@ class LibraryAdopter:
         return "desconocido"
 
     async def _adopt_file(
-        self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None
+        self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None,
+        *, root=None,
     ) -> None:
+        if root is None:
+            root = getattr(self, "_root_en_curso", None)
         # El hash se lee de los bytes que hay AHORA: si el archivo cambia mientras se lee, ese hash ya no lo describe y NO se registra (se
         # compara tamaño y fecha antes y después; un cambio que conserve ambos no se detecta, ver docs/design/registro-incremental-326.md).
         antes = await asyncio.to_thread(path.stat)
@@ -993,11 +1032,13 @@ class LibraryAdopter:
             # coleccionista reorganizó quedaría sin registrar.
             ruta_previa, previa_ausente = outcome.recuperar.file_path, bool(outcome.recuperar.is_missing)
             await _reenlazar_fila(outcome.recuperar, outcome.tr, path)
+            if root is not None:
+                outcome.recuperar.root_id = root.id
             await self._db.flush()
             report.added_rows.append((outcome.recuperar.id, str(path), ruta_previa, previa_ausente))
             report.registered.append(f"{path.name} — reenlazado (recuperado)")
             report.relinked += 1
-            logger.info("library_adopter.reenlazado", path=str(path))
+            logger.info("library_adopter.reenlazado", file_id=str(outcome.recuperar.id))
             return
         if outcome.duplicate_of:
             report.duplicates.append(f"{path.name} — duplicado de {outcome.duplicate_of}, descartado")
@@ -1027,6 +1068,7 @@ class LibraryAdopter:
             file_path=str(path),
             file_name=path.name,
             file_format=FileFormat(path.suffix.lstrip(".").lower()),
+            root_id=root.id if root is not None else None,
             file_size_bytes=antes.st_size,
             # BL-R9: el stat guardado describe los bytes del hash guardado.
             file_mtime_ns=antes.st_mtime_ns,
@@ -1054,7 +1096,7 @@ class LibraryAdopter:
             report.unsorted.append(f"{path.name} (pendiente de revisar) — {motivo}")
         else:
             report.registered.append(f"{path.name} — serie sugerida, falta confirmar número y edición")
-        logger.info("library_adopter.registered", path=str(path), status=result.status)
+        logger.info("library_adopter.registered", file_id=str(file_rec.id), status=result.status)
 
     async def _persist_run(self, report: AdoptionReport, kind: str = "adoption") -> UUID:
         run = ImportRun(

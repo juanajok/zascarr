@@ -125,6 +125,12 @@ def _quitar_numero_de_aniversario(texto: str) -> str:
 # real ("#1.5", los paquetes decimales que el modelo sí soporta).
 DOT_SEPARATOR_PATTERN = re.compile(r"(?<!\d)\.|\.(?!\d)")
 
+# Punto entre letras sueltas: forma parte de una abreviatura («DC K.O.»,
+# «S.H.I.E.L.D.»), no es separador. Se colapsa ANTES de convertir puntos en
+# espacios; si no, la serie queda «DC K O» y no casa con «DC K.O.» de la DB
+# (title_norm «dc ko») — el fichero acaba en _Unsorted (bug 2026-11-16).
+_ABREV_DOTS = re.compile(r"(?<=\b[A-Za-z])\.(?=[A-Za-z]\b)")
+
 # Líneas editoriales de reedición que anteponen su propio nombre al de la
 # serie real, con " - " como separador ("Marvel Gold - La Patrulla-X
 # Original 1.cbr") — al revés que "Serie - Subtítulo". Sin esto, el split
@@ -556,6 +562,11 @@ def _buscar_numero(working: str) -> tuple[re.Match, bool] | None:
 def _limpiar_titulo_serie(texto: str) -> str:
     """Limpieza final del título: separadores, sufijos de edición y bordes."""
     series = texto.strip()
+    # Abreviaturas con puntos («DC K.O.», «S.H.I.E.L.D.»): el punto entre
+    # letras sueltas NO es separador; si se cambia por espacio queda
+    # «DC K O», que ya no casa con la serie «DC K.O.» (title_norm «dc ko»)
+    # y el fichero acaba en _Unsorted (bug real 2026-11-16: DC K.O. #1).
+    series = re.sub(r"(?<=\b[A-Za-z])\.(?=[A-Za-z]\b)", "", series)
     series = re.sub(r"[\.\-_]+", " ", series)
     series = re.sub(r"\s+", " ", series)
     series = re.sub(r"\s*[-\u2013\u2014]\s*$", "", series)
@@ -639,6 +650,7 @@ def parse_comic_filename(
     if numero_de_prefijo is not None:
         result.issue_number = numero_de_prefijo
 
+    working = _ABREV_DOTS.sub("", working)
     working = DOT_SEPARATOR_PATTERN.sub(" ", working)
     working = CREDITS_PATTERN.sub("", working, count=1)
     working = _quitar_credito_con_carpeta(working, carpeta)

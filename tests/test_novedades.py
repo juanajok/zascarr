@@ -70,8 +70,13 @@ def test_semana_iso_acepta_fecha_y_cae_en_lunes():
 async def test_cargar_apagada_no_consulta(monkeypatch):
     from zascarr.services import novedades
 
+    async def _sin_es(**kw):
+        from zascarr.services.novedades_es import ResultadoES
+        return ResultadoES()
+
     monkeypatch.setattr(novedades, "get_settings", lambda: SimpleNamespace(
         comicvine_enabled=False, comicvine_api_key="x"))
+    monkeypatch.setattr(novedades, "cargar_novedades_es", _sin_es)
     with pytest.raises(novedades.NovedadesApagadaError):
         await novedades.cargar_semana(SimpleNamespace(), date(2026, 11, 16))
 
@@ -178,3 +183,182 @@ def test_deduplica_la_misma_novedad():
                               series=[s], wishlist_series=set(),
                               hoy=date(2026, 11, 16))
     assert semana.total == 1
+
+
+def test_las_editoriales_españolas_entran_en_la_misma_semana():
+    s = _serie("Biblioteca Conan", cv=None, editorial="Panini")
+    item = {
+        "id": None, "issue_number": "", "cover_date": "2026-11-26",
+        "store_date": None, "site_detail_url": "https://panini.es/x",
+        "volume": {"id": None, "name": "Biblioteca Conan 24"},
+        "fuente": "Panini", "editorial": "Panini Comics",
+    }
+    semana = construir_semana([item], inicio=date(2026, 11, 23), series=[s],
+                              wishlist_series={s.id}, hoy=date(2026, 11, 16))
+    n = semana.novedades[0]
+    assert (n.fuente, n.editorial, n.numero, n.interes) == (
+        "Panini", "Panini Comics", "", True)
+    assert n.publicado is False
+
+
+def test_la_pantalla_muestra_fuente_espanola_y_sin_numero(monkeypatch):
+    from zascarr.main import app
+    from zascarr.services.novedades import Novedad
+    from zascarr.web import novedades as web
+
+    async def _cargar(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio, novedades=[Novedad(
+            cv_id=None, volumen_id=None, serie="Biblioteca Conan 24", numero="",
+            fecha=inicio, publicado=False, editorial="Panini Comics",
+            url="https://panini.es/x", interes=True, series_id=None,
+            fuente="Panini")], fuentes_fallidas=("Norma",))
+
+    monkeypatch.setattr(web, "cargar_semana", _cargar)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r = TestClient(app).get("/ui/novedades?semana=2026-11-23")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    assert "Panini" in r.text and "Biblioteca Conan 24" in r.text
+    assert "Biblioteca Conan 24 #" not in r.text
+    assert "No se pudo consultar: Norma" in r.text
+    assert "Norma y Panini" in r.text and "ECC" not in r.text
+
+
+async def test_encendida_sin_clave_y_sin_espanolas_no_devuelve_vacio(monkeypatch):
+    from zascarr.services import novedades
+    from zascarr.services.novedades_es import ResultadoES
+
+    async def _sin_es(**kw):
+        return ResultadoES()
+
+    monkeypatch.setattr(novedades, "get_settings", lambda: SimpleNamespace(
+        comicvine_enabled=True, comicvine_api_key=""))
+    monkeypatch.setattr(novedades, "cargar_novedades_es", _sin_es)
+    with pytest.raises(novedades.NovedadesApagadaError):
+        await novedades.cargar_semana(SimpleNamespace(), date(2026, 11, 16))
+
+
+def test_api_expone_las_fuentes_que_faltan(monkeypatch):
+    from zascarr.main import app
+    from zascarr.web import novedades as web
+
+    async def _cargar(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio, fuentes_fallidas=("Norma",))
+
+    monkeypatch.setattr(web, "cargar_semana", _cargar)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r = TestClient(app).get("/api/novedades?semana=2026-11-18")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    assert r.json()["fuentes_fallidas"] == ["Norma"]
+
+
+def test_el_prefijo_solo_casa_si_lo_que_sigue_es_numero_o_edicion():
+    s = _serie("Batman", cv=None)
+    inicio = date(2026, 11, 23)
+    def _item(titulo):
+        return {"id": None, "issue_number": "", "cover_date": "2026-11-26",
+                "site_detail_url": None, "volume": {"id": None, "name": titulo},
+                "fuente": "Panini", "editorial": "Panini Comics"}
+    semana = construir_semana([_item("Batman Beyond 1"), _item("Batman Universe"),
+                               _item("Batman 24")],
+                              inicio=inicio, series=[s], wishlist_series={s.id},
+                              hoy=date(2026, 11, 16))
+    por_titulo = {n.serie: n.interes for n in semana.novedades}
+    assert por_titulo == {"Batman Beyond 1": False, "Batman Universe": False,
+                          "Batman 24": True}
+
+
+def test_el_matching_real_de_norma_y_panini_no_cruza_vecinos():
+    series = [_serie("Batman", cv=None), _serie("Blade Runner 2019", cv=None),
+              _serie("El Depravado", cv=None), _serie("Cyberpunk 2077", cv=None),
+              _serie("Biblioteca Conan", cv=None)]
+    inicio = date(2026, 11, 23)
+    def _item(titulo):
+        return {"id": None, "issue_number": "", "cover_date": "2026-11-26",
+                "site_detail_url": None, "volume": {"id": None, "name": titulo},
+                "fuente": "Norma", "editorial": "Norma Editorial"}
+    titulos = ["Batman", "Batman 24", "Batman Beyond 1", "Batman Universe",
+               "Blade Runner 2019 [Ed. Integral]", "El Depravado [Ed. de lujo]",
+               "Cyberpunk 2077. Chrome",
+               "Biblioteca Conan. Conan el Bárbaro. 24"]
+    semana = construir_semana([_item(t) for t in titulos], inicio=inicio,
+                              series=series, wishlist_series={f.id for f in series},
+                              hoy=date(2026, 11, 16))
+    interesa = {n.serie: n.interes for n in semana.novedades}
+    assert interesa["Batman 24"] and interesa["Batman"]
+    assert not interesa["Batman Beyond 1"] and not interesa["Batman Universe"]
+    assert interesa["Blade Runner 2019 [Ed. Integral]"]
+    assert interesa["El Depravado [Ed. de lujo]"]
+    assert interesa["Cyberpunk 2077. Chrome"]
+    assert interesa["Biblioteca Conan. Conan el Bárbaro. 24"]
+
+
+def test_las_tarjetas_usan_portada_local_y_marcador_si_no_hay_serie(monkeypatch):
+    from uuid import uuid4
+
+    from zascarr.main import app
+    from zascarr.services.novedades import Novedad
+    from zascarr.web import novedades as web
+
+    sid = uuid4()
+
+    async def _cargar(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio, novedades=[
+            Novedad(cv_id=None, volumen_id=None, serie="Con portada", numero="1",
+                    fecha=inicio, publicado=False, editorial="Norma Editorial",
+                    url=None, interes=True, series_id=sid, fuente="Norma",
+                    tiene_portada=True),
+            Novedad(cv_id=None, volumen_id=None, serie="Sin portada", numero="",
+                    fecha=inicio, publicado=False, editorial="Panini Comics",
+                    url=None, interes=False, series_id=None, fuente="Panini"),
+        ])
+
+    monkeypatch.setattr(web, "cargar_semana", _cargar)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r = TestClient(app).get("/ui/novedades?semana=2026-11-23")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    assert f"/ui/series/{sid}/portada?v=2" in r.text
+    assert r.text.count('class="portada ') >= 2
+    assert 'class="portada-carga' not in r.text
+    assert "Sin portada" in r.text
+
+
+def test_si_la_serie_casa_pero_no_tiene_portada_no_se_pide_la_imagen(monkeypatch):
+    from uuid import uuid4
+
+    from zascarr.main import app
+    from zascarr.services.novedades import Novedad
+    from zascarr.web import novedades as web
+
+    sid = uuid4()
+
+    async def _cargar(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio, novedades=[Novedad(
+            cv_id=None, volumen_id=None, serie="Serie sin imagen", numero="1",
+            fecha=inicio, publicado=False, editorial="Norma Editorial", url=None,
+            interes=True, series_id=sid, fuente="Norma", tiene_portada=False)])
+
+    monkeypatch.setattr(web, "cargar_semana", _cargar)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r = TestClient(app).get("/ui/novedades?semana=2026-11-23")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert f"/ui/series/{sid}/portada" not in r.text
+    assert 'class="portada ' in r.text  # marcador de ZascArr
+
+
+def test_la_rejilla_no_pasa_de_tres_columnas():
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
+    assert "grid-template-columns: repeat(4" not in css
+    assert ".novedad-portada a:focus-visible" in css
