@@ -51,6 +51,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   ruta conserva el aviso legal y el tope avisa antes de buscar.
  (feat(deseos): cancelar búsqueda en curso y buscar en lote (hasta 8))
 
+- **Logs estructurados y correlacionables (2026-11-17).** `LOG_LEVEL` y `LOG_JSON` ya tienen
+  efecto: JSON por defecto (consola legible si `LOG_JSON=false`), `timestamp` ISO-8601 UTC,
+  `level` una sola vez y `request_id`/`method`/`path` en cada petición (cabecera
+  `X-Request-ID`). Los resúmenes de ciclo incluyen `run_id` y `duracion_ms`; los hits de caché
+  y duplicados por archivo bajan a DEBUG para que INFO sea señal. La descarga `/ui/logs` deja
+  de repetir `level=info`. Benchmark y matriz en `docs/design/benchmark-logs-zascarr.md`.
 - **Cola/progreso de Deseados en la propia pantalla (2026-11-17).** Cuando hay deseos
   en descarga, Deseados muestra un panel «Descargas en curso» que se refresca solo
   (cada 30 s) y lee **una vez** Transmission por refresco: barra de progreso y

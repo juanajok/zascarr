@@ -126,7 +126,9 @@ async def _ejecutar_tarea(fabrica, disparador: str) -> None:
                 revisados=informe.files_scanned,
                 nuevos=informe.nuevos_registrados + informe.nuevos_a_revisar,
                 re_triados=informe.re_triados,
-                desaparecidos=informe.desaparecidos)
+                desaparecidos=informe.desaparecidos,
+                duracion_ms=int((informe.finished_at - informe.started_at).total_seconds() * 1000)
+                if informe.finished_at and informe.started_at else None)
         except asyncio.CancelledError:
             _estado.fase = FaseRescan.INACTIVO
             _estado.causa = "CancelledError"
