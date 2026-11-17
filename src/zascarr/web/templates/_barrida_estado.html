@@ -1,0 +1,33 @@
+{% import "_componentes.html" as ui %}
+<div id="barrida-estado"
+     {% if barrida.en_curso %}hx-get="/ui/datos/barrida/estado" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {% if barrida.estado == "en_curso" %}
+    <p><strong>Barrida inicial en curso.</strong> Se procesan las series con ID en tandas de 20; puedes seguir usando ZascArr.</p>
+    {{ ui.progreso(barrida.procesadas, barrida.total, "Series procesadas en la barrida inicial") }}
+    <p class="caption">{{ barrida.procesadas }} de {{ barrida.total }} series · lote {{ barrida.lote }} · {{ barrida.recolectadas }} fichas · {{ barrida.aplicados }} campos completados · {{ barrida.conflictos }} conflictos.</p>
+  {% elif barrida.estado == "completada" %}
+    {{ ui.aviso("ok", "Barrida inicial terminada: " ~ barrida.recolectadas ~ " fichas, " ~ barrida.aplicados ~ " campos completados y " ~ barrida.conflictos ~ " conflictos para revisar.") }}
+    {% if barrida.terminada_en %}<p class="caption">Terminada el {{ barrida.terminada_en.strftime("%d-%m-%Y %H:%M") }}.</p>{% endif %}
+  {% elif barrida.estado == "error" %}
+    {{ ui.aviso("amber", barrida.error or "La barrida se ha detenido.") }}
+  {% else %}
+    <p class="muted">Recorre todas las series con ID, recolecta sus fichas y completa solo los huecos seguros. No resuelve conflictos ni cambia roles.</p>
+  {% endif %}
+
+  {% if barrida.series_conflictos %}
+  <details>
+    <summary>Conflictos para revisar ({{ barrida.series_conflictos|length }} series)</summary>
+    <ul class="audit-resumen">
+      {% for s in barrida.series_conflictos %}
+      <li><a href="/ui/series/{{ s.id }}/datos">{{ s.titulo }}</a> <span class="muted">· {{ s.campos }} campos</span></li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  {% if not barrida.en_curso %}
+  <form method="post" action="/ui/datos/barrida">
+    <button type="submit" class="btn primary">Barrida inicial completa</button>
+  </form>
+  {% endif %}
+</div>
