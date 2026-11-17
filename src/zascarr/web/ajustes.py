@@ -322,6 +322,22 @@ async def habilitar_raiz(
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
 
 
+@router.post("/raices/{root_id}/predeterminada", response_class=HTMLResponse)
+async def predeterminada_raiz(
+    request: Request, root_id: UUID, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.cambiar_por_defecto(db, root_id)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo elegir el disco por defecto.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
+
+
 @router.post("/raices/{root_id}/borrar", response_class=HTMLResponse)
 async def borrar_raiz(
     request: Request, root_id: UUID, db: AsyncSession = Depends(get_db),

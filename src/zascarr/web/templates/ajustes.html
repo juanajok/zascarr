@@ -374,6 +374,11 @@
         <p>{{ ui.chip("info", r.estado) }}{% if r.is_default %} {{ ui.chip("neutro", "Por defecto") }}{% endif %}
           <span class="ajustes-hint">{{ r.archivos }} archivos</span></p>
         <p class="ajustes-hint">Tradiciones: {{ r.tradiciones | join(", ") or "ninguna" }}</p>
+        {% if not r.is_default and r.enabled %}
+        <form hx-post="/ui/ajustes/raices/{{ r.id }}/predeterminada" hx-target="#resultado-discos" hx-swap="innerHTML">
+          <button type="submit" class="btn ghost sm">Usar para «sin clasificar»</button>
+        </form>
+        {% endif %}
         {% if not r.is_default %}
         <form hx-post="/ui/ajustes/raices/{{ r.id }}/habilitar" hx-target="#resultado-discos" hx-swap="innerHTML">
           <input type="hidden" name="enabled" value="{{ 'false' if r.enabled else 'true' }}">

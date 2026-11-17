@@ -1,3 +1,4 @@
+# ruff: noqa: E501, UP017
 """
 tests/test_web_auditoria.py
 
@@ -241,3 +242,24 @@ class TestRutasDelHost:
         assert r.status_code == 200
         assert self.HOST + "/Comics/Vacía" in r.text
         assert "/media/library" not in r.text
+
+
+def test_rutas_y_cuarentena_resuelven_la_raiz_correcta(monkeypatch, tmp_path):
+    """Corte C: la UI de duplicados no usa una raíz global."""
+    from types import SimpleNamespace
+
+    from zascarr.web import auditoria
+
+    a, b = tmp_path / "A", tmp_path / "B"
+    a.mkdir()
+    b.mkdir()
+    (a / "uno.cbz").write_bytes(b"x")
+    (b / "dos.cbz").write_bytes(b"x")
+    ajustes = SimpleNamespace(library_path=a, library_roots=f"{a},{b}",
+                              host_library_path="", host_library_dir="")
+    monkeypatch.setattr("zascarr.web.auditoria.get_settings", lambda: ajustes)
+    assert auditoria._ruta_relativa(str(a / "uno.cbz")) == "uno.cbz"
+    assert auditoria._ruta_relativa(str(b / "dos.cbz")) == "dos.cbz"
+    resumen = auditoria._resumen_cuarentena()
+    assert len(resumen["raices"]) == 2
+    assert all(r["archivos"] == 0 for r in resumen["raices"])
