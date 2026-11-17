@@ -7,15 +7,19 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from zascarr.models import (
     ComicTradition,
     IssueFormat,
+    MetadataSource,
     Series,
     Wishlist,
     WishlistOrigin,
+    WishlistPolicy,
     WishlistStatus,
 )
+from zascarr.services.politica import Querer, pendientes_de_buscar, querer_de_serie
 from zascarr.services.seguimiento import Hallazgo, crear_deseos, ejecutar_pasada
 
 
@@ -28,6 +32,9 @@ class _Res:
 
     def scalars(self):
         return self
+
+    def scalar(self):
+        return self._rows[0] if self._rows else None
 
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
@@ -49,6 +56,18 @@ class _Db:
 
     def add(self, obj):
         self.added.append(obj)
+
+
+class _CapturaDb(_Db):
+    """Como `_Db`, pero guarda el SQL compilado de cada consulta."""
+
+    def __init__(self, queue=None):
+        super().__init__(queue)
+        self.statements: list = []
+
+    async def execute(self, statement):
+        self.statements.append(statement)
+        return await super().execute(statement)
 
 
 def _serie() -> Series:
@@ -113,3 +132,69 @@ async def test_sin_series_seguidas_no_hay_red():
                 forum_enabled=False, prowlarr_enabled=False, prowlarr_api_key="")):
         informe = await ejecutar_pasada(db)  # type: ignore[arg-type]
     assert informe.deseos == 0 and informe.hallazgos == 0
+
+
+# ── #1017: aviso único y AC-16 (interacción con la política) ─────────────────
+
+
+async def test_aviso_una_vez_por_pasada_y_como_mucho_cinco():
+    """Aunque la pasada cree más deseos, el webhook recibe UNA llamada y como
+    mucho `seguimiento_max_avisos` novedades."""
+    serie = _serie()
+    hallazgos = [_hallazgo(serie, numero) for numero in range(1, 8)]
+    notifier = SimpleNamespace(
+        notify_novedades=AsyncMock(return_value=SimpleNamespace(ok=True)))
+    ajustes = SimpleNamespace(
+        forum_enabled=False, prowlarr_enabled=False, prowlarr_api_key="",
+        seguimiento_max_deseos=10, seguimiento_max_avisos=5,
+        seguimiento_retencion_dias=90)
+
+    with patch("zascarr.services.seguimiento.is_acknowledged", AsyncMock(return_value=True)), \
+            patch("zascarr.services.seguimiento.cargar_series_seguidas",
+                  AsyncMock(return_value=([serie], {}))), \
+            patch("zascarr.services.seguimiento._procesar_foro",
+                  AsyncMock(return_value=(hallazgos, 0, 0))), \
+            patch("zascarr.services.seguimiento.crear_deseos",
+                  AsyncMock(return_value=hallazgos)), \
+            patch("zascarr.services.seguimiento.purgar_vistos", AsyncMock()), \
+            patch("zascarr.services.seguimiento.get_settings", lambda: ajustes):
+        informe = await ejecutar_pasada(_Db(), foro=object(), notifier=notifier)
+
+    assert informe.deseos == 7
+    assert notifier.notify_novedades.await_count == 1
+    textos = notifier.notify_novedades.await_args.args[0]
+    assert len(textos) == 5
+    assert [numero for _, numero in textos] == [1, 2, 3, 4, 5]
+    assert informe.avisados == 5
+
+
+async def test_ac16_un_deseo_de_seguimiento_vivo_ocupa_su_numero():
+    """Un `SEGUIMIENTO` vivo del número 7 impide que la política genere un
+    `POLICY` para el 7 (misma regla que un deseo manual de número)."""
+    serie = _serie()
+    serie.total_issues = 10
+    serie.metadata_source = MetadataSource.COMIC_VINE.value
+    serie.wishlist_policy = WishlistPolicy.ALL
+    # (issue_id=None, numero=7) vivo + ningún número poseído.
+    db = _Db(queue=[_Res([(None, 7)]), _Res([])])
+
+    querer = await querer_de_serie(db, serie)
+
+    assert querer.computable
+    assert querer.numeros == frozenset(set(range(1, 11)) - {7})
+
+
+async def test_ac16_el_cupo_de_la_politica_no_cuenta_deseos_de_seguimiento():
+    """`pendientes_de_buscar` solo mira `origen='politica'`: un deseo de
+    seguimiento no consume el cupo por hora de la generación."""
+    serie = _serie()
+    db = _CapturaDb(queue=[_Res([]), _Res([0])])
+
+    await pendientes_de_buscar(db, serie, Querer(frozenset({1}), True))
+
+    sql = "\n".join(
+        str(statement.compile(dialect=postgresql.dialect(),
+                              compile_kwargs={"literal_binds": True}))
+        for statement in db.statements)
+    assert sql.count("origen = 'politica'") == 2
+    assert "seguimiento" not in sql

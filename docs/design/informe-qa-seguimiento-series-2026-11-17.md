@@ -245,3 +245,32 @@ incluye ya 324 passed / 1 skip.
 nuevo. Observaciones menores: el docstring de 0047 aún dice «retira … índice» aunque el índice vive
 en 0048 (solo documentación), y un tema con `ultima_actividad` no reconocida se marca visto sin
 abrir en primera pasada (fail-closed); ambas son deuda menor.
+
+## Cierre de la deuda #1017 (2026-11-17)
+
+**Alcance:** O-2, cobertura O-3, ratificación O-1 y humo del parser; sin migración nueva.
+
+- **O-2 — cerrado.** La frontera por serie se aplica también a temas ya vistos usando la actividad
+  previa (huella guardada; `visto_en` si la huella no es fecha). Regresión en
+  `tests/test_seguimiento_foro_pasada.py`: serie vieja + serie nueva + tema actualizado ⇒ solo el
+  histórico de la vieja; control positivo posterior a la frontera; fallback `visto_en`.
+- **O-1 — ratificado por el PO.** El foro sigue sin consultar `robots.txt` (postura M4), opt-in, con
+  acuse y aviso legal; queda escrito en la spec (§13) y en el benchmark (§12). No hay cambio de
+  comportamiento.
+- **O-3 — cobertura añadida.** `tests/test_seguimiento_prowlarr.py` (rotación/cupo, corte por
+  `publish_date`, cupo de deseos, una consulta por serie y pasada); aviso único y máximo 5 en
+  `tests/test_seguimiento_pasada.py`; AC-16 explícito (deseo `SEGUIMIENTO` vivo ocupa su número y no
+  consume el cupo de la política); humo del parser con
+  `tests/fixtures/foro/showforum_real_anonimizado.html`.
+- **O-4 — sigue abierta como deuda menor** (`crear_deseos` sin `ON CONFLICT`; job secuencial).
+
+**Suites ejecutadas (sin Postgres):**
+
+| Comando | Resultado |
+|---|---|
+| `pytest -q tests/test_seguimiento_pasada.py tests/test_seguimiento_foro.py tests/test_seguimiento_prowlarr.py tests/test_seguimiento_foro_pasada.py` | **26 passed** |
+| `pytest -q` (suites de seguimiento + web de la ficha) | **38 passed** |
+| `ruff check src/` | **All checks passed!** |
+
+El HTML real de `showforum=5` ya se validó en la Pi al cerrar #993; el fixture anonimizado fija el
+humo sin red. No se toca la Pi ni la biblioteca real.

@@ -283,3 +283,13 @@ La **Opción A** sigue siendo la elegida, pero el generador de deseos **no** sal
 `cargar_semana` (papel): sale de un adaptador de **fuentes** (foro E-links diarios + Prowlarr),
 con Novedades como calendario. Esto añade un parser de listado de foro, estado «visto» y un
 pequeño adaptador de Prowlarr; no cambia el flag ni el notificador.
+
+### Ratificación O-1 (2026-11-17): el foro sigue sin consultar `robots.txt`
+
+El PO **ratifica la postura actual** para cerrar la deuda #1017: la integración del foro es
+**opt-in** (apagada por defecto, URL y credenciales del operador, aviso legal y acuse) y **no**
+consulta `robots.txt`, tal como ya declaraba M4 (`FUENTES_CON_ROBOTS` no incluye `foro`). El
+benchmark deja constancia del `Disallow: /` observado y de que la decisión es consciente; no se
+añade una consulta de robots ni un aviso nuevo, y esta ratificación cubre el scraping periódico
+del job, no solo la búsqueda manual. Si en el futuro se decide lo contrario, `foro` debe entrar en
+el mapa de robots y el job debe tratar `AccesoProhibidoPorRobots` como parada, no como error.
