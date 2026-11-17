@@ -55,6 +55,12 @@ def restaurar_settings():
 
 class TestIndex:
 
+    def test_incluye_carpeta_de_descargas_de_transmission(self):
+        client = TestClient(app)
+        r = client.get("/ui/ajustes")
+        assert 'name="transmission_download_dir"' in r.text
+        assert "La ruta tal como la ve Transmission en la Pi" in r.text
+
     def test_pagina_responde_200_con_las_cuatro_integraciones(self):
         client = TestClient(app)
         r = client.get("/ui/ajustes")
