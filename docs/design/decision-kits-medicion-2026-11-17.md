@@ -7,7 +7,7 @@
 
 | Qué | Tamaño | Decisión |
 |---|---:|---|
-| `scripts/medicion/evaluacion_rar/` | 70 ficheros, 0,8 MiB | **Archivar documentación y retirar el código**; era un kit histórico del lector RAR, usaba `unrar` non-free solo para comparar y no es código de producción ni se ejecuta en CI. Se conserva el modo de uso y los resultados en `docs/design/mediciones/evaluacion-rar-archivada.md`. |
+| `scripts/medicion/evaluacion_rar/` | 70 ficheros, 0,8 MiB | **Archivar documentación y retirar el código**; era un kit histórico del lector RAR, usaba `unrar` non-free solo para comparar y no es código de producción ni se ejecuta en CI. Se conserva el modo de uso y los resultados en `docs/design/mediciones/evaluacion-rar-archivada.md`. Sus dos tests (`test_banco_rar2.py`, `test_censo_cabeceras_rar.py`) se retiran con él: solo probaban ese kit y ya no pueden importarlo. |
 | `scripts/medicion/evaluacion_cnv/` y censos | pequeño | **Mantener**: documenta la medición de conversión CBR→CBZ y no introduce dependencias de ejecución. |
 | `alembic/versions/__init__.py` | 0 bytes | **Borrar**: el directorio de migraciones no se importa como paquete; Alembic carga los scripts por ruta. |
 
