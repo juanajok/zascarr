@@ -1,9 +1,0 @@
-{% if not resultados %}
-<p class="no-results">Sin coincidencias.</p>
-{% else %}
-<ul class="series-list">
-  {% for nombre, url in resultados %}
-  <li><a href="{{ url }}">{{ nombre }}</a></li>
-  {% endfor %}
-</ul>
-{% endif %}
