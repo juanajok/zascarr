@@ -2,10 +2,15 @@
     `foco`: al pasar a «en marcha» el botón se deshabilita y el foco se lleva aquí (si no, se perdería). -#}
 <div id="copia-estado" data-estado="{{ v.estado }}"
      {% if foco %}tabindex="-1" autofocus{% endif %}
-     {% if v.en_marcha %}hx-get="/ui/copias/estado" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
+     {% if v.en_marcha or (vr is defined and vr.en_marcha) %}hx-get="/ui/copias/estado" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
   {% if mensaje_pedir %}{{ ui.aviso("amber", mensaje_pedir, rol="") }}{% endif %}
   {% if not mensaje_pedir or v.en_marcha %}
     {% if v.nivel %}{{ ui.aviso(v.nivel, v.mensaje, rol="") }}{% else %}<p>{{ v.mensaje }}</p>{% endif %}
   {% endif %}
   {% if v.nocturna_omitida %}<p class="muted">{{ v.nocturna_omitida }}</p>{% endif %}
+  {% if vr is defined and vr.estado != "sin_datos" %}
+  <div id="restauracion-estado" data-estado="{{ vr.estado }}">
+    {% if vr.nivel %}{{ ui.aviso(vr.nivel, vr.mensaje, rol="") }}{% else %}<p>{{ vr.mensaje }}</p>{% endif %}
+  </div>
+  {% endif %}
 </div>
