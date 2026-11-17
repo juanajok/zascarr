@@ -66,8 +66,9 @@ def _one_shot() -> Series:
 
 def test_razon_pura_no_bloquea_la_obra_unica():
     assert razon_de_no_calculable(_one_shot()) is None
-    assert estado_puro(_one_shot(), set()).tipo == "completa"
+    assert estado_puro(_one_shot(), set(), tiene_publicacion=True).tipo == "completa"
     assert estado_puro(_one_shot(), set()).faltantes == ()
+    assert estado_puro(_one_shot(), set(), tiene_publicacion=False).tipo == "no_calculable"
 
 
 async def test_huecos_obra_unica_completa_con_publicacion():
@@ -75,6 +76,14 @@ async def test_huecos_obra_unica_completa_con_publicacion():
     db = _Db(queue=[_Res([uuid4()])])
     huecos = await huecos_de_serie(db, serie)  # type: ignore[arg-type]
     assert huecos.computable and huecos.faltantes == []
+
+
+async def test_huecos_obra_unica_sin_archivo_no_se_da_por_completa():
+    serie = _one_shot()
+    db = _Db(queue=[_Res([])])
+    huecos = await huecos_de_serie(db, serie)  # type: ignore[arg-type]
+    assert huecos.faltantes == [] and not huecos.computable
+    assert "sin publicación con archivo" in (huecos.motivo or "")
 
 
 async def test_huecos_obra_unica_sin_publicacion_no_inventa_el_numero_uno():
