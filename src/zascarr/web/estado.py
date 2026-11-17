@@ -62,7 +62,11 @@ async def estado(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRe
             await db.rollback()
     # BL-OPS1: bloque «Copias de seguridad» (solo ficheros del host; nunca tumba la página).
     try:
-        contexto.update(await contexto_copias())
+        revision = None
+        if get_settings().auth_mode != "none":
+            from zascarr.services.restauracion import revision_actual
+            revision = await revision_actual(db)
+        contexto.update(await contexto_copias(revision_actual=revision))
     except Exception as exc:  # noqa: BLE001
         logger.warning("estado.copias_no_leidas", error=type(exc).__name__)
         contexto.update(copias_error=True)

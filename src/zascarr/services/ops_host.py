@@ -212,6 +212,15 @@ RESERVADOS_NO_EMITIDOS = frozenset({"status_write_failed"})
 
 _FRASE_NO_SE_PUDO = ("No se pudo pedir la copia. Inténtalo otra vez; si sigue igual, avisa a quien instaló ZascArr. "
                      "Mira Estado, arriba.")
+MENSAJES_RESTAURAR: dict[CodigoOps, str] = {
+    CodigoOps.COPIA_DESCONOCIDA: "Esa copia ya no está disponible. Actualiza la lista.",
+    CodigoOps.AUTENTICACION_NO_ACTIVADA: "Activa la contraseña en Ajustes → Seguridad antes de restaurar una copia.",
+    CodigoOps.PRUEBA_INVALIDA: "La contraseña no es correcta.",
+    CodigoOps.BLOQUEO_TEMPORAL: "Demasiados intentos seguidos. Espera unos minutos y vuelve a intentarlo.",
+    CodigoOps.LIMITE_RESTAURACIONES: "Has restaurado varias veces en las últimas horas. Prueba más tarde.",
+    CodigoOps.OPERACION_EN_CURSO: "ZascArr está haciendo otra tarea de mantenimiento. Espera a que termine.",
+}
+
 MENSAJES_PEDIR: dict[CodigoOps, str] = {
     CodigoOps.OPERACION_EN_CURSO: "ZascArr está haciendo otra tarea de mantenimiento. Espera a que termine.",
     CodigoOps.DEMASIADO_PRONTO: f"Acabas de pedir una copia. Prueba otra vez dentro de {ENTRE_COPIAS_S // 60} minutos.",
@@ -397,6 +406,12 @@ def leer_copias(settings: Settings, ahora: int | None = None) -> list[dict] | No
         creada, tamano = _epoch(item.get("creada_epoch")), _epoch(item.get("bytes"))
         if creada is None or tamano is None:
             continue
-        salida.append({"creada_epoch": creada, "fecha": hora_llana(creada, ahora), "tamano": tamano_llano(tamano),
-                       "fuera_del_disco": item.get("fuera_del_disco") is True})
+        salida.append({
+            "id": item.get("id") if isinstance(item.get("id"), str) else "",
+            "revision": item.get("revision") if isinstance(item.get("revision"), str) else "",
+            "verificada": item.get("verificada") is True,
+            "creada_epoch": creada, "fecha": hora_llana(creada, ahora),
+            "tamano": tamano_llano(tamano),
+            "fuera_del_disco": item.get("fuera_del_disco") is True,
+        })
     return salida
