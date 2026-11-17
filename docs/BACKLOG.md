@@ -1675,6 +1675,14 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
 
 **Notas de proceso:**
 
+- **Huecos del benchmark de Deseados cerrados (2026-11-17):** #973 (panel de cola/progreso),
+  #983 (cancelar la espera + buscar en lote, máx. 8), #984 (carpeta de Transmission
+  editable y aviso al probar; §5.8 con SecOps favorable sobre `9b91a826`) y #985
+  (backoff 10 min/30 min/2 h/6 h tras fallos de envío). Informes: QA
+  `docs/design/informe-qa-lote-cancelar-2026-11-17.md`, QA
+  `docs/design/informe-qa-backoff-2026-11-17.md` y SecOps
+  `docs/design/secops-aviso-carpeta-2026-11-17.md`. Deuda menor aceptada: índice sobre
+  `next_retry_at`, revalidación de estado en el lote y cancelación solo de navegador.
 - **Benchmark de Deseados cerrado (2026-11-16, nivel 2 §13):** ficha en
   `docs/design/benchmark-DESEADOS-2026-11-16.md` con Sonarr 4.0.20, Radarr 7.0.3,
   Kapowarr 1.3.2, Mylar3 0.8.3 y Suwayomi 2.4.2366 (matriz ponderada, IGUALAR/MEJORAR

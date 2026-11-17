@@ -138,7 +138,7 @@ ranking para copiar: las referencias tienen unidades y fuentes distintas.
 - Cancelar una búsqueda a mitad de petición — **cerrado** en #983 (aborta la espera del navegador; el servidor puede terminar la petición ya lanzada).
 - Buscar en lote varios deseos seleccionados — **cerrado** en #983 (máx. 8 por tanda).
 - Aviso de carpeta de descargas distinta al probar la conexión — **cerrado** en #984 (aviso con las dos rutas; queda pendiente comprobar la existencia real en el host, imposible desde el contenedor).
-- Reintento automático/backoff tras un fallo de envío — **cerrado** en esta PR (10 min → 30 min → 2 h → 6 h; «Reintentar» lo salta).
+- Reintento automático/backoff tras un fallo de envío — **cerrado** en #985 (10 min → 30 min → 2 h → 6 h; «Reintentar» lo salta; el envío extra auxiliar no programa backoff).
 
 ## 7. Coste en la Pi y licencias
 
