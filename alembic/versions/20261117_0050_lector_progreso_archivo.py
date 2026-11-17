@@ -1,7 +1,7 @@
 """BL-LEC1 (#824): qué archivo se estaba leyendo en `reading_progress`.
 
-Revision ID: 0049
-Revises: 0048
+Revision ID: 0050
+Revises: 0049
 
 Aditiva y reversible. `file_id` es opcional: los progresos antiguos no lo tienen.
 No cambia la unicidad por `issue_id`.
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0049"
-down_revision = "0048"
+revision = "0050"
+down_revision = "0049"
 branch_labels = None
 depends_on = None
 
