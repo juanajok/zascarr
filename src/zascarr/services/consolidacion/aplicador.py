@@ -6,7 +6,7 @@ la escritura.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -115,16 +115,85 @@ class Aplicador:
         )
         await self._db.execute(stmt)
 
-    async def aplicar(self, plan: PlanConsolidacion) -> ResultadoAplicacion:
+    async def aplicar(
+        self,
+        plan: PlanConsolidacion,
+        *,
+        decisiones: dict[str, str] | None = None,
+        solo_campos: set[str] | None = None,
+    ) -> ResultadoAplicacion:
+        """Aplica el plan fresco; una decisión explícita puede elegir un candidato.
+
+        `decisiones` mapea campo → fuente. Solo se usan para conflictos que la
+        persona ha resuelto en la vista previa; el resto sigue las reglas del
+        motor.
+        """
         serie = await self._series_bloqueada(UUID(plan.entity_id))
         contexto = await cargar_contexto(self._db, UUID(plan.entity_id))
         fresco = contexto.plan()
         if fresco.huella != plan.huella:
             raise PlanCaducadoError("La ficha cambió desde la vista previa; no se ha escrito nada.")
+        elegidas = decisiones or {}
         aplicados: list[str] = []
-        for cambio in fresco.cambios_aplicables():
+        for cambio in fresco.cambios:
+            if solo_campos is not None and cambio.campo not in solo_campos:
+                continue
+            if cambio.campo in elegidas:
+                fuente = elegidas[cambio.campo]
+                candidato = next(
+                    (c for c in cambio.candidatos if c.fuente == fuente), None)
+                if candidato is None:
+                    continue
+                cambio = replace(cambio, seleccionado=candidato)
+            elif cambio.estado not in {"anadir", "actualizar_misma_fuente"}:
+                continue
             if await self._aplicar_cambio(serie, cambio):
                 await self._marcar(serie, cambio)
                 aplicados.append(cambio.campo)
         await self._db.flush()
         return ResultadoAplicacion(str(serie.id), len(aplicados), tuple(aplicados))
+
+    async def registrar_descarte(self, series_id: UUID, campo: str, fuente: str,
+                                 valor: object | None = None) -> None:
+        """Registra «mantener el mío» para que el conflicto no reaparezca."""
+        serie = await self._series_bloqueada(series_id)
+        contexto = await cargar_contexto(self._db, series_id)
+        cambio = next((c for c in contexto.plan().cambios if c.campo == campo), None)
+        candidato = next((c for c in (cambio.candidatos if cambio else ())
+                          if c.fuente == fuente), None)
+        valor_descartado = valor if valor is not None else (
+            candidato.valor if candidato is not None else None)
+        actual = (cambio.valor_actual if cambio is not None else None)
+        previo = (await self._db.execute(
+            select(FieldProvenance).where(
+                FieldProvenance.entity_type == "series",
+                FieldProvenance.entity_id == series_id,
+                FieldProvenance.field == campo,
+            )
+        )).scalar_one_or_none()
+        previo_valor = previo.value if previo is not None and isinstance(previo.value, dict) else {}
+        descartados = dict(previo_valor.get("descartados") or {})
+        descartados[fuente] = {
+            "valor_descartado": valor_descartado,
+            "resuelto_en": datetime.now(UTC).isoformat(timespec="seconds"),
+            "motivo": "usuario_mantiene_actual",
+        }
+        dato = dict(previo_valor)
+        dato.update({
+            "valor": actual,
+            "descartados": descartados,
+            "confianza": previo_valor.get("confianza", "desconocido"),
+            "ambito": (getattr(cambio, "ambito", None).value if cambio
+                       else previo_valor.get("ambito")),
+        })
+        stmt = pg_insert(FieldProvenance).values(
+            entity_type="series", entity_id=serie.id, field=campo,
+            source=(previo.source if previo is not None else "desconocido"),
+            value=dato, fetched_at=datetime.now(UTC),
+            locked=campo in (serie.locked_fields or []),
+        ).on_conflict_do_update(
+            index_elements=["entity_type", "entity_id", "field"],
+            set_={"value": dato, "fetched_at": datetime.now(UTC)},
+        )
+        await self._db.execute(stmt)
+        await self._db.flush()

@@ -25,9 +25,11 @@ from sqlalchemy.orm import selectinload
 
 from zascarr.api.series import huecos_de_serie, numeros_poseidos
 from zascarr.config import get_settings
+from zascarr.core.consolidacion.ambitos import CAMPOS_SERIE, ROLES, rol_de
 from zascarr.database import get_db
 from zascarr.models import (
     Collection,
+    FieldProvenance,
     File,
     Issue,
     MotivoRar,
@@ -52,6 +54,8 @@ from zascarr.services.coleccion import (
 from zascarr.services.colecciones import colecciones_de_serie, etiqueta_politica
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
+from zascarr.services.consolidacion.aplicador import Aplicador, PlanCaducadoError
+from zascarr.services.consolidacion.consulta import cargar_contexto
 from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.discrepancias import (
     clave_valida,
@@ -565,6 +569,196 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
     # #233/BL-R4: el aviso de una propuesta sin aplicar y sus acciones no se sirven de caché.
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
+
+
+# ── CCM (#1002): «Completar datos» y roles de las fuentes ──────────────────────────────────────
+
+_ETIQUETAS_CCM = {
+    "title": "Título",
+    "start_year": "Año de inicio",
+    "end_year": "Año de fin",
+    "publisher_name": "Editorial",
+    "language": "Idioma",
+    "total_issues": "Números en total",
+    "description": "Sinopsis",
+}
+_FUENTE_ID = {
+    "comic_vine": "comic_vine_id",
+    "anilist": "anilist_id",
+    "tebeosfera": "tebeosfera_slug",
+    "gcd": "gcd_id",
+    "metron": "metron_id",
+    "open_library": "open_library_id",
+    "fandom_dc": "fandom_dc_slug",
+    "fandom_marvel": "fandom_marvel_slug",
+}
+_ESTADOS_CCM = {
+    "anadir": "Listo para añadir",
+    "actualizar_misma_fuente": "La fuente corrigió su dato",
+    "acuerdo": "Las fuentes coinciden",
+    "conservar": "Se conserva el actual",
+    "conflicto": "Hay discrepancia",
+    "bloqueado": "Protegido",
+    "sin_dato": "Sin datos",
+}
+
+
+async def _procedencia_ccm(db: AsyncSession, series_id: UUID) -> tuple[dict, dict]:
+    filas = (await db.execute(
+        select(FieldProvenance).where(
+            FieldProvenance.entity_type == "series",
+            FieldProvenance.entity_id == series_id,
+        )
+    )).scalars().all()
+    return {f.field: (f.value if isinstance(f.value, dict) else None) for f in filas}, {
+        f.field: f for f in filas}
+
+
+def _roles_ccm(series: Series, contexto) -> list[dict]:
+    con_ficha = {r.fuente for r in contexto.registros}
+    salida = []
+    for fuente, columna in _FUENTE_ID.items():
+        if not getattr(series, columna, None):
+            continue
+        salida.append({
+            "fuente": fuente,
+            "nombre": NOMBRE_DE_FUENTE.get(fuente, fuente),
+            "rol": rol_de(series, fuente).value,
+            "tiene_ficha": fuente in con_ficha,
+        })
+    return salida
+
+
+async def _datos_ccm(db: AsyncSession, series_id: UUID) -> dict:
+    contexto = await cargar_contexto(db, series_id)
+    prov, filas = await _procedencia_ccm(db, series_id)
+    plan = contexto.plan()
+    serie = contexto.serie
+    return {
+        "series": serie,
+        "plan": plan,
+        "roles": _roles_ccm(serie, contexto),
+        "procedencia": procedencia_de_serie(serie, field_provenance=prov),
+        "procedencia_filas": filas,
+        "etiquetas": _ETIQUETAS_CCM,
+        "estados": _ESTADOS_CCM,
+        "huecos": tuple(c for c in plan.cambios if c.estado == "anadir"),
+        "conflictos": tuple(c for c in plan.cambios if c.estado == "conflicto"),
+        "bloqueados": tuple(c for c in plan.cambios if c.estado == "bloqueado"),
+        "sin_dato": tuple(c for c in plan.cambios if c.estado == "sin_dato"),
+        "con_ficha": bool(contexto.registros),
+        "nombres_fuente": NOMBRE_DE_FUENTE,
+    }
+
+
+def _redirect_datos(series_id: UUID, *, guardado: str = "", elegido: str = "",
+                    error: str = "") -> RedirectResponse:
+    destino = f"/ui/series/{series_id}/datos"
+    if guardado:
+        destino += f"?guardado={guardado}"
+    elif elegido:
+        destino += f"?elegido={elegido}"
+    elif error:
+        destino += f"?error={error}"
+    return RedirectResponse(destino, status_code=303)
+
+
+@router.get("/{series_id}/datos", response_class=HTMLResponse)
+async def datos_serie(series_id: UUID, request: Request,
+                      guardado: str = Query(default=""),
+                      elegido: str = Query(default=""),
+                      error: str = Query(default=""),
+                      db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    try:
+        contexto = await _datos_ccm(db, series_id)
+    except Exception as exc:  # noqa: BLE001 — 404 controlado para una serie inexistente
+        if exc.__class__.__name__ == "SerieNoEncontradaError":
+            raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+        raise
+    avisos = {
+        "caducado": "La ficha cambió desde que abriste esta pantalla. No se ha cambiado nada; vuelve a cargarla.",
+        "sin_ficha": "No hay fichas de fuentes asociadas para esta serie.",
+    }
+    contexto.update({
+        "guardado": f"Guardados {guardado} cambios." if guardado.isdigit() and guardado != "0" else "",
+        "elegido": f"Elegido el dato de {NOMBRE_DE_FUENTE.get(elegido, elegido)}." if elegido else "",
+        "error": avisos.get(error, ""),
+    })
+    respuesta = templates.TemplateResponse(request, "datos_serie.html", contexto)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/datos/aplicar", response_class=HTMLResponse)
+async def datos_aplicar(series_id: UUID, db: AsyncSession = Depends(get_db)):
+    try:
+        contexto = await _datos_ccm(db, series_id)
+        resultado = await Aplicador(db).aplicar(contexto["plan"])
+        await db.commit()
+    except PlanCaducadoError:
+        await db.rollback()
+        return _redirect_datos(series_id, error="caducado")
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ == "SerieNoEncontradaError":
+            await db.rollback()
+            raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+        raise
+    return _redirect_datos(series_id, guardado=str(resultado.aplicados))
+
+
+@router.post("/{series_id}/datos/elegir", response_class=HTMLResponse)
+async def datos_elegir(series_id: UUID, campo: str = Form(...), fuente: str = Form(...),
+                       db: AsyncSession = Depends(get_db)):
+    if campo not in CAMPOS_SERIE:
+        raise HTTPException(status_code=400, detail="Campo no válido")
+    try:
+        contexto = await _datos_ccm(db, series_id)
+        resultado = await Aplicador(db).aplicar(
+            contexto["plan"], decisiones={campo: fuente}, solo_campos={campo})
+        await db.commit()
+    except PlanCaducadoError:
+        await db.rollback()
+        return _redirect_datos(series_id, error="caducado")
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ == "SerieNoEncontradaError":
+            await db.rollback()
+            raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+        raise
+    if not resultado.campos:
+        return _redirect_datos(series_id, error="sin_ficha")
+    return _redirect_datos(series_id, elegido=fuente)
+
+
+@router.post("/{series_id}/datos/mantener", response_class=HTMLResponse)
+async def datos_mantener(series_id: UUID, campo: str = Form(...), fuente: str = Form(...),
+                          db: AsyncSession = Depends(get_db)):
+    if campo not in CAMPOS_SERIE:
+        raise HTTPException(status_code=400, detail="Campo no válido")
+    try:
+        await Aplicador(db).registrar_descarte(series_id, campo, fuente)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ == "SerieNoEncontradaError":
+            await db.rollback()
+            raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+        raise
+    return _redirect_datos(series_id, guardado="0")
+
+
+@router.post("/{series_id}/datos/rol", response_class=HTMLResponse)
+async def datos_rol(series_id: UUID, fuente: str = Form(...), rol: str = Form(...),
+                    db: AsyncSession = Depends(get_db)):
+    if fuente not in _FUENTE_ID or rol not in ROLES:
+        raise HTTPException(status_code=400, detail="Rol no válido")
+    serie = await _serie_o_404(db, series_id)
+    metadata = dict(serie.metadata_ or {})
+    roles = dict(metadata.get("vinculos_rol") or {})
+    roles[fuente] = rol
+    metadata["vinculos_rol"] = roles
+    serie.metadata_ = metadata
+    await db.flush()
+    await db.commit()
+    return _redirect_datos(series_id)
 
 
 # ── BL-R4 (#233): «Mantener lo mío» sobre una discrepancia concreta ───────────────────────────────
