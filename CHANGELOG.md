@@ -51,6 +51,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   ruta conserva el aviso legal y el tope avisa antes de buscar.
  (feat(deseos): cancelar búsqueda en curso y buscar en lote (hasta 8))
 
+- **Logs persistidos, rotados y consultables (2026-11-17).** `LOG_DIR` guarda un fichero
+  JSONL por día (5 MiB, 3 backups por día, retención 30 días) con los eventos ya saneados.
+  `GET /ui/logs/visor` permite filtrar por fecha/hora/evento y descargar el subconjunto;
+  `/ui/logs` conserva el búfer si no hay ficheros. Ver
+  `docs/design/logs-persistencia-rotacion.md`.
 - **Logs estructurados y correlacionables (2026-11-17).** `LOG_LEVEL` y `LOG_JSON` ya tienen
   efecto: JSON por defecto (consola legible si `LOG_JSON=false`), `timestamp` ISO-8601 UTC,
   `level` una sola vez y `request_id`/`method`/`path` en cada petición (cabecera

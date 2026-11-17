@@ -388,6 +388,13 @@ class Settings(BaseSettings):
     app_version: str = "1.15.1"
     log_level: str = "INFO"
     log_json: bool = True
+    # Persistencia/rotación propia para consultar logs anteriores desde la UI.
+    # En Docker se monta `${ZASCARR_DATA_DIR}/logs`; si no existe/es escribible,
+    # la app sigue usando solo stdout y el búfer en memoria.
+    log_dir: Path = Field(default=Path("/config/logs"))
+    log_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    log_backups: int = Field(default=3, ge=0, le=50)
+    log_retention_days: int = Field(default=30, ge=1, le=3650)
     debug: bool = False
 
     @model_validator(mode="after")
