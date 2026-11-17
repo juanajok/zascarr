@@ -154,3 +154,47 @@ seguimiento,series}.py`, `web/{pendientes,series}.py`, plantillas
 `_obra_unica_serie.html`, `_seguimiento_serie.html`, `_tarjeta_pendiente.html`,
 `series_detail.html` y 7 ficheros de pruebas. Sin `web/ajustes.py` ni
 `services/seguridad.py`.
+
+---
+
+## Addendum — re-dictamen de B1 sobre `fb5e07cd` (2026-11-17)
+
+**SHA corregido:** `fb5e07cdca0405ca4db3bfd7f17eba49e3de4ec4`. Diff desde `413f3902`:
+`huecos_de_serie` exige `Issue` + `File.is_missing=false`; `condicion_estado_coleccion` y
+`ids_por_estado` usan el mismo join a `files`; `estado_puro` recibe `tiene_publicacion` explícito;
+tests ajustados. Sin otros cambios de comportamiento.
+
+### B1 — cerrado (PG real)
+
+Sonda independiente con `zascarr_qa_oneshot_test` **4/4 OK**:
+
+* ONE_SHOT + `Issue` **sin File** ⇒ `Huecos(computable=False, motivo="sin publicación con archivo
+  disponible…")`, `estado_de_coleccion=no_calculable`, **no** sale en `ids_por_estado("completa")`
+  ni en `condicion_estado_coleccion("completa")`; **sí** en `no_calculable`;
+* ONE_SHOT + `Issue` + `File(is_missing=False)` ⇒ completa, en `ids_por_estado("completa")` y en
+  el SQL de completa;
+* sin `Issue` ⇒ no calculable, no completa;
+* `estado_puro(..., tiene_publicacion=False)` ⇒ no calculable; `True` ⇒ completa.
+
+La ficha usa la ruta async (`estado_de_coleccion`), que ahora aplica la regla correcta.
+`test_migracion_oneshot_pg.py` sigue pasando con PG real (**1 passed**, 7,30 s; 0049 sin cambios:
+una cabeza, enum, sin DML/columnas).
+
+### Regresión
+
+* Suite completa 1.ª pasada: **7779 passed / 2398 skipped / 0 fallos** (388,04 s).
+* Segunda pasada: **7779 passed / 2398 skipped / 0 fallos** (352,48 s).
+* Suites tocadas: **274 passed, 3 skipped** (17,57 s); `ruff check src/` limpio.
+* Normal/anual/especial y migración 0049 sin cambios; el resto de la aceptación de #1027
+  (alta sin `#1`, enlace sin mover, toggle, selector, política/seguimiento) se mantiene verificado.
+
+### Deuda menor que permanece
+
+* `estado_puro` conserva `tiene_publicacion=True` por defecto para no romper llamadas antiguas; un
+  consumidor que lo omita seguiría diciendo «completa». **No hay usos en producción** (solo tests),
+  pero conviene que el valor por defecto sea explícito en futuras llamadas.
+* El caso `Issue` sin `File` ya tiene prueba; sigue sin probarse un `File` con `is_missing=True` en
+  PG (misma rama) y la consulta real del selector.
+* NOT RUN: navegador/320 px, ComicInfo y backfill (fuera de este corte).
+
+**Veredicto actualizado: APTO para `fb5e07cd`.** B1 queda cerrado; no aparece bloqueante nuevo.
