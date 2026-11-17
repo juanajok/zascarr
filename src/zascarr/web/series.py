@@ -1977,6 +1977,31 @@ async def portada_numero_hd(series_id: UUID, issue_id: UUID, request: Request,
     return cached_image_response(request, datos, "image/jpeg", etag)
 
 
+@router.get("/{series_id}/portada-hd.jpg")
+async def portada_serie_hd(series_id: UUID, request: Request,
+                           db: AsyncSession = Depends(get_db)) -> Response:
+    """#1044: portada de serie en HD (primera página del primer número disponible)."""
+    await _serie_o_404(db, series_id)
+    fila = (await db.execute(
+        select(Issue.id)
+        .join(File, File.issue_id == Issue.id)
+        .where(Issue.series_id == series_id, File.is_missing.is_(False))
+        .order_by(Issue.sort_order.asc().nulls_last(), File.id.asc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if fila is None:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    ruta = await ruta_previa(db, series_id, fila, ancho=1200)
+    if ruta is None:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    try:
+        datos = await asyncio.to_thread(ruta.read_bytes)
+        etag = f'"{ruta.stat().st_mtime_ns}"'
+    except OSError:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    return cached_image_response(request, datos, "image/jpeg", etag)
+
+
 @router.get("/{series_id}/portada")
 async def portada(series_id: UUID, request: Request,
                   db: AsyncSession = Depends(get_db)) -> Response:
