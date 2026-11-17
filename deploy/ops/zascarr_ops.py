@@ -27,6 +27,7 @@ import os
 import re
 import select
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -34,16 +35,36 @@ import time
 
 # ── Protocolo (la app lo repite en `services/ops_host.py`; la prueba de paridad los compara) ─────────────────────
 VERSION = 1
+VERSION_RESTAURAR = 2
 ACCION_COPIA = "copia"
+ACCION_RESTAURAR = "restaurar"
 #: La tabla acción → unidad vive AQUÍ, en el código: ni en la petición, ni en `/etc/default/zascarr`, ni en el entorno.
-UNIDADES = {ACCION_COPIA: "zascarr-backup.service"}
+UNIDADES = {
+    ACCION_COPIA: "zascarr-backup.service",
+    ACCION_RESTAURAR: "zascarr-restaurar@.service",
+}
 CODIGOS = (
     "aceptada", "esquema_invalido", "firma_invalida", "caducada", "repetida", "accion_no_disponible",
     "demasiado_pronto", "limite_diario", "operacion_en_curso", "no_disponible",
+    "copia_desconocida", "autenticacion_no_activada", "prueba_invalida", "bloqueo_temporal",
+    "limite_restauraciones",
 )
 CLAVES_PETICION = ("v", "id", "accion", "creada", "firma")
-MAX_BYTES = 512                  # una petición mide como mucho esto
-LEER_MAX = MAX_BYTES + 1         # el auxiliar no lee más de esto de la conexión
+CLAVES_PETICION_RESTAURAR = ("v", "id", "accion", "copia", "prueba", "creada", "firma")
+MAX_BYTES = 512
+MAX_BYTES_V1 = 512
+MAX_BYTES_RESTAURAR = 1024
+LEER_MAX = MAX_BYTES_RESTAURAR + 1
+RESTAURACION_ESPERA_S = 30 * 60
+LIMITE_RESTAURACIONES = 3
+VENTANA_RESTAURACIONES_S = 24 * 3600
+UMBRAL_FALLOS = 5
+VENTANA_FALLOS_S = 15 * 60
+BLOQUEO_FALLOS_S = 30 * 60
+BLOQUEO_ESPERA_RESTAURAR_S = 12
+RUTA_COPIAS = "/var/backups/zascarr/postgres"
+RE_COPIA = re.compile(r"backup-[0-9]{8}_[0-9]{6}")
+RE_TS = re.compile(r"[0-9]{8}_[0-9]{6}")
 TIEMPO_LECTURA_S = 5             # y espera la línea como mucho esto
 CADUCIDAD_S = 120                # |creada − reloj del host| máximo, en los dos sentidos
 PURGA_VISTOS_S = 300             # un `id` visto se recuerda 300 s (la caducidad es ±120: un `id` válido vive hasta 240)
@@ -71,28 +92,34 @@ class Respuesta:
     """`resultado` es `aceptada` o `rechazada`; `codigo` es de la lista cerrada. Nunca lleva texto libre ni rutas."""
 
     def __init__(self, resultado: str, codigo: str, id_: str | None = None, accion: str | None = None,
-                 diario: str | None = None) -> None:
+                 diario: str | None = None, v: int = 1) -> None:
         self.resultado = resultado
         self.codigo = codigo
         self.id = id_
         self.accion = accion
         #: Código EXTRA solo para el diario (`clave_ausente`, `contador_ilegible`…): no sale por el socket.
         self.diario = diario
+        self.v = v
 
     def linea(self) -> bytes:
-        cuerpo = {"v": VERSION, "id": self.id, "resultado": self.resultado, "codigo": self.codigo}
+        cuerpo = {"v": self.v, "id": self.id, "resultado": self.resultado, "codigo": self.codigo}
         return json.dumps(cuerpo, separators=(",", ":")).encode("ascii") + b"\n"
 
 
-def _rechazo(codigo: str, id_: str | None = None, accion: str | None = None, diario: str | None = None) -> Respuesta:
-    return Respuesta("rechazada", codigo, id_, accion, diario)
+def _rechazo(codigo: str, id_: str | None = None, accion: str | None = None,
+             diario: str | None = None, v: int = 1) -> Respuesta:
+    return Respuesta("rechazada", codigo, id_, accion, diario, v=v)
 
 
 # ── Firma ───────────────────────────────────────────────────────────────────────────────────────────────────────
-def firma_de(clave: bytes, v: int, id_: str, accion: str, creada: int) -> str:
-    """HMAC-SHA256(clave, "{v}|{id}|{accion}|{creada}") en hexadecimal. La clave son los 32 bytes aleatorios de
-    `ops.key` (que guarda 64 caracteres hexadecimales)."""
-    return hmac.new(clave, f"{v}|{id_}|{accion}|{creada}".encode(), hashlib.sha256).hexdigest()
+def firma_de(clave: bytes, v: int, id_: str, accion: str, creada: int,
+             copia: str = "", prueba: str = "") -> str:
+    """HMAC-SHA256. v1: "{v}|{id}|{accion}|{creada}"; v2 añade copia y prueba al final."""
+    if v == VERSION_RESTAURAR:
+        texto = f"2|{id_}|restaurar|{copia}|{creada}|{prueba}"
+    else:
+        texto = f"{v}|{id_}|{accion}|{creada}"
+    return hmac.new(clave, texto.encode(), hashlib.sha256).hexdigest()
 
 
 # ── Esquema ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -108,10 +135,8 @@ def _es_entero(valor) -> bool:
 
 
 def parsear(linea: bytes) -> dict | None:
-    """La petición validada, o `None` si el esquema no es exactamente el cerrado: una sola línea UTF-8 de ≤ 512 bytes
-    terminada en `\\n`, un objeto con EXACTAMENTE `v` (1), `id` (32 hex), `accion` (cadena), `creada` (entero) y
-    `firma` (64 hex), sin claves de más, de menos ni repetidas."""
-    if not isinstance(linea, (bytes, bytearray)) or len(linea) > MAX_BYTES:
+    """Petición validada, o `None`. v1 ≤512 B; v2 ≤1024 B y admite solo `restaurar`."""
+    if not isinstance(linea, (bytes, bytearray)) or len(linea) > LEER_MAX:
         return None
     linea = bytes(linea)
     if not linea.endswith(b"\n") or linea.count(b"\n") != 1:
@@ -120,8 +145,21 @@ def parsear(linea: bytes) -> dict | None:
         objeto = json.loads(linea[:-1].decode("utf-8"), object_pairs_hook=_sin_duplicados)
     except (UnicodeDecodeError, ValueError, RecursionError):
         return None
-    if not isinstance(objeto, dict) or set(objeto) != set(CLAVES_PETICION):
+    if not isinstance(objeto, dict):
         return None
+    v = objeto.get("v")
+    if v == VERSION:
+        if len(linea) > MAX_BYTES_V1 or set(objeto) != set(CLAVES_PETICION):
+            return None
+        return _validar_v1(objeto)
+    if v == VERSION_RESTAURAR:
+        if len(linea) > MAX_BYTES_RESTAURAR or set(objeto) != set(CLAVES_PETICION_RESTAURAR):
+            return None
+        return _validar_v2(objeto)
+    return None
+
+
+def _validar_v1(objeto: dict) -> dict | None:
     if not _es_entero(objeto["v"]) or objeto["v"] != VERSION:
         return None
     if not isinstance(objeto["id"], str) or not _RE_ID.fullmatch(objeto["id"]):
@@ -129,7 +167,7 @@ def parsear(linea: bytes) -> dict | None:
     if not isinstance(objeto["accion"], str):
         return None
     try:
-        objeto["accion"].encode("utf-8")           # un sustituto suelto (JSON válido) no se puede firmar: F-4
+        objeto["accion"].encode("utf-8")
     except UnicodeEncodeError:
         return None
     if not _es_entero(objeto["creada"]):
@@ -139,8 +177,33 @@ def parsear(linea: bytes) -> dict | None:
     return objeto
 
 
+def _validar_v2(objeto: dict) -> dict | None:
+    if not _es_entero(objeto["v"]) or objeto["v"] != VERSION_RESTAURAR:
+        return None
+    if not isinstance(objeto["id"], str) or not _RE_ID.fullmatch(objeto["id"]):
+        return None
+    if objeto["accion"] != ACCION_RESTAURAR:
+        return None
+    if not isinstance(objeto["copia"], str) or not RE_COPIA.fullmatch(objeto["copia"]):
+        return None
+    prueba = objeto["prueba"]
+    if not isinstance(prueba, str):
+        return None
+    try:
+        prueba.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    if not 1 <= len(prueba.encode("utf-8")) <= 512:
+        return None
+    if not _es_entero(objeto["creada"]):
+        return None
+    if not isinstance(objeto["firma"], str) or not _RE_FIRMA.fullmatch(objeto["firma"]):
+        return None
+    return objeto
+
+
 # ── Estado en /run (tmpfs: un reinicio lo vacía y no puede quedar ninguna orden pendiente) ─────────────────────
-class AceptacionOcupada(OSError):
+class AceptacionOcupada(OSError):  # noqa: N818
     """No se tomó `aceptacion.lock` en el tiempo máximo (FR-35): otro proceso está en la sección crítica."""
 
 
@@ -157,6 +220,8 @@ class EstadoOps:
         self.dir_status = dir_status
         self.dir_vistos = os.path.join(dir_estado, "vistos")
         self.ruta_aceptadas = os.path.join(dir_estado, "aceptadas")
+        self.ruta_restauradas = os.path.join(dir_estado, "restauradas")
+        self.ruta_pruebas = os.path.join(dir_estado, "pruebas")
         self.ruta_ops_status = os.path.join(dir_status, "ops-status.json")
 
     # un solo uso (FR-06)
@@ -212,6 +277,50 @@ class EstadoOps:
     def anotar_aceptada(self, ahora: int, previas: list) -> None:
         vigentes = [t for t in previas if ahora - t < VENTANA_S]
         self._escribir_atomico(self.ruta_aceptadas, json.dumps(vigentes + [ahora]), 0o600)
+
+    def _leer_epocas(self, ruta: str) -> list:
+        try:
+            with open(ruta, encoding="ascii") as fh:
+                datos = json.loads(fh.read())
+        except FileNotFoundError:
+            return []
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            raise ContadorIlegible from exc
+        if not isinstance(datos, list) or not all(_es_entero(t) for t in datos):
+            raise ContadorIlegible
+        if any(t > time.time() + TOLERANCIA_RELOJ_S for t in datos):
+            raise ContadorIlegible
+        return list(datos)
+
+    def leer_restauradas(self, ahora: int) -> list:
+        try:
+            return [t for t in self._leer_epocas(self.ruta_restauradas)
+                    if t <= ahora + TOLERANCIA_RELOJ_S]
+        except ContadorIlegible:
+            raise
+
+    def anotar_restaurada(self, ahora: int, previas: list) -> None:
+        vigentes = [t for t in previas if ahora - t < VENTANA_RESTAURACIONES_S]
+        self._escribir_atomico(self.ruta_restauradas, json.dumps(vigentes + [ahora]), 0o600)
+
+    def leer_fallos(self, ahora: int) -> list:
+        try:
+            return self._leer_epocas(self.ruta_pruebas)
+        except ContadorIlegible:
+            raise
+
+    def anotar_fallo(self, ahora: int, previos: list) -> None:
+        vigentes = [t for t in previos if ahora - t < VENTANA_FALLOS_S]
+        self._escribir_atomico(self.ruta_pruebas, json.dumps(vigentes + [ahora]), 0o600)
+
+    def limpiar_fallos(self) -> None:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(self.ruta_pruebas)
+
+    def escribir_ops_status_restaurar(self, id_: str, pedida_epoch: int, copia: str) -> None:
+        cuerpo = {"schema": 1, "accion": ACCION_RESTAURAR, "id": id_,
+                  "pedida_epoch": pedida_epoch, "copia": copia, "resultado": "aceptada"}
+        self._escribir_atomico(self.ruta_ops_status, json.dumps(cuerpo), 0o644)
 
     # lo que la app lee (FR-15): SOLO una petición aceptada escribe aquí
     def escribir_ops_status(self, id_: str, pedida_epoch: int) -> None:
@@ -292,6 +401,16 @@ class LanzadorSystemd:
                                   check=False, close_fds=True)
         return resultado.stdout.strip()
 
+    def restauraciones_ocupadas(self) -> bool:
+        resultado = self.ejecutar(
+            ["systemctl", "list-units", "--plain", "--no-legend",
+             "--state=activating,active", "zascarr-restaurar@*.service"],
+            env={"PATH": PATH_FIJO}, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, timeout=TIEMPO_SYSTEMCTL_S, check=False, close_fds=True,
+        )
+        return bool(resultado.stdout.strip())
+
     def iniciar(self, unidad: str) -> bool:
         resultado = self.ejecutar(["systemctl", "start", "--no-block", unidad], env={"PATH": PATH_FIJO},
                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -299,20 +418,116 @@ class LanzadorSystemd:
         return resultado.returncode == 0
 
 
+def _verificar_regular_root(ruta: str) -> bool:
+    try:
+        st = os.lstat(ruta)
+    except OSError:
+        return False
+    return (stat.S_ISREG(st.st_mode) and st.st_uid == 0
+            and not (st.st_mode & (stat.S_IWGRP | stat.S_IWOTH)))
+
+
+def listar_copias(dir_backup: str, maximo: int = 30) -> list[str]:
+    """Ids `backup-AAAA...` de copias propias y manifiesto válido, de la más nueva a la más vieja."""
+    import glob
+    import json as _json
+    validas = []
+    for ruta in glob.glob(os.path.join(dir_backup, "backup_[0-9]*.sql.gz")):
+        nombre = os.path.basename(ruta)
+        m = re.fullmatch(r"backup_([0-9]{8}_[0-9]{6})\.sql\.gz", nombre)
+        if not m:
+            continue
+        if not _verificar_regular_root(ruta):
+            continue
+        manifiesto = os.path.join(dir_backup, f"MANIFIESTO-backup_{m.group(1)}.json")
+        if not _verificar_regular_root(manifiesto):
+            continue
+        try:
+            with open(manifiesto, "rb") as fh:
+                datos = _json.loads(fh.read(4097).decode("utf-8"))
+            if not isinstance(datos, dict) or datos.get("schema", 1) not in (1, None):
+                continue
+            if not re.fullmatch(r"[0-9a-f]{64}", str(datos.get("sha256", ""))):
+                continue
+            if not isinstance(datos.get("bytes"), int) or datos["bytes"] < 0:
+                continue
+        except (OSError, ValueError):
+            continue
+        validas.append(f"backup-{m.group(1)}")
+    return sorted(validas, reverse=True)[:maximo]
+
+
+class VerificadorPrueba:
+    """Lee `auth_mode`/hash de la BD viva con una orden fija y compara PBKDF2 en memoria."""
+
+    CONSULTA = (
+        "select coalesce((select values->>'auth_mode' from runtime_settings where id=1),'')"
+        "||'|'||coalesce((select values->>'auth_password_hash' from runtime_settings where id=1),'')"
+    )
+
+    def __init__(self, ejecutar=subprocess.run, db_user: str | None = None,
+                 db_name: str | None = None) -> None:
+        self.ejecutar = ejecutar
+        self.db_user = db_user or os.environ.get("DB_USER", "comics_admin")
+        self.db_name = db_name or os.environ.get("DB_NAME", "zascarr")
+        self.argv = [
+            "/usr/bin/docker", "exec", "zascarr-db", "psql",
+            "-U", self.db_user, "-d", self.db_name, "-At",
+            "-v", "ON_ERROR_STOP=1", "-c", self.CONSULTA,
+        ]
+
+    def leer(self) -> tuple[str, str] | None:
+        try:
+            resultado = self.ejecutar(
+                self.argv,
+                env={"PATH": PATH_FIJO, "DOCKER_CONFIG": "/run/zascarr-ops/docker"},
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, timeout=8, check=False, close_fds=True,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if resultado.returncode != 0 or len(resultado.stdout or b"") > 4096:
+            return None
+        try:
+            modo, _, hash_ = resultado.stdout.decode("utf-8").strip().partition("|")
+        except UnicodeDecodeError:
+            return None
+        return modo, hash_
+
+    @staticmethod
+    def comprobar(prueba: str, almacenado: str) -> bool:
+        try:
+            partes = almacenado.split("$")
+            if len(partes) != 4 or partes[0] != "pbkdf2_sha256":
+                return False
+            iteraciones = int(partes[1])
+            if not 10_000 <= iteraciones <= 2_000_000:
+                return False
+            sal = bytes.fromhex(partes[2])
+            esperado = bytes.fromhex(partes[3])
+            obtenido = hashlib.pbkdf2_hmac("sha256", prueba.encode("utf-8"), sal, iteraciones)
+        except (ValueError, UnicodeError):
+            return False
+        return hmac.compare_digest(obtenido, esperado)
+
+
 # ── El núcleo ───────────────────────────────────────────────────────────────────────────────────────────────────
-def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, lanzador) -> Respuesta:
+def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, lanzador,
+             verificador=None, copias=None, dir_backup: str | None = None) -> Respuesta:
     """Valida y, si procede, acepta una petición. Todo lo que toca el mundo (reloj, estado, systemd) entra por
     parámetro. Devuelve siempre una `Respuesta`; no lanza excepciones por una petición mala."""
     peticion = parsear(linea)
     if clave is None:
         # sin clave el auxiliar contesta no_disponible a todo y lo dice en el diario con un código genérico
-        return _rechazo("no_disponible", peticion["id"] if peticion else None, diario="clave_ausente")
+        return _rechazo("no_disponible", peticion["id"] if peticion else None,
+                        diario="clave_ausente", v=peticion["v"] if peticion else 1)
     if peticion is None:
         return _rechazo("esquema_invalido")
     id_ = peticion["id"]
     accion = peticion["accion"]
 
-    esperada = firma_de(clave, peticion["v"], id_, accion, peticion["creada"])
+    esperada = firma_de(clave, peticion["v"], id_, accion, peticion["creada"],
+                        peticion.get("copia", ""), peticion.get("prueba", ""))
     if not hmac.compare_digest(esperada, peticion["firma"]):
         return _rechazo("firma_invalida", id_)
     if abs(peticion["creada"] - ahora) > CADUCIDAD_S:
@@ -325,6 +540,12 @@ def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, l
     except OSError:
         return _rechazo("no_disponible", id_, diario="vistos_ilegible")
 
+    if peticion["v"] == VERSION_RESTAURAR:
+        return _procesar_restaurar(peticion, ahora, estado, lanzador,
+                                   verificador or VerificadorPrueba(),
+                                   copias if copias is not None else listar_copias(
+                                       dir_backup or os.environ.get("BACKUP_DIR")
+                                       or os.environ.get("ZASCARR_BACKUP_DIR", RUTA_COPIAS)))
     if accion != ACCION_COPIA:
         return _rechazo("accion_no_disponible", id_)
     unidad = UNIDADES[accion]
@@ -336,6 +557,64 @@ def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, l
         return _rechazo("no_disponible", id_, ACCION_COPIA, diario="aceptacion_ocupada")
     except OSError:
         return _rechazo("no_disponible", id_, ACCION_COPIA, diario="bloqueo_no_disponible")
+
+
+def _procesar_restaurar(peticion: dict, ahora: int, estado: EstadoOps, lanzador,
+                        verificador, copias) -> Respuesta:
+    """v2: copia propia, límites, cerrojo, fallos, contraseña y arranque de la unidad."""
+    id_ = peticion["id"]
+    copia = peticion["copia"]
+    accion = ACCION_RESTAURAR
+    if copia not in copias:
+        return _rechazo("copia_desconocida", id_, accion, v=VERSION_RESTAURAR)
+    try:
+        with estado.bloqueo(BLOQUEO_ESPERA_RESTAURAR_S):
+            restauradas = estado.leer_restauradas(ahora)
+            if restauradas and ahora - max(restauradas) < RESTAURACION_ESPERA_S:
+                return _rechazo("demasiado_pronto", id_, accion, v=VERSION_RESTAURAR)
+            if sum(1 for t in restauradas if ahora - t < VENTANA_RESTAURACIONES_S) >= LIMITE_RESTAURACIONES:
+                return _rechazo("limite_restauraciones", id_, accion, v=VERSION_RESTAURAR)
+            if lanzador.cerrojo_ocupado():
+                return _rechazo("operacion_en_curso", id_, accion, v=VERSION_RESTAURAR)
+            try:
+                if (lanzador.estado_unidad(UNIDADES[ACCION_COPIA]).strip() in ESTADOS_OCUPADOS
+                        or lanzador.restauraciones_ocupadas()):
+                    return _rechazo("operacion_en_curso", id_, accion, v=VERSION_RESTAURAR)
+            except (OSError, subprocess.SubprocessError):
+                return _rechazo("no_disponible", id_, accion, diario="systemctl_fallo", v=VERSION_RESTAURAR)
+            try:
+                fallos = estado.leer_fallos(ahora)
+            except ContadorIlegible:
+                return _rechazo("no_disponible", id_, accion, diario="contador_ilegible", v=VERSION_RESTAURAR)
+            bloqueo = [t for t in fallos if ahora - t < VENTANA_FALLOS_S]
+            if len(bloqueo) >= UMBRAL_FALLOS:
+                return _rechazo("bloqueo_temporal", id_, accion, v=VERSION_RESTAURAR)
+            leido = verificador.leer()
+            if leido is None:
+                return _rechazo("no_disponible", id_, accion, diario="hash_ilegible", v=VERSION_RESTAURAR)
+            modo, hash_ = leido
+            if modo not in ("password", "user_password"):
+                return _rechazo("autenticacion_no_activada", id_, accion, v=VERSION_RESTAURAR)
+            if not verificador.comprobar(peticion["prueba"], hash_):
+                with contextlib.suppress(OSError):
+                    estado.anotar_fallo(ahora, fallos)
+                return _rechazo("prueba_invalida", id_, accion, v=VERSION_RESTAURAR)
+            ts = copia.split("-", 1)[1]
+            unidad = UNIDADES[ACCION_RESTAURAR].replace("@.service", f"@{ts}.service")
+            try:
+                if not lanzador.iniciar(unidad):
+                    return _rechazo("no_disponible", id_, accion, diario="inicio_fallido", v=VERSION_RESTAURAR)
+                estado.anotar_restaurada(ahora, restauradas)
+                estado.escribir_ops_status_restaurar(id_, ahora, copia)
+                estado.limpiar_fallos()
+            except OSError:
+                return Respuesta("aceptada", "aceptada", id_, accion, diario="estado_no_escrito",
+                                 v=VERSION_RESTAURAR)
+            return Respuesta("aceptada", "aceptada", id_, accion, v=VERSION_RESTAURAR)
+    except AceptacionOcupada:
+        return _rechazo("operacion_en_curso", id_, accion, v=VERSION_RESTAURAR)
+    except OSError:
+        return _rechazo("no_disponible", id_, accion, diario="bloqueo_no_disponible", v=VERSION_RESTAURAR)
 
 
 def _aceptar(id_: str, unidad: str, ahora: int, estado: EstadoOps, lanzador) -> Respuesta:

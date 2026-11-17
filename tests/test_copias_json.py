@@ -61,7 +61,7 @@ def test_lista_las_copias_con_manifiesto_sin_rutas_ni_hashes(tmp_path):
     assert datos["schema"] == 1
     assert [c["id"] for c in datos["copias"]] == ["backup-20261111_040000", "backup-20261110_040000"]
     assert datos["copias"][0]["fuera_del_disco"] is False and datos["copias"][1]["fuera_del_disco"] is True
-    assert all(set(c) == {"id", "creada_epoch", "bytes", "fuera_del_disco", "verificada"} for c in datos["copias"])
+    assert all(set(c) == {"id", "creada_epoch", "bytes", "fuera_del_disco", "verificada", "revision"} for c in datos["copias"])
     texto = (e["estado"] / "copias.json").read_text()
     assert "abab" not in texto and str(tmp_path) not in texto and ".sql.gz" not in texto
     assert oct((e["estado"] / "copias.json").stat().st_mode & 0o777) == "0o644"

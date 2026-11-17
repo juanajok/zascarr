@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Restaurar una copia — ZascArr{% endblock %}
+{% block content %}
+<h1>Restaurar una copia</h1>
+<p class="subtitle">Vas a volver a los datos del {{ copia.fecha }}. Se perderán los cambios posteriores.</p>
+{{ ui.aviso("warn", "ZascArr se parará uno o dos minutos. Tu biblioteca, tus archivos y el acceso actual no cambian; la copia restaurada no puede traer contraseñas ni sesiones antiguas.") }}
+{% if not activa %}
+<p class="caption">Activa primero la contraseña en <a href="/ui/ajustes/seguridad">Ajustes → Seguridad</a>. Sin contraseña no se restaura desde aquí.</p>
+{% else %}
+<form method="post" action="/ui/copias/restaurar">
+  <input type="hidden" name="copia" value="{{ copia.id }}">
+  <p><label for="contrasena">Tu contraseña actual</label>
+     <input id="contrasena" name="contrasena" type="password" autocomplete="current-password" required></p>
+  <p><label><input type="checkbox" name="entiendo" value="si" required>
+    Entiendo que se pierden los cambios posteriores a esa copia.</label></p>
+  <button type="submit">Restaurar esta copia</button>
+  <a class="btn ghost sm" href="/estado">No restaurar</a>
+</form>
+<details><summary>Para quien instaló ZascArr</summary>
+  <p>La copia se verifica antes de tocar la base; la actual se guarda primero y se puede recuperar si falla. La operación la ejecuta el auxiliar del host, no la aplicación.</p>
+</details>
+{% endif %}
+{% endblock %}

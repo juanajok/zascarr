@@ -1575,6 +1575,7 @@ class OpsAccion(enum.StrEnum):
     """Acciones que la app puede pedir al auxiliar del host (BL-OPS1, ADR 0021): lista cerrada."""
 
     COPIA = "copia"
+    RESTAURAR = "restaurar"
 
 
 class CodigoOps(enum.StrEnum):
@@ -1590,6 +1591,11 @@ class CodigoOps(enum.StrEnum):
     LIMITE_DIARIO = "limite_diario"
     OPERACION_EN_CURSO = "operacion_en_curso"
     NO_DISPONIBLE = "no_disponible"
+    COPIA_DESCONOCIDA = "copia_desconocida"
+    AUTENTICACION_NO_ACTIVADA = "autenticacion_no_activada"
+    PRUEBA_INVALIDA = "prueba_invalida"
+    BLOQUEO_TEMPORAL = "bloqueo_temporal"
+    LIMITE_RESTAURACIONES = "limite_restauraciones"
 
 
 class EntitySourceRecord(Base):

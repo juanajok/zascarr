@@ -833,7 +833,7 @@ async def buscar_personaje(
         logger.warning("biblioteca.busqueda_personaje_fallida", error=type(exc).__name__)
     return _respuesta_auxiliar(
         request,
-        "_resultados_personaje.html",
+        "_resultados_entidad.html",
         {"resultados": await _buscar(filtros, "character_id", encontrados), "texto": texto},
     )
 
@@ -862,7 +862,7 @@ async def buscar_saga(
         logger.warning("biblioteca.busqueda_saga_fallida", error=type(exc).__name__)
     return _respuesta_auxiliar(
         request,
-        "_resultados_saga.html",
+        "_resultados_entidad.html",
         {"resultados": await _buscar(filtros, "story_arc_id", encontrados), "texto": texto},
     )
 
@@ -891,6 +891,6 @@ async def buscar_autor(
         logger.warning("biblioteca.busqueda_autor_fallida", error=type(exc).__name__)
     return _respuesta_auxiliar(
         request,
-        "_resultados_autor.html",
+        "_resultados_entidad.html",
         {"resultados": await _buscar(filtros, "author_id", encontrados), "texto": texto},
     )

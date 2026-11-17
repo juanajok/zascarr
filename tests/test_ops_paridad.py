@@ -16,17 +16,22 @@ _spec.loader.exec_module(aux)
 
 
 def test_acciones_y_codigos_coinciden():
-    assert {a.value for a in OpsAccion} == {aux.ACCION_COPIA} == set(aux.UNIDADES)
+    assert {a.value for a in OpsAccion} == {aux.ACCION_COPIA, aux.ACCION_RESTAURAR}
+    assert set(aux.UNIDADES) == {aux.ACCION_COPIA, aux.ACCION_RESTAURAR}
     assert {c.value for c in CodigoOps} == set(aux.CODIGOS)
 
 
 def test_limites_y_version_coinciden():
     assert ops_host.VERSION == aux.VERSION
-    assert ops_host.MAX_BYTES == aux.MAX_BYTES
+    assert ops_host.VERSION_RESTAURAR == aux.VERSION_RESTAURAR
+    assert ops_host.MAX_BYTES_RESTAURAR == aux.MAX_BYTES_RESTAURAR
+    assert ops_host.MAX_BYTES_V1 == aux.MAX_BYTES_V1
     assert ops_host.CADUCIDAD_S == aux.CADUCIDAD_S
     assert ops_host.PURGA_VISTOS_S == aux.PURGA_VISTOS_S
     assert ops_host.ENTRE_COPIAS_S == aux.ENTRE_COPIAS_S
     assert ops_host.LIMITE_DIARIO == aux.LIMITE_DIARIO
+    assert ops_host.LIMITE_RESTAURACIONES == aux.LIMITE_RESTAURACIONES
+    assert ops_host.ENTRE_RESTAURACIONES_S == aux.RESTAURACION_ESPERA_S
 
 
 def test_la_firma_es_la_misma_y_el_orden_de_los_campos_tambien():
@@ -70,3 +75,16 @@ def test_completitud_de_causas_ac45():
     assert emitidos <= set(ops_host.CAUSAS_COPIA)
     assert set(ops_host.CAUSAS_COPIA) | ops_host.RESERVADOS_NO_EMITIDOS == set(_BACKUP_ERRORES)
     assert {"status_write_failed"} == ops_host.RESERVADOS_NO_EMITIDOS
+
+
+def test_la_firma_v2_y_la_peticion_de_restaurar_coinciden():
+    clave = bytes(range(32))
+    assert ops_host.firma_restaurar_de(clave, 2, "a" * 32, "backup-20260101_120000",
+                                       1_800_000_000, "secreta") == aux.firma_de(
+        clave, 2, "a" * 32, "restaurar", 1_800_000_000,
+        "backup-20260101_120000", "secreta")
+    linea, id_ = ops_host.construir_peticion_restaurar(
+        clave, "backup-20260101_120000", "secreta", ahora=1_800_000_000)
+    cuerpo = aux.parsear(linea)
+    assert cuerpo is not None and cuerpo["id"] == id_ and cuerpo["v"] == 2
+    assert cuerpo["prueba"] == "secreta"
