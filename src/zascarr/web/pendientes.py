@@ -310,6 +310,10 @@ def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
             "sugerida_para_serie": bool(
                 serie_actual and g.serie_sugerida is not None
                 and str(g.serie_sugerida.series_id) == str(serie_actual["id"])
+                # #382: el chip no afirma que la carpeta sea de la serie si solo la sugiere
+                # una minoría (o empata). Sin recuento (fixtures antiguos) se mantiene.
+                and (g.serie_sugerida.n_sugeridos == 0
+                     or g.serie_sugerida.n_de_la_serie * 2 > g.serie_sugerida.n_sugeridos)
             ),
         })
     p = r.pagina

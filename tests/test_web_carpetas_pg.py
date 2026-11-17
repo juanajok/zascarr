@@ -1350,9 +1350,9 @@ class TestMarcaCarpetaMixta382:
         sid_a = await banco.serie("SERIE A", 2020)
         sid_b = await banco.serie("SERIE B", 2021)
         await banco.sembrar(
-            *[archivo(f"Comics/Mixta/A {n:02d}.cbz", cands=candidatas(sid_a, "SERIE A", 2020))
+            *[archivo(f"Comics/Mixta/A {n:02d}.cbz", estado="direct", cands=candidatas(sid_a, "SERIE A", 2020))
               for n in range(1, 4)],
-            *[archivo(f"Comics/Mixta/B {n:02d}.cbz", cands=candidatas(sid_b, "SERIE B", 2021))
+            *[archivo(f"Comics/Mixta/B {n:02d}.cbz", estado="direct", cands=candidatas(sid_b, "SERIE B", 2021))
               for n in range(1, 3)],
         )
         r = await pagina({"serie": str(sid_a)})
@@ -1364,9 +1364,9 @@ class TestMarcaCarpetaMixta382:
         sid_a = await banco.serie("SERIE A", 2020)
         sid_b = await banco.serie("SERIE B", 2021)
         await banco.sembrar(
-            *[archivo(f"Comics/Minoria/A {n:02d}.cbz", cands=candidatas(sid_a, "SERIE A", 2020))
+            *[archivo(f"Comics/Minoria/A {n:02d}.cbz", estado="direct", cands=candidatas(sid_a, "SERIE A", 2020))
               for n in range(1, 3)],
-            *[archivo(f"Comics/Minoria/B {n:02d}.cbz", cands=candidatas(sid_b, "SERIE B", 2021))
+            *[archivo(f"Comics/Minoria/B {n:02d}.cbz", estado="direct", cands=candidatas(sid_b, "SERIE B", 2021))
               for n in range(1, 4)],
         )
         r = await pagina({"serie": str(sid_a)})
@@ -1377,10 +1377,30 @@ class TestMarcaCarpetaMixta382:
     async def test_homogenea_dice_todos(self, banco):
         sid = await banco.serie("SERIE UNICA", 2020)
         await banco.sembrar(
-            *[archivo(f"Comics/Unica/U {n:02d}.cbz", cands=candidatas(sid, "SERIE UNICA", 2020))
+            *[archivo(f"Comics/Unica/U {n:02d}.cbz", estado="direct", cands=candidatas(sid, "SERIE UNICA", 2020))
               for n in range(1, 4)],
         )
         r = await pagina({"serie": str(sid)})
         t = visible(r.text)
         assert "Sugerida para esta serie" in t
         assert "La sugieren los 3 registros con sugerencia." in t
+
+
+    async def test_empate_no_lleva_chip(self, banco):
+        sid_a = await banco.serie("SERIE A", 2020)
+        sid_b = await banco.serie("SERIE B", 2021)
+        await banco.sembrar(
+            archivo("Comics/Empate/A 01.cbz", estado="direct", cands=candidatas(sid_a, "SERIE A", 2020)),
+            archivo("Comics/Empate/B 01.cbz", estado="direct", cands=candidatas(sid_b, "SERIE B", 2021)),
+        )
+        r = await pagina({"serie": str(sid_a)})
+        assert "Sugerida para esta serie" not in visible(r.text)
+
+    async def test_un_solo_registro_singular(self, banco):
+        sid = await banco.serie("SERIE UNICA", 2020)
+        await banco.sembrar(
+            archivo("Comics/Uno/U 01.cbz", estado="direct", cands=candidatas(sid, "SERIE UNICA", 2020)),
+        )
+        r = await pagina({"serie": str(sid)})
+        t = visible(r.text)
+        assert "La sugiere el único registro con sugerencia." in t
