@@ -68,7 +68,7 @@ _BACKUP_ERRORES = {
     "offsite_mount_missing": "el disco de respaldo no está montado",
     "offsite_same_device": "la copia no está en un dispositivo distinto",
     "pg_dump_failed": "el volcado falló",
-    "gzip_invalid": "el volcado no pasa gzip -t",
+    "gzip_invalid": "el volcado salió incompleto",
     "header_missing": "el volcado no tiene la cabecera esperada",
     "tables_missing": "al volcado le faltan tablas requeridas",
     "decompress_failed": "el volcado no se puede descomprimir",

@@ -366,3 +366,22 @@ def test_el_temporal_del_volcado_nace_600_y_no_644(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     anotados = modos.read_text(encoding="utf-8").split()
     assert anotados and set(anotados) == {"600"}, anotados
+
+    def test_volcado_truncado_en_volcar_postgres_se_registra_como_gzip_invalid(self, tmp_path):
+        """#372: el `.gz` cortado se detecta en `volcar_postgres` (gzip -t) y debe
+        conservar su causa, no convertirse en un genérico «pg_dump falló»."""
+        ctx = _preparar(tmp_path)
+        gzip_falso = ctx["bin"] / "gzip"
+        gzip_falso.write_text(
+            '#!/usr/bin/env bash\n'
+            'if [[ "${1:-}" == "-t" ]]; then exit 1; fi\n'
+            'exec "${REAL_GZIP:?}" "$@"\n', encoding="utf-8")
+        gzip_falso.chmod(0o755)
+        r = _ejecutar(ctx, extra_env={"REAL_GZIP": shutil.which("gzip") or "/bin/gzip"})
+        assert r.returncode != 0
+        estado = _estado(ctx)
+        assert estado["status"] == "failed"
+        assert estado["error"] == "gzip_invalid"
+        assert "gzip_invalid" in (r.stdout + r.stderr)
+        assert not list(ctx["backup"].glob("backup_*.sql.gz"))
+        assert not list(ctx["offsite"].glob("backup_*.sql.gz"))
