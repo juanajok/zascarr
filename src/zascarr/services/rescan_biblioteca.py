@@ -142,6 +142,8 @@ async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
                 duracion_ms=int((informe.finished_at - informe.started_at).total_seconds() * 1000)
                 if informe.finished_at and informe.started_at else None)
         except asyncio.CancelledError:
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error="CancelledError")
             _estado.fase = FaseRescan.INACTIVO
             _estado.causa = "CancelledError"
             raise
@@ -193,6 +195,8 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
             _estado.foco_resultado = True
             return informe
         except asyncio.CancelledError:
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error="CancelledError")
             _estado.fase = FaseRescan.INACTIVO
             _estado.causa = "CancelledError"
             raise

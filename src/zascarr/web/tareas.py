@@ -14,7 +14,7 @@ ui_router = APIRouter()
 
 @api_router.get("/tareas")
 async def api_tareas() -> JSONResponse:
-    datos = tareas.snapshot(incluir_recientes=True)
+    datos = tareas.snapshot(incluir_recientes=True, consumir_anuncio=False)
     cuerpo = {
         "version": 1,
         "generado": datos["generado"],
@@ -30,7 +30,7 @@ async def api_tareas() -> JSONResponse:
 
 @ui_router.get("/ui/_tareas", response_class=HTMLResponse)
 async def fragmento_tareas(request: Request) -> HTMLResponse:
-    datos = tareas.snapshot(incluir_recientes=True)
+    datos = tareas.snapshot(incluir_recientes=True, consumir_anuncio=True)
     respuesta = templates.TemplateResponse(request, "_tareas.html", {"t": datos})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta

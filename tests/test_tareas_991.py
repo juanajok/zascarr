@@ -113,3 +113,26 @@ async def test_import_error_no_deja_tarea_en_curso(monkeypatch):
     tareas_err = [x for x in tareas.snapshot(incluir_recientes=True)["tareas"]
                   if x["estado"] == "en_curso"]
     assert not tareas_err
+
+
+def test_post_visto_y_oob_cadencia():
+    t = tareas.iniciar("importar", total=2)
+    time.sleep(0.41)
+    tareas.actualizar(t.id, hechos=1)
+    cliente = TestClient(app)
+    f = cliente.get("/ui/_tareas")
+    assert "every 2s" in f.text and "tareas-cadencia" in f.text
+    tareas.error(t.id, tipo_error="OSError")
+    r = cliente.post(f"/ui/_tareas/visto/{t.id}")
+    assert r.status_code == 200
+    assert tareas.snapshot(incluir_recientes=True)["errores"] == 1
+    t._fin -= 9
+    assert tareas.snapshot(incluir_recientes=True)["errores"] == 0
+
+
+def test_api_no_consume_anuncio_ui():
+    tareas._reset_para_pruebas()
+    tareas.iniciar("importar", origen="a")
+    time.sleep(0.41)
+    assert tareas.snapshot(incluir_recientes=True)["anuncio"] is None
+    assert tareas.snapshot(incluir_recientes=True, consumir_anuncio=True)["anuncio"]
