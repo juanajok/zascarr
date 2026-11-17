@@ -1,4 +1,5 @@
 # ruff: noqa: E501
+
 """Registro de la biblioteca en SEGUNDO PLANO, con progreso consultable.
 
 Registrar una biblioteca grande lee (para el sha256) cada archivo: en una Pi con el disco por USB son
@@ -29,6 +30,7 @@ from enum import StrEnum
 import structlog
 from sqlalchemy import text
 
+from zascarr.services import tareas
 from zascarr.services.importer import CerrojoDeContenidoOcupado
 from zascarr.services.library_adopter import AdoptionReport, LibraryAdopter
 
@@ -98,6 +100,7 @@ class EstadoRegistro:
 
 _estado = EstadoRegistro()
 _tarea: asyncio.Task | None = None
+_tarea_global = None
 
 
 def estado_actual() -> EstadoRegistro:
@@ -105,6 +108,9 @@ def estado_actual() -> EstadoRegistro:
 
 
 def _volcar(report: AdoptionReport) -> None:
+    if _tarea_global is not None:
+        tareas.actualizar(_tarea_global.id, fase="Registrando", total=report.to_process,
+                          hechos=report.processed)
     _estado.ya_registrados = report.already_registered
     _estado.total = report.to_process
     _estado.procesados = report.processed
@@ -150,6 +156,9 @@ async def _cerrojo_de_registro(sesion) -> AsyncIterator[bool]:
 
 
 async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) -> None:
+    global _tarea_global
+    _tarea_global = tareas.iniciar("registrar", enlace="/ui/auditoria#registro",
+                                   origen="registro")
     try:
         async with fabrica() as sesion, _cerrojo_de_registro(sesion) as libre:
             if not libre:
@@ -159,6 +168,8 @@ async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) ->
             informe = await LibraryAdopter(sesion).adopt(progreso=_volcar, **extra)
         _volcar(informe)
         _estado.fase = FaseRegistro.TERMINADO
+        if _tarea_global is not None:
+            tareas.terminar(_tarea_global.id, resumen="Biblioteca registrada")
     except CerrojoDeContenidoOcupado:
         _estado.fase = FaseRegistro.OCUPADO       # el importador (o otro registro) llevaba demasiado con el cerrojo de contenido
     except asyncio.CancelledError:
@@ -169,6 +180,8 @@ async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) ->
         logger.warning("registro_biblioteca.interrumpido", error=type(exc).__name__)
         _estado.fase = FaseRegistro.INTERRUMPIDO
         _estado.causa = type(exc).__name__
+        if _tarea_global is not None:
+            tareas.error(_tarea_global.id, tipo_error=type(exc).__name__)
     finally:
         _estado.terminado = datetime.now(UTC)
 

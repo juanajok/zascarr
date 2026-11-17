@@ -1,4 +1,5 @@
 # ruff: noqa: E501
+
 """Rescan de la biblioteca a petición y periódico (#BL-R9).
 
 Una sola operación de disco a la vez: el rescan comparte el cerrojo consultivo de ciclo `(326, 2)`
@@ -23,6 +24,7 @@ from enum import StrEnum
 import structlog
 from sqlalchemy import text
 
+from zascarr.services import tareas
 from zascarr.services.comprobacion_disco import CLAVE_CERROJO_CICLO
 from zascarr.services.library_adopter import LibraryAdopter, RescanReport
 
@@ -163,8 +165,12 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
             _estado = EstadoRescan()
             logger.info("rescan.auto_skipped", motivo="cerrojo_ocupado")
             return None
+        tarea = tareas.iniciar("rescanear", enlace="/ui/auditoria#rescan-biblioteca",
+                               origen="rescan")
         try:
             informe = await _correr(fabrica, DISPARADOR_AUTOMATICO)
+            if tarea is not None:
+                tareas.terminar(tarea.id, resumen="Biblioteca revisada")
             _estado.informe = informe
             _estado.fase = FaseRescan.TERMINADO
             _estado.run_id = str(informe.run_id) if informe.run_id else None
@@ -175,6 +181,8 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
             _estado.causa = "CancelledError"
             raise
         except Exception as exc:  # noqa: BLE001
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error=type(exc).__name__)
             _estado.fase = FaseRescan.ERROR
             _estado.causa = type(exc).__name__
             logger.warning("rescan.fallido", disparador=DISPARADOR_AUTOMATICO,

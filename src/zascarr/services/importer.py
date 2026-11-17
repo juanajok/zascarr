@@ -54,6 +54,7 @@ from zascarr.models import (
     ResultadoComprobacion,
     Series,
 )
+from zascarr.services import tareas
 from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.etiquetas_comicinfo import aplicar_comicinfo
 from zascarr.services.raices import (
@@ -532,8 +533,12 @@ class Importer:
 
         # Dedupe por (st_dev, st_ino), no por ruta: ver `listar_comics`. El
         # recorrido va en un hilo — bloquea en E/S (CLAUDE.md §4).
+        tarea = tareas.iniciar("importar", enlace="/ui/no-disponibles#comprobar-disco",
+                               origen=f"importar:{disparador}")
         files = await asyncio.to_thread(listar_comics, self._scan_dirs, COMIC_EXTS)
         report.files_scanned = len(files)
+        if tarea is not None:
+            tareas.actualizar(tarea.id, total=len(files), fase="Importando")
 
         # Evidencia de cohorte (core/cohort.py): calculada UNA VEZ sobre la
         # foto fija de este ciclo, antes del bucle — contrato de
@@ -541,7 +546,9 @@ class Importer:
         # no puede cambiar la cohorte ya calculada para los anteriores.
         pistas = detectar_ordenes_de_lectura([f.name for f in files])
 
-        for path in sorted(files):
+        for indice, path in enumerate(sorted(files), 1):
+            if tarea is not None:
+                tareas.actualizar(tarea.id, hechos=indice)
             try:
                 await self._import_file(path, report, pistas.get(path.name))
             except CerrojoDeContenidoOcupado:
@@ -582,6 +589,8 @@ class Importer:
         report.reappeared = comprobacion.reaparecidos
 
         report.finished_at = datetime.now(UTC)
+        if tarea is not None:
+            tareas.terminar(tarea.id, resumen="Descargas revisadas")
         await self._persist_run(report)
         return report
 
