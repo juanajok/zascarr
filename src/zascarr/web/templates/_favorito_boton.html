@@ -1,0 +1,15 @@
+<form method="post" action="/ui/series/{{ series.id }}/favorito"
+      class="favorito-form"
+      hx-post="/ui/series/{{ series.id }}/favorito"
+      hx-target="this" hx-swap="outerHTML">
+  {% if not compacto %}<input type="hidden" name="volver" value="">
+  <input type="hidden" name="origen" value="ficha">
+  <input type="hidden" name="favorito-ficha" value="1">{% endif %}
+  <button type="submit"
+          class="favorito-btn{% if not compacto %} btn ghost sm favorito-btn-ficha{% endif %}"
+          aria-pressed="{{ 'true' if series.favorite else 'false' }}"
+          title="{{ 'Quitar de favoritas' if series.favorite else 'Marcar como favorita' }}">
+    {{ "deseados"|icono }}
+    <span class="{% if compacto %}sr{% endif %}">{{ "Quitar de favoritas" if series.favorite else "Marcar como favorita" }}</span>
+  </button>
+</form>

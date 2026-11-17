@@ -1296,12 +1296,20 @@ async def panel_sagas(series_id: UUID, request: Request,
 
 
 @router.post("/{series_id}/favorito")
-async def cambiar_favorita(series_id: UUID, volver: str = Form(""),
+async def cambiar_favorita(series_id: UUID, request: Request, volver: str = Form(""),
+                           origen: str = Form(""), favorito_ficha: str = Form(""),
                            db: AsyncSession = Depends(get_db)):
     """Marca/desmarca una serie como favorita local; sin efectos en archivos."""
     serie = await _serie_o_404(db, series_id)
     await alternar_favorita(db, serie.id)
     await db.commit()
+    if request.headers.get("HX-Request") == "true":
+        compacto = origen != "ficha" and not favorito_ficha
+        respuesta = templates.TemplateResponse(
+            request, "_favorito_boton.html",
+            {"series": serie, "compacto": compacto})
+        respuesta.headers["Cache-Control"] = "no-store"
+        return respuesta
     destino = volver if volver.startswith("/ui/") else f"/ui/series/{series_id}"
     return RedirectResponse(destino, status_code=303)
 

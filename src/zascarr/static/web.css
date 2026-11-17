@@ -2693,6 +2693,22 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (min-width: 1280px) { .tareas-panel { width: 360px; max-width: 360px; } }
 @media (prefers-reduced-motion: reduce) { .tareas-panel, .tarea, .tareas-chip { transition: none !important; animation: none !important; } }
 
+
+/* #1035: favorito en tarjetas de la biblioteca */
+.library-card-wrap { position: relative; min-width: 0; }
+.library-card-wrap .favorito-form { position: absolute; top: var(--space-2); right: var(--space-2); z-index: 2; margin: 0; }
+.favorito-btn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-pill); background: var(--paper); color: var(--ink); cursor: pointer; }
+.favorito-btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.favorito-btn svg { width: 22px; height: 22px; }
+.favorito-form { margin: var(--space-2) 0 0; }
+.favorito-btn-ficha { width: auto; min-height: 44px; padding: 0 var(--space-3); white-space: nowrap; }
+.library-card-wrap .favorito-btn { opacity: 0; }
+.library-card-wrap:hover .favorito-btn,
+.library-card-wrap:focus-within .favorito-btn { opacity: 1; }
+.favorito-btn:focus-visible { outline: var(--border-panel) solid var(--ink); outline-offset: 2px; opacity: 1; }
+@media (hover: none) { .library-card-wrap .favorito-btn { opacity: 1; } }
+@media (max-width: 480px) { .library-card-wrap .favorito-form { top: var(--space-1); right: var(--space-1); } }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
