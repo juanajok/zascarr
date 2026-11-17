@@ -154,7 +154,7 @@ def _contexto() -> dict:
         "prowlarr_indexer_ids": getattr(s, "prowlarr_indexer_ids", ""),
         "prowlarr_indexers_elegidos": _ids_prowlarr(s),
         "transmission_url": s.transmission_url,
-        "transmission_download_dir": s.transmission_download_dir,
+        "transmission_download_dir": getattr(s, "transmission_download_dir", ""),
         "transmission_username": s.transmission_username,
         "transmission_password_configurada": bool(s.transmission_password),
         "transmission_enabled": s.transmission_enabled,
@@ -965,7 +965,8 @@ async def probar_transmission(
     transmission_download_dir: str = Form(default=""),
 ) -> HTMLResponse:
     password = _secreto_o_guardado(transmission_password, "transmission_password")
-    carpeta = (transmission_download_dir or "").strip() or get_settings().transmission_download_dir
+    carpeta = (transmission_download_dir or "").strip() or getattr(
+        get_settings(), "transmission_download_dir", "")
     ok, mensaje, aviso = await _test_transmission(
         transmission_url.rstrip("/"), transmission_username, password, carpeta
     )
