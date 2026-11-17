@@ -7,10 +7,23 @@ from zascarr.services.forum_scraper import ForumScraper, temas_de_foro
 
 HTML_FORO = """
 <table>
-<tr class="row1"><td><a href="index.php?showtopic=10&amp;s=xyz">Batman #12</a></td><td>Hoy, 10:32</td></tr>
+<tr class="row1"><td><a href="index.php?showtopic=10&amp;view=getnewpost"><img src="n.gif"></a><span id="tid-span-10"><a id="tid-link-10" href="index.php?showtopic=10" title="iniciado: Nov 14 2019, 14:38">Batman #12</a></span><span class="minipagelink"><a href="index.php?showtopic=10&amp;st=0">1</a></span><div class="desc">desc</div></td><td><span class="lastaction">Hoy, 10:32</span></td></tr>
 <tr class="row1"><td><a href="index.php?showtopic=11">Tema viejo</a></td><td>15/11/2026</td></tr>
 <tr class="row1"><td><a href="index.php?showtopic=12">Tema actualizado</a></td><td>Ayer, 20:01</td></tr>
 </table>
+"""
+
+#: Fila real del foro: el primer `showtopic` es la imagen «nuevo mensaje» y la
+#: última actividad viene en inglés («5th August 2026 - 18:24»).
+HTML_FORO_REAL = """
+<table><tr>
+<td class="row1"><a href='http://foro/index.php?showtopic=84784&amp;view=getnewpost'><img src='nuevo.gif'></a>
+<span id='tid-span-84784'><a id="tid-link-84784" href="http://foro/index.php?showtopic=84784" title="Este tema fue iniciado: Nov 14 2019, 14:38">Emulecollections de completos</a></span>
+<span class="minipagelink"><a href="http://foro/index.php?showtopic=84784&amp;st=0&amp;start=0">1</a></span>
+<div class="desc">A dos clics</div></td>
+<td align="center" class="row2"><a href='http://foro/index.php?showuser=95657'>Hekutorukun</a><br /><span style="color:#666">Nov 14 2019, 14:38</span></td>
+<td class="row2"><span class="lastaction">5th August 2026 - 18:24<br /><a href='http://foro/index.php?showtopic=84784&amp;view=getlastpost'>Último mensaje:</a></span></td>
+</tr></table>
 """
 
 
@@ -19,6 +32,16 @@ def test_parser_de_temas():
     assert [t[1] for t in temas] == [10, 11, 12]
     assert temas[0][2] == "Batman #12"
     assert temas[0][3] == "Hoy, 10:32"
+
+
+def test_parser_real_prioriza_el_titulo_y_lee_la_fecha_inglesa():
+    temas = temas_de_foro(HTML_FORO_REAL)
+    assert len(temas) == 1
+    href, tema_id, titulo, actividad = temas[0]
+    assert tema_id == 84784
+    assert titulo == "Emulecollections de completos"
+    assert actividad == "5th August 2026 - 18:24"
+    assert "view=" not in href
 
 
 async def test_listar_temas_usa_una_get_de_lectura_y_no_la_busqueda():

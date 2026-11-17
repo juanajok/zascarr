@@ -8,6 +8,7 @@ puras; los adaptadores son inyectables para las pruebas.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from html import unescape
@@ -77,6 +78,13 @@ def _norm_alias(valor: str) -> str:
     return normalize_title(valor or "")
 
 
+#: Marcadores de recopilatorio que el parser de nombres no siempre marca como
+#: edición («One Piece 01 - Edición 3 en 1»): no identifican UNA grapa.
+_RECOPILATORIO = re.compile(
+    r"\b(?:\d+\s*en\s*1|integral|omnibus|omnigold|deluxe|colecci[oó]n|collection|pack)\b",
+    re.IGNORECASE)
+
+
 def casar_fichero(nombre: str, serie: Series, alias: set[str]) -> int | None:
     """Número de una grapa si el nombre de fichero casa con la serie, o None.
 
@@ -85,6 +93,8 @@ def casar_fichero(nombre: str, serie: Series, alias: set[str]) -> int | None:
     no enteros, y exigir igualdad del nombre normalizado con el título o un alias
     local. Falla cerrado; nunca usa el título del hilo ni el título del release.
     """
+    if _RECOPILATORIO.search(nombre or ""):
+        return None
     parsed = parse_comic_filename(nombre)
     if parsed.edition_kind is not None:
         return None
@@ -158,18 +168,62 @@ def nombres_de_enlaces(ed2k: list[str], magnet: list[str]) -> list[str]:
     return list(dict.fromkeys(n for n in nombres if n))
 
 
+_MESES_ACTIVIDAD = {nombre: i for i, nombre in enumerate(
+    ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+     "septiembre", "octubre", "noviembre", "diciembre"), start=1)}
+_MESES_ACTIVIDAD.update({nombre: i for i, nombre in enumerate(
+    ("january", "february", "march", "april", "may", "june", "july", "august",
+     "september", "october", "november", "december"), start=1)})
+_MESES_ACTIVIDAD.update({nombre[:3]: i for nombre, i in list(_MESES_ACTIVIDAD.items())})
+
+
+def _fecha_con_mes(limpio: str) -> datetime | None:
+    """Fecha IPB en inglés o español («5th August 2026 - 18:24», «Nov 14 2019, 14:38»)."""
+    import re
+
+    # Quita ordinales ingleses y normaliza el separador fecha/hora.
+    normal = re.sub(r"(\d{1,2})(?:st|nd|rd|th)\b", r"\1", limpio, flags=re.I)
+    normal = normal.replace("–", " ").replace(" - ", " ").replace(",", " ")
+    normal = re.sub(r"\s+", " ", normal).strip()
+    patrones = (
+        re.compile(r"^(\d{1,2}) ([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+) (\d{4})(?: (\d{1,2}):(\d{2}))?$"),
+        re.compile(r"^([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+) (\d{1,2}) (\d{4})(?: (\d{1,2}):(\d{2}))?$"),
+    )
+    for i, patron in enumerate(patrones):
+        m = patron.match(normal)
+        if not m:
+            continue
+        if i == 0:
+            dia, mes_txt, anio, hora, minuto = m.groups()
+        else:
+            mes_txt, dia, anio, hora, minuto = m.groups()
+        mes = _MESES_ACTIVIDAD.get(mes_txt.lower())
+        if mes is None:
+            continue
+        try:
+            return datetime(int(anio), mes, int(dia),
+                            int(hora or 0), int(minuto or 0), tzinfo=UTC)
+        except ValueError:
+            continue
+    return None
+
+
 def _fecha_de_actividad(texto: str | None, ahora: datetime) -> datetime | None:
     if not texto:
         return None
     limpio = texto.strip()
-    if limpio.lower().startswith("hoy"):
+    bajo = limpio.lower()
+    if bajo.startswith(("hoy", "today")):
         return ahora.replace(hour=0, minute=0, second=0, microsecond=0)
-    if limpio.lower().startswith("ayer"):
+    if bajo.startswith(("ayer", "yesterday")):
         return (ahora - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     try:
         return datetime.fromisoformat(limpio.replace("Z", "+00:00")).astimezone(UTC)
     except ValueError:
         pass
+    con_mes = _fecha_con_mes(limpio)
+    if con_mes is not None:
+        return con_mes
     try:
         from email.utils import parsedate_to_datetime
         return parsedate_to_datetime(limpio).astimezone(UTC)
