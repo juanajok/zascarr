@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""«Hacer una copia ahora» — cliente del auxiliar del host y lectura de su estado (BL-OPS1, ADR 0018).
+"""«Hacer una copia ahora» — cliente del auxiliar del host y lectura de su estado (BL-OPS1, ADR 0021).
 
 Lógica única (CLAUDE.md §3.1): el router solo la llama. Dos mitades:
 

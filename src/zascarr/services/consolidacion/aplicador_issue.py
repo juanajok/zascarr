@@ -96,6 +96,10 @@ class AplicadorIssue:
             if await self._aplicar(issue, cambio):
                 await self._marcar(issue, cambio)
                 aplicados.append(cambio.campo)
+        if aplicados:
+            metadata = dict(issue.metadata_ or {})
+            metadata["comicinfo_sync_pendiente"] = True
+            issue.metadata_ = metadata
         await self._db.flush()
         return ResultadoIssue(str(issue.id), len(aplicados), tuple(aplicados))
 

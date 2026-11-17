@@ -28,6 +28,7 @@ from zascarr.models import (
     LocalAlias,
     SeguimientoVisto,
     Series,
+    SeriesKind,
     Wishlist,
     WishlistOrigin,
     WishlistStatus,
@@ -248,7 +249,9 @@ async def _serie_por_id(db: AsyncSession, serie_id: UUID) -> Series | None:
 
 async def cargar_series_seguidas(db: AsyncSession) -> tuple[list[Series], dict[UUID, set[str]]]:
     series = list((await db.execute(
-        select(Series).where(Series.follow_new_issues.is_(True))
+        select(Series)
+        .where(Series.follow_new_issues.is_(True))
+        .where(Series.kind != SeriesKind.ONE_SHOT)
     )).scalars().all())
     alias: dict[UUID, set[str]] = {}
     if series:
