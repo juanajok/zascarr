@@ -4,7 +4,12 @@
   {% else %}
     <ul>
       {% for c in copias %}
-      <li>{{ c.fecha }} · {{ c.tamano }} · también en el disco de respaldo: {{ "sí" if c.fuera_del_disco else "no" }}</li>
+      <li>{{ c.fecha }} · {{ c.tamano }} · también en el disco de respaldo: {{ "sí" if c.fuera_del_disco else "no" }}
+        {% if c.id %}
+          {% if c.restaurable %}<a class="btn ghost sm" href="/ui/copias/restaurar/{{ c.id }}">Restaurar…</a>
+          {% else %}<span class="muted">{{ c.motivo }}</span>{% endif %}
+        {% endif %}
+      </li>
       {% endfor %}
     </ul>
   {% endif %}

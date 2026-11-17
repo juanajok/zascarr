@@ -7,6 +7,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Restaurar una copia desde la interfaz (BL-OPS2, #443).** Estado ofrece «Restaurar…» para
+  copias verificadas de la misma versión; la confirmación pide la contraseña actual y una
+  casilla explícita, y la petición v2 firmada permite al auxiliar del host comprobar la
+  contraseña, elegir una copia propia de su lista y arrancar la unidad de restauración. La
+  contraseña no se guarda, no se registra y no vuelve a la pantalla. El script gana
+  `--produccion --copia`, conserva la configuración vigente (incluida la contraseña y la
+  versión de sesión) y deja `ops-restaurar.json`. Sin desplegar ni aplicar en la Pi.
 - **La descarga de registros pasa de Inicio a Estado (2026-11-17).** Inicio deja de
   mostrar «Descargar logs» y su aviso, que competían con la tarea principal. El acceso vive
   en **Estado → Registro de la aplicación**, con texto llano y la garantía de saneado de #369.

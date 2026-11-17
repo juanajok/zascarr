@@ -708,4 +708,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         siguiente = f"{path}{query}"
         # `next` va como valor de query: sin codificar, un `&` de la query
         # original se parsea como parámetro aparte y trunca el destino.
+        if request.headers.get("HX-Request") == "true":
+            # htmx no debe pintar /login dentro del fragmento: se le pide una
+            # navegación completa a la página que la persona tiene abierta.
+            actual = request.headers.get("HX-Current-URL", "")
+            if (not actual.startswith("/") or actual.startswith("//")
+                    or any(ord(c) < 32 for c in actual)):
+                actual = "/"
+            return Response(status_code=200, headers={
+                "HX-Redirect": f"/login?next={quote(actual, safe='')}",
+                "Cache-Control": "no-store",
+            })
         return RedirectResponse(f"/login?next={quote(siguiente, safe='')}", status_code=303)

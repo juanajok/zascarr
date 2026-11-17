@@ -8,8 +8,10 @@ Type=simple
 StandardInput=socket
 StandardOutput=socket
 StandardError=journal
+EnvironmentFile=-/etc/default/zascarr
 Environment=ZASCARR_OPS_DIR=@ZASCARR_DATA_DIR@/ops
 Environment=ZASCARR_BACKUP_STATUS_DIR=@BACKUP_STATUS_DIR@
+Environment=DOCKER_CONFIG=/run/zascarr-ops/docker
 ExecStart=/usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-ops
 TimeoutStartSec=15s
 RuntimeMaxSec=45s

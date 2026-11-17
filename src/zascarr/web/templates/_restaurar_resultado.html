@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Restaurar una copia — ZascArr{% endblock %}
+{% block content %}
+<h1>Restaurar una copia</h1>
+<p role="{{ 'status' if aceptada else 'alert' }}">{{ mensaje }}</p>
+{% if not aceptada %}<p><a class="btn ghost sm" href="/estado">Volver a Estado</a></p>{% endif %}
+{% endblock %}
