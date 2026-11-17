@@ -5,14 +5,19 @@
   if (espera) {
     const aviso = document.getElementById("lector-preparando");
     let intentos = 0;
+    const volverAProbar = () => {
+      intentos += 1;
+      if (intentos >= 5) window.location.reload();
+      else setTimeout(consultar, 1500);
+    };
     const consultar = () => fetch(espera.dataset.estadoUrl, { credentials: "same-origin" })
       .then((r) => r.json())
       .then((datos) => {
         if (datos.estado === "listo") window.location.reload();
         else if (datos.estado === "error") {
           aviso.textContent = datos.motivo || "No se ha podido preparar el tebeo.";
-        } else { setTimeout(consultar, 1500); }
-      }).catch(() => setTimeout(consultar, 1500));
+        } else { volverAProbar(); }
+      }).catch(volverAProbar);
     consultar();
     return;
   }
