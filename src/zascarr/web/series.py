@@ -270,6 +270,23 @@ async def _fondo_confirmar(tid: str, token: str, file_id, serie_id, forzar: bool
         tareas.terminar(tid, resumen="Conversión terminada")
     except BaseException as exc:
         _CONVERSIONES[tid]["error"] = type(exc).__name__
+        _CONVERSIONES[tid]["error_obj"] = exc
+        tareas.error(tid, tipo_error=type(exc).__name__)
+
+
+async def _fondo_deshacer(tid: str, token: str, file_id, serie_id, forzar: bool) -> None:
+    try:
+        tareas.actualizar(tid, fase="Deshaciendo", hechos=0, total=1)
+        async with database.async_session_factory() as sesion:
+            resultado = await ConversionDeArchivo(sesion).deshacer(
+                token, forzar_compartido=forzar,
+                file_id_esperado=file_id, serie_id_esperado=serie_id)
+        _CONVERSIONES[tid]["resultado"] = resultado
+        tareas.actualizar(tid, fase="Comprobando", hechos=1, total=1)
+        tareas.terminar(tid, resumen="Conversión deshecha")
+    except BaseException as exc:
+        _CONVERSIONES[tid]["error"] = type(exc).__name__
+        _CONVERSIONES[tid]["error_obj"] = exc
         tareas.error(tid, tipo_error=type(exc).__name__)
 
 
@@ -2197,6 +2214,7 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
              "mensaje": "Hay demasiadas tareas en curso. Inténtalo en un momento."}))
     tid = tarea.id
     servicio = _servicio_conversion(db)
+    _podar_conversiones()
     _CONVERSIONES[tid] = {"tipo": "individual", "series": series,
                           "file_id": file_id, "resultado": None, "error": None}
     _CONVERSIONES_ACTIVAS[clave] = tid
@@ -2297,22 +2315,43 @@ async def deshacer_conversion_confirmar(series_id: UUID, file_id: UUID, request:
                                         forzar_compartido: str = Form(default=""),
                                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = await _serie_o_404(db, series_id)
-    try:
-        resultado = await _servicio_conversion(db).deshacer(
-            token, forzar_compartido=bool(forzar_compartido),
-            file_id_esperado=file_id, serie_id_esperado=series_id)
-    except Exception as exc:  # noqa: BLE001
-        if exc.__class__.__name__ in ("TokenCaducadoError", "TokenInvalidoError"):
-            if request.headers.get("HX-Request") == "true":
-                # Un error en una petición HTMX no se pinta: se devuelve un fragmento con aviso.
-                return _sin_cache_conversion(templates.TemplateResponse(
-                    request, "_conversion_error.html",
-                    {"series": series, "file_id": file_id, "mensaje": str(exc)}))
-            codigo = 410 if exc.__class__.__name__ == "TokenCaducadoError" else 400
-            raise HTTPException(status_code=codigo, detail=str(exc)) from None
-        raise
-    return _sin_cache_conversion(templates.TemplateResponse(
-        request, "conversion_resultado.html", {"series": series, "resultado": resultado}))
+    clave = f"deshacer:{series_id}:{file_id}"
+    ya = _CONVERSIONES_ACTIVAS.get(clave)
+    if ya:
+        return _sin_cache_conversion(_fragmento_en_curso(request, ya, series))
+    tarea = tareas.iniciar("deshacer", total=1,
+                           enlace=f"/ui/series/{series_id}", origen=clave)
+    if tarea is None:
+        return _sin_cache_conversion(templates.TemplateResponse(
+            request, "_conversion_error.html",
+            {"series": series, "file_id": file_id,
+             "mensaje": "Hay demasiadas tareas en curso. Inténtalo en un momento."}))
+    tid = tarea.id
+    _podar_conversiones()
+    _CONVERSIONES[tid] = {"tipo": "deshacer", "series": series,
+                          "file_id": file_id, "resultado": None, "error": None}
+    _CONVERSIONES_ACTIVAS[clave] = tid
+    forzar = bool(forzar_compartido)
+
+    async def _trabajo() -> None:
+        try:
+            await _fondo_deshacer(tid, token, file_id, series_id, forzar)
+        finally:
+            _CONVERSIONES_ACTIVAS.pop(clave, None)
+            _CONVERSIONES_FIN[tid] = time.monotonic()
+
+    lanzado = _lanzar_fondo(_trabajo, True)
+    if await _esperar_resultado(tid, lanzado, True):
+        datos = _CONVERSIONES[tid]
+        if datos.get("error"):
+            return _sin_cache_conversion(templates.TemplateResponse(
+                request, "_conversion_error.html",
+                {"series": series, "file_id": file_id,
+                 "mensaje": "No se pudo deshacer la conversión."}))
+        return _sin_cache_conversion(templates.TemplateResponse(
+            request, "conversion_resultado.html",
+            {"series": series, "resultado": datos["resultado"]}))
+    return _sin_cache_conversion(_fragmento_en_curso(request, tid, series))
 
 
 @router.get("/{series_id}/convertir", response_class=HTMLResponse)
@@ -2342,6 +2381,7 @@ async def convertir_lote_confirmar(series_id: UUID, request: Request,
             {"series": series, "file_id": None,
              "mensaje": "Hay demasiadas tareas en curso. Inténtalo en un momento."}))
     tid = tarea.id
+    _podar_conversiones()
     _CONVERSIONES[tid] = {"tipo": "lote", "series": series,
                           "resultado": None, "lote": None, "error": None}
     _CONVERSIONES_ACTIVAS[clave] = tid
