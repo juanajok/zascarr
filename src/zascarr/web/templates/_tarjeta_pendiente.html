@@ -7,13 +7,11 @@
     acción principal; el resto, en desplegables. Valores y rutas no cambian. -#}
 <div class="pending-card" id="card-{{ c.file.id }}">
   <div class="pending-media">
-    {% if c.con_portada %}
+    {#- Diseño §PortadaSerie: el marcador va SIEMPRE; la <img> solo si el
+        archivo puede tener portada. Inicial del título, color estable por id. -#}
     {{ ui.portada(c.suggestion.title if c.suggestion else c.detected, c.file.id,
-                  "/ui/pendientes/" ~ c.file.id ~ "/portada",
+                  ("/ui/pendientes/" ~ c.file.id ~ "/portada") if c.con_portada else none,
                   clase="portada-pendiente", carga="lazy") }}
-    {% else %}
-    <span class="pending-formato" aria-hidden="true">{{ c.formato }}</span>
-    {% endif %}
   </div>
   <div class="pending-body">
     {% if aviso %}{{ ui.aviso(aviso.tipo, aviso.texto, foco=true) }}{% endif %}
