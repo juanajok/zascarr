@@ -179,9 +179,10 @@ DATA_DIR="$(sed -n 's/^ZASCARR_DATA_DIR=//p' "${ENV_FILE}" | tail -1 | tr -d '"'
 DATA_DIR="${DATA_DIR:-/var/lib/zascarr}"
 PUID="$(sed -n 's/^PUID=//p' "${ENV_FILE}" | tail -1 | tr -d '"'"'"'')"
 PGID="$(sed -n 's/^PGID=//p' "${ENV_FILE}" | tail -1 | tr -d '"'"'"'')"
-mkdir -p "${DATA_DIR}/lector"
-chown "${PUID:-1000}:${PGID:-1000}" "${DATA_DIR}/lector"
-chmod 750 "${DATA_DIR}/lector"
+mkdir -p "${DATA_DIR}/lector" 2>/dev/null || \
+    warn "No pude crear ${DATA_DIR}/lector; la caché de CBR avisará al usarla."
+chown "${PUID:-1000}:${PGID:-1000}" "${DATA_DIR}/lector" 2>/dev/null || true
+chmod 750 "${DATA_DIR}/lector" 2>/dev/null || true
 info "Reiniciando ZascArr..."
 # `--remove-orphans`: una instalación anterior a ADR 0011 tiene un contenedor `zascarr-cache` (Redis) que ya no está en el
 # compose; sin esto seguiría vivo, gastando RAM, sin que nada lo use.

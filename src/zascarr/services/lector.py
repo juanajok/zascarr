@@ -30,7 +30,7 @@ from zascarr.core.formato_contenedor import (
     se_lee_como_zip,
 )
 from zascarr.core.importer_triage import parse_comic_info
-from zascarr.models import File, Issue, ReadingProgress, ReadingStatus, Series
+from zascarr.models import File, Firma, Issue, ReadingProgress, ReadingStatus, Series
 from zascarr.services.cache_lectura import CacheError, CacheLectura
 from zascarr.utils.cover import puede_dar_portada
 
@@ -59,7 +59,13 @@ def es_rar_real(f: File) -> bool:
         return False
     if fc.get("firma") == "rar":
         return True
-    return fc.get("firma") is None
+    if fc.get("firma") == "zip":
+        return False
+    # Metadatos antiguos sin formato: se mira la firma (512 B) para no romper los CBR legados.
+    try:
+        return firma_de(Path(f.file_path)) is Firma.RAR
+    except OSError:
+        return True
 
 
 @dataclass(frozen=True)
@@ -99,7 +105,7 @@ def _es_legible(f: File) -> bool:
         return True
     resultado = puede_dar_portada(ext, fc)
     if resultado is None:
-        return ext in (".cbz", ".zip")
+        return ext in (".cbz", ".zip", ".cbr", ".cb7")
     if resultado:
         return True
     # BL-LEC4: un CBR/CB7 que es RAR se prepara con `unar` (si el lector está encendido).
