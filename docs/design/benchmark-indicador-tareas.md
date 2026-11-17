@@ -726,3 +726,21 @@ sistema de diseño.
 8. La UX ya redactada (chip en `.side`, panel «Ahora», 400 ms, `aria-live` único) encaja; el benchmark añade el registro y los adaptadores que le faltan.
 9. El coste es pequeño (sin BD en el sondeo, <20 KB de estado), pero requiere convertir/paquete a segundo plano o aceptar que sigan siendo locales.
 10. Quedan decisiones de PO (ubicación, tareas globales, copia/descargas, historial, cancelación); **NOT RUN** mediciones, apps reales, navegador y capturas.
+
+---
+
+## 9. Decisión del PO (2026-11-17)
+
+El PO aprueba:
+
+- **Ubicación A**: chip global en `.side` + panel «Ahora».
+- **Alcance ampliado**: además de las tareas de fondo (registro, disco, descargas), el indicador incluye **conversión CBR→CBZ** y **extracción de paquetes**.
+
+Esto **modifica** la recomendación de §6.3 y §6.8: para que conversión y paquetes aparezcan en el chip y sobrevivan a navegar, hay que convertirlas en **tareas de fondo** (no peticiones síncronas) con el mismo registro, fases y progreso. Implica:
+
+1. Registro de tareas con id, tipo, fase, `hechos`/`total`, estado y enlace.
+2. Adaptadores para conversión individual/lote y paquete (la operación durable ya existe; falta exponerla y ejecutarla en segundo plano).
+3. Fases reales: «Leyendo», «Extrayendo N de M», «Comprobando», «Importando», «Convirtiendo N de M».
+4. Mantener la UI local existente mientras la tarea es de página; migrarla al registro cuando pase a segundo plano.
+
+El coste sube respecto a la estimación inicial; requiere especificación propia antes de implementar. Los NOT RUN de esta ficha siguen vigentes.
