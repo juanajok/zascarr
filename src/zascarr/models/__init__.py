@@ -68,6 +68,9 @@ class SeriesKind(enum.StrEnum):
     REGULAR = "regular"
     ANNUAL = "annual"
     SPECIAL = "special"
+    #: #1027/ADR 0022: una obra autoconclusiva (un único tomo/publicación), no una
+    #: línea de numeración. La marca es explícita del coleccionista, nunca inferida.
+    ONE_SHOT = "one_shot"
 
 class CreatorRole(enum.StrEnum):
     WRITER      = "writer"

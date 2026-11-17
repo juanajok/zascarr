@@ -1682,6 +1682,10 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
   un flag `follow_new_issues` por serie (opción A) en vez de reutilizar la política de
   huecos; pendiente decidir la señal de disponibilidad (`store_date` vs `cover_date`) y
   el origen `SEGUIMIENTO` frente a `MANUAL`.
+- **Obra autoconclusiva / one-shot (#1027, 2026-11-17):** ADR 0022 aceptado y spec v1.0;
+  `SeriesKind.ONE_SHOT`, migración 0049, completitud con publicación **con archivo** (sin `#1`
+  falso), alta desde Pendientes, badge/toggle en ficha y selector con «mostrar tomos únicos».
+  Fuera: ComicInfo (Count/Format/SeriesGroup), integrales y backfill.
 - **Seguir serie: números nuevos y aviso (#993, 2026-11-17):** flag `Series.follow_new_issues`
   independiente de la política de huecos; disparador por **fuentes** (foro E-links diarios
   autenticado + Prowlarr), no por la fecha de papel de Novedades; deseos

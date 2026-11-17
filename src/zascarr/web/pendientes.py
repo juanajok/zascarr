@@ -34,6 +34,10 @@ from zascarr.services.asignacion import (
 )
 from zascarr.services.borradores_revision import BorradoresRevision
 from zascarr.services.especiales import EspecialesService, EspecialSinNumeroError
+from zascarr.services.obras_autoconclusivas import (
+    ObraAutoconclusivaError,
+    crear_obra_autoconclusiva,
+)
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ClavePendiente, ReviewService
 from zascarr.services.revision_carpetas import (
     LIMITE_MAXIMO,
@@ -586,8 +590,11 @@ async def portada(file_id: UUID, request: Request, db: AsyncSession = Depends(ge
 
 @router.get("/{file_id}/buscar-serie", response_class=HTMLResponse)
 async def buscar_serie(file_id: UUID, request: Request, q: str = "",
+                        mostrar_tomos: str = Query(default=""),
                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    series_list = await ReviewService(db).search_series(q)
+    incluir = (mostrar_tomos or "").strip().lower() in ("1", "true", "si", "sí", "on")
+    series_list = await ReviewService(db).search_series(
+        q, incluir_one_shot=incluir)
     file = await db.get(File, file_id)
     return templates.TemplateResponse(
         request, "_resultados_serie.html",
@@ -807,6 +814,45 @@ async def vincular_especial(
         "titulo": "Guardado como especial.",
         "texto": "Se ha movido a la carpeta «Especiales» de la serie.",
         "series_id": series_id,
+        "deshacer_url": None,
+        "recontar_menu": RECONTAR_MENU,
+    })
+
+
+@router.post("/{file_id}/one-shot", response_class=HTMLResponse)
+async def crear_one_shot(
+    request: Request, file_id: UUID,
+    titulo: str = Form(default=""),
+    formato: str = Form("graphic_novel"),
+    tradicion: str = Form("american"),
+    numero: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#1027: alta explícita de una obra autoconclusiva desde Pendientes.
+
+    Crea la serie `ONE_SHOT` y su publicación, sin pedir número (solo se copia
+    si llega uno de una fuente), y enlaza el archivo sin moverlo.
+    """
+    try:
+        serie, _issue = await crear_obra_autoconclusiva(
+            db, file_id, titulo, formato, tradicion=tradicion, numero=numero)
+        await db.commit()
+    except ObraAutoconclusivaError as exc:
+        aviso = {"tipo": "warn", "texto": str(exc)}
+        if not _es_htmx(request):
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        file = await db.get(File, file_id)
+        if file is None:
+            return templates.TemplateResponse(
+                request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=400)
+        return templates.TemplateResponse(
+            request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
+            status_code=400)
+    return templates.TemplateResponse(request, "_accion_ok.html", {
+        "titulo": "Creado como tomo único.",
+        "texto": ("La serie y su publicación ya existen; el archivo se ha enlazado "
+                  "sin moverlo ni renombrarlo."),
+        "series_id": serie.id,
         "deshacer_url": None,
         "recontar_menu": RECONTAR_MENU,
     })

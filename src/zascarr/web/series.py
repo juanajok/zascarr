@@ -38,6 +38,7 @@ from zascarr.models import (
     MotivoRar,
     ReadingStatus,
     Series,
+    SeriesKind,
     Wishlist,
     WishlistOrigin,
     WishlistPolicy,
@@ -587,6 +588,7 @@ def _contexto_seguimiento(series: Series, *,
         "aviso_legal_pendiente": aviso_legal_pendiente,
         "activacion_bloqueada_por_aviso": activacion_bloqueada,
         "fuentes_descarga_activas": _fuentes_de_seguimiento_activas(),
+        "es_obra_unica": series.kind == SeriesKind.ONE_SHOT,
     }
 
 
@@ -630,6 +632,57 @@ async def _contexto_politica(db: AsyncSession, series: Series,
         "retirados": await _cuantos_retirados(db, series),
         "retirados_ahora": retirados_ahora,
     }
+
+
+def _contexto_obra_unica(series: Series, estado) -> dict:
+    """Datos del badge/control one-shot; sin consultas extra en la ficha."""
+    es = series.kind == SeriesKind.ONE_SHOT
+    return {
+        "es_obra_unica": es,
+        # La ficha no consulta publicaciones: usa el recuento de presentación como
+        # pista y la ruta hace la comprobación real (≤1 publicación).
+        "puede_marcar_obra_unica": es or (series.total_issues or 0) <= 1,
+        "estado_coleccion": estado,
+    }
+
+
+@router.post("/{series_id}/one-shot", response_class=HTMLResponse)
+async def cambiar_obra_unica(
+    series_id: UUID, request: Request, one_shot: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#1027: marca o desmarca una serie existente como obra autoconclusiva.
+
+    Solo se marca si tiene como mucho una publicación; desmarcar siempre vuelve
+    a `regular` y no borra nada. No toca `wishlist_policy`; al marcarla se apaga
+    el seguimiento de novedades (no aplica a una obra única).
+    """
+    series = (await db.execute(
+        select(Series).where(Series.id == series_id))).scalar_one_or_none()
+    if not series:
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    publicaciones = (await db.execute(
+        select(func.count(Issue.id)).where(Issue.series_id == series_id)
+    )).scalar_one()
+    aviso = None
+    if one_shot:
+        if publicaciones > 1:
+            aviso = ("No se puede marcar como tomo único: tiene más de una publicación. "
+                     "Una obra autoconclusiva solo puede tener una.")
+        else:
+            series.kind = SeriesKind.ONE_SHOT
+            series.follow_new_issues = False
+    else:
+        if series.kind == SeriesKind.ONE_SHOT:
+            series.kind = SeriesKind.REGULAR
+    await db.flush()
+    estado = await estado_de_coleccion(db, series)
+    contexto = {
+        "series": series,
+        **_contexto_obra_unica(series, estado),
+        "aviso_obra_unica": aviso,
+    }
+    return templates.TemplateResponse(request, "_obra_unica_serie.html", contexto)
 
 
 @router.get("/{series_id}", response_class=HTMLResponse)
@@ -689,6 +742,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "conflicto_coleccion": conflicto_con_politica(series),
         **politica,
         "fuentes_descarga_activas": _fuentes_de_seguimiento_activas(),
+        **_contexto_obra_unica(series, estado_coleccion),
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
         "archivos_por_numero": archivos,
         "formatos_legibles": FORMATOS_LEGIBLES,
@@ -1422,6 +1476,13 @@ async def cambiar_seguimiento(
     if not series:
         raise HTTPException(status_code=404, detail="Serie no encontrada")
     if follow_new_issues:
+        if series.kind == SeriesKind.ONE_SHOT:
+            return templates.TemplateResponse(
+                request, "_seguimiento_serie.html", {
+                    "series": series,
+                    **_contexto_seguimiento(series, aviso_legal_pendiente=False),
+                    "seguimiento_bloqueado_por_obra": True,
+                })
         if not await is_acknowledged(db):
             return templates.TemplateResponse(
                 request, "_seguimiento_serie.html", {

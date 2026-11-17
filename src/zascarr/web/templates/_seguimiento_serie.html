@@ -3,6 +3,10 @@
   <h2>Números nuevos</h2>
   <p class="subtitle">ZascArr mirará el foro (E-links diarios) y Prowlarr. Si aparece un número
     nuevo, lo buscará y te avisará.</p>
+  {% if seguimiento_bloqueado_por_obra %}
+  {{ ui.aviso("info", "Esta ficha es una obra autoconclusiva: no tiene números nuevos que seguir. Desmárcala en «Tomo único» si vuelve a ser una serie normal.") }}
+  {% endif %}
+  {% if not es_obra_unica %}
   {% if not fuentes_descarga_activas %}
   {{ ui.aviso("info", "No hay fuente de descarga activa: el seguimiento no podrá detectar nada hasta que configures el foro o Prowlarr en Ajustes.") }}
   {% endif %}
@@ -22,6 +26,8 @@
       <span class="htmx-indicator">Guardando…</span>
     </div>
   </form>
+  {% endif %}
+  {% if not es_obra_unica %}
   {% if series.follow_new_issues %}
   <p class="muted" role="status">Seguimiento activo. Empieza en la próxima pasada: no descarga lo anterior.
     Los números detectados se piden en Deseados.</p>
@@ -34,4 +40,5 @@
     <p class="caption">Solo mira lo que aparece a partir de ahora. No cambia «Qué buscar» y no borra
       los deseos pendientes si lo desactivas: los ya pedidos siguen en Deseados.</p>
   </details>
+  {% endif %}
 </div>

@@ -45,6 +45,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Obra autoconclusiva / one-shot sin `#1` inventado (2026-11-17).** La ficha permite
+  marcar una serie como **tomo único** (`SeriesKind.ONE_SHOT`) y Pendientes ofrece el alta
+  «Es un tomo único / novela gráfica / one-shot»: crea la serie y su publicación (número solo
+  si la fuente lo da; si no, sin número), enlaza el archivo sin moverlo y no inventa un `#1`.
+  Se muestra completa cuando tiene una publicación **con archivo disponible**, sin huecos ni
+  deseos de faltantes/futuros; los one-shot se ocultan del selector de series por defecto.
+  Migración 0049 (solo enum). Anuales, especiales ADR 0016 e integrales no cambian.
+
 - **Seguir una serie: números nuevos desde las fuentes (2026-11-17).** La ficha gana
   «Seguir esta serie» (independiente de «Qué buscar»). Un job (45 min, configurable)
   mira el subforo **E-links diarios** autenticado y Prowlarr; cuando aparece un número
