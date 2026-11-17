@@ -1683,6 +1683,12 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
   varios deseos y el aviso proactivo de carpeta de descargas inválida. También se documenta
   como **Mejorar** lo del foro+Prowlarr en una lista, el tomo que cubre 1-12 y cerrar el
   deseo con «Ya lo tengo».
+- **Backoff de envíos de Deseados cerrado (2026-11-17, T-62):** de los huecos declarados del
+  benchmark, «reintento automático/backoff tras un fallo de envío» deja de depender del cooldown
+  global. Migración 0046 (`wishlist.retry_count`, `wishlist.next_retry_at`) y helper
+  `Orchestrator._programar_reintento`: 10 min → 30 min → 2 h → 6 h (tope) solo cuando falla el
+  **envío** (no «sin resultados» ni «candidato rechazado»); un envío correcto o «Reintentar»
+  limpian el backoff. El cooldown de `last_searched_at` (6 h) no se toca: sigue para el resto.
 - **«Probar conexión» del foro cerrada (2026-11-16, PR [#880](https://github.com/juanajok/zascarr/pull/880), merge `04e24c08`):** la tarjeta Foro de Ajustes permite comprobar URL/usuario/contraseña antes de guardar (contraseña en blanco = la guardada), con **solo login** (sin búsqueda), funcionando aunque el foro esté apagado y con mensajes llanos (OK, credenciales, espera por cortesía/flood, URL inválida, red), sin persistir ni mostrar credenciales. QA apto (7.181×2, sonda 13/13) y SecOps favorable con **§5.8** sobre el SHA final `7876dfeb`. Menor aceptado: hereda `espera_max_s=30` (reducible).
 - **m-1 de UI/UX cerrado (2026-11-15, PR [#875](https://github.com/juanajok/zascarr/pull/875), merge `b8faa7cc`):** el error htmx de Importar guía actualiza `aria-invalid`/`aria-describedby` del input (reemplazo out-of-band con el valor conservado y nombre accesible propio), igual que el POST completo. Suite 7.162 passed.
 - **Lectura de temas del foro validada en vivo (2026-11-15):** con el hilo `showtopic=115142` en la Pi, login OK y **27 enlaces `ed2k`** extraídos (0 `magnet`), enlaces URL-encoded; sin cambios de código. Se cierra la deuda de validación de SCR4 (queda como fixturable para regresión futura).
