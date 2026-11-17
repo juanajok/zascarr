@@ -81,7 +81,6 @@ router = APIRouter(prefix="/ui/descubrir", tags=["ui"])
 _ALLOWED_COVER_HOSTS: dict[MetadataSource, tuple[str, ...]] = {
     MetadataSource.COMIC_VINE: ("comicvine.gamespot.com", "cbsistatic.com"),
     MetadataSource.ANILIST: ("anilist.co",),
-    MetadataSource.TEBEOSFERA: ("tebeosfera.com",),
     MetadataSource.GCD: ("comics.org",),
     MetadataSource.OPEN_LIBRARY: ("covers.openlibrary.org",),
 }
