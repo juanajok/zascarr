@@ -121,8 +121,9 @@ class TestPrimeraPasada:
         informe = await _rescan(mundo)
         assert informe.nuevos_registrados == 1 and informe.nuevos_a_revisar >= 2    # «Cosa…» + los demás del mundo
         assert informe.re_triados == 3 and informe.re_triados_a_revisar == 3        # las 3 presentes sin línea de base
-        # Las 3 filas sembradas (Desaparecida 1, 2 y la ajena) no existen en disco: se marcan sin borrarlas.
-        assert informe.desaparecidos == 3 and informe.resultado_biblioteca == "comprobada"
+        # Las 2 filas sembradas ausentes dentro de la raíz se marcan; la fila fuera de raíz
+        # (`/otro/sitio/ajeno.cbz`) no se atribuye a ninguna raíz ni se marca por su caída.
+        assert informe.desaparecidos == 2 and informe.resultado_biblioteca == "comprobada"
         filas = await _filas(mundo)
         assert all(f.file_mtime_ns is not None for f in filas.values() if Path(f.file_path).exists())
         async with mundo.fabrica() as s:
@@ -295,7 +296,7 @@ class TestMovidosYDesaparecidos:
         assert informe.resultado_biblioteca == "desaparicion_masiva"
         async with mundo.fabrica() as s:
             marcadas = (await s.execute(select(func.count(File.id)).where(File.is_missing.is_(True)))).scalar()
-        assert marcadas == 3                                           # solo las sembradas ausentes, nada nuevo
+        assert marcadas == 2                                           # las 2 sembradas ausentes; la ajena queda fuera de raíz
         for p, c in contenido.items():
             p.write_bytes(c)
 
@@ -345,7 +346,7 @@ class TestGuardasYContratos:
         assert informe.resultado_biblioteca == "raiz_inaccesible"
         async with mundo.fabrica() as s:
             marcadas = (await s.execute(select(func.count(File.id)).where(File.is_missing.is_(True)))).scalar()
-        assert marcadas == 3                                           # no se fabricó ninguna baja nueva
+        assert marcadas == 2                                           # las ausentes dentro de la raíz; la ajena queda fuera
 
     async def test_archivo_que_cambia_mientras_se_lee_se_omite(self, mundo, monkeypatch):
         await _rescan(mundo)

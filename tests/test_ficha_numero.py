@@ -46,7 +46,7 @@ class _DB:
 
 
 def _autor(nombre, rol, cantidad, fuente="comic_vine"):
-    return (rol, nombre, fuente, cantidad)
+    return (rol, uuid4(), nombre, fuente, cantidad)
 
 
 def _serie(**extra):

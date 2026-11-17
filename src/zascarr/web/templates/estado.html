@@ -81,6 +81,7 @@
             <th scope="row">{{ f.fuente }}</th>
             <td>
               <span class="cortesia-estado cortesia-estado-{{ f.clase }}">{{ f.estado }}</span>
+              {% if f.motivo_bloqueo %}<div class="muted">{{ f.motivo_bloqueo }}</div>{% endif %}
               {% if f.nota_apagada %}<div class="muted">{{ cortesia.nota_apagada }}</div>{% endif %}
             </td>
             <td>{{ f.proxima }}</td>
@@ -114,7 +115,7 @@
 
 {% if v is defined %}{% include "_copias_bloque.html" %}{% endif %}
 
-<p class="caption"><a class="btn ghost sm" href="/ui/exportar">Descargar colección y deseados (CSV)</a>
+<p class="caption"><a class="btn ghost sm" href="/ui/exportar">Descargar tebeoteca y deseados (CSV)</a>
   Esto no es una copia de seguridad.</p>
 
 <div id="warnings" class="caption estado-warnings">

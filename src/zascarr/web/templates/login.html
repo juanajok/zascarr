@@ -12,7 +12,10 @@
 <body>
   <main class="content login-content">
     <h1>ZascArr</h1>
-    <p class="subtitle">Introduce tu contraseña para continuar.</p>
+    <p class="subtitle">
+      {% if pide_usuario %}Introduce tu usuario y tu contraseña para continuar.
+      {% else %}Introduce tu contraseña para continuar.{% endif %}
+    </p>
     <form method="post" action="/login" class="login-form">
       <input type="hidden" name="next" value="{{ next }}">
       {% if pide_usuario %}

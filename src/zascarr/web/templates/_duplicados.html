@@ -29,10 +29,22 @@
       {% endfor %}
     </fieldset>
     {% endfor %}
-    <button type="submit" class="btn">Ver vista previa</button>
+    <p class="audit-detail">
+      «Apartar» mueve las otras copias a la cuarentena. «Unir con enlace duro» deja las dos rutas
+      existiendo y compartiendo el mismo contenido: no libera espacio hasta vaciar la cuarentena,
+      una copia de seguridad sin enlaces duros volverá a ocupar el doble y editar una copia cambia la otra.
+    </p>
+    <div class="duplicados-acciones">
+      <button type="submit" class="btn">Ver vista previa</button>
+      {% if duplicados.enlace_disponible %}
+      <button type="submit" class="btn ghost" name="accion" value="enlazar">Unir con enlace duro</button>
+      {% else %}
+      <p class="audit-detail" role="status">No se puede unir con enlace duro: {{ duplicados.enlace_motivo }}</p>
+      {% endif %}
+    </div>
   </form>
   {% else %}
-  <p class="audit-ok">Ahora mismo no hay copias idénticas en el último informe.</p>
+  {{ ui.aviso("info", "Ahora mismo no hay copias idénticas en el último informe.") }}
   {% endif %}
 
   <h3>Copias apartadas</h3>
@@ -46,10 +58,10 @@
   <ul class="duplicados-operaciones">
     {% for op in duplicados.operaciones %}
     <li>
-      <span>{{ op.creada }} · {{ op.grupos }} grupo{{ 's' if op.grupos != 1 }} · {{ op.bytes | tamano }}</span>
+      <span>{{ op.creada }} · {% if op.modo == 'carpeta' %}1 carpeta{% else %}{{ op.grupos }} grupo{{ 's' if op.grupos != 1 }} · {{ op.bytes | tamano }}{% endif %}</span>
       <form method="post" action="/ui/auditoria/duplicados/deshacer" class="duplicados-deshacer">
         <input type="hidden" name="operacion" value="{{ op.id }}">
-        <button type="submit" class="btn ghost sm">Deshacer el apartado</button>
+        <button type="submit" class="btn ghost sm">{% if op.modo == 'enlazar' %}Deshacer el enlace{% elif op.modo == 'carpeta' %}Deshacer el apartado de la carpeta{% else %}Deshacer el apartado{% endif %}</button>
       </form>
     </li>
     {% endfor %}

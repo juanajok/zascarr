@@ -28,3 +28,60 @@
 - Navegador real (Chrome/Firefox, claro/oscuro, 320/768/1280) y Pi: **NOT RUN**.
 - La deuda general del sistema (escala tipográfica sin tokens, grosores literales, `btn-secondary`
   inexistente, etc.) sigue abierta y es anterior a estas pantallas.
+
+## Cierre de la deuda 1 y 2 (tokens CSS, PR #738)
+
+- **Deuda 1 — escala de texto con nombre:** `:root` declara un token por estilo del sistema
+  (`--text-titulo-pagina`, `--text-cifra`, `--text-titulo-seccion`, `--text-marca`,
+  `--text-numero-paso`, `--text-titulo-bloque`, `--text-cuerpo`, `--text-titulo-frase`,
+  `--text-estado-resumen`, `--text-didascalia`, `--text-nav`, `--text-boton`,
+  `--text-secundario`, `--text-chip`, `--text-etiqueta`) y conserva `--text-nav-movil` como
+  excepción declarada. Las 140 declaraciones `font-size` usan `var(--text-*)`; fuera de `:root`
+  no queda ningún literal. Solo dos redondeos subpíxel: `.92rem→.9rem` y `1.02rem→1.05rem`.
+- **Deuda 2 — forma y espaciado:** `--border-panel` (3 px), `--border-control` (2,5 px),
+  `--border-chip` (2 px) y `--border-line` (1 px) sustituyen 130 grosores literales;
+  `--space-1..6` (4/8/12/16/24/32 px) sustituye 335 huecos exactos. Los valores fuera de la
+  escala del sistema se conservan con tokens heredados para no cambiar píxeles.
+- **Verificación:** `scripts/comparar_tokens_css.py` compara declaración a declaración antes y
+  después y solo admite los redondeos de la tabla; `tests/test_web_css_tokens.py` impide que
+  vuelvan los literales (mordida comprobada). Suite completa y CI en verde; revisado en la Pi en
+  claro/oscuro a 1280 y 375 px (Inicio, Biblioteca, Auditoría, Ajustes).
+
+## Deuda 6 — portada de «Por revisar» (decisión del PO, 2026-11-13)
+
+La revisión proponía usar `ui.portada` en las tarjetas de «Por revisar» para que una fila no cambie de alto
+al cargar, sabiendo que **revierte U12** (el hueco 2:3 volvía a empujar los nombres). El PO lo aprobó.
+
+- La tarjeta (`_tarjeta_pendiente.html`) pinta **siempre** el marcador de `ui.portada` (inicial + tinta) y la
+  `<img>` solo cuando el servidor sabe que la extensión tiene extractor: una ausencia conocida (CBR, PDF…)
+  no lanza ninguna petición `/portada`, y el marcador ocupa su 2:3 para alinear la fila.
+- `.portada-pendiente` acota el bloque a 120 px de ancho; `.cover` se conserva en la hoja por compatibilidad
+  hasta la V14.
+- Sin `onerror`: si la portada no llega, se ve el marcador, como en la Biblioteca.
+- Pruebas: los tres casos de portada de `tests/test_pendientes_tarjeta.py` se reescriben para el mecanismo
+  nuevo (marcador sin petición; `<img>` con marcador debajo; 2:3 y 120 px); la verificación visual se hace
+  en navegador real a 1280 y 375 px tras desplegar.
+
+**Corrección tras la primera puesta en pantalla (2026-11-13, misma deuda 6):** con la portada *debajo* del
+nombre, dentro de una fila las portadas empezaban a distinta altura (el nombre ocupa una o dos líneas), y el
+PO lo vio como tarjetas «descolocadas». La portada pasa **arriba** del nombre —como en la Biblioteca—: todas
+las tarjetas de una fila la empiezan a la misma altura, el nombre sigue entero debajo y el marcador conserva
+su 2:3. La prueba `test_la_portada_va_primero_para_que_la_fila_empiece_a_la_misma_altura` fija el orden.
+
+## Deuda 3 (parcial) — clases heredadas retiradas (V14, #750)
+
+V14 retiró `.topnav`, `.hero-state`, `.toast`, `.audit-ok`, `.ajustes-grid`, `.filter-*`, `.cover`,
+`.library-vista*`, `.tabla-ficha`, `.recuento-biblioteca`, `.lectura-nota`, `.arco-anadir`,
+`.vinc-candidata-titulo`, `.btn-primary`, `.legal-notice-warn` y la familia `.issue-chip`
+(sustituida por `ui.chip`, con `chip-falta` para «te falta»).
+
+**Excepción documentada:** `.estado-dot` se conserva. No es un alias de V2: el sistema de diseño lo
+describe como el componente actual de los semáforos (glifos ✓ ! ? dibujados desde `static/iconos`).
+Retirarlo exigiría sustituir el semáforo por un chip o renombrarlo, y eso es una decisión de diseño
+aparte, no una limpieza mecánica.
+
+## Cierre de V14
+
+La migración de la Épica V queda cerrada: CSS muerto retirado, alias de V2 fuera (con prueba que
+impide su vuelta), capturas actuales en `docs/design/ui-actual/` y peso medido. La única excepción
+es `.estado-dot`, documentada arriba como componente actual del semáforo.

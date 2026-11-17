@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, MetadataSource, Series
-from zascarr.services.inicio import Desglose, VistaInicio
+from zascarr.services.inicio import ContinuarLeyendo, Desglose, VistaInicio
 from zascarr.services.library_adopter import EstadoAdopcion
 from zascarr.services.primeros_pasos import (
     EstadoInicio,
@@ -128,7 +128,8 @@ def _primarios_dentro_y_fuera_de_details(html: str) -> tuple[list[str], list[str
 
 def vista(*, adopcion=EstadoAdopcion.SIN_TEBEOS, registrados=0, sin_clasificar=0, seguidas=0,
           informe=None, legal=False, fuente=False, series=0, con_archivos=0, con_recuento=0,
-          huecos=0, completitud=None, ultimas=(), desglose=None, copias=0) -> VistaInicio:
+          huecos=0, completitud=None, ultimas=(), desglose=None, copias=0,
+          continuar=None) -> VistaInicio:
     """`desglose` por defecto: lo registrado que no está por revisar, clasificado."""
     if desglose is None:
         desglose = Desglose(total=registrados, clasificados=max(registrados - sin_clasificar, 0),
@@ -143,7 +144,7 @@ def vista(*, adopcion=EstadoAdopcion.SIN_TEBEOS, registrados=0, sin_clasificar=0
         ultimas_series=tuple(ultimas))
     return VistaInicio(resumen=resumen, pasos=pasos, informe=informe,
                        archivos_sin_clasificar=sin_clasificar, registrados=desglose,
-                       copias_descartadas=copias)
+                       copias_descartadas=copias, continuar=continuar)
 
 
 def pagina(v: VistaInicio) -> str:
@@ -154,6 +155,23 @@ def pagina(v: VistaInicio) -> str:
         r = client.get("/ui/")
     assert r.status_code == 200
     return r.text
+
+
+def test_continuar_leyendo_aparece_solo_si_hay_lectura_en_curso():
+    c = ContinuarLeyendo(series_id=str(uuid4()), series_title="Thorgal",
+                         issue_id=str(uuid4()), issue_number="3",
+                         issue_title="El país Qâ", current_page=5, page_count=20)
+    html = pagina(vista(registrados=1, continuar=c))
+    assert "Continuar leyendo" in html
+    assert "Thorgal" in html and "#3" in html
+    assert "5 de 20 páginas" in html
+    assert f"/ui/series/{c.series_id}/numero/{c.issue_id}" in html
+    assert f"/ui/series/{c.series_id}" in html
+
+
+def test_sin_lectura_en_curso_no_pinta_la_tarjeta():
+    html = pagina(vista(registrados=1))
+    assert "Continuar leyendo" not in html
 
 
 def texto(html: str, clase: str) -> str:
@@ -249,7 +267,8 @@ class TestPasosEnLaPlantilla:
         """Un envío ya no es amarillo por serlo (el amarillo es opt-in con `.primary`): el de
         buscar, que no es la acción principal del Inicio, no lo lleva."""
         html = pagina(vista())
-        assert 'class="btn sm neutro">Buscar' in html
+        # V14 (#750): ya no hace falta el modificador `.neutro`; la base de un envío es neutra.
+        assert 'class="btn sm">Buscar' in html
         inicio = html.index('id="q-inicio"')
         assert "primary" not in html[inicio:html.index("</form>", inicio)]
 
@@ -268,7 +287,17 @@ class TestProcedenciaDeLasCifras:
         assert "Tu colección ahora" not in html
         assert "nada sin clasificar" not in html
         assert texto(html, "subtitle") == "Aún no hay ningún tebeo registrado en ZascArr."
-        assert texto(html, "procedencia muted") == "En tu disco había 14 el 3 de octubre de 2026."
+        assert texto(html, "procedencia muted") == (
+            "En tu disco había 14 tebeos el 3 de octubre de 2026.")
+
+    def test_la_cifra_del_disco_dice_que_son_tebeos_y_va_en_singular_con_uno(self):
+        """Revisión UX de 2026-11-12: «En tu disco había 22 el 12 de noviembre» no decía qué
+        había."""
+        for n, esperado in ((1, "En tu disco había 1 tebeo el 3 de octubre de 2026."),
+                            (22, "En tu disco había 22 tebeos el 3 de octubre de 2026.")):
+            informe = InformeDisco(fecha=FECHA, archivos_leidos=n, archivos_comparados=0)
+            html = pagina(vista(adopcion=EstadoAdopcion.PENDIENTE, informe=informe))
+            assert texto(html, "procedencia muted") == esperado
 
     def test_sin_informe_dice_registrados_y_que_no_se_miro_el_disco(self):
         html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=1542, series=3))
@@ -281,7 +310,8 @@ class TestProcedenciaDeLasCifras:
         informe = InformeDisco(fecha=FECHA, archivos_leidos=1542, archivos_comparados=432)
         html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=1500, series=3,
                             informe=informe))
-        assert texto(html, "procedencia muted") == "En tu disco había 1542 el 3 de octubre de 2026."
+        assert texto(html, "procedencia muted") == (
+            "En tu disco había 1542 tebeos el 3 de octubre de 2026.")
         assert "Tebeos encontrados" not in html     # la tarjeta cuenta lo registrado, no el disco
         assert "432" not in html
 
@@ -292,7 +322,7 @@ class TestProcedenciaDeLasCifras:
         v = replace(vista(adopcion=EstadoAdopcion.HECHA, registrados=1325, informe=informe),
                     informe_hace="hace 3 semanas", informe_antiguo=True)
         html = pagina(v)
-        assert "había <b>1542</b> el 3 de octubre de 2026 (hace 3 semanas)." in html
+        assert "había <b>1542</b> tebeos el 3 de octubre de 2026 (hace 3 semanas)." in html
         assert '<a href="/ui/auditoria">Volver a mirar el disco</a>' in html
 
     def test_un_informe_reciente_no_invita_a_repetirlo(self):
@@ -338,7 +368,7 @@ class TestUnaCuentaQueCuadra:
 
     def test_lo_del_disco_explica_las_copias_que_no_se_registraron(self):
         assert texto(self._caso(copias=217), "procedencia muted") == (
-            "En tu disco había 1542 el 3 de octubre de 2026. Al registrarlos dejamos fuera "
+            "En tu disco había 1542 tebeos el 3 de octubre de 2026. Al registrarlos dejamos fuera "
             "217 copias idénticas: el mismo archivo no se registra dos veces.")
 
     def test_sin_copias_descartadas_no_inventa_explicacion(self):

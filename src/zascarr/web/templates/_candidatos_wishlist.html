@@ -4,19 +4,23 @@
   {% elif sin_candidatos %}
   <p class="candidatos-vacio">{{ motivo }}</p>
   {% else %}
-  <ul class="candidatos-lista">
+  <p class="candidatos-resumen"><strong>{{ candidatos | length }} resultado{{ 's' if candidatos | length != 1 }}</strong>
+    <span class="muted">— elige uno o varios; se envían al cliente de descarga.</span></p>
+  <ul class="candidatos-lista" aria-label="Resultados encontrados{% if item_titulo %} para {{ item_titulo }}{% endif %}">
     {% for fila in candidatos %}
-    <li class="candidato-fila">
+    <li class="candidato-fila" id="candidato-{{ item_id }}-{{ loop.index0 }}">
       <span class="candidato-titulo">{{ fila.c.title }}</span>
       <span class="candidato-detalle">
-        {{ fila.c.indexer }} · {{ fila.formato }} · {{ fila.c.size_bytes | filesizeformat }}
+        {{ fila.c.indexer }} · {{ fila.formato }} · {% if fila.c.size_bytes %}{{ fila.c.size_bytes | filesizeformat }}{% else %}tamaño desconocido{% endif %}
         {% if fila.c.seeders %}· {{ fila.c.seeders }} seeders{% endif %}
       </span>
       <form hx-post="/ui/wishlist/{{ item_id }}/enviar-candidato"
-            hx-target="#fila-{{ item_id }}" hx-swap="outerHTML"
+            hx-target="closest li" hx-swap="outerHTML"
             hx-confirm="¿Descargar este candidato?">
         <input type="hidden" name="token" value="{{ fila.token }}">
-        <button type="submit" class="btn-descargar-candidato">Descargar este</button>
+        <input type="hidden" name="indice" value="{{ loop.index0 }}">
+        <button type="submit" class="btn-descargar-candidato" hx-disable="this"
+                aria-label="Descargar {{ fila.c.title }}">Descargar este</button>
       </form>
     </li>
     {% endfor %}
@@ -24,7 +28,8 @@
   {% endif %}
   <button type="button" class="btn-cancelar-busqueda"
           hx-post="/ui/wishlist/{{ item_id }}/cancelar-busqueda"
-          hx-target="#candidatos-{{ item_id }}" hx-swap="outerHTML">
-    Cancelar
+          hx-target="#candidatos-{{ item_id }}" hx-swap="outerHTML"
+          aria-label="Cerrar la lista de candidatos">
+    Cerrar lista
   </button>
 </div>

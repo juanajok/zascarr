@@ -11,6 +11,9 @@ botón de probar antes de guardar.
 """
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+from uuid import UUID
+
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -19,13 +22,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
-from zascarr.services.amule import hash_contrasena_amuleweb
+from zascarr.models import ComicTradition
+from zascarr.services import raices as servicio_raices
+from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import (
     COOKIE_NAME,
     SESSION_MAX_AGE,
     crear_cookie_sesion,
 )
+from zascarr.services.blog_feed import estado_feed
 from zascarr.services.cortesia_estado import texto_politica_ajustes
+from zascarr.services.forum_scraper import (
+    ForumFloodControl,
+    ForumScraper,
+    OrigenNoPermitidoError,
+    url_de_foro_visible,
+)
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.prowlarr import ProwlarrClient
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
@@ -40,12 +52,14 @@ from zascarr.utils.cortesia import (
     FuenteApagada,
     politica_de,
 )
+from zascarr.utils.nombres_biblioteca import PRESETS
 from zascarr.utils.peticiones import (
     ErrorDePeticion,
     ReintentosAgotados,
     RespuestaNoTransitoria,
     pedir_con_cortesia,
 )
+from zascarr.utils.robots import FUENTES_CON_ROBOTS, AccesoProhibidoPorRobots
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -127,6 +141,10 @@ def _contexto() -> dict:
         "open_library_enabled": bool(getattr(s, "open_library_enabled", False)),
         "fandom_dc_enabled": bool(getattr(s, "fandom_dc_enabled", False)),
         "fandom_marvel_enabled": bool(getattr(s, "fandom_marvel_enabled", False)),
+        "reading_orders_enabled": bool(getattr(s, "reading_orders_enabled", False)),
+        "continuity_guide_enabled": bool(getattr(s, "continuity_guide_enabled", False)),
+        # SCR5: solo el feed RSS público; no se pide el HTML de los artículos.
+        "comic_book_herald_enabled": bool(getattr(s, "comic_book_herald_enabled", False)),
         "metron_token_configurado": bool(getattr(s, "metron_token", "")),
         "fuentes_heredadas": s.fuentes_heredadas,
         "prowlarr_url": s.prowlarr_url,
@@ -141,6 +159,16 @@ def _contexto() -> dict:
         "amule_url": s.amule_url,
         "amule_password_configurada": bool(s.amule_password),
         "amule_enabled": s.amule_enabled,
+        # SCR4/D-1: tarjeta del foro. La contraseña NUNCA viaja a la plantilla (solo si consta).
+        # `getattr` tolera los dobles antiguos de Ajustes que aún no declaran estos campos.
+        # m-1 (SecOps): nunca se pinta `user:pass@` ni una query de sesión (`?s=`).
+        "forum_url": url_de_foro_visible(getattr(s, "forum_url", "") or ""),
+        "forum_username": getattr(s, "forum_username", ""),
+        "forum_password_configurada": bool(getattr(s, "forum_password", "")),
+        "forum_enabled": bool(getattr(s, "forum_enabled", False)),
+        # m-4: el esquema se compara sin distinguir mayúsculas (`HTTP://` también avisa).
+        "forum_http_sin_tls": url_de_foro_visible(
+            getattr(s, "forum_url", "") or "").lower().startswith("http://"),
         "carpetas_compartidas": list(getattr(s, "carpetas_compartidas", []) or []),
         "carpetas_disponibles": [
             {"ruta": str(ruta), "nombre": nombre}
@@ -164,13 +192,150 @@ def _contexto() -> dict:
         "webhook_incluir_nombres": s.webhook_incluir_nombres,
         "quality_profile": getattr(s, "quality_profile", "equilibrado"),
         "upgrade_scan_interval_minutes": getattr(s, "upgrade_scan_interval_minutes", 360),
+        "upgrade_scan_batch": getattr(s, "upgrade_scan_batch", 3),
         "cortesia": texto_politica_ajustes(s),
+        "blog_feed_enabled": bool(getattr(s, "blog_feed_enabled", False)),
+        "blog_feed_url": getattr(s, "blog_feed_url", ""),
+        "blog_feed_name": getattr(s, "blog_feed_name", "Blog o RSS"),
+        "naming_enabled": bool(getattr(s, "naming_enabled", False)),
+        "naming_preset": getattr(s, "naming_preset", "clasico"),
+        "naming_padding": getattr(s, "naming_padding", 0),
+        "nombres_presets": PRESETS,
+        "import_create_missing_issue": bool(getattr(s, "import_create_missing_issue", False)),
+        "import_convert_cbr": bool(getattr(s, "import_convert_cbr", False)),
     }
 
 
+
+
+TRADICIONES_ETIQUETAS = {
+    "american": "Grapa americana",
+    "british": "Británico",
+    "manga": "Manga",
+    "manhwa": "Manhwa",
+    "manhua": "Manhua",
+    "tebeo": "Tebeo español",
+    "franco_belgian": "Franco-belga (BD)",
+    "fumetti": "Fumetti",
+    "other": "Otra",
+}
+
+
+async def _contexto_raices(db: AsyncSession) -> dict:
+    """Contexto de la tarjeta de discos; si la BD no está disponible, la página sigue."""
+    try:
+        raices = await servicio_raices.listar_con_tradiciones(db)
+        mapa = {str(t.tradition.value): str(t.root_id)
+                for r in raices for t in getattr(r, "traditions", []) or []}
+        from sqlalchemy import func, select
+
+        from zascarr.models import File
+        recuentos = dict((await db.execute(
+            select(File.root_id, func.count(File.id)).group_by(File.root_id))).all())
+        datos = []
+        for r in raices:
+            datos.append({
+                "id": str(r.id), "name": r.name, "path": r.path,
+                "host_path": r.host_path or "", "enabled": bool(r.enabled),
+                "is_default": bool(r.is_default),
+                "estado": servicio_raices.estado_de_raiz(r),
+                "archivos": int(recuentos.get(r.id, 0)),
+                "tradiciones": sorted(
+                    t.tradition.value for t in getattr(r, "traditions", []) or []),
+            })
+        return {
+            "raices_admin": datos, "mapa_tradiciones": mapa,
+            "montajes_disponibles": [
+                {"path": m.path, "host_path": m.host_path}
+                for m in servicio_raices.montajes_libres(raices)],
+            "tradiciones_admin": [
+                {"valor": t.value, "etiqueta": TRADICIONES_ETIQUETAS.get(t.value, t.value)}
+                for t in ComicTradition],
+        }
+    except Exception:  # noqa: BLE001 — la tarjeta no puede tumbar Ajustes si la BD no responde
+        logger.warning("ajustes.raices_no_disponibles", exc_info=False)
+        return {"raices_admin": [], "mapa_tradiciones": {}, "montajes_disponibles": [],
+                "tradiciones_admin": []}
+
+
 @router.get("", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    return _sin_cache(templates.TemplateResponse(request, "ajustes.html", _contexto()))
+async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    contexto = _contexto()
+    contexto.update(await _contexto_raices(db))
+    return _sin_cache(templates.TemplateResponse(request, "ajustes.html", contexto))
+
+
+@router.post("/guardar/raices", response_class=HTMLResponse)
+async def guardar_raices(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    form = await request.form()
+    asignaciones = {
+        clave.removeprefix("trad_"): (str(valor) if valor else None)
+        for clave, valor in form.items() if clave.startswith("trad_")
+    }
+    try:
+        await servicio_raices.guardar_mapa(db, asignaciones)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001 — mensaje de dominio, sin detalle técnico
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo guardar el reparto de discos.", "nombre": "Discos"})
+    return templates.TemplateResponse(
+        request, "_ajustes_guardado.html",
+        {"nombre": "Discos",
+         "aviso": ("Los archivos que ya tienes no se mueven; solo cambia "
+                   "dónde se importan los nuevos.")})
+
+
+@router.post("/raices/crear", response_class=HTMLResponse)
+async def crear_raiz(
+    request: Request, path: str = Form(...), name: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.crear_raiz(db, path=path, name=name)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo añadir el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
+
+
+@router.post("/raices/{root_id}/habilitar", response_class=HTMLResponse)
+async def habilitar_raiz(
+    request: Request, root_id: UUID, enabled: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.cambiar_habilitada(db, root_id, enabled)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo cambiar el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
+
+
+@router.post("/raices/{root_id}/borrar", response_class=HTMLResponse)
+async def borrar_raiz(
+    request: Request, root_id: UUID, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.borrar_raiz(db, root_id)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo borrar el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
 
 
 @router.post("/guardar/comic-vine", response_class=HTMLResponse)
@@ -272,6 +437,7 @@ async def guardar_calidad(
     request: Request,
     quality_profile: str = Form(default="equilibrado"),
     upgrade_scan_interval_minutes: str = Form(default="360"),
+    upgrade_scan_batch: str = Form(default="3"),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """BL-D2/D3: perfil legible de calidad y cadencia del escaneo de mejoras."""
@@ -283,11 +449,95 @@ async def guardar_calidad(
         intervalo = 360
     if intervalo not in (0, 180, 360, 720, 1440):
         intervalo = 360
+    try:
+        lote = int(upgrade_scan_batch)
+    except (TypeError, ValueError):
+        lote = 3
+    if lote not in (1, 3, 5, 10):
+        lote = 3
     await RuntimeSettingsService(db).save({
         "quality_profile": quality_profile,
         "upgrade_scan_interval_minutes": intervalo,
+        "upgrade_scan_batch": lote,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Calidad"})
+
+
+@router.post("/guardar/blog", response_class=HTMLResponse)
+async def guardar_blog(
+    request: Request,
+    blog_feed_enabled: bool = Form(default=False),
+    blog_feed_url: str = Form(default=""),
+    blog_feed_name: str = Form(default="Blog o RSS"),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """BLOG1: feed RSS/Atom genérico; el usuario aporta la URL."""
+    url = (blog_feed_url or "").strip()
+    nombre = (blog_feed_name or "").strip()[:120] or "Blog o RSS"
+    if url and not estado_feed(url):
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Blog o RSS",
+            "error": ("La dirección no es válida para el conector: usa un dominio público "
+                      "http:// o https://, sin IP, credenciales ni puerto."),
+        })
+    if blog_feed_enabled and not url:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Blog o RSS",
+            "error": "Escribe la dirección del blog o RSS antes de activarlo.",
+        })
+    await RuntimeSettingsService(db).save({
+        "blog_feed_enabled": bool(blog_feed_enabled),
+        "blog_feed_url": url,
+        "blog_feed_name": nombre,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        "nombre": "Blog o RSS",
+    })
+
+
+@router.post("/guardar/nombres", response_class=HTMLResponse)
+async def guardar_nombres(
+    request: Request,
+    naming_enabled: bool = Form(default=False),
+    naming_preset: str = Form(default="clasico"),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """BL-B9: activa/desactiva nombres nuevos y elige su preset."""
+    if naming_preset not in PRESETS:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Nombres de archivo",
+            "error": "Ese estilo de nombre no existe. Elige uno de la lista.",
+        })
+    await RuntimeSettingsService(db).save({
+        "naming_enabled": bool(naming_enabled),
+        "naming_preset": naming_preset,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        "nombre": "Nombres de archivo",
+    })
+
+
+@router.post("/guardar/importacion", response_class=HTMLResponse)
+async def guardar_importacion(
+    request: Request,
+    import_create_missing_issue: bool = Form(default=False),
+    import_convert_cbr: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """B23: crear el primer número y convertir CBR al importar."""
+    await RuntimeSettingsService(db).save({
+        "import_create_missing_issue": bool(import_create_missing_issue),
+        "import_convert_cbr": bool(import_convert_cbr),
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        "nombre": "Importación",
+    })
+
+
+def _fuentes_de_robots_cambiadas(previas: dict, nuevas: dict) -> tuple[str, ...]:
+    """Fuentes cuyo booleano de activación cambia (para olvidar solo sus orígenes, M-4)."""
+    return tuple(fuente for fuente in FUENTES_CON_ROBOTS
+                 if bool(previas.get(fuente, False)) != bool(nuevas.get(fuente, False)))
 
 
 @router.post("/guardar/fuentes", response_class=HTMLResponse)
@@ -301,8 +551,23 @@ async def guardar_fuentes(
     open_library_enabled: bool = Form(default=False),
     fandom_dc_enabled: bool = Form(default=False),
     fandom_marvel_enabled: bool = Form(default=False),
+    reading_orders_enabled: bool = Form(default=False),
+    continuity_guide_enabled: bool = Form(default=False),
+    comic_book_herald_enabled: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
+    # M-4: solo se olvida el estado de robots de las fuentes que cambian de estado; si el
+    # guardado falla no se olvida nada (el estado en memoria sigue a la configuración real).
+    ajustes_previos = get_settings()
+    previas = {fuente: bool(getattr(ajustes_previos, f"{fuente}_enabled", False))
+               for fuente in FUENTES_CON_ROBOTS}
+    nuevas = {
+        "fandom_dc": fandom_dc_enabled,
+        "fandom_marvel": fandom_marvel_enabled,
+        "reading_orders": reading_orders_enabled,
+        "continuity_guide": continuity_guide_enabled,
+        "comic_book_herald": comic_book_herald_enabled,
+    }
     await RuntimeSettingsService(db).save({
         "comicvine_enabled": comicvine_enabled,
         "anilist_enabled": anilist_enabled,
@@ -312,10 +577,18 @@ async def guardar_fuentes(
         "open_library_enabled": open_library_enabled,
         "fandom_dc_enabled": fandom_dc_enabled,
         "fandom_marvel_enabled": fandom_marvel_enabled,
+        "reading_orders_enabled": reading_orders_enabled,
+        "continuity_guide_enabled": continuity_guide_enabled,
+        "comic_book_herald_enabled": comic_book_herald_enabled,
         # Guardar es tomar la decisión (aunque sea confirmar el estado actual): deja de ser
         # «heredado».
         "fuentes_heredadas": False,
     })
+    if any(previas.values()) or any(nuevas.values()):
+        from zascarr.utils.robots import olvidar_origenes_de_fuente
+
+        for fuente in _fuentes_de_robots_cambiadas(previas, nuevas):
+            olvidar_origenes_de_fuente(fuente)
     return templates.TemplateResponse(
         request, "_ajustes_guardado.html", {"nombre": "Fuentes de datos"}
     )
@@ -401,6 +674,54 @@ async def guardar_amule(
         "amule_enabled": amule_enabled,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "aMule"})
+
+
+def _direccion_de_foro_valida(url: str) -> bool:
+    """Dirección base del foro: http(s), sin credenciales, query ni fragmento (m-1).
+
+    Las credenciales en la URL acabarían en logs/UI y la query puede ser `?s=<sesión>`; si el
+    `.env` trae una, Ajustes la rechaza en vez de guardarla/pintarla.
+    """
+    try:
+        partes = urlsplit(url)
+        _ = partes.port                       # valida el puerto (lanza ValueError si no lo es)
+    except ValueError:
+        return False
+    if partes.scheme.lower() not in ("http", "https") or not partes.hostname:
+        return False
+    if partes.username is not None or partes.password is not None or "@" in partes.netloc:
+        return False
+    return not partes.query and not partes.fragment
+
+
+@router.post("/guardar/foro", response_class=HTMLResponse)
+async def guardar_foro(
+    request: Request,
+    forum_url: str = Form(default=""),
+    forum_username: str = Form(default=""),
+    forum_password: str = Form(default=""),
+    forum_enabled: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """SCR4/D-1: URL, usuario, contraseña (en blanco = no cambiar) y activar.
+
+    La contraseña no se devuelve nunca a la plantilla; `RuntimeSettingsService.save` ignora
+    un secreto vacío. `http://` se acepta (D-2) y la tarjeta avisa de que no hay TLS.
+    """
+    direccion = forum_url.strip().rstrip("/")
+    if direccion and not _direccion_de_foro_valida(direccion):
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Foro",
+            "error": "La dirección del foro debe ser http o https, sin usuario, contraseña "
+                     "ni parámetros (como ?s=). Guarda solo la dirección base.",
+        })
+    await RuntimeSettingsService(db).save({
+        "forum_url": url_de_foro_visible(direccion) if direccion else "",
+        "forum_username": forum_username.strip(),
+        "forum_password": forum_password,
+        "forum_enabled": forum_enabled,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Foro"})
 
 
 @router.post("/guardar/compartidos", response_class=HTMLResponse)
@@ -527,6 +848,66 @@ def _secreto_o_guardado(valor_form: str, campo: str) -> str:
     if campo not in SECRET_FIELDS:
         return valor_form
     return getattr(get_settings(), campo, "") or ""
+
+
+async def _test_foro(url: str, usuario: str, password: str) -> tuple[bool, str]:
+    """Prueba manual del foro: SOLO inicia sesión (sin búsqueda) y no persiste nada.
+
+    Es la excepción explícita a «fuente apagada»: el operador acaba de pulsar el botón, igual
+    que en Comic Vine/Metron. No genera tráfico de búsqueda ni gasta el intervalo de búsqueda.
+    """
+    direccion = (url or "").strip().rstrip("/")
+    if not _direccion_de_foro_valida(direccion):
+        return False, ("La dirección del foro no es válida: debe ser http(s), sin usuario, "
+                       "contraseña ni parámetros.")
+    usuario = (usuario or "").strip()
+    if not usuario or not password:
+        return False, "Falta el usuario o la contraseña."
+    try:
+        scraper = ForumScraper(direccion, permitir_apagada=True)
+        confirmado = await scraper.login(usuario, password)
+        if confirmado:
+            return True, "Conexión correcta: el foro aceptó el usuario."
+        return False, ("No se pudo iniciar sesión: revisa usuario y contraseña y que la "
+                       "cuenta pueda entrar en el foro.")
+    except ForumFloodControl as exc:
+        segundos = max(1, round(exc.segundos))
+        return False, ("No se ha probado: el foro pidió esperar ~"
+                       f"{segundos} s. Inténtalo de nuevo después.")
+    except CortesiaEnEspera as exc:
+        segundos = max(1, round(exc.espera_estimada_s))
+        return False, ("No se ha probado: hay que esperar ~"
+                       f"{segundos} s por cortesía. Inténtalo de nuevo en un momento.")
+    except AccesoProhibidoPorRobots:
+        return False, "El robots.txt del foro no permite comprobar la sesión."
+    except OrigenNoPermitidoError:
+        return False, ("La dirección del foro no es válida: debe ser http(s), sin usuario, "
+                       "contraseña ni parámetros.")
+    except (ErrorDePeticion, OSError, httpx.HTTPError) as exc:
+        logger.warning("ajustes.test_failed", integracion="foro",
+                       error=type(exc).__name__)
+        return False, ("No se pudo conectar con el foro: revisa la dirección y que la Pi "
+                       "llegue a él.")
+    except Exception as exc:
+        logger.warning("ajustes.test_failed", integracion="foro",
+                       error=type(exc).__name__)
+        return False, "No se pudo comprobar la conexión con el foro. Inténtalo de nuevo."
+
+
+@router.post("/probar/foro", response_class=HTMLResponse)
+async def probar_foro(
+    request: Request,
+    forum_url: str = Form(default=""),
+    forum_username: str = Form(default=""),
+    forum_password: str = Form(default=""),
+) -> HTMLResponse:
+    password = _secreto_o_guardado(forum_password, "forum_password")
+    ok, mensaje = await _test_foro(forum_url, forum_username, password)
+    aviso = (not ok) and mensaje.startswith("No se ha probado")
+    return templates.TemplateResponse(
+        request, "_ajustes_prueba.html",
+        {"ok": ok, "mensaje": mensaje, "aviso": aviso},
+    )
 
 
 @router.post("/probar/comic-vine", response_class=HTMLResponse)
@@ -697,7 +1078,8 @@ async def _test_prowlarr(url: str, api_key: str) -> tuple[bool, str]:
             return False, "Prowlarr respondió: clave de API rechazada."
         return False, f"Prowlarr respondió HTTP {r.status_code}."
     except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="prowlarr", error=str(exc))
+        logger.warning("ajustes.test_failed", integracion="prowlarr",
+                       error_tipo=type(exc).__name__)
         return False, _mensaje_conexion_fallida(exc)
 
 
@@ -725,7 +1107,8 @@ async def _test_transmission(url: str, username: str, password: str) -> tuple[bo
             return True, "Conexión correcta."
         return False, "Transmission no confirmó la sesión."
     except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="transmission", error=str(exc))
+        logger.warning("ajustes.test_failed", integracion="transmission",
+                       error_tipo=type(exc).__name__)
         return False, _mensaje_conexion_fallida(exc)
 
 
@@ -735,12 +1118,13 @@ async def _test_amule(url: str, password: str) -> tuple[bool, str]:
     if not password:
         return False, "Falta la contraseña de amuleweb."
     try:
-        pw_hash = hash_contrasena_amuleweb(password)
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-            r = await client.post(f"{url}/", data={"p": pw_hash})
-        if r.cookies or r.headers.get("set-cookie"):
+        cliente = AMuleClient()
+        cliente._base = url
+        cliente._password = password
+        if await cliente.login():
             return True, "Conexión correcta."
         return False, "aMule no devolvió sesión — revisa la contraseña."
     except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="amule", error=str(exc))
+        logger.warning("ajustes.test_failed", integracion="amule",
+                       error_tipo=type(exc).__name__)
         return False, _mensaje_conexion_fallida(exc)

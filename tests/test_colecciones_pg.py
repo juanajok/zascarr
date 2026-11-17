@@ -23,14 +23,18 @@ from zascarr.models import (
     WishlistOrigin,
     WishlistPolicy,
     WishlistStatus,
+    collection_series,
 )
 from zascarr.services.colecciones import (
     asignar_serie,
+    asignar_series,
     borrar_coleccion,
     crear_coleccion,
     detalle_coleccion,
     editar_coleccion,
+    es_miembro,
     listar_colecciones,
+    pagina_series_sin_coleccion,
     quitar_serie,
     series_sin_coleccion,
 )
@@ -71,9 +75,13 @@ async def serie(db, titulo="Flash", *, policy=WishlistPolicy.NONE, total=3,
                 collection=None) -> Series:
     s = Series(id=uuid4(), title=titulo, tradition=ComicTradition.AMERICAN,
                total_issues=total, metadata_source=MetadataSource.COMIC_VINE.value,
-               wishlist_policy=policy, collection_id=collection.id if collection else None)
+               wishlist_policy=policy)
     db.add(s)
     await db.flush()
+    if collection is not None:
+        await db.execute(collection_series.insert().values(
+            collection_id=collection.id, series_id=s.id))
+        await db.flush()
     return s
 
 
@@ -121,16 +129,16 @@ async def test_crud_nombre_unico_case_insensitive_y_asignacion_unica(db):
     s = await serie(db, "Flash")
     assert (await listar_colecciones(db))[0].name == "Grapas"
     assert not (await asignar_serie(db, r.coleccion.id, s.id)).errores
-    assert s.collection_id == r.coleccion.id
+    assert await es_miembro(db, r.coleccion.id, s.id)
     detalle = await detalle_coleccion(db, r.coleccion.id)
     assert detalle is not None and len(detalle.series) == 1
     fila = detalle.series[0]
     assert fila.wishlist_policy_label == "No buscar automáticamente"
     assert fila.politica_efectiva_label == "No buscar automáticamente"
     assert str(s.id) not in {x.id for x in await series_sin_coleccion(db)}
-    assert not (await asignar_serie(db, r.coleccion.id, s.id)).ok
+    assert (await asignar_serie(db, r.coleccion.id, s.id)).ok  # idempotente
     assert await quitar_serie(db, r.coleccion.id, s.id)
-    assert s.collection_id is None
+    assert not await es_miembro(db, r.coleccion.id, s.id)
     await editar_coleccion(db, r.coleccion.id, name="Clásicos", description="",
                            auto_search="excluir")
     assert (await db.get(Collection, r.coleccion.id)).auto_search == CollectionAutoSearch.EXCLUIR
@@ -142,7 +150,7 @@ async def test_borrar_coleccion_deja_series_sin_coleccion(db):
     assert await borrar_coleccion(db, r.coleccion.id)
     await db.flush()
     await db.refresh(s)
-    assert s.collection_id is None
+    assert not await es_miembro(db, r.coleccion.id, s.id)
 
 
 async def test_orquestador_incluye_faltantes_y_no_toca_manuales(db):
@@ -206,3 +214,184 @@ async def test_ficha_usa_la_politica_efectiva_y_explica_la_coleccion(db):
     assert ctx_exc["politica_efectiva"] == WishlistPolicy.NONE
     assert ctx_exc["veredicto"]["tipo"] == "ninguno"
     assert "Excluye" in (ctx_exc["coleccion_causa"] or "")
+
+
+async def _portadas(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from zascarr.services import colecciones as colecciones_service
+    from zascarr.services import portada_coleccion as pc
+    def ajustes():
+        return SimpleNamespace(covers_cache_path=tmp_path / "covers")
+    monkeypatch.setattr(pc, "get_settings", ajustes)
+    monkeypatch.setattr(colecciones_service, "get_settings", ajustes)
+    return pc
+
+
+def _jpeg_serie(tmp_path, series_id, color=(20, 40, 60)):
+    from PIL import Image
+    ruta = tmp_path / "covers" / "v3" / f"{series_id}.jpg"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (300, 450), color).save(ruta, format="JPEG")
+    return ruta
+
+
+async def test_portada_mosaico_1_2_3_4_y_etag(db, tmp_path, monkeypatch):
+    import io
+
+    from PIL import Image
+    pc = await _portadas(tmp_path, monkeypatch)
+    for n in (1, 2, 3, 4):
+        r = await crear_coleccion(db, name=f"C{n}", description="", auto_search="heredar")
+        for i in range(n):
+            s = await serie(db, f"Serie {n}-{i}", collection=r.coleccion)
+            _jpeg_serie(tmp_path, s.id, (i * 40, 20, 30))
+        res = await pc.obtener_portada(db, r.coleccion.id)
+        assert res is not None and res.cacheable
+        with Image.open(io.BytesIO(res.datos)) as img:
+            assert (img.width, img.height) == (600, 900)
+        assert (tmp_path / "covers" / "colecciones" / f"{r.coleccion.id}.jpg").exists()
+        assert (tmp_path / "covers" / "colecciones" / f"{r.coleccion.id}.json").exists()
+        segunda = await pc.obtener_portada(db, r.coleccion.id)
+        assert segunda is not None and segunda.etag == res.etag
+
+
+async def test_portada_override_miembro_y_fallback(db, tmp_path, monkeypatch):
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Override", description="", auto_search="heredar")
+    s1 = await serie(db, "Uno", collection=c.coleccion)
+    s2 = await serie(db, "Dos", collection=c.coleccion)
+    r1 = _jpeg_serie(tmp_path, s1.id, (255, 0, 0))
+    _jpeg_serie(tmp_path, s2.id, (0, 255, 0))
+    d0 = await detalle_coleccion(db, c.coleccion.id)
+    assert (await pc.elegir_portada(db, c.coleccion.id, s1.id)).ok
+    d1 = await detalle_coleccion(db, c.coleccion.id)
+    assert d0 is not None and d1 is not None and d0.portada_url != d1.portada_url
+    res = await pc.obtener_portada(db, c.coleccion.id)
+    assert res is not None and res.datos == r1.read_bytes()
+    # Elegir una que no es miembro se rechaza y no cambia la elección.
+    otra = await serie(db, "Otra")
+    assert not (await pc.elegir_portada(db, c.coleccion.id, otra.id)).ok
+    # La elegida se va de la colección: cae al mosaico sin borrar la elección.
+    await quitar_serie(db, c.coleccion.id, s1.id)
+    res2 = await pc.obtener_portada(db, c.coleccion.id)
+    assert res2 is not None and res2.datos != r1.read_bytes()
+    assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s1.id
+    assert (await pc.elegir_portada(db, c.coleccion.id, None)).ok
+
+
+async def test_portada_sin_covers_404_y_borrado_limpia_cache(db, tmp_path, monkeypatch):
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Vacía", description="", auto_search="heredar")
+    s = await serie(db, "Sin portada", collection=c.coleccion)
+    assert await pc.obtener_portada(db, c.coleccion.id) is None
+    _jpeg_serie(tmp_path, s.id)
+    assert await pc.obtener_portada(db, c.coleccion.id) is not None
+    assert (tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.jpg").exists()
+    assert await borrar_coleccion(db, c.coleccion.id)
+    assert not (tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.jpg").exists()
+
+
+async def test_migracion_0035_columna_y_fk_existen(db):
+    col = (await db.execute(text(
+        "SELECT is_nullable FROM information_schema.columns "
+        "WHERE table_name='collections' AND column_name='cover_series_id'"))).scalar()
+    assert col == "YES"
+    fk = (await db.execute(text(
+        "SELECT confdeltype FROM pg_constraint "
+        "WHERE conname='fk_collections_cover_series_id'"))).scalar()
+    assert fk in ("n", b"n")      # ON DELETE SET NULL
+
+
+async def test_override_invalido_conserva_la_eleccion(db, tmp_path, monkeypatch):
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Conserva", description="", auto_search="heredar")
+    s = await serie(db, "Uno", collection=c.coleccion)
+    _jpeg_serie(tmp_path, s.id)
+    assert (await pc.elegir_portada(db, c.coleccion.id, s.id)).ok
+    otra = await serie(db, "Fuera")
+    assert not (await pc.elegir_portada(db, c.coleccion.id, otra.id)).ok
+    await db.flush()
+    assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id
+    assert not (await pc.elegir_portada(db, c.coleccion.id, uuid4())).ok
+    assert (await db.get(Collection, c.coleccion.id)).cover_series_id == s.id
+
+
+async def test_asignar_series_es_atomico(db):
+    c1 = await crear_coleccion(db, name="Uno", description="", auto_search="heredar")
+    c2 = await crear_coleccion(db, name="Dos", description="", auto_search="heredar")
+    a = await serie(db, "A")
+    b = await serie(db, "B")
+    ya = await serie(db, "Ya", collection=c2.coleccion)
+    assert (await asignar_series(db, c1.coleccion.id, [a.id, b.id, a.id])).ok
+    assert await es_miembro(db, c1.coleccion.id, a.id)
+    assert await es_miembro(db, c1.coleccion.id, b.id)
+    assert (await asignar_series(db, c1.coleccion.id, [a.id])).ok       # idempotente
+    assert (await asignar_series(db, c1.coleccion.id, [ya.id, b.id])).ok
+    assert await es_miembro(db, c1.coleccion.id, ya.id)                 # ahora solapada
+    assert await es_miembro(db, c2.coleccion.id, ya.id)
+    assert not (await asignar_series(db, c1.coleccion.id, [])).ok
+    assert not (await asignar_series(db, c1.coleccion.id, [uuid4()])).ok
+
+
+async def test_sidecar_de_version_anterior_se_regenera_y_url_lleva_version(
+        db, tmp_path, monkeypatch):
+    import json
+    pc = await _portadas(tmp_path, monkeypatch)
+    c = await crear_coleccion(db, name="Version", description="", auto_search="heredar")
+    s = await serie(db, "Uno", collection=c.coleccion)
+    _jpeg_serie(tmp_path, s.id)
+    primera = await pc.obtener_portada(db, c.coleccion.id)
+    assert primera is not None
+    sidecar = tmp_path / "covers" / "colecciones" / f"{c.coleccion.id}.json"
+    datos = json.loads(sidecar.read_text())
+    datos["version"] = 1
+    sidecar.write_text(json.dumps(datos))
+    segunda = await pc.obtener_portada(db, c.coleccion.id)
+    assert segunda is not None
+    assert json.loads(sidecar.read_text())["version"] == 2
+    det = await detalle_coleccion(db, c.coleccion.id)
+    assert det is not None and "-m2" in det.portada_url
+
+
+async def test_filtros_alta_por_titulo_normalizado_y_tradicion(db):
+    await serie(db, "Flash")
+    asterix = await serie(db, "Astérix el Galo", policy=WishlistPolicy.NONE)
+    manga = await serie(db, "Berserk", policy=WishlistPolicy.NONE)
+    async with db.begin_nested():
+        await db.execute(text("UPDATE series SET tradition='manga' WHERE id=:i"), {"i": manga.id})
+    await db.flush()
+    solo_asterix = await series_sin_coleccion(db, q="asterix")
+    assert [s.id for s in solo_asterix] == [str(asterix.id)]
+    assert [s.id for s in await series_sin_coleccion(db, q="ASTÉRIX")] == [str(asterix.id)]
+    assert {s.id for s in await series_sin_coleccion(db, tradicion="manga")} == {str(manga.id)}
+    assert await series_sin_coleccion(db, q="no existe") == []
+    assert len(await series_sin_coleccion(db, q="x" * 500)) == 0
+
+
+async def test_paginacion_real_de_series_disponibles(db):
+    for i in range(45):
+        await serie(db, f"PaginacionUnica {i:02d}")
+    p1 = await pagina_series_sin_coleccion(db, q="PaginacionUnica")
+    p2 = await pagina_series_sin_coleccion(db, q="PaginacionUnica", pagina=2)
+    assert p1.total == 45 and p1.pagina == 1 and len(p1.series) == 40
+    assert p1.desde == 1 and p1.hasta == 40 and p1.paginas == 2
+    assert p2.pagina == 2 and len(p2.series) == 5 and p2.desde == 41 and p2.hasta == 45
+    assert {s.id for s in p1.series}.isdisjoint({s.id for s in p2.series})
+
+
+async def test_colecciones_solapadas_y_quitar_de_una_no_toca_la_otra(db):
+    c1 = await crear_coleccion(db, name="Solape Uno", description="", auto_search="heredar")
+    c2 = await crear_coleccion(db, name="Solape Dos", description="", auto_search="incluir")
+    s = await serie(db, "Solapada")
+    assert (await asignar_series(db, c1.coleccion.id, [s.id])).ok
+    assert (await asignar_series(db, c2.coleccion.id, [s.id])).ok
+    d1 = await detalle_coleccion(db, c1.coleccion.id)
+    d2 = await detalle_coleccion(db, c2.coleccion.id)
+    assert d1 is not None and [x.id for x in d1.series] == [str(s.id)]
+    assert d2 is not None and [x.id for x in d2.series] == [str(s.id)]
+    assert await es_miembro(db, c1.coleccion.id, s.id)
+    assert await es_miembro(db, c2.coleccion.id, s.id)
+    assert await quitar_serie(db, c1.coleccion.id, s.id)
+    assert not await es_miembro(db, c1.coleccion.id, s.id)
+    assert await es_miembro(db, c2.coleccion.id, s.id)

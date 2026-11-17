@@ -17,7 +17,21 @@ from zascarr.utils import lector_rar
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
 from zascarr.utils.portada_rar import barrer_temporales
+from zascarr.utils.registro_reciente import instalar_captura
+from zascarr.utils.saneado_logs import (
+    instalar_filtro_registros,
+    instalar_saneo_structlog,
+    refrescar_raices,
+    refrescar_raices_db,
+)
 
+# BL-E5 (#164): búfer acotado para que el dashboard pueda descargar los últimos
+# eventos sin depender de Docker ni de una shell. No cambia el formato de stdout.
+# #369: el saneador va ANTES de la captura para que el búfer no guarde rutas.
+instalar_saneo_structlog()
+refrescar_raices()
+instalar_captura()
+instalar_filtro_registros()
 logger = structlog.get_logger()
 
 # `httpx` registra cada petición a nivel INFO con la URL COMPLETA, y en Telegram
@@ -122,26 +136,45 @@ async def _rescan_loop(interval_minutes: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
-async def _upgrades_loop(interval_minutes: int) -> None:
-    """BL-D3: escaneo acotado y periódico de mejoras de edición.
+async def _upgrades_loop() -> None:
+    """BL-D3: escaneo acotado de mejoras, con cadencia leída en cada vuelta.
 
-    El primer pase espera un intervalo completo (no compite con el arranque).
-    Respeta el perfil D2; `cualquiera` y el escaneo desactivado no hacen nada.
+    Se arranca siempre (salvo BD degradada) para que activar el escaneo o
+    cambiar la cadencia en Ajustes funcione sin reiniciar. Si está desactivado
+    o el perfil es «cualquiera», no consulta nada y solo espera.
     """
     from zascarr.database import async_session_factory
     from zascarr.services.upgrades import escanear_mejoras
 
-    logger.info("upgrades.first_delayed", minutos=interval_minutes)
-    await asyncio.sleep(interval_minutes * 60)
+    logger.info("upgrades.scheduler_started")
+    siguiente: float | None = None
+    intervalo_previo = -1
+    bucle = asyncio.get_running_loop()
     while True:
         try:
-            async with async_session_factory() as db:
-                creadas = await escanear_mejoras(db)
-                if creadas:
-                    logger.info("upgrades.proposals_created", total=creadas)
+            settings = get_settings()
+            intervalo = max(0, int(getattr(settings, "upgrade_scan_interval_minutes", 0)))
+            perfil = getattr(settings, "quality_profile", "equilibrado")
+            ahora = bucle.time()
+            if intervalo <= 0 or perfil == "cualquiera":
+                siguiente = None
+            else:
+                if siguiente is None or intervalo != intervalo_previo:
+                    # Primera vuelta (o cambio de cadencia): espera el intervalo nuevo.
+                    siguiente = ahora + intervalo * 60
+                if ahora >= siguiente:
+                    async with async_session_factory() as db:
+                        informe = await escanear_mejoras(db)
+                        if informe.revisados or informe.creadas or informe.fallidos:
+                            logger.info("upgrades.cycle_done",
+                                        revisados=informe.revisados,
+                                        creadas=informe.creadas,
+                                        fallidos=informe.fallidos)
+                    siguiente = bucle.time() + intervalo * 60
+            intervalo_previo = intervalo
         except Exception:
             logger.exception("upgrades.cycle_failed")
-        await asyncio.sleep(interval_minutes * 60)
+        await asyncio.sleep(60)
 
 
 async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
@@ -153,12 +186,17 @@ async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
     """
     from zascarr.database import async_session_factory
     from zascarr.services.enricher import EnrichmentService
+    from zascarr.utils.cache_http import purgar_cache
 
     while True:
         try:
             async with async_session_factory() as session:
                 report = await EnrichmentService(session).enrich_pending(limit=batch_size)
                 await session.commit()
+            # SCR1: purga las filas caducadas de `http_cache` (nunca por `fresh_until`: eso
+            # destruiría el ETag y el cuerpo que hacen posible el 304). `purgar_cache` ya
+            # contiene el try/except: un fallo de purga no tumba el ciclo.
+            await purgar_cache()
             if report.total_enriched or report.errors:
                 logger.info(
                     "enricher.cycle_done",
@@ -303,11 +341,23 @@ async def lifespan(app: FastAPI):
             await RuntimeSettingsService(session).ensure_secret_key()
             await session.commit()
         logger.info("zascarr.db_connected")
+        await refrescar_raices_db(async_session_factory)
     except Exception:
         logger.exception("zascarr.db_unavailable_at_startup")
         app.state.db_degraded = True
 
     if not app.state.db_degraded:
+        # #344: operaciones de paquetes que quedaron vivas en un arranque anterior y sus
+        # temporales; se marcan error para que se puedan reintentar. Nunca impide arrancar.
+        try:
+            from zascarr.services.paquetes_extraccion import limpiar_huerfanos
+            async with async_session_factory() as session:
+                limpiadas = await limpiar_huerfanos(session)
+            if limpiadas:
+                logger.info("paquetes.huerfanos_limpiados", cantidad=limpiadas)
+        except Exception:
+            logger.exception("paquetes.huerfanos_limpieza_fallida")
+
         # #478/#564: consumir el diario de conversión de una ejecución anterior. Si una
         # conversión murió entre apartar el original y publicar, se restaura; si murió
         # después de publicar, se repara la fila. Sin esto, el diario crecería sin fin.
@@ -352,9 +402,9 @@ async def lifespan(app: FastAPI):
         if settings.rescan_interval_minutes > 0:
             background_tasks.append(
                 asyncio.create_task(_rescan_loop(settings.rescan_interval_minutes)))
-        if settings.upgrade_scan_interval_minutes > 0 and settings.quality_profile != "cualquiera":
-            background_tasks.append(
-                asyncio.create_task(_upgrades_loop(settings.upgrade_scan_interval_minutes)))
+        # BL-D3: siempre arranca; lee cadencia/perfil en cada vuelta para que
+        # activar o desactivar en Ajustes no exija reiniciar.
+        background_tasks.append(asyncio.create_task(_upgrades_loop()))
 
     yield
 
@@ -406,6 +456,7 @@ def create_app() -> FastAPI:
     from zascarr.api.revision import router as revision_router
     from zascarr.api.series import router as series_router
     from zascarr.api.wishlist import router as wishlist_router
+    from zascarr.middleware_cuerpo import LimiteCuerpoMiddleware
     from zascarr.services.auth import AuthMiddleware
     from zascarr.web.ajustes import router as ajustes_router
     from zascarr.web.arcos import router as arcos_ui_router
@@ -430,6 +481,8 @@ def create_app() -> FastAPI:
     from zascarr.web.library import router as library_router
     from zascarr.web.mejoras import router as mejoras_ui_router
     from zascarr.web.navegacion import router as navegacion_router
+    from zascarr.web.novedades import api_router as novedades_api_router
+    from zascarr.web.novedades import router as novedades_ui_router
     from zascarr.web.pendientes import router as pendientes_router
     from zascarr.web.retirada_serie import router as retirada_serie_ui_router
     from zascarr.web.routes import router as ui_router
@@ -441,6 +494,7 @@ def create_app() -> FastAPI:
     # siempre para que activarla desde /ui/ajustes no requiera reiniciar
     # el proceso con un middleware distinto.
     app.add_middleware(AuthMiddleware)
+    app.add_middleware(LimiteCuerpoMiddleware, max_bytes=settings.max_cuerpo_peticion_bytes)
 
     app.include_router(health_router, prefix="/api")
     app.include_router(estado_cortesia_router, prefix="/api")
@@ -466,6 +520,8 @@ def create_app() -> FastAPI:
     app.include_router(library_router)
     app.include_router(mejoras_ui_router)
     app.include_router(arcos_ui_router)
+    app.include_router(novedades_ui_router)
+    app.include_router(novedades_api_router)
     app.include_router(asistente_carpetas_router)
     app.include_router(asistente_vinculacion_router)
     app.include_router(pendientes_router)

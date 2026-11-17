@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     PrimaryKeyConstraint,
     SmallInteger,
     String,
@@ -31,6 +32,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from zascarr.database import Base
 
 # ── Enums ──────────────────────────────────────────────────────────────────────
+
+class EditionKind(enum.StrEnum):
+    """Tipo de edición declarado por el coleccionista; nunca se infiere."""
+    OFICIAL = "oficial"
+    TRADUMAQUETA = "tradumaqueta"
+    ESCANEO_PROPIO = "escaneo_propio"
+    OTRO = "otro"
+
 
 class ComicTradition(enum.StrEnum):
     AMERICAN      = "american"
@@ -282,6 +291,8 @@ class MetadataSource(enum.StrEnum):
     TEBEOSFERA    = "tebeosfera"
     METRON        = "metron"
     OPEN_LIBRARY  = "open_library"
+    FANDOM_DC     = "fandom_dc"
+    FANDOM_MARVEL = "fandom_marvel"
     COMICINFO_XML = "comicinfo_xml"
     MANUAL        = "manual"
 
@@ -472,6 +483,22 @@ class Character(Base):
     universe: Mapped["Universe|None"] = relationship(back_populates="characters")
 
 
+# #155/BL-D6 (M:N): una serie puede estar en varias colecciones.
+collection_series = Table(
+    "collection_series",
+    Base.metadata,
+    Column(
+        "collection_id", UUID(as_uuid=True),
+        ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    Column(
+        "series_id", UUID(as_uuid=True),
+        ForeignKey("series.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+)
+
+
 class Collection(Base):
     """#155/BL-D6: agrupación manual de series con política de auto-búsqueda."""
     __tablename__ = "collections"
@@ -482,11 +509,16 @@ class Collection(Base):
         Enum(CollectionAutoSearch, name="collection_auto_search",
              values_callable=lambda e: [m.value for m in e]),
         default=CollectionAutoSearch.HEREDAR, nullable=False)
+    #: Portada elegida de una serie miembro; NULL = mosaico automático.
+    cover_series_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    series: Mapped[list["Series"]] = relationship(back_populates="collection")
+    series: Mapped[list["Series"]] = relationship(
+        secondary=collection_series, back_populates="collections")
+    cover_series: Mapped["Series|None"] = relationship(foreign_keys=[cover_series_id])
 
 
 class Series(Base):
@@ -507,6 +539,15 @@ class Series(Base):
     #: Volumen/edición cuando la fuente o el título lo declaran. No es
     #: identidad; se usa para desambiguar la referencia (Catwoman Vol. 4/5).
     volume: Mapped[int | None] = mapped_column(SmallInteger)
+    #: Marca local del coleccionista; no se sincroniza con ninguna fuente.
+    favorite: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"))
+    #: CUR4: idioma ISO cuando consta (p. ej. «es», «en»); NULL = sin dato.
+    language: Mapped[str | None] = mapped_column(String(10))
+    #: CUR4: tipo de edición declarado; NULL = sin dato.
+    edition_kind: Mapped[EditionKind | None] = mapped_column(
+        Enum(EditionKind, name="edition_kind",
+             values_callable=lambda e: [m.value for m in e]), nullable=True)
     #: Referencia humana derivada (título + año + volumen). No única, no es
     #: identidad y no sustituye a `title`/`title_norm`.
     reference_name: Mapped[str | None] = mapped_column(
@@ -521,10 +562,8 @@ class Series(Base):
     universe_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL")
     )
-    collection_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("collections.id", ondelete="SET NULL")
-    )
-    collection: Mapped["Collection|None"] = relationship(back_populates="series")
+    collections: Mapped[list["Collection"]] = relationship(
+        secondary=collection_series, back_populates="series")
     tradition: Mapped[ComicTradition] = mapped_column(
         Enum(
             ComicTradition,
@@ -568,6 +607,11 @@ class Series(Base):
     # las demás fuentes (ADR 0002); una serie usa como mucho una en la práctica.
     metron_id:       Mapped[int|None] = mapped_column(BigInteger, unique=True)
     open_library_id: Mapped[str|None] = mapped_column(String(64), unique=True)
+    # Fandom (SCR2, migración 0034): DC Database y Marvel Database identifican sus
+    # páginas por título de wiki («Batman Vol 1»), un slug de texto como el de
+    # Tebeosfera. Columnas paralelas por fuente (mismo principio que las demás).
+    fandom_dc_slug:     Mapped[str|None] = mapped_column(String(255), unique=True)
+    fandom_marvel_slug: Mapped[str|None] = mapped_column(String(255), unique=True)
     cover_url:       Mapped[str|None] = mapped_column(String(500))
     metadata_:       Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None] = mapped_column(String(20))
@@ -647,6 +691,9 @@ class Issue(Base):
     metron_id:       Mapped[int|None]     = mapped_column(BigInteger, unique=True)
     anilist_id:      Mapped[int|None]     = mapped_column(BigInteger, unique=True)
     tebeosfera_slug: Mapped[str|None]     = mapped_column(String(255), unique=True)
+    # Fandom (SCR2, migración 0034): título de la página del número en su wiki.
+    fandom_dc_slug:     Mapped[str|None] = mapped_column(String(255), unique=True)
+    fandom_marvel_slug: Mapped[str|None] = mapped_column(String(255), unique=True)
     sort_order:      Mapped[float|None]   = mapped_column(Float)
     metadata_:       Mapped[dict]         = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None]     = mapped_column(String(20))
@@ -747,6 +794,59 @@ class Tag(Base):
     series: Mapped[list["Series"]] = relationship(secondary=series_tags, back_populates="tags")
 
 
+class LibraryRoot(Base):
+    """Una raíz de biblioteca: un disco/montaje donde viven los archivos (#156, ADR 0020).
+
+    `path` es la ruta del CONTENEDOR; `host_path` es la ruta del host solo para mostrar.
+    """
+    __tablename__ = "library_roots"
+    __table_args__ = (
+        CheckConstraint(
+            "path LIKE '/%' AND path <> '/' "
+            "AND path NOT LIKE '%/' AND path NOT LIKE '%//%' "
+            "AND path NOT LIKE '%/../%' AND path NOT LIKE '%/..' "
+            "AND path NOT LIKE '%/./%' AND path NOT LIKE '%/.' "
+            "AND path NOT LIKE '%/.zascarr%'",
+            name="ck_library_root_path",
+        ),
+        CheckConstraint("is_default = false OR enabled = true",
+                        name="ck_library_root_default_enabled"),
+        Index("uq_library_roots_default", "is_default", unique=True,
+              postgresql_where=text("is_default")),
+    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4,
+                                    server_default=text("gen_random_uuid()"))
+    name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    path: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    host_path: Mapped[str | None] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True,
+                                          server_default="true")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                             server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    traditions: Mapped[list["LibraryRootTradition"]] = relationship(
+        back_populates="root", cascade="all, delete-orphan")
+
+
+class LibraryRootTradition(Base):
+    """Mapeo tradición -> raíz. Una raíz puede servir N tradiciones; cada tradición una sola."""
+    __tablename__ = "library_root_traditions"
+    __table_args__ = (
+        UniqueConstraint("tradition", name="uq_library_root_traditions_tradition"),
+        Index("ix_library_root_traditions_tradition", "tradition"),
+    )
+    root_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("library_roots.id", ondelete="CASCADE"), primary_key=True)
+    tradition: Mapped[ComicTradition] = mapped_column(
+        Enum(ComicTradition, name="comic_tradition",
+             values_callable=lambda obj: [e.value for e in obj]),
+        primary_key=True)
+    root: Mapped[LibraryRoot] = relationship(back_populates="traditions")
+
+
 class File(Base):
     __tablename__ = "files"
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -754,6 +854,9 @@ class File(Base):
         UUID(as_uuid=True), ForeignKey("issues.id", ondelete="SET NULL")
     )
     file_path: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
+    #: Raíz explícita (#156). NULL = archivo fuera de toda raíz conocida.
+    root_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("library_roots.id", ondelete="RESTRICT"), index=True)
     file_name:           Mapped[str]          = mapped_column(String(500), nullable=False)
     file_format: Mapped[FileFormat] = mapped_column(
         Enum(FileFormat, name="file_format", values_callable=lambda obj: [e.value for e in obj]),
@@ -862,6 +965,9 @@ class AsignacionOperacion(Base):
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"))
     series_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"))
+    #: Raíz elegida al preparar la operación (#156); las filas antiguas quedan NULL.
+    root_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("library_roots.id", ondelete="RESTRICT"))
     estado: Mapped[AsignacionEstado] = mapped_column(
         Enum(AsignacionEstado, name="asignacion_estado",
              values_callable=lambda obj: [e.value for e in obj]),
@@ -888,6 +994,18 @@ class AsignacionOperacion(Base):
     actualizada: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class PaqueteEstado(enum.StrEnum):
+    """Estado durable de una extracción de paquete (#344). Corte 3 termina en `verificado`."""
+    LISTANDO = "listando"
+    EXTRAYENDO = "extrayendo"
+    VERIFICANDO = "verificando"
+    VERIFICADO = "verificado"
+    PUBLICANDO = "publicando"
+    IMPORTANDO = "importando"
+    IMPORTADO = "importado"
+    ERROR = "error"
 
 
 class ApartadoEstado(enum.StrEnum):
@@ -966,6 +1084,13 @@ class ApartadoOperacion(Base):
     completas: el detalle por grupo vive en `apartado_grupos.detalle`."""
     __tablename__ = "apartado_operaciones"
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    #: Raíz de la cuarentena (#156); las operaciones antiguas quedan NULL.
+    root_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("library_roots.id", ondelete="RESTRICT"))
+    #: `apartar` mueve la copia a cuarentena; `enlazar` además deja un enlace
+    #: duro a la copia que se queda. Las operaciones antiguas son `apartar`.
+    modo: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="apartar", server_default="apartar")
     estado: Mapped[ApartadoEstado] = mapped_column(
         Enum(ApartadoEstado, name="apartado_estado",
              values_callable=lambda obj: [e.value for e in obj]),
@@ -1127,6 +1252,35 @@ class ReadingList(Base):
     items: Mapped[list["ReadingListItem"]] = relationship(
         back_populates="reading_list", cascade="all, delete-orphan"
     )
+
+
+class HttpCache(Base):
+    """Caché HTTP condicional del proceso (SCR1, migración 0037).
+
+    Una fila por URL canónica y método (`url_hash`), con dos horizontes: `fresh_until`
+    (se sirve sin red) y `retain_until` (hasta ahí se puede revalidar con ETag/Last-Modified;
+    después la purga la borra). `is_negative` marca una respuesta negativa corta (404/410 o
+    `missingtitle`): no guarda cuerpo. El cuerpo va comprimido en `body_zlib` (tope 2 MiB) y
+    `url_canonical` redacta credenciales. No la tocan las portadas (esas van por su caché local).
+    """
+
+    __tablename__ = "http_cache"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    url_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    url_canonical: Mapped[str] = mapped_column(Text, nullable=False)
+    domain: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    status_code: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(255))
+    is_negative: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false")
+    etag: Mapped[str | None] = mapped_column(Text)
+    last_modified: Mapped[str | None] = mapped_column(Text)
+    body_zlib: Mapped[bytes | None] = mapped_column(LargeBinary)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    fresh_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    retain_until: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True)
 
 
 class ImportRun(Base):
@@ -1439,3 +1593,68 @@ class FieldProvenance(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     locked: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default=text("false"))
+
+
+class RevisionBorrador(Base):
+    """Borrador explícito de una revisión de carpeta (#725).
+
+    Solo guarda lo que la persona marcó/escribió; no es una selección válida
+    hasta que el asistente la reevalúa. Una fila por carpeta+serie, con
+    caducidad: no hay sesión ni estado global.
+    """
+    __tablename__ = "revision_borradores"
+    clave: Mapped[str] = mapped_column(String(500), primary_key=True)
+    series_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), primary_key=True)
+    datos: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    actualizado: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now())
+    caduca: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (Index("ix_revision_borradores_caduca", "caduca"),)
+
+
+class PaqueteOperacion(Base):
+    """Comprobante durable de extracción/verificación de un paquete de Descargas (#344).
+
+    No guarda el token ni publica nada: el original permanece intacto. `items` es el progreso
+    por fichero; los temporales se borran al terminar y al arrancar si quedaron huérfanos.
+    """
+    __tablename__ = "paquete_operaciones"
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    paquete_clave: Mapped[str] = mapped_column(String(200), nullable=False)
+    paquete_path: Mapped[str] = mapped_column(Text, nullable=False)
+    paquete_dev: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    paquete_ino: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    paquete_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    paquete_mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    firma: Mapped[str] = mapped_column(String(10), nullable=False)
+    estado: Mapped[PaqueteEstado] = mapped_column(
+        Enum(PaqueteEstado, name="paquete_estado",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=PaqueteEstado.LISTANDO,
+        server_default=PaqueteEstado.LISTANDO.value)
+    temp_dir: Mapped[str | None] = mapped_column(Text)
+    staging_dir: Mapped[str | None] = mapped_column(Text)
+    destino_dir: Mapped[str | None] = mapped_column(Text)
+    items: Mapped[list] = mapped_column(JSONB, nullable=False, default=list,
+                                        server_default=text("'[]'::jsonb"))
+    total_entradas: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0")
+    total_bytes: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0")
+    error_codigo: Mapped[str | None] = mapped_column(String(80))
+    error_mensaje: Mapped[str | None] = mapped_column(Text)
+    creada: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(),
+                                             nullable=False)
+    actualizada: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    finalizada: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        Index("ix_paquete_operaciones_clave", "paquete_clave"),
+        Index("ix_paquete_operaciones_estado", "estado"),
+        Index("ix_paquete_operaciones_creada", "creada"),
+        Index(
+            "uq_paquete_operaciones_viva", "paquete_clave", unique=True,
+            postgresql_where=text(
+                "estado IN ('listando','extrayendo','verificando','publicando','importando')")),
+    )

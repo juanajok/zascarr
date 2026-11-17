@@ -465,9 +465,9 @@ caracteres y pruebas de ida/vuelta; mientras, el veredicto de seguridad es **NO 
 | **BL-ETQ5** Alias / implicaciones / reglas | tablas de alias/padres, validación de ciclos, reglas propuestas, `regla` en `MetadataSource` (si se aprueba) | ETQ1a, ETQ4 | 1 PR | L | ciclos, fusión silenciosa, coste de CTE; ¿quién cura? (D-5) |
 | **BL-ETQ6** Export ComicInfo/Kavita | extender B6 + escritura de `<Tags>` + B20 | ETQ1a, contrato B6 | 1 PR (no autorizada antes de extender B6) | L | corromper CBZ / pisar ajeno; **NO APTO** hasta B6 |
 
-Reglas del reparto: **BL-ETQ1a (#403)**, **BL-ETQ1b (#431)** y **BL-ETQ2 (#538, PR #544)**
-están fusionadas y desplegadas; **BL-ETQ3 (#565, PR #671)** y **BL-ETQ4 (#697, PR #699)** están
-fusionadas y pendientes de despliegue. BL-ETQ5…6 quedan **propuestas** al PO, sin tarjeta, y no
+Reglas del reparto: **BL-ETQ1a (#403)**, **BL-ETQ1b (#431)**, **BL-ETQ2 (#538, PR #544)**,
+**BL-ETQ3 (#565, PR #671)** y **BL-ETQ4 (#697, PR #699)** están fusionadas y desplegadas (las dos
+últimas, el 2026-11-13). BL-ETQ5…6 quedan **propuestas** al PO, sin tarjeta, y no
 empiezan sin su decisión. Una historia = una PR; la ficha de benchmark de una fase nueva se abre si
 toca modelo/ficheros. Orden recomendado: 1a → 1b → 2 → 3 → 4 → 5 → 6, con 3 en paralelo a 2 si
 conviene (comparten clientes, no plantillas).

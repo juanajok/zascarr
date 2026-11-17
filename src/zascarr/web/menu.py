@@ -32,9 +32,11 @@ ENTRADAS: tuple[Entrada, ...] = (
     Entrada("revisar", "Por revisar", "/ui/pendientes", "Mi colección", "revisar",
             corta="Revisar", movil_principal=True, contador="pendientes"),
     Entrada("biblioteca", "Biblioteca", "/ui/biblioteca", "Mi colección", "biblioteca"),
+    Entrada("mejoras", "Mejoras", "/ui/mejoras", "Mi colección", "mejoras"),
     Entrada("colecciones", "Colecciones", "/ui/colecciones", "Mi colección", "colecciones"),
     Entrada("duplicados", "Duplicados", "/ui/auditoria", "Mi colección", "duplicados"),
     Entrada("descubrir", "Descubrir", "/ui/descubrir", "Añadir", "descubrir"),
+    Entrada("novedades", "Novedades", "/ui/novedades", "Añadir", "novedades"),
     Entrada("deseados", "Deseados", "/ui/wishlist", "Añadir", "deseados",
             movil_principal=True, contador="deseados"),
     Entrada("estado", "Estado", "/estado", "Sistema", "estado",
@@ -47,10 +49,14 @@ ENTRADAS: tuple[Entrada, ...] = (
 _PREFIJOS: tuple[tuple[str, str], ...] = (
     ("/ui/pendientes", "revisar"),
     ("/ui/biblioteca", "biblioteca"),
+    ("/ui/mejoras", "mejoras"),
     ("/ui/colecciones", "colecciones"),
     ("/ui/series", "biblioteca"),
+    ("/ui/arcos", "biblioteca"),   # Sagas cuelga de Biblioteca (biblioteca.html)
+    ("/ui/vistas", "revisar"),     # Vistas de trabajo cuelga de Por revisar (pendientes.html)
     ("/ui/auditoria", "duplicados"),
     ("/ui/descubrir", "descubrir"),
+    ("/ui/novedades", "novedades"),
     ("/ui/wishlist", "deseados"),
     ("/ui/ajustes", "ajustes"),
     ("/estado", "estado"),

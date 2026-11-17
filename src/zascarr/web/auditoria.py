@@ -22,11 +22,12 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -39,6 +40,8 @@ from zascarr.models import (
     File,
     ImportRun,
     Issue,
+    PaqueteEstado,
+    PaqueteOperacion,
     Series,
 )
 from zascarr.services import registro_biblioteca, rescan_biblioteca
@@ -49,13 +52,36 @@ from zascarr.services.apartado_duplicados import (
     GrupoEntrada,
     TokenApartadoInvalido,
 )
+from zascarr.services.carpetas_duplicadas import (
+    analizar_par,
+    apartar_carpeta_vacia,
+    deshacer_carpeta,
+    previsualizar_carpetas,
+)
 from zascarr.services.conversion import ConversionDeArchivo
+from zascarr.services.enlace_duplicados import EnlaceDuplicadosService
 from zascarr.services.library_adopter import EstadoAdopcion, InventarioBiblioteca, LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
+from zascarr.services.paquetes import (
+    PaqueteError,
+    TokenPaqueteInvalido,
+    crear_token_paquete,
+    detectar_paquetes,
+    listar_paquete,
+    verificar_token_paquete,
+)
+from zascarr.services.paquetes_extraccion import (
+    PaqueteExtraccionError,
+    clave_identidad,
+    crear_operacion,
+    extraer_y_verificar,
+)
+from zascarr.services.paquetes_publicacion import PaquetePublicacionError, publicar_e_importar
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.disponibilidad import registrar_filtros
 from zascarr.web.routes import crear_templates
 
+logger = __import__('structlog').get_logger()
 templates = crear_templates()
 registrar_filtros(templates)
 
@@ -81,7 +107,11 @@ templates.env.filters["tamano"] = _tamano
 def _motivo_apartado(motivo: str | None) -> str:
     """Motivos internos del servicio A en lenguaje llano (sin códigos)."""
     return {
-        "contenido_cambiado": "El contenido de una copia cambió; no se ha apartado.",
+        "contenido_cambiado": "El contenido de una copia cambió; no se ha completado.",
+        "catalogo_incoherente": "El catálogo no coincide con las copias; no se ha tocado nada.",
+        "no_regular": "Alguna copia ya no es un archivo normal o es un enlace simbólico.",
+        "vacio": "Alguna copia está vacía.",
+        "tamano_distinto": "Las copias ya no tienen el mismo tamaño.",
         "catalogo_ambiguo": "El catálogo tiene más de una ficha para este grupo; no se ha movido nada.",
         "sitio_ocupado": "El sitio original está ocupado; no se ha sobrescrito nada.",
         "cuarentena_ausente": "La copia apartada ya no está en la cuarentena.",
@@ -116,9 +146,21 @@ async def _ultimo_informe(db: AsyncSession) -> dict | None:
 
 
 
+MOTIVOS_ACEPTACION = {
+    "orphan_record": ("Hay una aceptación guardada sin marcador. No se autoriza nada y no se "
+                      "sobrescribe: revisa el estado antes de continuar."),
+    "corrupt_flag": ("El marcador de adopción guardado no es válido. No se autoriza nada y no se "
+                     "borra."),
+    "corrupt_record": ("La aceptación guardada no se puede verificar. No se autoriza nada y no se "
+                       "borra."),
+    "in_progress": "Hay un registro en marcha; no se acepta nada mientras tanto.",
+}
+
+
 async def _fragmento_registro(request: Request, db: AsyncSession, *, inc: InventarioBiblioteca | None = None,
                               cambio: bool = False, recien_aceptado: bool = False,
-                              conflicto: bool = False) -> HTMLResponse:
+                              conflicto: bool = False,
+                              motivo_conflicto: str | None = None) -> HTMLResponse:
     """Lo que el coleccionista debe ver del registro AHORA: progreso, resultado o inventario previo.
     `inc` (#326) es el inventario de archivos NUEVOS que se acaba de calcular a petición suya; `cambio`, que al confirmar la carpeta
     ya no era la que revisó; `recien_aceptado`, que la petición acaba de aceptar (para el foco); `conflicto`, que el intento
@@ -126,10 +168,14 @@ async def _fragmento_registro(request: Request, db: AsyncSession, *, inc: Invent
     reg = registro_biblioteca.estado_actual()
     contexto: dict = {"reg": reg, "estado": EstadoAdopcion.HECHA, "inv": None, "series": 0, "inc": inc,
                       "cambio": cambio, "adopcion": await evaluar(db, en_marcha=reg.en_marcha),
-                      "recien_aceptado": recien_aceptado, "conflicto": conflicto}
+                      "recien_aceptado": recien_aceptado, "conflicto": conflicto,
+                      "motivo_conflicto": MOTIVOS_ACEPTACION.get(motivo_conflicto or "")}
     if reg.fase is registro_biblioteca.FaseRegistro.INACTIVO:
         adopter = LibraryAdopter(db)
         contexto["estado"] = await adopter.estado()
+        if contexto["adopcion"].aviso and contexto["estado"] in (
+                EstadoAdopcion.PENDIENTE, EstadoAdopcion.CATALOGO_PREVIO):
+            contexto["estado"] = EstadoAdopcion.ACEPTACION_HUERFANA
         if contexto["estado"] in (EstadoAdopcion.PENDIENTE, EstadoAdopcion.CATALOGO_PREVIO):
             contexto["inv"] = await adopter.inventario()
             contexto["series"] = (await db.execute(select(func.count(Series.id)))).scalar() or 0
@@ -150,7 +196,10 @@ async def adoptar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
     página lo vuelve a pedir hasta que termina. Si ya hay uno en marcha no lanza otro. Repetirlo tras un
     fallo continúa donde se quedó."""
     en_marcha = registro_biblioteca.estado_actual().fase is registro_biblioteca.FaseRegistro.CORRIENDO
-    if not en_marcha and await LibraryAdopter(db).puede_registrar():
+    # #367: un marcador corrupto o un registro huérfano no se repara iniciando
+    # otro registro en silencio; la pantalla pide revisar el estado.
+    if (not en_marcha and not (await evaluar(db)).aviso
+            and await LibraryAdopter(db).puede_registrar()):
         registro_biblioteca.iniciar(database.async_session_factory)
     return await _fragmento_registro(request, db)
 
@@ -168,7 +217,7 @@ async def aceptar_ilegibles(request: Request, run_id: UUID = Form(...),
     if request.headers.get("HX-Request") == "true":
         return await _fragmento_registro(
             request, db, recien_aceptado=resultado.reason == "accepted",
-            conflicto=not resultado.ok)
+            conflicto=not resultado.ok, motivo_conflicto=resultado.reason)
     if not resultado.ok:
         return JSONResponse({"reason": resultado.reason}, status_code=resultado.status)
     return await _fragmento_registro(request, db, recien_aceptado=True)
@@ -313,6 +362,13 @@ def _no_store(respuesta):
     return respuesta
 
 
+def _uuid(valor: str) -> UUID | None:
+    try:
+        return UUID(str(valor))
+    except (ValueError, TypeError):
+        return None
+
+
 @dataclass
 class CopiaDuplicado:
     ruta_rel: str
@@ -329,6 +385,24 @@ class GrupoDuplicado:
     size_bytes: int
     bytes_recuperables: int
     copias: list[CopiaDuplicado]
+    enlace_posible: bool = False
+    enlace_motivo: str | None = None
+
+
+def _puede_enlazar(rutas: list[str]) -> tuple[bool, str | None]:
+    """Misma montura y permiso de escritura en las carpetas que se sustituyen."""
+    if len(rutas) < 2:
+        return False, "Hacen falta al menos dos copias."
+    try:
+        dispositivos = {Path(r).stat().st_dev for r in rutas}
+    except OSError:
+        return False, "Alguna copia ya no está."
+    if len(dispositivos) != 1:
+        return False, "Están en discos distintos."
+    for ruta in rutas:
+        if not os.access(Path(ruta).parent, os.W_OK):
+            return False, "No hay permiso para escribir en esa carpeta."
+    return True, None
 
 
 def _texto_fecha(segundos: float | None) -> str:
@@ -427,10 +501,15 @@ async def _contexto_duplicados(db: AsyncSession, informe: dict | None) -> dict:
                     catalogo=_texto_catalogo(fila), nombre=_pista_nombre(p.name),
                     fila=fila is not None,
                 ))
-            grupos.append(GrupoDuplicado(sha, size, size * max(0, len(rutas) - 1), copias))
+            posible, motivo = await asyncio.to_thread(_puede_enlazar, rutas)
+            grupos.append(GrupoDuplicado(
+                sha, size, size * max(0, len(rutas) - 1), copias, posible, motivo))
     cuarentena = await asyncio.to_thread(_resumen_cuarentena)
     operaciones = await _operaciones_apartadas(db)
-    return {"grupos": grupos, "cuarentena": cuarentena, "operaciones": operaciones}
+    enlace_disponible = bool(grupos) and all(g.enlace_posible for g in grupos)
+    enlace_motivo = next((g.enlace_motivo for g in grupos if not g.enlace_posible), None)
+    return {"grupos": grupos, "cuarentena": cuarentena, "operaciones": operaciones,
+            "enlace_disponible": enlace_disponible, "enlace_motivo": enlace_motivo}
 
 
 def _resumen_cuarentena() -> dict:
@@ -456,7 +535,8 @@ async def _operaciones_apartadas(db: AsyncSession) -> list[dict]:
             select(ApartadoOperacion)
             .options(selectinload(ApartadoOperacion.grupos))
             .where(ApartadoOperacion.estado == ApartadoEstado.CONFIRMADA,
-                   ApartadoOperacion.total_archivos > 0)
+                   or_(ApartadoOperacion.total_archivos > 0,
+                       ApartadoOperacion.modo == "carpeta"))
             .order_by(ApartadoOperacion.creada.desc())
             .limit(10)
         )
@@ -465,11 +545,15 @@ async def _operaciones_apartadas(db: AsyncSession) -> list[dict]:
         return []
     return [{"id": str(op.id), "creada": _texto_fecha(op.creada.timestamp() if op.creada else None),
              "grupos": len(op.grupos or []), "archivos": op.total_archivos,
-             "bytes": op.total_bytes} for op in ops]
+             "bytes": op.total_bytes, "modo": op.modo} for op in ops]
 
 
 def _servicio_apartado(db: AsyncSession) -> ApartadoDuplicadosService:
     return ApartadoDuplicadosService(db, secret=get_settings().secret_key)
+
+
+def _servicio_enlace(db: AsyncSession) -> EnlaceDuplicadosService:
+    return EnlaceDuplicadosService(db, secret=get_settings().secret_key)
 
 
 def _informe_en_dict(informe) -> dict | None:
@@ -488,6 +572,74 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
     return _no_store(templates.TemplateResponse(request, "auditoria.html", await _contexto_pagina(db)))
 
 
+@router.get("/paquetes", response_class=HTMLResponse)
+async def paquetes(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Paquetes de Descargas: detección por firma, solo lectura."""
+    try:
+        pendientes = await asyncio.to_thread(detectar_paquetes)
+        importadas: set[str] = set()
+        try:
+            importadas = set((await db.execute(
+                select(PaqueteOperacion.paquete_clave).where(
+                    PaqueteOperacion.estado == PaqueteEstado.IMPORTADO))).scalars())
+        except Exception:  # noqa: BLE001 — solo el fallback sin BD
+            logger.warning("paquetes.lista_sin_bd")
+        pendientes = [p for p in pendientes if clave_identidad(p) not in importadas]
+        return _no_store(templates.TemplateResponse(
+            request, "_paquetes_descargas.html", {"paquetes": pendientes, "error": None}))
+    except OSError:
+        return _no_store(templates.TemplateResponse(
+            request, "_paquetes_descargas.html",
+            {"paquetes": [], "error": "No se pudo revisar la carpeta de Descargas.",
+             "accion": "Comprueba que la carpeta existe y se puede leer."}))
+
+
+@router.get("/paquetes/previa", response_class=HTMLResponse)
+async def paquete_previa(request: Request, token: str = "") -> HTMLResponse:
+    """Vista previa del contenido declarado; no extrae ni escribe."""
+    try:
+        paquete = await asyncio.to_thread(verificar_token_paquete, token)
+    except TokenPaqueteInvalido:
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_previa.html",
+            {"listado": None, "error": "Esta vista previa ya no es válida.",
+             "accion": "Vuelve a la lista y ábrela de nuevo."}))
+    try:
+        listado = await asyncio.to_thread(listar_paquete, paquete)
+    except PaqueteError as exc:
+        if paquete.fd >= 0:
+            os.close(paquete.fd)
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_previa.html",
+            {"listado": None, "error": exc.causa, "accion": exc.accion
+             or "Prueba con otro paquete."}))
+    if paquete.fd >= 0:
+        os.close(paquete.fd)
+    clave_accion = crear_token_paquete(paquete)
+    return _no_store(templates.TemplateResponse(
+        request, "_paquete_previa.html",
+        {"listado": listado, "error": None, "clave_accion": clave_accion}))
+
+
+@router.post("/paquetes/extraer", response_class=HTMLResponse)
+async def paquete_extraer(request: Request, token: str = Form("", alias="clave"),
+                          db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Extrae y publica el paquete con un token de un solo uso; no borra el original."""
+    try:
+        paquete = await asyncio.to_thread(verificar_token_paquete, token)
+        op = await crear_operacion(db, paquete)
+        await extraer_y_verificar(db, op.id, conservar_temporal=True)
+        op = await publicar_e_importar(db, op.id)
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html", {"op": op, "error": None}))
+    except (TokenPaqueteInvalido, PaqueteExtraccionError,
+            PaquetePublicacionError) as exc:
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html",
+            {"op": None, "error": getattr(exc, "mensaje", None)
+             or "No se pudo completar la operación."}))
+
+
 @router.post("/analizar", response_class=HTMLResponse)
 async def analizar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Relanza el análisis. Solo lectura del disco (ver LibraryAudit)."""
@@ -497,7 +649,8 @@ async def analizar(request: Request, db: AsyncSession = Depends(get_db)) -> HTML
 
 
 @router.post("/duplicados/previsualizar", response_class=HTMLResponse)
-async def previsualizar_duplicados(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def previsualizar_duplicados(request: Request, accion: str = Form(default="apartar"),
+                                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Prepara uno o varios grupos elegidos. Valida con el servicio A y NO escribe."""
     informe = await _ultimo_informe(db)
     datos = await request.form()
@@ -507,6 +660,7 @@ async def previsualizar_duplicados(request: Request, db: AsyncSession = Depends(
             seleccion[clave[5:]] = str(valor)
     crudos = informe.get("mismo_contenido") if informe else []
     servicio = _servicio_apartado(db)
+    servicio_enlace = _servicio_enlace(db)
     items = []
     rechazos = []
     if not seleccion:
@@ -527,42 +681,47 @@ async def previsualizar_duplicados(request: Request, db: AsyncSession = Depends(
             rechazos.append({"grupo": sha, "motivo": "La copia elegida ya no está en la lista."})
             continue
         try:
-            vista = await servicio.previsualizar(sha, rutas, keep)
+            vista = await (servicio_enlace.previsualizar(sha, rutas, keep)
+                           if accion == "enlazar" else servicio.previsualizar(sha, rutas, keep))
         except (ApartadoError, OSError, ValueError) as exc:
             rechazos.append({"grupo": sha, "motivo": str(exc)})
             continue
         relativas = [_ruta_relativa(str(p)) for p in vista.rutas]
-        movidas = [r for i, r in enumerate(relativas) if i != vista.keep_index]
+        cambiadas = [r for i, r in enumerate(relativas) if i != vista.keep_index]
         filas = await _filas_catalogo(db, [str(p) for p in vista.rutas])
         if len(filas) > 1:
-            cambio = "El catálogo tiene más de una ficha para este grupo: no se podrá apartar hasta resolverlo."
+            cambio = "El catálogo tiene más de una ficha para este grupo: no se podrá unir hasta resolverlo."
         elif not filas:
             cambio = "Sin cambios en el catálogo: ninguna de estas copias está vinculada."
         elif str(vista.rutas[vista.keep_index]) in filas:
             cambio = "Sin cambios en el catálogo: la copia que se queda ya es la vinculada."
         else:
-            cambio = "El catálogo pasará a apuntar a la copia que se queda; conservará su serie y número."
+            cambio = "Sin cambios en el catálogo: la copia vinculada sigue existiendo."
         items.append({
             "token": vista.token, "sha256": sha,
             "grupo_json": json.dumps({"sha256": sha, "rutas": relativas,
                                       "keep_index": vista.keep_index}, ensure_ascii=False),
-            "rutas_apartadas": movidas, "bytes": vista.bytes_liberados,
-            "catalogo_cambio": cambio,
+            "rutas_apartadas": cambiadas, "rutas_enlazadas": cambiadas,
+            "ruta_keep": relativas[vista.keep_index], "bytes": vista.bytes_liberados,
+            "catalogo_cambio": cambio, "modo": accion,
         })
     contexto = {"previsualizacion": {
         "entradas": items, "bytes": sum(i["bytes"] for i in items), "rechazos": rechazos,
         "archivos": sum(len(i["rutas_apartadas"]) for i in items), "sin_eleccion": False,
+        "accion": accion,
         "cuarentena": await asyncio.to_thread(_resumen_cuarentena),
     }}
-    return _no_store(templates.TemplateResponse(request, "_duplicados_previsualizacion.html", contexto))
+    plantilla = "_enlace_previsualizacion.html" if accion == "enlazar" else "_duplicados_previsualizacion.html"
+    return _no_store(templates.TemplateResponse(request, plantilla, contexto))
 
 
 @router.post("/duplicados/confirmar", response_class=HTMLResponse)
 async def confirmar_duplicados(request: Request, token: list[str] = Form(default=[]),
                                grupos: list[str] = Form(default=[]),
+                               accion: str = Form(default="apartar"),
                                db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Confirma cada grupo previsualizado; un grupo rechazado no tumba los demás."""
-    servicio = _servicio_apartado(db)
+    servicio = _servicio_enlace(db) if accion == "enlazar" else _servicio_apartado(db)
     resultados = []
     for token_firmado, crudo in zip(token, grupos, strict=False):
         try:
@@ -573,6 +732,7 @@ async def confirmar_duplicados(request: Request, token: list[str] = Form(default
             resultados.append({"error": str(exc)})
     contexto = {"resultados": resultados, "operaciones": await _operaciones_apartadas(db),
                 "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}
+    contexto["modo"] = accion
     return _no_store(templates.TemplateResponse(request, "_duplicados_resultado.html", contexto))
 
 
@@ -580,15 +740,110 @@ async def confirmar_duplicados(request: Request, token: list[str] = Form(default
 async def deshacer_duplicados(request: Request, operacion: str = Form(...),
                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Deshace una operación confirmada; nunca sobrescribe."""
-    servicio = _servicio_apartado(db)
+    op = None
+    if _uuid(operacion):
+        try:
+            resultado_op = await db.execute(
+                select(ApartadoOperacion).where(ApartadoOperacion.id == UUID(operacion)))
+            op = resultado_op.scalar_one_or_none()
+        except (AttributeError, TypeError):
+            op = None
+    modo = getattr(op, "modo", "apartar") if op is not None else "apartar"
+    servicio = _servicio_enlace(db) if modo == "enlazar" else _servicio_apartado(db)
     try:
-        resultado = await servicio.deshacer(operacion)
+        if modo == "carpeta":
+            await deshacer_carpeta(db, operacion,
+                                   library=Path(get_settings().library_path))
+            resultado = SimpleNamespace(estado="deshecha", motivo=None)
+        else:
+            resultado = await servicio.deshacer(operacion)
         contexto = {"resultado_deshacer": resultado, "operaciones": await _operaciones_apartadas(db),
-                    "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}
+                    "cuarentena": await asyncio.to_thread(_resumen_cuarentena), "modo": modo}
     except (ApartadoError, TokenApartadoInvalido, ValueError) as exc:
         contexto = {"error_deshacer": str(exc), "operaciones": await _operaciones_apartadas(db),
-                    "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}
+                    "cuarentena": await asyncio.to_thread(_resumen_cuarentena), "modo": modo}
     return _no_store(templates.TemplateResponse(request, "_duplicados_resultado.html", contexto))
+
+
+# ── BL-DUP3 (#266): resolver una carpeta repetida o contenida ───────────────
+
+
+@router.post("/duplicados/carpetas", response_class=HTMLResponse)
+async def revisar_carpetas(request: Request, ruta_a: str = Form(default=""),
+                           ruta_b: str = Form(default=""),
+                           par: int | None = Form(default=None),
+                           db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Detalle de la pareja; no escribe ni preselecciona qué carpeta se queda."""
+    if par is not None and (not ruta_a or not ruta_b):
+        informe = await _ultimo_informe(db)
+        crudos = (informe or {}).get("carpetas_repetidas") or []
+        if not 0 <= par < len(crudos):
+            return _no_store(templates.TemplateResponse(
+                request, "_carpetas_detalle.html",
+                {"error": "Esa pareja de carpetas ya no está en el informe."}))
+        ruta_a = str(crudos[par].get("ruta_a") or "")
+        ruta_b = str(crudos[par].get("ruta_b") or "")
+    try:
+        detalle = await analizar_par(ruta_a, ruta_b, Path(get_settings().library_path))
+    except (ApartadoError, OSError) as exc:
+        return _no_store(templates.TemplateResponse(
+            request, "_carpetas_detalle.html",
+            {"error": str(exc), "ruta_a": ruta_a, "ruta_b": ruta_b}))
+    return _no_store(templates.TemplateResponse(
+        request, "_carpetas_detalle.html",
+        {"detalle": detalle, "ruta_a": ruta_a, "ruta_b": ruta_b}))
+
+
+@router.post("/duplicados/carpetas/previsualizar", response_class=HTMLResponse)
+async def previsualizar_carpetas_dup(request: Request, ruta_a: str = Form(...),
+                                     ruta_b: str = Form(...), keep: str = Form(...),
+                                     db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Firma un grupo DUP1 por cada archivo común idéntico; no escribe."""
+    try:
+        vista = await previsualizar_carpetas(
+            db, ruta_a, ruta_b, keep,
+            library=Path(get_settings().library_path),
+            secret=get_settings().secret_key)
+    except (ApartadoError, OSError, ValueError) as exc:
+        return _no_store(templates.TemplateResponse(
+            request, "_carpetas_detalle.html",
+            {"error": str(exc), "ruta_a": ruta_a, "ruta_b": ruta_b}))
+    return _no_store(templates.TemplateResponse(
+        request, "_carpetas_previsualizacion.html",
+        {"vista": vista,
+         "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}))
+
+
+@router.post("/duplicados/carpetas/confirmar", response_class=HTMLResponse)
+async def confirmar_carpetas_dup(
+    request: Request, token: list[str] = Form(default=[]),
+    grupos: list[str] = Form(default=[]), ruta_apartar: str = Form(default=""),
+    apartar_vacia: str = Form(default=""), db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Aparta solo los comunes idénticos; la carpeta vacía es una acción aparte."""
+    servicio = _servicio_apartado(db)
+    resultados = []
+    for token_firmado, crudo in zip(token, grupos, strict=False):
+        try:
+            datos = json.loads(crudo)
+            entrada = GrupoEntrada(datos["sha256"], tuple(datos["rutas"]), int(datos["keep_index"]))
+            resultados.append(await servicio.confirmar(token_firmado, [entrada]))
+        except (ApartadoError, TokenApartadoInvalido, ValueError, KeyError, TypeError) as exc:
+            resultados.append({"error": str(exc)})
+    carpeta = None
+    if apartar_vacia and ruta_apartar:
+        try:
+            operacion = await apartar_carpeta_vacia(
+                db, ruta_apartar, library=Path(get_settings().library_path),
+                secret=get_settings().secret_key)
+            carpeta = {"operacion": operacion}
+        except (ApartadoError, OSError, ValueError) as exc:
+            carpeta = {"error": str(exc)}
+    contexto = {"resultados": resultados, "carpeta": carpeta,
+                "operaciones": await _operaciones_apartadas(db),
+                "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}
+    return _no_store(templates.TemplateResponse(
+        request, "_carpetas_resultado.html", contexto))
 
 
 # ── BL-CNV2b: originales apartados de las conversiones ───────────────────────

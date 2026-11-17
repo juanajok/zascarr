@@ -281,6 +281,11 @@ class TestBuscarAhora:
         assert "Batman #1.cbz" in r.text
         assert "Descargar este" in r.text
         assert "CBZ" in r.text
+        # UX 2026-11-16: cada candidato identificable y el envío reemplaza SOLO su <li>,
+        # para poder descargar varios sin perder la lista.
+        assert f'id="candidato-{item.id}-0"' in r.text
+        assert 'name="indice" value="0"' in r.text
+        assert 'hx-target="closest li"' in r.text
 
     def test_sin_candidatos_muestra_el_motivo_de_d9(self, monkeypatch):
         item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED,
@@ -352,6 +357,7 @@ class TestEnviarCandidato:
         series = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN)
         item = Wishlist(id=uuid4(), series_id=series.id, status=WishlistStatus.WANTED)
         row_item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+        row_item.id = item.id   # `_get_row` lo busca por id: el estado es el MISMO ítem
         row_item.series = series
         row_item.issue = None
         enviado = AsyncMock(return_value=True)
@@ -369,6 +375,12 @@ class TestEnviarCandidato:
         candidato_enviado = enviado.await_args.args[1]
         assert candidato_enviado.title == "Batman #1.cbz"
         assert candidato_enviado.download_url == "magnet:?xt=urn:btih:abc"
+        # El resto de candidatos NO se pierde: solo se actualiza el estado (OOB) y este li.
+        assert f'hx-swap-oob="outerHTML:#estado-fila-{item.id}"' in r.text
+        assert f'id="candidato-{item.id}-0"' in r.text
+        assert "candidato-enviado" in r.text
+        assert "Enviado" in r.text and "a la cola de descarga" in r.text
+        assert 'class="wishlist-row"' not in r.text
 
     def test_item_inexistente_da_404(self):
         item_id = uuid4()
@@ -452,3 +464,216 @@ def test_index_avisa_si_prowlarr_esta_incompleto(monkeypatch):
     assert r.status_code == 200
     assert "Prowlarr está encendido pero le falta la URL o la clave" in r.text
     assert "Revisar Prowlarr en Ajustes" in r.text
+
+
+def _candidato_de_prueba() -> SearchResult:
+    return SearchResult(
+        title="Batman #1.cbz", indexer="test", download_url="magnet:?xt=urn:btih:abc",
+        size_bytes=52428800, seeders=12, category="comics",
+    )
+
+
+def test_buscar_ahora_avisa_de_que_puede_tardar_y_se_deshabilita():
+    """UX 2026-11-16: con el foro espaciado, la búsqueda manual tarda ~1-2 min; debe verse
+    que trabaja (indicador con aria-live) y el botón no debe poder pulsarse dos veces."""
+    series = Series(id=uuid4(), title="DC K.O.", tradition=ComicTradition.AMERICAN)
+    item = make_wishlist_item(series, status=WishlistStatus.WANTED)
+    item.series = series
+    item.issue = None
+    sesion = FakeSession(exec_queue=[FakeExecResult([item]), FakeExecResult([])])
+    with use_fake_session(sesion) as client:
+        r = client.get("/ui/wishlist")
+    assert r.status_code == 200
+    assert 'hx-post="/ui/wishlist/' in r.text and "buscar-ahora" in r.text
+    assert 'hx-disable="this"' in r.text
+    assert 'role="status" aria-live="polite"' in r.text
+    assert "puede tardar hasta 2 minutos" in r.text
+
+
+def test_anadir_deseo_inserta_la_fila_sin_recargar_la_pagina(monkeypatch):
+    """UX 2026-11-16: el botón recargaba con un hook que no se ejecutaba y la fila
+    no aparecía hasta refrescar a mano. Ahora se inserta al final de la lista."""
+    series = Series(id=uuid4(), title="DC K.O.", tradition=ComicTradition.AMERICAN)
+    monkeypatch.setattr(
+        "zascarr.web.wishlist.WishlistService.search_series",
+        AsyncMock(return_value=[series]))
+    with use_fake_session(FakeSession()) as client:
+        r = client.get("/ui/wishlist/buscar-serie", params={"q": "DC"})
+    assert r.status_code == 200
+    assert 'hx-target="#wishlist-list" hx-swap="beforeend"' in r.text
+    assert "window.location.reload" not in r.text
+    assert "this.disabled = true" in r.text
+
+
+def test_un_deseo_descargado_se_puede_marcar_como_conseguido():
+    """Descarga manual que quedó en _Unsorted: el deseo no puede quedarse
+    «Descargando…» para siempre (2026-11-16)."""
+    from zascarr.models import WishlistStatus
+
+    series = Series(id=uuid4(), title="Sector Lejano", tradition=ComicTradition.AMERICAN)
+    item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+    item.series = series
+    item.issue = None
+    fila = make_wishlist_item(series, status=WishlistStatus.IMPORTED)
+    fila.id = item.id
+    fila.series = series
+    fila.issue = None
+    sesion = FakeSession(get_map={(Wishlist, item.id): item},
+                         exec_queue=[FakeExecResult([fila])])
+    with use_fake_session(sesion) as client:
+        r = client.post(f"/ui/wishlist/{item.id}/marcar-conseguido")
+    assert r.status_code == 200
+    assert item.status is WishlistStatus.IMPORTED
+    assert item.downloaded_at is not None
+    assert item.last_error is None
+
+def test_la_fila_descargando_ofrece_ya_lo_tengo():
+    from zascarr.models import WishlistStatus
+
+    series = Series(id=uuid4(), title="Sector Lejano", tradition=ComicTradition.AMERICAN)
+    item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+    item.series = series
+    item.issue = None
+    sesion = FakeSession(exec_queue=[FakeExecResult([item]), FakeExecResult([])])
+    with use_fake_session(sesion) as client:
+        r = client.get("/ui/wishlist")
+    assert r.status_code == 200
+    assert "Ya lo tengo" in r.text
+    assert "/marcar-conseguido" in r.text
+
+
+def test_la_pagina_explica_sin_ruido_y_resume_la_lista():
+    """Pasada UI/UX 2026-11-16: introducción corta, «cómo funciona» plegado,
+    indicador del buscador y resumen de la lista."""
+    from zascarr.models import WishlistStatus
+
+    series = Series(id=uuid4(), title="Sandman", tradition=ComicTradition.AMERICAN)
+    item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+    item.series = series
+    item.issue = None
+    sesion = FakeSession(exec_queue=[FakeExecResult([item]), FakeExecResult([])])
+    with use_fake_session(sesion) as client:
+        r = client.get("/ui/wishlist")
+    assert r.status_code == 200
+    assert "¿Cómo funciona?" in r.text
+    assert "Buscando series…" in r.text
+    assert "1 deseo" in r.text and "1 en descarga" in r.text
+    assert 'aria-label="Quitar Sandman de Deseados"' in r.text
+    assert 'aria-label="Marcar Sandman como conseguido"' in r.text
+
+def test_los_candidatos_muestran_cabecera_y_el_boton_dice_que_descarga(monkeypatch):
+    item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+    serie = Series(id=uuid4(), title="Sandman", tradition=ComicTradition.AMERICAN)
+    item.series_id = serie.id
+    monkeypatch.setattr(
+        Orchestrator, "preview_candidates",
+        AsyncMock(return_value=[_candidato_de_prueba()]))
+    session = FakeSession(get_map={(Wishlist, item.id): item},
+                          exec_queue=[_accepted(), FakeExecResult([item])])
+    with use_fake_session(session) as client:
+        r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
+    assert r.status_code == 200
+    assert "1 resultado" in " ".join(r.text.split())
+    assert "Cerrar lista" in r.text
+    assert 'hx-disable="this"' in r.text
+    assert 'aria-label="Descargar Batman #1.cbz"' in r.text
+
+
+def test_un_deseo_ya_descargado_dice_descargado_no_descargando():
+    """DOWNLOADED es «terminó la descarga, falta importar»; decir
+    «Descargando…» confundía con DOWNLOADING (pasada UI/UX 2026-11-16)."""
+    from zascarr.models import WishlistStatus
+
+    series = Series(id=uuid4(), title="Sandman", tradition=ComicTradition.AMERICAN)
+    item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADED)
+    item.series = series
+    item.issue = None
+    sesion = FakeSession(exec_queue=[FakeExecResult([item]), FakeExecResult([])])
+    with use_fake_session(sesion) as client:
+        r = client.get("/ui/wishlist")
+    assert "Descargado" in r.text
+    assert "Descargando…" not in r.text
+
+
+def test_el_panel_de_progreso_lee_transmission_una_vez(monkeypatch):
+    from zascarr.models import WishlistStatus
+
+    series = Series(id=uuid4(), title="Absolute Wonder Woman",
+                    tradition=ComicTradition.AMERICAN)
+    item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+    item.series = series
+    item.issue = None
+    item.download_backend = "transmission"
+    item.download_ref = "ABC123"
+    otro = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+    otro.series = series
+    otro.issue = None
+    otro.download_backend = "amule"
+    otro.download_ref = "ED2KHASH"
+
+    cliente = AsyncMock()
+    cliente.list_torrents.return_value = [
+        {"hashString": "abc123", "percentDone": 0.4}]
+    monkeypatch.setattr("zascarr.web.wishlist.TransmissionClient",
+                        lambda: cliente)
+    ajustes = get_settings().model_copy(update={"transmission_enabled": True})
+    monkeypatch.setattr("zascarr.web.wishlist.get_settings", lambda: ajustes)
+    sesion = FakeSession(exec_queue=[FakeExecResult([item, otro])])
+    with use_fake_session(sesion) as client:
+        r = client.get("/ui/wishlist/progreso")
+    assert r.status_code == 200
+    assert "40%" in r.text and "aMule" in r.text
+    assert cliente.list_torrents.await_count == 1
+
+def test_el_panel_de_progreso_no_pide_nada_sin_descargas():
+    sesion = FakeSession(exec_queue=[FakeExecResult([])])
+    with use_fake_session(sesion) as client:
+        r = client.get("/ui/wishlist/progreso")
+    assert r.status_code == 200 and r.text == ""
+
+def test_la_pagina_carga_el_panel_de_progreso():
+    from zascarr.models import WishlistStatus
+
+    series = Series(id=uuid4(), title="Sandman", tradition=ComicTradition.AMERICAN)
+    item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+    item.series = series
+    item.issue = None
+    sesion = FakeSession(exec_queue=[FakeExecResult([item]), FakeExecResult([])])
+    with use_fake_session(sesion) as client:
+        r = client.get("/ui/wishlist")
+    assert 'hx-get="/ui/wishlist/progreso"' in r.text
+    assert "every 30s" in r.text
+
+
+def test_buscar_ahora_no_accede_a_relaciones_sin_precargar(monkeypatch):
+    """Regresión 2026-11-17: `_row(item)` sobre un `db.get` sin eager lanzaba
+    MissingGreenlet en async y la búsqueda devolvía 500. La ruta no debe tocar
+    `item.series`/`item.issue`; con un objeto que falla si se accede, responde 200."""
+    item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED, search_query="Absolute Batman")
+    serie = Series(id=uuid4(), title="Absolute Batman", tradition=ComicTradition.AMERICAN)
+    item.series_id = serie.id
+
+    # Un `Wishlist` real no permitiría este parche por el descriptor de SQLAlchemy,
+    # así que se simula el acceso perezoso con un objeto mínimo para la ruta.
+    class ItemSinRelaciones:
+        id = item.id
+        search_query = "Absolute Batman"
+        status = WishlistStatus.WANTED
+        last_error = None
+
+        @property
+        def series(self):  # pragma: no cover - debe fallar si se llama
+            raise AssertionError("la ruta no debe leer item.series sin eager")
+
+        @property
+        def issue(self):  # pragma: no cover - idem
+            raise AssertionError("la ruta no debe leer item.issue sin eager")
+
+    monkeypatch.setattr(Orchestrator, "preview_candidates",
+                        AsyncMock(return_value=[_candidato_de_prueba()]))
+    sesion = FakeSession(get_map={(Wishlist, item.id): ItemSinRelaciones()},
+                         exec_queue=[_accepted()])
+    with use_fake_session(sesion) as client:
+        r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
+    assert r.status_code == 200
+    assert "Resultados encontrados" in r.text

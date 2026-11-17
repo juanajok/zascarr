@@ -35,6 +35,10 @@ def test_upsert_tablas_enums_y_bajada():
         tablas = _consultar_sync(
             url, "SELECT tablename FROM pg_tables WHERE tablename LIKE 'apartado_%' ORDER BY 1")
         assert [t[0] for t in tablas] == ["apartado_grupos", "apartado_operaciones"]
+        columnas = _consultar_sync(
+            url, "SELECT column_name FROM information_schema.columns "
+                 "WHERE table_name = 'apartado_operaciones'")
+        assert "modo" in {c[0] for c in columnas}
         enums = _consultar_sync(
             url, "SELECT typname FROM pg_type WHERE typname LIKE 'apartado_%' AND typtype = 'e' ORDER BY 1")
         assert [e[0] for e in enums] == ["apartado_estado", "apartado_grupo_estado"]

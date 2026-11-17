@@ -14,6 +14,8 @@
       <legend>Fuentes de metadatos</legend>
       <p class="ajustes-desc">Webs de las que saca portadas, números y datos de tus series. Si enciendes una, se le envían tus títulos.</p>
       <form hx-post="/ui/ajustes/guardar/fuentes" hx-target="#resultado-fuentes" hx-swap="innerHTML">
+        <div role="group" aria-labelledby="fuentes-metadatos">
+        <h3 id="fuentes-metadatos" class="ajustes-subgrupo">Metadatos</h3>
         <label class="legal-checkbox">
           <input type="checkbox" name="comicvine_enabled" value="true" {% if comicvine_enabled %}checked{% endif %}>
           Comic Vine (grapa americana y británica)
@@ -28,15 +30,15 @@
         </label>
         <label class="legal-checkbox">
           <input type="checkbox" name="gcd_enabled" value="true" {% if gcd_enabled %}checked{% endif %}>
-          GCD (solo para buscar series en Descubrir)
+          GCD (Descubrir y rellenar huecos vacíos de series ya catalogadas)
         </label>
         <label class="legal-checkbox">
           <input type="checkbox" name="metron_enabled" value="true" {% if metron_enabled %}checked{% endif %}>
-          Metron (solo Descubrir; cómic EN/IT; requiere token; datos CC BY-SA 4.0)
+          Metron (Descubrir y rellenar huecos; cómic EN/IT; requiere token; datos CC BY-SA 4.0)
         </label>
         <label class="legal-checkbox">
           <input type="checkbox" name="open_library_enabled" value="true" {% if open_library_enabled %}checked{% endif %}>
-          Open Library (solo Descubrir; obras y tomos con ISBN; no grapas)
+          Open Library (Descubrir y rellenar huecos; obras y tomos con ISBN; no grapas)
         </label>
         <label class="legal-checkbox">
           <input type="checkbox" name="fandom_dc_enabled" value="true" {% if fandom_dc_enabled %}checked{% endif %}>
@@ -46,6 +48,22 @@
           <input type="checkbox" name="fandom_marvel_enabled" value="true" {% if fandom_marvel_enabled %}checked{% endif %}>
           Marvel Database (wikis de Fandom; serie y número; texto CC-BY-SA)
         </label>
+        </div>
+        <div role="group" aria-labelledby="fuentes-guias">
+        <h3 id="fuentes-guias" class="ajustes-subgrupo">Guías y novedades</h3>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="reading_orders_enabled" value="true" {% if reading_orders_enabled %}checked{% endif %}>
+          Comic Book Reading Orders (guías de lectura; solo referencias, sin prosa)
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="continuity_guide_enabled" value="true" {% if continuity_guide_enabled %}checked{% endif %}>
+          Continuity Guide (guías de lectura; solo referencias, sin prosa)
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="comic_book_herald_enabled" value="true" {% if comic_book_herald_enabled %}checked{% endif %}>
+          Comic Book Herald (novedades de guías por RSS; solo títulos, fechas y enlaces del feed público)
+        </label>
+        </div>
         {% if fuentes_heredadas %}
         <div id="aviso-fuentes-heredadas">
           {% call ui.aviso("amber") %}<strong>Encendidas por compatibilidad con tu instalación anterior.</strong>
@@ -61,7 +79,7 @@
 
       <details class="ajustes-mas">
         <summary>Qué pasa al apagar una fuente</summary>
-        <p class="ajustes-hint">Apagar una fuente no borra lo que ya trajo: solo deja de preguntarle, también en Descubrir. Si la vuelves a encender, las series que se le consultaron hace poco esperan 30 días antes de preguntarle otra vez. GCD, por ahora, solo sirve para buscar series en Descubrir; no completa las que ya tienes.</p>
+        <p class="ajustes-hint">Apagar una fuente no borra lo que ya trajo: solo deja de preguntarle, también en Descubrir. Si la vuelves a encender, las series que se le consultaron hace poco esperan 30 días antes de preguntarle otra vez. GCD, Metron y Open Library también rellenan huecos vacíos de series ya catalogadas; apagarlos deja de consultarlos.</p>
       </details>
       <details class="ajustes-mas">
         <summary>Cortesía y esperas</summary>
@@ -106,7 +124,7 @@
           <input type="password" name="metron_token" autocomplete="off"
                  placeholder="{{ 'ya configurado — deja en blanco para no cambiarlo' if metron_token_configurado else 'sin configurar' }}">
         </label>
-        <p class="ajustes-hint">Créalo en tu cuenta de Metron, en «Tokens». Por ahora Metron y Open Library solo se usan en Descubrir: no completan series ya catalogadas. Los datos de Metron se muestran con atribución CC BY-SA 4.0; sus portadas no se usan.</p>
+        <p class="ajustes-hint">Créalo en tu cuenta de Metron, en «Tokens». Rellenan huecos vacíos de series ya catalogadas: Metron, año, fin y sinopsis; Open Library, sinopsis y año de obra/tomo. Los datos de Metron se muestran con atribución CC BY-SA 4.0; sus portadas no se usan.</p>
         <div class="ajustes-actions">
           <button type="submit">Guardar</button>
           <button type="button" hx-post="/ui/ajustes/probar/metron" hx-include="closest form"
@@ -120,6 +138,7 @@
         <p class="ajustes-hint">Hace una búsqueda de prueba con el token del formulario o el guardado. No descarga nada ni cambia tu catálogo.</p>
       </details>
     </fieldset>
+
 
 
   <h2 class="ajustes-acto" id="ajustes-descargas">Descargas</h2>
@@ -227,6 +246,65 @@
       <div id="prueba-amule" aria-live="polite"></div>
     </fieldset>
 
+    <fieldset class="ajustes-card ajustes-card--tercio" id="ajustes-foro">
+      <legend>Foro</legend>
+      <p class="ajustes-desc">Busca enlaces de descarga en un foro IPB que configures tú.</p>
+      <form hx-post="/ui/ajustes/guardar/foro" hx-target="#resultado-foro" hx-swap="innerHTML">
+        <label>Dirección del foro
+          <input type="text" name="forum_url" value="{{ forum_url }}" placeholder="http://tu-foro.example/forum" autocomplete="off">
+        </label>
+        <p class="ajustes-hint">Si empieza por <code>http://</code>, el usuario y la contraseña viajan sin cifrar: el foro no ofrece HTTPS y ZascArr te avisa, pero no lo evita. No reutilices una contraseña que uses en otro sitio.</p>
+        {% if forum_http_sin_tls %}
+        {{ ui.aviso("amber", "El foro usa HTTP sin cifrar: tu usuario y contraseña viajan sin protección. No reutilices una contraseña que uses en otro sitio; si puedes, usa un foro con HTTPS.") }}
+        {% endif %}
+        <label>Usuario
+          <input type="text" name="forum_username" value="{{ forum_username }}" autocomplete="off">
+        </label>
+        <label>Contraseña
+          <input type="password" name="forum_password" autocomplete="off"
+                 placeholder="{{ 'ya configurada (vacío = no cambiar)' if forum_password_configurada else 'sin configurar' }}">
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="forum_enabled" value="true" {% if forum_enabled %}checked{% endif %}>
+          Activar el foro para buscar enlaces de descarga
+        </label>
+        <p class="ajustes-hint">Solo se leen las referencias de los temas; ZascArr no descarga ni publica nada en el foro. La conexión puede ser HTTP: el foro decide si ofrece HTTPS.</p>
+        <div class="ajustes-actions">
+          <button type="submit">Guardar</button>
+          <button type="button" hx-post="/ui/ajustes/probar/foro"
+                  hx-include="closest form" hx-target="#prueba-foro"
+                  hx-swap="innerHTML" hx-indicator="#prueba-foro-espera">Probar conexión</button>
+        </div>
+      </form>
+      <div id="resultado-foro" aria-live="polite"></div>
+      <div id="prueba-foro" aria-live="polite"></div>
+      <span id="prueba-foro-espera" class="htmx-indicator caption" aria-live="polite">Probando…</span>
+      <details class="ajustes-mas">
+        <summary>Qué hace «Probar conexión»</summary>
+        <p class="ajustes-hint">Solo inicia sesión en el foro: no busca ni descarga nada. Puede pedir esperar por cortesía; si el foro está apagado en Ajustes, la prueba funciona igual.</p>
+      </details>
+    </fieldset>
+
+
+    <fieldset class="ajustes-card ajustes-card--ancha" id="blog-rss">
+      <legend>Blog o RSS</legend>
+      <p class="ajustes-desc">Un feed RSS o Atom que tú aportas. Solo enlaces directos del propio feed.</p>
+      <form hx-post="/ui/ajustes/guardar/blog" hx-target="#resultado-blog" hx-swap="innerHTML">
+        <label class="legal-checkbox">
+          <input type="checkbox" name="blog_feed_enabled" value="true" {% if blog_feed_enabled %}checked{% endif %}>
+          Usar este feed al buscar en Deseados
+        </label>
+        <label>Nombre
+          <input type="text" name="blog_feed_name" maxlength="120" value="{{ blog_feed_name }}" placeholder="Blog o RSS">
+        </label>
+        <label>Dirección del feed
+          <input type="url" name="blog_feed_url" value="{{ blog_feed_url }}" maxlength="500" placeholder="https://tu-blog.example/feed.xml">
+        </label>
+        <p class="ajustes-hint">Sin dirección no hay ninguna fuente por defecto. Solo se aceptan enlaces magnet o ed2k que el feed ya incluya: no se abren los posts, no se sigue un .torrent y no se inventan enlaces.</p>
+        <div class="ajustes-actions"><button type="submit">Guardar blog o RSS</button></div>
+      </form>
+      <div id="resultado-blog" aria-live="polite"></div>
+    </fieldset>
 
     <fieldset class="ajustes-card ajustes-card--ancha" id="calidad-ediciones">
       <legend>Calidad y mejoras</legend>
@@ -254,6 +332,13 @@
             {% endfor %}
           </select>
         </label>
+        <label>Números por pasada
+          <select name="upgrade_scan_batch">
+            {% for valor in (1, 3, 5, 10) %}
+            <option value="{{ valor }}" {% if upgrade_scan_batch == valor %}selected{% endif %}>{{ valor }}</option>
+            {% endfor %}
+          </select>
+        </label>
         <div class="ajustes-actions"><button type="submit">Guardar</button></div>
       </form>
       <div id="resultado-calidad" aria-live="polite"></div>
@@ -277,8 +362,110 @@
     </fieldset>
 
 
+
   <h2 class="ajustes-acto" id="ajustes-propio">Tu ZascArr</h2>
 
+    <fieldset class="ajustes-card ajustes-card--ancha" id="discos-biblioteca">
+      <legend>Discos de la biblioteca</legend>
+      <p class="ajustes-desc">Reparte tus tradiciones entre los discos que ya tienes montados. Los archivos actuales no se mueven.</p>
+      {% for r in raices_admin %}
+      <div class="ajuste-raiz" data-raiz="{{ r.id }}">
+        <p><strong>{{ r.name }}</strong> <span class="ajustes-hint">{{ r.host_path or r.path }}</span></p>
+        <p>{{ ui.chip("info", r.estado) }}{% if r.is_default %} {{ ui.chip("neutro", "Por defecto") }}{% endif %}
+          <span class="ajustes-hint">{{ r.archivos }} archivos</span></p>
+        <p class="ajustes-hint">Tradiciones: {{ r.tradiciones | join(", ") or "ninguna" }}</p>
+        {% if not r.is_default %}
+        <form hx-post="/ui/ajustes/raices/{{ r.id }}/habilitar" hx-target="#resultado-discos" hx-swap="innerHTML">
+          <input type="hidden" name="enabled" value="{{ 'false' if r.enabled else 'true' }}">
+          <button type="submit" class="btn ghost sm">{{ 'Desactivar' if r.enabled else 'Activar' }}</button>
+        </form>
+        {% endif %}
+        {% if not r.is_default and r.archivos == 0 %}
+        <form hx-post="/ui/ajustes/raices/{{ r.id }}/borrar" hx-target="#resultado-discos" hx-swap="innerHTML">
+          <button type="submit" class="btn ghost sm">Borrar</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      <form hx-post="/ui/ajustes/guardar/raices" hx-target="#resultado-discos" hx-swap="innerHTML">
+        <div role="group" aria-labelledby="mapa-tradiciones">
+          <h3 id="mapa-tradiciones" class="ajustes-subgrupo">Tradición → disco</h3>
+          {% for t in tradiciones_admin %}
+          <label>{{ t.etiqueta }}
+            <select name="trad_{{ t.valor }}">
+              <option value="">Sin disco asignado</option>
+              {% for r in raices_admin if r.enabled %}
+              <option value="{{ r.id }}" {% if mapa_tradiciones.get(t.valor) == r.id %}selected{% endif %}>{{ r.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="ajustes-actions"><button type="submit">Guardar reparto</button></div>
+      </form>
+
+      {% if montajes_disponibles %}
+      <form hx-post="/ui/ajustes/raices/crear" hx-target="#resultado-discos" hx-swap="innerHTML">
+        <label>Disco montado
+          <select name="path" required>
+            {% for m in montajes_disponibles %}<option value="{{ m.path }}">{{ m.host_path or m.path }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Nombre <input type="text" name="name" maxlength="80" placeholder="Manga"></label>
+        <div class="ajustes-actions"><button type="submit">Añadir disco</button></div>
+      </form>
+      {% else %}
+      <p class="ajustes-hint">Para añadir otro disco, móntalo en el servidor y reinicia ZascArr; aquí solo se gestionan discos ya montados.</p>
+      {% endif %}
+      <div id="resultado-discos" aria-live="polite"></div>
+    </fieldset>
+
+    <fieldset class="ajustes-card" id="nombres-archivo">
+      <legend>Nombres de archivo</legend>
+      <p class="ajustes-desc">Cómo se llaman los archivos que organices a partir de ahora. La biblioteca que ya tienes no se renombra.</p>
+      <form hx-post="/ui/ajustes/guardar/nombres" hx-target="#resultado-nombres" hx-swap="innerHTML">
+        <label class="legal-checkbox">
+          <input type="checkbox" name="naming_enabled" value="true" {% if naming_enabled %}checked{% endif %}>
+          Usar nombres nuevos al organizar
+        </label>
+        <label>Estilo
+          <select name="naming_preset">
+            <option value="clasico" {% if naming_preset == "clasico" %}selected{% endif %}>Clásico (Serie #003)</option>
+            <option value="compacto" {% if naming_preset == "compacto" %}selected{% endif %}>Compacto (Serie #03)</option>
+            <option value="tradicion" {% if naming_preset == "tradicion" %}selected{% endif %}>Según la tradición</option>
+            <option value="titulo" {% if naming_preset == "titulo" %}selected{% endif %}>Con el título del número</option>
+          </select>
+        </label>
+        <ul class="ajustes-hint nombres-ejemplos">
+          <li><strong>Clásico:</strong> La Patrulla #003</li>
+          <li><strong>Compacto:</strong> La Patrulla #03</li>
+          <li><strong>Tradición:</strong> La Patrulla #003 · Akira v01 · Thorgal T01 · Mortadelo nº 01</li>
+          <li><strong>Con título:</strong> La Patrulla #003 - Corte de los búhos</li>
+        </ul>
+        <p class="ajustes-hint">Solo afecta a archivos nuevos; los que ya están organizados conservan su nombre.</p>
+        <div class="ajustes-actions"><button type="submit">Guardar nombres de archivo</button></div>
+      </form>
+      <div id="resultado-nombres" aria-live="polite"></div>
+    </fieldset>
+
+    <fieldset class="ajustes-card" id="importacion">
+      <legend>Importación</legend>
+      <p class="ajustes-desc">Qué hace ZascArr con lo que llega de Descargas.</p>
+      <form hx-post="/ui/ajustes/guardar/importacion" hx-target="#resultado-importacion" hx-swap="innerHTML">
+        <label class="legal-checkbox">
+          <input type="checkbox" name="import_create_missing_issue" value="true" {% if import_create_missing_issue %}checked{% endif %}>
+          Crear el número al importar si la serie aún no tiene catálogo
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="import_convert_cbr" value="true" {% if import_convert_cbr %}checked{% endif %}>
+          Convertir CBR a CBZ al importar
+        </label>
+        <p class="ajustes-hint">La conversión verifica el CBZ antes de apartar el CBR; si falla, el CBR se conserva. Solo afecta a importaciones nuevas.</p>
+        <div class="ajustes-actions"><button type="submit">Guardar importación</button></div>
+      </form>
+      <div id="resultado-importacion" aria-live="polite"></div>
+    </fieldset>
 
     {% include "_ajustes_seguridad.html" %}
 

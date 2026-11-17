@@ -21,6 +21,7 @@ from PIL import Image
 from sqlalchemy import select, text
 
 from tests._pg import bd_efimera_sync, migrar_a_head
+from tests._raices_pg import allowlist, sembrar_raiz
 from tests.test_revision_carpetas_pg import Banco
 from zascarr.core.importer_triage import parse_comic_info
 from zascarr.models import (
@@ -104,6 +105,8 @@ async def ent(url_bd, tmp_path, monkeypatch):
         amule_incoming_dir=str(tmp_path / "amule"),
         downloads_path=descargas,
     ))
+    allowlist(monkeypatch, lib)
+    await sembrar_raiz(b.fabrica, lib)
     yield SimpleNamespace(banco=b, lib=lib, descargas=descargas)
     await b.cerrar()
 

@@ -1,0 +1,14 @@
+{% if sagas %}
+<section id="sagas-serie" class="series-sagas" aria-label="Sagas de la serie">
+  <h2 class="titulo-frase">Sagas</h2>
+  <ul class="series-sagas-lista">
+    {% for s in sagas %}
+    <li>
+      <a href="/ui/arcos/{{ s.id }}">{{ s.title }}</a>
+      {% if s.is_crossover %}{{ ui.chip("neutro", "Cruza series") }}{% endif %}
+      <span class="muted">{% if s.desde == s.hasta %}puesto {{ s.desde }}{% else %}puestos {{ s.desde }}–{{ s.hasta }}{% endif %} de {{ s.total }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

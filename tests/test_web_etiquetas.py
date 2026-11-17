@@ -42,6 +42,7 @@ def test_panel_y_alta_manual(monkeypatch):
     class Tag:
         name = "noir"
     monkeypatch.setattr(web_series, "etiquetas_de_serie", AsyncMock(return_value=[Tag()]))
+    monkeypatch.setattr(web_series, "ideas_para_empezar", AsyncMock(return_value=[]))
     monkeypatch.setattr(web_series, "anadir_etiqueta", AsyncMock(
         return_value=ResultadoEtiqueta(None, "Etiqueta añadida.", True)))
     with use_session(series) as client:
@@ -55,6 +56,7 @@ def test_panel_y_alta_manual(monkeypatch):
 def test_alta_invalida_muestra_aviso_sin_500(monkeypatch):
     series = Series(id=uuid4(), title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN)
     monkeypatch.setattr(web_series, "etiquetas_de_serie", AsyncMock(return_value=[]))
+    monkeypatch.setattr(web_series, "ideas_para_empezar", AsyncMock(return_value=[]))
     monkeypatch.setattr(web_series, "anadir_etiqueta", AsyncMock(
         side_effect=web_series.EtiquetaInvalida("Escribe al menos una letra o un número.")))
     with use_session(series) as client:
@@ -66,6 +68,7 @@ def test_alta_invalida_muestra_aviso_sin_500(monkeypatch):
 def test_sugerencias_vacias_no_consultan(monkeypatch):
     series = Series(id=uuid4(), title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN)
     monkeypatch.setattr(web_series, "etiquetas_de_serie", AsyncMock(return_value=[]))
+    monkeypatch.setattr(web_series, "ideas_para_empezar", AsyncMock(return_value=[]))
     with use_session(series) as client:
         r = client.get(f"/ui/series/{series.id}/etiquetas/sugerir?etiqueta=")
     assert r.status_code == 200 and r.text == ""
@@ -75,6 +78,7 @@ def test_post_sin_etiqueta_no_da_422_crudo(monkeypatch):
     """Un formulario sin el campo (o con una petición manipulada) no enseña JSON de validación."""
     series = Series(id=uuid4(), title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN)
     monkeypatch.setattr(web_series, "etiquetas_de_serie", AsyncMock(return_value=[]))
+    monkeypatch.setattr(web_series, "ideas_para_empezar", AsyncMock(return_value=[]))
     monkeypatch.setattr(web_series, "anadir_etiqueta", AsyncMock(
         side_effect=web_series.EtiquetaInvalida("Escribe al menos una letra o un número.")))
     with use_session(series) as client:
@@ -82,3 +86,15 @@ def test_post_sin_etiqueta_no_da_422_crudo(monkeypatch):
     assert r.status_code == 200
     assert "Escribe al menos una letra" in r.text
     assert '"detail"' not in r.text
+
+
+def test_panel_muestra_ideas_para_empezar_sin_asignarlas(monkeypatch):
+    from types import SimpleNamespace
+    series = Series(id=uuid4(), title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN)
+    monkeypatch.setattr(web_series, "etiquetas_de_serie", AsyncMock(return_value=[]))
+    monkeypatch.setattr(web_series, "ideas_para_empezar", AsyncMock(
+        return_value=[SimpleNamespace(name="noir")]))
+    with use_session(series) as client:
+        r = client.get(f"/ui/series/{series.id}/etiquetas")
+    assert r.status_code == 200
+    assert "Ideas para empezar" in r.text and "noir" in r.text

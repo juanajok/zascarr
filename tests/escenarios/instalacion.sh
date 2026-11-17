@@ -92,5 +92,22 @@ PL="$(grep '^DB_PASSWORD=' "${REPO}/.env.example" | cut -d= -f2-)"
 if [[ -z "${PL}" || "${PL}" == "cambia_esto_ahora" ]]; then pass I08 ".env.example: DB_PASSWORD vacío o placeholder obvio"
 else fail I08 ".env.example lleva un valor que no es un placeholder"; fi
 
+# ── I11 (A7): el usuario de servicio se elige en la pregunta, no solo por entorno ────────────────
+NUEVO_USR="a7u$$"
+RAIZ_A7="${W}/opt_a7"; mkdir -p "${RAIZ_A7}"; copiar_repo "${RAIZ_A7}"
+printf '%s\n%s\n%s\n%s\n' "${W}/biblioteca" "${W}/descargas" es "${NUEVO_USR}" | \
+    env PATH="${W}/bin:${PATH}" STUB_LOG="${W}/docker.log" _ZASCARR_YA_ACTUALIZADO=1 \
+        ZASCARR_DATA_DIR="${W}/datos_a7" \
+        bash "${RAIZ_A7}/zascarr/bootstrap.sh" >"${W}/salida.out" 2>"${W}/salida.err"
+RC=$?
+PUID_A7="$(id -u "${NUEVO_USR}" 2>/dev/null || true)"
+if getent passwd "${NUEVO_USR}" >/dev/null && getent group "${NUEVO_USR}" >/dev/null \
+   && grep -q "^ZASCARR_USER=${NUEVO_USR}$" "${RAIZ_A7}/.env" \
+   && grep -q "^ZASCARR_GROUP=${NUEVO_USR}$" "${RAIZ_A7}/.env" \
+   && grep -q "^PUID=${PUID_A7}$" "${RAIZ_A7}/.env"; then
+    pass I11 "el usuario elegido en la pregunta se crea y queda en .env/PUID"
+else
+    fail I11 "no se creó o no quedó configurado el usuario elegido (rc=${RC})"
+fi
 rm -rf "${W}"
 exit 0

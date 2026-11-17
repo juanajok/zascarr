@@ -1,0 +1,16 @@
+{#- SCR2: atribución legal de las wikis de Fandom (texto CC-BY-SA 3.0). Se pinta en la ficha
+    de serie, la de número y la saga cuando sus datos vienen de DC Database o Marvel Database.
+    El artículo original da la atribución; la licencia va enlazada aparte. La portada no va
+    bajo esa licencia (es fair use editorial). Nada de hotlinking ni de imágenes: solo texto.
+    `que` nombra la superficie («esta ficha», «este número», «esta saga»). -#}
+{% macro aviso_de_atribucion(datos, que, portada=False) %}
+{% if datos %}
+<p class="caption">
+  Parte de los datos de {{ que }} viene de
+  <a href="{{ datos.url_articulo }}" target="_blank" rel="noopener noreferrer">«{{ datos.titulo }}» en {{ datos.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>.
+  Ese texto se publica bajo la
+  <a href="{{ datos.url_licencia }}" target="_blank" rel="noopener noreferrer">licencia Creative Commons BY-SA 3.0</a>.
+  {%- if portada %} La portada no está incluida en esa licencia.{% endif %}
+</p>
+{% endif %}
+{% endmacro %}

@@ -15,9 +15,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from zascarr.models import Issue, IssueFormat, MetadataSource, Publisher, Series
+from zascarr.models import (
+    EditionKind,
+    Issue,
+    IssueFormat,
+    MetadataSource,
+    Publisher,
+    Series,
+)
 
-CAMPOS_SERIE = ("title", "start_year", "end_year", "publisher", "description", "total_issues")
+CAMPOS_SERIE = (
+    "title", "start_year", "end_year", "publisher", "description", "total_issues",
+    "language", "edition_kind",
+)
 CAMPOS_NUMERO = ("issue_number", "title", "release_date", "format", "synopsis")
 
 MAX_TITULO = 500
@@ -87,6 +97,39 @@ def _entero(
     return numero
 
 
+def _idioma(valor: str, errores: dict[str, str]) -> str | None:
+    """Normaliza un código de idioma sin inventarlo; vacío = sin dato."""
+    texto = (valor or "").strip().lower()
+    if not texto:
+        return None
+    if len(texto) > 10 or not re.fullmatch(r"[a-z]{2,3}(?:-[a-z]{2,4})?", texto):
+        errores["language"] = "Usa un código de idioma corto, por ejemplo «es» o «en»."
+        return None
+    return texto
+
+
+def _edicion(valor: str, errores: dict[str, str]) -> EditionKind | None:
+    texto = (valor or "").strip()
+    if not texto:
+        return None
+    try:
+        return EditionKind(texto)
+    except ValueError:
+        errores["edition_kind"] = "Elige un tipo de edición de la lista."
+        return None
+
+
+def _etiqueta_edicion(valor: EditionKind | None) -> str:
+    if valor is None:
+        return ""
+    return {
+        EditionKind.OFICIAL: "Oficial",
+        EditionKind.TRADUMAQUETA: "Tradumaqueta",
+        EditionKind.ESCANEO_PROPIO: "Escaneo propio",
+        EditionKind.OTRO: "Otro",
+    }[valor]
+
+
 def _sort_order(numero: str | None) -> float | None:
     """Orden estable a partir del primer número de la numeración; None si no es numérico."""
     if not numero:
@@ -112,7 +155,7 @@ async def _publisher(db: AsyncSession, nombre: str):
 async def guardar_serie(
     db: AsyncSession, series_id: UUID, *,
     title: str, start_year: str, end_year: str, publisher: str,
-    description: str, total_issues: str,
+    description: str, total_issues: str, language: str = "", edition_kind: str = "",
 ) -> ResultadoEdicion:
     serie = (await db.execute(
         select(Series).options(selectinload(Series.publisher))
@@ -130,6 +173,8 @@ async def guardar_serie(
     if inicio is not None and fin is not None and inicio > fin:
         errores["end_year"] = "El año de fin no puede ser anterior al de inicio."
     total = _entero(total_issues, "total_issues", errores, maximo=100_000)
+    idioma = _idioma(language, errores)
+    edicion = _edicion(edition_kind, errores)
     sinopsis = (description or "").strip()
     if len(sinopsis) > MAX_TEXTO:
         errores["description"] = f"La sinopsis no puede superar {MAX_TEXTO} caracteres."
@@ -139,7 +184,8 @@ async def guardar_serie(
     if errores:
         return ResultadoEdicion(False, errores, {
             "title": title, "start_year": start_year, "end_year": end_year,
-            "publisher": publisher, "description": description, "total_issues": total_issues})
+            "publisher": publisher, "description": description, "total_issues": total_issues,
+            "language": language, "edition_kind": edition_kind})
 
     nueva_editorial = await _publisher(db, editorial)
     cambios: dict[str, object] = {}
@@ -161,6 +207,12 @@ async def guardar_serie(
     if total != serie.total_issues:
         serie.total_issues = total
         cambios["total_issues"] = total
+    if idioma != serie.language:
+        serie.language = idioma
+        cambios["language"] = idioma
+    if edicion != serie.edition_kind:
+        serie.edition_kind = edicion
+        cambios["edition_kind"] = edicion
     if cambios:
         ahora = datetime.now(UTC)
         serie.metadata_ = _marcar(serie.metadata_, list(cambios), ahora)

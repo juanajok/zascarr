@@ -29,12 +29,15 @@ item pedía — el import loop periódico ya existente es quien de verdad
 clasifica el archivo, este método solo refleja ese hecho en el estado de
 la wishlist.
 """
+import asyncio
 import base64
 import json
+import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from urllib.parse import parse_qs, unquote, unquote_plus, urlsplit
 from uuid import uuid4
 
 import structlog
@@ -56,9 +59,11 @@ from zascarr.models import (
     WishlistOrigin,
     WishlistPolicy,
     WishlistStatus,
+    collection_series,
 )
 from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import sign_token, verify_token
+from zascarr.services.blog_feed import buscar_en_feed, estado_feed, resultados_de_busqueda
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     ESTADOS_REACTIVABLES,
@@ -103,7 +108,11 @@ def hay_fuente_de_busqueda(settings) -> bool:
     foro_configurado = bool(
         settings.forum_enabled and settings.forum_username and settings.forum_url
     )
-    return bool(settings.prowlarr_enabled) or foro_configurado
+    blog_configurado = bool(
+        getattr(settings, "blog_feed_enabled", False)
+        and (getattr(settings, "blog_feed_url", "") or "").strip()
+    )
+    return bool(settings.prowlarr_enabled) or foro_configurado or blog_configurado
 
 
 # D9: causas distinguibles de "por qué esta búsqueda no avanza", en
@@ -111,7 +120,8 @@ def hay_fuente_de_busqueda(settings) -> bool:
 # que el coleccionista no pueda accionar. El aviso legal pendiente NO
 # vive aquí: es un estado global (ver services/legal.py), lo muestra la
 # UI de wishlist con un banner propio en vez de escribirse en cada fila.
-MOTIVO_SIN_FUENTE = "Sin fuente de búsqueda activa — activa Prowlarr o el foro en Ajustes"
+MOTIVO_SIN_FUENTE = (
+    "Sin fuente de búsqueda activa — activa Prowlarr, el foro o un blog/RSS en Ajustes")
 MOTIVO_PROWlARR_CONFIGURACION = (
     "Prowlarr está encendido pero le falta la URL o la clave de API — revísalo en Ajustes"
 )
@@ -119,6 +129,13 @@ MOTIVO_FUENTE_INACCESIBLE = (
     "La fuente de búsqueda no respondió a tiempo — se reintentará automáticamente"
 )
 MOTIVO_SIN_RESULTADOS = "No se encontró nada en las fuentes activas"
+#: SCR4: el foro pidió esperar (Search Flood Control) — no es «sin resultados».
+MOTIVO_FORO_ESPERA = "El foro pidió esperar unos segundos; se reintentará"
+#: El foro esperaba Y además Prowlarr trajo cosas que se descartaron: decir solo
+#: «el foro pidió esperar» ocultaba el motivo real (bug de UX 2026-11-16).
+MOTIVO_ESPERA_CON_DESCARTES = (
+    "El foro pidió esperar unos segundos y los resultados de Prowlarr no eran utilizables; "
+    "se reintentará")
 MOTIVO_CANDIDATO_RECHAZADO = (
     "Se encontró algo, pero ningún cliente de descarga está activo — revisa Ajustes"
 )
@@ -133,9 +150,105 @@ MOTIVO_NUMERO_DISTINTO = (
     "en Pendientes: ZascArr aprenderá ese nombre para la próxima búsqueda"
 )
 MOTIVO_CLIENTE_INACCESIBLE = (
-    "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
+    "No se pudo enviar al cliente de descarga — se reintentará más tarde"
 )
+#: UX 2026-11-17: decir CUÁL no responde evita que el coleccionista tenga que
+#: adivinar entre Transmission y aMule (antes ambos compartían el genérico).
+MOTIVO_TRANSMISSION_INACCESIBLE = (
+    "Transmission no respondió — se reintentará más tarde"
+)
+MOTIVO_AMULE_INACCESIBLE = (
+    "aMule no respondió — se reintentará más tarde"
+)
+
+
+def motivo_de_cliente(backend) -> str:
+    """Mensaje concreto del cliente que falló (o el genérico si no se sabe)."""
+    if backend == DownloadBackend.TRANSMISSION:
+        return MOTIVO_TRANSMISSION_INACCESIBLE
+    if backend == DownloadBackend.AMULE:
+        return MOTIVO_AMULE_INACCESIBLE
+    return MOTIVO_CLIENTE_INACCESIBLE
 MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
+
+
+def _clave_de_enlace_de_foro(url: str) -> str:
+    """Identidad del fichero: hash ed2k/btih, no la URL.
+
+    El mismo fichero puede estar enlazado dos veces con distinta codificación
+    (`%20` vs espacio) y la deduplicación por URL cruda lo dejaba duplicado en
+    «Buscar ahora» (bug UX 2026-11-16: Sector Lejano, dos filas idénticas).
+    """
+    if url.startswith("ed2k://|file|"):
+        partes = url.split("|")
+        if len(partes) >= 5 and partes[4]:
+            return "ed2k:" + partes[4].strip().lower()
+    if url.startswith("magnet:?"):
+        parametros = parse_qs(url[len("magnet:?"):])
+        xt = (parametros.get("xt") or [""])[0]
+        if xt.lower().startswith("urn:btih:"):
+            return "magnet:" + xt.rsplit(":", 1)[-1].lower()
+    return "url:" + url
+
+
+def _tamano_de_enlace_de_foro(url: str) -> int:
+    """Tamaño declarado en un enlace ed2k (bytes); 0 si no se puede leer."""
+    if url.startswith("ed2k://|file|"):
+        partes = url.split("|")
+        if len(partes) >= 4 and partes[3].isdigit():
+            return int(partes[3])
+    return 0
+
+
+def _sin_duplicados_de_prowlarr(resultados: list[SearchResult]) -> list[SearchResult]:
+    """Un mismo release aparece en varios indexers con URL distinta.
+
+    Se conserva uno por (título normalizado, tamaño) — el de más seeders —;
+    un tamaño distinto es otra edición y se mantiene (2026-11-16).
+    """
+    elegidos: dict[tuple[str, int], SearchResult] = {}
+    for r in resultados:
+        clave = (normalize_series_name(r.title), int(r.size_bytes or 0))
+        previo = elegidos.get(clave)
+        if previo is None or r.seeders > previo.seeders:
+            elegidos[clave] = r
+    return list(elegidos.values())
+
+
+def _nombre_de_fichero_de_enlace(url: str) -> str:
+    """Nombre del fichero que viaja dentro de un enlace ed2k o de un magnet.
+
+    Cada enlace de un mismo tema del foro es un número/edición distinta: usar el
+    título del TEMA para todos pintaba N candidatos idénticos en «Buscar ahora»
+    (bug UX 2026-11-16). El nombre del fichero los distingue y además da el
+    formato real (CBZ/CBR) a la fila.
+    """
+    if url.startswith("ed2k://|file|"):
+        partes = url.split("|")
+        if len(partes) >= 3 and partes[2]:
+            return unquote_plus(partes[2]).strip()[:200]
+        return ""
+    if url.startswith("magnet:?"):
+        parametros = parse_qs(url[len("magnet:?"):])
+        nombre = (parametros.get("dn") or [""])[0]
+        return unquote(nombre).strip()[:200]
+    return ""
+
+#: D10 (2026-11-16): URLs ya enviadas a mano por ítem. El coleccionista puede querer
+#: VARIOS candidatos de una misma búsqueda (varios números + un tie-in): cada envío
+#: extra no debe pisar el estado ni repetir el mismo enlace. En memoria (un worker).
+_ENVIADOS_MANUAL: dict[str, set[str]] = {}
+_MAX_ITEMS_ENVIADOS_MANUAL = 500
+
+
+def _ya_enviado(item_id, download_url: str) -> bool:
+    return download_url in _ENVIADOS_MANUAL.get(str(item_id), set())
+
+
+def _marcar_enviado(item_id, download_url: str) -> None:
+    _ENVIADOS_MANUAL.setdefault(str(item_id), set()).add(download_url)
+    while len(_ENVIADOS_MANUAL) > _MAX_ITEMS_ENVIADOS_MANUAL:
+        _ENVIADOS_MANUAL.pop(next(iter(_ENVIADOS_MANUAL)))
 MOTIVO_CANDIDATO_INVALIDO = (
     "Ese candidato ya no es válido — vuelve a buscar y elige uno de la lista actual"
 )
@@ -257,6 +370,24 @@ class Orchestrator:
         item.status = WishlistStatus.SEARCHING
         await self.db.flush()
 
+    async def _restaurar_marca(self, item: Wishlist,
+                               marca_previa: datetime | None) -> None:
+        """Deshace la marca de intento de `_marcar_busqueda` (usada si el foro pide esperar).
+
+        La marca de política se confirma con commit ANTES de la petición (FR-22), así que no basta
+        con tocar el atributo: se restaura con un UPDATE y, en política, se confirma igual que se
+        confirmó la marca. El ítem vuelve a ser elegible al pasar la espera y no cuenta en el techo
+        por hora (`_queda_cupo_de_politica`).
+        """
+        await self.db.execute(
+            update(Wishlist).where(Wishlist.id == item.id)
+            .values(last_searched_at=marca_previa)
+        )
+        item.last_searched_at = marca_previa
+        if getattr(item, "origen", None) == WishlistOrigin.POLICY:
+            await self.db.commit()
+        await self.db.flush()
+
     async def _process_item(self, item: Wishlist) -> bool:
         candidates = await self._search_and_rank(item)
         if not candidates:
@@ -281,7 +412,7 @@ class Orchestrator:
         # Hubo candidatos pero ninguno se pudo enviar (backend caído, etc.):
         # esto sí es un fallo real, distinto de "sin resultados todavía".
         item.status = WishlistStatus.FAILED
-        item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+        item.last_error = motivo_de_cliente(backend)
         await self.db.flush()
         return False
 
@@ -304,6 +435,7 @@ class Orchestrator:
         # foro en cada ciclo con un item condenado. C6: va ANTES de comprobar si hay alguna fuente
         # activa (decisión del PO): un ítem sin fuentes gasta el cooldown de 6 h y no vuelve a
         # ocupar huecos del lote en cada ciclo.
+        marca_previa = getattr(item, "last_searched_at", None)
         await self._marcar_busqueda(item)
 
         settings = get_settings()
@@ -318,52 +450,104 @@ class Orchestrator:
             return []
 
         results: list[SearchResult] = []
-        motivo_prowlarr: str | None = None
-        if settings.prowlarr_enabled:
-            if not prowlarr_configurado(settings):
-                # D9 (2026-11-11): fuente encendida pero incompleta NO es «sin resultados».
-                motivo_prowlarr = MOTIVO_PROWlARR_CONFIGURACION
-            else:
-                try:
-                    seleccionados = prowlarr_indexers_seleccionados(settings)
-                    if seleccionados:
-                        results = await self._prowlarr.search(
-                            query, categories=COMIC_CATEGORIES, indexer_ids=seleccionados)
-                    else:
-                        results = await self._prowlarr.search(
-                            query, categories=COMIC_CATEGORIES)
-                except Exception:
-                    logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
-                    motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
-
-        candidates = self._ranked_candidates(results, query) if results else []
-
-        if not candidates:
-            forum_result = await self._forum_fallback(query)
-            if forum_result:
-                candidates = [forum_result]
-
-        # D8: la búsqueda es de TEXTO, así que devolver algo no significa que sea
-        # el número pedido. El filtro va ANTES de `candidatos_crudos` a
-        # propósito: si lo único que había era de otro número, el motivo no puede
-        # decir "ningún backend activo" (sería falso, y D9 existe justo para no
-        # dar ese tipo de motivo).
         titulo_serie = ""
         alias_serie: set[str] = set()
+        if item.series_id:
+            serie = (await self.db.execute(
+                select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
+            titulo_serie = serie.title if serie else ""
+            # B13: alias confirmados a mano. Se cargan antes de las fuentes para que el
+            # feed RSS también pueda aceptar un release con el nombre español.
+            alias_serie = set((await self.db.execute(
+                select(LocalAlias.pattern_norm)
+                .where(LocalAlias.series_id == item.series_id,
+                       LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
+
+        # Prowlarr y foro se consultan SIEMPRE juntos (no en cascada): el
+        # coleccionista ve en una sola lista lo que hay en cada fuente. En
+        # paralelo para que el foro no espere a que Prowlarr agote su timeout.
+        # Un flood del foro no invalida los resultados de Prowlarr; si no hay
+        # ninguno, se conserva el comportamiento de espera de SCR4.
+        from zascarr.services.forum_scraper import ForumFloodControl
+        from zascarr.utils.cortesia import CortesiaEnEspera
+
+        resultado_prowlarr, resultado_foro = await asyncio.gather(
+            self._prowlarr_candidates(query, settings),
+            self._forum_candidates(query),
+            return_exceptions=True,
+        )
+        # `CancelledError` hereda de BaseException: no es un fallo de fuente, es la
+        # cancelación del ciclo (apagado, timeout del proceso). Se propaga tal cual.
+        for resultado in (resultado_prowlarr, resultado_foro):
+            if isinstance(resultado, asyncio.CancelledError):
+                raise resultado
+
+        motivo_prowlarr: str | None = None
+        if isinstance(resultado_prowlarr, BaseException):
+            logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
+            motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
+        elif resultado_prowlarr is not None:
+            results, motivo_prowlarr = resultado_prowlarr
+
+        forum_flood = isinstance(resultado_foro, ForumFloodControl)
+        forum_espera = isinstance(resultado_foro, CortesiaEnEspera)
+        if forum_flood:
+            logger.info("orchestrator.forum_flood_sin_bloquear_prowlarr", id=str(item.id))
+        elif forum_espera:
+            logger.info("orchestrator.forum_cortesia_sin_bloquear_prowlarr", id=str(item.id))
+        elif isinstance(resultado_foro, BaseException):
+            logger.warning("orchestrator.forum_search_failed", id=str(item.id),
+                           error=type(resultado_foro).__name__)
+        else:
+            results.extend(resultado_foro or [])
+
+        motivo_blog: str | None = None
+        if getattr(settings, "blog_feed_enabled", False):
+            url_blog = (getattr(settings, "blog_feed_url", "") or "").strip()
+            if not estado_feed(url_blog):
+                motivo_blog = (
+                    "El blog/RSS está encendido pero le falta una URL válida — "
+                    "revísalo en Ajustes")
+            else:
+                try:
+                    entradas = await buscar_en_feed(url_blog, query, alias=alias_serie)
+                    results.extend(resultados_de_busqueda(entradas, url_blog))
+                except Exception:
+                    logger.exception("orchestrator.blog_search_failed")
+                    motivo_blog = MOTIVO_FUENTE_INACCESIBLE
+
+        # Deduplica por URL: la misma release puede aparecer en Prowlarr y en
+        # el foro, y no queremos dos botones para exactamente lo mismo.
+        vistos: set[tuple[str, str]] = set()
+        unicos: list[SearchResult] = []
+        for resultado in results:
+            clave = (resultado.download_url, resultado.title)
+            if clave in vistos:
+                continue
+            vistos.add(clave)
+            unicos.append(resultado)
+
+        candidates = self._ranked_candidates(unicos, query) if unicos else []
+
+        if not candidates and forum_flood:
+            # C-1 (SecOps): un flood es una espera, no un intento fallido. Se deshace la
+            # marca para que el ítem se reintente al pasar la espera y no consuma cupo de
+            # política (la marca se había confirmado antes de la petición).
+            # El estado vuelve a WANTED ANTES de restaurar: en política, la restauración
+            # confirma, y no debe persistir el SEARCHING transitorio de _marcar_busqueda.
+            item.status = WishlistStatus.WANTED
+            item.last_error = MOTIVO_FORO_ESPERA
+            await self._restaurar_marca(item, marca_previa)
+            await self.db.flush()
+            return None
+
+        # La relevancia se resuelve con el título local (sin el número) y los alias;
+        # titulo_serie/alias_serie se cargaron antes de consultar las fuentes.
+        candidates = self._relevantes(
+            candidates, item.search_query or titulo_serie or query, alias_serie)
+
         descartados_por_numero = 0
         if item.numero is not None:
-            if item.series_id:
-                serie = (await self.db.execute(
-                    select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
-                titulo_serie = serie.title if serie else ""
-                # B13: los alias que el coleccionista ya confirmó a mano. Un
-                # release español puede llamar "La Patrulla-X" a una serie
-                # catalogada como "X-Men"; sin ellos, la igualdad estricta
-                # descartaría el candidato bueno.
-                alias_serie = set((await self.db.execute(
-                    select(LocalAlias.pattern_norm)
-                    .where(LocalAlias.series_id == item.series_id,
-                           LocalAlias.estado == EstadoAlias.ACTIVO))).scalars().all())
             antes = len(candidates)
             candidates = [
                 c
@@ -384,6 +568,17 @@ class Orchestrator:
         ]
 
         if not candidates:
+            # Se comprueba DESPUÉS de relevancia/número/backend: un candidato de
+            # Prowlarr que se descarta no debe ocultar que el foro pidió esperar.
+            if forum_espera:
+                item.status = WishlistStatus.WANTED
+                # Si Prowlarr sí respondió pero todo se descartó, no mentir con un
+                # «el foro pidió esperar» que oculta de dónde venir el problema.
+                item.last_error = (
+                    MOTIVO_ESPERA_CON_DESCARTES if unicos else MOTIVO_FORO_ESPERA)
+                await self._restaurar_marca(item, marca_previa)
+                await self.db.flush()
+                return []
             item.status = WishlistStatus.WANTED  # nada encontrado todavía, no es un fallo
             # D9: distingue "no había nada" de "había algo pero el
             # backend correspondiente está apagado" — la acción del
@@ -393,7 +588,7 @@ class Orchestrator:
             elif descartados_por_numero:
                 item.last_error = MOTIVO_NUMERO_DISTINTO
             else:
-                item.last_error = motivo_prowlarr or MOTIVO_SIN_RESULTADOS
+                item.last_error = motivo_prowlarr or motivo_blog or MOTIVO_SIN_RESULTADOS
             await self.db.flush()
             return []
 
@@ -450,7 +645,33 @@ class Orchestrator:
         entonces reevalúa el WHERE), así que como mucho una petición ve
         su fila afectada — la otra ve 0 filas y no llega a enviar nada.
         """
+        if _ya_enviado(item.id, candidate.download_url):
+            # Doble clic/reenvío del MISMO candidato: no se encola dos veces. No impide
+            # enviar otros candidatos distintos del mismo preview (2026-11-16).
+            item.last_error = MOTIVO_CANDIDATO_INVALIDO
+            await self.db.flush()
+            return False
+
         if item.status not in (WishlistStatus.WANTED, WishlistStatus.FAILED):
+            if item.status == WishlistStatus.DOWNLOADING:
+                # Envío EXTRA desde el mismo «Buscar ahora»: no se toca el estado ni
+                # `download_ref` (siguen apuntando a la primera descarga); el importador
+                # recogerá también los ficheros de los envíos extra.
+                settings = get_settings()
+                backend = _detect_backend(candidate.download_url)
+                if not self._backend_enabled(backend, settings):
+                    item.last_error = MOTIVO_CANDIDATO_RECHAZADO
+                    await self.db.flush()
+                    return False
+                ref = await self._send(backend, candidate)
+                if ref is None:
+                    item.last_error = motivo_de_cliente(backend)
+                    await self.db.flush()
+                    return False
+                _marcar_enviado(item.id, candidate.download_url)
+                logger.info("orchestrator.download_started", title=candidate.title,
+                            backend=backend.value, manual=True, extra=True)
+                return True
             item.last_error = MOTIVO_CANDIDATO_INVALIDO
             await self.db.flush()
             return False
@@ -491,7 +712,7 @@ class Orchestrator:
         ref = await self._send(backend, candidate)
         if ref is None:
             item.status = WishlistStatus.FAILED
-            item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+            item.last_error = motivo_de_cliente(backend)
             await self.db.flush()
             return False
 
@@ -499,6 +720,7 @@ class Orchestrator:
         item.download_backend = backend.value
         item.download_ref = ref
         item.last_error = None
+        _marcar_enviado(item.id, candidate.download_url)
         # Hora de la BD (FR-23).
         item.last_searched_at = (await self.db.execute(select(func.now()))).scalar_one()
         await self.db.flush()
@@ -570,6 +792,8 @@ class Orchestrator:
                 return added.get("hashString") or added.get("name") or ""
             if backend == DownloadBackend.AMULE:
                 if not await self._amule.login():
+                    logger.warning("orchestrator.send_sin_credenciales",
+                                   backend=backend.value)
                     return None
                 if not await self._amule.add_ed2k_link(result.download_url):
                     return None
@@ -601,34 +825,100 @@ class Orchestrator:
                     backend=backend.value)
         return True, "Descarga enviada. Cuando llegue, el importador la añadirá al número."
 
-    async def _forum_fallback(self, query: str) -> SearchResult | None:
+    async def _prowlarr_candidates(
+            self, query: str, settings) -> tuple[list[SearchResult], str | None]:
+        """Resultados de Prowlarr y, si falla, el motivo D9 que se mostrará si no hay nada más."""
+        if not settings.prowlarr_enabled:
+            return [], None
+        if not prowlarr_configurado(settings):
+            # D9 (2026-11-11): fuente encendida pero incompleta NO es «sin resultados».
+            return [], MOTIVO_PROWlARR_CONFIGURACION
+        try:
+            seleccionados = prowlarr_indexers_seleccionados(settings)
+            if seleccionados:
+                encontrados = await self._prowlarr.search(
+                    query, categories=COMIC_CATEGORIES, indexer_ids=seleccionados)
+            else:
+                encontrados = await self._prowlarr.search(
+                    query, categories=COMIC_CATEGORIES)
+            sin_repetir = _sin_duplicados_de_prowlarr(encontrados)
+            if len(sin_repetir) != len(encontrados):
+                logger.info("orchestrator.prowlarr_duplicados",
+                            descartados=len(encontrados) - len(sin_repetir))
+            return sin_repetir, None
+        except Exception:
+            logger.exception("orchestrator.prowlarr_search_failed")
+            return [], MOTIVO_FUENTE_INACCESIBLE
+
+    async def _forum_candidates(self, query: str) -> list[SearchResult]:
+        """Candidatos del foro configurado; admite dobles antiguos que devolvían uno solo.
+
+        El scraper recorre TODOS los temas y enlaces de la búsqueda, no solo el
+        primero: el foro suele tener varias ediciones/releases en la misma página.
+        """
+        resultado = await self._forum_fallback(query, propagar_espera=True)
+        if resultado is None:
+            return []
+        if isinstance(resultado, SearchResult):
+            return [resultado]
+        return list(resultado)
+
+    async def _forum_fallback(
+            self, query: str, *, propagar_espera: bool = False) -> list[SearchResult]:
         s = get_settings()
         # forum_url vacío por defecto a propósito (blindaje legal): es un
         # plugin IPB genérico, la URL la aporta el usuario, el proyecto no
         # incluye ni recomienda ningún foro concreto.
         if not s.forum_enabled or not s.forum_username or not s.forum_url:
-            return None
+            return []
         try:
-            from zascarr.services.forum_scraper import ForumScraper
+            from zascarr.services.forum_scraper import ForumFloodControl, ForumScraper
             from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
             scraper = ForumScraper(base_url=s.forum_url, rate_limit=s.forum_rate_limit)
-            await scraper.login(s.forum_username, s.forum_password)
+            if not await scraper.login(s.forum_username, s.forum_password):
+                logger.info("orchestrator.forum_login_fallido",
+                            host=self._host_para_log_foro(s.forum_url))
+                return []
+            encontrados: list[SearchResult] = []
+            vistos: set[str] = set()
             for fr in await scraper.use_ipb_search(query):
-                if fr.ed2k_links:
-                    return SearchResult(
-                        fr.topic_title, "forum:crg", fr.ed2k_links[0], 0, 0, "comics"
-                    )
-                if fr.magnet_links:
-                    return SearchResult(
-                        fr.topic_title, "forum:crg", fr.magnet_links[0], 0, 1, "comics"
-                    )
-        except (CortesiaEnEspera, FuenteApagada) as exc:
-            # AC-16: sin turno no es un fallo; se omite el ciclo sin registrar excepción.
+                for enlace in (*fr.ed2k_links, *fr.magnet_links):
+                    clave = _clave_de_enlace_de_foro(enlace)
+                    if clave in vistos:
+                        continue
+                    vistos.add(clave)
+                    nombre = _nombre_de_fichero_de_enlace(enlace)
+                    encontrados.append(SearchResult(
+                        nombre or fr.topic_title, "forum:crg", enlace,
+                        _tamano_de_enlace_de_foro(enlace),
+                        1 if enlace.lower().startswith("magnet:?") else 0, "comics"
+                    ))
+            return encontrados
+        except ForumFloodControl:
+            # El ítem ya está marcado; _search_and_rank deja MOTIVO_FORO_ESPERA.
+            raise
+        except CortesiaEnEspera as exc:
+            # La búsqueda manual necesita distinguir «el foro pidió esperar» de «no hay
+            # nada»; el ciclo automático puede omitirlo y reintentar más tarde.
+            if propagar_espera:
+                raise
+            logger.info("orchestrator.forum_sin_turno",
+                        motivo=getattr(exc, "motivo", "cortesia"))
+        except FuenteApagada as exc:
             logger.info("orchestrator.forum_sin_turno",
                         motivo=getattr(exc, "motivo", "apagada"))
-        except Exception:
-            logger.exception("orchestrator.forum_fallback_error")
-        return None
+        except Exception as exc:
+            # m-3 (SecOps): solo el tipo, sin traza ni URL (la del foro puede llevar `s=`).
+            logger.warning("orchestrator.forum_fallback_error", error=type(exc).__name__)
+        return []
+
+    @staticmethod
+    def _host_para_log_foro(url: str) -> str:
+        """Host del foro para el log, sin la URL ni una posible `s=<sesión>`."""
+        try:
+            return (urlsplit(url).hostname or "?")[:100]
+        except ValueError:
+            return "?"
 
     @staticmethod
     def _candidato_es_del_numero(candidate: SearchResult, numero: int,
@@ -700,13 +990,42 @@ class Orchestrator:
             backend = _detect_backend(r.download_url)
             score = self._score(r, norm)
             if backend == DownloadBackend.TRANSMISSION:
-                if r.seeders >= 1:
+                # Un feed RSS no publica seeders; sus magnet/.torrent son directos
+                # y no se descartan por no traer ese dato.
+                if r.seeders >= 1 or r.indexer.startswith("blog:"):
                     torrents.append((score, r))
             else:
                 ed2k.append((score, r))
         torrents.sort(key=lambda x: x[0], reverse=True)
         ed2k.sort(key=lambda x: x[0], reverse=True)
         return [r for _, r in torrents] + [r for _, r in ed2k]
+
+    @classmethod
+    def _relevantes(cls, candidates: list[SearchResult], norm: str,
+                    alias_serie: set[str] | None = None) -> list[SearchResult]:
+        """Descarta releases que no contienen TODOS los términos de la serie.
+
+        Se aplica DESPUÉS de cargar los alias locales (B13): un release con el nombre
+        español confirmado por el coleccionista no debe caer por no contener el título
+        inglés. Una consulta de una sola letra no tiene términos significativos: no filtra.
+        """
+        terminos = [t for t in normalize_series_name(norm).split() if len(t) > 1]
+        if not terminos:
+            return candidates
+        alias = alias_serie or set()
+        relevante: list[SearchResult] = []
+        for candidato in candidates:
+            parsed = parse_comic_filename(candidato.title)
+            if alias and normalize_title(parsed.series or "") in alias:
+                relevante.append(candidato)
+                continue
+            normalizado = normalize_series_name(candidato.title)
+            # Palabras completas, no subcadenas: «ko» está dentro de «Konar» y
+            # hacía pasar un manual de ginecología como «DC K.O.».
+            palabras = set(re.findall(r"\w+", normalizado))
+            if all(t in palabras for t in terminos):
+                relevante.append(candidato)
+        return relevante
 
     @staticmethod
     def _score(r: SearchResult, norm: str) -> float:
@@ -768,23 +1087,28 @@ class Orchestrator:
             Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]),
             Wishlist.series_id.is_not(None),
         )
-        # #155: la colección puede añadir series (incluir) o vetarlas
-        # (excluir). Las excluidas solo entran si tienen items de política que
-        # retirar; las incluidas entran aunque su wishlist_policy sea «ninguno».
+        # #155 con M:N: incluir suma series; excluir gana sobre incluir.
+        incluidas = select(collection_series.c.series_id).join(
+            Collection, Collection.id == collection_series.c.collection_id
+        ).where(Collection.auto_search == CollectionAutoSearch.INCLUIR)
+        excluidas = select(collection_series.c.series_id).join(
+            Collection, Collection.id == collection_series.c.collection_id
+        ).where(Collection.auto_search == CollectionAutoSearch.EXCLUIR)
         consulta = (
             select(Series)
-            .outerjoin(Collection, Series.collection_id == Collection.id)
-            .where(or_(
-                Series.id.in_(pendientes),
-                and_(
-                    or_(
-                        Collection.id.is_(None),
-                        Collection.auto_search == CollectionAutoSearch.HEREDAR,
+            .where(
+                or_(
+                    Series.id.in_(pendientes),
+                    and_(
+                        Series.id.not_in(excluidas),
+                        or_(
+                            Series.wishlist_policy.in_(
+                                [WishlistPolicy.MISSING, WishlistPolicy.ALL]),
+                            Series.id.in_(incluidas),
+                        ),
                     ),
-                    Series.wishlist_policy.in_([WishlistPolicy.MISSING, WishlistPolicy.ALL]),
                 ),
-                Collection.auto_search == CollectionAutoSearch.INCLUIR,
-            ))
+            )
             .order_by(Series.sort_title)
         )
         return list((await self.db.execute(consulta)).scalars().all())
