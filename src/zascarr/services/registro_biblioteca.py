@@ -163,6 +163,8 @@ async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) ->
         async with fabrica() as sesion, _cerrojo_de_registro(sesion) as libre:
             if not libre:
                 _estado.fase = FaseRegistro.OCUPADO
+                if _tarea_global is not None:
+                    tareas.error(_tarea_global.id, tipo_error="ocupado")
                 return
             extra = {} if alcance is None else {"alcance": alcance}       # el registro inicial se llama exactamente como siempre
             informe = await LibraryAdopter(sesion).adopt(progreso=_volcar, **extra)
@@ -171,10 +173,14 @@ async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) ->
         if _tarea_global is not None:
             tareas.terminar(_tarea_global.id, resumen="Biblioteca registrada")
     except CerrojoDeContenidoOcupado:
-        _estado.fase = FaseRegistro.OCUPADO       # el importador (o otro registro) llevaba demasiado con el cerrojo de contenido
+        _estado.fase = FaseRegistro.OCUPADO
+        if _tarea_global is not None:
+            tareas.error(_tarea_global.id, tipo_error="ocupado")
     except asyncio.CancelledError:
         _estado.fase = FaseRegistro.INTERRUMPIDO
         _estado.causa = "CancelledError"
+        if _tarea_global is not None:
+            tareas.error(_tarea_global.id, tipo_error="CancelledError")
         raise
     except Exception as exc:  # noqa: BLE001 — nada se propaga: se cuenta en el estado
         logger.warning("registro_biblioteca.interrumpido", error=type(exc).__name__)
@@ -184,6 +190,8 @@ async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) ->
             tareas.error(_tarea_global.id, tipo_error=type(exc).__name__)
     finally:
         _estado.terminado = datetime.now(UTC)
+        if _tarea_global is not None and _tarea_global.estado.value == "en_curso":
+            tareas.terminar(_tarea_global.id, resumen="Biblioteca registrada")
 
 
 def iniciar(fabrica: Callable, alcance: frozenset[str] | None = None) -> bool:

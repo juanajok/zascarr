@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -136,3 +137,88 @@ def test_api_no_consume_anuncio_ui():
     time.sleep(0.41)
     assert tareas.snapshot(incluir_recientes=True)["anuncio"] is None
     assert tareas.snapshot(incluir_recientes=True, consumir_anuncio=True)["anuncio"]
+
+
+@pytest.mark.asyncio
+async def test_registro_ocupado_y_cancelado_cierran_tarea(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from zascarr.services import registro_biblioteca as rb
+
+    class Fabrica:
+        def __call__(self):
+            return self
+
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *a):
+            return False
+
+    @asynccontextmanager
+    async def sin_libre(_sesion):
+        yield False
+
+    monkeypatch.setattr(rb, "_cerrojo_de_registro", sin_libre)
+    rb._estado = rb.EstadoRegistro()
+    tareas._reset_para_pruebas()
+    await rb._ejecutar(Fabrica())
+    time.sleep(0.41)
+    assert any(x["estado"] == "error" for x in tareas.snapshot(incluir_recientes=True)["tareas"])
+
+
+@pytest.mark.asyncio
+async def test_descargas_multi_ciclo_y_error(monkeypatch):
+    from types import SimpleNamespace
+
+    from zascarr.services import orchestrator as orq_mod
+    from zascarr.services.orchestrator import Orchestrator
+    orq_mod._tarea_descargas = None
+
+    class Res:
+        def __init__(self, items):
+            self._items = items
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self._items
+
+    class Db:
+        def __init__(self, items=None, falla=False):
+            self.items = items or []
+            self.falla = falla
+
+        async def execute(self, *_a, **_k):
+            if self.falla:
+                raise RuntimeError("fallo bd")
+            return Res(self.items)
+
+        async def flush(self):
+            return None
+
+    tareas._reset_para_pruebas()
+    orq = Orchestrator.__new__(Orchestrator)
+    orq.db = Db([SimpleNamespace(id="1", status="downloading")])
+    async def no_hecho(_item):
+        return False
+    orq._is_fulfilled = no_hecho
+    assert await orq.check_completions() == 0
+    time.sleep(0.41)
+    assert tareas.snapshot(incluir_recientes=True)["activas"] == 1
+    orq.db = Db([])
+    assert await orq.check_completions() == 0
+    assert tareas.snapshot(incluir_recientes=True)["activas"] == 0
+    orq.db = Db([], falla=True)
+    with pytest.raises(RuntimeError):
+        await orq.check_completions()
+
+
+def test_oob_no_reemplaza_details_y_conserva_foco():
+    base = Path("src/zascarr/web/templates/base.html").read_text()
+    frag = Path("src/zascarr/web/templates/_tareas.html").read_text()
+    assert 'id="tareas-detalles"' in base and "<details" not in frag
+    for ident in ("tareas-lista", "tareas-contador", "tareas-anuncio", "tareas-cadencia"):
+        assert f'id="{ident}"' in frag and "hx-swap-oob" in frag
+    assert "every 2s" in frag and "every 10s" in frag

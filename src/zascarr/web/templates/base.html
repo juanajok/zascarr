@@ -15,6 +15,16 @@
   <div class="app">
     <div class="side">
       <a href="/ui/" class="brand">ZascArr</a>
+      {{ ui.menu(request.url.path) }}
+      {% if auth_activo() %}
+      <div class="side-foot">
+        <form method="post" action="/logout" class="nav-logout">
+          <button type="submit" class="btn-logout">Cerrar sesión</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    <div class="tareas-fuera">
       <div id="tareas-global">
         <div id="tareas-hay" hidden></div>
         <details id="tareas-detalles" class="tareas-panel">
@@ -26,14 +36,6 @@
         <div id="tareas-cadencia" hx-get="/ui/_tareas" hx-trigger="load, every 10s"
              hx-swap="none"></div>
       </div>
-      {{ ui.menu(request.url.path) }}
-      {% if auth_activo() %}
-      <div class="side-foot">
-        <form method="post" action="/logout" class="nav-logout">
-          <button type="submit" class="btn-logout">Cerrar sesión</button>
-        </form>
-      </div>
-      {% endif %}
     </div>
     <main class="content" id="main" tabindex="-1" hx-history-elt>
       {% block content %}{% endblock %}

@@ -1322,9 +1322,7 @@ class Orchestrator:
                 _tarea_descargas = None
             raise
         finally:
-            if _tarea_descargas is not None and _tarea_descargas.estado.value == "en_curso":
-                tareas.terminar(_tarea_descargas.id, resumen="Descargas revisadas")
-                _tarea_descargas = None
+            pass
 
     async def _is_fulfilled(self, item: Wishlist) -> bool:
         # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya
