@@ -17,7 +17,7 @@ seguimiento cuentan como ocupados (el índice de política no cambia); no hay b�
 dependencias nuevas; sin backfill del catálogo antiguo (eso es «completar»/«Buscar ahora»); sin UI de intervalo/cupos (config); sin validación en vivo
 autenticada en esta entrega (NOT RUN §12).
 
-## 2. Modelo y migración `0047` (aditiva; cabeza actual `0046`)
+## 2. Modelo y migración `0047` + `0048` (aditivas; cabeza de partida `0046`)
 
 - **`series.follow_new_issues`**: `BOOLEAN NOT NULL DEFAULT false`. Independiente de `wishlist_policy` (`models/__init__.py:628-633`); una serie puede
   completar huecos y seguir nuevos a la vez.
@@ -27,6 +27,11 @@ autenticada en esta entrega (NOT RUN §12).
   Es la vía para retirar en bloque y distinguirlo en la UI; no se usa `MANUAL` (el benchmark lo permitía como deuda, pero perderíamos la distinción y la
   prueba de «nunca tocar lo manual»). Nota PG 15 (misma que `0015`): el valor añadido no se puede **usar** en la misma transacción de la migración; solo se
   añade.
+- **Nota de implementación (2026-11-17):** el índice único parcial va en una
+  migración aparte (`0048`) con predicado `origen <> 'manual' AND numero IS NOT NULL`
+  (cubre política + seguimiento y deja fuera los manuales). No puede nombrar
+  `'seguimiento'` dentro de la transacción que añade el valor al enum, y
+  `origen::text` no es IMMUTABLE para un predicado de índice en PostgreSQL.
 - **`seguimiento_vistos`** (tabla nueva, genérica): `id UUID PK`, `fuente VARCHAR(20) NOT NULL`, `clave VARCHAR(255) NOT NULL`, `huella VARCHAR(255) NULL`,
   `visto_en TIMESTAMPTZ NOT NULL DEFAULT now()`, `procesado_en TIMESTAMPTZ NULL`; `UNIQUE (fuente, clave)`; índice por `visto_en` para purga. Uso:
   - foro: `clave='tema:<id>'`, `huella` = última actividad del listado (texto normalizado); `procesado_en` cuando se abrió y procesó;

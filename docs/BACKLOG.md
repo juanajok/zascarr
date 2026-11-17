@@ -1682,6 +1682,12 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
   un flag `follow_new_issues` por serie (opción A) en vez de reutilizar la política de
   huecos; pendiente decidir la señal de disponibilidad (`store_date` vs `cover_date`) y
   el origen `SEGUIMIENTO` frente a `MANUAL`.
+- **Seguir serie: números nuevos y aviso (#993, 2026-11-17):** flag `Series.follow_new_issues`
+  independiente de la política de huecos; disparador por **fuentes** (foro E-links diarios
+  autenticado + Prowlarr), no por la fecha de papel de Novedades; deseos
+  `origen=seguimiento` y ciclo/backoff existentes; aviso webhook; migraciones 0047/0048;
+  spec `docs/design/especificacion-seguimiento-series.md`, QA APTO y NOT RUN del HTML real
+  de `showforum=5` hasta validarlo en la Pi.
 - **Huecos del benchmark de Deseados cerrados (2026-11-17):** #973 (panel de cola/progreso),
   #983 (cancelar la espera + buscar en lote, máx. 8), #984 (carpeta de Transmission
   editable y aviso al probar; §5.8 con SecOps favorable sobre `9b91a826`) y #985

@@ -74,6 +74,50 @@ RESULTADO_PATTERN = re.compile(
     re.IGNORECASE | re.DOTALL)
 
 
+#: Fila de la tabla de temas de un subforo. El `showtopic` puede llevar `&s=`/`&st=`.
+_FILA_DE_FORO = re.compile(
+    r"<tr\b[^>]*>(?:(?!</tr>).)*?showtopic=\d+(?:(?!</tr>).)*?</tr>",
+    re.IGNORECASE | re.DOTALL)
+_ENLACE_DE_TEMA = re.compile(
+    r'<a[^>]+href=["\']([^"\']*showtopic=(\d+)[^"\']*)["\'][^>]*>(.*?)</a>',
+    re.IGNORECASE | re.DOTALL)
+_ACTIVIDAD_DE_FORO = re.compile(
+    r"\b(?:Hoy|Ayer)\b(?:\s*,?\s*\d{1,2}:\d{2})?"
+    r"|\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}(?:\s+\d{1,2}:\d{2})?",
+    re.IGNORECASE)
+
+
+def _texto_plano(html: str) -> str:
+    return unescape(re.sub(r"<[^>]+>", " ", html)).replace("\xa0", " ")
+
+
+def temas_de_foro(html: str) -> list[tuple[str, int, str, str | None]]:
+    """Temas de un `showforum`: ``(href, id, título, última actividad)``.
+
+    La huella de actividad se toma del texto de la fila (Hoy/Ayer/fecha IPB);
+    es solo una pista para decidir si reabrir el tema, nunca identidad.
+    """
+    salida: list[tuple[str, int, str, str | None]] = []
+    vistos: set[int] = set()
+    for fila in _FILA_DE_FORO.findall(html):
+        enlace = _ENLACE_DE_TEMA.search(fila)
+        if not enlace:
+            continue
+        href = unescape(enlace.group(1))
+        tema_id, contenido = int(enlace.group(2)), enlace.group(3)
+        if tema_id in vistos:
+            continue
+        vistos.add(tema_id)
+        titulo = re.sub(r"\s+", " ", _texto_plano(contenido)).strip()
+        if not titulo:
+            continue
+        actividad = None
+        for coincidencia in _ACTIVIDAD_DE_FORO.finditer(_texto_plano(fila)):
+            actividad = re.sub(r"\s+", " ", coincidencia.group(0)).strip()
+        salida.append((href, tema_id, titulo, actividad))
+    return salida
+
+
 def temas_de_busqueda(html: str) -> list[tuple[str, str]]:
     """`(href, título)` de los temas de la tabla de resultados, sin navegación.
 
@@ -545,6 +589,27 @@ class ForumScraper:
         ed2k = list(dict.fromkeys(ED2K_PATTERN.findall(topic_html)))
         magnets = list(dict.fromkeys(MAGNET_PATTERN.findall(topic_html)))
         return ForumResult(title.strip(), url, ed2k, magnets)
+
+    async def listar_temas(self, foro_id: int = 5, limite: int = 50) -> list:
+        """Lista los temas de un subforo (``showforum``) con UNA petición de lectura.
+
+        No usa la búsqueda de IPB (25 s de cortesía): es el listado normal del
+        subforo. Devuelve `TemaForo` con id, título, URL del tema y la huella de
+        última actividad (texto normalizado); si una fila no se entiende, se omite.
+        """
+        from zascarr.services.seguimiento import TemaForo
+
+        html = await self._get(f"{self._base}/index.php?showforum={int(foro_id)}")
+        temas = temas_de_foro(html)
+        salida: list[TemaForo] = []
+        for href, tema_id, titulo, actividad in temas[:max(0, int(limite))]:
+            try:
+                url = self._resolver_enlace(href)
+            except OrigenNoPermitidoError:
+                continue
+            salida.append(TemaForo(id=tema_id, titulo=titulo, url=url,
+                                   ultima_actividad=actividad))
+        return salida
 
     async def leer_tema(self, url: str) -> ForumResult:
         """Lee un tema concreto y devuelve sus enlaces (una sola petición)."""
