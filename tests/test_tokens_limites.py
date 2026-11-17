@@ -197,7 +197,7 @@ class TestMaximosCalculados:
         valores se recalculan — no se editan a mano — y las pruebas anteriores comprueban que siguen siendo el peor
         caso. Las cifras estimadas antes a mano (4.625 / 5.889 y 14.625 / 15.889) no eran estos máximos, y el primer
         cálculo de esta corrección (17.649 / 23.013) suponía una clave de cuatro bytes por carácter: era menor."""
-        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (20353, 25681)
+        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (20357, 25685)
 
 
 # ── 2. El límite antiguo rechazaba un token legítimo (el problema) ────────────────────────────────
