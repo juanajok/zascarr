@@ -515,7 +515,7 @@ async def test_publica_importa_y_consume_temporal(tmp_path, monkeypatch):
 
             async def falso(self, *, disparador="automatico"):
                 return ImportReport(started_at=datetime.now(UTC),
-                                    imported=[str(d / "x" / "0001.cbz")])
+                                    imported=["0001.cbz → Biblioteca/0001.cbz"])
             monkeypatch.setattr("zascarr.services.importer.Importer.scan_and_import", falso)
             op = await pub.publicar_e_importar(s, op.id)
             await s.refresh(op)
@@ -584,6 +584,217 @@ async def test_publicar_importa_grapas_reales_y_conserva_original(tmp_path, monk
         assert (p.read_bytes(), p.stat().st_mtime_ns) == antes
         assert len(list(lib.rglob("*.cbz"))) == 2
         assert not list(lib.rglob("leeme.txt"))
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
+
+
+def test_importer_no_ve_staging_oculto(tmp_path):
+    from zascarr.utils.fs import listar_comics
+    d = tmp_path / "descargas"
+    (d / ".zascarr" / "paquetes" / "op").mkdir(parents=True)
+    (d / ".zascarr" / "paquetes" / "op" / "a.cbz").write_bytes(b"x")
+    (d / "visible.cbz").write_bytes(b"x")
+    assert [p.name for p in listar_comics([d], {".cbz"})] == ["visible.cbz"]
+
+
+@pytest.mark.asyncio
+async def test_publicacion_fallida_no_marca_importado_y_limpia_staging(tmp_path, monkeypatch):
+    import os
+
+    from zascarr.config import get_settings
+    from zascarr.models import PaqueteEstado
+    from zascarr.services import paquetes_publicacion as pub
+    from zascarr.services.paquetes_extraccion import extraer_y_verificar
+    d = tmp_path / "descargas"
+    d.mkdir()
+    p = d / "p.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("a.cbz", _cbz_bytes())
+    ajustes = type("A", (), {})()
+    ajustes.transmission_download_dir = str(d)
+    ajustes.amule_incoming_dir = ""
+    ajustes.downloads_path = ""
+    ajustes.secret_key = "k"
+    paquete = detectar_paquetes(ajustes=ajustes, secret="k")[0]
+    monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
+    monkeypatch.setenv("TRANSMISSION_DOWNLOAD_DIR", str(d))
+    get_settings.cache_clear()
+    migrar_a_head(URL)
+    motor = create_async_engine(url_asyncpg(URL), poolclass=None)
+    fabrica = async_sessionmaker(motor, expire_on_commit=False)
+    try:
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            await extraer_y_verificar(s, op.id, conservar_temporal=True)
+            async def explota(self, *, disparador="automatico"):
+                raise RuntimeError("importer roto")
+            monkeypatch.setattr("zascarr.services.importer.Importer.scan_and_import", explota)
+            with pytest.raises(RuntimeError):
+                await pub.publicar_e_importar(s, op.id)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.ERROR
+            staging = d / ".zascarr" / "paquetes"
+            assert not staging.exists() or not list(staging.glob("*"))
+    finally:
+        await motor.dispose()
+        os.environ.pop("COVERS_CACHE_PATH", None)
+        os.environ.pop("TRANSMISSION_DOWNLOAD_DIR", None)
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_huerfanos_respeta_verificado_e_importado(tmp_path, monkeypatch):
+    import os
+
+    from zascarr.config import get_settings
+    from zascarr.services.paquetes_extraccion import limpiar_huerfanos
+    d = tmp_path / "d"
+    d.mkdir()
+    p = d / "p.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("a.cbz", _cbz_bytes())
+    ajustes = type("A", (), {})()
+    ajustes.transmission_download_dir = str(d)
+    ajustes.amule_incoming_dir = ""
+    ajustes.downloads_path = ""
+    ajustes.secret_key = "k"
+    paquete = detectar_paquetes(ajustes=ajustes, secret="k")[0]
+    monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path / "config"))
+    get_settings.cache_clear()
+    motor = create_async_engine(url_asyncpg(URL), poolclass=None)
+    fabrica = async_sessionmaker(motor, expire_on_commit=False)
+    try:
+        async with fabrica() as limpia:
+            await limpia.execute(text("TRUNCATE paquete_operaciones"))
+            await limpia.commit()
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            temp = tmp_path / "config" / ".paquetes" / "guardado"
+            temp.mkdir(parents=True)
+            op.temp_dir = str(temp)
+            op.estado = PaqueteEstado.VERIFICADO
+            s.add(op)
+            await s.commit()
+            assert await limpiar_huerfanos(s) == 0
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.VERIFICADO and temp.exists()
+            op.estado = PaqueteEstado.IMPORTADO
+            s.add(op)
+            await s.commit()
+            op2 = await crear_operacion(s, paquete)
+            assert op2.id == op.id
+    finally:
+        await motor.dispose()
+        os.environ.pop("COVERS_CACHE_PATH", None)
+        get_settings.cache_clear()
+
+
+def test_staging_symlink_rechaza_publicacion(tmp_path):
+    from zascarr.services.paquetes_publicacion import (
+        PaquetePublicacionError,
+        _validar_cadena_oculta,
+    )
+    d = tmp_path / "d"
+    d.mkdir()
+    fuera = tmp_path / "fuera"
+    fuera.mkdir()
+    (d / ".zascarr").symlink_to(fuera, target_is_directory=True)
+    with pytest.raises(PaquetePublicacionError, match="no es segura"):
+        _validar_cadena_oculta(d)
+
+
+@pytest.mark.asyncio
+async def test_verificado_se_reutiliza_sin_reextraer(tmp_path, monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.services import paquetes_extraccion as modulo
+    _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            temp = tmp_path / "config" / ".paquetes" / str(op.id)
+            temp.mkdir(parents=True)
+            (temp / "0001.cbz").write_bytes(_cbz_bytes())
+            op.estado = PaqueteEstado.VERIFICADO
+            op.temp_dir = str(temp)
+            op.items = [{"nombre": "0001.cbz", "bytes": len(_cbz_bytes()),
+                         "sha256": "a" * 64, "estado": "verificado"}]
+            op.total_bytes = len(_cbz_bytes())
+            s.add(op)
+            await s.commit()
+
+            def no_llamar(*_a, **_k):
+                raise AssertionError("no debe reextraer un VERIFICADO")
+
+            monkeypatch.setattr(modulo, "_extraer_en_proceso", no_llamar)
+            resultado = await extraer_y_verificar(s, op.id, conservar_temporal=True)
+            assert resultado.items[0]["nombre"] == "0001.cbz"
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_huerfano_publicando_limpia_staging(tmp_path, monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.services.paquetes_extraccion import limpiar_huerfanos
+    _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        staging = tmp_path / "staging-publicando"
+        staging.mkdir()
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            op.estado = PaqueteEstado.PUBLICANDO
+            op.staging_dir = str(staging)
+            op.temp_dir = None
+            s.add(op)
+            await s.commit()
+            assert await limpiar_huerfanos(s) >= 1
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.ERROR and not staging.exists()
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_duplicado_no_se_presenta_como_importado(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+
+    from zascarr.config import get_settings
+    from zascarr.services import paquetes_publicacion as pub
+    from zascarr.services.importer import ImportReport
+    _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            temp = tmp_path / "config" / ".paquetes" / str(op.id)
+            temp.mkdir(parents=True)
+            (temp / "0001.cbz").write_bytes(_cbz_bytes())
+            op.estado = PaqueteEstado.VERIFICADO
+            op.temp_dir = str(temp)
+            op.items = [{"nombre": "0001.cbz", "bytes": len(_cbz_bytes()),
+                         "sha256": "a" * 64, "estado": "verificado"}]
+            op.total_bytes = len(_cbz_bytes())
+            s.add(op)
+            await s.commit()
+
+            class ImportadorDuplicado:
+                def __init__(self, _s):
+                    self._scan_dirs = []
+
+                async def scan_and_import(self, **_kw):
+                    return ImportReport(started_at=datetime.now(UTC),
+                                        duplicates=["0001.cbz"])
+
+            monkeypatch.setenv("TRANSMISSION_DOWNLOAD_DIR", str(paquete.ruta.parent))
+            get_settings.cache_clear()
+            monkeypatch.setattr(pub, "Importer", ImportadorDuplicado)
+            op = await pub.publicar_e_importar(s, op.id)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.ERROR
+            assert op.error_codigo == "duplicado"
+            assert op.items[0]["resultado"] == "duplicado"
     finally:
         await motor.dispose()
         get_settings.cache_clear()

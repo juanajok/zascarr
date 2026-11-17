@@ -2,10 +2,6 @@
   <h2>Qué contiene el paquete</h2>
   {% if error %}
     <p class="caption" role="status">{{ error }} {{ accion }}</p>
-    <form hx-post="/ui/auditoria/paquetes/extraer" hx-confirm="¿Extraer e importar este paquete? El paquete original seguirá en Descargas." hx-target="#paquete-resultado" hx-swap="innerHTML" hx-disable="find button">
-      <input type="hidden" name="clave" value="{{ clave_accion }}">
-      <button type="submit">Extraer e importar</button>
-    </form>
     <p class="caption">El paquete original no se mueve ni se borra; podrás seguir viéndolo en Descargas.</p>
     <div id="paquete-resultado" role="status" aria-live="polite"></div>
     <p><a href="/ui/auditoria">Volver a Auditoría</a></p>
@@ -20,8 +16,10 @@
         <li class="audit-fila"><span>{{ e.nombre }} — {{ e.causa }}</span></li>
       {% endfor %}
     </ul>
-    <form hx-post="/ui/auditoria/paquetes/extraer" hx-confirm="¿Extraer e importar este paquete? El paquete original seguirá en Descargas." hx-target="#paquete-resultado" hx-swap="innerHTML" hx-disable="find button">
+    <form hx-post="/ui/auditoria/paquetes/extraer" hx-target="#paquete-resultado" hx-swap="innerHTML" hx-disable="find button">
       <input type="hidden" name="clave" value="{{ clave_accion }}">
+      <label class="caption"><input type="checkbox" name="confirmo" value="si" required>
+        Entiendo que se extraerá una copia y que el paquete original no se mueve ni se borra.</label>
       <button type="submit">Extraer e importar</button>
     </form>
     <p class="caption">El paquete original no se mueve ni se borra; podrás seguir viéndolo en Descargas.</p>
