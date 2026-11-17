@@ -2700,6 +2700,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .favorito-btn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-pill); background: var(--paper); color: var(--ink); cursor: pointer; }
 .favorito-btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .favorito-btn svg { width: 22px; height: 22px; }
+.favorito-form { margin: var(--space-2) 0 0; }
+.favorito-btn-ficha { width: auto; min-height: 44px; padding: 0 var(--space-3); white-space: nowrap; }
 .library-card-wrap .favorito-btn { opacity: 0; }
 .library-card-wrap:hover .favorito-btn,
 .library-card-wrap:focus-within .favorito-btn { opacity: 1; }
