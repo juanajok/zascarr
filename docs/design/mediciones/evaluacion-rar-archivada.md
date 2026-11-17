@@ -1,3 +1,20 @@
+# Kit histórico de evaluación del lector RAR (archivado)
+
+- **Estado:** archivado en OCTA-A6 (2026-11-17). El **código ejecutable se retiró** de
+  `scripts/medicion/evaluacion_rar/`; este documento conserva el modo de uso y la evidencia
+  para que la medición sea reproducible desde el historial de Git.
+- **Contexto:** spike #308 y tandas 1–2 de #315/#317/#319.
+- **Resultados:** `docs/design/evaluacion-lector-rar-2026-10-23.md`,
+  `docs/design/evaluacion-lector-rar-tanda2-2026-10-23.md` y
+  `docs/design/evaluacion-lector-rar-tanda2-2026-10-23-datos.md`.
+- **Por qué no está el código:** usaba `unar`/`lsar` y una comparación con `unrar` non-free;
+  no es código de producción ni se ejecuta en la app/CI. Se conserva la descripción y los
+  resultados; para repetir la medición hay que recuperar los ficheros del historial (commit
+  previo a la PR de OCTA-A6) y revisar de nuevo el uso de `unrar` no libre.
+- **No se toca la imagen de ZascArr ni la biblioteca.**
+
+## LEEME original (histórico)
+
 # Evaluación del lector RAR/CBR en la Pi (spike #308) — cómo se ejecuta
 
 **Qué es:** medir si herramientas como `unar`, `bsdtar` y `unrar` (y `rarfile`) pueden leer el contenido de tus RAR/CBR dentro del presupuesto de la Pi. Protocolo: `docs/design/protocolo-evaluacion-lector-rar.md`. **No cambia ZascArr, ni su imagen, ni tu biblioteca.**
