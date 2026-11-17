@@ -9,7 +9,23 @@
 
 {% if guardado %}{{ ui.aviso("ok", guardado) }}{% endif %}
 {% if elegido %}{{ ui.aviso("ok", elegido) }}{% endif %}
+{% if recolectado %}{{ ui.aviso("ok", recolectado) }}{% endif %}
+{% if sin_fuentes %}{{ ui.aviso("amber", sin_fuentes) }}{% endif %}
 {% if error %}{{ ui.aviso("amber", error) }}{% endif %}
+
+{% if not con_ficha %}
+<section class="pending-card">
+  <h2 class="titulo-frase">Buscar fichas de fuentes</h2>
+  <p class="muted">Todavía no hay fichas de las fuentes asociadas. Búscalas ahora: solo se consultan las fuentes encendidas en Ajustes y los identificadores ya asociados.</p>
+  <form method="post" action="/ui/series/{{ series.id }}/datos/recolectar">
+    <button type="submit" class="btn primary">Buscar fichas en las fuentes</button>
+  </form>
+</section>
+{% else %}
+<form method="post" action="/ui/series/{{ series.id }}/datos/recolectar" class="inline-accion">
+  <button type="submit" class="btn ghost sm">Buscar fichas de nuevo</button>
+</form>
+{% endif %}
 
 <section class="pending-card" aria-labelledby="roles-ccm">
   <h2 id="roles-ccm" class="titulo-frase">De dónde vienen los datos</h2>
@@ -44,7 +60,7 @@
 {% if not con_ficha %}
 <section class="pending-card">
   <h2 class="titulo-frase">Todavía no hay fichas</h2>
-  <p class="muted">Hay identificadores, pero aún no se ha recolectado su ficha. La recolección se ejecuta en segundo plano; vuelve a esta pantalla cuando haya terminado.</p>
+  <p class="muted">Hay identificadores, pero aún no se ha recolectado su ficha. Usa «Buscar fichas en las fuentes» y vuelve a cargar esta pantalla.</p>
 </section>
 {% else %}
 <section class="pending-card" aria-labelledby="huecos-ccm">
