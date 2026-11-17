@@ -404,7 +404,8 @@ async def _veredicto(db: AsyncSession, series: Series, querer, politica: Wishlis
     """Qué dice el veredicto de la política (C6, FR-09/27/28/29). Precedencia con la política ACTIVA, donde cada nivel
     anula los siguientes: aviso legal pendiente > R = 0 > serie no calculable > cota de tiempo."""
     k = len(querer.numeros)
-    r = get_settings().politica_busquedas_por_hora
+    ajustes = get_settings()
+    r = ajustes.politica_busquedas_por_hora
     if politica == WishlistPolicy.NONE:
         return {"tipo": "ninguno", "no_calculable": razon_de_no_calculable(series) is not None}
     if k >= 1 and aviso_pendiente:
@@ -416,7 +417,8 @@ async def _veredicto(db: AsyncSession, series: Series, querer, politica: Wishlis
         # búsquedas posibles (R > 0 y aviso aceptado); en condicional y sin nombrar la fuente.
         diferido = (not querer.computable and r > 0 and not aviso_pendiente
                     and politica in (WishlistPolicy.MISSING, WishlistPolicy.ALL)
-                    and puede_enlazarse_con_comic_vine(series, get_settings().comicvine_enabled))
+                    and puede_enlazarse_con_comic_vine(
+                        series, ajustes.comicvine_enabled, ajustes.comicvine_api_key))
         return {"tipo": "motivo", "fuente": querer.fuente if not querer.computable else None,
                 "diferido": diferido}
     if k >= 1:
