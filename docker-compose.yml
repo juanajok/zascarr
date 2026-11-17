@@ -160,6 +160,9 @@ services:
       # #418 (ADR 0015): interruptor del lector de .cbr con `unar` (por defecto, encendido)
       - LECTOR_RAR_ENABLED=${LECTOR_RAR_ENABLED:-true}
       - TZ=${TZ:-Europe/Madrid}
+      # Observabilidad: nivel real de structlog y formato JSON/consola.
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_JSON=${LOG_JSON:-true}
       # BL-R9: cadencia del rescan de la biblioteca (1440 = una vez al día; 0 lo apaga).
       - RESCAN_INTERVAL_MINUTES=${RESCAN_INTERVAL_MINUTES:-1440}
       # A6/E6: sin estas dos, lo que el operador pone en el .env NO llega al
