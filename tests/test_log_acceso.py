@@ -277,7 +277,8 @@ class TestConUvicornReal:
         cabeceras = {"Connection": "Upgrade", "Upgrade": "websocket", "Sec-WebSocket-Version": "13",
                      "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="}
         salida = _servir_y_pedir(cmd, [(f"/ui/descubrir?{QUERY}", cabeceras)], RAIZ)
-        assert CENTINELAS["clave"] in salida, salida[-1200:]
+        # #369 sanea la traza de uvicorn.error: la query ya no se filtra al log.
+        assert CENTINELAS["clave"] not in salida, salida[-1200:]
 
     def test_control_negativo_sin_el_filtro_el_detector_si_ve_la_query(self, tmp_path):
         """Una aplicación ASGI mínima bajo el MISMO uvicorn y los mismos argumentos, pero SIN el filtro: el centinela debe
@@ -348,8 +349,9 @@ class TestRotacionEfectivaConDockerCompose:
 #: se quita: sirve para que nadie dé por «sin datos» un parámetro nuevo sin haberlo mirado.)
 PARAMETROS_DE_QUERY = frozenset({
     "anio", "antes", "candidata", "character_id", "clave", "consulta", "cursor", "decision", "desplazamiento", "despues",
-    "limite", "limpiar", "next", "operacion", "page", "page_size", "personaje", "primero", "publisher_id", "q", "ref", "saga",
-    "search", "serie_id", "serie",
+    "cambio_vista", "limite", "limpiar", "next", "operacion", "page", "page_size", "personaje", "primero", "publisher_id", "q", "ref", "saga",
+    "autor", "author_id", "favoritos", "idioma", "edicion", "anio_desde", "anio_hasta",
+    "page_title", "search", "serie_id", "serie",
     # BL-FILT1 (#397): filtro de «Pendientes por carpeta» (estado de la vista, no se registra).
     "nombre", "estado", "por_confirmar", "en_conflicto",
     "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
@@ -385,10 +387,20 @@ PARAMETROS_DE_QUERY = frozenset({
     "issue_number",
     # BL-INF5 (#591): aviso de guardado al volver de la edición manual.
     "guardado",
+    # BL-PACK1 (#344): token firmado de la vista previa de un paquete de Descargas.
+    "token",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
     "desde",
+    # BL-D7 (#163): resultado de pedir una saga (solo recuentos de la vista).
+    "anadidos", "ya_pedidos", "en_biblioteca",
+    # #843: importación de una guía de lectura (fuente, aviso de resultado y recuentos).
+    "fuente", "importada", "enlazados", "omitidos", "motivos",
     # #155: filtros del alta de series y selección de candidatas (estado de la vista).
-    "serie_ids", "tradicion", "navegar",
+    "serie_ids", "tradicion",
+    # D5 (#162): semana y editorial de Novedades (estado de la vista).
+    "semana", "editorial",
+    # #797: abrir el desplegable de alta tras un error (estado de la vista).
+    "abrir",
 })
 
 

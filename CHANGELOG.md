@@ -5,8 +5,300 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Cambiado
+
+- **Ficha de serie: números primero y densidad (2026-11-14).** Los números pasan justo
+  después de la cabecera; «Retirar de mi biblioteca» se pliega; «Otras fuentes» desaparece si
+  no hay fuente; las rejillas de más de 30 números se colapsan con «Ver los N que faltan /
+  tienes» (medido: 17 series con ≥50 y 6 con ≥100, máximo 426). Portada móvil a 96 px para
+  que el índice quepa en el primer pantallazo. Validación renderizada en
+  `docs/design/validacion-ux-ficha-serie.md`; personas reales pendientes.
+- **Ficha de serie: navegación por secciones y «Completitud» (2026-11-14).** La ficha
+  estrena un índice de anclas (Números, Búsqueda, Etiquetas, Colecciones, Completitud, Datos
+  y Archivos si existe) para no recorrer diez secciones en móvil. El bloque D8 deja de llamarse
+  «Estado de la colección» para no confundirse con las colecciones M:N, y la frase de entrada
+  pasa antes de los datos. Sin JS ni componentes nuevos; benchmark en
+  `docs/design/benchmark-ficha-serie.md`.
+- **Alta de series en colecciones: divulgación progresiva (2026-11-14).** La ficha de una
+  colección ya no muestra siempre el selector con hasta 40 series de la biblioteca. Un botón
+  «Añadir series» (antes de la lista) despliega el panel; el fragmento solo se pide al abrir
+  (`/ui/colecciones/{id}/anadir`). Una colección vacía lo abre sola. Se corrige la copia
+  «Añadir series sin colección» (M:N), se conserva búsqueda/tradición/página/selección y se
+  mantienen vista lista/tarjetas y el foco. Ficha: `docs/design/benchmark-alta-series-colecciones.md`.
+- **Colecciones solapadas (2026-11-14).** Una serie puede pertenecer a varias colecciones: la
+  pertenencia única `series.collection_id` pasa a la tabla puente `collection_series`
+  (migración 0040, conserva todas las asignaciones existentes). La ficha muestra todas sus
+  colecciones, la lista de alta permite series que ya están en otras y la política efectiva
+  combina las colecciones: `excluir` gana sobre `incluir`, y `incluir` sobre la política guardada.
+  Portada y exportación leen la tabla puente.
+
+### Añadido
+
+- **Cola/progreso de Deseados en la propia pantalla (2026-11-17).** Cuando hay deseos
+  en descarga, Deseados muestra un panel «Descargas en curso» que se refresca solo
+  (cada 30 s) y lee **una vez** Transmission por refresco: barra de progreso y
+  porcentaje para los torrents, estado para aMule (su web no expone progreso). Cierra
+  el hueco declarado en el benchmark de Deseados (§13) sin depender de abrir el cliente.
+
+
+
+- **Consistencia del registro de adopción (2026-11-17).** El marcador solo cuenta si es
+  exactamente `true`: un valor corrupto ya no se presenta como «biblioteca registrada» ni
+  habilita el registro incremental. Un registro de aceptación huérfano (sin marcador) se
+  rechaza con aviso y no se sobrescribe por un POST directo. Sin migración.
+
+- **Pasada de UI/UX en Deseados (2026-11-16).** Introducción más corta y «¿Cómo funciona?»
+  plegado (menos ruido antes de la acción), indicador «Buscando series…» al buscar,
+  resumen «N deseos · M en descarga», estado vacío con siguiente paso, nombres
+  accesibles en todos los botones de la fila, y panel de candidatos con cabecera
+  («N resultados — elige uno o varios»), scroll para listas largas, «Enviado» como chip,
+  botón de descarga deshabilitado mientras envía y apilado correcto en móvil.
+  DOWNLOADED ya dice «Descargado» (antes «Descargando…», que confundía con la descarga
+  en curso).
+
+- **Tomo recopilatorio: números que cubre (2026-11-16).** Al guardar un especial sin
+  número se puede indicar un rango (`1-12`, `1,3,5-7`): el tomo queda como publicación
+  sin número pero esos números **cuentan como poseídos**, dejan de ser huecos y no se
+  vuelven a buscar. Se guarda en `metadata.numeros_cubiertos` del archivo (sin
+  migración); `numeros_poseidos`/dashboard lo incluyen. Tope de 300 números y rangos
+  invertidos rechazados.
+- **«Ya lo tengo» para desechos descargados que el importador no enlaza (2026-11-16).**
+  Una descarga manual que acaba en `_Unsorted` (sin Issue) dejaba el deseo en
+  «Descargando…» para siempre, porque la comprobación automática solo lo cierra si ve
+  un fichero ligado a la serie importado después de añadir el deseo. Ahora esos deseos
+  muestran **«Ya lo tengo»**: lo marca como importado a mano, sin volver a buscarlo.
+ (feat(deseos): botón «Ya lo tengo» para descargas que el importador no enlaza)
+
+- **Especiales sin número en `Serie/Especiales/` (2026-11-16).** «Por revisar» ofrece
+  «Guardar como especial (sin número)» cuando la serie está reconocida: crea el Issue
+  sin número, enlaza el archivo y lo **mueve** a `…/Serie (Año)/Especiales/<archivo>`
+  (la carpeta se crea si no existe), saliendo de `_Unsorted`. Formatos: novela
+  gráfica, tomo, tapa dura u ómnibus. La ruta existía en el servicio pero no estaba
+  expuesta en la tarjeta.
+
+- **«Por revisar» sugiere la serie cuando el nombre no trae número (2026-11-16).**
+  Tomos, especiales y aniversarios (`Sector Lejano (Young Animals - ECC) [GVS]
+  [22 Aniversario CRG].cbz`) se quedaban en `_Unsorted` sin ninguna pista. El matcher
+  sigue sin inventar el número, pero guarda la serie reconocida como candidata: la
+  tarjeta de Pendientes la ofrece con un clic y basta escribir el número y pulsar
+  «Organizar» para mover el fichero a la carpeta de la serie (se crea si no existe).
+
+- **NFR-03: límite del cuerpo de las peticiones (2026-11-16).** Middleware ASGI que
+  rechaza con 413 los cuerpos de escritura que superan 256 KiB, comprobando `Content-Length`
+  y los bytes reales (chunked o cabecera falsa) antes de que FastAPI los parsee. Tope en
+  `config.py`, por `.env`, por encima del cuerpo válido máximo de #115 (~73,5 KiB).
+- **BL-A11Y: foco, avisos y título del asistente de vinculación (2026-11-16).**
+  «Marcar/Desmarcar todos» deja el foco en el recuento (sin región viva anidada); el resultado
+  inmediato y el fallo enfocan su encabezado; el resultado guardado y el inmediato titulan
+  «Resultado de la vinculación». El paso 3 pasa a «Vincular y ver el resultado» en todo el
+  recorrido. Sin JS propio ni cambios de contrato HTMX.
+- **BL-DUP3: resolver una carpeta repetida o contenida (2026-11-16).** «Duplicados»
+  permite revisar una pareja de carpetas: muestra comunes idénticos, comunes con contenido
+  distinto y lo que solo está en cada lado. Solo se apartan los comunes idénticos de la carpeta
+  que no se queda, con la cuarentena y el deshacer de BL-DUP1; si queda vacía, se ofrece
+  apartarla también. No se fusionan carpetas ni se toca lo que solo está en un lado. Sin migración.
+- **Varias descargas desde un mismo «Buscar ahora» (2026-11-16).** Al descargar un
+  candidato ya no desaparece el resto de la lista: se actualiza solo el estado de la
+  fila y ese candidato (marcado «Enviado a la cola de descarga»), de modo que se pueden
+  encolar varios números o un tie-in sin repetir la búsqueda de minutos. El mismo
+  enlace no se encola dos veces y el estado/`download_ref` del deseo siguen apuntando a
+  la primera descarga; las extra las recoge el importador.
+
+
+
+- **BL-DUP2: unir copias idénticas con enlace duro (2026-11-16).** En «Duplicados»,
+  «Unir con enlace duro» reemplaza cada copia sobrante por un enlace a la que se queda: ambas
+  rutas siguen existiendo y comparten el mismo contenido. La copia original pasa por la
+  cuarentena de BL-DUP1 y la operación se puede deshacer; no se libera espacio hasta vaciarla.
+  La opción solo aparece si hay misma montura y permiso de escritura. Migración 0044 aditiva.
+
+- **CUR7: filtro por rango de años en Biblioteca (2026-11-16).** Dos campos, «Desde el
+  año» y «Hasta el año», acotan por `start_year` y se combinan con el resto de filtros; la URL
+  canónica, los chips, la limpieza y la paginación los conservan. Años inválidos se descartan y
+  un rango invertido se corrige avisando. Sin etapas inventadas ni migración.
+- **«Buscar ahora» avisa de que puede tardar (2026-11-16).** El botón se deshabilita
+  mientras busca y muestra un aviso con `aria-live` («Buscando en Prowlarr y en el
+  foro… puede tardar hasta 2 minutos; no cierres la página»), porque el foro espacia
+  sus consultas. La cabecera de Deseados también lo explica.
+ (fix(ui): «Buscar ahora» avisa de que puede tardar y se deshabilita mientras trabaja)
+- **CUR6: sagas como guías con portada y progreso (2026-11-16).** El listado y la ficha
+  de una saga muestran una portada tomada de su primer número miembro (servida por la caché
+  local, sin hotlinking) y el progreso de lectura completada (`leídos de total`). Solo lectura:
+  no cambia el orden, los números ni los archivos; sin migración.
+- **CUR5: «Continuar leyendo» en Inicio (2026-11-16).** Si hay algún número marcado
+  «Leyendo», el Inicio muestra una tarjeta con serie, número y progreso de páginas, con enlace
+  directo al número y a la ficha de la serie. Solo estado local: sin telemetría ni fuentes;
+  una consulta y sin migración.
+- **CUR4: idioma y edición de la serie (2026-11-16).** Campos estructurados opcionales
+  `language` (código corto normalizado) y `edition_kind` (oficial, tradumaqueta, escaneo
+  propio u otro), editables a mano, visibles en la ficha y filtrables en Biblioteca. No se
+  infieren de la tradición ni se importan de fuentes no autorizadas. Migración 0043 reversible.
+- **CUR3: favoritos locales de series (2026-11-16).** La ficha permite marcar/desmarcar
+  una serie como favorita y Biblioteca incorpora «Solo favoritas» con estado en URL. La marca
+  es local, idempotente y no toca etiquetas, Deseados, búsqueda ni archivos. Migración 0042
+  reversible; sin sincronización externa.
+- **CUR2: filtro por autor en Biblioteca (2026-11-15).** La barra de filtros incorpora
+  un buscador de autores (`/ui/biblioteca/buscar-autor`) y el filtro `author_id`, combinable
+  con editorial, tradición, personaje, saga, etiquetas y lectura. Los autores de la ficha de
+  serie enlazan directamente a sus series. Sin migración ni cambios en archivos.
+- **«Probar conexión» del foro en Ajustes (2026-11-15, #877).** La tarjeta Foro permite comprobar
+  URL, usuario y contraseña **antes de guardar** (contraseña en blanco = la guardada): solo inicia
+  sesión (no busca ni gasta el intervalo de búsqueda), funciona aunque el foro esté apagado y
+  responde en español llano (OK, credenciales rechazadas, espera por cortesía/flood, URL inválida
+  o sin conexión), sin mostrar ni guardar credenciales.
+ (docs: changelog del botón Probar conexión del foro)
+- **Importación de guías de lectura desde la interfaz (2026-11-15, #843).** Nueva pantalla
+  «Importar una guía» en Sagas en orden: eliges fuente (Comic Book Reading Orders / Continuity
+  Guide) y pegas la URL; ZascArr valida la URL contra la allowlist del extractor, comprueba que
+  la fuente esté encendida en Ajustes, reconcilia la guía y te lleva a la saga con el resumen
+  (números enlazados y omitidos con motivo). Los errores, la fuente apagada y las esperas de
+  cortesía se explican en español llano, sin pantallas de error. Complementa el script manual
+  `scripts/reconciliar-lecturas.py`.
+
+- **SCR7: GCD, Metron y Open Library rellenan huecos (2026-11-14, #736).** Las series que ya
+  tienen `gcd_id`, `metron_id` u `open_library_id` completan año, fin y sinopsis **solo si el
+  campo está vacío** (nunca pisan título, ids, procedencia, portada, total ni bloqueos) por
+  id exacto y por orden Metron → Open Library → GCD, con tope de 5 peticiones por fuente y
+  ciclo, TTL de 30 días para las negativas y fuentes apagadas por defecto. Ficha con
+  atribución CC BY-SA 4.0 (Metron/GCD) y Open Library; `LEGAL.md` y `/api/health` al día.
+- **BL-E5 (#164): descargar logs recientes desde Inicio (2026-11-14).** El dashboard
+  ofrece «Descargar logs» y `/ui/logs` entrega un `.txt` con los últimos eventos de la app.
+  El búfer es en memoria (500 eventos / 256 KiB), no lee Docker ni monta rutas del host, y
+  redacta contraseñas, tokens, cookies y queries sensibles; avisa de que puede contener rutas.
+  Sin migración ni dependencias. Ficha: `docs/design/especificacion-BL-E5-logs.md`.
+- **SCR5: novedades de Comic Book Herald por RSS (2026-11-14).** Fuente opcional (apagada por
+  defecto) que lee **solo el feed RSS 2.0 público** del sitio —título, enlace, fecha y
+  categorías, nunca el HTML del artículo ni imágenes, sin evadir el WAF— con la caché
+  condicional y robots.txt de SCR1 (TTL 6 h, retención 2 días, negativa 6 h), cortesía de
+  3,5 s, tope de 1 MiB y `lxml` sin entidades ni red. «Sagas en orden» muestra al final
+  «Novedades de Comic Book Herald» (hasta 5 guías, enlace externo con `rel="noopener
+  noreferrer"` y fecha en español) solo si la fuente está encendida en Ajustes; la fila de
+  `LEGAL.md` atribuye el artículo y la fuente sin copiar su contenido.
+
+- **SCR4: foro IPB con charset real, control de saturación y tarjeta en Ajustes (2026-11-14, #705).**
+  El foro se lee decodificando su charset real (cabecera → `<meta>` → cp1252, nunca UTF-8 a
+  ciegas) y el login/búsqueda envían el formulario en ese charset, conservando `s=`; se detecta
+  el *Search Flood Control* de IPB (HTTP 200) como espera compartida de 20–60 s, no como «sin
+  resultados»; la búsqueda tiene su propio ritmo (25 s) separado de la lectura (2 s); Ajustes
+  estrena tarjeta **Foro** (URL, usuario, contraseña «en blanco = no cambia», activar) con aviso
+  de HTTP sin TLS, y `LEGAL.md` lo advierte. Incluye `scripts/diagnostico_foro.py` (sin
+  credenciales en pantalla) y pruebas con fixtures latin-1/cp1252 y de saturación.
+
+### Añadido
+
+- **CUR1: sagas en la ficha de serie (2026-11-15).** La ficha muestra un bloque perezoso
+  «Sagas» con las sagas en las que participa la serie y su tramo (`puesto 3 de 12` o
+  `puestos 3–4 de 12`), enlazando a `/ui/arcos/{id}`. Solo lectura sobre
+  `story_arc_issues.reading_order`; sin migración, sin tocar números ni archivos.
+
 ### Corregido
 
+- **«Buscar ahora» devolvía 500 (2026-11-17).** La etiqueta de resultados construía el
+  título con `_row(item)` sobre un `item` cargado sin relaciones precargadas; en async
+  eso lanza `MissingGreenlet`. Ahora la ruta no toca `item.series`/`item.issue`: usa la
+  consulta guardada (`search_query`) para la etiqueta, con prueba de regresión que falla
+  si se accede a una relación perezosa.
+
+- **El fallo de envío nombra al cliente que no responde (2026-11-17).** El deseo decía
+  «No se pudo enviar a ningún cliente de descarga», sin distinguir Transmission de aMule.
+  Ahora el motivo es «Transmission no respondió — se reintentará más tarde» o «aMule no
+  respondió — se reintentará más tarde» según el backend del candidato (el genérico queda
+  solo para un backend desconocido). Aplica al ciclo automático y a las descargas manuales.
+
+- **Transmission: si la carpeta configurada no existe, usa la suya (2026-11-16).**
+  Caso real: Ajustes apuntaba a `/media/downloads/comics`, que no existía en el host, y
+  Transmission rechazaba cada `torrent-add` en silencio. Ahora se registra
+  `transmission.download_dir_invalido` y se **reintenta sin `download-dir`** (carpeta por
+  defecto de Transmission), que el importador ve por el montaje de descargas. Si también
+  falla, queda `transmission.add_failed` con el motivo del RPC.
+
+- **Transmission: un `torrent-add` rechazado ya no se pierde en silencio (2026-11-16).**
+  `add_torrent` devolvía `None` sin registrar nada; el deseo solo decía «no se pudo
+  enviar». Ahora se registra `transmission.add_failed` con el resultado del RPC y las
+  claves de la respuesta (nunca la URL, que puede llevar passkey).
+- **Candidatos de Prowlarr duplicados (2026-11-16).** El mismo release aparecía dos
+  veces si lo listaban varios indexers (mismo título y tamaño, URL distinta). Se
+  conserva uno —el de más seeders— por título normalizado y tamaño; un tamaño
+  distinto es otra edición y se mantiene.
+
+- **Abreviaturas con puntos en el nombre del fichero (2026-11-16).** `DC K.O. #1…cbz`
+  se parseaba como serie «DC K O» y el matcher no encontraba la serie «DC K.O.»:
+  el fichero caía en `_Unsorted` aunque el deseo apuntara a ella. Ahora los puntos
+  entre letras sueltas («DC K.O.», «S.H.I.E.L.D.») se colapsan antes de separar por
+  puntos, así que quedan «DC KO»/«SHIELD» y el match exacto con `title_norm` funciona.
+- **Candidatos del foro duplicados (2026-11-16).** Un mismo fichero podía estar
+  enlazado dos veces en el tema con distinta codificación (`%20` frente a espacio):
+  se deduplicaba por URL cruda y aparecía dos veces en «Buscar ahora» (Sector Lejano).
+  Ahora la identidad es el **hash** `ed2k`/`btih`. Además se lee el tamaño declarado
+  en el enlace (la fila ya no muestra «0 Bytes»: muestra el tamaño o «tamaño
+  desconocido»).
+ (fix(foro): deduplicar candidatos por hash y mostrar el tamaño del enlace)
+
+- **Añadir a Deseados muestra la fila al instante (2026-11-16).** El botón dependía
+  de un `window.location.reload()` en un hook de htmx que no llegaba a ejecutarse:
+  el deseo se creaba, pero había que refrescar la página para verlo. Ahora la fila
+  se inserta al final de la lista (`hx-target="#wishlist-list"`, `beforeend`), el
+  botón queda «Añadido» y deshabilitado, y el texto de lista vacía desaparece solo.
+
+- **Candidatos del foro con el nombre de cada fichero (2026-11-16).** Un tema con
+  varios enlaces `ed2k` (varios números/ediciones) pintaba todos los candidatos con el
+  título del tema (27 filas idénticas). Ahora el título del candidato es el nombre del
+  fichero que viaja en el enlace (y la fila muestra su formato real); el tema sigue
+  como fuente `forum:crg`. En magnet se usa el parámetro `dn`.
+- **aMule: el enlace se envía con el formulario real de su web (2026-11-16).**
+  `add_ed2k_link` usaba `GET /amuleweb/?ed2k=…`, que en el phpUI de aMule no
+  existe: respondía HTTP 200 con una página de error de ~458 bytes y el enlace
+  nunca se encolaba (síntoma: «le doy descargar y en aMule no aparece nada»).
+  Ahora hace `POST /footer.php` con los campos del formulario real
+  (`ed2klink`, `selectcat`, `Submit`) y desescapa el nombre URL-encoded del
+  foro (`%20` → espacio), que es lo que haría el navegador.
+ (fix(amule): añadir enlaces con el formulario POST real de footer.php)
+
+- **Búsqueda del foro: el salto de redirección no cabía en el presupuesto (2026-11-16).**
+  IPB responde `302` al POST de búsqueda y el salto de redirección volvía a esperar el
+  intervalo de 25 s; con un presupuesto de 30 s solo cabía una espera, así que la búsqueda
+  se saltaba siempre («el foro pidió esperar») y no encontraba series como DC K.O. Ahora
+  los **saltos de redirección se cobran con la política de lectura** (2 s), no con el
+  intervalo de búsqueda: son parte de la misma búsqueda. El presupuesto además cubre dos
+  esperas (60 s) por si la cadena de saltos es más larga. Una búsqueda manual tarda ~27 s.
+
+- **Lote 2 de deudas menores (2026-11-15).** El enricher de huecos ya no se queda con las
+  primeras series por id (rota por `enrichment_attempted_at` y marca 30 días las que no tienen
+  huecos cubribles); Metron/GCD/Open Library tratan un payload vacío como «sin ficha»; la
+  atribución de relleno se muestra aunque la URL de la ficha no sea válida; y la importación de
+  guías captura también fallos de `commit` (200 con aviso, sin 500) y registra el error sin
+  trazas ni URL.
+
+- **Asistente de carpeta: «pendientes» en avisos y «archivo» para el fichero (#834).** Los avisos de carpeta sin pendientes dejan de decir «registros»; el motivo de fichero inexistente pasa a «El archivo ya no existe…». El recuento de la carpeta ya decía «pendientes» y no se toca. Sin cambios de lógica, URLs ni datos.
+
+- **V14 cerrada: migración de la UI sin restos (2026-11-14, #750).** Capturas nuevas en
+  `docs/design/ui-actual/` (claro/oscuro, escritorio/móvil), enlace desde el README, cierre
+  documental en BACKLOG y medición de peso: `web.css` pasa de 130.813 B a **128.037 B**, con
+  0 reglas sin uso y 27 alias retirados cubiertos por una prueba de no regresión.
+- **V14 F4: se cierra la lista de compatibilidad (2026-11-13, #750).** El último `.neutro` pasa a
+  la base neutra y se retira su regla; `CLASES_ANTERIORES_A_V2` se sustituye por
+  `ALIAS_RETIRADOS_EN_V14`, una prueba que impide que vuelvan los 27 alias retirados.
+- **Sagas: añadir un número desde la ficha de la saga (2026-11-14).** La ruta
+  `POST /ui/arcos/{id}/numeros` y el servicio existían, pero la plantilla no ofrecía el
+  formulario: ahora la ficha muestra «Añadir un número» (serie, número y posición opcional),
+  con errores en español llano, valores conservados al reintentar y la garantía de que no se
+  toca ningún archivo. Se reutilizan las clases del sistema de diseño (`.edicion-form`,
+  `.campo-error`, …). PR del arreglo en el historial de `main`.
+
+- **V14 F3b: los números de la ficha usan `ui.chip` (2026-11-13, #750).** Fuera `.issue-chip`,
+  `.issue-missing`, `.issue-present`, `.issue-leido` y `.issue-leyendo`: presente `ok` (✓), leyendo
+  `info`, leído `neutro`, y «te falta» `neutro` con `chip-falta` (borde discontinuo); los números
+  con ficha van en `.chip-enlace`. `.estado-dot` se conserva como excepción justificada: el sistema
+  de diseño lo documenta como componente actual del semáforo.
+- **V14 F3a: botones principales y avisos legales con los componentes (2026-11-13, #750).**
+  Las 8 plantillas que usaban el alias `.btn-primary` pasan a `.btn.primary` y los avisos legales de
+  Deseados y Ajustes, a `ui.aviso("warn")` (mismo texto, enlace y negritas; ahora con icono y
+  `role="alert"`). Se retiran las reglas del alias y las de `.legal-notice-warn`; la auditoría de
+  clases sigue en 0 reglas sin uso.
+- **D3: conciliación de la descarga importada e historial (2026-11-13).** Cuando el archivo de
+  una propuesta enviada se importa, la propuesta pasa a «importada» y se liga a su `File`
+  (sin tocar el archivo). Mejoras muestra un historial reciente con el estado de las últimas
+  propuestas: importada, enviada o descartada.
 - **D3: lote de escaneo configurable (2026-11-13).** Ajustes → Calidad permite elegir cuántos
   números revisa cada pasada (1/3/5/10); el valor se valida en servidor y se guarda como override
   en caliente. Cambio en `web/ajustes.py`: pendiente de dictamen de SecOps antes de fusionar.
@@ -124,6 +416,22 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   anti-bots o de la red (VPN/proxy). Regresión con el `User-Agent` capturado y con ambos códigos.
 
 ### Añadido
+
+- **Pool inicial de 60 etiquetas (2026-11-13).** La ficha de una serie nueva ofrece hasta 12
+  ideas en español («superhéroes», «noir», «ciencia ficción»…) que se añaden con un clic; el
+  resto del vocabulario queda en el autocompletado. Se siembra una vez (migración 0039), sin
+  asignar nada; las fuentes y ComicInfo siguen aportando sus tags con procedencia. Ficha:
+  `docs/design/benchmark-pool-etiquetas-inicial.md`.
+
+- **Guías y órdenes de lectura (SCR3, entrega 2).** Extractores de Comic Book Reading
+  Orders y Continuity Guide (solo referencias fácticas, `use=reference`, nunca la prosa;
+  CG sin `?format=json`) y `reading_order_resolver` puro; reconciliación con la colección
+  reutilizando **`story_arcs` / `story_arc_issues.reading_order`** (sin modelo nuevo ni
+  migración), idempotente y solo lectura de la biblioteca. Fuentes apagadas por defecto
+  (`reading_orders_enabled`/`continuity_guide_enabled` en Ajustes), cortesía 2,5/3,5 s,
+  descargas por la caché/robots de SCR1 y enlace a la guía original en la ficha del arco.
+  Disparador manual: `scripts/reconciliar-lecturas.py --fuente … --url …`.
+  Spec: `docs/design/especificacion-SCR3-lecturas.md`.
 
 - **Caché HTTP condicional y `robots.txt` (SCR1, Fase 1).** Tabla `http_cache` (migración
   `0038`) con dos horizontes (`fresh_until` para servir sin red, `retain_until` para revalidar

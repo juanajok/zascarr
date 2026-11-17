@@ -58,7 +58,7 @@
     {% for av in r.avisos_de_grupo %}{{ ui.aviso("amber", av.texto) }}{% endfor %}
   </section>
 
-  <div class="vinc-barra" role="status" aria-live="polite" aria-label="Progreso de la revisión">
+  <div class="vinc-barra" role="status" aria-live="polite" aria-atomic="true" aria-label="Progreso de la revisión">
     <span class="vinc-barra-contexto">{{ r.clave }}</span>
     <span>Página {{ r.pagina.desde }}–{{ r.pagina.hasta }} de {{ r.pagina.en_el_grupo }}</span>
     <span><strong>{{ n_marcados }}</strong> marcado{{ "s" if n_marcados != 1 }} · <strong>{{ n_incluidos }}</strong> listo{{ "s" if n_incluidos != 1 }}{% if n_bloqueados %} · {{ n_bloqueados }} bloqueado{{ "s" if n_bloqueados != 1 }}{% endif %}</span>
@@ -81,7 +81,7 @@
 
   <p class="vinculacion-pendiente" role="status">Actualizando la revisión… Hasta que termine, no se puede vincular.</p>
 
-  {% if accion %}<div class="vinc-accion-resultado" role="status" data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto) }}</div>{% endif %}
+  {% if accion %}<div class="vinc-accion-resultado" tabindex="-1" autofocus data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto, viva=false) }}</div>{% endif %}
 
   {% if r.archivos %}
   <div class="vinc-masivo" role="group" aria-label="Marcar varios a la vez">
@@ -99,7 +99,7 @@
       <div class="vinc-cab">
         {% if editable %}
         <label class="vinc-marca">
-          <input type="checkbox" name="marcar" value="{{ a.id }}"{% if a.marcado %} checked{% endif %}{% if not a.marcable and not a.marcado %} disabled{% endif %}>
+          <input id="marca-{{ a.id }}" type="checkbox" name="marcar" value="{{ a.id }}"{% if a.marcado %} checked{% endif %}{% if not a.marcable and not a.marcado %} disabled{% endif %}>
           <span class="nombre-archivo">{{ a.nombre }}</span>
         </label>
         {% else %}
@@ -179,8 +179,21 @@
       {% if a.repetido_con %}
       <div class="vinc-conflicto">
         <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
+        <ul class="vinc-conflicto-lista">
+          {% for otro in a.repetido_con %}
+          {% set o = archivos_por_id.get(otro) %}
+          <li><strong>{{ nombres_de([otro]) | join(", ") }}</strong>{% if o %} · número {{ o.numero or "sin número" }}{% if o.ruta_actual %} · {{ o.ruta_actual }}{% endif %}{% endif %}</li>
+          {% endfor %}
+        </ul>
         {% if a.marcado %}
-        <button type="submit" name="quitar" value="{{ a.id }}" class="btn ghost sm">Quitar este del lote</button>
+        <div class="vinc-acciones">
+          <button type="submit" name="quitar" value="{{ a.id }}" class="btn ghost sm"
+                  id="quitar-{{ a.id }}">Quitar este del lote</button>
+          {% for otro in a.repetido_con %}
+          <button type="submit" name="quitar" value="{{ otro }}" class="btn ghost sm"
+                  id="dejar-{{ a.id }}-{{ otro }}">Dejar este y quitar «{{ nombres_de([otro]) | join(", ") }}»</button>
+          {% endfor %}
+        </div>
         {% endif %}
       </div>
       {% endif %}

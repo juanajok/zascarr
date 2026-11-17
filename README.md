@@ -104,16 +104,18 @@ listo:
 curl -fsSL https://raw.githubusercontent.com/juanajok/zascarr/main/bootstrap.sh | sudo bash
 ```
 
-Instala git y Docker si te faltan, crea un usuario de servicio `media`
-(igual que Sonarr/Radarr/Prowlarr si ya los tienes — código en `/opt`,
-nunca mezclado con tu usuario personal), descarga ZascArr en
-`/opt/zascarr/zascarr`, y te hace **3 preguntas** (pulsa `Intro` para
-aceptar lo que va entre corchetes) y una cuarta que **por defecto no abre nada**:
+Instala git y Docker si te faltan, prepara el usuario de servicio que elijas
+(`media` por defecto, igual que Sonarr/Radarr/Prowlarr si ya los tienes — código
+en `/opt`, nunca mezclado con tu usuario personal), descarga ZascArr en
+`/opt/zascarr/zascarr`, y te hace **5 preguntas** (pulsa `Intro` para aceptar lo
+que va entre corchetes):
 
 1. ¿Dónde están tus tebeos ya organizados?
 2. ¿Dónde caen tus descargas (Transmission/aMule)?
 3. ¿Idioma de la interfaz? (`es`/`en`)
-4. ¿Quieres usarlo desde otros dispositivos (móvil, tablet)? En una instalación
+4. ¿Usuario de servicio del sistema? (`media` por defecto; si no existe, lo crea
+   como usuario de sistema). Elige otro si ya usas uno para toda la suite *arr.
+5. ¿Quieres usarlo desde otros dispositivos (móvil, tablet)? En una instalación
    nueva, `Intro` = solo desde esta máquina. Si eliges abrirlo a tu red local (o
    detrás de un proxy con HTTPS), **te pide una contraseña antes de abrir nada**.
    El proxy lo pones tú: la dirección tiene que ser `https://dominio` (con puerto
@@ -147,7 +149,9 @@ de tu colección.
 > contenedores en `ZASCARR_DATA_DIR` (por defecto `/var/lib/zascarr`), y el
 > usuario de servicio —dueño de las carpetas de datos de los contenedores (portadas, estado
 > de la VPN)— en `ZASCARR_USER`/`ZASCARR_GROUP` (por defecto `media`). Ese usuario **no** es
-> dueño del código ni de la configuración.
+> dueño del código ni de la configuración. El instalador **pregunta el usuario**; si no existe,
+> lo crea como usuario de sistema. `ZASCARR_USER`/`ZASCARR_GROUP` siguen sirviendo para
+> instalaciones desatendidas o para fijar el valor por defecto.
 > Cambia lo que necesites antes de instalar:
 > ```bash
 > export ZASCARR_ROOT=/opt/Zascarr ZASCARR_DATA_DIR=/var/lib/zascarr ZASCARR_USER=media ZASCARR_GROUP=media
@@ -518,6 +522,7 @@ docker-compose.yml
 - [`SECURITY.md`](SECURITY.md) — postura de seguridad y cómo reportar una vulnerabilidad.
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — backlog canónico del producto.
 - [`docs/adr/`](docs/adr/) — decisiones de arquitectura registradas.
+- [Capturas actuales de la interfaz](docs/design/ui-actual/README.md) — foto de la UI al cerrar la migración V0–V14 (claro/oscuro, escritorio/móvil).
 - [Sistema de diseño](docs/design/sistema-de-diseno-zascarr.md) ([PDF con las muestras](docs/design/sistema-de-diseno-zascarr.pdf)) — guía de marca, componentes, accesibilidad y revisión de la UI (versión 2026-11-13, `main@76e7812`).
 - [`docs/TESTING_E2E.md`](docs/TESTING_E2E.md) / [`docs/TESTING_NFR_Zascarr.md`](docs/TESTING_NFR_Zascarr.md) — planes de testing end-to-end y no funcional.
 - [`src/zascarr/LEGAL.md`](src/zascarr/LEGAL.md) — aviso legal y marco de uso.

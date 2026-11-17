@@ -104,6 +104,11 @@ class TestChip:
     def test_acepta_numeros(self, env):
         assert texto(render(env, '{{ ui.chip("neutro", 0) }}')) == "0"
 
+    def test_la_clase_extra_anade_un_modificador_declarado(self, env):
+        """`clase` es solo el gancho del modificador (p. ej. `chip-falta`); el matiz lo pone el estado."""
+        html = render(env, '{{ ui.chip("neutro", "#1", clase="chip-falta") }}')
+        assert clases(parsear(html).elementos[0]) == {"chip", "chip-falta"}
+
 
 # ── aviso ─────────────────────────────────────────────────────────────────────────────────
 class TestAviso:
@@ -137,6 +142,12 @@ class TestAviso:
     def test_con_call_conserva_el_marcado_del_contenido(self, env):
         html = render(env, '{% call ui.aviso("info") %}Mira <a href="/x">esto</a>{% endcall %}')
         assert any(e[0] == "a" and e[1]["href"] == "/x" for e in parsear(html).elementos)
+
+    def test_viva_false_quita_la_region_viva_sin_cambiar_el_aspecto(self, env):
+        html = render(env, '{{ ui.aviso("ok", "Mensaje", viva=false) }}')
+        cont = parsear(html).elementos[0]
+        assert cont[1].get("role") is None
+        assert "aviso" in clases(cont) and "ok" in clases(cont)
 
     def test_con_texto_plano_lo_escapa(self, env):
         html = render(env, '{{ ui.aviso("warn", t) }}', t="<b>ojo</b>")
@@ -386,14 +397,14 @@ class TestCssDeLosComponentes:
     def test_existe_el_componente(self, selector):
         assert selector in _lista_de_selectores()
 
-    def test_btn_primary_comparte_regla_con_el_nombre_antiguo(self):
-        regla = next(s for s in _selectores() if ".btn.primary" in s and ".btn-primary" in s)
+    def test_el_boton_principal_gana_con_su_intencion(self):
+        regla = next(s for s in _selectores() if s.strip() == "button.primary, .btn.primary")
         assert "button.primary" in regla
 
     def test_un_envio_no_es_principal_por_serlo(self):
         """Revisión visual (2026-10-20): cualquier `type="submit"` salía amarillo y Ajustes enseñaba
         siete «Guardar» principales. El amarillo es opt-in con `.primary`."""
-        regla = next(s for s in _selectores() if ".btn.primary" in s and ".btn-primary" in s)
+        regla = next(s for s in _selectores() if s.strip() == "button.primary, .btn.primary")
         assert 'button[type="submit"]' not in regla
 
     def test_el_boton_pequeno_conserva_los_40_px(self):
@@ -432,61 +443,38 @@ class TestCssDeLosComponentes:
         assert ":focus-visible" in CSS and "outline: 3px solid var(--cyan-t)" in CSS
 
 
-# ── compatibilidad: clases de antes que siguen vivas ─────────────────────────────────────
-# V14 (#750): se retiraron las que ya no usaba ninguna plantilla y no eran dinámicas:
-# ajustes-grid, audit-ok, cover, filter-bar-secondary, filter-search-box y topnav.
-# Esta lista queda como red para el resto hasta cerrar del todo la migración.
-# `wishlist-badge` se retiró a propósito: ya no la usa ninguna plantilla (las filas
-# de Deseados pintan `ui.chip`, deuda 6 de la revisión de diseño); sus reglas por
-# estado (`.estado-imported`…) con ella.
-# `cover-missing` se retiró a propósito con la portada de dos capas (ui.portada, sin `onerror=`); la
-# sustituye `.portada` (test_portada_marca.py).
-CLASES_ANTERIORES_A_V2 = (
-    "ajustes-actions", "ajustes-card", "ajustes-desc", "ajustes-error",
-    "ajustes-hint", "ajustes-ok", "assign-form", "audit-adoptar", "audit-block", "audit-count",
-    "audit-detail", "audit-item", "audit-path", "audit-resumen", "audit-why",
-    "back-link", "brand", "btn", "btn-ignorar", "btn-logout", "btn-primary", "btn-reintentar",
-    "btn-sugerencia", "candidato-detalle", "candidato-fila", "candidato-titulo",
-    "candidatos-lista", "candidatos-vacio", "candidatos-wishlist", "caption", "content",
-    "dashboard", "detected", "discover", "discover-desc",
-    "discovery-card", "discovery-card-actions", "discovery-card-body", "discovery-card-desc",
-    "discovery-card-title", "discovery-list", "empty", "empty-state", "estado-bad",
-    "estado-check-name", "estado-check-row", "estado-check-status", "estado-checks",
-    "estado-dot", "estado-dot-sm",
-    "estado-neutral", "estado-ok", "estado-summary",
-    "estado-summary-detail", "estado-summary-label", "estado-warn",
-    "estado-warnings", "estado-warnings-title", "filename", "filter-bar",
-    "htmx-indicator", "htmx-request",
-    "issue-chip", "issue-grid", "issue-input", "issue-missing", "issue-present",
-    "legal-checkbox", "legal-form", "legal-full", "legal-notice", "legal-notice-footer",
-    "legal-notice-info", "legal-notice-warn", "library-card", "library-card-body",
-    "library-card-meta", "library-card-title", "library-grid", "login-content", "login-error",
-    "login-form", "metric-card", "metric-delta", "metric-detail", "metric-label",
-    "metric-value", "metric-warning", "metrics-grid", "nav-logout", "no-results",
-    "page-current", "page-link", "pagination", "pending-body", "pending-card", "pending-grid",
-    "politica-aviso", "politica-form", "politica-lista-corta", "politica-retirados-ahora",
-    "politica-serie", "politica-veredicto", "search-form", "search-input", "section-header",
-    "series-card", "series-cover", "series-grid", "series-header", "series-list",
-    "series-meta", "series-name", "series-result-item", "series-results", "series-search",
-    "series-title", "series-year", "site-footer", "subtitle", "suggestion", "suggestion-label",
-    "suggestion-score", "view-all", "visible", "wishlist-list",
-    "wishlist-motivo", "wishlist-row", "wishlist-title",
+# ── alias retirados en la V14 (#750) ───────────────────────────────────────────────────────
+# La migración V0–V13 dejaba una lista de compatibilidad para que ninguna clase de antes
+# desapareciera antes de tiempo. V14 la cierra: los alias se retiraron y esta es la red que
+# impide que vuelvan por copia/pega. `.estado-dot` no está aquí: es el componente actual del
+# semáforo (lo describe el sistema de diseño), no un alias.
+ALIAS_RETIRADOS_EN_V14 = (
+    "btn-primary", "legal-notice-warn", "issue-chip", "issue-missing", "issue-present",
+    "issue-leido", "issue-leyendo", "audit-ok", "topnav", "hero-state", "toast",
+    "ajustes-grid", "filter-bar-secondary", "filter-search-box", "cover",
+    "library-vista", "library-vista-actual", "library-vistas", "tabla-ficha",
+    "recuento-biblioteca", "lectura-nota", "arco-anadir", "vinc-candidata-titulo",
+    "wishlist-badge", "cover-missing", "btn-secondary", "neutro",
 )
 
 
-class TestCompatibilidad:
+class TestAliasRetirados:
 
-    def test_se_conocen_las_clases_anteriores(self):
-        assert len(CLASES_ANTERIORES_A_V2) > 100
+    @pytest.mark.parametrize("alias", ALIAS_RETIRADOS_EN_V14)
+    def test_ningun_alias_retirado_tiene_regla(self, alias):
+        assert not re.search(r"\." + re.escape(alias) + r"(?![\w-])", CSS_SIN_COMENTARIOS), alias
 
-    def test_ninguna_clase_anterior_a_v2_desaparece(self):
-        actuales = set(re.findall(r"\.([A-Za-z_][\w-]*)", CSS_SIN_COMENTARIOS))
-        perdidas = [c for c in CLASES_ANTERIORES_A_V2 if c not in actuales]
-        assert not perdidas, f"clases que desaparecen (se retiran en V14, no antes): {perdidas}"
+    def test_ninguna_plantilla_usa_un_alias_retirado(self):
+        usados = set()
+        for f in PLANTILLAS.rglob("*.html"):
+            for valor in re.findall(r'class="([^"]*)"', f.read_text(encoding="utf-8")):
+                usados |= set(valor.split()) & set(ALIAS_RETIRADOS_EN_V14)
+        assert not usados, f"plantillas con alias retirados: {sorted(usados)}"
+
 
     def test_las_plantillas_no_usan_clases_inexistentes_del_vocabulario_nuevo(self):
         """Salvo `.btn` y el chip de filtros, ninguna plantilla estrena los componentes."""
-        nuevos = {"chip", "group", "ghead", "aviso", "hero-state", "toast", "region-viva"}
+        nuevos = {"chip", "group", "ghead", "aviso", "region-viva"}
         usadas = set()
         for f in PLANTILLAS.glob("*.html"):
             if f.name == "_componentes.html":

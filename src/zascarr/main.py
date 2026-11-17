@@ -17,7 +17,21 @@ from zascarr.utils import lector_rar
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
 from zascarr.utils.portada_rar import barrer_temporales
+from zascarr.utils.registro_reciente import instalar_captura
+from zascarr.utils.saneado_logs import (
+    instalar_filtro_registros,
+    instalar_saneo_structlog,
+    refrescar_raices,
+    refrescar_raices_db,
+)
 
+# BL-E5 (#164): búfer acotado para que el dashboard pueda descargar los últimos
+# eventos sin depender de Docker ni de una shell. No cambia el formato de stdout.
+# #369: el saneador va ANTES de la captura para que el búfer no guarde rutas.
+instalar_saneo_structlog()
+refrescar_raices()
+instalar_captura()
+instalar_filtro_registros()
 logger = structlog.get_logger()
 
 # `httpx` registra cada petición a nivel INFO con la URL COMPLETA, y en Telegram
@@ -327,11 +341,23 @@ async def lifespan(app: FastAPI):
             await RuntimeSettingsService(session).ensure_secret_key()
             await session.commit()
         logger.info("zascarr.db_connected")
+        await refrescar_raices_db(async_session_factory)
     except Exception:
         logger.exception("zascarr.db_unavailable_at_startup")
         app.state.db_degraded = True
 
     if not app.state.db_degraded:
+        # #344: operaciones de paquetes que quedaron vivas en un arranque anterior y sus
+        # temporales; se marcan error para que se puedan reintentar. Nunca impide arrancar.
+        try:
+            from zascarr.services.paquetes_extraccion import limpiar_huerfanos
+            async with async_session_factory() as session:
+                limpiadas = await limpiar_huerfanos(session)
+            if limpiadas:
+                logger.info("paquetes.huerfanos_limpiados", cantidad=limpiadas)
+        except Exception:
+            logger.exception("paquetes.huerfanos_limpieza_fallida")
+
         # #478/#564: consumir el diario de conversión de una ejecución anterior. Si una
         # conversión murió entre apartar el original y publicar, se restaura; si murió
         # después de publicar, se repara la fila. Sin esto, el diario crecería sin fin.
@@ -430,6 +456,7 @@ def create_app() -> FastAPI:
     from zascarr.api.revision import router as revision_router
     from zascarr.api.series import router as series_router
     from zascarr.api.wishlist import router as wishlist_router
+    from zascarr.middleware_cuerpo import LimiteCuerpoMiddleware
     from zascarr.services.auth import AuthMiddleware
     from zascarr.web.ajustes import router as ajustes_router
     from zascarr.web.arcos import router as arcos_ui_router
@@ -453,6 +480,8 @@ def create_app() -> FastAPI:
     from zascarr.web.library import router as library_router
     from zascarr.web.mejoras import router as mejoras_ui_router
     from zascarr.web.navegacion import router as navegacion_router
+    from zascarr.web.novedades import api_router as novedades_api_router
+    from zascarr.web.novedades import router as novedades_ui_router
     from zascarr.web.pendientes import router as pendientes_router
     from zascarr.web.retirada_serie import router as retirada_serie_ui_router
     from zascarr.web.routes import router as ui_router
@@ -464,6 +493,7 @@ def create_app() -> FastAPI:
     # siempre para que activarla desde /ui/ajustes no requiera reiniciar
     # el proceso con un middleware distinto.
     app.add_middleware(AuthMiddleware)
+    app.add_middleware(LimiteCuerpoMiddleware, max_bytes=settings.max_cuerpo_peticion_bytes)
 
     app.include_router(health_router, prefix="/api")
     app.include_router(estado_cortesia_router, prefix="/api")
@@ -488,6 +518,8 @@ def create_app() -> FastAPI:
     app.include_router(library_router)
     app.include_router(mejoras_ui_router)
     app.include_router(arcos_ui_router)
+    app.include_router(novedades_ui_router)
+    app.include_router(novedades_api_router)
     app.include_router(asistente_carpetas_router)
     app.include_router(asistente_vinculacion_router)
     app.include_router(pendientes_router)

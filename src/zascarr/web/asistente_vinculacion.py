@@ -95,7 +95,7 @@ MENSAJE_SIN_CLAVE = "ZascArr no tiene clave para firmar lo que ves: reinícialo 
 MENSAJE_SERIE_NO_VALIDA = ("Hace falta una serie de tu biblioteca para preparar la vinculación. Elige o crea la serie "
                            "primero: una candidata de búsqueda no basta.")
 MENSAJE_SERIE_NO_EXISTE = "La serie elegida ya no existe en tu biblioteca. Vuelve a elegirla."
-MENSAJE_GRUPO_NO_EXISTE = "Esa carpeta ya no tiene registros pendientes: puede que se hayan vinculado o descartado."
+MENSAJE_GRUPO_NO_EXISTE = "Esa carpeta ya no tiene pendientes: puede que se hayan vinculado o descartado."
 MENSAJE_BORRADOR_NO_VALE = ("No se ha podido reconstruir lo que habías marcado y escrito en esa página, así que se muestra "
                             "sin ello. Ese borrador no cuenta como una revisión válida.")
 
@@ -325,6 +325,7 @@ def _contexto_de_la_revision(r: RespuestaVinculacion, cursor_actual: str, otros:
         "nombres_de": lambda ids: [por_id[i].nombre for i in ids if i in por_id],
         "borradores_json": json.dumps({k: b.a_json() for k, b in otros.items() if not b.vacio()}, ensure_ascii=False),
         "pendientes": pendientes, "incluidos": incluidos, "excluidos": excluidos, "limite": LIMITE_ARCHIVOS,
+        "archivos_por_id": {a.id: a for a in r.archivos},
         "n_marcados": sum(1 for a in r.archivos if a.marcado),
         "n_incluidos": len(incluidos),
         "n_bloqueados": sum(1 for a in r.archivos if a.marcado and not a.marcable),
@@ -443,13 +444,15 @@ async def reabrir(
     guardado = await _leer_borrador(db, clave, series_id)
     if guardado is None:
         return await _revisar(request, db, clave, series_id, estado=Borrador(), cursor="", otros={},
-                              avisos=["No hay un borrador guardado o ha caducado."], pagina_completa=True)
+                              avisos=["No hay un borrador guardado o ha caducado."],
+                              pagina_completa="hx-request" not in request.headers)
     otros = leer_borradores(json.dumps(guardado.paginas, ensure_ascii=False))
     cursor = guardado.cursor if guardado.cursor in otros else (next(iter(otros), ""))
     estado = otros.pop(cursor, Borrador())
     return await _revisar(request, db, clave, series_id, estado=estado, cursor=cursor, otros=otros,
                           avisos=["Revisión reanudada. Nada se vincula hasta que lo confirmes."],
-                          pagina_completa=True, borrador_guardado=guardado)
+                          pagina_completa="hx-request" not in request.headers,
+                          borrador_guardado=guardado)
 
 
 @router.post("/guardar", response_class=HTMLResponse)
@@ -625,7 +628,7 @@ def _entero(valor: object) -> int:
 #: Qué pasó con cada archivo omitido y qué se puede hacer con lo que el contrato ofrece (revisar de nuevo). El servicio
 #: devuelve solo el CÓDIGO; el texto es presentación. Un código que no esté aquí no se inventa: sale con su código.
 TEXTO_DE_MOTIVO: dict[str, str] = {
-    "archivo_inexistente": "El registro ya no existe: puede que se haya borrado o vinculado desde otro sitio.",
+    "archivo_inexistente": "El archivo ya no existe: puede que se haya borrado o vinculado desde otro sitio.",
     "descartado": "Lo descartaste de la bandeja de pendientes, así que no se vincula.",
     "ya_vinculado_a_otro": "Ya estaba vinculado a otro número: no se cambia por ti.",
     "en_curso": "Tiene una asignación en curso: espera a que termine y revísalo de nuevo.",
@@ -703,8 +706,10 @@ async def confirmar(
     contexto = _contexto_de_la_confirmacion(token)
     base = {**contexto, "cursor_actual": cursor_actual, "inicio": INICIO,
             "pagina": f"{_entero(pagina_desde)}–{_entero(pagina_hasta)}" if _entero(pagina_hasta) else None}
-    plantilla = "asistente_vinculacion.html" if "hx-request" not in request.headers else "_vinculacion_resultado.html"
+    es_htmx = "hx-request" in request.headers
+    plantilla = "asistente_vinculacion.html" if not es_htmx else "_vinculacion_resultado.html"
     base["titulo_serie"] = await _titulo_de_la_serie(db, contexto["series_id"])
+    base.update({"oob_cabecera": es_htmx, "foco_resultado": es_htmx})
     def pagina_de_fallo(codigo: str, mensaje: str) -> HTMLResponse:
         titulo, definitivo, repetible = FALLOS.get(codigo, ("No se pudo vincular", True, False))
         return _sin_cache(templates.TemplateResponse(request, plantilla, {

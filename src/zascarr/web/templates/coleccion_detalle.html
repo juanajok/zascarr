@@ -26,91 +26,85 @@
 </header>
 
 <section class="coleccion-panel" id="series">
-  <h2>Series</h2>
+  <div class="coleccion-series-cabecera">
+    <h2 id="series-titulo"{% if foco_vista|default(false) and not aviso and not errores %} tabindex="-1" autofocus{% endif %}>Series</h2>
+    <div class="barra-vista" role="group" aria-label="Vista de las series de la colección">
+      <a class="barra-vista-opcion{% if vista|default('lista') == 'tarjetas' %} barra-vista-opcion-actual{% endif %}"
+         href="{{ url_vista_tarjetas|default('/ui/colecciones/' ~ coleccion.id ~ '?vista=tarjetas') }}"
+         {% if vista|default('lista') == 'tarjetas' %}aria-current="page"{% endif %}
+         aria-label="Tarjetas"><span class="barra-vista-icono" aria-hidden="true">{{ icono("grid") }}</span><span class="barra-vista-texto">Tarjetas</span></a>
+      <a class="barra-vista-opcion{% if vista|default('lista') == 'lista' %} barra-vista-opcion-actual{% endif %}"
+         href="{{ url_vista_lista|default('/ui/colecciones/' ~ coleccion.id) }}"
+         {% if vista|default('lista') == 'lista' %}aria-current="page"{% endif %}
+         aria-label="Lista"><span class="barra-vista-icono" aria-hidden="true">{{ icono("list") }}</span><span class="barra-vista-texto">Lista</span></a>
+    </div>
+  </div>
+  {% set abrir_alta = (abrir_alta|default(false)) or not coleccion.series %}
+  <details class="coleccion-anadir" id="anadir-series"
+           {% if abrir_alta %}open{% endif %}
+           hx-get="/ui/colecciones/{{ coleccion.id }}/anadir"
+           hx-trigger="{{ 'load, toggle once' if abrir_alta else 'toggle once' }}"
+           hx-target="#coleccion-anadir-contenido" hx-swap="innerHTML">
+    <summary class="btn coleccion-anadir-boton">Añadir series</summary>
+    <div id="coleccion-anadir-contenido" class="coleccion-anadir-contenido">
+      <p class="caption">Abriendo series disponibles…</p>
+    </div>
+  </details>
   {% if coleccion.series %}
+  {% if vista|default('lista') == "tarjetas" %}
+  <div class="series-grid coleccion-series-grid">
+    {% for s in coleccion.series %}
+    <article class="series-card coleccion-serie-card">
+      <a class="coleccion-serie-card-enlace" href="/ui/series/{{ s.id }}?volver={{ ('/ui/colecciones/' ~ coleccion.id) | urlencode }}"
+         aria-label="Abrir la serie {{ s.title }}">
+        <div class="coleccion-serie-card-portada">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-tarjeta", carga="lazy") }}</div>
+        <span class="series-title">{{ s.title }}</span>
+      </a>
+      <span class="series-year">{{ s.start_year or "Año no consta" }}</span>
+      <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
+        <input type="hidden" name="q" value="{{ q|default('') }}">
+        <input type="hidden" name="tradicion" value="{{ tradicion|default('') }}">
+        <input type="hidden" name="pagina" value="{{ pagina.pagina if pagina else 1 }}">
+        <input type="hidden" name="vista" value="{{ vista|default('lista') }}">
+        {% for sid in seleccion|default([]) %}<input type="hidden" name="serie_ids" value="{{ sid }}">{% endfor %}
+        <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar de la colección</button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
   <ul class="coleccion-series-lista">
     {% for s in coleccion.series %}
     <li class="coleccion-serie-fila">
       <div>
-        <a href="/ui/series/{{ s.id }}">{{ s.title }}</a>
+        <span class="chip-previa chip-previa-lista">
+          <a href="/ui/series/{{ s.id }}?volver={{ ('/ui/colecciones/' ~ coleccion.id) | urlencode }}"
+             hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
+             hx-target="#previa-m-{{ s.id }}" hx-swap="innerHTML"
+             hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{{ s.title }}</a>
+          <button type="button" class="btn ghost sm chip-previa-boton"
+                  hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
+                  hx-target="next .previa-numero" hx-swap="innerHTML"
+                  hx-trigger="click">Ver portada<span class="sr"> de {{ s.title }}</span></button>
+          <span class="previa-numero" id="previa-m-{{ s.id }}" aria-hidden="true"></span>
+        </span>
         <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>
       </div>
       <form method="post" action="/ui/colecciones/{{ coleccion.id }}/series/{{ s.id }}/quitar">
+        <input type="hidden" name="q" value="{{ q|default('') }}">
+        <input type="hidden" name="tradicion" value="{{ tradicion|default('') }}">
+        <input type="hidden" name="pagina" value="{{ pagina.pagina if pagina else 1 }}">
+        <input type="hidden" name="vista" value="{{ vista|default('lista') }}">
+        {% for sid in seleccion|default([]) %}<input type="hidden" name="serie_ids" value="{{ sid }}">{% endfor %}
         <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar serie</button>
       </form>
     </li>
     {% endfor %}
   </ul>
-  {% else %}
-  {{ ui.estado_vacio("Esta colección está vacía", "Añade series de la lista de abajo.") }}
   {% endif %}
-  {% set visibles = series|map(attribute="id")|list %}
-  <form method="get" action="/ui/colecciones/{{ coleccion.id }}" class="coleccion-alta">
-    <fieldset class="coleccion-alta-grupo">
-      <legend>Añadir series sin colección</legend>
-      <p class="caption">Filtra y marca una o varias. Se añaden todas o ninguna.</p>
-      <div class="coleccion-filtros">
-        <div class="coleccion-filtro">
-          <label for="alta-q">Buscar por título</label>
-          <input id="alta-q" type="search" name="q" value="{{ q }}" maxlength="120"
-                 placeholder="Escribe parte del título" autocomplete="off">
-        </div>
-        <div class="coleccion-filtro">
-          <label for="alta-tradicion">Tradición</label>
-          <select id="alta-tradicion" name="tradicion">
-            <option value="">Todas</option>
-            {% for valor, etiqueta in tradiciones|default([]) %}
-            <option value="{{ valor }}" {% if tradicion == valor %}selected{% endif %}>{{ etiqueta }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="coleccion-filtro-acciones">
-          <button class="btn" type="submit">Filtrar</button>
-          <button class="btn ghost" type="submit" name="limpiar" value="1">Limpiar filtros</button>
-        </div>
-      </div>
-      {% if pagina %}
-      <p class="coleccion-contador" role="status"{% if foco_filtros %} tabindex="-1" autofocus{% endif %}>{{ pagina.desde }}–{{ pagina.hasta }} de {{ pagina.total }} {{ "serie disponible" if pagina.total == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
-      {% else %}
-      <p class="coleccion-contador" role="status"{% if foco_filtros %} tabindex="-1" autofocus{% endif %}>{{ series|length }} {{ "serie disponible" if series|length == 1 else "series disponibles" }}{% if q or tradicion %} con estos filtros{% endif %}.</p>
-      {% endif %}
-      {% for sid in seleccion_oculta %}
-      <input type="hidden" name="serie_ids" value="{{ sid }}">
-      {% endfor %}
-      {% if series %}
-      <div class="coleccion-checkgrid">
-        {% for s in series %}
-        <label class="coleccion-check" for="serie-{{ s.id }}">
-          <input type="checkbox" id="serie-{{ s.id }}" name="serie_ids" value="{{ s.id }}"
-                 {% if s.id in seleccion %}checked{% endif %}>
-          <span>{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</span>
-        </label>
-        {% endfor %}
-      </div>
-      <button class="btn" type="submit" formaction="/ui/colecciones/{{ coleccion.id }}/series"
-              formmethod="post">Añadir series seleccionadas</button>
-      {% elif q or tradicion %}
-      {{ ui.estado_vacio("No hay series con esos filtros", "Prueba con otro título o tradición, o limpia los filtros.") }}
-      <p><a class="btn ghost" href="{{ url_limpiar }}">Limpiar filtros</a></p>
-      {% else %}
-      <p class="caption">No quedan series sin colección.</p>
-      {% endif %}
-      {% if seleccion_oculta and not series %}
-      <button class="btn" type="submit" formaction="/ui/colecciones/{{ coleccion.id }}/series"
-              formmethod="post">Añadir series seleccionadas</button>
-      {% endif %}
-      {% if pagina and pagina.paginas > 1 %}
-      <nav class="coleccion-paginacion" aria-label="Páginas de series disponibles">
-        <input type="hidden" name="navegar" value="1">
-        <button class="btn ghost" type="submit" name="pagina" value="{{ pagina.pagina - 1 }}"
-                {% if pagina.pagina <= 1 %}disabled{% endif %}>← Anterior</button>
-        <span>Página {{ pagina.pagina }} de {{ pagina.paginas }}</span>
-        <button class="btn ghost" type="submit" name="pagina" value="{{ pagina.pagina + 1 }}"
-                {% if pagina.pagina >= pagina.paginas %}disabled{% endif %}>Siguiente →</button>
-      </nav>
-      {% endif %}
-    </fieldset>
-  </form>
+  {% else %}
+  {{ ui.estado_vacio("Esta colección está vacía", "Usa «Añadir series» para empezar.") }}
+  {% endif %}
 </section>
 
 <section class="coleccion-panel">

@@ -8,7 +8,9 @@
     (no enfoca ni emite el campo fuera de banda) — BL-IT01, spec §6.2. -#}
 {% set quitar = request.query_params.get("quitar") %}
 {% set quitar_valido = quitar if quitar in (
-  "q", "tradition", "publisher_id", "character_id", "story_arc_id", "leido", "etiquetas",
+  "q", "tradition", "publisher_id", "character_id", "story_arc_id", "author_id",
+  "favoritos", "idioma", "edicion", "anio_desde", "anio_hasta", "leido",
+  "etiquetas",
   "coleccion", "todos"
 ) else none %}
 {% if es_fragmento %}
@@ -109,7 +111,19 @@
   <tbody>
     {% for series in items %}
     <tr id="serie-{{ series.id }}">
-      <td data-label="Título"><a href="{{ url_serie(series.id) }}">{{ series.title }}</a></td>
+      <td data-label="Título">
+        <span class="chip-previa chip-previa-lista">
+          <a href="{{ url_serie(series.id) }}"
+             hx-get="/ui/series/{{ series.id }}/previa"
+             hx-target="#previa-l-{{ series.id }}" hx-swap="innerHTML"
+             hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{{ series.title }}</a>
+          <button type="button" class="btn ghost sm chip-previa-boton"
+                  hx-get="/ui/series/{{ series.id }}/previa"
+                  hx-target="next .previa-numero" hx-swap="innerHTML"
+                  hx-trigger="click">Ver portada<span class="sr"> de {{ series.title }}</span></button>
+          <span class="previa-numero" id="previa-l-{{ series.id }}" aria-hidden="true"></span>
+        </span>
+      </td>
       <td data-label="Año">{% if series.start_year is not none %}{{ series.start_year }}{% else %}No consta{% endif %}</td>
       <td data-label="Tradición">{{ (series.tradition|tradicion) or "No consta" }}</td>
       <td data-label="Números">{% if series.total_issues is not none %}{{ series.total_issues }}{% else %}No consta{% endif %}</td>
@@ -136,10 +150,11 @@
     {% endif %}
     <div class="library-card-body">
       <div class="library-card-title" title="{{ series.title }}">{{ series.title }}</div>
+      {% set tradicion_tarjeta = series.tradition|tradicion %}
       <div class="library-card-meta">
-        {{ series.start_year or "" }}
-        {% if series.start_year %}·{% endif %}
-        {{ series.tradition|tradicion }}
+        {% if series.start_year %}{{ series.start_year }}{% endif %}
+        {% if series.start_year and tradicion_tarjeta %}·{% endif %}
+        {% if tradicion_tarjeta %}{{ tradicion_tarjeta }}{% endif %}
       </div>
     </div>
   </a>
@@ -173,7 +188,7 @@
 {#- Selector fuera de #rejilla: la respuesta lo actualiza OOB para que no quede
     con el valor viejo al quitar un chip o limpiar. -#}
 <select name="coleccion" id="f-coleccion" hx-swap-oob="outerHTML"
-        aria-label="Estado de la colección">
+        aria-label="Estado de la serie">
   {% include "_opciones_coleccion.html" %}
 </select>
 {% endif %}

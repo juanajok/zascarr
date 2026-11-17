@@ -36,7 +36,15 @@ from zascarr.core.comicinfo_write import (
     plan as plan_comicinfo,
 )
 from zascarr.core.exportacion_kavita import ArchivoFuente, PlanExportacion, plan_export
-from zascarr.models import Collection, File, ImportRun, Issue, Series
+from zascarr.models import (
+    Collection,
+    File,
+    ImportRun,
+    Issue,
+    LibraryRoot,
+    Series,
+    collection_series,
+)
 from zascarr.services.tagger import TaggerService
 from zascarr.utils.cbz import leer_comicinfo, reescribir_con_xml
 
@@ -81,7 +89,7 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _resolver_raiz(settings) -> Path:
+def _resolver_raiz(settings, raices: tuple[str, ...] = ()) -> Path:
     root = Path(settings.export_path)
     crudo = str(root)
     if ".." in Path(crudo).parts:
@@ -96,6 +104,7 @@ def _resolver_raiz(settings) -> Path:
         getattr(settings, "library_path", None),
         getattr(settings, "downloads_path", None),
         getattr(settings, "amule_incoming_dir", None),
+        *raices,
     ]
     prohibidas += list(getattr(settings, "carpetas_compartidas", None) or [])
     for p in prohibidas:
@@ -126,7 +135,8 @@ async def _filas(db: AsyncSession, collection: Collection) -> list[tuple[Archivo
         select(Series, Issue, File)
         .join(Issue, Issue.series_id == Series.id)
         .join(File, File.issue_id == Issue.id)
-        .where(Series.collection_id == collection.id)
+        .join(collection_series, collection_series.c.series_id == Series.id)
+        .where(collection_series.c.collection_id == collection.id)
         .order_by(Series.sort_title, Issue.sort_order, Issue.issue_number, File.file_path)
     )).all()
     salida: list[tuple[ArchivoFuente, File]] = []
@@ -402,7 +412,7 @@ def _materializar(
             raise
         except Exception:
             errores += 1
-            logger.exception("exportacion_kavita.materializar_falló", destino=str(destino))
+            logger.exception("exportacion_kavita.materializar_falló", file_id=str(accion.file_id))
     modo_global = "mixed" if len(modos) > 1 else (next(iter(modos)) if modos else "hardlink")
     return entradas, omitidos, colisiones, deriva, errores, copiados, modo_global
 
@@ -444,7 +454,8 @@ async def exportar_coleccion(db: AsyncSession, collection_id: UUID, *,
     if collection.auto_search is None:  # defensa: la columna es NOT NULL
         raise ExportacionError("La colección no es válida.")
     settings = get_settings()
-    root = await asyncio.to_thread(_resolver_raiz, settings)
+    raices = tuple((await db.execute(select(LibraryRoot.path))).scalars().all())
+    root = await asyncio.to_thread(_resolver_raiz, settings, raices)
     await asyncio.to_thread(root.mkdir, parents=True, exist_ok=True)
     try:
         pares = await _filas(db, collection)

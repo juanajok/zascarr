@@ -23,6 +23,7 @@ from zascarr.models import (
     WishlistOrigin,
     WishlistPolicy,
     WishlistStatus,
+    collection_series,
 )
 from zascarr.services.colecciones import (
     asignar_serie,
@@ -31,6 +32,7 @@ from zascarr.services.colecciones import (
     crear_coleccion,
     detalle_coleccion,
     editar_coleccion,
+    es_miembro,
     listar_colecciones,
     pagina_series_sin_coleccion,
     quitar_serie,
@@ -73,9 +75,13 @@ async def serie(db, titulo="Flash", *, policy=WishlistPolicy.NONE, total=3,
                 collection=None) -> Series:
     s = Series(id=uuid4(), title=titulo, tradition=ComicTradition.AMERICAN,
                total_issues=total, metadata_source=MetadataSource.COMIC_VINE.value,
-               wishlist_policy=policy, collection_id=collection.id if collection else None)
+               wishlist_policy=policy)
     db.add(s)
     await db.flush()
+    if collection is not None:
+        await db.execute(collection_series.insert().values(
+            collection_id=collection.id, series_id=s.id))
+        await db.flush()
     return s
 
 
@@ -123,16 +129,16 @@ async def test_crud_nombre_unico_case_insensitive_y_asignacion_unica(db):
     s = await serie(db, "Flash")
     assert (await listar_colecciones(db))[0].name == "Grapas"
     assert not (await asignar_serie(db, r.coleccion.id, s.id)).errores
-    assert s.collection_id == r.coleccion.id
+    assert await es_miembro(db, r.coleccion.id, s.id)
     detalle = await detalle_coleccion(db, r.coleccion.id)
     assert detalle is not None and len(detalle.series) == 1
     fila = detalle.series[0]
     assert fila.wishlist_policy_label == "No buscar automáticamente"
     assert fila.politica_efectiva_label == "No buscar automáticamente"
     assert str(s.id) not in {x.id for x in await series_sin_coleccion(db)}
-    assert not (await asignar_serie(db, r.coleccion.id, s.id)).ok
+    assert (await asignar_serie(db, r.coleccion.id, s.id)).ok  # idempotente
     assert await quitar_serie(db, r.coleccion.id, s.id)
-    assert s.collection_id is None
+    assert not await es_miembro(db, r.coleccion.id, s.id)
     await editar_coleccion(db, r.coleccion.id, name="Clásicos", description="",
                            auto_search="excluir")
     assert (await db.get(Collection, r.coleccion.id)).auto_search == CollectionAutoSearch.EXCLUIR
@@ -144,7 +150,7 @@ async def test_borrar_coleccion_deja_series_sin_coleccion(db):
     assert await borrar_coleccion(db, r.coleccion.id)
     await db.flush()
     await db.refresh(s)
-    assert s.collection_id is None
+    assert not await es_miembro(db, r.coleccion.id, s.id)
 
 
 async def test_orquestador_incluye_faltantes_y_no_toca_manuales(db):
@@ -318,10 +324,12 @@ async def test_asignar_series_es_atomico(db):
     b = await serie(db, "B")
     ya = await serie(db, "Ya", collection=c2.coleccion)
     assert (await asignar_series(db, c1.coleccion.id, [a.id, b.id, a.id])).ok
-    assert a.collection_id == b.collection_id == c1.coleccion.id
-    assert not (await asignar_series(db, c1.coleccion.id, [a.id])).ok   # ya asignada
-    assert not (await asignar_series(db, c1.coleccion.id, [ya.id, b.id])).ok
-    assert ya.collection_id == c2.coleccion.id                         # ninguna cambió
+    assert await es_miembro(db, c1.coleccion.id, a.id)
+    assert await es_miembro(db, c1.coleccion.id, b.id)
+    assert (await asignar_series(db, c1.coleccion.id, [a.id])).ok       # idempotente
+    assert (await asignar_series(db, c1.coleccion.id, [ya.id, b.id])).ok
+    assert await es_miembro(db, c1.coleccion.id, ya.id)                 # ahora solapada
+    assert await es_miembro(db, c2.coleccion.id, ya.id)
     assert not (await asignar_series(db, c1.coleccion.id, [])).ok
     assert not (await asignar_series(db, c1.coleccion.id, [uuid4()])).ok
 
@@ -370,3 +378,20 @@ async def test_paginacion_real_de_series_disponibles(db):
     assert p1.desde == 1 and p1.hasta == 40 and p1.paginas == 2
     assert p2.pagina == 2 and len(p2.series) == 5 and p2.desde == 41 and p2.hasta == 45
     assert {s.id for s in p1.series}.isdisjoint({s.id for s in p2.series})
+
+
+async def test_colecciones_solapadas_y_quitar_de_una_no_toca_la_otra(db):
+    c1 = await crear_coleccion(db, name="Solape Uno", description="", auto_search="heredar")
+    c2 = await crear_coleccion(db, name="Solape Dos", description="", auto_search="incluir")
+    s = await serie(db, "Solapada")
+    assert (await asignar_series(db, c1.coleccion.id, [s.id])).ok
+    assert (await asignar_series(db, c2.coleccion.id, [s.id])).ok
+    d1 = await detalle_coleccion(db, c1.coleccion.id)
+    d2 = await detalle_coleccion(db, c2.coleccion.id)
+    assert d1 is not None and [x.id for x in d1.series] == [str(s.id)]
+    assert d2 is not None and [x.id for x in d2.series] == [str(s.id)]
+    assert await es_miembro(db, c1.coleccion.id, s.id)
+    assert await es_miembro(db, c2.coleccion.id, s.id)
+    assert await quitar_serie(db, c1.coleccion.id, s.id)
+    assert not await es_miembro(db, c1.coleccion.id, s.id)
+    assert await es_miembro(db, c2.coleccion.id, s.id)

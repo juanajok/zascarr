@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
+from tests._raices_pg import allowlist, sembrar_raiz
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, File, ImportRun, Issue, ResultadoComprobacion, Series
@@ -118,7 +119,7 @@ class TestCicloCompletoDelImportador:
     """Criterios 2, 3 y 6 con el ciclo real (`scan_and_import`), la base real y el disco real."""
 
     @pytest.fixture
-    def montaje(self, tmp_path, monkeypatch):
+    async def montaje(self, fabrica, tmp_path, monkeypatch):
         vacio = tmp_path / "vacio"
         vacio.mkdir()
         ajustes = type("A", (), {})()
@@ -127,6 +128,8 @@ class TestCicloCompletoDelImportador:
         ajustes.amule_incoming_dir = str(vacio / "a")
         ajustes.downloads_path = vacio / "d"
         monkeypatch.setattr("zascarr.services.importer.get_settings", lambda: ajustes)
+        allowlist(monkeypatch, ajustes.library_path)
+        await sembrar_raiz(fabrica, ajustes.library_path, crear=False)
         return ajustes.library_path
 
     async def _ciclo(self, fabrica):

@@ -437,11 +437,9 @@ html { scroll-padding-bottom: 96px; }
 .empty { color: var(--ink-faint); font-style: italic; }
 
 /* ── 5. BOTONES ──────────────────────────────────────────────────────────── */
-/* Sin `button[type="submit"]` aquí: con su especificidad (0,1,1) el fondo base ganaba a `.btn-primary`
-   (0,1,0), que solo salía amarillo porque la regla amarilla también nombraba los envíos. */
+/* V14 (#750): las plantillas usan `.btn.primary`; el alias `.btn-primary` se retiró. */
 button,
 .btn,
-.btn-primary,
 .btn-ignorar,
 .btn-reintentar,
 .series-result-item button {
@@ -471,7 +469,6 @@ button,
 button:where(:not([disabled])):hover,
 button[type="submit"]:where(:not([disabled])):hover,
 .btn:where(:not([disabled])):hover,
-.btn-primary:where(:not([disabled])):hover,
 .series-result-item button:where(:not([disabled])):hover {
   transform: translate(-2px, -2px);
   box-shadow: var(--shadow-ink-hover);
@@ -479,8 +476,7 @@ button[type="submit"]:where(:not([disabled])):hover,
 
 button:where(:not([disabled])):active,
 button[type="submit"]:where(:not([disabled])):active,
-.btn:where(:not([disabled])):active,
-.btn-primary:where(:not([disabled])):active {
+.btn:where(:not([disabled])):active {
   transform: translate(1px, 1px);
   box-shadow: var(--shadow-ink-active);
 }
@@ -489,18 +485,10 @@ button[type="submit"]:where(:not([disabled])):active,
    `type="submit"`: Ajustes enseñaba siete «Guardar» amarillos y una lista de resultados, uno por fila.
    Un envío es neutro salvo que lleve `.primary` (revisión visual, 2026-10-20). */
 button.primary,
-.btn-primary,
 .btn.primary {
   --btn-bg: var(--yellow);
   /* V1: en oscuro --ink es CLARO: sobre el amarillo daba 1,2:1. El par fijo es --on-yellow. */
   color: var(--on-yellow);
-}
-
-/* `.neutro` era el parche para que un envío no saliera amarillo; ya no hace falta (el envío es neutro
-   por defecto), pero se conserva por compatibilidad de clases hasta V14. */
-button[type="submit"].neutro {
-  --btn-bg: var(--paper);
-  color: var(--ink);
 }
 
 .btn-ignorar {
@@ -542,8 +530,7 @@ button[type="submit"].neutro {
 /* ── 7. DIDASCALIA (cajita amarilla de narración) ───────────────────────── */
 /* U17: un TEXTO (de más de una línea) va en caja normal: sin mayúsculas, sin giro y sin espaciado de rótulo. Antes, `.caption`
    pintaba así párrafos enteros —el aviso legal, los avisos de Estado, las notas de la ficha— y costaba leerlos. */
-.caption,
-.legal-notice-warn {
+.caption {
   display: block;
   background: var(--caption-bg);
   border: var(--border-chip) solid var(--ink);
@@ -570,25 +557,7 @@ button[type="submit"].neutro {
   transform: rotate(-1.2deg);
 }
 
-/* ── 8. PEGATINAS / BADGES ───────────────────────────────────────────────── */
-.issue-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-chip);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;   /* los números de una rejilla de grapas se alinean */
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  padding: 3px 10px;
-  border-radius: var(--radius-pill);
-  border: var(--border-chip) solid var(--ink);
-  background: var(--paper);
-  color: var(--ink-soft);
-  white-space: nowrap;
-}
+/* ── 8. (V14) Las viejas pegatinas `.issue-chip` se sustituyeron por `ui.chip`. ── */
 
 /* D9: motivo concreto de por qué una fila de la wishlist no avanza —
    texto discreto junto al badge de estado, no otro badge que compita
@@ -615,7 +584,8 @@ button[type="submit"].neutro {
   border-radius: var(--radius-panel);
   background: var(--paper);
 }
-.candidatos-lista { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
+.candidatos-lista { list-style: none; margin: 0 0 var(--space-2); padding: 0; max-height: 60vh; overflow-y: auto; }
+.candidatos-resumen { margin: 0 0 var(--space-1); }
 .candidato-fila {
   display: flex;
   align-items: center;
@@ -723,6 +693,8 @@ button[type="submit"].btn-sugerencia {
 .assign-form {
   display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
 }
+.acciones-tarjeta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.acciones-tarjeta .btn, .acciones-tarjeta .btn-sugerencia { min-height: 44px; }
 .series-name { font-size: var(--text-boton); flex: 1; font-weight: 600; }
 /* El formulario de «especial sin número» vive dentro de una tarjeta de 200 px: sus campos ocupan el ancho
    disponible en vez de su tamaño natural, que los sacaba de la tarjeta. */
@@ -786,6 +758,36 @@ button[type="submit"].btn-sugerencia {
 /* El panel de candidatos de «Buscar ahora» ocupa su propia línea, pero solo cuando tiene
    contenido: vacío no debe forzar una línea (12 px de hueco) en cada fila. */
 .wishlist-row .candidatos-wishlist:not(:empty) { flex: 1 1 100%; }
+/* UX 2026-11-16: al añadir sin recargar, el texto de «lista vacía» desaparece
+   en cuanto la lista tiene filas (selector de hermano siguiente). */
+p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
+
+/* UX 2026-11-16: el estado vive en su propio contenedor (para actualizarlo sin
+   tirar el panel de candidatos), pero no cambia el reparto flex de la fila. */
+.wishlist-estado { display: contents; }
+.candidato-enviado { opacity: .7; }
+@media (max-width: 640px) {
+  .candidato-fila { flex-wrap: wrap; }
+  .candidato-titulo { flex: 1 1 100%; order: 1; }
+  .candidato-detalle { white-space: normal; flex: 1 1 100%; order: 2; }
+  .candidato-fila form { order: 3; width: 100%; margin: 0; }
+  .candidato-fila .btn-descargar-candidato { width: 100%; }
+}
+
+/* UX 2026-11-16: el aviso de «puede tardar» ocupa su propia línea, sin apretar la fila. */
+.wishlist-buscando {
+  flex: 1 1 100%;
+  margin-top: 4px;
+  font-size: var(--text-secundario);
+  color: var(--ink-soft);
+}
+/* Cola/progreso de Deseados (benchmark 2026-11-16): una fila por descarga,
+   con barra nativa y texto; refresco htmx desde la propia página. */
+.wishlist-progreso { margin-top: var(--space-3); }
+.wishlist-progreso-lista { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: 6px; }
+.wishlist-progreso-fila { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.wishlist-progreso-titulo { flex: 1 1 12rem; font-weight: 600; }
+.wishlist-progreso progress { width: 9rem; max-width: 100%; height: 10px; }
 
 /* ── 12. FICHA DE SERIE (C2) ─────────────────────────────────────────────── */
 .issue-grid { display: flex; flex-wrap: wrap; gap: 7px; margin: var(--space-2) 0 20px; }
@@ -812,19 +814,9 @@ button[type="submit"].btn-sugerencia {
 .politica-lista-corta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
 .politica-aviso { color: var(--warn-t); }
 .politica-retirados-ahora { color: var(--ok-t); font-weight: 700; }
-.issue-chip.issue-present {
-  background: var(--ok-solid); color: var(--on-ok-solid); border-color: var(--ink);
-}
 /* V1: el estado no se transmite solo por color — «lo tienes» lleva ✓ y «te falta» borde
    discontinuo, aunque los dos colores se confundan. */
-.issue-chip.issue-present::before { content: "✓ "; }
 /* BL-INF10: lectura visible sin etiquetas; el texto `sr` lo dice también sin color. */
-.issue-chip.issue-present.issue-leido { background: var(--ink); color: var(--paper); }
-.issue-chip.issue-present.issue-leyendo { background: var(--amber-bg); color: var(--ink); }
-.issue-chip.issue-missing {
-  background: var(--paper); color: var(--ink-faint);
-  border-style: dashed;
-}
 
 /* ── 13. BIBLIOTECA (C1) ─────────────────────────────────────────────────── */
 .back-link {
@@ -833,21 +825,33 @@ button[type="submit"].btn-sugerencia {
 }
 .back-link:hover { color: var(--cyan-t); }
 
+.ficha-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0 0 var(--space-4); }
+.ficha-nav .btn { min-height: 40px; }
+.ficha-mas { margin: var(--space-2) 0; }
+.ficha-mas summary { cursor: pointer; min-height: 40px; padding: var(--space-1) 0; color: var(--ink-soft); font-weight: 700; }
+.ficha-numeros, #politica-serie, #etiquetas-serie, #colecciones-serie, #coleccion-serie, #datos-serie, #archivos-por-numero { scroll-margin-top: var(--space-4); }
 .series-header { display: flex; gap: 22px; margin-bottom: var(--space-5); flex-wrap: wrap; }
 /* Los datos van a la derecha de la portada: sin base propia, su texto largo los mandaba debajo incluso a
    1280 px. Bajan solo cuando no caben (y en el móvil, por la regla de ≤ 860 px). */
 .series-header > div { flex: 1 1 20rem; min-width: 0; }
 .anio-titulo { display: inline; }
+/* #854: cifras que se comparan en la ficha (año del título y totales). */
+.anio-titulo, .series-meta { font-variant-numeric: tabular-nums; }
 .portada.series-cover {
   width: 140px;
   border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
   flex-shrink: 0;
 }
+.favorito-form { margin: var(--space-2) 0 0; }
+.filtro-favoritas { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 600; }
+.filtro-favoritas input { width: 24px; height: 24px; accent-color: var(--mag-t); }
 .series-meta { color: var(--ink-soft); font-size: var(--text-didascalia); margin: 2px 0; }
 .series-intro { margin: 0 0 6px; font-weight: 600; }
 .series-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2) 14px; align-items: center; margin: 10px 0 0; }
 /* Fila de enlaces secundarios bajo la frase de entrada (p. ej. las otras formas de revisar). */
 .acciones-fila { display: flex; flex-wrap: wrap; gap: var(--space-1) 14px; align-items: center; margin: var(--space-1) 0 var(--space-4); }
+.series-retirar { margin-top: var(--space-2); }
+.series-retirar summary { cursor: pointer; color: var(--ink-soft); font-weight: 600; padding: var(--space-2) 0; min-height: 40px; }
 .series-fuentes, .politica-detalles { margin-top: var(--space-2); }
 .politica-detalles code { font-size: var(--text-secundario); }
 .series-fuentes summary, .politica-detalles summary {
@@ -902,10 +906,6 @@ button[type="submit"].btn-sugerencia {
 .legal-notice { font-size: var(--text-secundario); color: var(--ink-faint); }
 .legal-notice a { color: inherit; text-decoration: underline; }
 .legal-notice-footer { text-align: center; margin: 0; }
-.legal-notice-warn {
-  display: block; margin: var(--space-3) 0;
-  background: var(--caption-bg); color: var(--ink);
-}
 .legal-notice-info {
   display: block; border-radius: var(--radius-panel); padding: 10px 14px; margin: var(--space-3) 0;
   background: var(--info-bg);
@@ -924,6 +924,9 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 15. DASHBOARD (métricas + estantería + descubrir) ───────────────────── */
 .dashboard { max-width: 1240px; margin: 0 auto; }
+.dashboard-cabecera { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.dashboard-cabecera h1 { margin-bottom: 0; }
+.dashboard-logs { align-self: start; }
 .dashboard h1 { font-size: var(--text-titulo-pagina); margin-bottom: var(--space-1); }
 
 .metrics-grid {
@@ -1036,6 +1039,13 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 15b. PRIMEROS PASOS (V4) ────────────────────────────────────────────────
    Lista numerada; el estado se ve por TEXTO (chip) además de por color/forma. */
+.continuar-leyendo { margin: 18px 0 4px; }
+.continuar-card { padding: 18px 20px; border: var(--border-panel) solid var(--ink); background: var(--paper-2); box-shadow: var(--shadow-ink); }
+.continuar-card .rotulo { margin: 0 0 4px; }
+.continuar-card h2 { margin: 0 0 4px; }
+.continuar-numero { margin: 0 0 10px; color: var(--ink-soft); }
+.continuar-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.continuar-acciones .btn { min-height: 44px; }
 .primeros-pasos { margin: 22px 0 var(--space-2); }
 .row-pasos { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
 .row-pasos h2, .seccion { font-size: var(--text-titulo-seccion); margin: 0; }
@@ -1105,6 +1115,11 @@ button[type="submit"].btn-sugerencia {
 
 @media (max-width: 480px) {
   .metrics-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .portada.series-cover { width: 96px; }
+  .series-header { margin-bottom: var(--space-3); }
 }
 
 /* ── 16a. DESCUBRIR (C0) — tarjeta horizontal (portada + ficha), a
@@ -1314,7 +1329,7 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 16c. COMPONENTES (V2) ───────────────────────────────────────────────────
    Piezas reutilizables con los nombres de la maqueta (docs/design/maqueta-ui.html), sobre los
-   tokens ya comprobados de V1. Las clases actuales (.btn-primary, .empty-state…)
+   tokens ya comprobados de V1. Las clases heredadas (.empty-state…)
    SIGUEN funcionando: se retiran en V14, no antes. Las macros que las emiten viven en
    templates/_componentes.html; el estado→aspecto, en web/componentes.py. */
 
@@ -1351,6 +1366,10 @@ button[disabled], .btn[disabled] {
 .chip.warn  { background: var(--warn-bg);  color: var(--warn-t); }
 .chip.amber { background: var(--amber-bg); color: var(--amber-t); }
 .chip.info  { background: var(--info-bg);  color: var(--cyan-t); }
+/* V14 (#750): «te falta» se dice con borde discontinuo, no solo con el color. */
+.chip-falta { border-style: dashed; }
+/* Un chip que además es enlace (número con ficha) no lleva el subrayado del enlace. */
+.chip-enlace { text-decoration: none; }
 
 /* Grupo: caja con cabecera (título + recuento). El contenido va directamente dentro. */
 .group {
@@ -1438,6 +1457,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .carpeta-accion-principal { border: var(--border-control) solid var(--ink); font-weight: 700; }
 .carpeta-avanzado { margin: 0 0 10px; }
 .carpeta-avanzado summary { cursor: pointer; }
+.pend-recomendacion { margin: 0 0 var(--space-2); font-weight: 700; }
+#vinc-lote, .vinc-fila { scroll-margin-top: 5rem; }
 
 /* Revisión de selección y números (#119). La revisión pendiente se avisa y el lote anterior deja de usarse. */
 .vinculacion-lista { list-style: none; padding: 0; margin: 0 0 var(--gutter); display: grid; gap: var(--space-3); }
@@ -1486,8 +1507,24 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vinc-barra-contexto { font-weight: 700; overflow-wrap: anywhere; }
 .vinc-barra .btn { margin-left: auto; }
 @media (max-width: 600px) {
-  .vinc-barra { position: static; }
-  .vinc-barra .btn { margin-left: 0; width: 100%; }
+  .vinc-barra { position: sticky; top: 4rem; z-index: 4; }
+  .vinc-barra .btn { margin-left: 0; width: 100%; min-height: 44px; }
+  .vinc-borrador-acciones { display: grid; grid-template-columns: 1fr; }
+  .vinc-borrador-acciones .btn { width: 100%; min-height: 44px; }
+}
+@media (max-width: 480px) {
+  .pending-grid { grid-template-columns: 1fr; }
+  .pending-body { padding: var(--space-3); }
+  .assign-form, .vincular-form { display: flex; flex-wrap: wrap; gap: 8px; }
+  .assign-form .issue-input, .vincular-form .issue-input { flex: 1 1 8rem; width: 100%; min-height: 44px; }
+  .assign-form button, .vincular-form button, .pending-body > .btn-ignorar { width: 100%; min-height: 44px; }
+  .vinc-fila { padding: 10px var(--space-2); }
+  .vinc-numero input[type="text"] { width: 100%; min-height: 44px; }
+  .vinc-masivo { display: grid; grid-template-columns: 1fr; }
+  .vinc-masivo .btn { width: 100%; min-height: 44px; }
+}
+@media (hover: none) {
+  .pending-card:hover, .library-card:hover { transform: none; box-shadow: none; }
 }
 .vinc-masivo { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 var(--gutter); }
 .vinc-alcance { margin: 6px 0; }
@@ -1514,7 +1551,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* U19: indicador de pasos del recorrido carpeta → serie → revisión → vinculación (solo CSS). */
 .pasos-asistente ol { list-style: none; margin: var(--space-2) 0 var(--space-4); padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) 18px; }
-.pasos-asistente li { display: flex; align-items: center; gap: var(--space-2); color: var(--ink-soft); font-weight: 600; }
+.pasos-asistente li { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--ink-soft); font-weight: 600; line-height: 1.35; }
 .pasos-asistente .num {
   width: 28px; height: 28px; border: var(--border-chip) solid var(--ink); border-radius: 50%; display: grid; place-items: center;
   font-family: var(--font-display); background: var(--paper-2); color: var(--ink);
@@ -1846,6 +1883,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
    especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
 
 /* ── BL-ETQ1a (#403): etiquetas en la ficha ───────────────────────────────── */
+.series-sagas { margin: 10px 0 6px; }
+.series-sagas h2 { margin: 0 0 4px; }
+.series-sagas-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.series-sagas-lista li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.series-colecciones { margin: 10px 0 6px; }
+.series-colecciones h2 { margin: 0 0 4px; }
+.series-colecciones-lista { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .series-etiquetas { margin: 14px 0 6px; }
 .series-etiquetas h2 { margin: 0 0 2px; }
 .series-etiquetas > .muted { margin: 0 0 var(--space-2); }
@@ -1947,6 +1991,18 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
    encogía al ancho del chip (~40 px). Va DEBAJO del chip para no tapar el rótulo de la sección;
    `pointer-events:none` para no robar el hover ni el clic. */
 .chip-previa { position: relative; display: inline-flex; }
+.chip-previa-boton { display: none; }
+.chip-previa-lista > .previa-numero {
+  position: fixed;
+  z-index: 50;
+  top: 50%;
+  right: 24px;
+  left: auto;
+  transform: translateY(-50%);
+  width: 200px;
+  max-width: calc(100vw - 48px);
+  pointer-events: none;
+}
 .previa-numero {
   position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
   width: 220px; z-index: 30; pointer-events: none;
@@ -2361,11 +2417,16 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* BL-INF5 (#591): formularios de edición manual. */
 .edicion-form { display: grid; gap: 14px; max-width: 48rem; }
+.edicion-form code { overflow-wrap: anywhere; }
 .edicion-form label { display: grid; gap: 5px; font-weight: 600; }
 .edicion-form input, .edicion-form textarea, .edicion-form select { font: inherit; padding: var(--space-2) 10px; border: var(--border-chip) solid var(--ink); border-radius: 6px; background: var(--paper); color: var(--ink); }
 .edicion-form textarea { resize: vertical; }
 .edicion-dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-3); }
 .campo-error { color: var(--warn-t); font-weight: 700; font-size: var(--text-secundario); }
+/* #854: una sola caja de atribución de la ficha (Fandom y relleno juntos). */
+.atribucion-fuentes { margin: var(--space-3) 0; }
+.atribucion-lista { margin: var(--space-2) 0 0; padding-left: var(--space-3); display: grid; gap: var(--space-1); }
+.ajustes-subgrupo { margin: var(--space-3) 0 var(--space-2); }
 .edicion-acciones { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .edicion-manuales { margin-top: 22px; }
 .edicion-manuales ul { list-style: none; padding: 0; display: grid; gap: var(--space-2); }
@@ -2373,11 +2434,28 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* BL-C4 (#151): sagas en orden de lectura. */
 .arcos-lista, .arco-orden { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: var(--space-2); }
+.portada.arco-miniatura { width: 64px; flex: none; align-self: center; border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); }
+.portada.arco-portada { width: 150px; flex: none; border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); }
+.arco-cabecera { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-start; margin-bottom: var(--space-2); }
+.arco-cabecera > div { min-width: 0; flex: 1 1 260px; }
+.arco-cabecera h1 { margin-top: 0; }
+.arco-progreso { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; }
 .arco-fila, .arco-orden li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); padding: var(--space-2) 10px; border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
 .arco-posicion { min-width: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* BL-C4 (#151): gestión manual de sagas. */
 .arco-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 10px 0 var(--space-4); }
+/* #854: acciones de Sagas con el mismo tamaño y estado vacío con salida. */
+.arcos-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 10px 0 var(--space-4); }
+.arcos-acciones-secundarias { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
+/* #854: novedades externas sin la tarjeta de una saga local. */
+.novedades-herald { margin-top: var(--space-4); }
+.novedades-lista { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: 0; }
+.novedad-fila { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: var(--border-panel) solid var(--ink-faint); }
+.novedad-fila:last-child { border-bottom: 0; }
+.novedades-esqueleto { min-height: calc(5 * 2.75rem + 4 * var(--space-2)); display: grid; gap: var(--space-2); }
+.esqueleto-fila { min-height: 2.75rem; border: var(--border-panel) solid var(--ink-faint); border-radius: var(--radius-panel); background: var(--paper-2); }
+#novedades-herald:has(#novedades-herald-contenido:empty) { display: none; }
 .arco-controles { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
 
 /* #264 B: apartar copias idénticas desde Duplicados. */
@@ -2409,6 +2487,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .mejoras-escanear { margin: var(--space-3) 0; }
 .mejora-acciones { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 .coleccion-fila { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: var(--space-3); align-items: start; padding: 10px var(--space-3); border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); }
+.coleccion-portada-enlace { display: block; width: 88px; color: inherit; }
+.coleccion-portada-enlace .portada-coleccion { width: 88px; }
 .coleccion-fila .portada-coleccion { width: 88px; }
 .coleccion-panel {
   margin: 0 0 var(--space-4);
@@ -2424,13 +2504,21 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-portada .portada { border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); box-shadow: var(--shadow-ink-sm); }
 .coleccion-descripcion { margin: 0 0 var(--space-2); color: var(--ink-soft); max-width: 62ch; }
 .coleccion-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; }
+.coleccion-series-cabecera { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+.coleccion-series-cabecera h2 { margin: 0; }
 .coleccion-series-lista { list-style: none; margin: 0 0 var(--space-3); padding: 0; }
-.coleccion-serie-fila { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: var(--border-line) solid var(--paper-2); }
+.coleccion-serie-fila { position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: var(--border-line) solid var(--paper-2); }
 .coleccion-serie-fila:last-child { border-bottom: 0; }
+/* Alta de series con divulgación progresiva: el selector no ocupa la ficha hasta abrirlo. */
+.coleccion-anadir { margin: 0 0 var(--space-3); }
+.coleccion-anadir > summary { list-style: none; cursor: pointer; width: fit-content; }
+.coleccion-anadir > summary::-webkit-details-marker { display: none; }
+.coleccion-anadir[open] > summary { margin-bottom: var(--space-3); }
+.coleccion-anadir-contenido { margin-top: var(--space-2); }
 .coleccion-alta-grupo { border: 0; padding: 0; margin: 0; }
 .coleccion-alta-grupo legend { font-weight: 700; margin-bottom: var(--space-1); }
 .coleccion-checkgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-2); margin: 10px 0; }
-.coleccion-check { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: var(--space-2) 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); cursor: pointer; }
+.coleccion-check { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: var(--space-2) 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); cursor: pointer; }
 .coleccion-check:hover { background: var(--yellow); color: var(--on-yellow); }
 .coleccion-check:focus-within { outline: 3px solid var(--cyan-t); outline-offset: 2px; }
 .coleccion-check input { width: 24px; height: 24px; flex-shrink: 0; }
@@ -2459,6 +2547,103 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-paginacion { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 12px; }
 .coleccion-paginacion .btn, .coleccion-paginacion [aria-disabled="true"] { min-height: 44px; }
 .coleccion-paginacion [aria-disabled="true"] { opacity: .55; cursor: default; }
+
+.coleccion-series-cabecera { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.coleccion-series-cabecera h2 { margin: 0; }
+.coleccion-series-grid { margin-bottom: 12px; }
+.coleccion-serie-card { display: flex; flex-direction: column; align-items: stretch; }
+.coleccion-serie-card-enlace { display: flex; flex-direction: column; gap: var(--space-2); color: inherit; }
+.coleccion-serie-card-enlace:hover .series-title, .coleccion-serie-card-enlace:focus-visible .series-title { text-decoration: underline; }
+.coleccion-serie-card-portada { display: block; }
+.coleccion-serie-card .btn { margin: 0 var(--space-2) 10px; min-height: 44px; }
+.coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty) {
+  display: block;
+}
+@media (hover: none), (pointer: coarse) {
+  .chip-previa-boton { display: inline-flex; align-items: center; min-height: 44px; }
+}
+@media (max-width: 860px), (pointer: coarse) {
+  .chip-previa-lista > .previa-numero {
+    top: auto;
+    bottom: calc(64px + 16px);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(220px, calc(100vw - 24px));
+  }
+  .chip-previa-lista:focus-within > .previa-numero:not(:empty) {
+    display: block;
+  }
+  .coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty) {
+    display: block;
+    width: 180px;
+    max-width: calc(100vw - 24px);
+    left: 0;
+    right: auto;
+    transform: none;
+  }
+}
+
+
+/* Pool inicial de etiquetas (BL-ETQ): ideas para empezar. */
+.etiquetas-ideas { margin: 8px 0 12px; }
+.etiquetas-ideas-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.etiqueta-idea { font: inherit; padding: 4px 10px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-pill); background: var(--paper); color: var(--ink); cursor: pointer; }
+.etiqueta-idea:hover { background: var(--paper-2); }
+
+#blog-rss .legal-checkbox { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+#blog-rss input[type="text"], #blog-rss input[type="url"] { min-height: 44px; }
+#blog-rss .ajustes-actions button { min-height: 44px; }
+#importacion .legal-checkbox { min-height: 44px; }
+#importacion .ajustes-actions button { min-height: 44px; }
+#nombres-archivo .legal-checkbox { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+#nombres-archivo .ajustes-actions button { min-height: 44px; }
+#nombres-archivo .nombres-ejemplos { margin: 8px 0; padding-left: 1.2em; }
+
+.arcos-buscar-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 14px 0; }
+.arcos-buscar-form label { flex: 1 1 240px; }
+.arcos-buscar-form input { width: 100%; min-height: 44px; }
+.arcos-buscar-form .btn, .arcos-importar-form .btn { min-height: 44px; }
+.arcos-importar-form .legal-checkbox { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+.arcos-importar-form { display: grid; gap: 10px; margin-top: 14px; }
+
+/* ── D5: tarjetas de Novedades con portada ───────────────────────────────────
+   La portada es la de la serie local si el número casa; si no, `ui.portada`
+   pinta su marcador (trama + inicial), nunca una imagen externa. La rejilla
+   es fluida: 1 columna en móvil, 2–3 en escritorio, sin recortar el título. */
+.novedades-dia {
+  list-style: none; margin: var(--space-2) 0 0; padding: 0;
+  display: grid; gap: var(--space-2); grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .novedades-dia { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1000px) {
+  .novedades-dia { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.novedad-card {
+  display: flex; gap: var(--space-2); min-width: 0;
+  background: var(--paper-2); border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-panel); overflow: hidden;
+}
+.novedad-portada { display: block; flex: 0 0 74px; color: inherit; text-decoration: none; }
+.novedad-portada a { display: block; }
+.novedad-portada a:focus-visible { outline: 3px solid var(--ink); outline-offset: -3px; }
+.novedad-portada .portada {
+  width: 74px; border-right: var(--border-panel) solid var(--ink);
+}
+.novedad-cuerpo {
+  min-width: 0; padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  display: flex; flex-direction: column; gap: var(--space-1);
+}
+.novedad-titulo { display: block; font-size: var(--text-boton); line-height: 1.25; overflow-wrap: anywhere; }
+.novedad-titulo a { color: var(--ink); }
+.novedad-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.novedad-meta { margin: 0; color: var(--ink-soft); font-size: var(--text-secundario); overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .novedad-portada, .novedad-portada .portada { flex-basis: 62px; width: 62px; }
+  .novedad-cuerpo { padding-right: var(--space-1); }
+}
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,

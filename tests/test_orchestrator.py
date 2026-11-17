@@ -9,7 +9,7 @@ Transmission/aMule ni Prowlarr reales.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -32,9 +32,11 @@ from zascarr.services.orchestrator import (
     MOTIVO_CLIENTE_INACCESIBLE,
     MOTIVO_ERROR_INESPERADO,
     MOTIVO_FUENTE_INACCESIBLE,
+    MOTIVO_AMULE_INACCESIBLE,
     MOTIVO_NUMERO_DISTINTO,
     MOTIVO_SIN_FUENTE,
     MOTIVO_SIN_RESULTADOS,
+    MOTIVO_TRANSMISSION_INACCESIBLE,
     DownloadBackend,
     MOTIVO_PROWlARR_CONFIGURACION,
     Orchestrator,
@@ -124,10 +126,14 @@ class FakeSession:
         self.commit = AsyncMock()
 
     async def execute(self, statement):
-        # C6: la marca del intento es un `UPDATE … SET last_searched_at = now() RETURNING` (hora de la BD): contesta con
-        # una fecha sin consumir la cola de resultados de la prueba.
+        # C6: la marca del intento es un `UPDATE … SET last_searched_at = now()
+        # RETURNING` (hora de la BD): contesta con una fecha sin consumir la cola.
         texto = str(statement)
-        if (texto.startswith("UPDATE wishlist") and "last_searched_at" in texto) or texto.startswith("SELECT now()"):
+        if texto.startswith("SELECT collections.auto_search"):
+            return FakeExecResult([])
+        if ((texto.startswith("UPDATE wishlist")
+             and "last_searched_at" in texto)
+                or texto.startswith("SELECT now()")):
             return FakeMarca()
         return self._queue.pop(0)
 
@@ -258,6 +264,62 @@ class TestProcessItemRetryPool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2a. Búsqueda conjunta: Prowlarr y foro, no una cascada
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestBusquedaConjunta:
+
+    @pytest.mark.asyncio
+    async def test_prowlarr_y_foro_se_consultan_siempre_y_se_mezclan(self, monkeypatch):
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave", "transmission_enabled": True, "amule_enabled": True,
+            "forum_enabled": True, "forum_url": "http://foro.example/forum",
+            "forum_username": "lector",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        torrent = make_result(title="Batman #1.cbz", seeders=20,
+                              url="magnet:?xt=urn:btih:torrent")
+        ed2k = SearchResult(title="Batman #1.cbr", indexer="forum:crg",
+                            download_url="ed2k://|file|Batman_01.cbr|1|ABC|/",
+                            size_bytes=0, seeders=0, category="comics")
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [torrent]
+        orch._forum_fallback = AsyncMock(return_value=[ed2k])
+
+        candidatos = await orch._search_and_rank(item)
+
+        assert {c.indexer for c in candidatos} == {"test", "forum:crg"}
+        assert candidatos[0] == torrent                    # torrents antes que eD2K
+        assert orch._prowlarr.search.await_count == 1
+        assert orch._forum_fallback.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_un_flood_del_foro_no_oculta_los_resultados_de_prowlarr(self, monkeypatch):
+        from zascarr.services.forum_scraper import ForumFloodControl
+
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave", "transmission_enabled": True, "amule_enabled": True,
+            "forum_enabled": True, "forum_url": "http://foro.example/forum",
+            "forum_username": "lector",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=10)]
+        orch._forum_fallback = AsyncMock(side_effect=ForumFloodControl("foro.example:80", 30.0))
+
+        candidatos = await orch._search_and_rank(item)
+
+        assert candidatos and item.status is WishlistStatus.SEARCHING
+        assert item.last_error is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 2b. last_error — D9: por qué esta fila no avanza, con causa distinguible
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -337,7 +399,8 @@ class TestMotivoNoAvanza:
         await orch._process_item(item)
 
         assert item.status == WishlistStatus.FAILED
-        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+        assert "Transmission no respondió" in item.last_error
 
     @pytest.mark.asyncio
     async def test_exito_limpia_el_motivo_anterior(self):
@@ -464,7 +527,25 @@ class TestBusquedaManual:
 
         assert result is False
         assert item.status == WishlistStatus.FAILED
-        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_amule_sin_sesion_dice_a_mule_y_no_un_generico(self):
+        """UX 2026-11-17: el mensaje debe nombrar el cliente que falló."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
+        orch._amule = AsyncMock()
+        orch._amule.login.return_value = False
+        candidato = make_result(
+            title="DC K.O. #1.cbr",
+            url="ed2k://|file|DC%20K.O.%20%231.cbr|1|HASH|/")
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is False
+        assert item.status == WishlistStatus.FAILED
+        assert item.last_error == MOTIVO_AMULE_INACCESIBLE
+        assert "aMule no respondió" in item.last_error
 
     @pytest.mark.asyncio
     async def test_transmission_inalcanzable_no_revienta_da_motivo_claro(self):
@@ -484,15 +565,13 @@ class TestBusquedaManual:
 
         assert result is False
         assert item.status == WishlistStatus.FAILED
-        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+        assert "Transmission no respondió" in item.last_error
 
     @pytest.mark.asyncio
     async def test_no_reenvia_si_el_item_ya_no_esta_en_estado_accionable(self):
-        """Hallazgo de revisión (2026-09-26): sin este guardarraíl, una
-        doble confirmación (doble clic, un token reenviado dentro de su
-        ventana de validez) podía encolar la misma descarga otra vez
-        sobre un item que ya está DOWNLOADING/IMPORTED."""
-        item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
+        """Un item IMPORTED (u otro estado final) no admite más descargas manuales."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.IMPORTED)
         orch = Orchestrator(db=FakeSession())
         orch._transmission = AsyncMock()
         candidato = make_result(seeders=10)
@@ -500,9 +579,42 @@ class TestBusquedaManual:
         result = await orch.send_manual_candidate(item, candidato)
 
         assert result is False
-        assert item.status == WishlistStatus.DOWNLOADING  # sin tocar
+        assert item.status == WishlistStatus.IMPORTED  # sin tocar
         assert item.last_error == MOTIVO_CANDIDATO_INVALIDO
         orch._transmission.add_torrent.assert_not_called()
+
+    async def test_descarga_extra_del_mismo_preview_si_es_otro_candidato(self):
+        """UX 2026-11-16: desde un mismo «Buscar ahora» se pueden enviar VARIOS
+        candidatos (varios números + un tie-in) sin perder la lista."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "b" * 40}
+        candidato = make_result(seeders=10, url="magnet:?xt=urn:btih:" + "c" * 40)
+
+        ajustes = get_settings().model_copy(update={"transmission_enabled": True})
+        with patch("zascarr.services.orchestrator.get_settings", return_value=ajustes):
+            result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is True
+        assert item.status == WishlistStatus.DOWNLOADING  # no se toca
+        orch._transmission.add_torrent.assert_awaited_once()
+
+    async def test_el_mismo_candidato_no_se_encola_dos_veces(self):
+        """El doble clic/reenvío del MISMO enlace sigue rechazándose."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        # Reclamación atómica (UPDATE) del primer envío: 1 fila afectada.
+        orch = Orchestrator(db=FakeSession(queue=[FakeExecResult([], rowcount=1)]))
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "d" * 40}
+        candidato = make_result(seeders=10, url="magnet:?xt=urn:btih:" + "e" * 40)
+        ajustes = get_settings().model_copy(update={"transmission_enabled": True})
+
+        with patch("zascarr.services.orchestrator.get_settings", return_value=ajustes):
+            assert await orch.send_manual_candidate(item, candidato) is True
+            assert item.status == WishlistStatus.DOWNLOADING
+            assert await orch.send_manual_candidate(item, candidato) is False
+        assert orch._transmission.add_torrent.await_count == 1
 
     @pytest.mark.asyncio
     async def test_pierde_la_reclamacion_atomica_no_envia_nada(self):
@@ -1221,3 +1333,163 @@ class TestSincronizacionD8:
 
         orch._prowlarr.search.assert_awaited_once_with(
             "Batman", categories=[7030, 7020], indexer_ids=[3, 7])
+
+
+class TestRelevanciaDeBusqueda:
+    """La búsqueda de texto no debe devolver cualquier cosa que comparta una palabra."""
+
+    def test_dc_ko_no_deja_pasar_libros_que_solo_tienen_dc(self):
+        orch = Orchestrator(db=FakeSession())
+        ruido = make_result(title="DC Power Supply Circuits 2026.pdf", seeders=10)
+        bueno = make_result(title="DC K.O. 001 (2025) (Digital).cbz", seeders=10)
+        assert orch._relevantes([ruido, bueno], "DC K.O.") == [bueno]
+
+    def test_ko_dentro_de_konar_no_cuenta_como_palabra(self):
+        orch = Orchestrator(db=FakeSession())
+        ruido = make_result(
+            title="Konar H. DC Dutta's Textbook of Gynecology...8ed 2020")
+        bueno = make_result(title="DC K.O. 001 (2025) (Digital).cbz")
+        assert orch._relevantes([ruido, bueno], "DC K.O.") == [bueno]
+
+    def test_un_titulo_con_todos_los_terminos_pasa(self):
+        orch = Orchestrator(db=FakeSession())
+        bueno = make_result(title="X-Men 01.cbz", seeders=2)
+        assert orch._relevantes([bueno], "X-Men") == [bueno]
+
+    def test_consulta_de_una_letra_no_filtra(self):
+        orch = Orchestrator(db=FakeSession())
+        candidato = make_result(title="X 01.cbz", seeders=2)
+        assert orch._relevantes([candidato], "X") == [candidato]
+
+    def test_alias_local_espanol_pasa_aunque_no_contenga_el_titulo_ingles(self):
+        orch = Orchestrator(db=FakeSession())
+        alias = {"patrulla x"}
+        candidato = make_result(title="La Patrulla-X 012 (1985).cbz", seeders=2)
+        assert orch._relevantes([candidato], "X-Men 12", alias) == [candidato]
+
+
+# ── Títulos de candidatos del foro (UX 2026-11-16) ─────────────────────────
+
+class TestTitulosDeEnlacesDelForo:
+    def test_ed2k_usa_el_nombre_del_fichero_desescaped(self):
+        from zascarr.services.orchestrator import _nombre_de_fichero_de_enlace
+        url = ("ed2k://|file|DC%20K.O.%20%231%20-%20S%C3%BAbete%20al%20ring.cbr"
+               "|123456|AABBCC|/")
+        assert _nombre_de_fichero_de_enlace(url) == "DC K.O. #1 - Súbete al ring.cbr"
+
+    def test_magnet_usa_el_parametro_dn(self):
+        from zascarr.services.orchestrator import _nombre_de_fichero_de_enlace
+        assert _nombre_de_fichero_de_enlace(
+            "magnet:?xt=urn:btih:abc&dn=DC+K.O.+%231.cbz") == "DC K.O. #1.cbz"
+
+    def test_sin_nombre_devuelve_vacio(self):
+        from zascarr.services.orchestrator import _nombre_de_fichero_de_enlace
+        assert _nombre_de_fichero_de_enlace("ed2k://|file|") == ""
+        assert _nombre_de_fichero_de_enlace("magnet:?xt=urn:btih:abc") == ""
+
+    @pytest.mark.asyncio
+    async def test_cada_enlace_del_mismo_tema_se_distingue_por_su_fichero(self, monkeypatch):
+        """Antes todos los candidatos de un tema salían con el título del TEMA (27 filas
+        idénticas en «Buscar ahora», bug UX 2026-11-16)."""
+        from zascarr.services import forum_scraper as modulo_foro
+
+        class Foro:
+            def __init__(self, **_kw):
+                pass
+
+            async def login(self, *_a, **_k):
+                return True
+
+            async def use_ipb_search(self, *_a, **_k):
+                return [modulo_foro.ForumResult(
+                    topic_title="DC K.O. (serie + orden de lectura)",
+                    topic_url="http://foro.example/forum/index.php?showtopic=1",
+                    ed2k_links=[
+                        "ed2k://|file|DC%20K.O.%20%231%20-%20S%C3%BAbete%20al%20ring.cbr"
+                        "|1|A|/",
+                        "ed2k://|file|DC%20K.O.%20%232%20-%20El%20combate.cbr|1|B|/",
+                    ],
+                )]
+
+        monkeypatch.setattr(modulo_foro, "ForumScraper", Foro)
+        ajustes = get_settings().model_copy(update={
+            "forum_enabled": True, "forum_url": "http://foro.example/forum",
+            "forum_username": "lector", "forum_password": "clave",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+
+        candidatos = await Orchestrator(db=MagicMock())._forum_fallback("DC K.O.")
+
+        assert [c.title for c in candidatos] == [
+            "DC K.O. #1 - Súbete al ring.cbr",
+            "DC K.O. #2 - El combate.cbr",
+        ]
+        assert {c.indexer for c in candidatos} == {"forum:crg"}
+
+
+class TestDuplicadosDelForo:
+    @pytest.mark.asyncio
+    async def test_el_mismo_fichero_con_codificaciones_distintas_es_uno_solo(self, monkeypatch):
+        """«Sector Lejano» aparecía dos veces: mismo hash ed2k enlazado con `%20`
+        y con espacios. La clave es el hash, no la URL (bug 2026-11-16)."""
+        from zascarr.services import forum_scraper as modulo_foro
+
+        class Foro:
+            def __init__(self, **_kw):
+                pass
+
+            async def login(self, *_a, **_k):
+                return True
+
+            async def use_ipb_search(self, *_a, **_k):
+                return [modulo_foro.ForumResult(
+                    topic_title="Sector Lejano",
+                    topic_url="http://foro.example/forum/index.php?showtopic=2",
+                    ed2k_links=[
+                        "ed2k://|file|Sector%20Lejano.cbz|1234|AABBCCDD|/",
+                        "ed2k://|file|Sector Lejano.cbz|1234|aabbccdd|/",
+                    ],
+                )]
+
+        monkeypatch.setattr(modulo_foro, "ForumScraper", Foro)
+        ajustes = get_settings().model_copy(update={
+            "forum_enabled": True, "forum_url": "http://foro.example/forum",
+            "forum_username": "lector", "forum_password": "clave",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+
+        candidatos = await Orchestrator(db=MagicMock())._forum_fallback("Sector Lejano")
+
+        assert len(candidatos) == 1
+        assert candidatos[0].title == "Sector Lejano.cbz"
+        assert candidatos[0].size_bytes == 1234
+
+
+
+class TestDuplicadosDeProwlarr:
+    @pytest.mark.asyncio
+    async def test_el_mismo_release_en_dos_indexers_se_queda_una_vez(self, monkeypatch):
+        """Absolute Wonder Woman #20 salía dos veces (mismo título/tamaño, URL
+        distinta de otro indexer). Se conserva la de más seeders (2026-11-16)."""
+        ajustes = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave",
+            "transmission_enabled": True, "amule_enabled": False,
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [
+            make_result(title="Absolute Wonder Woman #20 (2026)",
+                        url="magnet:?xt=urn:btih:aaa", seeders=3, size=100),
+            make_result(title="Absolute Wonder Woman #20 (2026)",
+                        url="magnet:?xt=urn:btih:bbb", seeders=40, size=100),
+            make_result(title="Absolute Wonder Woman #20 (2026)",
+                        url="magnet:?xt=urn:btih:ccc", seeders=5, size=200),
+        ]
+
+        resultados, motivo = await orch._prowlarr_candidates("Absolute Wonder Woman", ajustes)
+
+        assert motivo is None
+        assert len(resultados) == 2                      # 100 (mejor seeders) + 200
+        assert max(r.seeders for r in resultados if r.size_bytes == 100) == 40

@@ -5,26 +5,52 @@
 <h1>Sagas en orden</h1>
 <p class="subtitle">Listas de lectura que cruzan series, en el orden que marca cada arco.</p>
 {% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
-<p><a class="btn ghost" href="/ui/arcos/nueva">Nueva saga</a></p>
+<nav class="arcos-acciones" aria-label="Acciones de sagas">
+  <a class="btn ghost" href="/ui/arcos/nueva">Nueva saga</a>
+  <a class="btn ghost" href="/ui/arcos/buscar">Buscar en fuentes</a>
+  <a class="btn ghost" href="/ui/arcos/importar-guia">Importar una guía</a>
+</nav>
 {% if pagina.total == 0 %}
-{{ ui.estado_vacio("Todavía no hay sagas registradas", "Cuando ZascArr tenga arcos con números enlazados, aparecerán aquí en su orden de lectura.") }}
+{{ ui.estado_vacio("Todavía no hay sagas registradas", "Cuando ZascArr tenga arcos con números enlazados, aparecerán aquí en su orden de lectura.", ("Nueva saga", "/ui/arcos/nueva")) }}
+<p class="arcos-acciones-secundarias"><a class="btn ghost" href="/ui/arcos/buscar">Buscar en fuentes</a> <a class="btn ghost" href="/ui/arcos/importar-guia">Importar una guía</a></p>
 {% else %}
 <p class="caption">{{ pagina.total }} {{ "saga" if pagina.total == 1 else "sagas" }} · mostrando {{ pagina.desde + 1 }}–{{ pagina.hasta }}</p>
 <ul class="arcos-lista">
   {% for a in pagina.filas %}
   <li class="arco-fila">
+    {{ ui.portada(a.title, a.id, "/ui/arcos/%s/portada.jpg" % a.id, "arco-miniatura", "lazy") }}
     <a href="/ui/arcos/{{ a.id }}">{{ a.title }}</a>
     {% if a.is_crossover %}{{ ui.chip("info", "Crossover") }}{% endif %}
-    <span class="muted">{{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }} · {{ a.series }} {{ "serie" if a.series == 1 else "series" }}</span>
+    <span class="muted">{{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }} · {{ a.series }} {{ "serie" if a.series == 1 else "series" }} · {{ a.leidos }} de {{ a.numeros }} leídos</span>
   </li>
   {% endfor %}
 </ul>
+{% if pagina.hay_fandom %}
+<p class="caption">Algunas de estas sagas usan datos de DC/Marvel Database (Fandom), que se publican bajo la <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener noreferrer">licencia Creative Commons BY-SA 3.0<span class="sr"> (se abre en otra pestaña)</span></a>. <a href="/legal">Aviso legal</a>.</p>
+{% endif %}
+{% if pagina.hay_guia %}
+<p class="caption">Las sagas importadas de una guía enlazan su fuente original en el detalle de la saga.</p>
+{% endif %}
 {% if pagina.paginas > 1 %}
 <nav class="pagination" aria-label="Páginas de sagas">
-  {% if pagina.pagina > 1 %}<a class="page-link" href="/ui/arcos?pagina={{ pagina.pagina - 1 }}">← Anteriores</a>{% endif %}
+  {% if pagina.pagina > 1 %}<a class="page-link" href="/ui/arcos?pagina={{ pagina.pagina - 1 }}">Anteriores</a>{% endif %}
   <span class="page-current">Página {{ pagina.pagina }} de {{ pagina.paginas }}</span>
-  {% if pagina.pagina < pagina.paginas %}<a class="page-link" href="/ui/arcos?pagina={{ pagina.pagina + 1 }}">Siguientes →</a>{% endif %}
+  {% if pagina.pagina < pagina.paginas %}<a class="page-link" href="/ui/arcos?pagina={{ pagina.pagina + 1 }}">Siguientes</a>{% endif %}
 </nav>
 {% endif %}
 {% endif %}
+<section id="novedades-herald" class="novedades-herald"
+         aria-label="Novedades de Comic Book Herald"
+         hx-get="/ui/arcos/novedades-herald" hx-trigger="revealed once"
+         hx-target="#novedades-herald-contenido" hx-swap="innerHTML"
+         hx-indicator="#novedades-herald-cargando">
+  <div id="novedades-herald-contenido" aria-live="polite">
+    <div id="novedades-herald-cargando" class="htmx-indicator">
+      <p class="caption">Cargando novedades…</p>
+      <div class="novedades-esqueleto" aria-hidden="true">
+        <span class="esqueleto-fila"></span><span class="esqueleto-fila"></span><span class="esqueleto-fila"></span>
+      </div>
+    </div>
+  </div>
+</section>
 {% endblock %}

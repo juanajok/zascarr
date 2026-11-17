@@ -34,6 +34,10 @@
         La primera tiene {{ c.solo_en_a }} que no están en la segunda, y la segunda {{ c.solo_en_b }} que no están en la primera.
       {% endif %}
     </div>
+    <form method="post" action="/ui/auditoria/duplicados/carpetas" class="carpetas-form">
+      <input type="hidden" name="par" value="{{ loop.index0 }}">
+      <button type="submit" class="btn ghost sm">Revisar qué sobra</button>
+    </form>
   </div>
   {% endfor %}
 </section>

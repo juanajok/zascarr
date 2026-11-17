@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 tests/test_web_ajustes.py
 
@@ -60,6 +61,12 @@ class TestIndex:
         assert r.status_code == 200
         for nombre in ("Comic Vine", "Prowlarr", "Transmission", "aMule"):
             assert nombre in r.text
+
+    def test_incluye_la_tarjeta_de_discos_de_biblioteca(self):
+        r = TestClient(app).get("/ui/ajustes")
+        assert r.status_code == 200
+        assert "Discos de la biblioteca" in r.text
+        assert "Tradición → disco" in r.text
 
     def test_incluye_la_seccion_de_seguridad_a6(self):
         client = TestClient(app)
@@ -258,57 +265,71 @@ class TestGuardarSeguridad:
 
 class TestProbar:
 
+    @staticmethod
+    def _cliente_falso(monkeypatch, responder):
+        """Sustituye el cliente HTTP por uno con transporte simulado (streaming de RES-3)."""
+        import httpx
+        from httpx import AsyncClient as ClienteReal
+
+        def fabrica(**kw):
+            kw["transport"] = httpx.MockTransport(responder)
+            return ClienteReal(**kw)
+
+        monkeypatch.setattr("zascarr.web.ajustes.httpx.AsyncClient", fabrica)
+
     def test_comic_vine_sin_clave_falla_sin_llamar_a_la_red(self):
         client = TestClient(app)
         r = client.post("/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": ""})
         assert "✗" in r.text
         assert "Falta la clave" in r.text
 
-    def test_comic_vine_conexion_correcta(self):
-        respuesta = MagicMock(status_code=200)
-        respuesta.json.return_value = {"error": "OK"}
-        with patch("httpx.AsyncClient.get", AsyncMock(return_value=respuesta)):
-            client = TestClient(app)
-            r = client.post("/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
+    def test_comic_vine_conexion_correcta(self, monkeypatch):
+        import httpx
+
+        self._cliente_falso(monkeypatch, lambda _r: httpx.Response(200, json={"error": "OK"}))
+        client = TestClient(app)
+        r = client.post("/ui/ajustes/probar/comic-vine",
+                        data={"comicvine_api_key": "clave-valida"})
         assert "✓" in r.text
         assert "Conexión correcta" in r.text
 
-    def test_la_prueba_de_comic_vine_manda_el_user_agent_de_zascarr(self):
+    def test_la_prueba_de_comic_vine_manda_el_user_agent_de_zascarr(self, monkeypatch):
         """Bug real (2026-11-09): GameSpot bloquea con 403 el User-Agent genérico de httpx
-        (`python-httpx/…`). La prueba creaba un cliente sin cabecera y daba «HTTP 403» con una
-        clave válida. Debe mandar el MISMO User-Agent que el cliente real."""
+        (`python-httpx/…`). Debe mandar el MISMO User-Agent que el cliente real."""
+        import httpx
+
         capturado: dict = {}
-        respuesta = MagicMock(status_code=200)
-        respuesta.json.return_value = {"error": "OK"}
 
-        async def get(self, *args, **kwargs):
-            capturado["ua"] = self.headers.get("user-agent")
-            return respuesta
+        def responder(request: httpx.Request) -> httpx.Response:
+            capturado["ua"] = request.headers.get("user-agent")
+            return httpx.Response(200, json={"error": "OK"})
 
-        with patch("httpx.AsyncClient.get", get):
-            client = TestClient(app)
-            r = client.post(
-                "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
+        self._cliente_falso(monkeypatch, responder)
+        client = TestClient(app)
+        r = client.post(
+            "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
         assert "Conexión correcta" in r.text
         assert capturado["ua"] == "ZascArr/0.1"
 
-    def test_comic_vine_401_lo_dice_como_clave_rechazada(self):
-        respuesta = MagicMock(status_code=401)
-        with patch("httpx.AsyncClient.get", AsyncMock(return_value=respuesta)):
-            client = TestClient(app)
-            r = client.post(
-                "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-mala"})
+    def test_comic_vine_401_lo_dice_como_clave_rechazada(self, monkeypatch):
+        import httpx
+
+        self._cliente_falso(monkeypatch, lambda _r: httpx.Response(401))
+        client = TestClient(app)
+        r = client.post(
+            "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-mala"})
         assert "✗" in r.text
         assert "rechazó la clave (HTTP 401)" in r.text
 
-    def test_comic_vine_403_habla_del_bloqueo_anti_bots_y_de_la_vpn(self):
+    def test_comic_vine_403_habla_del_bloqueo_anti_bots_y_de_la_vpn(self, monkeypatch):
         """El 403 de GameSpot no significa «clave mala»: es su protección contra programas o la
         red. El mensaje no debe hacer pensar que la clave está mal y debe decir qué probar."""
-        respuesta = MagicMock(status_code=403)
-        with patch("httpx.AsyncClient.get", AsyncMock(return_value=respuesta)):
-            client = TestClient(app)
-            r = client.post(
-                "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
+        import httpx
+
+        self._cliente_falso(monkeypatch, lambda _r: httpx.Response(403))
+        client = TestClient(app)
+        r = client.post("/ui/ajustes/probar/comic-vine",
+                        data={"comicvine_api_key": "clave-valida"})
         assert "✗" in r.text
         assert "bloqueó la conexión (HTTP 403)" in r.text
         assert "protección contra programas" in r.text and "VPN" in r.text
@@ -580,3 +601,125 @@ class TestPresupuestoDeTextoYAcessibilidad:
         r = TestClient(app).get("/ui/ajustes")
         assert 'id="aviso-fuentes-heredadas"' not in r.text      # sin heredadas, no hay aviso
         # (el caso con heredadas se prueba en test_fuentes_apagadas_por_defecto.py)
+
+
+class TestNombresDeArchivo:
+    def test_la_pagina_muestra_seccion_preset_y_ejemplo(self):
+        r = TestClient(app).get("/ui/ajustes")
+        assert r.status_code == 200
+        assert "Nombres de archivo" in r.text
+        assert 'name="naming_preset"' in r.text
+        assert "archivos que organices a partir de ahora" in r.text
+        for ejemplo in ("La Patrulla #003", "La Patrulla #03", "Akira v01",
+                        "Thorgal T01", "Mortadelo nº 01",
+                        "La Patrulla #003 - Corte de los búhos"):
+            assert ejemplo in r.text
+        assert "no se renombra" in r.text
+
+    def test_guardar_aplica_al_instante_y_no_pisa_padding(self, restaurar_settings):
+        s = get_settings()
+        s.naming_padding = 7
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/nombres", data={
+                "naming_enabled": "true", "naming_preset": "compacto",
+                "naming_padding": "2",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "guardado" in r.text.lower()
+        assert s.naming_enabled is True
+        assert s.naming_preset == "compacto"
+        assert s.naming_padding == 7
+
+    def test_preset_invalido_no_guarda(self, restaurar_settings):
+        s = get_settings()
+        antes = s.naming_preset
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/nombres", data={
+                "naming_enabled": "true", "naming_preset": "inventado",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "no existe" in r.text
+        assert s.naming_preset == antes
+
+
+class TestBlogRss:
+    def test_pagina_muestra_seccion_sin_url_por_defecto(self):
+        r = TestClient(app).get("/ui/ajustes")
+        assert r.status_code == 200
+        assert "Blog o RSS" in r.text
+        assert 'name="blog_feed_url"' in r.text
+        assert "Solo se aceptan enlaces" in r.text
+
+    def test_guardar_url_valida_y_activar(self, restaurar_settings):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/blog", data={
+                "blog_feed_enabled": "true",
+                "blog_feed_name": "Mi blog",
+                "blog_feed_url": "https://blog.example/feed.xml",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "guardado" in r.text.lower()
+        s = get_settings()
+        assert s.blog_feed_enabled is True
+        assert s.blog_feed_url == "https://blog.example/feed.xml"
+        assert s.blog_feed_name == "Mi blog"
+
+    def test_url_invalida_no_guarda(self, restaurar_settings):
+        s = get_settings()
+        antes = s.blog_feed_url
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/blog", data={
+                "blog_feed_enabled": "true", "blog_feed_url": "javascript:alert(1)"})
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "http://" in r.text
+        assert s.blog_feed_url == antes
+
+    def test_activo_sin_url_no_guarda(self, restaurar_settings):
+        s = get_settings()
+        s.blog_feed_enabled = False
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/blog", data={
+                "blog_feed_enabled": "true", "blog_feed_url": ""})
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "dirección" in r.text.lower()
+        assert s.blog_feed_enabled is False
+
+
+    def test_url_privada_o_puerto_no_estandar_no_guarda(self, restaurar_settings):
+        s = get_settings()
+        antes = s.blog_feed_url
+        for mala in ("http://127.0.0.1/feed.xml", "https://blog.example:8080/feed.xml",
+                     "http://localhost/feed.xml"):
+            app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+            try:
+                r = TestClient(app).post("/ui/ajustes/guardar/blog", data={
+                    "blog_feed_enabled": "true", "blog_feed_url": mala})
+            finally:
+                app.dependency_overrides.pop(get_db, None)
+            assert r.status_code == 200 and "no es válida" in r.text
+            assert s.blog_feed_url == antes
+
+
+    def test_importacion_guarda_los_dos_interruptores(self, restaurar_settings):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/importacion", data={
+                "import_create_missing_issue": "true",
+                "import_convert_cbr": "true",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "guardado" in r.text.lower()
+        s = get_settings()
+        assert s.import_create_missing_issue is True
+        assert s.import_convert_cbr is True

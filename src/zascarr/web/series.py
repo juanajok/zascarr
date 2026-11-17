@@ -37,8 +37,10 @@ from zascarr.models import (
     WishlistOrigin,
     WishlistPolicy,
     WishlistStatus,
+    collection_series,
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
+from zascarr.services.arcos import sagas_de_serie
 from zascarr.services.calidad import buscar_mejoras
 from zascarr.services.coleccion import (
     ConflictoVersionError,
@@ -47,7 +49,7 @@ from zascarr.services.coleccion import (
     estado_de_coleccion,
     version_de_decision,
 )
-from zascarr.services.colecciones import etiqueta_politica
+from zascarr.services.colecciones import colecciones_de_serie, etiqueta_politica
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
 from zascarr.services.conversion import ConversionDeArchivo
@@ -81,6 +83,7 @@ from zascarr.services.etiquetas import (
     quitar_etiqueta,
     sugerencias_etiqueta,
 )
+from zascarr.services.etiquetas_iniciales import ideas_para_empezar
 from zascarr.services.ficha_numero import (
     ROLES_ES,
     cargar_ficha_numero,
@@ -128,6 +131,7 @@ from zascarr.services.politica import (
     retirar_de_serie,
     texto_de_cota,
 )
+from zascarr.services.portada_coleccion import portada_cacheada
 from zascarr.services.portada_numero import ANCHO_FICHA, ruta_previa
 from zascarr.services.portada_serie import (
     MAX_CANDIDATAS,
@@ -154,7 +158,7 @@ from zascarr.services.relacion_confirmada import (
     estado_de_relacion,
     relacion_actual,
 )
-from zascarr.services.series import razon_de_no_calculable
+from zascarr.services.series import alternar_favorita, razon_de_no_calculable
 from zascarr.services.tagger import _LOCK_DE
 from zascarr.services.tokens_revision import (
     MAX_TOKEN_CONVERSION,
@@ -193,7 +197,7 @@ from zascarr.utils.portada_rar import (
     portada_de_rar,
 )
 from zascarr.web.asistente_vinculacion import FORMATOS_LEGIBLES
-from zascarr.web.atribucion import atribucion_fandom
+from zascarr.web.atribucion import atribucion_de_relleno, atribucion_fandom
 from zascarr.web.retorno import volver_segura
 from zascarr.web.routes import crear_templates
 
@@ -425,15 +429,20 @@ async def _veredicto(db: AsyncSession, series: Series, querer, politica: Wishlis
 
 async def _causa_de_coleccion(db: AsyncSession, series: Series) -> str | None:
     """Texto llano de por qué la política efectiva no es la guardada (o None)."""
-    if series.collection_id is None:
+    colecciones = (await db.execute(
+        select(Collection)
+        .join(collection_series, collection_series.c.collection_id == Collection.id)
+        .where(collection_series.c.series_id == series.id)
+        .order_by(Collection.name)
+    )).scalars().all()
+    if not colecciones:
         return None
-    coleccion = await db.get(Collection, series.collection_id)
-    if coleccion is None:
-        return None
-    if coleccion.auto_search.value == "incluir":
-        return f"La colección «{coleccion.name}» fuerza a buscar los números que faltan."
-    if coleccion.auto_search.value == "excluir":
-        return f"La colección «{coleccion.name}» veta la búsqueda automática."
+    vetos = [c for c in colecciones if c.auto_search.value == "excluir"]
+    if vetos:
+        return f"La colección «{vetos[0].name}» veta la búsqueda automática."
+    impulsos = [c for c in colecciones if c.auto_search.value == "incluir"]
+    if impulsos:
+        return f"La colección «{impulsos[0].name}» fuerza a buscar los números que faltan."
     return None
 
 
@@ -541,6 +550,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "procedencia": procedencia_de_serie(series),
         # SCR2: doble enlace visible (artículo + CC-BY-SA 3.0) cuando la identifica Fandom.
         "atribucion_fandom": atribucion_fandom(series),
+        "atribucion_relleno": atribucion_de_relleno(series),
         "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
         "aviso_guardado": {
@@ -705,16 +715,56 @@ async def aplicar_enriquecimiento(
     )
 
 
+@router.get("/{series_id}/sagas", response_class=HTMLResponse)
+async def panel_sagas(series_id: UUID, request: Request,
+                      db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento perezoso: sagas en las que participa la serie y su posición."""
+    series = await _serie_o_404(db, series_id)
+    sagas = await sagas_de_serie(db, series.id)
+    if not sagas:
+        return HTMLResponse("", headers={"Cache-Control": "no-store"})
+    respuesta = templates.TemplateResponse(
+        request, "_sagas_serie.html", {"series": series, "sagas": sagas})
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/favorito")
+async def cambiar_favorita(series_id: UUID, volver: str = Form(""),
+                           db: AsyncSession = Depends(get_db)):
+    """Marca/desmarca una serie como favorita local; sin efectos en archivos."""
+    serie = await _serie_o_404(db, series_id)
+    await alternar_favorita(db, serie.id)
+    await db.commit()
+    destino = volver if volver.startswith("/ui/") else f"/ui/series/{series_id}"
+    return RedirectResponse(destino, status_code=303)
+
+
 @router.get("/{series_id}/etiquetas", response_class=HTMLResponse)
 async def panel_etiquetas(series_id: UUID, request: Request,
                           db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """Panel perezoso de etiquetas de la ficha (BL-ETQ1a)."""
     series = await _serie_o_404(db, series_id)
     etiquetas = await etiquetas_de_serie(db, series.id)
+    iniciales = await ideas_para_empezar(db, series.id)
     respuesta = templates.TemplateResponse(
         request, "_etiquetas_serie.html",
-        {"series": series, "etiquetas": etiquetas, "mensaje": None, "error": None},
+        {"series": series, "etiquetas": etiquetas, "iniciales": iniciales,
+         "mensaje": None, "error": None},
     )
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.get("/{series_id}/colecciones", response_class=HTMLResponse)
+async def panel_colecciones(series_id: UUID, request: Request,
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento de las colecciones de la serie (puede estar en varias)."""
+    series = await _serie_o_404(db, series_id)
+    respuesta = templates.TemplateResponse(
+        request, "_colecciones_serie.html",
+        {"series": series,
+         "colecciones": await colecciones_de_serie(db, series.id)})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 
@@ -746,9 +796,11 @@ async def anadir_etiqueta_web(series_id: UUID, request: Request,
     except EtiquetaInvalida as exc:
         error = str(exc)
     etiquetas = await etiquetas_de_serie(db, series.id)
+    iniciales = await ideas_para_empezar(db, series.id)
     respuesta = templates.TemplateResponse(
         request, "_etiquetas_serie.html",
-        {"series": series, "etiquetas": etiquetas, "mensaje": mensaje, "error": error},
+        {"series": series, "etiquetas": etiquetas, "iniciales": iniciales,
+         "mensaje": mensaje, "error": error},
     )
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
@@ -766,9 +818,11 @@ async def quitar_etiqueta_web(series_id: UUID, request: Request,
     except EtiquetaInvalida as exc:
         error = str(exc)
     etiquetas = await etiquetas_de_serie(db, series.id)
+    iniciales = await ideas_para_empezar(db, series.id)
     respuesta = templates.TemplateResponse(
         request, "_etiquetas_serie.html",
-        {"series": series, "etiquetas": etiquetas, "mensaje": mensaje, "error": error},
+        {"series": series, "etiquetas": etiquetas, "iniciales": iniciales,
+         "mensaje": mensaje, "error": error},
     )
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
@@ -921,6 +975,9 @@ def _valores_serie(series: Series, valores: dict | None = None) -> dict:
         "publisher": series.publisher.name if series.publisher else "",
         "description": series.description or "",
         "total_issues": "" if series.total_issues is None else str(series.total_issues),
+        "language": getattr(series, "language", "") or "",
+        "edition_kind": (getattr(series, "edition_kind", None).value
+                         if getattr(series, "edition_kind", None) else ""),
     }
 
 
@@ -945,11 +1002,13 @@ async def editar_serie_guardar(
     title: str = Form(default=""), start_year: str = Form(default=""),
     end_year: str = Form(default=""), publisher: str = Form(default=""),
     description: str = Form(default=""), total_issues: str = Form(default=""),
+    language: str = Form(default=""), edition_kind: str = Form(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     resultado = await guardar_serie_manual(
         db, series_id, title=title, start_year=start_year, end_year=end_year,
-        publisher=publisher, description=description, total_issues=total_issues)
+        publisher=publisher, description=description, total_issues=total_issues,
+        language=language, edition_kind=edition_kind)
     series = (await db.execute(select(Series).options(selectinload(Series.publisher))
                                .where(Series.id == series_id))).scalar_one()
     if not resultado.ok:
@@ -958,7 +1017,8 @@ async def editar_serie_guardar(
             "series": series, "valores": {
                 "title": title, "start_year": start_year, "end_year": end_year,
                 "publisher": publisher, "description": description,
-                "total_issues": total_issues},
+                "total_issues": total_issues, "language": language,
+                "edition_kind": edition_kind},
             "errores": resultado.errores, "campos_manuales": campos_manuales(series.metadata_),
         })
         respuesta.headers["Cache-Control"] = "no-store"
@@ -1118,6 +1178,7 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
                             (ReadingStatus.READING, "Leyendo"),
                             (ReadingStatus.COMPLETED, "Leído")),
         "nota_numero": await leer_numero(db, issue_id),
+        "colecciones": await colecciones_de_serie(db, series_id),
         "aviso_guardado": {
             "numero": "Guardado: el número muestra lo que has escrito.",
             "desbloqueado": "Ese dato vuelve a quedar a cargo del enriquecimiento; no se ha borrado.",
@@ -1186,6 +1247,23 @@ async def marcar_leido(series_id: UUID, issue_id: UUID, request: Request,
         destino = (f"/ui/series/{series_id}/numero/{issue_id}" if modo == "bloque"
                    else f"/ui/series/{series_id}#archivos-por-numero")
         respuesta = RedirectResponse(url=destino, status_code=303)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.get("/{series_id}/previa", response_class=HTMLResponse)
+async def previa_serie(series_id: UUID, request: Request,
+                       db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento de previa de portada de una serie para las listas (hover/foco)."""
+    series = await db.get(Series, series_id)
+    if series is None:
+        if request.headers.get("HX-Request") == "true":
+            return HTMLResponse("", headers={"Cache-Control": "no-store"})
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    cache = portada_cacheada(Path(get_settings().covers_cache_path), series.id)
+    src = f"/ui/series/{series.id}/portada" if cache is not None else None
+    respuesta = templates.TemplateResponse(
+        request, "_previa_serie.html", {"serie": series, "portada_src": src})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 

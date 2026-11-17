@@ -19,6 +19,7 @@ from zascarr.services.upgrades import (
     descartar_mejora,
     devolver_mejora,
     escanear_mejoras,
+    historial_mejoras,
     listar_mejoras,
     marcar_descargada,
     motivo_sin_escaneo,
@@ -40,9 +41,11 @@ def _respuesta(request: Request, contexto: dict) -> HTMLResponse:
 async def _contexto(db: AsyncSession, *, pagina: int = 1,
                     aviso: str = "", error: str = "") -> dict:
     datos = await listar_mejoras(db, pagina)
+    historial = await historial_mejoras(db)
     secret = get_settings().secret_key
     return {
         "pagina": datos,
+        "historial": historial,
         "mejoras": [
             # El token se liga a la PROPUESTA, no al número (SecOps F-2).
             {"m": m,

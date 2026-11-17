@@ -9,12 +9,14 @@ sin `TEST_DATABASE_URL`.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import httpx
 import pytest
 from sqlalchemy import text
 
 from tests._pg import bd_efimera_sync, migrar_a_head
+from tests._raices_pg import allowlist
 from tests.test_asignacion_servicio_pg import Mundo
 from zascarr.database import get_db
 from zascarr.main import app
@@ -36,8 +38,9 @@ def url_bd():
 
 
 @pytest.fixture
-async def mundo(url_bd, tmp_path):
+async def mundo(url_bd, tmp_path, monkeypatch):
     m = await Mundo(url_bd, tmp_path).sembrar()
+    allowlist(monkeypatch, m.lib)
     yield m
     await m.cerrar()
 
@@ -71,7 +74,7 @@ class TestAsignarConectadoAlServicio:
     async def test_asigna_mueve_el_fichero_y_deja_issue_y_alias(self, mundo, cliente_de):
         async with cliente_de() as c:
             r = await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
-        assert r.status_code == 200 and r.text == RECONTAR_MENU      # la tarjeta desaparece
+        assert r.status_code == 200 and "Organizado." in r.text and "Deshacer" in r.text
         e = await mundo.estado()
         assert e.ops == ["limpiada"] and not e.origen_existe and len(e.destinos) == 1
         assert e.issue_id is not None and e.issues == 1 and e.alias == 1
@@ -219,7 +222,7 @@ class TestResultadosRecuperables:
             r = await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
         monkeypatch.setattr(AsyncSession, "commit", original)
         assert r.status_code == 503
-        assert 'id="card-' in r.text and "No se pudo confirmar la asignación" in r.text
+        assert 'id="card-' in r.text and "No se pudo confirmar la organización" in r.text
         assert "se cayó" not in r.text and "reintentará solo" not in r.text
         e = await mundo.estado()
         assert e.ops == ["preparada"] and e.issue_id is None          # operación VIVA, sin confirmar
@@ -275,7 +278,7 @@ class TestRespuestasExhaustivas:
     def test_la_reparacion_pendiente_no_afirma_que_se_asigno_con_una_copia_danada(self):
         """Incluye el caso «BD desviada», no solo una copia dañada."""
         texto = RESPUESTAS[EstadoResultado.REPARACION_PENDIENTE].texto
-        assert texto.startswith("La asignación necesita revisión; se ha conservado el original")
+        assert texto.startswith("La organización necesita revisión; se ha conservado el original")
         assert "copia nueva" not in texto
 
     def test_estado_desconocido_no_queda_mudo(self):
@@ -296,7 +299,8 @@ class TestEspecialSinNumero:
                       "formato": "graphic_novel"},
                 headers=HTMX,
             )
-        assert r.status_code == 200 and r.text == RECONTAR_MENU
+        assert r.status_code == 200
+        assert "Guardado como especial" in r.text and RECONTAR_MENU in r.text
         async with mundo.fabrica() as s:
             issue = (await s.execute(text(
                 "SELECT issue_number, title, format::text FROM issues "
@@ -307,7 +311,9 @@ class TestEspecialSinNumero:
         assert issue.issue_number is None
         assert issue.title == "Bad Weekend"
         assert issue.format == "graphic_novel"
-        assert path == before
+        # El especial se organiza en «Especiales» de la serie (comportamiento actual);
+        # ya no se queda en su ruta de origen.
+        assert path != before and Path(path).exists()
 
     async def test_single_issue_se_rechaza_y_el_archivo_sigue_pendiente(self, mundo, cliente_de):
         async with cliente_de() as c:

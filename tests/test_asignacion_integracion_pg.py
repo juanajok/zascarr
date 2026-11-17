@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tests._pg import RAIZ, bd_efimera_sync, migrar_a_head, url_asyncpg
+from tests._raices_pg import allowlist, sembrar_raiz
 from tests.test_asignacion_servicio_pg import Mundo, hacer_cbz
 from zascarr.models import (
     ComicTradition,
@@ -51,10 +52,15 @@ def url_bd():
 
 
 @pytest.fixture
-async def mundo(url_bd, tmp_path):
+async def mundo(url_bd, tmp_path, monkeypatch):
     m = await Mundo(url_bd, tmp_path).sembrar()
+    monkeypatch.setenv("LIBRARY_PATH", str(m.lib))
+    monkeypatch.setenv("LIBRARY_ROOTS", str(m.lib))
+    from zascarr.config import get_settings
+    get_settings.cache_clear()
     yield m
     await m.cerrar()
+    get_settings.cache_clear()
 
 
 async def _destino_de(mundo) -> Path:
@@ -327,9 +333,11 @@ class TestReconciliarAlArrancar:
         from zascarr.main import app
 
         lib = tmp_path / "lib"
+        allowlist(monkeypatch, lib)
+        (lib / "Comics" / "S").mkdir(parents=True)
         origen, destino = lib / "_Unsorted" / "x.cbz", lib / "Comics" / "S" / "x.cbz"
         contenido = hacer_cbz(origen, "k")
-        destino.parent.mkdir(parents=True)
+        destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_bytes(contenido)
         sha = hashlib.sha256(contenido).hexdigest()
 
@@ -339,9 +347,11 @@ class TestReconciliarAlArrancar:
             async with m.begin() as c:
                 await c.execute(
                     text(
-                        "TRUNCATE asignacion_operaciones, files, issues, series, local_aliases CASCADE"
+                        "TRUNCATE asignacion_operaciones, files, issues, series, local_aliases, "
+                        "library_root_traditions, library_roots CASCADE"
                     )
                 )
+            await sembrar_raiz(fab, lib)
             async with fab() as s:
                 serie = Series(id=uuid4(), title="S", tradition=ComicTradition.AMERICAN)
                 s.add(serie)
@@ -369,8 +379,8 @@ class TestReconciliarAlArrancar:
                 await s.execute(
                     text(
                         "INSERT INTO asignacion_operaciones (file_id, series_id, estado, origen, destino, temporal, size_bytes, "
-                        "mtime_ns, sha256, issue_number, formato, epoca) VALUES (:f, :s, 'confirmada', :o, :d, :t, :sz, :mt, "
-                        ":sha, '1', 'single_issue', 1)"
+                        "mtime_ns, sha256, issue_number, formato, epoca, root_id) VALUES (:f, :s, 'confirmada', :o, :d, :t, :sz, :mt, "
+                        ":sha, '1', 'single_issue', 1, (SELECT id FROM library_roots ORDER BY created_at LIMIT 1))"
                     ),
                     {
                         "f": f.id,

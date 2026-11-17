@@ -72,11 +72,12 @@ class TestEndpoint:
         assert r.headers["cache-control"] == "no-store"
         datos = r.json()
         assert datos["coordinacion"] == "proceso"
-        # SCR2: las dos wikis de Fandom son fuentes declaradas y el snapshot las lista siempre
-        # (apagadas por defecto), igual que el resto de la allowlist.
+        # SCR2/SCR3: Fandom y las dos guías son fuentes declaradas y el snapshot las lista
+        # siempre (apagadas por defecto), igual que el resto de la allowlist.
         assert {f["fuente"] for f in datos["fuentes"]} == {
             "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library",
-            "fandom_dc", "fandom_marvel", "foro", "portada"}
+            "fandom_dc", "fandom_marvel", "reading_orders", "continuity_guide",
+            "comic_book_herald", "foro", "portada"}
         assert all("://" not in h["host"] for h in datos["hosts"])
         assert all(h["host"] in ("comicvine.gamespot.com", "cbsistatic.com") for h in datos["hosts"])
         texto = json.dumps(datos)
@@ -171,3 +172,17 @@ class TestAjustes:
         assert "ajustes-aviso" in r.text
         assert "ajustes-error" not in r.text
         assert "hay que esperar ~12 s por cortesía" in r.text
+
+
+class TestMotivosY304:
+    def test_el_motivo_del_bloqueo_se_dice_en_llano(self, entorno, cliente):
+        r = cliente.get("/estado")
+        assert r.status_code == 200
+        assert "La web nos pidió esperar" in r.text
+        assert "nos pidió esperar" in r.text
+
+    def test_un_304_se_dice_sin_cambios(self, entorno, cliente):
+        entorno.registrar_resultado("comicvine", "304", intento=2, espera_s=0.5)
+        r = cliente.get("/estado")
+        assert r.status_code == 200
+        assert "Sin cambios" in r.text

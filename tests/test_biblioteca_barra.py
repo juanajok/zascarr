@@ -2,6 +2,7 @@
 """Biblioteca: barra única, contador OOB, panel y limpiar (rebanada 1)."""
 from __future__ import annotations
 
+import re
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -46,14 +47,16 @@ def test_barra_unica_con_busqueda_acciones_y_panel():
     assert "Buscar por título" in html
 
 
-def test_panel_tiene_labels_visibles_y_los_seis_filtros():
+def test_panel_tiene_labels_visibles_y_los_siete_filtros():
     html = _index()
     panel = html[html.index('id="panel-filtros"'):]
     panel = panel[:panel.index("</details>")]
     for etiqueta, campo in (
         ("Tradición", "f-tradition"), ("Editorial", "f-publisher"),
         ("Lectura", "f-leido"), ("Personaje", "f-personaje"),
-        ("Saga", "f-saga"), ("Etiquetas", "f-etiquetas"),
+        ("Saga", "f-saga"), ("Autor", "f-autor"), ("Idioma", "f-idioma"),
+        ("Edición", "f-edicion"), ("Desde el año", "f-anio-desde"),
+        ("Hasta el año", "f-anio-hasta"), ("Etiquetas", "f-etiquetas"),
     ):
         assert f'<label for="{campo}">{etiqueta}</label>' in panel
     assert "<noscript>" in panel and "Aplicar filtros" in panel
@@ -107,6 +110,8 @@ def test_panel_conserva_los_tres_buscadores_y_sus_endpoints():
     assert 'hx-target="#resultados-personaje"' in panel
     assert 'hx-get="/ui/biblioteca/buscar-saga"' in panel
     assert 'hx-target="#resultados-saga"' in panel
+    assert 'hx-get="/ui/biblioteca/buscar-autor"' in panel
+    assert 'hx-target="#resultados-autor"' in panel
     assert 'hx-include="#filtros"' in panel
     assert 'aria-live="polite"' in panel
 
@@ -124,8 +129,9 @@ def test_abrir_el_panel_es_nativo_y_no_roba_el_foco():
 def test_oob_incluye_campos_del_panel_para_no_resucitar_filtros():
     html = _index(path="/ui/biblioteca/resultados?quitar=todos&tradicion=&orden=reciente&vista=lista")
     assert 'id="filtros-campos" class="barra-panel-campos" hx-swap-oob="true"' in html
-    for campo in ("f-tradition", "f-publisher", "f-leido", "f-personaje", "f-saga", "f-etiquetas"):
+    for campo in ("f-tradition", "f-leido", "f-personaje", "f-saga", "f-etiquetas"):
         assert f'id="{campo}"' in html
+    assert 'id="f-publisher"' not in html  # 0 editoriales y sin filtro activo: no resucita
     assert 'id="control-vista"' in html
     control = html[html.index('id="control-vista"'):]
     control = control[:control.index("</a>")]
@@ -311,3 +317,84 @@ def test_limpiar_es_boton_pildora_no_texto_subrayado():
     assert "min-height: 44px;" in bloque
     assert "text-decoration" not in bloque
     assert "width: 44px; min-width: 44px; min-height: 44px;" in css.split(".quitar-filtro {", 1)[1][:160]
+
+
+def _pagina_biblioteca(cola):
+    session = FakeSession(cola)
+    app.dependency_overrides[get_db] = override_get_db(session)
+    try:
+        client = TestClient(app, base_url="http://localhost",
+                            headers={"Origin": "http://localhost"})
+        return client
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_sin_editoriales_ni_filtro_no_pinta_el_select_vacio():
+    serie = make_series("Sin editoriales")
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    app.dependency_overrides[get_db] = override_get_db(session)
+    try:
+        client = TestClient(app, base_url="http://localhost", headers={"Origin": "http://localhost"})
+        r = client.get("/ui/biblioteca")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    panel = r.text[r.text.index('id="panel-filtros"'):]
+    panel = panel[:panel.index("</details>")]
+    assert 'id="f-publisher"' not in panel
+
+
+def test_con_editorial_activa_y_cero_editoriales_conserva_el_campo_y_su_etiqueta():
+    from uuid import uuid4 as _uuid4
+    publisher_id = _uuid4()
+    serie = make_series("Con editorial")
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    app.dependency_overrides[get_db] = override_get_db(session)
+    try:
+        client = TestClient(app, base_url="http://localhost", headers={"Origin": "http://localhost"})
+        r = client.get(f"/ui/biblioteca?publisher_id={publisher_id}")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    panel = r.text[r.text.index('id="panel-filtros"'):]
+    panel = panel[:panel.index("</details>")]
+    assert 'id="f-publisher"' in panel
+    assert "Editorial seleccionada" in panel
+
+
+def test_fragmento_con_editorial_activa_conserva_el_campo_y_la_etiqueta():
+    from uuid import uuid4 as _uuid4
+    publisher_id = _uuid4()
+    serie = make_series("Con editorial")
+    session = FakeSession([FakeExecResult(1), FakeExecResult([serie]),
+                           FakeExecResult("Bruguera")])
+    app.dependency_overrides[get_db] = override_get_db(session)
+    try:
+        client = TestClient(app, base_url="http://localhost", headers={
+            "Origin": "http://localhost", "HX-Request": "true"})
+        r = client.get(f"/ui/biblioteca/resultados?publisher_id={publisher_id}")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    assert 'id="f-publisher"' in r.text
+    publicador = r.text[r.text.index('id="f-publisher"'):]
+    publicador = publicador[:publicador.index("</select>")]
+    assert "Editorial seleccionada" in publicador or "Bruguera" in publicador
+    assert re.search(r'<option value="[^"]+" selected>', publicador)
+
+
+def test_fragmento_sin_editoriales_y_sin_filtro_no_pinta_el_select():
+    serie = make_series("Sin editoriales")
+    session = FakeSession([FakeExecResult(0), FakeExecResult([serie]), FakeExecResult([])])
+    app.dependency_overrides[get_db] = override_get_db(session)
+    try:
+        client = TestClient(app, base_url="http://localhost", headers={
+            "Origin": "http://localhost", "HX-Request": "true"})
+        r = client.get("/ui/biblioteca/resultados?quitar=todos")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    panel = r.text[r.text.index('id="filtros-campos"'):]
+    panel = panel[:panel.index("</details>") if "</details>" in panel else len(panel)]
+    assert 'id="f-publisher"' not in panel

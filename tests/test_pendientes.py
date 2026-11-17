@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, File, FileFormat, Series
-from zascarr.web.pendientes import RECONTAR_MENU
+from zascarr.web.pendientes import RECONTAR_MENU, RESPUESTA_INESPERADA, RESPUESTAS
 
 
 class FakeScalarResult:
@@ -145,12 +145,25 @@ class TestPendientesIndex:
         assert "La Patrulla-X" in r.text
         assert "62% de coincidencia" in r.text
         assert f'value="{sid}"' in r.text
-        assert "Vincular en su sitio" in r.text
-        assert f'hx-post="/ui/pendientes/{file.id}/vincular"' in r.text
-        assert "solo funciona si esa publicación ya existe" in r.text
+        # En `_Unsorted` no se ofrece Vincular: fallaría siempre. Solo Organizar.
+        assert "Vincular en su sitio" not in r.text
         # #723: la búsqueda manual no compite con la sugerencia; vive en un desplegable.
         assert '<details class="elegir-otra-serie">' in r.text
         assert "Elegir otra serie" in r.text
+
+    def test_archivo_dentro_de_la_biblioteca_si_ofrece_vincular_en_sitio(self):
+        sid = uuid4()
+        file = File(
+            id=uuid4(), file_path="/lib/Comics/Flash/Flash 01.cbz",
+            file_name="Flash 01.cbz", file_format=FileFormat.CBZ,
+            metadata_={"match_status": "unsorted",
+                       "candidates": [{"series_id": str(sid), "title": "Flash", "score": 0.9}]},
+        )
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
+            r = client.get("/ui/pendientes")
+        assert "Vincular en su sitio" in r.text
+        assert f'hx-post="/ui/pendientes/{file.id}/vincular"' in r.text
+        assert "Vincular no mueve ni renombra" in r.text
 
     def test_archivo_sin_candidatos_no_muestra_sugerencia(self):
         file = File(id=uuid4(), file_path="/lib/_Unsorted/algo.cbz", file_name="algo.cbz",
@@ -189,8 +202,11 @@ class TestLaAsignacionSeRotulaOrganizar:
         formularios = re.findall(
             r'<form[^>]*hx-get="/ui/pendientes/[^"]+/asignar/previa"[^>]*>(.*?)</form>',
             html, re.S)
-        return [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", re.search(r'<button[^>]*type="submit"[^>]*>.*?</button>', f, re.S).group(0))).strip()
-                for f in formularios]
+        botones = []
+        for f in formularios:
+            for b in re.findall(r'<button[^>]*type="submit"[^>]*>.*?</button>', f, re.S):
+                botones.append(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", b)).strip())
+        return botones
 
     @staticmethod
     def _texto_visible(html: str) -> str:
@@ -235,7 +251,8 @@ class TestLaAsignacionSeRotulaOrganizar:
         for p in con_previa:
             html = p.read_text(encoding="utf-8")
             botones = self._botones_de_asignar(html)
-            assert botones and all("organizar" in b.lower() for b in botones), p.name
+            assert botones, p.name
+            assert any("organizar" in b.lower() for b in botones), p.name
             assert "mueve y renombra el archivo" in self._texto_visible(html), p.name
             assert 'hx-post="/ui/pendientes/{{ c.file.id }}/asignar"' not in html, p.name
         previa = (plantillas / "_previa_asignacion.html").read_text(encoding="utf-8")
@@ -249,6 +266,13 @@ class TestLaAsignacionSeRotulaOrganizar:
         previa = (Path(__import__("zascarr.web", fromlist=["x"]).__file__).parent
                   / "templates" / "_previa_asignacion.html").read_text(encoding="utf-8")
         assert 'hx-post="/ui/pendientes/{{ file_id }}/asignar"' in previa
+
+
+def test_los_mensajes_visibles_de_la_ruta_que_mueve_dicen_organizar():
+    """#112 criterio 2: la ruta que mueve y renombra nunca se presenta como «asignar»."""
+    textos = [r.texto for r in RESPUESTAS.values()] + [RESPUESTA_INESPERADA.texto]
+    assert not [t for t in textos if "asign" in t.lower()]
+    assert any("organiz" in t.lower() for t in textos)
 
 
 class TestFragmentoDeRecuento:

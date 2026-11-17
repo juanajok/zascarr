@@ -42,6 +42,20 @@ from zascarr.web.routes import crear_templates
 
 RAIZ = Path(__file__).resolve().parents[1]
 PLANTILLAS = RAIZ / "src" / "zascarr" / "web" / "templates"
+
+
+@pytest.fixture(autouse=True)
+def _novedades_sin_red(monkeypatch):
+    """La página de Novedades consulta editoriales; en tests de navegación, sin red."""
+    from datetime import date
+
+    from zascarr.services.novedades import Semana
+    from zascarr.web import novedades
+
+    async def _vacia(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=date.fromordinal(inicio.toordinal() + 6))
+
+    monkeypatch.setattr(novedades, "cargar_semana", _vacia)
 CSS = (RAIZ / "src" / "zascarr" / "static" / "web.css").read_text(encoding="utf-8")
 FRAGMENTO = "/ui/_nav/estado"
 
@@ -237,14 +251,15 @@ URLS_DE_SIEMPRE = {
     "inicio": "/ui/", "revisar": "/ui/pendientes", "biblioteca": "/ui/biblioteca",
     "colecciones": "/ui/colecciones", "mejoras": "/ui/mejoras",
     "duplicados": "/ui/auditoria",
-    "descubrir": "/ui/descubrir", "deseados": "/ui/wishlist",
-    "estado": "/estado", "ajustes": "/ui/ajustes",
+    "descubrir": "/ui/descubrir", "novedades": "/ui/novedades",
+    "deseados": "/ui/wishlist", "estado": "/estado", "ajustes": "/ui/ajustes",
 }
 ETIQUETAS = {
     "inicio": "Inicio", "revisar": "Por revisar", "biblioteca": "Biblioteca",
     "colecciones": "Colecciones", "mejoras": "Mejoras",
     "duplicados": "Duplicados", "descubrir": "Descubrir",
-    "deseados": "Deseados", "estado": "Estado", "ajustes": "Ajustes",
+    "novedades": "Novedades", "deseados": "Deseados", "estado": "Estado",
+    "ajustes": "Ajustes",
 }
 
 
@@ -261,7 +276,7 @@ class TestDatosDelMenu:
         assert por_grupo == {
             "Mi colección": ["Inicio", "Por revisar", "Biblioteca", "Mejoras",
                              "Colecciones", "Duplicados"],
-            "Añadir": ["Descubrir", "Deseados"],
+            "Añadir": ["Descubrir", "Novedades", "Deseados"],
             "Sistema": ["Estado", "Ajustes"],
         }
 
@@ -275,7 +290,7 @@ class TestDatosDelMenu:
     def test_la_barra_inferior_tiene_cuatro_entradas_y_mas_guarda_el_resto(self):
         principales = [e.clave for e in ENTRADAS if e.movil_principal]
         assert principales == ["inicio", "revisar", "deseados", "estado"]
-        assert len([e for e in ENTRADAS if not e.movil_principal]) == 6
+        assert len([e for e in ENTRADAS if not e.movil_principal]) == 7
 
     def test_solo_las_entradas_principales_llevan_contador(self):
         """Las secundarias salen dos veces en el DOM (barra y «Más»): un `id` de contador duplicado
@@ -289,6 +304,8 @@ class TestDatosDelMenu:
         ("/ui/pendientes/abc/portada", "revisar"), ("/ui/biblioteca", "biblioteca"),
         ("/ui/biblioteca?page=2", "biblioteca"), ("/ui/series/123", "biblioteca"),
         ("/ui/mejoras", "mejoras"), ("/ui/mejoras/abc", "mejoras"),
+        ("/ui/colecciones", "colecciones"), ("/ui/colecciones/abc", "colecciones"),
+        ("/ui/arcos", "biblioteca"), ("/ui/vistas", "revisar"),
         ("/ui/auditoria", "duplicados"), ("/ui/descubrir", "descubrir"),
         ("/ui/wishlist", "deseados"), ("/estado", "estado"), ("/ui/ajustes", "ajustes"),
     ])
@@ -428,9 +445,17 @@ class TestLosEnlacesNoDependenDelFragmento:
 # ── 3. páginas: título, h1, aria-current, salto de contenido ──────────────────────────────
 PAGINAS = [
     ("inicio", "/ui/"), ("revisar", "/ui/pendientes"), ("biblioteca", "/ui/biblioteca"),
+    ("mejoras", "/ui/mejoras"), ("colecciones", "/ui/colecciones"),
     ("duplicados", "/ui/auditoria"), ("descubrir", "/ui/descubrir"),
-    ("deseados", "/ui/wishlist"), ("estado", "/estado"), ("ajustes", "/ui/ajustes"),
+    ("novedades", "/ui/novedades"), ("deseados", "/ui/wishlist"),
+    ("estado", "/estado"), ("ajustes", "/ui/ajustes"),
 ]
+
+
+def test_las_paginas_cubren_todas_las_entradas_del_menu():
+    """U7: si se añade una entrada al menú, su página tiene que entrar en PAGINAS;
+    antes Mejoras y Colecciones se colaron porque el test no las recorría."""
+    assert {clave for clave, _ in PAGINAS} == {e.clave for e in ENTRADAS}
 
 
 class TestPaginas:
@@ -962,7 +987,7 @@ class TestRevisionVisual:
         """Con la sombra dura desplazada, una caja de aviso parecía algo que pulsar."""
         import re
         css = re.sub(r"/\*.*?\*/", "", _css(), flags=re.S)
-        regla = css[css.index(".caption,\n.legal-notice-warn {"):]
+        regla = css[css.index(".caption {"):]
         regla = regla[:regla.index("}")]
         assert "box-shadow" not in regla
 

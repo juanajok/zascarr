@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Resultado de apartar copias — ZascArr{% endblock %}
 {% block content %}
-<h1>Resultado de apartar copias</h1>
+<h1>{% if modo == 'enlazar' %}Resultado de unir copias{% else %}Resultado de apartar copias{% endif %}</h1>
 {% if error_deshacer %}
 <p class="audit-why" role="alert">No se pudo deshacer: {{ error_deshacer }}</p>
 {% endif %}
 {% if resultado_deshacer %}
 <p class="audit-why" role="status">
-  {% if resultado_deshacer.estado == 'deshecha' %}Se ha deshecho el apartado.{% else %}No se ha deshecho: {{ resultado_deshacer.motivo | motivo_apartado }}.{% endif %}
+  {% if resultado_deshacer.estado == 'deshecha' %}Se ha deshecho {% if modo == 'enlazar' %}el enlace{% else %}el apartado{% endif %}.{% else %}No se ha deshecho: {{ resultado_deshacer.motivo | motivo_apartado }}.{% endif %}
 </p>
 {% endif %}
 {% if resultados %}
@@ -37,7 +37,7 @@
   {% if r.estado == 'confirmada' %}
   <form method="post" action="/ui/auditoria/duplicados/deshacer" class="duplicados-deshacer">
     <input type="hidden" name="operacion" value="{{ r.operacion }}">
-    <button type="submit" class="btn ghost sm">Deshacer el apartado</button>
+    <button type="submit" class="btn ghost sm">{% if modo == 'enlazar' %}Deshacer el enlace{% else %}Deshacer el apartado{% endif %}</button>
   </form>
   {% endif %}
   {% endif %}

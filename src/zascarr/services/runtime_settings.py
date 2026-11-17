@@ -44,6 +44,8 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
         "comicvine_enabled", "anilist_enabled", "tebeosfera_enabled", "gcd_enabled",
         "metron_enabled", "open_library_enabled",
         "fandom_dc_enabled", "fandom_marvel_enabled",
+        "reading_orders_enabled", "continuity_guide_enabled",
+        "comic_book_herald_enabled",
     ),
     "prowlarr": (
         "prowlarr_url", "prowlarr_api_key", "prowlarr_enabled", "prowlarr_indexer_ids",
@@ -53,13 +55,21 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
         "transmission_password", "transmission_enabled",
     ),
     "amule": ("amule_url", "amule_password", "amule_enabled"),
+    # SCR4/D-1: tarjeta completa del foro en Ajustes (la contraseña vacía = no cambiar).
+    "foro": ("forum_url", "forum_username", "forum_password", "forum_enabled"),
     # BL-D2/D3: perfil legible y cadencia del escaneo de mejoras.
     "calidad": ("quality_profile", "upgrade_scan_interval_minutes", "upgrade_scan_batch"),
+    # BL-B9 (#158): nombres de archivo de destinos nuevos.
+    "nombres": ("naming_enabled", "naming_preset", "naming_padding"),
+    # B23: decisiones de importación de una serie nueva.
+    "importacion": ("import_create_missing_issue", "import_convert_cbr"),
     # #488/BL-CNV6: carpetas declaradas compartidas (lista de rutas absolutas del contenedor).
     "compartidos": ("carpetas_compartidas",),
     # A6: auth_password_hash nunca llega aquí en claro — web/ajustes.py lo
     # calcula (services/auth.py::hash_password) ANTES de llamar a save().
     "seguridad": ("auth_mode", "auth_username", "auth_password_hash", "base_url"),
+    # BLOG1: feed RSS/Atom genérico aportado por el usuario.
+    "blog": ("blog_feed_url", "blog_feed_name", "blog_feed_enabled", "blog_feed_rate_limit"),
     # E4: aviso de importación por webhook, apagado por defecto.
     "avisos": (
         "webhook_enabled", "webhook_type", "webhook_url",
@@ -70,7 +80,7 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
 # como "configurado"/"no configurado", nunca con el valor real.
 SECRET_FIELDS = {
     "comicvine_api_key", "metron_token", "prowlarr_api_key", "transmission_password",
-    "amule_password", "auth_password_hash", "webhook_token",
+    "amule_password", "forum_password", "auth_password_hash", "webhook_token",
 }
 # Campos donde un valor vacío guardado en la BD significa "vuelve al valor del
 # `.env`" en vez de "pisa con vacío". `base_url` es el caso que importa — es la
@@ -143,6 +153,8 @@ class RuntimeSettingsService:
         row.values = values
         await self.db.flush()
         apply_overrides(values)
+        from zascarr.utils.saneado_logs import refrescar_raices
+        refrescar_raices()
 
     # ── Marcadores internos (B11 y similares) ───────────────────────────
     # Misma fila JSONB, pero NUNCA pasan por `save()` ni su lista blanca:
@@ -153,6 +165,21 @@ class RuntimeSettingsService:
     async def get_flag(self, key: str) -> bool:
         row = await self._row()
         return bool((row.values or {}).get(key, False))
+
+    async def get_valor_sin_crear(self, key: str) -> tuple[bool, Any]:
+        """¿Existe la clave y qué valor tiene? Lectura pura, sin crear ni escribir.
+
+        A diferencia de `get_flag`, no convierte a `bool`: un marcador `"false"`,
+        `1` o `{}` se devuelve tal cual para que quien lo interpreta pueda
+        distinguir «ausente» de «presente pero no válido».
+        """
+        row = (await self.db.execute(
+            select(RuntimeSetting).where(RuntimeSetting.id == _SETTINGS_ROW_ID)
+        )).scalar_one_or_none()
+        if row is None:
+            return False, None
+        valores = row.values or {}
+        return key in valores, valores.get(key)
 
     async def get_flag_sin_crear(self, key: str) -> bool:
         """Lee un marcador con SELECT puro: NUNCA crea la fila ni hace flush.

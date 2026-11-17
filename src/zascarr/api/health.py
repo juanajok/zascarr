@@ -466,12 +466,23 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "anilist":    "enabled" if settings.anilist_enabled else "disabled",
             "tebeosfera": "enabled" if settings.tebeosfera_enabled else "disabled",
             "gcd":        "enabled" if settings.gcd_enabled else "disabled",
+            # SCR7: ahora también rellenan huecos de series ya catalogadas.
+            "metron": "enabled" if getattr(settings, "metron_enabled", False) else "disabled",
+            "open_library": "enabled"
+            if getattr(settings, "open_library_enabled", False) else "disabled",
             # SCR2 (AC-17): las dos wikis de Fandom son fuentes de enriquecimiento y se
             # consultan en el ciclo, así que su estado debe verse aquí, apagadas por defecto.
             "fandom_dc": "enabled"
             if getattr(settings, "fandom_dc_enabled", False) else "disabled",
             "fandom_marvel": "enabled"
             if getattr(settings, "fandom_marvel_enabled", False) else "disabled",
+            # SCR3: guías de lectura (solo referencias fácticas); apagadas por defecto.
+            "reading_orders": "enabled"
+            if getattr(settings, "reading_orders_enabled", False) else "disabled",
+            "continuity_guide": "enabled"
+            if getattr(settings, "continuity_guide_enabled", False) else "disabled",
+            "comic_book_herald": "enabled"
+            if getattr(settings, "comic_book_herald_enabled", False) else "disabled",
         },
         # A11: seguridad aparte de la salud técnica (ver estado_de_seguridad).
         "seguridad": estado_de_seguridad(settings),

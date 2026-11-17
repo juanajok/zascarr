@@ -169,3 +169,26 @@ Prowlarr admite `indexerIds` en `/api/v1/search`. Se añadió en Ajustes una **m
 indexers** para ZascArr: se cargan desde Prowlarr, se guardan como lista de IDs y solo esos se
 envían en la búsqueda. Vacío = todos. No modifica la configuración de Prowlarr ni afecta a otras
 apps; evita desactivar globalmente 78 indexers para dejar 2–3 de cómics.
+
+## 12. Búsqueda conjunta Prowlarr + foro (2026-11-15)
+
+**Petición:** que al buscar una serie en Deseados se consulte **a la vez** Prowlarr y el
+scraping del foro configurado (La Mansión del CRG en la instalación del PO), no solo uno como
+fallback.
+
+**Decisión:** mantener el modelo de dos fuentes con ranking común y consultarlas en paralelo.
+Prowlarr y el foro no son alternativas: el coleccionista debe ver en una sola lista lo que hay en
+cada una. El foro sigue siendo el plugin IPB genérico con URL aportada por el usuario; no se
+hardcodea ni se recomienda un foro.
+
+- `Orchestrator._prowlarr_candidates` y `Orchestrator._forum_candidates` se ejecutan con
+  `asyncio.gather`; el tiempo de la búsqueda no es la suma de ambas.
+- Se conservan el ranking (torrents antes que eD2K), el filtro por número, el filtro por backend
+  activo, el cooldown y la confirmación manual de D10.
+- Un flood del foro no oculta candidatos válidos de Prowlarr; si no hay ninguno, se mantiene la
+  espera de SCR4.
+- Se deduplica por URL + título para no ofrecer dos veces la misma release.
+- El scraper devuelve **todos** los enlaces de todos los temas de la búsqueda, no solo el primero.
+
+**Pruebas:** búsqueda conjunta, mezcla de fuentes, flood del foro con Prowlarr disponible y
+regresiones del ciclo/foro. **No** se ha ejecutado una búsqueda real contra Prowlarr/foro en CI.

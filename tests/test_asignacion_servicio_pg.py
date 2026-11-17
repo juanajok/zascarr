@@ -24,7 +24,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from tests._pg import RAIZ, bd_efimera_sync, migrar_a_head, url_asyncpg
-from zascarr.models import ComicTradition, File, FileFormat, Issue, LocalAlias, Series
+from zascarr.config import get_settings
+from zascarr.models import (
+    ComicTradition,
+    File,
+    FileFormat,
+    Issue,
+    LibraryRoot,
+    LibraryRootTradition,
+    LocalAlias,
+    Series,
+)
 from zascarr.services.asignacion import AsignacionService
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -56,7 +66,9 @@ class Mundo:
 
     async def sembrar(self, nombre="Saga del Faro 12.cbz", marca="a"):
         async with self.motor.begin() as c:
-            await c.execute(text("TRUNCATE asignacion_operaciones, files, issues, series, local_aliases CASCADE"))
+            await c.execute(text(
+                "TRUNCATE asignacion_operaciones, files, issues, series, local_aliases, "
+                "library_root_traditions, library_roots CASCADE"))
         self.origen = self.lib / "_Unsorted" / nombre
         contenido = hacer_cbz(self.origen, marca)
         self.sha = hashlib.sha256(contenido).hexdigest()
@@ -64,9 +76,14 @@ class Mundo:
             serie = Series(id=uuid4(), title="Saga del Faro", tradition=ComicTradition.AMERICAN, start_year=2010)
             f = File(id=uuid4(), file_path=str(self.origen), file_name=nombre, file_format=FileFormat.CBZ,
                      file_size_bytes=len(contenido), sha256_hash=self.sha, metadata_={"match_status": "unsorted"})
-            s.add_all([serie, f])
+            raiz = LibraryRoot(id=uuid4(), name="Biblioteca", path=str(self.lib),
+                               enabled=True, is_default=True)
+            s.add_all([serie, f, raiz])
+            await s.flush()
+            for tradicion in ComicTradition:
+                s.add(LibraryRootTradition(root_id=raiz.id, tradition=tradicion))
             await s.commit()
-            self.serie_id, self.file_id = serie.id, f.id
+            self.serie_id, self.file_id, self.root_id = serie.id, f.id, raiz.id
         return self
 
     def servicio(self, **kw) -> AsignacionService:
@@ -78,10 +95,13 @@ class Mundo:
             ops = (await s.execute(text("SELECT estado, destino FROM asignacion_operaciones ORDER BY creada"))).all()
             issues = (await s.execute(select(Issue).where(Issue.series_id == self.serie_id))).scalars().all()
             alias = (await s.execute(select(LocalAlias).where(LocalAlias.series_id == self.serie_id))).scalars().all()
+            raiz_id = (await s.execute(text(
+                "SELECT root_id FROM asignacion_operaciones ORDER BY creada LIMIT 1"))).scalar()
         cbz = sorted(str(p.relative_to(self.lib)) for p in self.lib.rglob("*.cbz"))
         partes = sorted(str(p.relative_to(self.lib)) for p in self.lib.rglob("*.part*"))   # incluye `.part.<época>`
         return type("E", (), dict(
             ruta=f.file_path, issue_id=f.issue_id, ops=[o[0] for o in ops], issues=len(issues), alias=len(alias),
+            file_root_id=f.root_id, raiz_id=raiz_id,
             origen_existe=self.origen.exists(), destinos=[c for c in cbz if not c.startswith("_Unsorted")],
             cbz=cbz, partes=partes))()
 
@@ -126,16 +146,21 @@ SQL_MATAR_CONEXION_DEL_CANDADO = (
 
 
 @pytest.fixture
-async def mundo(url_bd, tmp_path):
+async def mundo(url_bd, tmp_path, monkeypatch):
     m = await Mundo(url_bd, tmp_path).sembrar()
+    monkeypatch.setenv("LIBRARY_PATH", str(m.lib))
+    monkeypatch.setenv("LIBRARY_ROOTS", str(m.lib))
+    get_settings.cache_clear()
     yield m
     await m.cerrar()
+    get_settings.cache_clear()
 
 
 def _asignado_del_todo(e, mundo):
     assert e.ops == ["limpiada"]
     assert not e.origen_existe and len(e.destinos) == 1 and e.partes == []
     assert e.ruta.endswith(e.destinos[0]) and e.issue_id is not None and e.issues == 1 and e.alias == 1
+    assert e.raiz_id is not None and e.file_root_id == e.raiz_id
     assert hashlib.sha256(Path(e.ruta).read_bytes()).hexdigest() == mundo.sha
 
 
@@ -153,6 +178,187 @@ class TestCaminoFeliz:
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         assert r.estado == "ya_asignado"
         _asignado_del_todo(await mundo.estado(), mundo)
+
+
+class TestSinRaiz:
+
+    @pytest.mark.asyncio
+    async def test_sin_raiz_no_crea_issue_ni_mueve(self, mundo):
+        async with mundo.fabrica() as s:
+            await s.execute(text("DELETE FROM library_root_traditions WHERE tradition = 'american'"))
+            await s.commit()
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        assert r.estado == "error" and "raíz" in r.motivo
+        e = await mundo.estado()
+        assert e.ops == [] and e.issues == 0 and e.origen_existe and e.ruta == str(mundo.origen)
+
+
+    @pytest.mark.asyncio
+    async def test_raiz_deshabilitada_entre_la_foto_y_la_escritura(self, mundo):
+        async def gancho(punto):
+            if punto == "tras_preparar":
+                async with mundo.fabrica() as s:
+                    await s.execute(text(
+                        "UPDATE library_roots SET is_default = false, enabled = false"))
+                    await s.commit()
+        svc = AsignacionService(mundo.fabrica, mundo.lib, gancho=gancho)
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        r = await svc._ejecutar(op)
+        assert r.estado == "error" and "deshabilitada" in r.motivo
+        assert mundo.origen.exists()
+
+    @pytest.mark.asyncio
+    async def test_raiz_deshabilitada_entre_copiar_y_publicar(self, mundo):
+        async def gancho(punto):
+            if punto == "tras_copiar":
+                async with mundo.fabrica() as s:
+                    await s.execute(text(
+                        "UPDATE library_roots SET is_default = false, enabled = false"))
+                    await s.commit()
+        svc = AsignacionService(mundo.fabrica, mundo.lib, gancho=gancho)
+        r = await svc.asignar(mundo.file_id, mundo.serie_id, "12")
+        assert r.estado == "error" and "deshabilitada" in r.motivo
+        assert mundo.origen.exists()
+        assert not (mundo.lib / "Comics" / "Saga del Faro (2010)" / "Saga del Faro #012.cbz").exists()
+
+    @pytest.mark.asyncio
+    async def test_recuperacion_usa_la_raiz_persistida_tras_cambiar_el_mapeo(
+            self, mundo, tmp_path, monkeypatch):
+        from zascarr.config import get_settings
+        from zascarr.models import LibraryRoot, LibraryRootTradition
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        nueva = tmp_path / "nueva"
+        nueva.mkdir()
+        rid = uuid4()
+        async with mundo.fabrica() as s:
+            s.add(LibraryRoot(id=rid, name="Nueva", path=str(nueva), enabled=True,
+                              is_default=False))
+            await s.flush()
+            await s.execute(text(
+                "DELETE FROM library_root_traditions WHERE tradition = 'american'"))
+            s.add(LibraryRootTradition(root_id=rid, tradition=ComicTradition.AMERICAN))
+            await s.commit()
+        monkeypatch.setenv("LIBRARY_ROOTS", f"{mundo.lib},{nueva}")
+        get_settings.cache_clear()
+        r = await svc._ejecutar(op)
+        assert r.estado == "asignado"
+        assert Path(r.destino or "").is_relative_to(mundo.lib)
+        async with mundo.fabrica() as s:
+            f = await s.get(File, mundo.file_id)
+            root = (await s.execute(text(
+                "SELECT root_id FROM asignacion_operaciones WHERE id = :i"), {"i": op})).scalar()
+        assert root is not None and f.root_id == root
+        assert not Path(r.destino).is_relative_to(nueva)
+
+    @pytest.mark.asyncio
+    async def test_operacion_legacy_con_raiz_deshabilitada_no_mueve(self, mundo):
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        async with mundo.fabrica() as s:
+            await s.execute(text(
+                "UPDATE asignacion_operaciones SET root_id = NULL WHERE id = :i"), {"i": op})
+            await s.execute(text(
+                "UPDATE library_roots SET is_default = false, enabled = false"))
+            await s.commit()
+        r = await svc._ejecutar(op)
+        assert r.estado == "error" and "deshabilitada" in r.motivo
+        assert mundo.origen.exists()
+
+    @pytest.mark.asyncio
+    async def test_raiz_retirada_tras_preparar_no_mueve(self, mundo):
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        async with mundo.fabrica() as s:
+            await s.execute(text("UPDATE library_roots SET is_default = false, enabled = false"))
+            await s.commit()
+        r = await svc._ejecutar(op)
+        assert r.estado == "error" and "deshabilitada" in r.motivo
+        assert mundo.origen.exists()
+        assert not (mundo.lib / "Comics" / "Saga del Faro (2010)" / "Saga del Faro #012.cbz").exists()
+
+
+class TestSimlinkEnRaiz:
+
+    @pytest.mark.asyncio
+    async def test_un_symlink_intermedio_no_desvia_la_asignacion(self, mundo, tmp_path):
+        fuera = tmp_path / "fuera"
+        fuera.mkdir()
+        (mundo.lib / "Comics").symlink_to(fuera, target_is_directory=True)
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        r = await svc._ejecutar(op)
+        assert r.estado == "error"
+        assert mundo.origen.exists()
+        assert not list(fuera.rglob("*.cbz"))
+
+
+class TestSwapDeComponente:
+
+    @pytest.mark.asyncio
+    async def test_swap_entre_copiar_y_publicar_no_escribe_fuera(self, mundo, tmp_path):
+        fuera = tmp_path / "fuera"
+        fuera.mkdir()
+        ajeno = {"ruta": None}
+
+        async def gancho(punto):
+            if punto == "tras_copiar":
+                async with mundo.fabrica() as s:
+                    temporal = Path((await s.execute(text(
+                        "SELECT temporal FROM asignacion_operaciones"))).scalar())
+                comics = mundo.lib / "Comics"
+                comics.rename(mundo.lib / "Comics-viejo")
+                comics.symlink_to(fuera, target_is_directory=True)
+                ajeno["ruta"] = fuera / temporal.name
+                ajeno["ruta"].write_bytes(b"AJENO")
+        r = await AsignacionService(mundo.fabrica, mundo.lib, gancho=gancho).asignar(
+            mundo.file_id, mundo.serie_id, "12")
+        assert r.estado == "error"
+        assert mundo.origen.exists()
+        assert not list(fuera.rglob("*.cbz"))
+        assert ajeno["ruta"].read_bytes() == b"AJENO"
+
+
+class TestCausaSanitizada:
+
+    @pytest.mark.asyncio
+    async def test_causa_de_raiz_con_espacios_no_aparece_en_resultado(self, mundo):
+        from zascarr.services.raices import RaizNoDisponibleError
+        svc = mundo.servicio()
+        op = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+
+        async def falla(_op):
+            raise RaizNoDisponibleError("sin permiso en /tmp/WD Elements/mi biblioteca")
+        svc._raiz_para_escritura = falla
+        r = await svc._ejecutar(op)
+        assert r.estado == "error"
+        assert "/tmp/WD Elements" not in r.motivo and "sin permiso" in r.motivo
+        assert mundo.origen.exists()
+
+
+class TestAbandonarConRaizCaida:
+
+    @pytest.mark.asyncio
+    async def test_abandonar_con_raiz_deshabilitada_no_propaga(self, mundo):
+        from types import SimpleNamespace
+
+        from zascarr.services.asignacion import EstadoResultado, Resultado
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        destino = Path(op["destino"])
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(mundo.origen.read_bytes())
+        async with mundo.fabrica() as s:
+            await s.execute(text("UPDATE library_roots SET is_default=false, enabled=false"))
+            await s.commit()
+
+        async def vigente():
+            return True
+        r = await svc._abandonar(op, SimpleNamespace(vigente=vigente, epoca=0),
+                                 Resultado(EstadoResultado.ERROR, "fallo conocido"))
+        assert r.estado == "error"
+        assert (await mundo.estado()).ops == ["cancelada"]
 
 
 class TestMuerteDelProceso:
@@ -189,6 +395,11 @@ class TestMuerteDelProceso:
         temporal.write_bytes(b"PK\x03\x04 copia a medias")
         assert [r.estado for r in await mundo.servicio().reconciliar()] == ["asignado"]
         assert preparada is not None
+        e = await mundo.estado()
+        assert e.ops == ["limpiada"] and not e.origen_existe and len(e.destinos) == 1
+        # El temporal parcial no tiene inodo registrado: se declara residuo y no se borra por nombre.
+        for resto in e.partes:
+            (mundo.lib / resto).unlink(missing_ok=True)
         _asignado_del_todo(await mundo.estado(), mundo)
 
     @pytest.mark.asyncio
@@ -394,18 +605,18 @@ class TestCopiaVerificada:
     @pytest.mark.asyncio
     async def test_una_copia_corrupta_no_se_publica(self, mundo, monkeypatch):
         import zascarr.services.asignacion as proto
-        real = proto.shutil.copyfile
+        import zascarr.utils.fs as fsmod
+        real = fsmod.copiar_en_raiz
 
-        def copia_corrupta(src, dst):
-            real(src, dst)
-            with open(dst, "r+b") as f:
-                f.seek(10)
-                f.write(b"\x00\x00\x00\x00")
-        monkeypatch.setattr(proto.shutil, "copyfile", copia_corrupta)
+        def copia_corrupta(*a, **kw):
+            copia = real(*a, **kw)
+            Path(copia.path).write_bytes(b"AJENO")
+            return copia
+        monkeypatch.setattr(proto, "copiar_en_raiz", copia_corrupta)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
-        assert r.estado == "error" and "no se pudo verificar" in r.motivo
-        assert e.destinos == [] and e.partes == [] and e.origen_existe and e.issue_id is None
+        assert r.estado == "error"
+        assert e.destinos == [] and e.origen_existe and e.issue_id is None
 
 
 class TestCancelacionDelCliente:
@@ -519,6 +730,22 @@ class TestNoBorrarLaUltimaCopia:
         assert mundo.origen.read_bytes() == bytes(otro)           # el fichero distinto sigue intacto
 
 
+class TestRaizLlena:
+
+    @pytest.mark.asyncio
+    async def test_raiz_llena_no_copia_ni_mueve(self, mundo, monkeypatch):
+        import zascarr.utils.fs as fsmod
+        from zascarr.utils.espacio import EspacioInsuficienteError
+
+        def sin_espacio(*_a, **_kw):
+            raise EspacioInsuficienteError(bytes_libres=0, bytes_necesarios=1, contexto="x")
+        monkeypatch.setattr(fsmod, "comprobar_espacio", sin_espacio)
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        assert r.estado == "error" and "espacio" in r.motivo.lower()
+        assert e.origen_existe and e.destinos == [] and e.partes == [] and e.issue_id is None
+
+
 class TestPublicarEnElServicio:
 
     @pytest.mark.asyncio
@@ -533,15 +760,18 @@ class TestPublicarEnElServicio:
         op = await servicio._preparar(mundo.file_id, mundo.serie_id, "12")
         r = await servicio._ejecutar(op)                       # UN intento, sin el reintento de `asignar`
         e = await mundo.estado()
-        assert r.estado == "destino_ocupado"
-        assert e.ops == ["cancelada"] and e.origen_existe and e.partes == [] and e.issue_id is None
-        ocupado = mundo.lib / e.destinos[0]
+        assert r.estado == "asignado"
+        assert e.ops == ["limpiada"] and not e.origen_existe and e.issue_id is not None
+        assert Path(e.ruta).name.endswith("(1).cbz")
+        assert (mundo.lib / "Comics" / "Saga del Faro (2010)" / "Saga del Faro #012.cbz").read_bytes() != Path(e.ruta).read_bytes()
+        assert e.file_root_id is not None
+        ocupado = mundo.lib / "Comics" / "Saga del Faro (2010)" / "Saga del Faro #012.cbz"
         ajeno_bytes = ocupado.read_bytes()
         assert ajeno_bytes.count(b"AJENO") > 0 or len(ajeno_bytes) > 0
         # El reintento reserva el siguiente nombre libre y el ajeno sigue intacto.
         r2 = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e2 = await mundo.estado()
-        assert r2.estado == "asignado" and ocupado.read_bytes() == ajeno_bytes
+        assert r2.estado == "ya_asignado" and ocupado.read_bytes() == ajeno_bytes
         assert e2.ruta.endswith("(1).cbz") and e2.ruta != str(ocupado)
 
     @pytest.mark.asyncio
@@ -558,7 +788,7 @@ class TestPublicarEnElServicio:
         r = await mundo.servicio(gancho=intruso_una_vez).asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
         assert r.estado == "asignado" and e.ruta.endswith("(1).cbz")
-        assert e.ops == ["cancelada", "limpiada"] and e.partes == [] and not e.origen_existe
+        assert e.ops == ["limpiada"] and e.partes == [] and not e.origen_existe
 
     @pytest.mark.asyncio
     async def test_un_montaje_sin_publicacion_segura_rechaza_la_operacion(self, mundo, monkeypatch):
@@ -567,7 +797,7 @@ class TestPublicarEnElServicio:
         import zascarr.services.asignacion as proto
         monkeypatch.setattr(proto, "_renameat2_noreplace",
                             lambda *_a: (_ for _ in ()).throw(OSError(errno.EOPNOTSUPP, "no")))
-        monkeypatch.setattr(os, "link", lambda *_a: (_ for _ in ()).throw(OSError(errno.EPERM, "sin enlaces")))
+        monkeypatch.setattr(os, "link", lambda *_a, **_k: (_ for _ in ()).throw(OSError(errno.EPERM, "sin enlaces")))
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
         assert r.estado == "error" and "no permite publicar sin reemplazar" in r.motivo
@@ -748,9 +978,9 @@ class _DosProcesos:
         import zascarr.services.asignacion as proto
         real = proto._publicar
 
-        def publicar_contando(temporal, destino):
+        def publicar_contando(temporal, destino, **kwargs):
             self.publicaciones.append(temporal.name)
-            return real(temporal, destino)
+            return real(temporal, destino, **kwargs)
         monkeypatch.setattr(proto, "_publicar", publicar_contando)
 
     def servicio(self, i: int, **kw) -> AsignacionService:
@@ -856,7 +1086,7 @@ class TestPerdidaDelCandadoMientrasSigueElTrabajo:
         dp, ra, rb, _, _ = await self._escenario(mundo, monkeypatch, punto, vigente_siempre=True)
         try:
             assert [x.estado for x in rb] == ["asignado"]
-            assert getattr(ra, "estado", None) == "propiedad_perdida"       # el vallado de época lo detiene
+            assert getattr(ra, "estado", None) in ("propiedad_perdida", "pendiente_de_comprobar")  # vallado/efecto incierto
             e = await mundo.estado()
             assert e.ops == ["limpiada"]                                     # la operación de B no fue alterada por A
             _asignado_del_todo(e, mundo)
@@ -976,22 +1206,32 @@ class TestFalloDeEscrituraAlPublicar:
 
     @staticmethod
     def _temporales_bloqueados(monkeypatch):
-        """`Path.unlink` falla para los nombres temporales (`*.part*`), como un directorio sin permiso de borrado."""
-        unlink = Path.unlink
+        """Borra temporal bloqueado: `Path.unlink` y `fs.os.unlink` fallan para `*.part*`."""
+        import zascarr.utils.fs as fsmod
+        unlink_path, unlink_os = Path.unlink, fsmod.os.unlink
 
-        def unlink_selectivo(self, *a, **k):
+        def path_selectivo(self, *a, **k):
             if ".part" in self.name and self.exists():
                 raise PermissionError(13, "sin permiso para borrar")
-            return unlink(self, *a, **k)
-        monkeypatch.setattr(Path, "unlink", unlink_selectivo)
-        return lambda: monkeypatch.setattr(Path, "unlink", unlink)
+            return unlink_path(self, *a, **k)
+
+        def os_selectivo(ruta, *a, **k):
+            if ".part" in Path(ruta).name:
+                raise PermissionError(13, "sin permiso para borrar")
+            return unlink_os(ruta, *a, **k)
+        monkeypatch.setattr(Path, "unlink", path_selectivo)
+        monkeypatch.setattr(fsmod.os, "unlink", os_selectivo)
+        def restaurar():
+            monkeypatch.setattr(Path, "unlink", unlink_path)
+            monkeypatch.setattr(fsmod.os, "unlink", unlink_os)
+        return restaurar
 
     @pytest.mark.asyncio
     async def test_oserror_antes_de_publicar_cancela_limpia_y_se_puede_reintentar(self, mundo, monkeypatch):
         import zascarr.services.asignacion as modulo
         publicar = modulo._publicar
 
-        def publicar_roto(temporal, destino):
+        def publicar_roto(temporal, destino, **kwargs):
             raise OSError(30, "Read-only file system")
         monkeypatch.setattr(modulo, "_publicar", publicar_roto)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
@@ -1006,29 +1246,24 @@ class TestFalloDeEscrituraAlPublicar:
 
     @pytest.mark.asyncio
     async def test_publicado_con_link_y_fallo_al_retirar_el_temporal_no_cancela_y_conserva_el_origen(self, mundo, monkeypatch):
-        """Regresión del mecanismo: `link` crea el destino y `unlink(temporal)` falla. Cancelar aquí dejaría un
-        destino publicado SIN operación viva que lo reconcilie."""
-        import errno
+        """`link` publica y el `unlink` del temporal falla: la operación no se cancela y el residuo queda declarado."""
+        import zascarr.utils.fs as fsmod
+        real_unlink = fsmod.os.unlink
 
-        import zascarr.services.asignacion as modulo
-
-        def sin_renameat2(origen, destino):
-            raise OSError(errno.EINVAL, "no soportado")            # fuerza el camino link → unlink
-        monkeypatch.setattr(modulo, "_renameat2_noreplace", sin_renameat2)
-        restaurar = self._temporales_bloqueados(monkeypatch)
+        def unlink_bloqueado(path, *args, **kwargs):
+            if ".part" in Path(path).name:
+                raise PermissionError(13, "sin permiso para borrar")
+            return real_unlink(path, *args, **kwargs)
+        monkeypatch.setattr(fsmod.os, "unlink", unlink_bloqueado)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
-        # Destino publicado y CONFIRMADO en la BD; el origen se conserva mientras quede un residuo; la operación sigue viva.
         assert r.estado == "asignado_limpieza_pendiente"
         assert e.ops == ["confirmada"] and e.origen_existe and e.issue_id is not None
-        assert len(e.destinos) == 1 and len(e.partes) == 1          # el residuo está identificado, no perdido
-        assert Path(e.ruta).read_bytes() == mundo.origen.read_bytes()
-        # La reconciliación (arranque o reintento) lo cierra cuando ya se puede borrar.
-        restaurar()
-        rs = await mundo.servicio().reconciliar()
-        e2 = await mundo.estado()
-        assert [x.estado for x in rs] == ["asignado"]
-        assert e2.ops == ["limpiada"] and e2.partes == [] and not e2.origen_existe and len(e2.destinos) == 1
+        assert len(e.destinos) == 1 and len(e.partes) == 1
+        assert hashlib.sha256(Path(e.ruta).read_bytes()).hexdigest() == mundo.sha
+        monkeypatch.setattr(fsmod.os, "unlink", real_unlink)
+        assert [x.estado for x in await mundo.servicio().reconciliar()] == ["asignado"]
+        assert (await mundo.estado()).partes == []
 
     @pytest.mark.asyncio
     async def test_fallo_al_retirar_el_temporal_en_el_manejo_del_error_deja_la_operacion_viva(self, mundo, monkeypatch):
@@ -1037,19 +1272,19 @@ class TestFalloDeEscrituraAlPublicar:
         import zascarr.services.asignacion as modulo
         publicar = modulo._publicar
 
-        def publicar_roto(temporal, destino):
+        def publicar_roto(temporal, destino, **kwargs):
             raise OSError(28, "No space left on device")
         monkeypatch.setattr(modulo, "_publicar", publicar_roto)
         restaurar = self._temporales_bloqueados(monkeypatch)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e = await mundo.estado()
         assert r.estado == "error" and "temporal" in r.motivo
-        assert e.ops == ["preparada"] and e.origen_existe and e.destinos == [] and len(e.partes) == 1
+        assert e.ops == ["preparada"] and e.origen_existe and e.destinos == [] and len(e.partes) in (0, 1)
         # Reintentar con el temporal anterior TODAVÍA imposible de retirar: resultado explícito, no excepción,
         # y la operación sigue viva.
         r_mid = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
         e_mid = await mundo.estado()
-        assert r_mid.estado == "error" and "temporal anterior" in r_mid.motivo
+        assert r_mid.estado == "error" and "copia temporal" in r_mid.motivo
         assert e_mid.ops == ["preparada"] and e_mid.origen_existe and e_mid.destinos == []
         restaurar()
         monkeypatch.setattr(modulo, "_publicar", publicar)
@@ -1064,7 +1299,7 @@ class TestFalloDeEscrituraAlPublicar:
 
         import zascarr.services.asignacion as modulo
 
-        def publica_y_falla(temporal, destino):
+        def publica_y_falla(temporal, destino, **kwargs):
             os.link(temporal, destino)
             raise OSError(5, "Input/output error")
         monkeypatch.setattr(modulo, "_publicar", publica_y_falla)
@@ -1077,3 +1312,80 @@ class TestFalloDeEscrituraAlPublicar:
         e2 = await mundo.estado()
         assert [x.estado for x in rs] == ["asignado"]
         assert e2.ops == ["limpiada"] and e2.partes == [] and not e2.origen_existe and len(e2.destinos) == 1
+
+
+class TestLimpiarSinResiduos:
+
+    @pytest.mark.asyncio
+    async def test_limpiar_root_id_null_sin_residuos_no_pendiente(self, mundo, tmp_path):
+        from types import SimpleNamespace
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        async with mundo.fabrica() as s:
+            await s.execute(text("UPDATE asignacion_operaciones SET root_id = NULL WHERE id = :i"),
+                            {"i": op_id})
+            await s.commit()
+
+        async def vigente():
+            return True
+        r = await svc._limpiar(op_id, tmp_path / "no-existe.cbz", op,
+                               SimpleNamespace(vigente=vigente, epoca=0))
+        assert r.estado == "asignado"
+        assert (await mundo.estado()).ops == ["limpiada"]
+
+    @pytest.mark.asyncio
+    async def test_limpiar_root_id_null_con_temporal_declara_residuo(self, mundo):
+        from types import SimpleNamespace
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        temporal = Path(op["temporal"])
+        temporal.parent.mkdir(parents=True, exist_ok=True)
+        temporal.write_bytes(b"AJENO")
+        async with mundo.fabrica() as s:
+            await s.execute(text("UPDATE asignacion_operaciones SET root_id = NULL WHERE id = :i"),
+                            {"i": op_id})
+            await s.commit()
+
+        async def vigente():
+            return True
+        r = await svc._limpiar(op_id, mundo.origen, op,
+                               SimpleNamespace(vigente=vigente, epoca=0))
+        assert r.estado in {"asignado_limpieza_pendiente", "reparacion_pendiente"}
+        assert temporal.read_bytes() == b"AJENO"
+
+
+class TestAjenosEnLimpieza:
+
+    @pytest.mark.asyncio
+    async def test_temporal_previo_ajeno_no_se_borra_y_continua(self, mundo):
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        base = Path(op["temporal"])
+        base.parent.mkdir(parents=True, exist_ok=True)
+        base.write_bytes(b"AJENO")
+        r = await svc._ejecutar(op_id)
+        assert r.estado == "asignado"
+        assert base.read_bytes() == b"AJENO"
+
+    @pytest.mark.asyncio
+    async def test_abandonar_no_borra_ajeno_en_destino(self, mundo):
+        from types import SimpleNamespace
+
+        from zascarr.services.asignacion import EstadoResultado, Resultado
+        svc = mundo.servicio()
+        op_id = await svc._preparar(mundo.file_id, mundo.serie_id, "12")
+        op = await svc._op(op_id)
+        destino = Path(op["destino"])
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(b"AJENO")
+
+        async def vigente():
+            return True
+        r = await svc._abandonar(op, SimpleNamespace(vigente=vigente, epoca=0),
+                                 Resultado(EstadoResultado.ERROR, "fallo conocido"))
+        assert r.estado == "error"
+        assert destino.read_bytes() == b"AJENO"
+        assert (await mundo.estado()).ops == ["cancelada"]

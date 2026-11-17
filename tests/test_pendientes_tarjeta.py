@@ -166,3 +166,23 @@ class TestPaginadorNativo:
         navs = re.findall(r'<nav class="pend-paginas[^"]*" aria-label="([^"]+)"', t)
         assert len(navs) == 2 and len(set(navs)) == 2, navs     # dos landmarks con nombre distinto
         assert re.search(r'<a class="pend-siguiente" href="/ui/pendientes\?despues=', t)
+
+
+def test_la_tarjeta_ofrece_guardar_como_especial_sin_numero():
+    """El matcher ya guarda la serie aunque falte el número (2026-11-16); la
+    tarjeta debe ofrecer el alta como especial, que mueve a Especiales/."""
+    serie_id = uuid4()
+    archivo = _archivo("Sector Lejano (Aniversario).cbz", FileFormat.CBZ)
+    archivo.metadata_ = {
+        "match_status": "unsorted",
+        "notes": ["sin número en el nombre: la serie se reconoce, elige el número"],
+        "candidates": [{"series_id": str(serie_id), "title": "Sector Lejano",
+                        "start_year": None, "score": 0.92}],
+    }
+    tarjetas = _tarjetas(archivo)
+    tarjeta = tarjetas[archivo.file_name]
+    assert "Guardar como especial (sin número)" in tarjeta
+    assert f'value="{serie_id}"' in tarjeta
+    assert "/especial" in tarjeta
+    assert "Especiales" in tarjeta
+    assert "Números que recopila" in tarjeta

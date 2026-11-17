@@ -32,6 +32,7 @@ from zascarr.services.asignacion import (
     previsualizar_asignacion,
     servicio_por_defecto,
 )
+from zascarr.services.borradores_revision import BorradoresRevision
 from zascarr.services.especiales import EspecialesService, EspecialSinNumeroError
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ClavePendiente, ReviewService
 from zascarr.services.revision_carpetas import (
@@ -88,11 +89,21 @@ def _suggestion(file: File) -> dict | None:
     }
 
 
+def _puede_vincular(f: File) -> bool:
+    """Vincular solo donde puede funcionar: en la biblioteca, sin _Unsorted y sin pack."""
+    try:
+        return ("_Unsorted" not in Path(f.file_path).parts
+                and not parse_comic_filename(f.file_name).is_pack)
+    except (OSError, ValueError):
+        return False
+
+
 def _card(f: File) -> dict:
     return {
         "file": f,
         "detected": _detected_label(f.file_name),
         "suggestion": _suggestion(f),
+        "puede_vincular": _puede_vincular(f),
         # U12: ausencia CONOCIDA (por la extensión, sin I/O): ni `<img>` ni petición ni bloque.
         "con_portada": puede_tener_portada(f.file_path,
                                            (f.metadata_ or {}).get("formato_contenido")),
@@ -278,7 +289,8 @@ def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
                     serie_aviso: str | None = None,
                     estado_nuevos: str | None = None,
                     filtros: dict | None = None, avisos=(), url_base: str = "",
-                    url_quitar_filtro: str = "", url_quitar_serie: str = "") -> dict:
+                    url_quitar_filtro: str = "", url_quitar_serie: str = "",
+                    borradores_guardados=None) -> dict:
     """Prepara lo que pinta la plantilla SIN recalcular nada: señales, estados y etiquetas
     vienen del servicio (la misma respuesta que el JSON). Aquí solo se traducen los ids de
     `senales[].archivos` a nombres, que es presentación; `grupos[].archivos` contiene siempre
@@ -347,6 +359,7 @@ def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
         "url_base": url_base,
         "url_quitar_filtro": url_quitar_filtro,
         "url_quitar_serie": url_quitar_serie,
+        "borradores_guardados": borradores_guardados or {},
         "contexto_query": contexto.query,
         "contexto_campos": contexto.campos,
     }
@@ -423,6 +436,7 @@ async def carpetas(
         if (serie_actual is not None and not respuesta.grupos
                 and respuesta.filtro is None):
             estado_nuevos = await _estado_nuevos(db)
+        borradores_guardados = await BorradoresRevision(db).listar()
     except Exception as exc:  # noqa: BLE001 — un fallo no puede dejar recuentos a medias
         logger.warning("pendientes.carpetas_fallo", error=type(exc).__name__)
         resp = templates.TemplateResponse(
@@ -439,6 +453,7 @@ async def carpetas(
     resp = templates.TemplateResponse(request, "carpetas.html", _vista_carpetas(
         respuesta, serie_actual=serie_actual, serie_aviso=serie_aviso,
         estado_nuevos=estado_nuevos, filtros=filtros, avisos=filtros["avisos"],
+        borradores_guardados=borradores_guardados,
         url_base=_url_de_carpetas(limite=limite, serie=serie_str, filtros=filtros),
         url_quitar_filtro=_url_de_carpetas(limite=limite, serie=serie_str, filtros=sin_filtro),
         url_quitar_serie=_url_de_carpetas(limite=limite, serie="", filtros=filtros)))
@@ -523,8 +538,11 @@ async def portada(file_id: UUID, request: Request, db: AsyncSession = Depends(ge
 async def buscar_serie(file_id: UUID, request: Request, q: str = "",
                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series_list = await ReviewService(db).search_series(q)
+    file = await db.get(File, file_id)
     return templates.TemplateResponse(
-        request, "_resultados_serie.html", {"file_id": file_id, "series_list": series_list}
+        request, "_resultados_serie.html",
+        {"file_id": file_id, "series_list": series_list,
+         "puede_vincular": bool(file and _puede_vincular(file))},
     )
 
 
@@ -538,7 +556,7 @@ class Respuesta:
 
 
 _TEXTO_ERROR_GENERICO = (
-    "No se pudo asignar este archivo y el original no se ha tocado. Recarga la página y vuelve a "
+    "No se pudo organizar este archivo y el original no se ha tocado. Recarga la página y vuelve a "
     "intentarlo; si sigue igual, mira Estado."
 )
 _R = EstadoResultado
@@ -548,13 +566,13 @@ RESPUESTAS: dict[EstadoResultado, Respuesta] = {
     _R.ASIGNADO: Respuesta(200, asignado=True),
     _R.YA_ASIGNADO: Respuesta(200, asignado=True),
     _R.ASIGNADO_LIMPIEZA_PENDIENTE: Respuesta(
-        200, "Asignado. El archivo original sigue en la carpeta de revisión y se intentará retirar "
-             "al reiniciar ZascArr.", "amber", asignado=True),
+        200, "Organizado. El archivo original sigue en la carpeta de revisión y se intentará "
+             "retirar al reiniciar ZascArr.", "amber", asignado=True),
     _R.REPARACION_PENDIENTE: Respuesta(
-        200, "La asignación necesita revisión; se ha conservado el original. ZascArr volverá a "
+        200, "La organización necesita revisión; se ha conservado el original. ZascArr volverá a "
              "comprobarla al reiniciar.", "amber", asignado=True),
     _R.COLISION_EDICION: Respuesta(
-        409, f"No se asigna: {MOTIVO_COLISION_EDICION}. Ese número ya existe como otra edición "
+        409, f"No se organiza: {MOTIVO_COLISION_EDICION}. Ese número ya existe como otra edición "
              "(por ejemplo una grapa y un recopilatorio). Elige otro número o revísalo a mano."),
     _R.NO_ENCONTRADO: Respuesta(400, "El archivo o la serie ya no existen. Recarga la página."),
     _R.DATOS_NO_VALIDOS: Respuesta(400, "Escribe el número del tebeo antes de confirmar."),
@@ -562,15 +580,15 @@ RESPUESTAS: dict[EstadoResultado, Respuesta] = {
         409, "Otro archivo ocupó el nombre de destino mientras se copiaba. No se ha tocado nada; "
              "inténtalo de nuevo."),
     _R.YA_EN_CURSO: Respuesta(
-        409, "Este archivo ya se está asignando. Espera unos segundos y recarga.", "info"),
+        409, "Este archivo ya se está organizando. Espera unos segundos y recarga.", "info"),
     _R.PROPIEDAD_PERDIDA: Respuesta(
-        409, "Este archivo ya se está asignando. Espera unos segundos y recarga.", "info"),
+        409, "Este archivo ya se está organizando. Espera unos segundos y recarga.", "info"),
     _R.PENDIENTE: Respuesta(
-        503, "No se pudo confirmar la asignación. Tus archivos están a salvo. Se reintentará al "
-             "reiniciar ZascArr o al volver a asignar este archivo.", "amber"),
+        503, "No se pudo confirmar la organización. Tus archivos están a salvo. Se reintentará al "
+             "reiniciar ZascArr o al volver a organizar este archivo.", "amber"),
     _R.PENDIENTE_DE_COMPROBAR: Respuesta(
-        503, "No se pudo comprobar si la asignación se guardó. No se ha borrado nada; se "
-             "comprobará al reiniciar ZascArr o al volver a asignar este archivo.", "amber"),
+        503, "No se pudo comprobar si la organización se guardó. No se ha borrado nada; se "
+             "comprobará al reiniciar ZascArr o al volver a organizar este archivo.", "amber"),
     _R.ERROR: Respuesta(500, _TEXTO_ERROR_GENERICO),
 }
 
@@ -650,7 +668,19 @@ async def asignar(request: Request, file_id: UUID, series_id: UUID = Form(...),
     resp = interpretar(r) if r is not None else RESPUESTA_INESPERADA
     aviso = {"tipo": resp.tipo, "texto": resp.texto}
     if resp.status == 200 and not resp.texto:
-        return HTMLResponse(RECONTAR_MENU)                      # la tarjeta desaparece
+        # Recibo explícito: la tarjeta desaparece, pero queda constancia de lo hecho y la
+        # puerta a la vista de desvinculación (que pide su propia confirmación).
+        titulo = ("Organizado." if r is not None and r.estado == EstadoResultado.ASIGNADO
+                  else "Ya estaba organizado.")
+        return templates.TemplateResponse(
+            request, "_accion_ok.html", {
+                "titulo": titulo,
+                "texto": ("El archivo se movió y renombró; se copió y verificó "
+                          "antes de retirar el original."),
+                "series_id": series_id,
+                "deshacer_url": f"/ui/series/{series_id}/archivos/{file_id}/deshacer",
+                "recontar_menu": RECONTAR_MENU,
+            })
     if resp.status == 200:                  # asignado, con un aviso que no debe perderse
         return templates.TemplateResponse(
             request, "_asignacion_aviso.html", {"aviso": aviso, "recontar_menu": RECONTAR_MENU})
@@ -676,7 +706,12 @@ async def vincular(
     resultado = await vincular_en_sitio(db, file_id, series_id, issue_number)
     if resultado.estado == "vinculado":
         await db.commit()
-        return HTMLResponse(RECONTAR_MENU)
+        return templates.TemplateResponse(
+            request, "_accion_ok.html",
+            {"titulo": "Vinculado.", "texto": "No se ha movido ni renombrado nada.",
+             "series_id": series_id,
+             "deshacer_url": f"/ui/series/{series_id}/archivos/{file_id}/deshacer",
+             "recontar_menu": RECONTAR_MENU})
     aviso = {"tipo": "warn", "texto": resultado.texto}
     file = await db.get(File, file_id)
     if not _es_htmx(request):
@@ -694,6 +729,7 @@ async def vincular_especial(
     series_id: UUID = Form(...),
     titulo: str = Form(...),
     formato: str = Form("graphic_novel"),
+    numeros: str = Form(""),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """Vincula un archivo como publicación sin número (especial/tomo).
@@ -702,7 +738,9 @@ async def vincular_especial(
     operación es manual y no pasa por el matcher.
     """
     try:
-        await EspecialesService(db).vincular_especial(file_id, series_id, titulo, formato)
+        await EspecialesService(db).vincular_especial(
+            file_id, series_id, titulo, formato, mover=True,
+            numeros_cubiertos=numeros)
         await db.commit()
     except EspecialSinNumeroError as exc:
         aviso = {"tipo": "warn", "texto": str(exc)}
@@ -715,7 +753,13 @@ async def vincular_especial(
         return templates.TemplateResponse(
             request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
             status_code=400)
-    return HTMLResponse(RECONTAR_MENU)
+    return templates.TemplateResponse(request, "_accion_ok.html", {
+        "titulo": "Guardado como especial.",
+        "texto": "Se ha movido a la carpeta «Especiales» de la serie.",
+        "series_id": series_id,
+        "deshacer_url": None,
+        "recontar_menu": RECONTAR_MENU,
+    })
 
 
 @router.post("/{file_id}/ignorar", response_class=HTMLResponse)

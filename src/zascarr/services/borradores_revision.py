@@ -35,6 +35,7 @@ class BorradorGuardado:
     paginas: dict[str, dict]
     cursor: str
     actualizado: datetime
+    series_id: UUID | None = None
 
     @property
     def total_marcados(self) -> int:
@@ -97,7 +98,8 @@ class BorradoresRevision:
                 set_={"datos": datos, "actualizado": ahora, "caduca": ahora + TTL},
             )
         )
-        return BorradorGuardado(paginas=datos["paginas"], cursor=cursor, actualizado=ahora)
+        return BorradorGuardado(paginas=datos["paginas"], cursor=cursor,
+                                actualizado=ahora, series_id=sid)
 
     async def obtener(self, *, clave: str, series_id: str) -> BorradorGuardado | None:
         if not clave or len(clave) > MAX_CLAVE_GRUPO:
@@ -121,7 +123,26 @@ class BorradoresRevision:
         if not paginas or not cursor:
             await self.db.delete(fila)
             return None
-        return BorradorGuardado(paginas=paginas, cursor=cursor, actualizado=fila.actualizado)
+        return BorradorGuardado(paginas=paginas, cursor=cursor,
+                                actualizado=fila.actualizado, series_id=fila.series_id)
+
+    async def listar(self) -> dict[str, BorradorGuardado]:
+        """Borradores vivos por carpeta, para poder ofrecer «Reanudar» en la lista."""
+        ahora = datetime.now(UTC)
+        filas = (await self.db.execute(
+            sa.select(RevisionBorrador).where(RevisionBorrador.caduca > ahora)
+        )).scalars().all()
+        salida: dict[str, BorradorGuardado] = {}
+        for fila in filas:
+            datos = fila.datos if isinstance(fila.datos, dict) else {}
+            paginas = datos.get("paginas") if isinstance(datos.get("paginas"), dict) else {}
+            cursor = datos.get("cursor") if isinstance(datos.get("cursor"), str) else ""
+            if not paginas or not cursor:
+                continue
+            salida[fila.clave] = BorradorGuardado(
+                paginas=paginas, cursor=cursor, actualizado=fila.actualizado,
+                series_id=fila.series_id)
+        return salida
 
     async def borrar(self, *, clave: str, series_id: str) -> None:
         try:

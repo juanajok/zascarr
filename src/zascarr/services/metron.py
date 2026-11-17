@@ -23,6 +23,7 @@ from zascarr.config import get_settings
 from zascarr.utils.cortesia import CortesiaProceso, PoliticaFuente, politica_de
 from zascarr.utils.peticiones import (
     ErrorDePeticion,
+    RespuestaNoTransitoria,
     pedir_con_cortesia,
 )
 
@@ -156,6 +157,36 @@ class MetronClient:
             if len(resultados) >= limit:
                 break
         return resultados
+
+    async def get_series_por_id(self, metron_id: int) -> MetronResult | None:
+        """Ficha por ID para el relleno de huecos (SCR7): 404 ⇒ None; transitorio ⇒ excepción."""
+        if self._client is None:
+            raise RuntimeError("Cliente de Metron sin abrir: úsalo con `async with`.")
+        if not isinstance(metron_id, int) or metron_id <= 0:
+            return None
+        self.ultimas_peticiones += 1
+        try:
+            r = await pedir_con_cortesia(
+                self._client, "GET", f"{_BASE_URL}/series/{metron_id}/",
+                politica=self._politica, espera_max_s=self._espera_max_s,
+                cortesia=self._cortesia, reloj=self._reloj, dormir=self._dormir,
+            )
+        except RespuestaNoTransitoria as exc:
+            if exc.codigo == 404:
+                return None
+            raise
+        try:
+            data = r.json()
+        except ValueError as exc:
+            raise ErrorDePeticion("respuesta JSON inválida de Metron") from exc
+        ficha = _serie_desde_raw(data) if isinstance(data, dict) else None
+        if ficha is None:
+            return None
+        # O2 (deudas SCR7): un payload vacío o sin ningún dato útil es como un 404.
+        if not (ficha.name or ficha.year_began is not None or ficha.year_ended is not None
+                or ficha.descripcion):
+            return None
+        return ficha
 
     async def get_series(self, metron_id: int) -> MetronResult | None:
         """`GET /series/{id}/` para detalle (no usado aún por el enricher)."""

@@ -238,7 +238,8 @@ def _clasificar_outcome(fuente: MetadataSource, nombre: str,
                   else "Metron no ha aceptado el token.")
         return _estado(fuente, FUENTE_CONFIGURACION_INCOMPLETA, motivo), [], []
     if isinstance(outcome, BaseException):
-        logger.warning("discovery.source_failed", source=nombre, error=str(outcome))
+        logger.warning("discovery.source_failed", source=nombre,
+                           error_tipo=type(outcome).__name__)
         return (_estado(fuente, FUENTE_FALLO_TRANSITORIO, "No ha respondido ahora mismo."),
                 [], [f"{nombre}: no se pudo consultar ahora mismo."])
     if outcome:

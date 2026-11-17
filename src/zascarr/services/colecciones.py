@@ -1,6 +1,6 @@
 """#155/BL-D6: colecciones de series y su política de auto-búsqueda.
 
-Una serie pertenece como máximo a una colección. La colección no cambia la
+Una serie puede pertenecer a varias colecciones. La colección no cambia la
 política guardada de la serie (la ficha puede seguir mostrándola), solo decide
 la **política efectiva** con la que el orquestador genera/retira items.
 Sin fuentes, calidad ni ficheros: esta historia es solo agrupación y política.
@@ -12,12 +12,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, exists, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
-from zascarr.models import Collection, CollectionAutoSearch, ComicTradition, Series, WishlistPolicy
+from zascarr.models import (
+    Collection,
+    CollectionAutoSearch,
+    ComicTradition,
+    Series,
+    WishlistPolicy,
+    collection_series,
+)
 from zascarr.services.portada_coleccion import VERSION as PORTADA_VERSION
 from zascarr.services.portada_coleccion import portada_cacheada
 
@@ -145,18 +153,20 @@ def _portada_url_de(coleccion: Collection, filas: list[Series], covers: Path) ->
 
 async def listar_colecciones(db: AsyncSession) -> list[ColeccionResumen]:
     filas = (await db.execute(
-        select(Collection, func.count(Series.id))
-        .outerjoin(Series, Series.collection_id == Collection.id)
+        select(Collection, func.count(collection_series.c.series_id))
+        .outerjoin(collection_series, collection_series.c.collection_id == Collection.id)
         .group_by(Collection.id)
         .order_by(func.lower(Collection.name), Collection.id)
     )).all()
     covers = Path(get_settings().covers_cache_path)
     por_coleccion: dict[str, list[Series]] = {}
     if filas:
-        series = (await db.execute(select(Series).where(
-            Series.collection_id.is_not(None)))).scalars().all()
-        for s in series:
-            por_coleccion.setdefault(str(s.collection_id), []).append(s)
+        filas_miembros = (await db.execute(
+            select(collection_series.c.collection_id, Series)
+            .join(Series, Series.id == collection_series.c.series_id)
+        )).all()
+        for cid, s in filas_miembros:
+            por_coleccion.setdefault(str(cid), []).append(s)
     resumen = []
     for c, n in filas:
         tiene, url = _portada_url_de(c, por_coleccion.get(str(c.id), []), covers)
@@ -171,7 +181,9 @@ async def detalle_coleccion(db: AsyncSession, coleccion_id: UUID) -> DetalleCole
     if coleccion is None:
         return None
     filas = (await db.execute(
-        select(Series).where(Series.collection_id == coleccion_id)
+        select(Series).join(
+            collection_series, collection_series.c.series_id == Series.id)
+        .where(collection_series.c.collection_id == coleccion_id)
         .order_by(Series.sort_title, Series.title)
     )).scalars().all()
     sobre = next((s for s in filas if s.id == coleccion.cover_series_id), None)
@@ -262,8 +274,14 @@ class PaginaSeriesDisponibles:
     hasta: int
 
 
-def _filtro_disponibles(q: str, tradicion: str):
-    filtros = [Series.collection_id.is_(None)]
+def _filtro_disponibles(q: str, tradicion: str, coleccion_id: UUID | None = None):
+    filtros = []
+    if coleccion_id is not None:
+        filtros.append(~exists().where(
+            collection_series.c.series_id == Series.id,
+            collection_series.c.collection_id == coleccion_id))
+    else:
+        filtros.append(~exists().where(collection_series.c.series_id == Series.id))
     texto = (q or "").strip()[:120]
     if texto:
         normalizado = normalize_title(texto)
@@ -276,9 +294,9 @@ def _filtro_disponibles(q: str, tradicion: str):
 
 async def pagina_series_sin_coleccion(
     db: AsyncSession, *, q: str = "", tradicion: str = "",
-    pagina: int = 1, por_pagina: int = 40,
+    pagina: int = 1, por_pagina: int = 40, coleccion_id: UUID | None = None,
 ) -> PaginaSeriesDisponibles:
-    filtros = _filtro_disponibles(q, tradicion)
+    filtros = _filtro_disponibles(q, tradicion, coleccion_id)
     total = int((await db.execute(
         select(func.count()).select_from(Series).where(*filtros))).scalar_one())
     paginas = max(1, (total + por_pagina - 1) // por_pagina)
@@ -301,9 +319,10 @@ async def pagina_series_sin_coleccion(
 
 
 async def series_sin_coleccion(db: AsyncSession, *, q: str = "",
-                               tradicion: str = "") -> list[SerieDeColeccion]:
-    """Series sin colección (máx. 200) con los mismos filtros que la paginación."""
-    filtros = _filtro_disponibles(q, tradicion)
+                               tradicion: str = "",
+                               coleccion_id: UUID | None = None) -> list[SerieDeColeccion]:
+    """Series que aún no están en la colección indicada (o en ninguna)."""
+    filtros = _filtro_disponibles(q, tradicion, coleccion_id)
     filas = (await db.execute(
         select(Series).where(*filtros)
         .order_by(Series.sort_title, Series.title).limit(200)
@@ -342,13 +361,10 @@ async def asignar_series(db: AsyncSession, coleccion_id: UUID,
     if faltan:
         return ResultadoColeccion(False, {
             "serie": "Alguna de las series elegidas ya no existe. No se ha añadido ninguna."})
-    ocupadas = [s.title for s in filas if s.collection_id is not None]
-    if ocupadas:
-        return ResultadoColeccion(False, {
-            "serie": "Estas series ya pertenecen a otra colección: "
-                     + ", ".join(ocupadas) + ". No se ha añadido ninguna."})
-    for serie in filas:
-        serie.collection_id = coleccion_id
+    await db.execute(
+        pg_insert(collection_series)
+        .values([{"collection_id": coleccion_id, "series_id": sid} for sid in unicos])
+        .on_conflict_do_nothing())
     await db.flush()
     return ResultadoColeccion(True, coleccion=coleccion)
 
@@ -357,10 +373,26 @@ async def asignar_serie(db: AsyncSession, coleccion_id: UUID, serie_id: UUID) ->
     return await asignar_series(db, coleccion_id, [serie_id])
 
 
+async def colecciones_de_serie(db: AsyncSession, series_id: UUID) -> list[Collection]:
+    """Colecciones a las que pertenece una serie (puede ser ninguna o varias)."""
+    return list((await db.execute(
+        select(Collection)
+        .join(collection_series, collection_series.c.collection_id == Collection.id)
+        .where(collection_series.c.series_id == series_id)
+        .order_by(func.lower(Collection.name), Collection.id)
+    )).scalars().all())
+
+
+async def es_miembro(db: AsyncSession, coleccion_id: UUID, serie_id: UUID) -> bool:
+    return (await db.execute(
+        select(collection_series.c.collection_id).where(
+            collection_series.c.collection_id == coleccion_id,
+            collection_series.c.series_id == serie_id))).scalar_one_or_none() is not None
+
+
 async def quitar_serie(db: AsyncSession, coleccion_id: UUID, serie_id: UUID) -> bool:
-    serie = await db.get(Series, serie_id)
-    if serie is None or str(serie.collection_id) != str(coleccion_id):
-        return False
-    serie.collection_id = None
+    resultado = await db.execute(delete(collection_series).where(
+        collection_series.c.collection_id == coleccion_id,
+        collection_series.c.series_id == serie_id))
     await db.flush()
-    return True
+    return bool(resultado.rowcount)

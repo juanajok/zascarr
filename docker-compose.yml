@@ -121,6 +121,8 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-}@postgres:5432/zascarr
       - COMICVINE_API_KEY=${COMICVINE_API_KEY:-}
+      - MAX_CUERPO_TRANSFER_BYTES=${MAX_CUERPO_TRANSFER_BYTES:-4194304}
+      - CRAWL_DELAY_MAX_S=${CRAWL_DELAY_MAX_S:-60}
       - PROWLARR_URL=${PROWLARR_URL:-http://host.docker.internal:9696}
       - PROWLARR_API_KEY=${PROWLARR_API_KEY:-}
       - TRANSMISSION_URL=${TRANSMISSION_URL:-http://host.docker.internal:9091}
@@ -133,6 +135,9 @@ services:
       - FORUM_USERNAME=${FORUM_USERNAME:-}
       - FORUM_PASSWORD=${FORUM_PASSWORD:-}
       - LIBRARY_PATH=/media/library
+      # #156: montajes autorizados para raíces adicionales (vacío = solo LIBRARY_PATH).
+      - LIBRARY_ROOTS=${LIBRARY_ROOTS:-}
+      - HOST_LIBRARY_ROOTS=${HOST_LIBRARY_ROOTS:-}
       - EXPORT_PATH=${EXPORT_PATH:-/media/export}
       - HOST_EXPORT_DIR=${HOST_EXPORT_DIR:-}
       # La ruta REAL de la biblioteca en el host: la app solo la usa para MOSTRARLA (la vista previa de «Desvincular»

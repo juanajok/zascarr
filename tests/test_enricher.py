@@ -77,6 +77,31 @@ def _ajustes_cv(monkeypatch):
         tebeosfera_rate_limit=2.5, gcd_rate_limit=2.0, forum_rate_limit=2.0))
 
 
+class _ContextoStream:
+    """`async with cliente.stream(...)` mínimo sobre una `httpx.Response` real."""
+
+    def __init__(self, respuesta):
+        self.respuesta = respuesta
+
+    async def __aenter__(self):
+        return self.respuesta
+
+    async def __aexit__(self, *_exc):
+        return None
+
+
+class _ClienteSecuencial:
+    """Cliente falso de RES-3: `stream()` devuelve las respuestas en orden y las cuenta."""
+
+    def __init__(self, respuestas):
+        self.respuestas = list(respuestas)
+        self.llamadas: list[tuple[str, str, dict]] = []
+
+    def stream(self, metodo, url, **kwargs):
+        self.llamadas.append((metodo, url, kwargs))
+        return _ContextoStream(self.respuestas.pop(0))
+
+
 class TestComicVineRetry:
     """El reintento y el 429 viven AHORA en la envoltura común (#134); el cliente solo la usa."""
 
@@ -88,23 +113,22 @@ class TestComicVineRetry:
             httpx.Response(429, headers={"Retry-After": "0.01"}, request=httpx.Request("GET", "http://x")),
             httpx.Response(200, json={"error": "OK", "results": []}, request=httpx.Request("GET", "http://x")),
         ]
-        fake_http = MagicMock()
-        fake_http.get = AsyncMock(side_effect=responses)
+        fake_http = _ClienteSecuencial(responses)
         client._client = fake_http
 
         data = await client._get("/search/", {"query": "batman"})
 
         assert data["results"] == []
-        assert fake_http.get.await_count == 2
+        assert len(fake_http.llamadas) == 2
 
     @pytest.mark.asyncio
     async def test_no_muta_params_del_caller(self, monkeypatch):
         _ajustes_cv(monkeypatch)
         client = ComicVineClient()
-        fake_http = MagicMock()
-        fake_http.get = AsyncMock(
-            return_value=httpx.Response(200, json={"error": "OK"}, request=httpx.Request("GET", "http://x"))
-        )
+        fake_http = _ClienteSecuencial([
+            httpx.Response(200, json={"error": "OK"},
+                           request=httpx.Request("GET", "http://x")),
+        ])
         client._client = fake_http
 
         caller_params = {"query": "batman"}
@@ -128,14 +152,13 @@ class TestAniListRetry:
             httpx.Response(200, json={"data": {"Page": {"media": []}}},
                            request=httpx.Request("POST", "http://x")),
         ]
-        fake_http = MagicMock()
-        fake_http.post = AsyncMock(side_effect=responses)
+        fake_http = _ClienteSecuencial(responses)
         client._client = fake_http
 
         results = await client.search_manga("berserk")
 
         assert results == []
-        assert fake_http.post.await_count == 2
+        assert len(fake_http.llamadas) == 2
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -958,3 +981,111 @@ def test_paginas_de_volumen_filtra_personajes_y_numeros():
         "Absolute Batman Vol 1", "Batman: The Court of Owls",
     ]
     assert _paginas_de_volumen(candidatos, norm) == ["Batman Vol 1", "Batman Vol 2"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SCR2 m-3: el arco de Fandom no adopta un arco manual ni de otra fuente
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _ResultadoArcos:
+    def __init__(self, filas):
+        self._filas = filas
+
+    def scalars(self):
+        return self
+
+    def first(self):
+        return self._filas[0] if self._filas else None
+
+    def all(self):
+        return self._filas
+
+
+class _SesionArcos:
+    """Sesión mínima que filtra en memoria como lo harían las dos consultas reales."""
+
+    def __init__(self, arcos):
+        from zascarr.models import StoryArc
+
+        self.arcos = list(arcos)
+        self._StoryArc = StoryArc
+        self.añadidos: list = []
+
+    async def execute(self, statement):
+        texto = str(statement)
+        if "story_arcs.metadata ->>" in texto:
+            return _ResultadoArcos([
+                a for a in self.arcos
+                if (a.metadata_ or {}).get("fandom_dc") == self.page_title])
+        if "WHERE story_arcs.title" in texto:
+            return _ResultadoArcos([a for a in self.arcos if a.title == self.title])
+        return _ResultadoArcos([])                       # enlaces del arco
+
+    def add(self, fila):
+        self.arcos.append(fila)
+        self.añadidos.append(fila)
+
+    async def flush(self):
+        return None
+
+
+def _servicio_con_arco(arco_manual, *, page_title="Batman: Year One", title="Year One"):
+    from zascarr.services.fandom import FandomArc
+
+    sesion = _SesionArcos([arco_manual] if arco_manual is not None else [])
+    sesion.page_title = page_title
+    sesion.title = title
+    servicio = EnrichmentService(db=sesion)
+    return servicio, sesion, FandomArc(page_title=page_title, title=title)
+
+
+async def test_un_arco_manual_homonimo_queda_intacto_y_se_crea_el_de_fandom():
+    from zascarr.models import StoryArc
+
+    manual = StoryArc(id=uuid4(), title="Year One", metadata_={})
+    servicio, sesion, arco = _servicio_con_arco(manual)
+
+    await servicio._upsert_arc(arco)
+
+    assert manual.metadata_ == {}                        # nunca se le añade `fandom_dc`
+    assert len(sesion.arcos) == 2
+    nuevo = next(a for a in sesion.arcos if a is not manual)
+    assert nuevo.metadata_ == {"origen": "fandom_dc", "fandom_dc": "Batman: Year One"}
+
+
+async def test_un_arco_de_otra_fuente_homonimo_tampoco_se_adopta():
+    from zascarr.models import StoryArc
+
+    ajeno = StoryArc(id=uuid4(), title="Year One",
+                     metadata_={"origen": "reading_orders", "url": "https://x.test/guia/"})
+    metadata_original = dict(ajeno.metadata_)
+    servicio, sesion, arco = _servicio_con_arco(ajeno)
+
+    await servicio._upsert_arc(arco)
+
+    assert ajeno.metadata_ == metadata_original
+    assert len(sesion.arcos) == 2
+
+
+async def test_el_segundo_enricher_es_idempotente_y_no_duplica_el_arco():
+    servicio, sesion, arco = _servicio_con_arco(None)
+    await servicio._upsert_arc(arco)
+    assert len(sesion.arcos) == 1
+
+    servicio.db = sesion
+    await servicio._upsert_arc(arco)
+
+    assert len(sesion.arcos) == 1                        # se reutiliza por metadata fandom
+    assert len(sesion.añadidos) == 1
+
+
+async def test_un_arco_viejo_de_fandom_sin_origen_se_reutiliza_por_titulo():
+    from zascarr.models import StoryArc
+
+    viejo = StoryArc(id=uuid4(), title="Year One", metadata_={"fandom_dc": "Otra pagina"})
+    servicio, sesion, arco = _servicio_con_arco(viejo)
+
+    await servicio._upsert_arc(arco)
+
+    assert len(sesion.arcos) == 1
+    assert viejo.metadata_["fandom_dc"] == "Batman: Year One"

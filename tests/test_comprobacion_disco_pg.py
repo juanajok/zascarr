@@ -15,7 +15,16 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
-from zascarr.models import ComicTradition, File, FileFormat, ImportRun, Series
+from tests._raices_pg import allowlist, sembrar_raiz
+from zascarr.models import (
+    ComicTradition,
+    File,
+    FileFormat,
+    ImportRun,
+    Issue,
+    IssueFormat,
+    Series,
+)
 from zascarr.services import comprobacion_disco as servicio
 from zascarr.services.comprobacion_disco import FaseCicloDisco
 from zascarr.services.disponibilidad import ultima_ejecucion_importador
@@ -153,7 +162,7 @@ class TestPersistenciaYLectura:
 
 
 @pytest.fixture
-def montaje(tmp_path, monkeypatch):
+async def montaje(fabrica, tmp_path, monkeypatch):
     library = tmp_path / "lib"
     library.mkdir()
     descargas = tmp_path / "descargas"
@@ -164,6 +173,8 @@ def montaje(tmp_path, monkeypatch):
     ajustes.amule_incoming_dir = str(tmp_path / "amule")
     ajustes.downloads_path = descargas
     monkeypatch.setattr("zascarr.services.importer.get_settings", lambda: ajustes)
+    allowlist(monkeypatch, library)
+    await sembrar_raiz(fabrica, library)
     return ajustes
 
 
@@ -266,7 +277,11 @@ class TestCicloReal:
         assert notifier.llamadas == []
 
         async with fabrica() as s:
-            s.add(Series(title="Batman", tradition=ComicTradition.AMERICAN, start_year=2011))
+            serie = Series(title="Batman", tradition=ComicTradition.AMERICAN, start_year=2011)
+            s.add(serie)
+            await s.flush()
+            s.add(Issue(series_id=serie.id, issue_number="1",
+                        format=IssueFormat.SINGLE_ISSUE))
             await s.commit()
         _cbz(montaje.downloads_path / "Batman 001.cbz")
         await _manual(fabrica)                     # archivo nuevo: un aviso

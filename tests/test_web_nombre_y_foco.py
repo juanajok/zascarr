@@ -249,10 +249,7 @@ class TestPorRevisar:
 
     def test_el_numero_de_la_sugerencia_tiene_nombre(self):
         html = _por_revisar([_archivo("Paracuellos 05.cbz", con_sugerencia=True)])
-        assert nombres(html, "issue-input") == [
-            "Número de «Paracuellos 05.cbz»",
-            "Número para vincular «Paracuellos 05.cbz»",
-        ]
+        assert nombres(html, "issue-input") == ["Número de «Paracuellos 05.cbz»"]
         assert not controles_sin_nombre(html)
 
     def test_los_ids_de_las_etiquetas_no_se_repiten(self):
@@ -282,9 +279,7 @@ class TestTrasIntercambiosHtmx:
 
         assert not controles_sin_nombre(dom)
         assert nombres(dom, "issue-input") == [
-            "Número en «Paracuellos»", "Número para vincular en «Paracuellos»",
-            "Número en «Paracuellos (integral)»",
-            "Número para vincular en «Paracuellos (integral)»"]
+            "Número en «Paracuellos»", "Número en «Paracuellos (integral)»"]
 
     def test_por_revisar_tras_un_fallo_al_asignar(self):
         """`asignar` con error devuelve la TARJETA entera: hx-target="#card-<id>" outerHTML."""
@@ -318,7 +313,8 @@ class TestTrasIntercambiosHtmx:
         assert not controles_sin_nombre(dom)
         assert [n for _, _, n in _leer(pagina).nombres()] == [
             "Buscar por título", "Tradición", "Editorial", "Lectura", "Personaje", "Saga",
-            "Etiquetas", "Estado de la colección", "Orden"]
+            "Idioma", "Edición", "Desde el año", "Hasta el año", "Autor",
+            "Solo favoritas", "Etiquetas", "Estado de la serie", "Orden"]
 
     def test_deseados_tras_buscar_serie(self):
         """`wishlist.html`: hx-target="#resultados-wishlist" innerHTML."""

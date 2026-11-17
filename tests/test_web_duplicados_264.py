@@ -18,6 +18,7 @@ from zascarr.services.apartado_duplicados import (
     ResultadoGrupo,
     VistaApartado,
 )
+from zascarr.services.enlace_duplicados import EnlaceDuplicadosService
 
 
 class FakeExecResult:
@@ -202,3 +203,47 @@ def test_resultado_rechazado_sin_movimientos_no_dice_listo(monkeypatch):
     assert "Listo" not in r.text
     assert "No se ha apartado nada" in r.text
     assert "Ninguna copia se pudo mover" in r.text
+
+
+def test_previsualizar_enlace_tiene_vista_propia_y_aviso(tmp_path, monkeypatch):
+    g = grupo(tmp_path)
+    async def preview_enlace(_self, _sha, rutas, keep):
+        return VistaApartado("token-enlace", "55555555-5555-5555-5555-555555555555",
+                             (Path(g["rutas"][0]), Path(g["rutas"][1])), keep, 5)
+    monkeypatch.setattr(EnlaceDuplicadosService, "previsualizar", preview_enlace)
+    with use_fake_session(FakeSession([FakeExecResult(informe_falso([g]))])) as c:
+        r = c.post("/ui/auditoria/duplicados/previsualizar",
+                   data={"accion": "enlazar",
+                         f"keep_{g['sha256']}": Path(g["rutas"][0]).name})
+    assert r.status_code == 200
+    assert "Vista previa de unir copias" in r.text
+    assert "Confirmar y unir" in r.text
+    assert "no se anuncia como espacio liberado" in r.text
+    assert 'name="accion" value="enlazar"' in r.text
+
+
+def test_confirmar_enlace_usa_el_servicio_de_enlace(tmp_path, monkeypatch):
+    grupo(tmp_path)
+    async def confirmar(_self, _token, _grupos):
+        return __import__("zascarr.services.enlace_duplicados", fromlist=["ResultadoEnlace"]).ResultadoEnlace(
+            "66666666-6666-6666-6666-666666666666", "confirmada",
+            [ResultadoGrupo("a" * 64, "movido", movidos=1, bytes=5)], 1, 1, 5)
+    monkeypatch.setattr(EnlaceDuplicadosService, "confirmar", confirmar)
+    with use_fake_session(FakeSession([])) as c:
+        r = c.post("/ui/auditoria/duplicados/confirmar",
+                   data={"accion": "enlazar", "token": "t",
+                         "grupos": '{"sha256":"%s","rutas":["a","b"],"keep_index":0}' % ("a" * 64)})
+    assert r.status_code == 200
+    assert "Resultado de unir copias" in r.text
+    assert "Enlace" in r.text or "enlace" in r.text
+
+
+def test_unir_no_aparece_si_las_copias_no_se_pueden_enlazar(tmp_path, monkeypatch):
+    g = grupo(tmp_path)
+    monkeypatch.setattr("zascarr.web.auditoria._puede_enlazar",
+                        lambda _rutas: (False, "Están en discos distintos."))
+    with use_fake_session(FakeSession([FakeExecResult(informe_falso([g]))])) as c:
+        r = c.get("/ui/auditoria")
+    assert r.status_code == 200
+    assert 'name="accion" value="enlazar"' not in r.text
+    assert "Están en discos distintos" in r.text

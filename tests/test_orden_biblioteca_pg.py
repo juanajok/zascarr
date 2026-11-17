@@ -10,7 +10,15 @@ import pytest
 
 from tests._pg import bd_efimera_sync, migrar_a_head
 from tests.test_revision_carpetas_pg import Banco
-from zascarr.models import ComicTradition, Series
+from zascarr.models import (
+    ComicTradition,
+    Creator,
+    CreatorRole,
+    EditionKind,
+    Issue,
+    IssueCreator,
+    Series,
+)
 from zascarr.services.series import SeriesService
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -69,6 +77,55 @@ async def test_cada_criterio_y_null_al_final(entorno, orden, esperado):
 
 
 @pytest.mark.asyncio
+async def test_filtro_por_autor_solo_devuelve_series_con_su_credito(entorno):
+    async with entorno.fabrica() as s:
+        autor = Creator(id=uuid4(), name="Alan Moore")
+        con = Series(id=uuid4(), title="Con autor", tradition=ComicTradition.AMERICAN)
+        sin = Series(id=uuid4(), title="Sin autor", tradition=ComicTradition.AMERICAN)
+        s.add_all([autor, con, sin])
+        await s.flush()
+        issue = Issue(id=uuid4(), series_id=con.id, issue_number="1", volume=1)
+        s.add(issue)
+        await s.flush()
+        s.add(IssueCreator(issue_id=issue.id, creator_id=autor.id, role=CreatorRole.WRITER))
+        await s.commit()
+    async with entorno.fabrica() as s:
+        items, total = await SeriesService(s).list_series(author_id=autor.id)
+        assert total == 1 and [i.title for i in items] == ["Con autor"]
+
+
+@pytest.mark.asyncio
+async def test_filtros_idioma_y_edicion_pg(entorno):
+    async with entorno.fabrica() as s:
+        s.add_all([
+            Series(id=uuid4(), title="Español", tradition=ComicTradition.AMERICAN,
+                   language="es", edition_kind=EditionKind.OFICIAL),
+            Series(id=uuid4(), title="Inglés", tradition=ComicTradition.AMERICAN,
+                   language="en", edition_kind=EditionKind.OTRO),
+        ])
+        await s.commit()
+    async with entorno.fabrica() as s:
+        items, total = await SeriesService(s).list_series(
+            language="es", edition_kind=EditionKind.OFICIAL.value)
+        assert total == 1 and [i.title for i in items] == ["Español"]
+
+
+@pytest.mark.asyncio
+async def test_filtro_solo_favoritas_pg(entorno):
+    async with entorno.fabrica() as s:
+        s.add_all([
+            Series(id=uuid4(), title="Favorita", tradition=ComicTradition.AMERICAN,
+                   favorite=True),
+            Series(id=uuid4(), title="Normal", tradition=ComicTradition.AMERICAN,
+                   favorite=False),
+        ])
+        await s.commit()
+    async with entorno.fabrica() as s:
+        items, total = await SeriesService(s).list_series(solo_favoritas=True)
+        assert total == 1 and [i.title for i in items] == ["Favorita"]
+
+
+@pytest.mark.asyncio
 async def test_desempate_determinista_pg(entorno):
     ids = [uuid4(), uuid4(), uuid4()]
     async with entorno.fabrica() as s:
@@ -82,3 +139,15 @@ async def test_desempate_determinista_pg(entorno):
     async with entorno.fabrica() as s:
         items, _, _ = await SeriesService(s).list_series_paginado(page_size=10, orden="titulo_desc")
         assert [i.id for i in items] == sorted(ids, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_filtro_por_rango_de_anios_pg(entorno):
+    await _sembrar(entorno)
+    async with entorno.fabrica() as s:
+        items, total = await SeriesService(s).list_series(
+            year_from=1995, year_to=2005)
+        assert total == 1 and [i.title for i in items] == ["Alfa"]
+        ninguno, total_ninguno = await SeriesService(s).list_series(
+            year_from=1800, year_to=1850)
+        assert total_ninguno == 0 and ninguno == []

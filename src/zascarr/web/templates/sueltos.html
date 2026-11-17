@@ -1,21 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Archivos sueltos — ZascArr{% endblock %}
+{% block title %}Pendientes sueltos — ZascArr{% endblock %}
 {% block content %}
 <p><a class="back-link" href="/ui/pendientes">← Volver a «Por revisar»</a>
    · <a href="/ui/pendientes/carpetas">Pendientes por carpeta</a></p>
 
 {% if error %}
-<h1>Archivos sueltos</h1>
-<p class="caption" role="alert">No se pudieron leer los archivos sueltos. No se muestran recuentos
+<h1>Pendientes sueltos</h1>
+<p class="caption" role="alert">No se pudieron leer los pendientes sueltos. No se muestran recuentos
 parciales. Vuelve a intentarlo en unos segundos.</p>
 <p><a class="btn ghost" href="/ui/pendientes/sueltos">Reintentar</a></p>
 {% elif not sueltos %}
-<h1>Archivos sueltos</h1>
-<p class="empty">No hay archivos sueltos.</p>
+<h1>Pendientes sueltos</h1>
+<p class="empty">No hay pendientes sueltos.</p>
 <p><a class="btn ghost" href="/ui/pendientes/carpetas">Volver a las carpetas</a>
    · <a href="/ui/pendientes">Por revisar</a></p>
 {% else %}
-<h1>Archivos sueltos</h1>
+<h1>Pendientes sueltos</h1>
 <p class="subtitle">Pendientes que no están dentro de una carpeta de serie. Solo lectura: desde
 aquí no se asigna, crea, mueve ni ignora nada. Para ignorar un pendiente, ábrelo en «Por revisar».</p>
 <p class="pend-rango" id="sueltos-rango">Sueltos {{ desde }}–{{ hasta }} de {{ total_texto }} ·

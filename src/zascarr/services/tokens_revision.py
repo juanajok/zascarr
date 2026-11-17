@@ -1269,6 +1269,77 @@ def verificar_token_apartar(token: str, secret: str, *, ahora: float | None = No
 MAX_TOKEN_APARTAR = 16_384
 
 
+# ── BL-DUP2 (#265): enlazar copias idénticas con enlace duro ────────────────────────────────
+
+PROPOSITO_ENLAZAR = "enlazar_duplicados"
+CONTEXTO_ENLACES = "enlaces"
+MAX_GRUPOS_ENLAZAR = MAX_GRUPOS_APARTAR
+VERSION_TOKEN_ENLAZAR = 1
+
+
+@dataclass(frozen=True)
+class EnlaceFirmada:
+    """Intención firmada de unir copias; mismas reglas de integridad que apartar."""
+    operacion: str
+    accion: str
+    grupos: tuple[GrupoFirmado, ...]
+    caduca: int
+
+
+def crear_token_enlazar(operacion: str | UUID, grupos: Sequence[GrupoFirmado], secret: str, *,
+                        accion: str = "enlazar", ahora: float | None = None) -> str:
+    if accion not in ("enlazar", "deshacer"):
+        raise ValueError("Acción de enlace desconocida")
+    if not uuid_texto(str(operacion)):
+        raise ValueError("Operación de enlace inválida")
+    if len(grupos) > MAX_GRUPOS_ENLAZAR:
+        raise ValueError("Demasiados grupos para una sola confirmación")
+    return crear_token(PROPOSITO_ENLAZAR, CONTEXTO_ENLACES, {
+        "version": VERSION_TOKEN_ENLAZAR,
+        "operacion": str(operacion),
+        "accion": accion,
+        "grupos": [
+            {"sha256": g.sha256, "rutas_digest": g.rutas_digest,
+             "keep_index": g.keep_index, "n_rutas": g.n_rutas}
+            for g in grupos
+        ],
+    }, secret, ahora=ahora)
+
+
+def verificar_token_enlazar(token: str, secret: str, *, ahora: float | None = None,
+                            ignorar_caducidad: bool = False) -> EnlaceFirmada | None:
+    verificado = _verificar(token, PROPOSITO_ENLAZAR, CONTEXTO_ENLACES, secret,
+                            ahora=ahora, ignorar_caducidad=ignorar_caducidad)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    if d.get("version") != VERSION_TOKEN_ENLAZAR or isinstance(d.get("version"), bool):
+        return None
+    if not uuid_texto(d.get("operacion")) or d.get("accion") not in ("enlazar", "deshacer"):
+        return None
+    crudos = d.get("grupos")
+    if not isinstance(crudos, list) or len(crudos) > MAX_GRUPOS_ENLAZAR:
+        return None
+    if d.get("accion") == "enlazar" and not crudos:
+        return None
+    grupos = []
+    for g in crudos:
+        if not isinstance(g, dict):
+            return None
+        if not _hex_digest(g.get("sha256")) or not _hex_digest(g.get("rutas_digest")):
+            return None
+        keep, n = g.get("keep_index"), g.get("n_rutas")
+        if not isinstance(keep, int) or isinstance(keep, bool) or not isinstance(n, int) or isinstance(n, bool):
+            return None
+        if n < 2 or not 0 <= keep < n:
+            return None
+        grupos.append(GrupoFirmado(g["sha256"], g["rutas_digest"], keep, n))
+    return EnlaceFirmada(d["operacion"], d["accion"], tuple(grupos), caduca)
+
+
+MAX_TOKEN_ENLAZAR = MAX_TOKEN_APARTAR
+
+
 def uuid_texto(valor: object) -> bool:
     """UUID canónico en texto, sin importar mayúsculas ni guiones."""
     if not isinstance(valor, str):

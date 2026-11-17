@@ -17,7 +17,7 @@ from structlog.testing import capture_logs
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import Character, ComicTradition, Publisher, Series, StoryArc
+from zascarr.models import Character, ComicTradition, Creator, Publisher, Series, StoryArc
 
 
 class FakeScalarResult:
@@ -87,6 +87,17 @@ class TestIndex:
             r = client.get("/ui/biblioteca")
         assert r.status_code == 200
         assert "Batman" in r.text
+
+    def test_lista_lleva_chip_previa(self):
+        series = make_series("Batman")
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca?vista=lista")
+        assert r.status_code == 200
+        assert f'hx-get="/ui/series/{series.id}/previa"' in r.text
+        assert f'hx-target="#previa-l-{series.id}"' in r.text
+        assert "Ver portada" in r.text
+        assert 'hx-target="next .previa-numero"' in r.text
 
     def test_la_portada_de_la_rejilla_lleva_v2(self):
         """R-01 de BL-PORT1 (#300): sin `?v=2` el navegador puede pintar hasta 24 h la
@@ -178,8 +189,9 @@ class TestResultados:
             r = client.get("/ui/biblioteca/resultados?tradition=franco_belgian")
         assert r.status_code == 200
         assert "Thorgal" in r.text
-        # Es un fragmento: no repite el layout completo (topnav).
-        assert "ZascArr" not in r.text
+        # Es un fragmento: no repite el layout completo (sin <html>/doctype).
+        assert "<html" not in r.text.lower() and "<!doctype" not in r.text.lower()
+        assert 'id="filtros-campos"' in r.text
 
     def test_campos_uuid_vacios_no_dan_422(self):
         """Regresión: el formulario de filtros manda publisher_id/
@@ -501,6 +513,21 @@ class TestBusquedaPersonajeSagaConservaFiltros:
         assert "tradition=tebeo" in r.text
         assert f"story_arc_id={saga.id}" in r.text
 
+    def test_autor_anade_su_filtro_sin_perder_los_demas(self):
+        autor = Creator(id=uuid4(), name="Alan Moore")
+        publisher_id = uuid4()
+        session = FakeSession([FakeExecResult([autor])])
+        with use_fake_session(session) as client:
+            r = client.get(
+                "/ui/biblioteca/buscar-autor?autor=moore"
+                f"&tradition=tebeo&publisher_id={publisher_id}"
+            )
+        assert r.status_code == 200
+        assert "Alan Moore" in r.text
+        assert "tradition=tebeo" in r.text
+        assert f"publisher_id={publisher_id}" in r.text
+        assert f"author_id={autor.id}" in r.text
+
     def test_contrato_antiguo_con_q_sigue_funcionando(self):
         personaje = Character(id=uuid4(), name="Mortadelo")
         session = FakeSession([FakeExecResult([personaje])])
@@ -622,7 +649,7 @@ class TestVistaLista:
     def test_una_vista_invalida_vuelve_a_tarjetas_con_aviso(self):
         series = make_series("Batman")
         r, _ = self._index(series, params="?vista=inventada")
-        assert "La presentación pedida no existe; se muestran tarjetas." in r.text
+        assert "La vista pedida no existe; se muestran tarjetas." in r.text
         assert "library-grid" in r.text and "library-lista" not in r.text
 
     def test_el_fragmento_lista_no_repite_layout(self):
@@ -630,7 +657,9 @@ class TestVistaLista:
         session = FakeSession([FakeExecResult(1), FakeExecResult([series])])
         with use_fake_session(session) as client:
             r = client.get("/ui/biblioteca/resultados?vista=lista")
-        assert "library-lista" in r.text and "ZascArr" not in r.text
+        assert "library-lista" in r.text
+        assert "<html" not in r.text.lower() and "<!doctype" not in r.text.lower()
+        assert 'id="filtros-campos"' in r.text
         assert not session._queue
 
 
@@ -719,3 +748,81 @@ class TestEtiquetasBiblioteca:
         assert 'role="progressbar"' in r.text
         assert "38% leído · 3 de 8" in r.text
         assert 'aria-valuenow="38"' in r.text
+
+
+def test_endpoint_previa_generica_200_404_y_fallback(monkeypatch):
+    from pathlib import Path
+    from unittest.mock import patch
+
+    series = make_series("Batman")
+    session = FakeSession()
+
+    async def get(_modelo, clave):
+        return series if clave == series.id else None
+
+    session.get = get
+    monkeypatch.setattr("zascarr.web.series.portada_cacheada", lambda *_a: None)
+    with use_fake_session(session) as client:
+        with patch("zascarr.web.series.portada_cacheada", return_value=Path("/covers/x.jpg")):
+            r = client.get(f"/ui/series/{series.id}/previa")
+            assert r.status_code == 200
+            assert f"/ui/series/{series.id}/portada" in r.text
+            assert r.headers["cache-control"] == "no-store"
+        r404 = client.get(f"/ui/series/{uuid4()}/previa")
+        assert r404.status_code == 404
+
+
+def test_tarjeta_tebeo_etiqueta_y_sin_valor_interno():
+    serie = make_series("El Capitán Trueno")
+    serie.tradition = ComicTradition.TEBEO
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    tarjeta = r.text[r.text.index('class="library-card-meta"'):]
+    tarjeta = tarjeta[:tarjeta.index("</div>")]
+    assert "Tebeo español" in tarjeta
+    assert "tebeo" not in tarjeta
+
+
+def test_tradicion_desconocida_tiene_fallback_y_no_deja_punto_colgando():
+    serie = make_series("Rara")
+    serie.tradition = "tradicion_inventada"
+    serie.start_year = None
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    tarjeta = r.text[r.text.index('class="library-card-meta"'):]
+    tarjeta = tarjeta[:tarjeta.index("</div>")]
+    assert "Otra tradición" in tarjeta
+    assert "tradicion_inventada" not in tarjeta
+    assert "·" not in tarjeta
+
+
+def test_tradicion_none_no_deja_punto_colgando():
+    """Regresión H4 (#789): con año y sin tradición, la tarjeta no debe pintar un «·» colgando
+    ni inventar una etiqueta. El caso con año es el que muerde: sin año no hay separador posible."""
+    serie = make_series("Sin tradición")
+    serie.tradition = None
+    serie.start_year = 2011
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    inicio = r.text.index('class="library-card-meta"')
+    inicio = r.text.index(">", inicio) + 1
+    tarjeta = r.text[inicio:r.text.index("</div>", inicio)]
+    assert "2011" in tarjeta
+    assert "·" not in tarjeta
+    assert "Otra tradición" not in tarjeta and "None" not in tarjeta
+
+
+def test_tradicion_none_sin_anio_deja_la_tarjeta_vacia():
+    serie = make_series("Sin tradición ni año")
+    serie.tradition = None
+    serie.start_year = None
+    session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+    with use_fake_session(session) as client:
+        r = client.get("/ui/biblioteca")
+    inicio = r.text.index('class="library-card-meta"')
+    inicio = r.text.index(">", inicio) + 1
+    tarjeta = r.text[inicio:r.text.index("</div>", inicio)]
+    assert tarjeta.strip() == ""

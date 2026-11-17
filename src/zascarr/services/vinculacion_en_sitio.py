@@ -16,8 +16,8 @@ import sqlalchemy as sa
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.config import get_settings
 from zascarr.models import EDITION_KIND_A_FORMAT, File, Issue, IssueFormat
+from zascarr.services.raices import FotoDeRaices, raiz_de
 from zascarr.utils.naming import parse_comic_filename
 
 
@@ -38,19 +38,30 @@ async def vincular_en_sitio(
         return ResultadoVinculo("no_encontrado", "El archivo ya no existe.")
     if file.issue_id is not None:
         return ResultadoVinculo("ya_vinculado", "Ese archivo ya está vinculado.")
-    biblioteca = Path(str(get_settings().library_path)).resolve()
-    ruta = Path(file.file_path).resolve()
+    # M1: no se mueve ni se renombra; se hereda la raíz si el archivo está bajo una.
     try:
-        dentro = ruta.is_relative_to(biblioteca) and "_Unsorted" not in ruta.parts
-    except (OSError, ValueError):
-        dentro = False
-    if not dentro:
-        return ResultadoVinculo(
-            "fuera_de_biblioteca",
-            "Este archivo aún no está en su sitio: usa Organizar para moverlo y renombrarlo.")
+        foto = await FotoDeRaices.cargar(db)
+        raiz = raiz_de(file.file_path, foto.raices)
+        if raiz is not None:
+            raiz = foto.raiz_para_escritura(raiz.id)
+    except Exception:  # noqa: BLE001 — la raíz no es requisito del vínculo
+        raiz = None
+    if raiz is not None:
+        if file.root_id is None:
+            file.root_id = raiz.id
+        if "_Unsorted" in Path(file.file_path).parts:
+            return ResultadoVinculo(
+                "fuera_de_biblioteca",
+                "Este archivo aún no está en su sitio: usa Organizar para moverlo y renombrarlo.")
+    # Fuera de toda raíz: queda root_id NULL y el vínculo editorial no se bloquea (§4.3).
 
-    formato = EDITION_KIND_A_FORMAT.get(
-        parse_comic_filename(file.file_name).edition_kind, IssueFormat.SINGLE_ISSUE)
+    parsed = parse_comic_filename(file.file_name)
+    if parsed.is_pack:
+        return ResultadoVinculo(
+            "es_pack",
+            "Es un pack de varios números: no se vincula como una sola grapa. "
+            "Dejarlo para después.")
+    formato = EDITION_KIND_A_FORMAT.get(parsed.edition_kind, IssueFormat.SINGLE_ISSUE)
     filas = list((await db.execute(
         sa.select(Issue.id, Issue.format)
         .where(Issue.series_id == series_id,

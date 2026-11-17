@@ -14,9 +14,10 @@ from uuid import uuid4
 
 import pytest
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from tests._pg import bd_efimera_sync, migrar_a_head
+from tests._raices_pg import allowlist, sembrar_raiz
 from tests.test_revision_carpetas_pg import Banco
 from zascarr.models import ComicTradition, File, FileFormat, Issue, IssueFormat, Series
 from zascarr.services import importer as mod
@@ -60,6 +61,8 @@ async def ent(url_bd, tmp_path, monkeypatch):
     descargas.mkdir()
     monkeypatch.setattr(mod, "get_settings", lambda: SimpleNamespace(
         library_path=lib, transmission_download_dir=str(tmp_path / "transmission"), amule_incoming_dir=str(tmp_path / "amule"), downloads_path=descargas))
+    allowlist(monkeypatch, lib)
+    await sembrar_raiz(b.fabrica, lib)
     yield SimpleNamespace(banco=b, lib=lib, descargas=descargas)
     await b.cerrar()
 
@@ -182,3 +185,43 @@ class TestDejarloEnLaCarpetaDeDescargas:                                        
         nombres = sorted(f.file_name for f in await filas(ent))
         assert nombres == ["Serie 01.cbz", "Serie 02.cbz"] and not list(ent.descargas.rglob("*.cbz"))
         assert pack.exists()                                                                # el pack original sigue donde estaba
+
+
+@pytest.mark.asyncio
+async def test_dos_raices_importan_cada_tradicion_a_la_suya(ent, tmp_path, monkeypatch):
+    from uuid import uuid4 as _uuid4
+
+    from zascarr.config import get_settings
+    from zascarr.models import LibraryRoot, LibraryRootTradition
+
+    manga_dir = tmp_path / "manga"
+    manga_dir.mkdir()
+    rid = _uuid4()
+    async with ent.banco.fabrica() as s:
+        s.add(LibraryRoot(id=rid, name="Manga", path=str(manga_dir), enabled=True,
+                          is_default=False))
+        await s.flush()
+        await s.execute(text(
+            "DELETE FROM library_root_traditions WHERE tradition = 'manga'"))
+        s.add(LibraryRootTradition(root_id=rid, tradition=ComicTradition.MANGA))
+        serie_id = _uuid4()
+        s.add(Series(id=serie_id, title="Manga Test", start_year=2020,
+                     tradition=ComicTradition.MANGA))
+        await s.flush()
+        issue_id = _uuid4()
+        s.add(Issue(id=issue_id, series_id=serie_id, issue_number="1",
+                    format=IssueFormat.SINGLE_ISSUE))
+        await s.commit()
+    monkeypatch.setenv("LIBRARY_ROOTS", f"{ent.lib},{manga_dir}")
+    get_settings.cache_clear()
+    fuente = ent.descargas / "Manga Test 01.cbz"
+    un_zip(fuente, 3)
+    async with ent.banco.fabrica() as s:
+        informe = await Importer(s).scan_and_import()
+        await s.commit()
+    assert informe.error_count == 0
+    async with ent.banco.fabrica() as s:
+        fila = (await s.execute(select(File).where(File.issue_id == issue_id))).scalar_one()
+    assert str(fila.root_id) == str(rid)
+    assert Path(fila.file_path).is_relative_to(manga_dir)
+    assert not Path(fila.file_path).is_relative_to(ent.lib)
