@@ -544,3 +544,52 @@ class TestLimitesV2:
         texto = ops.linea_de_diario(r, uid=1000, ms=7)
         assert texto.startswith("accion=restaurar copia=backup-20260101_120000 id=")
         assert "secreta" not in texto
+
+
+# ── F-21: tipos estrictos de la lista propia del auxiliar ──────────────────────────────────────────────────────
+def _copia_de_prueba(tmp_path: Path, *, bytes_=1, sha="a" * 64, schema=1, nombre="20260101_120000"):
+    dump = tmp_path / f"backup_{nombre}.sql.gz"
+    dump.write_bytes(b"x")
+    (tmp_path / f"MANIFIESTO-backup_{nombre}.json").write_text(
+        json.dumps({"sha256": sha, "bytes": bytes_, **({} if schema is None else {"schema": schema})}),
+        encoding="utf-8")
+    return dump
+
+
+class TestListaPropia:
+    def test_un_manifiesto_valido_entra_y_los_tipos_laxos_no(self, tmp_path, monkeypatch):
+        """F-21/FR-10: `true` no es un entero válido para `bytes`/`schema`; un sha256 no-hex no vale."""
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda _r: True)
+        _copia_de_prueba(tmp_path, nombre="20260101_010101")
+        _copia_de_prueba(tmp_path, bytes_=True, nombre="20260101_020202")
+        _copia_de_prueba(tmp_path, bytes_=-1, nombre="20260101_030303")
+        _copia_de_prueba(tmp_path, sha="no-es-hex", nombre="20260101_040404")
+        _copia_de_prueba(tmp_path, sha="a" * 63, nombre="20260101_050505")
+        _copia_de_prueba(tmp_path, schema=True, nombre="20260101_060606")
+        _copia_de_prueba(tmp_path, schema=2, nombre="20260101_070707")
+        (tmp_path / "backup_20260101_080808.sql.gz").write_bytes(b"x")     # sin manifiesto
+        (tmp_path / "update_20260101_090909.sql.gz").write_bytes(b"x")     # no es backup_*
+        assert ops.listar_copias(str(tmp_path)) == ["backup-20260101_010101"]
+
+    def test_el_manifiesto_se_verifica_como_fichero_regular_de_root(self, tmp_path, monkeypatch):
+        """FR-10: si el dump o el manifiesto no son ficheros regulares de root sin escritura de grupo/otros, no entra."""
+        dump = _copia_de_prueba(tmp_path, nombre="20260101_111111")
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda ruta: ruta == str(dump))
+        assert ops.listar_copias(str(tmp_path)) == []                     # el manifiesto no pasó la comprobación
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda _r: True)
+        assert ops.listar_copias(str(tmp_path)) == ["backup-20260101_111111"]
+
+    def test_se_quedan_las_30_mas_recientes(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda _r: True)
+        for i in range(35):
+            _copia_de_prueba(tmp_path, nombre=f"20260101_{i:06d}")
+        lista = ops.listar_copias(str(tmp_path))
+        assert len(lista) == 30 and lista[0] == "backup-20260101_000034"
+
+
+def test_verificar_regular_root_rechaza_enlaces_y_permisos_abiertos(tmp_path, monkeypatch):
+    """FR-10/AC-06: solo fichero regular de root sin escritura para grupo u otros."""
+    ruta = tmp_path / "fichero"
+    ruta.write_bytes(b"x")
+    assert ops._verificar_regular_root(str(ruta)) is False          # no es de root (uid 1000)
+    assert ops._verificar_regular_root(str(tmp_path / "no-existe")) is False

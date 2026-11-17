@@ -170,6 +170,8 @@ def test_si_la_reaplicacion_no_cabe_en_jsonb_falla_cerrado(tmp_path):
     assert estado["resultado"] == "fallida" and estado["error"] == "seguridad_no_aplicada"
     assert estado["base_en_su_sitio"] is True
     assert "up zascarr" in ev                                            # la app se vuelve a arrancar
+    # F-22: los temporales con la fila vigente (secretos) no quedan en el directorio de copias.
+    assert not list(ctx["backup"].glob("seguridad.*")), list(ctx["backup"].glob("*"))
 
 
 # ── F-15/AC-51: recuentos genéricos de todas las tablas base ───────────────────────────────────────────────────
