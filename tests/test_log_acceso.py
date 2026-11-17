@@ -399,6 +399,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "serie_ids", "tradicion",
     # D5 (#162): semana y editorial de Novedades (estado de la vista).
     "semana", "editorial",
+    # Por revisar: filtro y tamaño de página (estado de la vista).
+    "solo_sugerencia", "tamano",
     # #797: abrir el desplegable de alta tras un error (estado de la vista).
     "abrir",
 })
