@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 from tests.test_pendientes import FakeExecResult, FakeSession, use_fake_session
+from zascarr.main import app
 from zascarr.models import File, FileFormat, Issue, Series
 from zascarr.services import lector
 
@@ -80,14 +81,49 @@ def test_pantalla_y_pagina(tmp_path):
         assert 'data-total="3"' in r.text and "/pagina/1" in r.text
         p = client.get(f"/ui/leer/{f.id}/pagina/1")
         assert p.status_code == 200 and p.headers["content-type"].startswith("image/jpeg")
+        assert p.headers["x-content-type-options"] == "nosniff"
+        r304 = client.get(f"/ui/leer/{f.id}/pagina/1",
+                          headers={"If-None-Match": p.headers["etag"]})
+        assert r304.status_code == 304
         assert client.get(f"/ui/leer/{f.id}/pagina/0").status_code == 404
         assert client.get(f"/ui/leer/{f.id}/pagina/99").status_code == 404
 
 
 def test_guardar_progreso_recorta_y_marca_leyendo(tmp_path):
     f = _file(tmp_path)
-    db = FakeSession(get_map={(File, f.id): f}, exec_queue=[FakeExecResult([])])
-    # El servicio real usa async; el fake no tiene un `commit` que persista, pero sí registra.
+    añadidos = []
+
+    class Db(FakeSession):
+        def add(self, obj):
+            añadidos.append(obj)
+
+    db = Db(get_map={(File, f.id): f}, exec_queue=[FakeExecResult([])])
     import asyncio
     asyncio.run(lector.guardar_progreso(db, f.id, 99))
     assert db.commit.await_count == 1
+    p = añadidos[0]
+    assert p.current_page == 3 and p.file_id == f.id
+    assert p.status.value == "reading"
+
+
+def test_ruta_de_progreso_devuelve_204_y_guarda_la_pagina(tmp_path):
+    f = _file(tmp_path)
+    añadidos = []
+
+    class Db(FakeSession):
+        def add(self, obj):
+            añadidos.append(obj)
+
+    db = Db(get_map={(File, f.id): f}, exec_queue=[FakeExecResult([])])
+    with use_fake_session(db):
+        from fastapi.testclient import TestClient
+        r = TestClient(app).post(f"/ui/leer/{f.id}/progreso", data={"pagina": "99"})
+    assert r.status_code == 204 and añadidos[0].current_page == 3
+
+
+def test_la_ficha_tiene_el_enlace_de_leer_sin_escribir():
+    from pathlib import Path
+    t = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "web"
+         / "templates" / "issue_detail.html").read_text(encoding="utf-8")
+    assert "lector_archivo" in t and "/ui/leer/" in t
+    assert "Continuar (pág." in t
