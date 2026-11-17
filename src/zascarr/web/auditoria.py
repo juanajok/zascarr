@@ -693,6 +693,9 @@ async def _procesar_paquete(op_id: str) -> None:
             op = await s.get(PaqueteOperacion, UUID(op_id))
             if op is not None and op.estado is PaqueteEstado.VERIFICADO:
                 if tarea is not None:
+                    tareas.actualizar(tarea.id, fase="Comprobando",
+                                      total=op.total_entradas or None,
+                                      hechos=len(op.items or []))
                     tareas.actualizar(tarea.id, fase="Importando",
                                       total=op.total_entradas or None,
                                       hechos=len(op.items or []))
