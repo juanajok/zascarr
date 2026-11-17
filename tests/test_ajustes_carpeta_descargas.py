@@ -25,4 +25,5 @@ def test_valida_ruta_absoluta_del_host():
     assert _carpeta_de_descargas_valida("/media/Descargas/torrents/completos")
     assert not _carpeta_de_descargas_valida("media/Descargas")
     assert not _carpeta_de_descargas_valida("/media/../etc")
+    assert not _carpeta_de_descargas_valida("/")
     assert not _carpeta_de_descargas_valida("/media/\x01raro")
