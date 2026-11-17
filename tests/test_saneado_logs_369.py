@@ -248,9 +248,11 @@ def test_logger_exception_real_y_buffer():
 
 
 def test_aviso_y_descarga_logs_saneados():
+    estado = Path("src/zascarr/web/templates/estado.html").read_text()
     dashboard = Path("src/zascarr/web/templates/dashboard.html").read_text()
-    assert "Pueden incluir rutas" not in dashboard
-    assert "se ocultan" in dashboard
+    assert "Registro de la aplicación" in estado
+    assert "sin rutas, nombres, contraseñas ni tokens" in estado
+    assert "Descargar logs" not in dashboard and "/ui/logs" not in dashboard
 
 
 def test_websocket_con_args_saneado():
