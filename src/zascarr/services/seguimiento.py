@@ -8,6 +8,7 @@ puras; los adaptadores son inyectables para las pruebas.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from html import unescape
@@ -77,6 +78,13 @@ def _norm_alias(valor: str) -> str:
     return normalize_title(valor or "")
 
 
+#: Marcadores de recopilatorio que el parser de nombres no siempre marca como
+#: edición («One Piece 01 - Edición 3 en 1»): no identifican UNA grapa.
+_RECOPILATORIO = re.compile(
+    r"\b(?:\d+\s*en\s*1|integral|omnibus|omnigold|deluxe|colecci[oó]n|collection|pack)\b",
+    re.IGNORECASE)
+
+
 def casar_fichero(nombre: str, serie: Series, alias: set[str]) -> int | None:
     """Número de una grapa si el nombre de fichero casa con la serie, o None.
 
@@ -85,6 +93,8 @@ def casar_fichero(nombre: str, serie: Series, alias: set[str]) -> int | None:
     no enteros, y exigir igualdad del nombre normalizado con el título o un alias
     local. Falla cerrado; nunca usa el título del hilo ni el título del release.
     """
+    if _RECOPILATORIO.search(nombre or ""):
+        return None
     parsed = parse_comic_filename(nombre)
     if parsed.edition_kind is not None:
         return None
