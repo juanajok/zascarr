@@ -1569,7 +1569,7 @@ class AliasImportado(Base):
 
 
 class OpsAccion(enum.StrEnum):
-    """Acciones que la app puede pedir al auxiliar del host (BL-OPS1, ADR 0018): lista cerrada."""
+    """Acciones que la app puede pedir al auxiliar del host (BL-OPS1, ADR 0021): lista cerrada."""
 
     COPIA = "copia"
 

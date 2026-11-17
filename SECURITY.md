@@ -191,7 +191,7 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   caracteres por valor**. Lo que excede se ignora con aviso en el informe de
   importación y nunca aborta el ciclo; no se escribe ni un byte del CBZ.
 
-## «Hacer una copia ahora» (BL-OPS1, ADR 0018)
+## «Hacer una copia ahora» (BL-OPS1, ADR 0021)
 
 Es opcional y **no está activado por defecto**: lo instala quien opera el equipo con `sudo bash scripts/instalar_ops.sh`. Sin
 él, Estado dice «No activado en este equipo» y no hay botón.
