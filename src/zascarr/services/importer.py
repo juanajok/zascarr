@@ -60,6 +60,7 @@ from zascarr.services.raices import (
     FotoDeRaices,
     RaizNoDisponibleError,
     RaizResuelta,
+    es_componente_de,
 )
 from zascarr.services.upgrades import reconciliar_mejora_importada
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
@@ -149,6 +150,9 @@ class ComprobacionBiblioteca:
     ausentes: int | None = None  # rutas registradas que no estaban (solo si se llegó a mirarlas)
     desaparecidos: list[str] = field(default_factory=list)
     reaparecidos: list[str] = field(default_factory=list)
+    #: Estado observado POR RAÍZ (#156, corte C). Compatible: una instalación de una raíz
+    #: deja una sola entrada. Cada entrada: id, nombre, resultado, archivos, ausentes.
+    raices: list[dict] = field(default_factory=list)
 
     @property
     def bajas_omitidas(self) -> bool:
@@ -163,6 +167,7 @@ class ComprobacionBiblioteca:
             "ausentes": self.ausentes,
             "bajas_omitidas": self.bajas_omitidas,
             "fecha": self.fecha.isoformat(),
+            "raices": self.raices,
         }
 
 
@@ -551,8 +556,14 @@ class Importer:
                 report.errors.append("El ciclo se detuvo antes de mirar el resto de las descargas")
                 break
             except Exception as exc:
-                logger.error("importer.file_failed", file=path.name,
-                             error=type(exc).__name__)
+                try:
+                    inodo = path.stat(follow_symlinks=False).st_ino
+                except OSError:
+                    inodo = None
+                logger.error(
+                    "importer.file_failed", inodo=inodo,
+                    formato=path.suffix.lstrip(".") or "sin_extension",
+                    error_tipo=type(exc).__name__)
                 report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
 
         # B7: revisión de la biblioteca YA importada, no de lo nuevo que
@@ -677,70 +688,106 @@ class Importer:
         return comprobacion.desaparecidos, comprobacion.reaparecidos
 
     async def _comprobar_biblioteca(self) -> ComprobacionBiblioteca:
-        """Misma revisión que describe `_detectar_desaparecidos` (B7), pero devolviendo también
-        QUÉ observó (#231): el motivo de cada guardarraíl deja de ir solo al log. No cambia cuándo
-        se marca una baja ni los umbrales. Una excepción NO se captura aquí: la recoge
-        `scan_and_import` y la registra como `FALLO_DETECCION`."""
+        """Revisa la disponibilidad POR RAÍZ (#156, corte C).
+
+        Una raíz caída, vacía o con desaparición masiva se omite ENTERA y no marca bajas de
+        sus archivos ni contamina a las demás. Los `File.root_id NULL` no se atribuyen a
+        ninguna raíz ni se marcan por la caída de otra. En una instalación de una sola raíz
+        el resultado y los recuentos son los mismos que antes.
+        """
         fecha = datetime.now(UTC)
-
-        def omitida(resultado, registrados=None, ausentes=None):
-            return ComprobacionBiblioteca(resultado=resultado, fecha=fecha,
-                                          archivos_registrados=registrados, ausentes=ausentes)
-
-        if not self._library.exists() or not self._library.is_dir():
-            logger.warning(
-                "importer.biblioteca_inaccesible_omitiendo_desaparecidos", raiz="biblioteca"
-            )
-            registrados = (await self._db.execute(
-                select(func.count()).select_from(File))).scalar_one()
-            return omitida(ResultadoComprobacion.RAIZ_INACCESIBLE, registrados)
-
-        files = list((await self._db.execute(select(File))).scalars().all())
-        if not files:
-            return ComprobacionBiblioteca(resultado=ResultadoComprobacion.COMPROBADA, fecha=fecha,
-                                          archivos_registrados=0, ausentes=0)
-
-        biblioteca_vacia = await asyncio.to_thread(lambda: not any(self._library.iterdir()))
-        if biblioteca_vacia:
-            logger.warning(
-                "importer.biblioteca_vacia_omitiendo_desaparecidos", raiz="biblioteca"
-            )
-            return omitida(ResultadoComprobacion.RAIZ_VACIA, len(files))
-
-        rutas = [f.file_path for f in files]
-        # Un único hop a un hilo para todo el lote, no uno por fichero —
-        # `stat` es síncrono (I/O bloqueante, CLAUDE.md §4).
-        ausentes = await asyncio.to_thread(lambda: {r for r in rutas if not _existe(r)})
-
-        if (
-            len(files) >= UMBRAL_DESAPARICION_MASIVA_MINIMO
-            and len(ausentes) > len(files) * UMBRAL_DESAPARICION_MASIVA_FRACCION
-        ):
-            logger.error(
-                "importer.desaparicion_masiva_anomala_abortando",
-                ausentes=len(ausentes), total_files=len(files), raiz="biblioteca",
-            )
-            return omitida(ResultadoComprobacion.DESAPARICION_MASIVA, len(files), len(ausentes))
-
+        foto = await self._foto()
+        todas = list((await self._db.execute(select(File))).scalars().all())
+        estados: list[dict] = []
         desaparecidos: list[str] = []
         reaparecidos: list[str] = []
-        for f in files:
-            ausente = f.file_path in ausentes
-            if ausente and not f.is_missing:
-                f.is_missing = True
-                f.missing_since = datetime.now(UTC)
-                desaparecidos.append(f.file_name)
-            elif not ausente and f.is_missing:
-                f.is_missing = False
-                f.missing_since = None
-                reaparecidos.append(f.file_name)
+        ausentes_total: int | None = 0
+        vistos: set[object] = set()
+
+        raices = [r for r in foto.raices if bool(getattr(r, "enabled", True))]
+        for raiz in raices:
+            def de_esta_raiz(f: File, raiz=raiz) -> bool:
+                if getattr(raiz, "id", None) is None:
+                    # Compatibilidad con dobles de una sola raíz sin tabla.
+                    return f.root_id is None and es_componente_de(f.file_path, raiz.path)
+                # `root_id NULL` bajo la raíz es una fila heredada aún sin backfill: se
+                # cuenta en su raíz por componentes, nunca en otra.
+                return (f.root_id is not None and str(f.root_id) == str(raiz.id)) or (
+                    f.root_id is None and es_componente_de(f.file_path, raiz.path))
+
+            archivos = [f for f in todas if de_esta_raiz(f)]
+            vistos.update(id(f) for f in archivos)
+            ruta = Path(raiz.path)
+            info = {"id": str(raiz.id) if getattr(raiz, "id", None) is not None else None,
+                    "nombre": str(raiz.name), "resultado": "", "archivos": len(archivos),
+                    "ausentes": None}
+            if not await asyncio.to_thread(ruta.is_dir):
+                logger.warning("importer.raiz_inaccesible_omitiendo_desaparecidos", raiz=raiz.name)
+                info["resultado"] = ResultadoComprobacion.RAIZ_INACCESIBLE.value
+                ausentes_total = None
+                estados.append(info)
+                continue
+            if not archivos:
+                info["resultado"] = ResultadoComprobacion.COMPROBADA.value
+                info["ausentes"] = 0
+                estados.append(info)
+                continue
+            vacia = await asyncio.to_thread(lambda ruta=ruta: not any(ruta.iterdir()))
+            if vacia:
+                logger.warning("importer.raiz_vacia_omitiendo_desaparecidos", raiz=raiz.name)
+                info["resultado"] = ResultadoComprobacion.RAIZ_VACIA.value
+                estados.append(info)
+                continue
+            rutas = [f.file_path for f in archivos]
+            ausentes = await asyncio.to_thread(
+                lambda rutas=rutas: {r for r in rutas if not _existe(r)})
+            ausentes_total += len(ausentes)
+            if (
+                len(archivos) >= UMBRAL_DESAPARICION_MASIVA_MINIMO
+                and len(ausentes) > len(archivos) * UMBRAL_DESAPARICION_MASIVA_FRACCION
+            ):
+                logger.error("importer.desaparicion_masiva_anomala_abortando",
+                             ausentes=len(ausentes), total_files=len(archivos), raiz=raiz.name)
+                info["resultado"] = ResultadoComprobacion.DESAPARICION_MASIVA.value
+                info["ausentes"] = len(ausentes)
+                estados.append(info)
+                continue
+            for f in archivos:
+                ausente = f.file_path in ausentes
+                if ausente and not f.is_missing:
+                    f.is_missing = True
+                    f.missing_since = datetime.now(UTC)
+                    desaparecidos.append(f.file_name)
+                elif not ausente and f.is_missing:
+                    f.is_missing = False
+                    f.missing_since = None
+                    reaparecidos.append(f.file_name)
+            info["resultado"] = ResultadoComprobacion.COMPROBADA.value
+            info["ausentes"] = len(ausentes)
+            estados.append(info)
+
+        # Los archivos fuera de toda raíz no se atribuyen ni se dan de baja por una raíz caída.
+        fuera_de_raiz = sum(1 for f in todas if id(f) not in vistos)
+        if fuera_de_raiz:
+            estados.append({"id": None, "nombre": "Fuera de raíz", "resultado": "fuera_de_raiz",
+                            "archivos": fuera_de_raiz, "ausentes": None})
+
+        resultados = [e["resultado"] for e in estados]
+        if not raices or ResultadoComprobacion.RAIZ_INACCESIBLE.value in resultados:
+            resultado = ResultadoComprobacion.RAIZ_INACCESIBLE
+        elif ResultadoComprobacion.RAIZ_VACIA.value in resultados:
+            resultado = ResultadoComprobacion.RAIZ_VACIA
+        elif ResultadoComprobacion.DESAPARICION_MASIVA.value in resultados:
+            resultado = ResultadoComprobacion.DESAPARICION_MASIVA
+        else:
+            resultado = ResultadoComprobacion.COMPROBADA
 
         if desaparecidos or reaparecidos:
             await self._db.flush()
         return ComprobacionBiblioteca(
-            resultado=ResultadoComprobacion.COMPROBADA, fecha=fecha,
-            archivos_registrados=len(files), ausentes=len(ausentes),
-            desaparecidos=desaparecidos, reaparecidos=reaparecidos)
+            resultado=resultado, fecha=fecha, archivos_registrados=len(todas),
+            ausentes=ausentes_total, desaparecidos=desaparecidos,
+            reaparecidos=reaparecidos, raices=estados)
 
     async def _foto(self) -> FotoDeRaices:
         """Foto de raíces por ciclo: una consulta, aunque haya muchos archivos."""
@@ -748,6 +795,12 @@ class Importer:
         if foto is None:
             if isinstance(self._db, AsyncSession):
                 foto = await FotoDeRaices.cargar(self._db)
+                biblioteca = getattr(self, "_library", None)
+                if foto.raices and biblioteca is not None and not any(
+                        str(biblioteca) == str(r.path) for r in foto.raices):
+                    # Configuración de una sola raíz antigua (o doble de prueba): la raíz de
+                    # settings sigue siendo la que se recorre. En producción las filas mandan.
+                    foto = FotoDeRaices.compatibilidad(path=biblioteca)
             else:
                 # Dobles de prueba sin tabla de raíces: reproducción de una instalación de una raíz.
                 foto = FotoDeRaices.compatibilidad(
@@ -780,10 +833,10 @@ class Importer:
             report.duplicates.append(
                 f"{path.name} — duplicado de {outcome.duplicate_of}, descartado"
             )
-            logger.info(
+            logger.debug(
                 "importer.duplicate",
-                file=path.name,
-                hash=outcome.tr.sha256[:12] if outcome.tr.sha256 else None,
+                inodo=path.stat(follow_symlinks=False).st_ino,
+                formato=path.suffix.lstrip(".") or "sin_extension",
             )
             return
         tr, result = outcome.tr, outcome.result
@@ -840,8 +893,9 @@ class Importer:
         except RaizNoDisponibleError as exc:
             causa = _mensaje_sin_rutas(exc, path)
             report.errors.append(f"{path.name}: {causa}")
-            logger.warning("importer.raiz_no_disponible", archivo=path.name,
-                           causa=causa, raiz=exc.raiz)
+            logger.warning("importer.raiz_no_disponible",
+                           raiz=exc.raiz, motivo=type(exc).__name__,
+                           formato=path.suffix.lstrip(".") or "sin_extension")
             return
         if is_unsorted:
             dest = raiz.path / "_Unsorted" / path.name
@@ -855,7 +909,8 @@ class Importer:
                 comprobar_espacio, raiz.path, path.stat().st_size, "importar a la biblioteca")
         except EspacioInsuficienteError as exc:
             report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
-            logger.warning("importer.raiz_sin_espacio", archivo=path.name, raiz=raiz.name)
+            logger.warning("importer.raiz_sin_espacio", raiz=raiz.name,
+                           formato=path.suffix.lstrip(".") or "sin_extension")
             return
         except OSError as exc:
             report.errors.append(
@@ -952,8 +1007,9 @@ class Importer:
             sufijo = f" (ComicInfo: {'; '.join(avisos)})" if avisos else ""
             report.imported.append(
                 f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)}{sufijo}")
-        logger.info("importer.imported", file=path.name, root=raiz.name,
-                    relative=str(final_dest.relative_to(raiz.path)), status=result.status)
+        logger.info("importer.imported", file_id=str(file_rec.id), root=raiz.name,
+                    formato=path.suffix.lstrip(".") or "sin_extension",
+                    status=result.status)
 
     async def _aplicar_comicinfo(
             self, result: MatchResult, tr: TriageResult, ruta: Path) -> list[str]:
@@ -1013,8 +1069,9 @@ class Importer:
         except RaizNoDisponibleError as exc:
             causa = _mensaje_sin_rutas(exc, path)
             report.errors.append(f"{path.name}: {causa}")
-            logger.warning("importer.raiz_no_disponible", archivo=path.name,
-                           causa=causa, raiz=exc.raiz)
+            logger.warning("importer.raiz_no_disponible",
+                           raiz=exc.raiz, motivo=type(exc).__name__,
+                           formato=path.suffix.lstrip(".") or "sin_extension")
             return
         if serie is None:
             dest = raiz.path / "_Unsorted" / path.name
@@ -1039,8 +1096,8 @@ class Importer:
         prefijo_raiz = "" if len(foto.raices) <= 1 else f"{raiz.name}: "
         report.imported.append(
             f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)} (recuperado)")
-        logger.info("importer.recuperado", file=path.name, root=raiz.name,
-                    relative=str(final_dest.relative_to(raiz.path)))
+        logger.info("importer.recuperado", file_id=str(fila.id), root=raiz.name,
+                    formato=path.suffix.lstrip(".") or "sin_extension")
 
     async def _persist_run(self, report: ImportReport) -> None:
         run = ImportRun(
@@ -1153,7 +1210,8 @@ class Importer:
                             file_id=str(file_rec.id), resultado=resultado.resultado)
                 return None
             ruta = Path(file_rec.file_path)
-            logger.info("importer.conversion_ok", file_id=str(file_rec.id), destino=str(ruta))
+            logger.info("importer.conversion_ok", file_id=str(file_rec.id),
+                        formato=ruta.suffix.lstrip(".") or "sin_extension")
             return ruta
         except Exception:  # noqa: BLE001 — nunca se pierde el CBR por una conversión
             logger.exception("importer.conversion_fallida", file_id=str(file_rec.id))
@@ -1176,7 +1234,7 @@ def build_library_path(library: Path, series: Series, issue_number: str | None,
                        suffix: str, fallback_name: str | None = None,
                        *, issue_title: str | None = None,
                        issue_format: IssueFormat | str | None = None,
-                       pack: bool = False) -> Path:
+                       pack: bool = False, especial: bool = False) -> Path:
     """Ruta canónica /library/{tradición}/{Serie (Año)}/{Serie #NNN.ext}.
 
     Compartida entre el importer (issue_number viene de ComicInfo.xml, si
@@ -1211,5 +1269,9 @@ def build_library_path(library: Path, series: Series, issue_number: str | None,
             filename = f"{safe_title} #{num}{suffix}"
     else:
         filename = fallback_name or f"{safe_title}{suffix}"
+        if especial:
+            # Especiales/tomos sin número: van a su propia carpeta dentro de la
+            # serie (decisión del PO, 2026-11-16), no al _Unsorted general.
+            folder = f"{folder}/Especiales"
 
     return library / tradition_folder / folder / filename

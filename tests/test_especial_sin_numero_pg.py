@@ -99,3 +99,18 @@ async def test_rechaza_numero_inventado_y_archivo_ya_enlazado(sesion):
     await sesion.commit()
     with pytest.raises(EspecialSinNumeroError):
         await servicio.vincular_especial(archivo.id, serie.id, "Otro")
+
+
+async def test_un_tomo_declara_los_numeros_que_cubre(sesion):
+    """El tomo guarda `numeros_cubiertos`; esos números cuentan como poseídos."""
+    from zascarr.services.series import numeros_poseidos
+
+    serie, archivo = await _mundo(sesion)
+    await EspecialesService(sesion).vincular_especial(
+        archivo.id, serie.id, "Sector Lejano: recopilatorio", IssueFormat.TRADE_PAPERBACK,
+        numeros_cubiertos="1-3")
+    await sesion.commit()
+
+    await sesion.refresh(archivo)
+    assert archivo.metadata_["numeros_cubiertos"] == ["1", "2", "3"]
+    assert await numeros_poseidos(sesion, serie.id) == {1, 2, 3}

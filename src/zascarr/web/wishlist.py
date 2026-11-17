@@ -28,6 +28,7 @@ from zascarr.services.orchestrator import (
     prowlarr_configurado,
     verificar_token_candidato,
 )
+from zascarr.services.transmission import TransmissionClient
 from zascarr.services.wishlist import WishlistService
 from zascarr.web.routes import crear_templates
 
@@ -41,7 +42,7 @@ _ESTADO_LABEL = {
     WishlistStatus.WANTED: "Por buscar",
     WishlistStatus.SEARCHING: "Buscando…",
     WishlistStatus.DOWNLOADING: "Descargando…",
-    WishlistStatus.DOWNLOADED: "Descargando…",
+    WishlistStatus.DOWNLOADED: "Descargado",  # terminó; espera al importador
     WishlistStatus.IMPORTED: "En tu biblioteca",
     WishlistStatus.FAILED: "Sin resultados",
     # D8: lo retiró la política (dejó de querer ese número), no falló nada. Se
@@ -71,6 +72,9 @@ def _row(item: Wishlist) -> dict:
         # una vez descargando/en biblioteca, esto no es la herramienta
         # para tocarlo (no hay override manual de una descarga en curso).
         "puede_buscar_ahora": item.status in (WishlistStatus.WANTED, WishlistStatus.FAILED),
+        # Descargas manuales que no enlazan (p. ej. _Unsorted → especial): se
+        # pueden dar por conseguidas a mano para no dejar el deseo colgado.
+        "puede_marcar_conseguido": item.status == WishlistStatus.DOWNLOADING,
         # D9: motivo concreto de por qué esta fila no avanza (o avanzó
         # y ya no aplica) — escrito por el orquestador, nunca inventado
         # aquí. "Sin resultados" en el badge de estado ya no es lo único
@@ -106,9 +110,14 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
     settings = get_settings()
     prowlarr_incompleto = bool(
         getattr(settings, "prowlarr_enabled", False) and not prowlarr_configurado(settings))
+    en_descarga = sum(
+        1 for r in rows
+        if r["item"].status in (WishlistStatus.DOWNLOADING, WishlistStatus.DOWNLOADED))
     return templates.TemplateResponse(
         request, "wishlist.html", {
             "rows": rows,
+            "total": len(rows),
+            "en_descarga": en_descarga,
             "aviso_legal_pendiente": aviso_legal_pendiente,
             "prowlarr_incompleto": prowlarr_incompleto,
         }
@@ -136,6 +145,78 @@ async def anadir(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = await _get_row(db, item.id)
+    return templates.TemplateResponse(request, "_fila_wishlist.html", {"row": row})
+
+
+@router.get("/progreso", response_class=HTMLResponse)
+async def progreso(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Cola/progreso de los deseos en descarga (hueco del benchmark 2026-11-16).
+
+    Una sola consulta a Transmission por refresco (no una por fila); aMule no
+    expone progreso por su web, así que se indica como tal. Solo incluye deseos
+    en DOWNLOADING/DOWNLOADED: el resto de la pantalla no se duplica.
+    """
+    items = list((await db.execute(
+        select(Wishlist)
+        .where(Wishlist.status.in_([WishlistStatus.DOWNLOADING,
+                                    WishlistStatus.DOWNLOADED]))
+        .options(*_EAGER)
+        .order_by(Wishlist.added_at.asc())
+    )).scalars().all())
+    if not items:
+        return HTMLResponse("")
+
+    settings = get_settings()
+    torrents: dict[str, dict] = {}
+    hay_transmission = any(
+        (i.download_backend or "") == "transmission" and i.download_ref for i in items)
+    if hay_transmission and getattr(settings, "transmission_enabled", False):
+        try:
+            torrents = {
+                str(t.get("hashString", "")).lower(): t
+                for t in await TransmissionClient().list_torrents()
+                if t.get("hashString")
+            }
+        except Exception:
+            # Sin acceso al cliente se sigue mostrando el deseo como «en cola».
+            torrents = {}
+
+    filas = []
+    for item in items:
+        row = _row(item)
+        backend = (item.download_backend or "").lower()
+        pct: int | None = None
+        detalle = "En cola de descarga"
+        if backend == "transmission" and item.download_ref:
+            torrent = torrents.get(str(item.download_ref).lower())
+            if torrent is not None:
+                pct = round(float(torrent.get("percentDone") or 0) * 100)
+                detalle = "Completado, pendiente de importar" if pct >= 100 else "Transmission"
+            else:
+                detalle = "Transmission (no está en la lista del cliente)"
+        elif backend == "amule":
+            detalle = "aMule (sin progreso por aquí)"
+        filas.append({
+            "item_id": item.id,
+            "titulo": row["titulo"],
+            "backend": backend,
+            "pct": pct,
+            "detalle": detalle,
+        })
+    return templates.TemplateResponse(
+        request, "_progreso_wishlist.html", {"filas": filas})
+
+
+@router.post("/{item_id}/marcar-conseguido", response_class=HTMLResponse)
+async def marcar_conseguido(item_id: UUID, request: Request,
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Cierra un deseo que ya está en la biblioteca aunque el importador no lo
+    haya ligado (p. ej. quedó en _Unsorted y luego se guardó como especial)."""
+    try:
+        await WishlistService(db).marcar_conseguido(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    row = await _get_row(db, item_id)
     return templates.TemplateResponse(request, "_fila_wishlist.html", {"row": row})
 
 
@@ -208,11 +289,90 @@ async def buscar_ahora(
     ]
     return templates.TemplateResponse(request, "_candidatos_wishlist.html", {
         "item_id": item_id,
+        # No usar `_row()` aquí: `item` viene de `db.get` SIN las relaciones
+        # precargadas y acceder a `item.series` en async lanza MissingGreenlet
+        # (500 real 2026-11-17). Para la etiqueta basta la consulta guardada.
+        "item_titulo": (item.search_query or "").strip() if item else "",
         "candidatos": filas,
         "no_se_pudo_buscar": no_se_pudo_buscar,
         "sin_candidatos": sin_candidatos,
         "motivo": item.last_error if sin_candidatos else None,
     })
+
+
+#: Tope de deseos por tanda: cada búsqueda puede tardar hasta ~2 min (foro/cortesía).
+MAX_LOTE = 8
+
+
+def _resultado_lote(request: Request, mensaje: str, parciales: list[str]):
+    """Aviso de la tanda + parciales de candidatos en OOB (sin tocar el estado del deseo)."""
+    return templates.TemplateResponse(request, "_resultado_lote.html", {
+        "mensaje": mensaje,
+        "parciales": "".join(parciales),
+    })
+
+
+@router.post("/buscar-lote", response_class=HTMLResponse,
+             dependencies=[Depends(require_legal_acknowledgment)])
+async def buscar_lote(
+    request: Request,
+    item_id: list[UUID] = Form(default=[]),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Busca varios deseos en secuencia y devuelve cada panel de candidatos en OOB.
+
+    No usa `_row()`: los items vienen de `db.get` sin relaciones precargadas y tocar
+    `item.series`/`item.issue` lanzaría MissingGreenlet (regresión 2026-11-17). El panel se
+    renderiza con `templates.env.get_template(...).render(...)` para poder incrustarlo en la
+    respuesta OOB conservando el mismo parcial que «Buscar ahora». No cambia el estado del
+    deseo ni envía nada a los clientes de descarga.
+    """
+    ids = list(dict.fromkeys(item_id))
+    if not ids:
+        return _resultado_lote(request, "No has seleccionado ningún deseo.", [])
+    if len(ids) > MAX_LOTE:
+        return _resultado_lote(
+            request,
+            f"Has seleccionado {len(ids)} deseos; el máximo por tanda es {MAX_LOTE}. "
+            "Marca menos y vuelve a intentarlo.", [])
+    orquestador = Orchestrator(db)
+    secret = get_settings().secret_key
+    parciales: list[str] = []
+    buscados = 0
+    saltados = 0
+    plantilla = templates.env.get_template("_candidatos_wishlist.html")
+    for ident in ids:
+        item = await db.get(Wishlist, ident)
+        if item is None:
+            saltados += 1
+            continue
+        resultado = await orquestador.preview_candidates(item)
+        filas = [
+            {"c": candidato, "formato": _formato_de(candidato.title),
+             "token": crear_token_candidato(ident, candidato, secret)}
+            for candidato in (resultado or [])
+        ]
+        parcial = plantilla.render(
+            item_id=ident,
+            item_titulo=(item.search_query or "").strip(),
+            candidatos=filas,
+            no_se_pudo_buscar=resultado is None,
+            sin_candidatos=resultado is not None and not resultado,
+            motivo=item.last_error if resultado is not None and not resultado else None,
+        )
+        # El root del parcial ya tiene el id vivo: se le añade el swap OOB para que htmx
+        # sustituya ESE panel y no todo el contenedor del lote.
+        parcial = parcial.replace(
+            f'<div class="candidatos-wishlist" id="candidatos-{ident}">',
+            f'<div class="candidatos-wishlist" id="candidatos-{ident}" '
+            f'hx-swap-oob="outerHTML:#candidatos-{ident}">', 1)
+        parciales.append(parcial)
+        buscados += 1
+    mensaje = (f"Se buscaron {buscados} deseo{'s' if buscados != 1 else ''}; "
+               "cada resultado está en su fila.")
+    if saltados:
+        mensaje += f" {saltados} ya no estaban en la lista."
+    return _resultado_lote(request, mensaje, parciales)
 
 
 @router.post("/{item_id}/cancelar-busqueda", response_class=HTMLResponse)

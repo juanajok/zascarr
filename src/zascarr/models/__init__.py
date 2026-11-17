@@ -1188,6 +1188,13 @@ class Wishlist(Base):
     # Sin timestamp propio: se correlaciona con last_searched_at, ya
     # marcado en el mismo punto donde se decide la causa.
     last_error:       Mapped[str|None]        = mapped_column(Text)
+    # T-62: backoff de envío. `retry_count` son los fallos consecutivos del
+    # cliente de descargas; `next_retry_at` es el momento antes del cual el
+    # ciclo automático no vuelve a intentarlo. Los limpia un envío correcto o
+    # el reintento manual del coleccionista (`WishlistService.retry`).
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0"))
+    next_retry_at:    Mapped[datetime|None]   = mapped_column(DateTime(timezone=True))
     series: Mapped["Series|None"] = relationship()
     issue:  Mapped["Issue|None"]  = relationship()
 
@@ -1527,6 +1534,27 @@ class AliasImportado(Base):
                                               server_default=text("'{}'::jsonb"))
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
                                                 server_default=func.now())
+
+
+class OpsAccion(enum.StrEnum):
+    """Acciones que la app puede pedir al auxiliar del host (BL-OPS1, ADR 0018): lista cerrada."""
+
+    COPIA = "copia"
+
+
+class CodigoOps(enum.StrEnum):
+    """Códigos de respuesta del auxiliar del host (lista cerrada, repetida en `deploy/ops`)."""
+
+    ACEPTADA = "aceptada"
+    ESQUEMA_INVALIDO = "esquema_invalido"
+    FIRMA_INVALIDA = "firma_invalida"
+    CADUCADA = "caducada"
+    REPETIDA = "repetida"
+    ACCION_NO_DISPONIBLE = "accion_no_disponible"
+    DEMASIADO_PRONTO = "demasiado_pronto"
+    LIMITE_DIARIO = "limite_diario"
+    OPERACION_EN_CURSO = "operacion_en_curso"
+    NO_DISPONIBLE = "no_disponible"
 
 
 class EntitySourceRecord(Base):

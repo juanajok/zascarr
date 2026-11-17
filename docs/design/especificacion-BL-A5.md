@@ -1,8 +1,10 @@
 # Especificación — BL-A5: repartir tradiciones entre discos (#156)
 
-> **Estado: APROBADO (D1–D7). CORTES A (#844) Y B (#859) IMPLEMENTADOS; NO DESPLEGADOS. MIGRACIÓN
-> 0041 APLICADA EN LA PI DEL PO CON BACKUP, FUERA DE ESTE PR; NO IMPLICA DESPLIEGUE GENERAL; CORTES C–D
-> PENDIENTES.** Este documento es la especificación de referencia. El corte A (modelo, migración y
+> **Estado: APROBADO (D1–D7). CORTES A (#844) Y B (#859) IMPLEMENTADOS; NO DESPLEGADOS. CORTE C
+> PARCIAL: ESCANEO, ADOPCIÓN, RESCAN, DISAPARICIÓN Y TARJETA DE AJUSTES CON MAPA TRADICIÓN→RAÍZ
+> IMPLEMENTADOS; AUDITORÍA/CUARENTENA/PORTADAS/EXPORTACIÓN Y OPERACIÓN COMPLETA DE AJUSTES
+> (PREDETERMINADA, ESTADO/ESPACIO) PENDIENTES. MIGRACIÓN 0041 APLICADA EN LA PI DEL PO CON
+> BACKUP, FUERA DE ESTE PR; NO IMPLICA DESPLIEGUE GENERAL.** Este documento es la especificación de referencia. El corte A (modelo, migración y
 > `RaicesService`) y el corte B (importer/asignación y confinamiento) están implementados y probados
 > localmente, pero este PR **no despliega** ni aplica la migración a una instalación general;
 > **A5 no está hecho**: solo se cierra con C+D (§8).

@@ -82,6 +82,17 @@ logger = structlog.get_logger()
 COMIC_CATEGORIES = [7030, 7020]
 MAX_SIZE_BYTES = 500 * 1024 * 1024
 
+# T-62: espera entre fallos de envío consecutivos al cliente de descargas.
+# Crece con cada intento y se queda en el tope: un cliente caído no quema
+# Prowlarr/foro en cada ciclo, pero el deseo no queda fuera para siempre. El
+# usuario puede saltárselo con «Reintentar» (limpia `next_retry_at`).
+BACKOFF_ENVIOS = (
+    timedelta(minutes=10),
+    timedelta(minutes=30),
+    timedelta(hours=2),
+    timedelta(hours=6),
+)
+
 
 def prowlarr_indexers_seleccionados(settings) -> list[int]:
     """IDs elegidos en Ajustes; lista vacía = todos los indexers de Prowlarr."""
@@ -150,9 +161,69 @@ MOTIVO_NUMERO_DISTINTO = (
     "en Pendientes: ZascArr aprenderá ese nombre para la próxima búsqueda"
 )
 MOTIVO_CLIENTE_INACCESIBLE = (
-    "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
+    "No se pudo enviar al cliente de descarga — se reintentará más tarde"
 )
+#: UX 2026-11-17: decir CUÁL no responde evita que el coleccionista tenga que
+#: adivinar entre Transmission y aMule (antes ambos compartían el genérico).
+MOTIVO_TRANSMISSION_INACCESIBLE = (
+    "Transmission no respondió — se reintentará más tarde"
+)
+MOTIVO_AMULE_INACCESIBLE = (
+    "aMule no respondió — se reintentará más tarde"
+)
+
+
+def motivo_de_cliente(backend) -> str:
+    """Mensaje concreto del cliente que falló (o el genérico si no se sabe)."""
+    if backend == DownloadBackend.TRANSMISSION:
+        return MOTIVO_TRANSMISSION_INACCESIBLE
+    if backend == DownloadBackend.AMULE:
+        return MOTIVO_AMULE_INACCESIBLE
+    return MOTIVO_CLIENTE_INACCESIBLE
 MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
+
+
+def _clave_de_enlace_de_foro(url: str) -> str:
+    """Identidad del fichero: hash ed2k/btih, no la URL.
+
+    El mismo fichero puede estar enlazado dos veces con distinta codificación
+    (`%20` vs espacio) y la deduplicación por URL cruda lo dejaba duplicado en
+    «Buscar ahora» (bug UX 2026-11-16: Sector Lejano, dos filas idénticas).
+    """
+    if url.startswith("ed2k://|file|"):
+        partes = url.split("|")
+        if len(partes) >= 5 and partes[4]:
+            return "ed2k:" + partes[4].strip().lower()
+    if url.startswith("magnet:?"):
+        parametros = parse_qs(url[len("magnet:?"):])
+        xt = (parametros.get("xt") or [""])[0]
+        if xt.lower().startswith("urn:btih:"):
+            return "magnet:" + xt.rsplit(":", 1)[-1].lower()
+    return "url:" + url
+
+
+def _tamano_de_enlace_de_foro(url: str) -> int:
+    """Tamaño declarado en un enlace ed2k (bytes); 0 si no se puede leer."""
+    if url.startswith("ed2k://|file|"):
+        partes = url.split("|")
+        if len(partes) >= 4 and partes[3].isdigit():
+            return int(partes[3])
+    return 0
+
+
+def _sin_duplicados_de_prowlarr(resultados: list[SearchResult]) -> list[SearchResult]:
+    """Un mismo release aparece en varios indexers con URL distinta.
+
+    Se conserva uno por (título normalizado, tamaño) — el de más seeders —;
+    un tamaño distinto es otra edición y se mantiene (2026-11-16).
+    """
+    elegidos: dict[tuple[str, int], SearchResult] = {}
+    for r in resultados:
+        clave = (normalize_series_name(r.title), int(r.size_bytes or 0))
+        previo = elegidos.get(clave)
+        if previo is None or r.seeders > previo.seeders:
+            elegidos[clave] = r
+    return list(elegidos.values())
 
 
 def _nombre_de_fichero_de_enlace(url: str) -> str:
@@ -241,14 +312,29 @@ class Orchestrator:
             return 0
 
         settings = get_settings()
+        ahora = datetime.now(UTC)
         cooldown = timedelta(hours=settings.orchestrator_retry_cooldown_hours)
-        cutoff = datetime.now(UTC) - cooldown
+        cutoff = ahora - cooldown
         elegibles = (
             select(Wishlist)
             .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
+            # T-62: un fallo de ENVÍO se rige por su propio backoff (10 min,
+            # 30 min, 2 h, 6 h); vencido, entra aunque el cooldown global de 6 h
+            # aún no haya pasado — si no, las esperas cortas nunca servirían.
+            # El cooldown de `last_searched_at` sigue gobernando los intentos
+            # que no programaron reintento (sin resultados, candidato rechazado).
             .where(or_(
-                Wishlist.last_searched_at.is_(None),
-                Wishlist.last_searched_at < cutoff,
+                and_(
+                    Wishlist.next_retry_at.is_not(None),
+                    Wishlist.next_retry_at <= ahora,
+                ),
+                and_(
+                    Wishlist.next_retry_at.is_(None),
+                    or_(
+                        Wishlist.last_searched_at.is_(None),
+                        Wishlist.last_searched_at < cutoff,
+                    ),
+                ),
             ))
             .order_by(Wishlist.priority.asc(), Wishlist.added_at.asc())
         )
@@ -328,6 +414,27 @@ class Orchestrator:
             await self.db.commit()
         await self.db.flush()
 
+    def _programar_reintento(self, item: Wishlist,
+                             ahora: datetime | None = None) -> datetime:
+        """Programa el siguiente intento tras un fallo de ENVÍO al cliente.
+
+        T-62: el fallo de envío (cliente inaccesible) se reintenta con espera
+        creciente — 10 min, 30 min, 2 h, 6 h (tope) — en vez de depender del
+        cooldown global de 6 h, que además bloqueaba a todos los deseos a la
+        vez. Suma un fallo consecutivo y fija `next_retry_at`; lo limpia un
+        envío correcto o el reintento manual. No se llama por «sin resultados»
+        ni por «candidato rechazado»: eso no es un fallo del cliente.
+        """
+        item.retry_count = (item.retry_count or 0) + 1
+        espera = BACKOFF_ENVIOS[min(item.retry_count, len(BACKOFF_ENVIOS)) - 1]
+        item.next_retry_at = (ahora or datetime.now(UTC)) + espera
+        return item.next_retry_at
+
+    def _limpiar_reintento(self, item: Wishlist) -> None:
+        """Un envío correcto recupera el deseo: fuera el backoff pendiente."""
+        item.retry_count = 0
+        item.next_retry_at = None
+
     async def _process_item(self, item: Wishlist) -> bool:
         candidates = await self._search_and_rank(item)
         if not candidates:
@@ -343,6 +450,7 @@ class Orchestrator:
                 item.download_backend = backend.value
                 item.download_ref = ref
                 item.last_error = None  # D9: ya no aplica, se recuperó
+                self._limpiar_reintento(item)  # T-62: el cliente volvió a responder
                 await self.db.flush()
                 logger.info(
                     "orchestrator.download_started", title=candidate.title, backend=backend.value
@@ -352,7 +460,8 @@ class Orchestrator:
         # Hubo candidatos pero ninguno se pudo enviar (backend caído, etc.):
         # esto sí es un fallo real, distinto de "sin resultados todavía".
         item.status = WishlistStatus.FAILED
-        item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+        item.last_error = motivo_de_cliente(backend)
+        self._programar_reintento(item)
         await self.db.flush()
         return False
 
@@ -605,10 +714,16 @@ class Orchestrator:
                     return False
                 ref = await self._send(backend, candidate)
                 if ref is None:
-                    item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+                    item.last_error = motivo_de_cliente(backend)
+                    # T-62: el envío extra es auxiliar. Un fallo NO cambia el estado
+                    # del deseo (la descarga principal sigue en DOWNLOADING) ni
+                    # programa el backoff del ciclo (que solo mira WANTED/FAILED):
+                    # se informa en ese candidato y el coleccionista decide.
                     await self.db.flush()
                     return False
+                self._limpiar_reintento(item)
                 _marcar_enviado(item.id, candidate.download_url)
+                await self.db.flush()
                 logger.info("orchestrator.download_started", title=candidate.title,
                             backend=backend.value, manual=True, extra=True)
                 return True
@@ -652,7 +767,8 @@ class Orchestrator:
         ref = await self._send(backend, candidate)
         if ref is None:
             item.status = WishlistStatus.FAILED
-            item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+            item.last_error = motivo_de_cliente(backend)
+            self._programar_reintento(item)
             await self.db.flush()
             return False
 
@@ -660,6 +776,7 @@ class Orchestrator:
         item.download_backend = backend.value
         item.download_ref = ref
         item.last_error = None
+        self._limpiar_reintento(item)  # T-62: el envío manual recupera el deseo
         _marcar_enviado(item.id, candidate.download_url)
         # Hora de la BD (FR-23).
         item.last_searched_at = (await self.db.execute(select(func.now()))).scalar_one()
@@ -732,6 +849,8 @@ class Orchestrator:
                 return added.get("hashString") or added.get("name") or ""
             if backend == DownloadBackend.AMULE:
                 if not await self._amule.login():
+                    logger.warning("orchestrator.send_sin_credenciales",
+                                   backend=backend.value)
                     return None
                 if not await self._amule.add_ed2k_link(result.download_url):
                     return None
@@ -774,9 +893,16 @@ class Orchestrator:
         try:
             seleccionados = prowlarr_indexers_seleccionados(settings)
             if seleccionados:
-                return await self._prowlarr.search(
-                    query, categories=COMIC_CATEGORIES, indexer_ids=seleccionados), None
-            return await self._prowlarr.search(query, categories=COMIC_CATEGORIES), None
+                encontrados = await self._prowlarr.search(
+                    query, categories=COMIC_CATEGORIES, indexer_ids=seleccionados)
+            else:
+                encontrados = await self._prowlarr.search(
+                    query, categories=COMIC_CATEGORIES)
+            sin_repetir = _sin_duplicados_de_prowlarr(encontrados)
+            if len(sin_repetir) != len(encontrados):
+                logger.info("orchestrator.prowlarr_duplicados",
+                            descartados=len(encontrados) - len(sin_repetir))
+            return sin_repetir, None
         except Exception:
             logger.exception("orchestrator.prowlarr_search_failed")
             return [], MOTIVO_FUENTE_INACCESIBLE
@@ -814,12 +940,14 @@ class Orchestrator:
             vistos: set[str] = set()
             for fr in await scraper.use_ipb_search(query):
                 for enlace in (*fr.ed2k_links, *fr.magnet_links):
-                    if enlace in vistos:
+                    clave = _clave_de_enlace_de_foro(enlace)
+                    if clave in vistos:
                         continue
-                    vistos.add(enlace)
+                    vistos.add(clave)
                     nombre = _nombre_de_fichero_de_enlace(enlace)
                     encontrados.append(SearchResult(
-                        nombre or fr.topic_title, "forum:crg", enlace, 0,
+                        nombre or fr.topic_title, "forum:crg", enlace,
+                        _tamano_de_enlace_de_foro(enlace),
                         1 if enlace.lower().startswith("magnet:?") else 0, "comics"
                     ))
             return encontrados
@@ -1138,6 +1266,10 @@ class Orchestrator:
                     "download_ref": None,
                     "download_backend": None,
                     "last_error": None,
+                    # T-62: una reactivación de política empieza de cero; un
+                    # backoff viejo no debe retrasar el deseo reactivado.
+                    "retry_count": 0,
+                    "next_retry_at": None,
                 },
                 # Defensa contra dos ciclos solapados: entre el SELECT de
                 # `_generar_lo_que_falta` y este INSERT, el otro ciclo puede

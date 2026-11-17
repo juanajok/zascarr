@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Registros — ZascArr{% endblock %}
+{% block content %}
+<h1>Registros</h1>
+<p class="subtitle">Consulta las incidencias por fecha, hora o tipo de evento y descarga solo lo que necesites.</p>
+
+{% if sin_ficheros %}
+<div class="empty-state">
+  <p>Todavía no hay ficheros de registro. Se crearán en cuanto la aplicación escriba el primer evento.</p>
+  <p class="muted">Si acabas de instalar esta versión, los registros anteriores siguen en Docker; los nuevos se guardan aquí.</p>
+</div>
+{% else %}
+<form method="get" action="/ui/logs/visor" class="filtros-logs">
+  <label>Fecha
+    <select name="fecha">
+      <option value="">Todas</option>
+      {% for d in dias %}<option value="{{ d.fecha }}" {% if d.fecha == fecha %}selected{% endif %}>{{ d.fecha }} ({{ (d.bytes / 1024) | round(1) }} KiB)</option>{% endfor %}
+    </select>
+  </label>
+  <label>Hora <input type="text" name="hora" value="{{ hora }}" placeholder="HH o HH:MM" maxlength="5"></label>
+  <label>Evento
+    <select name="evento">
+      <option value="">Todos</option>
+      {% for e in eventos %}<option value="{{ e }}" {% if e == evento %}selected{% endif %}>{{ e }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Filtrar</button>
+  <a class="btn ghost sm" href="/ui/logs?fecha={{ fecha | urlencode }}&amp;hora={{ hora | urlencode }}&amp;evento={{ evento | urlencode }}">Descargar este filtro</a>
+</form>
+
+{% if filas %}
+<p class="muted">{{ filas | length }} eventos (máximo 300 en pantalla; la descarga incluye hasta 1.000).</p>
+<div class="tabla-logs">
+  {% for e in filas %}
+  <article class="log-linea">
+    <span class="log-fecha">{{ e.timestamp or "" }}</span>
+    <span class="log-nivel">{{ e.level or "" }}</span>
+    <strong>{{ e.event or "(sin evento)" }}</strong>
+    <code>{{ e | tojson }}</code>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty">No hay eventos para esos filtros.</p>
+{% endif %}
+{% endif %}
+
+<p><a href="/ui/estado">Volver a Estado</a></p>
+{% endblock %}

@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 tests/test_library_adopter.py
 
@@ -92,8 +93,8 @@ class TestShouldRun:
 
         with pytest.MonkeyPatch().context() as mp:
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=True),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(True, True)),
             )
             assert await adopter.should_run() is False
 
@@ -108,8 +109,8 @@ class TestShouldRun:
 
         with pytest.MonkeyPatch().context() as mp:
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=False),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(False, None)),
             )
             assert await adopter.should_run() is False
 
@@ -124,8 +125,8 @@ class TestShouldRun:
 
         with pytest.MonkeyPatch().context() as mp:
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=False),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(False, None)),
             )
             assert await adopter.should_run() is False
 
@@ -141,8 +142,8 @@ class TestShouldRun:
 
         with pytest.MonkeyPatch().context() as mp:
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=False),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(False, None)),
             )
             assert await adopter.should_run() is True
 
@@ -159,9 +160,10 @@ class TestEstado:
         cola = [] if marcador else [FakeExecResult(series)]
         adopter = LibraryAdopter(db=FakeSession(cola))
         with pytest.MonkeyPatch().context() as mp:
+            valor = (True, marcador) if marcador is not False else (False, None)
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=marcador),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=valor),
             )
             return await adopter.estado()
 
@@ -205,9 +207,10 @@ class TestEstado:
             )
             adopter = LibraryAdopter(db=FakeSession([] if marcador else [FakeExecResult(series)]))
             with pytest.MonkeyPatch().context() as mp:
+                valor = (True, marcador) if marcador is not False else (False, None)
                 mp.setattr(
-                    "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                    AsyncMock(return_value=marcador),
+                    "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                    AsyncMock(return_value=valor),
                 )
                 assert await adopter.should_run() is esperado
 
@@ -355,6 +358,30 @@ class TestAdopt:
         assert llamadas["stat"] == 1          # no se intenta el segundo stat
 
     @pytest.mark.asyncio
+    @pytest.mark.asyncio
+    async def test_adopt_file_guarda_la_raiz_del_archivo(self, monkeypatch, tmp_path):
+        from types import SimpleNamespace
+
+        from zascarr.core.matcher import MatchResult, MatchStatus
+
+        path = tmp_path / "Manga" / "Serie" / "Tomo 01.cbz"
+        path.parent.mkdir(parents=True)
+        make_cbz(path)
+        root = SimpleNamespace(id=uuid4())
+        monkeypatch.setattr(
+            "zascarr.services.library_adopter._triage_and_match",
+            AsyncMock(return_value=_Outcome(
+                tr=TriageResult(path=path, sha256="a" * 64),
+                result=MatchResult(MatchStatus.UNSORTED))))
+        session = FakeSession([])
+        report = AdoptionReport(started_at=datetime.now(UTC))
+
+        await LibraryAdopter(db=session)._adopt_file(path, report, root=root)
+
+        fila = next(o for o in session.added if isinstance(o, File))
+        assert fila.root_id == root.id
+
+    @pytest.mark.asyncio
     async def test_persiste_import_run_con_kind_adoption(self, monkeypatch, tmp_path):
         make_cbz(tmp_path / "Algo.cbz")
         monkeypatch.setattr(
@@ -370,3 +397,26 @@ class TestAdopt:
 
         run = next(o for o in session.added if isinstance(o, ImportRun))
         assert run.details["kind"] == "adoption"
+
+
+class TestMarcadorInvalido:
+    """#367: el marcador solo vale si es exactamente `True`; no hay fail-open."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("valor", ["false", 1, {}, []])
+    async def test_no_se_presenta_registrada_ni_ofrece_incremental(self, monkeypatch, tmp_path, valor):
+        make_cbz(tmp_path / "Batman 001.cbz")
+        monkeypatch.setattr(
+            "zascarr.services.library_adopter.get_settings",
+            lambda: MagicMock(library_path=tmp_path),
+        )
+        adopter = LibraryAdopter(db=FakeSession([]))
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(True, valor)),
+            )
+            assert await adopter.estado() is EstadoAdopcion.MARCADOR_INVALIDO
+            assert await adopter.should_run() is False
+            assert await adopter.puede_registrar() is False
+            assert await adopter.ofrece_registro_incremental() is False

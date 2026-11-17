@@ -264,9 +264,12 @@ class TestProgreso:
 
     async def test_t6_cada_pantalla_marca_su_paso_con_aria_current_step(self, ent):
         pantallas, esperado = await self._pantallas(ent)
+        assert "<title>Revisar selección y números — ZascArr</title>" in pantallas["V"]
+        assert "<title>Resultado de la vinculación — ZascArr</title>" in pantallas["X"]
+        assert "<title>Resultado de la vinculación — ZascArr</title>" in pantallas["lectura"]
         for nombre, actual in esperado.items():
             ps = pasos(pantallas[nombre])
-            assert [n for n, _, _ in ps] == ["Elegir la serie", "Revisar los archivos", "Vincular"], nombre
+            assert [n for n, _, _ in ps] == ["Elegir la serie", "Revisar los archivos", "Vincular y ver el resultado"], nombre
             assert [c for _, _, c in ps].count(True) == 1 and ps[actual - 1][2], nombre      # uno, y el correcto
             assert pantallas[nombre].count('aria-current="step"') == 1, nombre
 
@@ -302,7 +305,7 @@ class TestProgreso:
     async def test_t6_el_estado_se_dice_en_texto_no_solo_por_color(self, ent):
         pantallas, _ = await self._pantallas(ent)
         t = visible(pantallas["V"])
-        assert "Elegir la serie (hecho)" in t and "Revisar los archivos (paso actual)" in t and "Vincular (pendiente)" in t
+        assert "Elegir la serie (hecho)" in t and "Revisar los archivos (paso actual)" in t and "Vincular y ver el resultado (pendiente)" in t
 
 
 # ═══ T7 · criterio 4: navegar no confirma ═══════════════════════════════════════════════════════

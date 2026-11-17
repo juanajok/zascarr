@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # Toda petición de `utils/peticiones.py` (y por tanto `cache_http`) lee el cuerpo en
     # streaming y corta al superar este tope de bytes YA DECODIFICADOS. 4 MiB por defecto,
     # acotado a 1–16 MiB; el `.env` puede subirlo/bajarlo. No se expone en Ajustes.
+    # NFR-03 (#363): tope del cuerpo de una petición de escritura (formularios y API),
+    # comprobado en `middleware_cuerpo.py` antes de que FastAPI lo parsee. El cuerpo
+    # válido máximo de #115 mide ~73,5 KiB (token de hasta 73.229 caracteres más
+    # campos); 256 KiB deja margen >3×. Es un contrato distinto del límite del campo
+    # `token` de #115. Solo por `.env`; no se expone en Ajustes.
+    max_cuerpo_peticion_bytes: int = Field(
+        default=262_144, ge=131_072, le=8_388_608)
     max_cuerpo_transfer_bytes: int = Field(
         default=4_194_304, ge=1_048_576, le=16_777_216)
     #: Tope al `Crawl-delay` que declare un `robots.txt` (M-4, #813). Un sitio puede pedir
@@ -251,6 +258,16 @@ class Settings(BaseSettings):
     # read-only. /api/health avisa de restauraciones atrasadas o fallidas (#334 B2).
     restore_status_file: str = Field(default="/run/backup-status/restore-status.json")
 
+    # BL-OPS1 (FR-18): «Hacer una copia ahora». El socket y la clave los crea
+    # `scripts/instalar_ops.sh` y el compose monta la carpeta `ops` de solo lectura; el
+    # estado del auxiliar (`ops-status.json`) y el listado de `backup.sh` (`copias.json`)
+    # van junto a `status.json`.
+    ops_socket_file: str = Field(default="/run/zascarr-ops/ops.sock")
+    ops_key_file: str = Field(default="/run/zascarr-ops/ops.key")
+    ops_status_file: str = Field(default="/run/backup-status/ops-status.json")
+    copias_file: str = Field(default="/run/backup-status/copias.json")
+    omitida_file: str = Field(default="/run/backup-status/omitida.json")
+
     # ── Orquestador ────────────────────────────────────────────────
     scan_interval_minutes: int = 60
     import_interval_minutes: int = 15
@@ -371,6 +388,13 @@ class Settings(BaseSettings):
     app_version: str = "1.15.1"
     log_level: str = "INFO"
     log_json: bool = True
+    # Persistencia/rotación propia para consultar logs anteriores desde la UI.
+    # En Docker se monta `${ZASCARR_DATA_DIR}/logs`; si no existe/es escribible,
+    # la app sigue usando solo stdout y el búfer en memoria.
+    log_dir: Path = Field(default=Path("/config/logs"))
+    log_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    log_backups: int = Field(default=3, ge=0, le=50)
+    log_retention_days: int = Field(default=30, ge=1, le=3650)
     debug: bool = False
 
     @model_validator(mode="after")

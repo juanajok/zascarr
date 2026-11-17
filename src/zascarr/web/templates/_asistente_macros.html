@@ -25,10 +25,12 @@
 {#- Indicador de pasos del recorrido «carpeta → serie → revisión → vinculación» (U19, criterio 3). `actual` es 1, 2 o 3. El actual
     lleva `aria-current="step"`; «hecho» solo se dice de los anteriores (la serie ya elegida, la revisión ya confirmada) y
     «pendiente» de los siguientes: una acción pendiente nunca se presenta como completada. Solo HTML y CSS. -#}
+{% macro titulo_vinculacion(resultado) -%}{% if resultado %}Resultado de la vinculación — ZascArr{% else %}Revisar selección y números — ZascArr{% endif %}{%- endmacro %}
+
 {% macro indicador_de_pasos(actual) -%}
 <nav class="pasos-asistente" aria-label="Pasos para vincular los archivos de una carpeta">
   <ol>
-    {% for n, nombre in [(1, "Elegir la serie"), (2, "Revisar los archivos"), (3, "Vincular")] %}
+    {% for n, nombre in [(1, "Elegir la serie"), (2, "Revisar los archivos"), (3, "Vincular y ver el resultado")] %}
     {% set estado = "actual" if n == actual else "hecho" if n < actual else "pendiente" %}
     <li class="{{ estado }}"{% if n == actual %} aria-current="step"{% endif %}><span class="num" aria-hidden="true">{{ n }}</span>
       {{ nombre }}<span class="sr"> ({{ "paso actual" if estado == "actual" else "hecho" if estado == "hecho" else "pendiente" }})</span></li>

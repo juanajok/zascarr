@@ -191,6 +191,28 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   caracteres por valor**. Lo que excede se ignora con aviso en el informe de
   importación y nunca aborta el ciclo; no se escribe ni un byte del CBZ.
 
+## «Hacer una copia ahora» (BL-OPS1, ADR 0018)
+
+Es opcional y **no está activado por defecto**: lo instala quien opera el equipo con `sudo bash scripts/instalar_ops.sh`. Sin
+él, Estado dice «No activado en este equipo» y no hay botón.
+
+- **Qué puede hacer la app:** pedir **una** acción, `copia`, a un auxiliar del host que solo ordena a systemd iniciar
+  `zascarr-backup.service`. No recibe rutas, argumentos ni scripts; el contenedor **no** tiene `docker.sock`, privilegios ni más
+  que un volumen `ops` de solo lectura.
+- **Canal:** socket Unix `root:<grupo del usuario de servicio>` `0660`, un proceso por conexión, petición de una línea de ≤ 512 B
+  firmada con HMAC-SHA256 (clave de 32 bytes en `ops.key`, `0440`, creada por el instalador y nunca impresa). Caducidad de ±120 s,
+  `id` de un solo uso, 300 s entre copias y 6 al día, y un único cerrojo de operaciones compartido con `update.sh`, `rollback.sh` y
+  las restauraciones. La respuesta es un código de lista cerrada, nunca texto libre.
+- **Quién puede pedirla:** `POST /ui/copias/pedir` solo existe bajo `/ui` (nada en `/api/*`), con el mismo Origen/Sesión que el
+  resto. **Sin contraseña en ZascArr, cualquiera que pueda abrir ZascArr puede pedir una copia**; una copia solo ocupa disco.
+  Quien tenga el grupo del socket puede agotar el límite diario o saturar el socket: solo afecta a la disponibilidad de esta
+  función; la copia nocturna sigue.
+- **Límites conocidos:** root con acceso a systemd sigue siendo root. `CapabilityBoundingSet=` vacío y el endurecimiento de la
+  unidad no se han comprobado en una Pi (hay que pasar `systemd-analyze security zascarr-ops@.service`). Si el contador diario
+  queda ilegible, el auxiliar falla cerrado y nunca lo reinicia: el operador borra `/run/zascarr-ops/aceptadas` como root.
+- **Registro:** el auxiliar escribe una línea por conexión (`accion`, `id`, `uid`, `resultado`, `codigo`, `ms`); nunca la clave,
+  la firma, el cuerpo ni rutas.
+
 ## Registros de acceso (#361)
 
 El registro de acceso de uvicorn **no incluye la query** de las peticiones (`?clave=…&cursor=…&ref=…&q=…`): `zascarr.utils.log_acceso` deja método, ruta y estado, y sustituye lo demás por `?…`. En ZascArr la query puede llevar el nombre de una carpeta, un cursor que decodifica a un nombre de archivo, una referencia firmada al resultado (válida hasta 24 h desde que se firmó la vinculación) o lo que se busca. Tampoco se registra la query de una petición de `Upgrade` a WebSocket (la imagen arranca con `--ws none`, y la aplicación no tiene rutas WebSocket). Si una versión futura de uvicorn cambiara el formato del registro, el filtro **falla cerrado**: pierde esa línea en lugar de dejar pasar la query. Los registros de los contenedores rotan (`json-file`, 10 MB × 3 ficheros, 30 MB **nominales** por contenedor en disco; no es un límite global ni una medición); la rotación se aplica al recrear los contenedores (`update.sh` lo hace), y las líneas ya copiadas de `docker logs` antes siguen donde se copiaron.

@@ -113,6 +113,8 @@
   {% endif %}
 </section>
 
+{% if v is defined %}{% include "_copias_bloque.html" %}{% endif %}
+
 <p class="caption"><a class="btn ghost sm" href="/ui/exportar">Descargar tebeoteca y deseados (CSV)</a>
   Esto no es una copia de seguridad.</p>
 
@@ -122,6 +124,14 @@
 </div>
 
 <div class="pending-card estado-checks" id="checks"></div>
+
+<section id="diagnostico" class="estado-diagnostico" aria-labelledby="h-diagnostico">
+  <h2 id="h-diagnostico" class="titulo-frase">Registro de la aplicación</h2>
+  <p class="muted">Si algo no funciona, descarga los últimos registros para compartirlos.
+    Están saneados: sin rutas, nombres, contraseñas ni tokens.</p>
+  <a class="btn ghost sm" href="/ui/logs/visor">Ver/descargar registros por fecha</a>
+  <a class="btn ghost sm" href="/ui/logs">Descargar los últimos registros</a>
+</section>
 
 <p class="empty" id="footer">—</p>
 

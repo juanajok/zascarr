@@ -65,3 +65,17 @@ class TestConfiguracionYCompose:
         assert re.search(r"^\s*- HOST_LIBRARY_DIR=\$\{HOST_LIBRARY_DIR:-\}\s*$", texto, re.M)
         # y sigue montándola donde la app la lee
         assert "${HOST_LIBRARY_DIR:-/media/library}:/media/library" in texto
+
+
+def test_con_varias_raices_usa_el_host_de_la_raiz_correcta(monkeypatch):
+    """Corte C: no se aplica el host de una raíz a un archivo de otra."""
+    from zascarr.config import Settings
+    from zascarr.utils import ruta_visible as modulo
+
+    monkeypatch.setattr(modulo, "get_settings", lambda: Settings(
+        library_path="/media/library",
+        library_roots="/media/library,/media/library2",
+        host_library_roots="/host/uno,/host/dos",
+        host_library_dir="/host/uno"))
+    assert ruta_visible("/media/library/a.cbz") == "/host/uno/a.cbz"
+    assert ruta_visible("/media/library2/b.cbz") == "/host/dos/b.cbz"

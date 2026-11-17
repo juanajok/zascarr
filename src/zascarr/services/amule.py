@@ -1,7 +1,7 @@
 """Cliente aMule vía amuleweb HTTP."""
 import hashlib
 import re
-from urllib.parse import quote
+from urllib.parse import unquote
 
 import httpx
 import structlog
@@ -73,11 +73,37 @@ class AMuleClient:
             r.raise_for_status()
             return r.text
 
+    async def _post(self, path: str, datos: dict[str, str]) -> str:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True,
+                                     cookies=self._cookies) as client:
+            r = await client.post(f"{self._base}{path}", data=datos)
+            r.raise_for_status()
+            return r.text
+
+    @staticmethod
+    def _datos_de_enlace(link: str) -> dict[str, str]:
+        """Campos del formulario real del footer de amuleweb.
+
+        El panel tiene una página `footer.php` con
+        `<form name="formlink" method="post" action="footer.php">
+        <input name="ed2klink">…<input type="submit" value="Download link">`.
+        El cliente usaba `GET /amuleweb/?ed2k=…`, que no existe: amuleweb
+        responde 200 con una página de error de ~458 bytes y el enlace se
+        perdía silenciosamente (bug real 2026-11-16: «le doy descargar y en
+        aMule no aparece nada»). El enlace del foro llega URL-encoded
+        (`DC%20K.O.…`): se desescapa, que es lo que haría el navegador.
+        """
+        return {
+            "ed2klink": unquote(link),
+            "selectcat": "all",
+            "Submit": "Download link",
+        }
+
     async def add_ed2k_link(self, link: str) -> bool:
         if not link.startswith("ed2k://"):
             return False
         try:
-            await self._get(f"/amuleweb/?ed2k={quote(link, safe=':/|')}")
+            await self._post("/footer.php", self._datos_de_enlace(link))
             logger.info("amule.ed2k_added", link=link[:80])
             return True
         except Exception:

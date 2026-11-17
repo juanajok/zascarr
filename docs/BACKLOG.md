@@ -595,7 +595,7 @@ Publicar estas tarjetas no autoriza código, migraciones en producción ni despl
 | D2 | ~~Como coleccionista, quiero elegir "solo CBZ de calidad" o "acepto escaneos" sin entender qué es un quality profile~~ **Cómo se cerró (2026-11-13):** selector de 3 opciones en Ajustes → Calidad (`quality_profile`: mejor/equilibrado/cualquiera), override en caliente; el escaneo de mejoras usa el objetivo del perfil. Sin migración de enum: el perfil es configuración. | ✅ Hecho | M |
 | D3 | ~~Como coleccionista, quiero que si sale una edición mejor de algo que ya tengo, el sistema me la ofrezca~~ **Cómo se cerró (2026-11-13):** PR #691 (propuesta bajo demanda) + escaneo periódico acotado con propuestas persistidas (`upgrade_proposals`, migración 0034), pantalla Biblioteca → Mejoras, perfil D2 y confirmación con token; nunca sustituye ni borra archivos. Ficha: `docs/design/benchmark-BL-D3-mejoras.md`. | ✅ Hecho | M |
 | D4 | ~~Como coleccionista, quiero que el sistema me avise si está descargando sin VPN sin que se pare todo~~ | ~~Warning del healthcheck visible como aviso en UI + log del orchestrator (decisión ya acordada, ver fix C2)~~ | ✅ Hecho (vía E1) | S |
-| D5 | Como coleccionista, quiero ver lo que sale esta semana —tanto grapa americana como novedades de Norma/ECC/Panini España— de las series que sigo, para no perderme lanzamientos | **Parcial: v1 USA/Comic Vine** con `/ui/novedades` y `/api/novedades` (semana, filtro editorial, «Te interesa», anunciado/publicado; sin tabla, caché 30 min). Pendiente: track Norma/ECC/Panini (spike de HTML real) y aviso por serie seguida. Diseño: `docs/design/novedades-v1-usa.md`. | P2 | L |
+| D5 | Como coleccionista, quiero ver lo que sale esta semana —tanto grapa americana como novedades de Norma/ECC/Panini España— de las series que sigo, para no perderme lanzamientos | **Hecho: v1 USA/Comic Vine + Norma/Panini** con `/ui/novedades` y `/api/novedades` (semana, filtro editorial, «Te interesa», anunciado/publicado). Sin tabla; caché 30 min. El aviso por serie seguida queda en E4. Diseño: `docs/design/novedades-v1-usa.md`. | P2 | L |
 | D6 | Como coleccionista, quiero agrupar series en colecciones ("grapas en curso", "clásicos Bruguera") y que cada colección decida si se busca, con qué fuentes y con qué calidad | Tabla `collections` con políticas tri-estado (include/exclude/unset) de auto-búsqueda aplicadas en el orquestador; una serie sin colección conserva el comportamiento actual. **Cómo se cerró (2026-11-12):** migración **0031** (`collections`, `series.collection_id` SET NULL), una colección por serie; `heredar` mantiene D8, `incluir` fuerza faltantes y `excluir` veta y retira solo items de origen política (los manuales no se tocan). UI `/ui/colecciones` y ficha con política guardada/efectiva; #680, fusionada (`a8f00dc`); fuentes/calidad quedan documentadas como seguimiento. | P1 | ✅ Hecho (fusionado; pendiente despliegue) |
 | D7 | Como coleccionista, quiero pedir un arco argumental entero aunque cruce varias series, en orden de lectura | Wishlist por `story_arc` que genera items por issue respetando `reading_order` | P2 | L |
 | D8 | ~~Como coleccionista, quiero decidir por serie si quiero todos los números, solo los que me faltan o solo los futuros, para no pedir contenido que no quiero~~ | ~~Campo `wishlist_policy` (`ninguno`/`faltantes`/`futuros`/`todos`) por serie, leído por `Orchestrator.process_wishlist` antes de generar candidatos a buscar; migración deja `ninguno` como valor seguro en series existentes. Requiere C0.~~ **Cómo se cerró (2026-09-30):** migración `0015` (`Series.wishlist_policy`, `Wishlist.origen`/`numero`, estado `retirado` y índice único parcial `(series_id, numero)` solo para items de política). El predicado único es `services/politica.py::querer_de_serie` («números que la política quiere ahora») y lo consumen la generación, la retirada y la ficha de serie, así que no pueden divergir. La generación está acotada por ciclo (`orchestrator_politica_lote`) y repartida en rondas entre series; usa `INSERT ... ON CONFLICT ... DO UPDATE` porque el índice no mira el estado, y **solo reactiva `retirado`/`imported`** (un `FAILED` conserva su motivo de D9 y lo reintenta `process_wishlist`; un `DOWNLOADED` espera al importador). La retirada es un `UPDATE` atómico por serie, solo `WANTED`/`FAILED` y solo `origen='politica'`, y cubre la política que pasa a `ninguno`, el número que llega a disco y el item manual de serie que aparece después; se aplica al guardar (la generación espera al ciclo). `futuros`/`todos`/`null` se rechazan con 422 y el selector los oculta o los deshabilita con su motivo. **Límites abiertos, a medir con la biblioteca real en la primera instalación:** arranque en frío de los alias (B13), hipótesis de series catalogadas en inglés con releases en español, y rango `1..total_issues` cuando una serie arranca en el #0. Reservado para más adelante: `todos` espera a D3 (criterio de cierre) y `futuros` a que la fuente publique números no salidos. | ✅ Hecho | M |
@@ -613,7 +613,7 @@ Publicar estas tarjetas no autoriza código, migraciones en producción ni despl
 | E4 | Como coleccionista, quiero un aviso al móvil cuando una descarga se importa, para no estar mirando el dashboard | Webhook configurable (Gotify/ntfy/Telegram/URL genérica) al completar descarga+import; desactivado por defecto | ✅ Hecho | S |
 
 - **E4 (2026-09-28, hecho):** webhook de importación con **entrega de mejor esfuerzo** (decisión explícita de la ficha: sin cola ni reintentos persistentes, que exigirían otro alcance). `services/notifier.py` soporta `generic`/`gotify`/`ntfy`/`telegram`, apagado por defecto (`webhook_enabled`), configurable desde `/ui/ajustes` reutilizando D11 (grupo `avisos`; `webhook_token` en `SECRET_FIELDS`). `main.py::_ejecutar_ciclo_y_avisar` avisa **después del `commit`** y solo con `report.imported` (nunca adopción ni duplicados); un fallo del webhook se registra sin URL ni token y no revierte la importación. Ficha en `docs/design/benchmark-E4-avisos.md`. Regresión: `tests/test_notifier.py` (receptor falso + orden commit/rollback).
-| E5 | Como coleccionista que reporta un fallo, quiero un botón en el dashboard que genere un fichero con los logs recientes, sin tocar la terminal | Botón "Descargar logs" en el dashboard, sin acceso a shell | P2 | S |
+| E5 | Como coleccionista que reporta un fallo, quiero un acceso que genere un fichero con los registros recientes, sin tocar la terminal | **Hecho**, acceso movido a **Estado → Registro de la aplicación** (UX 2026-11-17; antes «Descargar logs» en Inicio); sin acceso a shell | P2 | S |
 | E6 | Como administrador, quiero que `/api/health` distinga "sin conexión con Postgres" de "conectado pero sin migrar" de "esquema incompatible" de "listo", en vez de un `database: ok/error` binario, para resolver una instalación rota sin leer tracebacks | Nuevos valores de `checks.database`: `unreachable` (no conecta), `migration_required` (conecta pero `alembic_version` no está en `head` — comparar revisión actual contra `head` de `alembic/versions`), `schema_incompatible` (conecta, migrado, pero falta una tabla de dominio esperada — señal de una restauración/rollback a medias), `ok`. Cada estado con su texto y acción en español en `/estado`; ninguna vista de `/ui/*` debe devolver un 500 crudo por tabla ausente — degradar con el mismo diagnóstico en vez de reventar | ✅ Hecho | S |
 | E7 | Como coleccionista, quiero saber si GCD puede **enriquecer** (no solo buscar) mis tebeos españoles, con datos reales de sus fichas, antes de conectar el enricher | **Evaluación, no implementación.** Con un caso real (Absolute Batman 2025, Panini España): contrastar ficha de serie, resumen de serie y ficha de número contra las **respuestas reales de la API** de GCD (endpoints separados; no inferirlas de la página web) — qué campos de la edición española (editorial, fechas, formato, créditos) se pueden incorporar, si la **portada es recuperable como URL de la API** y con qué rate limit. **Criterio de parada:** si no hay portada ni datos por número aprovechables, GCD **no** entra para portadas ni números; la evaluación puede recomendar igualmente usar sus campos **de serie** de la edición española (editorial, fechas, formato), que son valor propio. No añade GCD a `EnrichmentService`. | ✅ Hecho | S |
 
@@ -1675,6 +1675,35 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
 
 **Notas de proceso:**
 
+- **Benchmark de «seguir serie» (2026-11-17, nivel 2 §13):** ficha en
+  `docs/design/benchmark-seguimiento-series-2026-11-17.md` con Sonarr 4.0.20, Radarr 7.0.3,
+  Mylar3 0.8.3, Kapowarr 1.3.2 y Suwayomi 2.4.2366. Conclusión: reutilizar **Novedades**
+  (Comic Vine + Norma/Panini, ya cruza series seguidas) y el **notificador** webhook, con
+  un flag `follow_new_issues` por serie (opción A) en vez de reutilizar la política de
+  huecos; pendiente decidir la señal de disponibilidad (`store_date` vs `cover_date`) y
+  el origen `SEGUIMIENTO` frente a `MANUAL`.
+- **Huecos del benchmark de Deseados cerrados (2026-11-17):** #973 (panel de cola/progreso),
+  #983 (cancelar la espera + buscar en lote, máx. 8), #984 (carpeta de Transmission
+  editable y aviso al probar; §5.8 con SecOps favorable sobre `9b91a826`) y #985
+  (backoff 10 min/30 min/2 h/6 h tras fallos de envío). Informes: QA
+  `docs/design/informe-qa-lote-cancelar-2026-11-17.md`, QA
+  `docs/design/informe-qa-backoff-2026-11-17.md` y SecOps
+  `docs/design/secops-aviso-carpeta-2026-11-17.md`. Deuda menor aceptada: índice sobre
+  `next_retry_at`, revalidación de estado en el lote y cancelación solo de navegador.
+- **Benchmark de Deseados cerrado (2026-11-16, nivel 2 §13):** ficha en
+  `docs/design/benchmark-DESEADOS-2026-11-16.md` con Sonarr 4.0.20, Radarr 7.0.3,
+  Kapowarr 1.3.2, Mylar3 0.8.3 y Suwayomi 2.4.2366 (matriz ponderada, IGUALAR/MEJORAR
+  y NOT RUN). Igualamos búsqueda/elección/estados/ruido en la Pi; quedan declarados como
+  huecos la cola/progreso unificada, la cancelación de búsqueda en curso, buscar en lote
+  varios deseos y el aviso proactivo de carpeta de descargas inválida. También se documenta
+  como **Mejorar** lo del foro+Prowlarr en una lista, el tomo que cubre 1-12 y cerrar el
+  deseo con «Ya lo tengo».
+- **Backoff de envíos de Deseados cerrado (2026-11-17, T-62):** de los huecos declarados del
+  benchmark, «reintento automático/backoff tras un fallo de envío» deja de depender del cooldown
+  global. Migración 0046 (`wishlist.retry_count`, `wishlist.next_retry_at`) y helper
+  `Orchestrator._programar_reintento`: 10 min → 30 min → 2 h → 6 h (tope) solo cuando falla el
+  **envío** (no «sin resultados» ni «candidato rechazado»); un envío correcto o «Reintentar»
+  limpian el backoff. El cooldown de `last_searched_at` (6 h) no se toca: sigue para el resto.
 - **«Probar conexión» del foro cerrada (2026-11-16, PR [#880](https://github.com/juanajok/zascarr/pull/880), merge `04e24c08`):** la tarjeta Foro de Ajustes permite comprobar URL/usuario/contraseña antes de guardar (contraseña en blanco = la guardada), con **solo login** (sin búsqueda), funcionando aunque el foro esté apagado y con mensajes llanos (OK, credenciales, espera por cortesía/flood, URL inválida, red), sin persistir ni mostrar credenciales. QA apto (7.181×2, sonda 13/13) y SecOps favorable con **§5.8** sobre el SHA final `7876dfeb`. Menor aceptado: hereda `espera_max_s=30` (reducible).
 - **m-1 de UI/UX cerrado (2026-11-15, PR [#875](https://github.com/juanajok/zascarr/pull/875), merge `b8faa7cc`):** el error htmx de Importar guía actualiza `aria-invalid`/`aria-describedby` del input (reemplazo out-of-band con el valor conservado y nombre accesible propio), igual que el POST completo. Suite 7.162 passed.
 - **Lectura de temas del foro validada en vivo (2026-11-15):** con el hilo `showtopic=115142` en la Pi, login OK y **27 enlaces `ed2k`** extraídos (0 `magnet`), enlaces URL-encoded; sin cambios de código. Se cierra la deuda de validación de SCR4 (queda como fixturable para regresión futura).
@@ -2129,7 +2158,12 @@ como importado con «recuperado»).
   previo a D8, vive en `huecos_de_serie`, y queda pendiente de medir con la
   biblioteca real.
 
-## Deuda técnica registrada (observabilidad del logging, 2026-09-30)
+## Deuda técnica registrada (observabilidad del logging, 2026-09-30) — resuelta parcialmente 2026-11-17
+
+> `LOG_LEVEL`/`LOG_JSON` ya se cablean a structlog, stdout es JSON y las peticiones llevan
+> `request_id`; ver `docs/design/benchmark-logs-zascarr.md`. La rotación sigue siendo de Docker
+> y el saneo de #369 no cambia.
+
 
 Encontrado al implementar E4 (el aviso de importación): el módulo de avisos
 construye URLs que **llevan el secreto dentro** (en Telegram, el token del bot:

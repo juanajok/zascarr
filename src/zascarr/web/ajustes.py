@@ -11,7 +11,9 @@ botón de probar antes de guardar.
 """
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from urllib.parse import urlsplit
+from uuid import UUID
 
 import httpx
 import structlog
@@ -21,6 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
+from zascarr.models import ComicTradition
+from zascarr.services import raices as servicio_raices
 from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import (
     COOKIE_NAME,
@@ -150,6 +154,7 @@ def _contexto() -> dict:
         "prowlarr_indexer_ids": getattr(s, "prowlarr_indexer_ids", ""),
         "prowlarr_indexers_elegidos": _ids_prowlarr(s),
         "transmission_url": s.transmission_url,
+        "transmission_download_dir": getattr(s, "transmission_download_dir", ""),
         "transmission_username": s.transmission_username,
         "transmission_password_configurada": bool(s.transmission_password),
         "transmission_enabled": s.transmission_enabled,
@@ -203,9 +208,152 @@ def _contexto() -> dict:
     }
 
 
+
+
+TRADICIONES_ETIQUETAS = {
+    "american": "Grapa americana",
+    "british": "Británico",
+    "manga": "Manga",
+    "manhwa": "Manhwa",
+    "manhua": "Manhua",
+    "tebeo": "Tebeo español",
+    "franco_belgian": "Franco-belga (BD)",
+    "fumetti": "Fumetti",
+    "other": "Otra",
+}
+
+
+async def _contexto_raices(db: AsyncSession) -> dict:
+    """Contexto de la tarjeta de discos; si la BD no está disponible, la página sigue."""
+    try:
+        raices = await servicio_raices.listar_con_tradiciones(db)
+        mapa = {str(t.tradition.value): str(t.root_id)
+                for r in raices for t in getattr(r, "traditions", []) or []}
+        from sqlalchemy import func, select
+
+        from zascarr.models import File
+        recuentos = dict((await db.execute(
+            select(File.root_id, func.count(File.id)).group_by(File.root_id))).all())
+        datos = []
+        for r in raices:
+            datos.append({
+                "id": str(r.id), "name": r.name, "path": r.path,
+                "host_path": r.host_path or "", "enabled": bool(r.enabled),
+                "is_default": bool(r.is_default),
+                "estado": servicio_raices.estado_de_raiz(r),
+                "archivos": int(recuentos.get(r.id, 0)),
+                "tradiciones": sorted(
+                    t.tradition.value for t in getattr(r, "traditions", []) or []),
+            })
+        return {
+            "raices_admin": datos, "mapa_tradiciones": mapa,
+            "montajes_disponibles": [
+                {"path": m.path, "host_path": m.host_path}
+                for m in servicio_raices.montajes_libres(raices)],
+            "tradiciones_admin": [
+                {"valor": t.value, "etiqueta": TRADICIONES_ETIQUETAS.get(t.value, t.value)}
+                for t in ComicTradition],
+        }
+    except Exception:  # noqa: BLE001 — la tarjeta no puede tumbar Ajustes si la BD no responde
+        logger.warning("ajustes.raices_no_disponibles", exc_info=False)
+        return {"raices_admin": [], "mapa_tradiciones": {}, "montajes_disponibles": [],
+                "tradiciones_admin": []}
+
+
 @router.get("", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    return _sin_cache(templates.TemplateResponse(request, "ajustes.html", _contexto()))
+async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    contexto = _contexto()
+    contexto.update(await _contexto_raices(db))
+    return _sin_cache(templates.TemplateResponse(request, "ajustes.html", contexto))
+
+
+@router.post("/guardar/raices", response_class=HTMLResponse)
+async def guardar_raices(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    form = await request.form()
+    asignaciones = {
+        clave.removeprefix("trad_"): (str(valor) if valor else None)
+        for clave, valor in form.items() if clave.startswith("trad_")
+    }
+    try:
+        await servicio_raices.guardar_mapa(db, asignaciones)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001 — mensaje de dominio, sin detalle técnico
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo guardar el reparto de discos.", "nombre": "Discos"})
+    return templates.TemplateResponse(
+        request, "_ajustes_guardado.html",
+        {"nombre": "Discos",
+         "aviso": ("Los archivos que ya tienes no se mueven; solo cambia "
+                   "dónde se importan los nuevos.")})
+
+
+@router.post("/raices/crear", response_class=HTMLResponse)
+async def crear_raiz(
+    request: Request, path: str = Form(...), name: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.crear_raiz(db, path=path, name=name)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo añadir el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
+
+
+@router.post("/raices/{root_id}/habilitar", response_class=HTMLResponse)
+async def habilitar_raiz(
+    request: Request, root_id: UUID, enabled: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.cambiar_habilitada(db, root_id, enabled)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo cambiar el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
+
+
+@router.post("/raices/{root_id}/predeterminada", response_class=HTMLResponse)
+async def predeterminada_raiz(
+    request: Request, root_id: UUID, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.cambiar_por_defecto(db, root_id)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo elegir el disco por defecto.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
+
+
+@router.post("/raices/{root_id}/borrar", response_class=HTMLResponse)
+async def borrar_raiz(
+    request: Request, root_id: UUID, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.borrar_raiz(db, root_id)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo borrar el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
 
 
 @router.post("/guardar/comic-vine", response_class=HTMLResponse)
@@ -519,13 +667,23 @@ async def guardar_transmission(
     request: Request, transmission_url: str = Form(...),
     transmission_username: str = Form(default=""),
     transmission_password: str = Form(default=""),
+    transmission_download_dir: str = Form(default=""),
     transmission_enabled: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
+    carpeta = (transmission_download_dir or "").strip()
+    if carpeta and not _carpeta_de_descargas_valida(carpeta):
+        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+            "ok": False,
+            "mensaje": "La carpeta de descargas debe ser una ruta absoluta del host "
+                       "(empieza por / y sin «..») — por ejemplo "
+                       "/media/Descargas/torrents/completos.",
+        })
     await RuntimeSettingsService(db).save({
         "transmission_url": transmission_url.rstrip("/"),
         "transmission_username": transmission_username,
         "transmission_password": transmission_password,
+        "transmission_download_dir": carpeta,
         "transmission_enabled": transmission_enabled,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Transmission"})
@@ -820,13 +978,22 @@ async def probar_prowlarr(
 async def probar_transmission(
     request: Request, transmission_url: str = Form(...),
     transmission_username: str = Form(default=""), transmission_password: str = Form(default=""),
+    transmission_download_dir: str = Form(default=""),
 ) -> HTMLResponse:
     password = _secreto_o_guardado(transmission_password, "transmission_password")
-    ok, mensaje = await _test_transmission(
-        transmission_url.rstrip("/"), transmission_username, password
+    carpeta = (transmission_download_dir or "").strip() or getattr(
+        get_settings(), "transmission_download_dir", "")
+    if carpeta and not _carpeta_de_descargas_valida(carpeta):
+        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+            "ok": False,
+            "mensaje": "La carpeta de descargas debe ser una ruta absoluta del host "
+                       "(no la raíz «/», sin «..» ni caracteres de control).",
+        })
+    ok, mensaje, aviso = await _test_transmission(
+        transmission_url.rstrip("/"), transmission_username, password, carpeta
     )
     return templates.TemplateResponse(
-        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje}
+        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje, "aviso": aviso}
     )
 
 
@@ -948,13 +1115,40 @@ async def _test_prowlarr(url: str, api_key: str) -> tuple[bool, str]:
             return False, "Prowlarr respondió: clave de API rechazada."
         return False, f"Prowlarr respondió HTTP {r.status_code}."
     except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="prowlarr", error=str(exc))
+        logger.warning("ajustes.test_failed", integracion="prowlarr",
+                       error_tipo=type(exc).__name__)
         return False, _mensaje_conexion_fallida(exc)
 
 
-async def _test_transmission(url: str, username: str, password: str) -> tuple[bool, str]:
+def _carpeta_de_descargas_valida(ruta: str) -> bool:
+    """Ruta absoluta del host, sin «..» ni caracteres de control."""
+    if not ruta.startswith("/") or ".." in PurePosixPath(ruta).parts:
+        return False
+    if PurePosixPath(ruta) == PurePosixPath("/"):
+        return False          # la raíz del host no es una carpeta de descargas válida
+    return not any(ord(c) < 32 for c in ruta)
+
+
+def _aviso_de_carpeta_transmission(esperada: str, real: str | None) -> str | None:
+    """Aviso si ZascArr enviará a una carpeta distinta de la que usa Transmission.
+
+    No se puede comprobar desde el contenedor si la carpeta del host existe; el
+    aviso da las dos rutas para que el operador las compare antes de descargar.
+    """
+    if not esperada or not real:
+        return None
+    if PurePosixPath(esperada) == PurePosixPath(real):
+        return None
+    return ("Conexión correcta, pero la carpeta de descargas configurada en ZascArr "
+            f"(«{esperada}») no es la que usa Transmission («{real}»). ZascArr enviará "
+            "los torrents a la primera: si no existe en la Pi, el envío fallará.")
+
+
+async def _test_transmission(
+    url: str, username: str, password: str, download_dir: str = ""
+) -> tuple[bool, str, bool]:
     if not url:
-        return False, "Falta la URL de Transmission."
+        return False, "Falta la URL de Transmission.", False
     auth = (username, password) if username else None
     rpc_url = f"{url}/transmission/rpc"
     try:
@@ -969,15 +1163,31 @@ async def _test_transmission(url: str, username: str, password: str) -> tuple[bo
                     headers={"X-Transmission-Session-Id": session_id},
                 )
         if r.status_code == 401:
-            return False, "Transmission respondió: usuario o contraseña rechazados."
+            return False, "Transmission respondió: usuario o contraseña rechazados.", False
         if r.status_code != 200:
-            return False, f"Transmission respondió HTTP {r.status_code}."
-        if r.json().get("result") == "success":
-            return True, "Conexión correcta."
-        return False, "Transmission no confirmó la sesión."
+            return False, f"Transmission respondió HTTP {r.status_code}.", False
+        try:
+            datos = r.json()
+        except ValueError:
+            return False, "Transmission devolvió una respuesta que no es JSON.", False
+        if not isinstance(datos, dict):
+            return False, "Transmission devolvió una respuesta inesperada.", False
+        if datos.get("result") == "success":
+            argumentos = datos.get("arguments")
+            if not isinstance(argumentos, dict):
+                return False, "Transmission devolvió una respuesta inesperada.", False
+            real = argumentos.get("download-dir")
+            if real is not None and not isinstance(real, str):
+                return False, "Transmission devolvió una respuesta inesperada.", False
+            aviso = _aviso_de_carpeta_transmission(download_dir, real)
+            if aviso:
+                return True, aviso, True
+            return True, "Conexión correcta.", False
+        return False, "Transmission no confirmó la sesión.", False
     except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="transmission", error=str(exc))
-        return False, _mensaje_conexion_fallida(exc)
+        logger.warning("ajustes.test_failed", integracion="transmission",
+                       error_tipo=type(exc).__name__)
+        return False, _mensaje_conexion_fallida(exc), False
 
 
 async def _test_amule(url: str, password: str) -> tuple[bool, str]:
@@ -993,5 +1203,6 @@ async def _test_amule(url: str, password: str) -> tuple[bool, str]:
             return True, "Conexión correcta."
         return False, "aMule no devolvió sesión — revisa la contraseña."
     except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="amule", error=str(exc))
+        logger.warning("ajustes.test_failed", integracion="amule",
+                       error_tipo=type(exc).__name__)
         return False, _mensaje_conexion_fallida(exc)

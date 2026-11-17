@@ -277,7 +277,8 @@ class TestConUvicornReal:
         cabeceras = {"Connection": "Upgrade", "Upgrade": "websocket", "Sec-WebSocket-Version": "13",
                      "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="}
         salida = _servir_y_pedir(cmd, [(f"/ui/descubrir?{QUERY}", cabeceras)], RAIZ)
-        assert CENTINELAS["clave"] in salida, salida[-1200:]
+        # #369 sanea la traza de uvicorn.error: la query ya no se filtra al log.
+        assert CENTINELAS["clave"] not in salida, salida[-1200:]
 
     def test_control_negativo_sin_el_filtro_el_detector_si_ve_la_query(self, tmp_path):
         """Una aplicación ASGI mínima bajo el MISMO uvicorn y los mismos argumentos, pero SIN el filtro: el centinela debe
@@ -398,8 +399,12 @@ PARAMETROS_DE_QUERY = frozenset({
     "serie_ids", "tradicion",
     # D5 (#162): semana y editorial de Novedades (estado de la vista).
     "semana", "editorial",
+    # Por revisar: filtro y tamaño de página (estado de la vista).
+    "solo_sugerencia", "tamano",
     # #797: abrir el desplegable de alta tras un error (estado de la vista).
     "abrir",
+    # Logs persistidos: filtros de fecha/hora/evento (solo lectura, saneados).
+    "fecha", "hora", "evento",
 })
 
 

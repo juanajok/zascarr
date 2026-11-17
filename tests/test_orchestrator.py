@@ -32,9 +32,11 @@ from zascarr.services.orchestrator import (
     MOTIVO_CLIENTE_INACCESIBLE,
     MOTIVO_ERROR_INESPERADO,
     MOTIVO_FUENTE_INACCESIBLE,
+    MOTIVO_AMULE_INACCESIBLE,
     MOTIVO_NUMERO_DISTINTO,
     MOTIVO_SIN_FUENTE,
     MOTIVO_SIN_RESULTADOS,
+    MOTIVO_TRANSMISSION_INACCESIBLE,
     DownloadBackend,
     MOTIVO_PROWlARR_CONFIGURACION,
     Orchestrator,
@@ -262,6 +264,179 @@ class TestProcessItemRetryPool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2b. T-62 — backoff persistente tras fallos de envío
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestBackoffEnvios:
+
+    def test_el_backoff_crece_y_se_queda_en_el_tope(self):
+        """10 min → 30 min → 2 h → 6 h y ahí se queda: no puede crecer sin
+        límite ni dejar el deseo fuera del ciclo para siempre."""
+        item = Wishlist(id=uuid4())
+        orch = Orchestrator(db=FakeSession())
+        ahora = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
+
+        esperas = []
+        for _ in range(5):
+            orch._programar_reintento(item, ahora=ahora)
+            esperas.append(item.next_retry_at - ahora)
+
+        assert esperas == [
+            timedelta(minutes=10),
+            timedelta(minutes=30),
+            timedelta(hours=2),
+            timedelta(hours=6),
+            timedelta(hours=6),
+        ]
+        assert item.retry_count == 5
+
+    @pytest.mark.asyncio
+    async def test_un_fallo_de_envio_programa_el_reintento_y_deja_failed(self):
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=10)]
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = None
+        antes = datetime.now(UTC)
+
+        result = await orch._process_item(item)
+
+        assert result is False
+        assert item.status == WishlistStatus.FAILED
+        assert item.retry_count == 1
+        assert item.next_retry_at is not None
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+        assert antes + timedelta(minutes=10) <= item.next_retry_at
+
+    @pytest.mark.asyncio
+    async def test_sin_resultados_no_programa_backoff(self):
+        """«Sin resultados» no es un fallo del cliente: no debe retrasar el
+        siguiente ciclo con una espera de backoff."""
+        item = Wishlist(id=uuid4(), search_query="Serie Rarísima", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = []
+
+        await orch._process_item(item)
+
+        assert not item.retry_count
+        assert item.next_retry_at is None
+
+    @pytest.mark.asyncio
+    async def test_candidato_rechazado_no_programa_backoff(self, monkeypatch):
+        """Un backend apagado en Ajustes no es un fallo de envío que el
+        backoff deba esperar: el motivo ya dice qué revisar."""
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave", "transmission_enabled": False, "amule_enabled": False,
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=50)]
+
+        await orch._process_item(item)
+
+        assert item.last_error == MOTIVO_CANDIDATO_RECHAZADO
+        assert not item.retry_count
+        assert item.next_retry_at is None
+
+    @pytest.mark.asyncio
+    async def test_el_exito_limpia_retry_count_y_next_retry_at(self):
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.FAILED,
+                        retry_count=3,
+                        next_retry_at=datetime.now(UTC) + timedelta(hours=2))
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=10)]
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "abc"}
+
+        await orch._process_item(item)
+
+        assert item.status == WishlistStatus.DOWNLOADING
+        assert item.retry_count == 0
+        assert item.next_retry_at is None
+
+    @pytest.mark.asyncio
+    async def test_el_ciclo_no_elige_un_item_con_backoff_futuro(self):
+        """Sin BD real: se comprueba el WHERE que genera `process_wishlist`.
+        Un backoff futuro excluye el ítem; vencido, lo hace elegible sin
+        esperar el cooldown global (si no, las esperas de 10 min/30 min/2 h
+        serían decorativas); el cooldown sigue para quien no tiene backoff."""
+        session = CapturingSession(queue=[
+            FakeExecResult(["acknowledged"]),  # is_acknowledged
+            FakeExecResult([]),                # items manuales
+            FakeExecResult([]),                # items de política
+        ])
+        orch = Orchestrator(db=session)
+
+        assert await orch.process_wishlist() == 0
+
+        consultas = [s for s in session.statements if "FROM wishlist" in s]
+        assert consultas, "process_wishlist no consultó la wishlist"
+        assert all("next_retry_at IS NOT NULL" in s for s in consultas)
+        assert all("next_retry_at <=" in s for s in consultas)
+        # El cooldown global no desaparece: sigue para los intentos sin backoff.
+        assert all("last_searched_at IS NULL" in s for s in consultas)
+        assert all("last_searched_at <" in s for s in consultas)
+
+    @pytest.mark.asyncio
+    async def test_el_envio_manual_fallido_programa_el_backoff(self):
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = None
+
+        result = await orch.send_manual_candidate(item, make_result(seeders=10))
+
+        assert result is False
+        assert item.status == WishlistStatus.FAILED
+        assert item.retry_count == 1
+        assert item.next_retry_at is not None
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_el_envio_manual_con_exito_limpia_el_backoff_y_no_espera(self):
+        """El usuario manda: un deseo con `next_retry_at` futuro se envía
+        igual desde la UI, y el éxito limpia el backoff pendiente."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.FAILED, retry_count=2,
+                        next_retry_at=datetime.now(UTC) + timedelta(hours=5))
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "abc123"}
+
+        result = await orch.send_manual_candidate(item, make_result(seeders=10))
+
+        assert result is True
+        assert item.status == WishlistStatus.DOWNLOADING
+        assert item.retry_count == 0
+        assert item.next_retry_at is None
+
+    @pytest.mark.asyncio
+    async def test_el_envio_extra_fallido_no_toca_estado_ni_backoff(self):
+        """Envío EXTRA auxiliar sobre un deseo ya en descarga: si el cliente
+        falla, no degrada la descarga principal ni programa el backoff del ciclo
+        (decisión de producto tras QA B1, 2026-11-17)."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = None
+
+        result = await orch.send_manual_candidate(item, make_result(seeders=10))
+
+        assert result is False
+        # Decisión de producto (QA B1 2026-11-17): el envío extra es auxiliar;
+        # no degrada la descarga principal ni programa el backoff del ciclo.
+        assert item.status == WishlistStatus.DOWNLOADING
+        assert not item.retry_count
+        assert item.next_retry_at is None
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 2a. Búsqueda conjunta: Prowlarr y foro, no una cascada
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -397,7 +572,8 @@ class TestMotivoNoAvanza:
         await orch._process_item(item)
 
         assert item.status == WishlistStatus.FAILED
-        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+        assert "Transmission no respondió" in item.last_error
 
     @pytest.mark.asyncio
     async def test_exito_limpia_el_motivo_anterior(self):
@@ -524,7 +700,25 @@ class TestBusquedaManual:
 
         assert result is False
         assert item.status == WishlistStatus.FAILED
-        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_amule_sin_sesion_dice_a_mule_y_no_un_generico(self):
+        """UX 2026-11-17: el mensaje debe nombrar el cliente que falló."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
+        orch._amule = AsyncMock()
+        orch._amule.login.return_value = False
+        candidato = make_result(
+            title="DC K.O. #1.cbr",
+            url="ed2k://|file|DC%20K.O.%20%231.cbr|1|HASH|/")
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is False
+        assert item.status == WishlistStatus.FAILED
+        assert item.last_error == MOTIVO_AMULE_INACCESIBLE
+        assert "aMule no respondió" in item.last_error
 
     @pytest.mark.asyncio
     async def test_transmission_inalcanzable_no_revienta_da_motivo_claro(self):
@@ -544,7 +738,8 @@ class TestBusquedaManual:
 
         assert result is False
         assert item.status == WishlistStatus.FAILED
-        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+        assert "Transmission no respondió" in item.last_error
 
     @pytest.mark.asyncio
     async def test_no_reenvia_si_el_item_ya_no_esta_en_estado_accionable(self):
@@ -1403,3 +1598,71 @@ class TestTitulosDeEnlacesDelForo:
             "DC K.O. #2 - El combate.cbr",
         ]
         assert {c.indexer for c in candidatos} == {"forum:crg"}
+
+
+class TestDuplicadosDelForo:
+    @pytest.mark.asyncio
+    async def test_el_mismo_fichero_con_codificaciones_distintas_es_uno_solo(self, monkeypatch):
+        """«Sector Lejano» aparecía dos veces: mismo hash ed2k enlazado con `%20`
+        y con espacios. La clave es el hash, no la URL (bug 2026-11-16)."""
+        from zascarr.services import forum_scraper as modulo_foro
+
+        class Foro:
+            def __init__(self, **_kw):
+                pass
+
+            async def login(self, *_a, **_k):
+                return True
+
+            async def use_ipb_search(self, *_a, **_k):
+                return [modulo_foro.ForumResult(
+                    topic_title="Sector Lejano",
+                    topic_url="http://foro.example/forum/index.php?showtopic=2",
+                    ed2k_links=[
+                        "ed2k://|file|Sector%20Lejano.cbz|1234|AABBCCDD|/",
+                        "ed2k://|file|Sector Lejano.cbz|1234|aabbccdd|/",
+                    ],
+                )]
+
+        monkeypatch.setattr(modulo_foro, "ForumScraper", Foro)
+        ajustes = get_settings().model_copy(update={
+            "forum_enabled": True, "forum_url": "http://foro.example/forum",
+            "forum_username": "lector", "forum_password": "clave",
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+
+        candidatos = await Orchestrator(db=MagicMock())._forum_fallback("Sector Lejano")
+
+        assert len(candidatos) == 1
+        assert candidatos[0].title == "Sector Lejano.cbz"
+        assert candidatos[0].size_bytes == 1234
+
+
+
+class TestDuplicadosDeProwlarr:
+    @pytest.mark.asyncio
+    async def test_el_mismo_release_en_dos_indexers_se_queda_una_vez(self, monkeypatch):
+        """Absolute Wonder Woman #20 salía dos veces (mismo título/tamaño, URL
+        distinta de otro indexer). Se conserva la de más seeders (2026-11-16)."""
+        ajustes = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave",
+            "transmission_enabled": True, "amule_enabled": False,
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [
+            make_result(title="Absolute Wonder Woman #20 (2026)",
+                        url="magnet:?xt=urn:btih:aaa", seeders=3, size=100),
+            make_result(title="Absolute Wonder Woman #20 (2026)",
+                        url="magnet:?xt=urn:btih:bbb", seeders=40, size=100),
+            make_result(title="Absolute Wonder Woman #20 (2026)",
+                        url="magnet:?xt=urn:btih:ccc", seeders=5, size=200),
+        ]
+
+        resultados, motivo = await orch._prowlarr_candidates("Absolute Wonder Woman", ajustes)
+
+        assert motivo is None
+        assert len(resultados) == 2                      # 100 (mejor seeders) + 200
+        assert max(r.seeders for r in resultados if r.size_bytes == 100) == 40
