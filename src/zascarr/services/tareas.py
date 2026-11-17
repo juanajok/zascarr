@@ -62,6 +62,7 @@ class Tarea:
     detalle: str | None = None
     run_id: str | None = None
     visto: bool = False
+    unidad: str | None = None
     _origen: str = ""
     _fin: float | None = None
     _creada_mono: float = 0.0
@@ -71,6 +72,7 @@ class Tarea:
 _lock = threading.RLock()
 _tareas: dict[str, Tarea] = {}
 _por_origen: dict[str, str] = {}
+_ultimo_anuncio: tuple[int, int] | None = None
 
 
 def _ahora(ahora: float | None = None) -> float:
@@ -105,8 +107,12 @@ def iniciar(tipo: TipoTarea | str, *, total: int | None = None, fase: str | None
             return None
         if enlace is not None and not (enlace.startswith("/ui/") or enlace == "/estado"):
             enlace = None
+        unidades = {"importar": "archivos", "registrar": "archivos",
+                    "rescanear": "archivos", "descarga": "deseos",
+                    "copia": "elementos", "convertir": "tebeos", "paquete": "tebeos"}
         t = Tarea(id=secrets.token_hex(4), tipo=tipo, titulo=TITULOS[tipo.value],
                   fase=fase, total=total, enlace=enlace, run_id=run_id,
+                  unidad=unidades.get(tipo.value),
                   _origen=origen, _creada_mono=_ahora(ahora),
                   _ultima_superficie=_ahora(ahora))
         _tareas[t.id] = t
@@ -165,7 +171,7 @@ def marcar_visto(tid: str) -> None:
         t = _tareas.get(tid)
         if t is not None and t.estado is EstadoTarea.ERROR:
             t.visto = True
-            t._fin = _ahora(None) - RETENCION_S
+            t._fin = _ahora(None)
 
 
 def _publicable(t: Tarea, ahora: float) -> bool:
@@ -189,26 +195,42 @@ def snapshot(*, ahora: float | None = None, incluir_recientes: bool = False) -> 
             pct = None
             if t.total and t.hechos is not None and t.total > 0:
                 pct = round(t.hechos * 100 / t.total)
+            minutos = max(0, int((datetime.now(UTC) - t.iniciada).total_seconds() // 60))
+            hace = "ahora" if minutos == 0 else f"hace {minutos} min"
             salida.append({"id": t.id, "tipo": t.tipo.value, "titulo": t.titulo,
+                           "iniciada_texto": f"Empezó {hace}",
                            "fase": t.fase, "hechos": t.hechos, "total": t.total,
-                           "pct": pct, "unidad": "archivos" if t.total else None,
+                           "pct": pct, "unidad": t.unidad if t.total else None,
                            "estado": estado, "atascada": atascada,
                            "iniciada": t.iniciada.isoformat(),
                            "actualizada": t.actualizada.isoformat(), "enlace": t.enlace,
                            "detalle": t.detalle, "run_id": t.run_id, "visto": t.visto})
         activas = sum(1 for x in salida if x["estado"] in {"en_curso", "atascada"})
         errores = sum(1 for x in salida if x["estado"] == "error")
+        global _ultimo_anuncio
+        firma = (activas, errores)
+        anuncio = None
+        if firma != _ultimo_anuncio:
+            _ultimo_anuncio = firma
+            if errores:
+                anuncio = "Una tarea ha fallado."
+            elif activas:
+                plural = "" if activas == 1 else "s"
+                anuncio = f"ZascArr está trabajando en {activas} tarea{plural}."
         return {"version": 1, "generado": datetime.now(UTC).isoformat(),
                 "tareas": salida, "activas": activas, "errores": errores,
                 "hay_tareas": bool(salida),
                 "resumen": {"total": len(salida), "en_curso": activas,
-                            "con_error": errores, "hay_tareas": bool(salida)}}
+                            "con_error": errores, "hay_tareas": bool(salida)},
+                "anuncio": anuncio}
 
 
 def limpiar_al_arrancar() -> None:
     with _lock:
         _tareas.clear()
         _por_origen.clear()
+        global _ultimo_anuncio
+        _ultimo_anuncio = None
 
 
 def _reset_para_pruebas() -> None:

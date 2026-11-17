@@ -43,6 +43,8 @@ def test_retencion_y_error_hasta_visto():
     tareas.error(t.id, tipo_error="OSError")
     assert tareas.snapshot(incluir_recientes=True)["errores"] == 1
     tareas.marcar_visto(t.id)
+    assert tareas.snapshot(incluir_recientes=True)["errores"] == 1
+    t._fin -= 9
     assert tareas.snapshot(incluir_recientes=True)["errores"] == 0
 
 
@@ -78,6 +80,9 @@ def test_api_json_y_fragmento():
     cuerpo = r.json()
     assert cuerpo["version"] == 1 and cuerpo["resumen"]["en_curso"] == 1
     assert set(cuerpo) == {"version", "generado", "resumen", "tareas"}
+    tarea = cuerpo["tareas"][0]
+    assert {"detalle", "run_id", "visto", "unidad"} <= set(tarea)
+    assert tarea["unidad"] == "archivos"
     f = cliente.get("/ui/_tareas")
     assert f.status_code == 200 and 'role="status"' in f.text
     assert "<progress" in f.text and "Ahora" in f.text

@@ -21,7 +21,8 @@ async def api_tareas() -> JSONResponse:
         "resumen": datos["resumen"],
         "tareas": [{k: t[k] for k in ("id", "tipo", "titulo", "fase", "hechos",
                                      "total", "pct", "unidad", "estado", "atascada",
-                                     "iniciada", "actualizada", "enlace")}
+                                     "iniciada", "actualizada", "enlace", "detalle",
+                                     "run_id", "visto")}
                    for t in datos["tareas"]],
     }
     return JSONResponse(cuerpo, headers={"Cache-Control": "no-store"})

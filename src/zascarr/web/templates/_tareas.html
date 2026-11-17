@@ -10,12 +10,13 @@
 {% for x in t.tareas %}
   <article class="tarea {{ x.estado }}">
     <h3>{{ x.titulo }}</h3>
-    <p>{% if x.fase %}{{ x.fase }}{% elif x.estado == "en_curso" %}Trabajando…{% elif x.estado == "atascada" %}Tarda más{% elif x.estado == "error" %}Error{% else %}Hecho{% endif %}</p>
-    {% if x.total and x.hechos is not none %}<progress value="{{ x.hechos }}" max="{{ x.total }}"></progress>{% elif x.estado == "en_curso" %}<progress></progress>{% endif %}
+    <p class="tarea-estado">{% if x.estado == "error" %}Error · No se pudo terminar. Vuelve a intentarlo.{% elif x.estado == "terminada" %}Hecho{% elif x.estado == "atascada" %}Tarda más{% elif x.fase and x.total and x.hechos is not none %}{{ x.fase }} {{ x.hechos }} de {{ x.total }}{% elif x.fase %}{{ x.fase }}{% else %}Trabajando…{% endif %}</p>
+    {% if x.total and x.hechos is not none %}<progress value="{{ x.hechos }}" max="{{ x.total }}" aria-label="{{ x.titulo }}: {{ x.hechos }} de {{ x.total }}"></progress><p class="caption">{{ x.hechos }} de {{ x.total }}</p>{% elif x.estado == "en_curso" %}<progress aria-label="{{ x.titulo }}"></progress>{% endif %}
+    <p class="caption">{{ x.iniciada_texto }}</p>
     {% if x.estado == "atascada" %}<p>Está tardando más de lo normal. Puedes seguir usando ZascArr.</p>{% endif %}
     {% if x.estado == "error" %}<button type="button" hx-post="/ui/_tareas/visto/{{ x.id }}" hx-swap="none">Revisar</button>{% endif %}
     {% if x.enlace %}<a href="{{ x.enlace }}">Ver la tarea</a>{% endif %}
   </article>
 {% endfor %}
 </div>
-<div id="tareas-anuncio" role="status" hx-swap-oob="innerHTML">{% if t.errores %}Una tarea ha fallado.{% elif t.activas %}ZascArr está trabajando en {{ t.activas }} tarea{% if t.activas != 1 %}s{% endif %}.{% endif %}</div>
+<div id="tareas-anuncio" class="sr" role="status" hx-swap-oob="innerHTML">{% if t.anuncio %}{{ t.anuncio }}{% endif %}</div>
