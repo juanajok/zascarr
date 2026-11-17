@@ -61,3 +61,30 @@ def test_tarjeta_y_ficha_incluyen_boton():
     assert 'include "_favorito_boton.html"' in rejilla and "library-card-wrap" in rejilla
     assert 'include "_favorito_boton.html"' in ficha
     assert "hx-post" in frag and "aria-pressed" in frag and "favorito-btn" in frag
+
+
+def test_hx_ficha_texto_visible_y_tarjeta_compacta():
+    cliente, serie = _cliente()
+    try:
+        ficha = cliente.post(f"/ui/series/{serie.id}/favorito",
+                             data={"origen": "ficha", "favorito-ficha": "1"},
+                             headers={"HX-Request": "true"})
+        assert "Quitar de favoritas" in ficha.text
+        assert "favorito-btn-ficha" in ficha.text
+        assert 'class="sr"' not in ficha.text
+        tarjeta = cliente.post(f"/ui/series/{serie.id}/favorito",
+                               headers={"HX-Request": "true"})
+        assert '<span class="sr">' in tarjeta.text
+        assert "aria-pressed" in tarjeta.text
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_css_favorito_44_y_sin_tapar_titulo():
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text()
+    assert ".favorito-btn" in css and "width: 44px" in css and "height: 44px" in css
+    assert ".library-card-wrap .favorito-form" in css and "position: absolute" in css
+    assert "top: var(--space-2)" in css
+    assert ".favorito-btn-ficha { width: auto; min-height: 44px;" in css
+    assert "white-space: nowrap" in css
