@@ -14,7 +14,7 @@ ZascArr se diseña como un tebeo: papel y tinta con acentos CMYK, bordes gruesos
 dura sin desenfoque, una trama de puntos y didascalias amarillas.
 
 Todo es CSS y HTMX servidos por la propia app: dos fuentes libres en `static/vendor/fonts`, iconos
-SVG en línea, nada de CDN, de JavaScript propio ni de imágenes externas. Lo ligero y lo legible van
+SVG en línea, nada de CDN ni de imágenes externas. **Única excepción de JavaScript propio:** el fichero del lector (`static/lector.js`, ADR 0021), solo en la pantalla de lectura; el resto sigue con HTMX. Lo ligero y lo legible van
 primero: la app corre en una Raspberry Pi compartida y la usa «el Coleccionista», que no abre
 terminales.
 

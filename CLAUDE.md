@@ -305,7 +305,7 @@ como marco permanente.
 
 ## 10. Lo que NO se hace (anti-patrones del proyecto)
 
-- ❌ SPA / Node build / Alpine/Vue/React: ADR-0001, definitivo.
+- ❌ SPA / Node build / Alpine/Vue/React: ADR-0001, definitivo. **Única excepción:** el lector propio puede usar un único `static/lector.js` sin dependencias ni build, solo en su pantalla (ADR 0021); nada de Alpine/Vue/React.
 - ❌ `create_type=False` esperando que funcione sin `postgresql.ENUM`.
 - ❌ `Wishlist(**data)` desde el body crudo (cerrado con esquemas
    Pydantic).
@@ -321,7 +321,7 @@ como marco permanente.
 | Doc | Rol |
 |---|---|
 | `docs/BACKLOG.md` | Prioridades P0-P2, historias, estimaciones y decisión de hecho/cierre con nota mecánica de cómo se logró cada historia |
-| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis, 0012 credenciales del `.env`, 0015 lector de RAR con `unar` y riesgo aceptado; 0006–0010 en el propio directorio) |
+| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis, 0012 credenciales del `.env`, 0015 lector de RAR con `unar` y riesgo aceptado, 0021 JavaScript propio solo en el lector; 0006–0010 y 0013–0020 en el propio directorio) |
 | `docs/design/ui-migracion.md` | Inventario de la UI (plantillas, rutas, contratos HTMX), maqueta frente a la realidad y estimaciones de la Épica V. **Consultar antes de tocar una plantilla o un contrato `hx-*`** |
 | `docs/design/sistema-de-diseno-zascarr.md` (+ `.pdf`) | **Sistema de diseño publicado** (2026-11-13): libro de marca, principios, color y tokens de los dos temas, tipografía, forma, trama, iconografía, maquetación, interacción/accesibilidad, cómo se usa y la revisión de UI/UX con su deuda abierta. El `.md` es la referencia diffeable; el `.pdf`, las muestras visuales. **Consultar antes de tocar plantillas o CSS.** |
 | `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
