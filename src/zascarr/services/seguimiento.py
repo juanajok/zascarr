@@ -328,8 +328,6 @@ async def _procesar_foro(
     temas = list(await foro.listar_temas(foro_id=getattr(get_settings(), "seguimiento_foro_id", 5),
                                           limite=max_temas))
     informe.temas = min(len(temas), max_temas)
-    since = min((s.follow_new_issues_since for s in series
-                 if s.follow_new_issues_since is not None), default=None)
     for tema in temas[:max_temas]:
         clave = PLANTILLA_CLAVE_FORO.format(tema_id=tema.id)
         fila = (await db.execute(
@@ -340,12 +338,19 @@ async def _procesar_foro(
             desde_cache += 1
             continue
         actividad = _fecha_de_actividad(tema.ultima_actividad, ahora)
-        if fila is None and since is not None and actividad is not None and actividad < since:
-            # Primera pasada: lo anterior a la frontera queda visto sin abrir.
-            await _marcar_visto(db, "foro", clave, tema.ultima_actividad, ahora,
-                                procesado=False)
-            desde_cache += 1
-            continue
+        if fila is None:
+            # Primera pasada: solo se abre un tema si ALGUNA serie seguida ya
+            # existía en la fecha del tema. El filtro definitivo es por serie
+            # (abajo), no un min() global que mezclaría fronteras.
+            elegibles = [s for s in series
+                         if s.follow_new_issues_since is not None
+                         and actividad is not None
+                         and actividad >= s.follow_new_issues_since]
+            if not elegibles:
+                await _marcar_visto(db, "foro", clave, tema.ultima_actividad, ahora,
+                                    procesado=False)
+                desde_cache += 1
+                continue
         try:
             resultado = await foro.leer_tema(tema.url)
         except Exception as exc:
@@ -358,6 +363,13 @@ async def _procesar_foro(
             if elegido is None:
                 continue
             serie, numero = elegido
+            # #993: cada serie tiene su propia frontera. Un tema anterior a la
+            # activación de ESTA serie no puede generar su deseo, aunque otra
+            # serie más antigua permita abrir el tema.
+            if (fila is None and serie.follow_new_issues_since is not None
+                    and actividad is not None
+                    and actividad < serie.follow_new_issues_since):
+                continue
             hallazgos.append(Hallazgo(
                 fuente="foro", clave=f"tema:{tema.id}:{numero}", serie_id=serie.id,
                 numero=numero, titulo=serie.title))

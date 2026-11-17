@@ -45,15 +45,13 @@ def upgrade() -> None:
                             name="uq_seguimiento_vistos_fuente_clave"),
     )
     op.create_index("ix_seguimiento_vistos_visto_en", "seguimiento_vistos", ["visto_en"])
-    op.create_index(
-        "uq_wishlist_seguimiento_numero", "wishlist", ["series_id", "numero"],
-        unique=True,
-        postgresql_where=sa.text("origen::text = 'seguimiento' AND numero IS NOT NULL"),
-    )
+    # El índice único parcial se crea en 0048: el predicado con el valor de
+    # enum nuevo no se puede usar en la misma transacción que lo añade (PG) y
+    # el cast `origen::text` no es IMMUTABLE para un índice.
 
 
 def downgrade() -> None:
-    op.drop_index("uq_wishlist_seguimiento_numero", table_name="wishlist")
+    # El índice único vive en 0048 y se retira allí.
     op.drop_index("ix_seguimiento_vistos_visto_en", table_name="seguimiento_vistos")
     op.drop_table("seguimiento_vistos")
     op.drop_column("series", "follow_new_issues_since")
