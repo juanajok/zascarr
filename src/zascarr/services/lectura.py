@@ -73,6 +73,8 @@ class EstadoLectura:
     nota: str | None
     started_at: datetime | None
     completed_at: datetime | None
+    file_id: str | None = None
+    current_page: int = 0
 
     @property
     def estado_es(self) -> str:
@@ -111,7 +113,9 @@ def _normalizar_estado(estado: str | ReadingStatus) -> ReadingStatus:
 
 
 def _instantanea(p: ReadingProgress) -> EstadoLectura:
-    return EstadoLectura(str(p.issue_id), p.status, p.rating, p.notes, p.started_at, p.completed_at)
+    return EstadoLectura(str(p.issue_id), p.status, p.rating, p.notes, p.started_at,
+                         p.completed_at, str(p.file_id) if p.file_id else None,
+                         p.current_page or 0)
 
 
 async def marcar(

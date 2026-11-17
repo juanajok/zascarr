@@ -175,7 +175,7 @@ jobs:
       # #418 (ADR 0015): sin los demonios GNUstep que nadie usa, y `lsar` sigue leyendo un RAR de verdad.
       - name: sin gdomap/gdnc/gpbs ni sus ficheros de servicio y con lsar funcionando sobre RAR (incluido sólido)
         run: |
-          docker run --rm --entrypoint sh zascarr:ci -c '
+          docker run --rm -v "$PWD/tests:/app/tests:ro" --entrypoint sh zascarr:ci -c '
             for b in "gdomap*" gdnc "gpbs*"; do
               if [ -n "$(find / -xdev -type f -name "$b" 2>/dev/null)" ]; then echo "::error::$b sigue en la imagen"; exit 1; fi
             done
@@ -184,7 +184,7 @@ jobs:
             echo "setuid/setgid de la imagen:"; find / -xdev -perm /6000 -type f 2>/dev/null | head -20'
       # #418 (SecOps C-4): la suite y la imagen usan ya el mismo `unar` 1.10.8 (trixie desde #528).
       - name: lector RAR con el unar de la imagen de producción (ejecutables de GNUstep fuera, sin setuid nuevo, fixtures)
-        run: docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- python /app/scripts/comprobar_imagen_rar.py
+        run: docker run --rm -v "$PWD/tests:/app/tests:ro" --entrypoint runuser zascarr:ci -u zascarr -- python /app/scripts/comprobar_imagen_rar.py
       - name: presupuesto de tamaño de la imagen (#530 C2)
         run: |
           bytes=$(docker image inspect zascarr:ci --format '{{.Size}}')
