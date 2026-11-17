@@ -17,6 +17,7 @@ from zascarr.utils import lector_rar
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
 from zascarr.utils.portada_rar import barrer_temporales
+from zascarr.utils.registro import configurar_logs
 from zascarr.utils.registro_reciente import instalar_captura
 from zascarr.utils.saneado_logs import (
     instalar_filtro_registros,
@@ -27,12 +28,25 @@ from zascarr.utils.saneado_logs import (
 
 # BL-E5 (#164): búfer acotado para que el dashboard pueda descargar los últimos
 # eventos sin depender de Docker ni de una shell. No cambia el formato de stdout.
+# Formato/nivel reales antes de instalar el saneador y el búfer.
+configurar_logs()
 # #369: el saneador va ANTES de la captura para que el búfer no guarde rutas.
 instalar_saneo_structlog()
 refrescar_raices()
 instalar_captura()
 instalar_filtro_registros()
 logger = structlog.get_logger()
+
+
+def _duracion_ms(inicio, fin) -> int | None:
+    """Duración estable para el resumen, sin obligar a restar timestamps a mano."""
+    if inicio is None or fin is None:
+        return None
+    try:
+        return max(0, int((fin - inicio).total_seconds() * 1000))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
 
 # `httpx` registra cada petición a nivel INFO con la URL COMPLETA, y en Telegram
 # esa URL lleva el token del bot (en ntfy, el tema hace de contraseña). La app no
@@ -86,6 +100,7 @@ async def _import_loop(interval_minutes: int) -> None:
                     report.files_scanned or report.disappeared_count or report.reappeared):
                 logger.info(
                     "importer.cycle_done",
+                    run_id=str(report.run_id) if report.run_id else None,
                     escaneados=report.files_scanned,
                     importados=report.imported_count,
                     duplicados=report.duplicate_count,
@@ -93,6 +108,7 @@ async def _import_loop(interval_minutes: int) -> None:
                     errores=report.error_count,
                     desaparecidos=report.disappeared_count,
                     reaparecidos=len(report.reappeared),
+                    duracion_ms=_duracion_ms(report.started_at, report.finished_at),
                 )
         except Exception:
             logger.exception("importer.cycle_failed")
@@ -495,6 +511,10 @@ def create_app() -> FastAPI:
     # el proceso con un middleware distinto.
     app.add_middleware(AuthMiddleware)
     app.add_middleware(LimiteCuerpoMiddleware, max_bytes=settings.max_cuerpo_peticion_bytes)
+    # El contexto se añade el último para envolver también auth y límite de cuerpo:
+    # cualquier log de una petición lleva su request_id.
+    from zascarr.middleware_contexto import ContextoPeticionMiddleware
+    app.add_middleware(ContextoPeticionMiddleware)
 
     app.include_router(health_router, prefix="/api")
     app.include_router(estado_cortesia_router, prefix="/api")

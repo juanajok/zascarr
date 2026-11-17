@@ -2158,7 +2158,12 @@ como importado con «recuperado»).
   previo a D8, vive en `huecos_de_serie`, y queda pendiente de medir con la
   biblioteca real.
 
-## Deuda técnica registrada (observabilidad del logging, 2026-09-30)
+## Deuda técnica registrada (observabilidad del logging, 2026-09-30) — resuelta parcialmente 2026-11-17
+
+> `LOG_LEVEL`/`LOG_JSON` ya se cablean a structlog, stdout es JSON y las peticiones llevan
+> `request_id`; ver `docs/design/benchmark-logs-zascarr.md`. La rotación sigue siendo de Docker
+> y el saneo de #369 no cambia.
+
 
 Encontrado al implementar E4 (el aviso de importación): el módulo de avisos
 construye URLs que **llevan el secreto dentro** (en Telegram, el token del bot:
