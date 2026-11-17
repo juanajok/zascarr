@@ -95,3 +95,21 @@ def test_plantilla_y_sin_datos_sensibles():
     assert 'id="tareas-global"' in base and "/ui/_tareas" in base
     assert 'aria-live="polite"' in base and "progress" in frag
     assert "str(exc)" not in frag
+
+
+@pytest.mark.asyncio
+async def test_import_error_no_deja_tarea_en_curso(monkeypatch):
+    import time
+
+    from zascarr.services import importer as modulo
+
+    def rompe(*_a, **_k):
+        raise RuntimeError("fallo simulado")
+    monkeypatch.setattr(modulo, "listar_comics", rompe)
+    enc = modulo.Importer(db=None)
+    with pytest.raises(RuntimeError):
+        await enc.scan_and_import(disparador="prueba")
+    time.sleep(0.41)
+    tareas_err = [x for x in tareas.snapshot(incluir_recientes=True)["tareas"]
+                  if x["estado"] == "en_curso"]
+    assert not tareas_err
