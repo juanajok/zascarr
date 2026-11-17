@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -214,6 +215,43 @@ logger = structlog.get_logger()
 
 _CONVERSIONES: dict[str, dict] = {}
 _CONVERSIONES_ACTIVAS: dict[str, str] = {}
+_CONVERSIONES_FIN: dict[str, float] = {}
+_RETENCION_CONVERSIONES = 8.0
+_MAX_CONVERSIONES = 20
+
+
+def _podar_conversiones() -> None:
+    ahora = time.monotonic()
+    for tid, fin in list(_CONVERSIONES_FIN.items()):
+        if ahora - fin >= _RETENCION_CONVERSIONES:
+            _CONVERSIONES.pop(tid, None)
+            _CONVERSIONES_FIN.pop(tid, None)
+    while len(_CONVERSIONES) > _MAX_CONVERSIONES:
+        viejo = next(iter(_CONVERSIONES))
+        _CONVERSIONES.pop(viejo, None)
+        _CONVERSIONES_FIN.pop(viejo, None)
+
+
+def _lanzar_fondo(trabajo, real: bool):
+    """Lanza la conversión; para dobles de test usa un hilo con su propio bucle."""
+    if real:
+        return asyncio.create_task(trabajo())
+    hilo = threading.Thread(target=lambda: asyncio.run(trabajo()), daemon=True)
+    hilo.start()
+    return hilo
+
+
+async def _esperar_resultado(tid: str, lanzado, real: bool, timeout: float = 0.5) -> bool:
+    if real:
+        await asyncio.wait({lanzado}, timeout=timeout)
+        return lanzado.done()
+    fin = time.monotonic() + timeout
+    while time.monotonic() < fin:
+        datos = _CONVERSIONES.get(tid)
+        if datos and (datos.get("resultado") is not None or datos.get("error")):
+            return True
+        await asyncio.sleep(0.005)
+    return False
 
 
 def _resultado_conversion(tid: str) -> dict | None:
@@ -222,11 +260,13 @@ def _resultado_conversion(tid: str) -> dict | None:
 
 async def _fondo_confirmar(tid: str, token: str, file_id, serie_id, forzar: bool) -> None:
     try:
+        tareas.actualizar(tid, fase="Convirtiendo", hechos=0, total=1)
         async with database.async_session_factory() as sesion:
             resultado = await ConversionDeArchivo(sesion).confirmar(
                 token, forzar_compartido=forzar,
                 file_id_esperado=file_id, serie_id_esperado=serie_id)
         _CONVERSIONES[tid]["resultado"] = resultado
+        tareas.actualizar(tid, fase="Comprobando", hechos=1, total=1)
         tareas.terminar(tid, resumen="Conversión terminada")
     except BaseException as exc:
         _CONVERSIONES[tid]["error"] = type(exc).__name__
@@ -235,9 +275,15 @@ async def _fondo_confirmar(tid: str, token: str, file_id, serie_id, forzar: bool
 
 async def _fondo_lote(tid: str, serie_id) -> None:
     try:
+        tareas.actualizar(tid, fase="Convirtiendo", hechos=0)
         async with database.async_session_factory() as sesion:
             servicio = ConversionDeArchivo(sesion)
-            _CONVERSIONES[tid]["resultado"] = await servicio.convertir_lote(serie_id)
+
+            def _progreso(hechos: int, total: int) -> None:
+                tareas.actualizar(tid, fase="Convirtiendo", hechos=hechos, total=total)
+
+            _CONVERSIONES[tid]["resultado"] = await servicio.convertir_lote(
+                serie_id, progreso=_progreso)
             _CONVERSIONES[tid]["lote"] = await servicio.previsualizar_lote(serie_id)
         tareas.terminar(tid, resumen="Lote convertido")
     except BaseException as exc:
@@ -2151,25 +2197,6 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
              "mensaje": "Hay demasiadas tareas en curso. Inténtalo en un momento."}))
     tid = tarea.id
     servicio = _servicio_conversion(db)
-    if type(servicio).__name__ != "ConversionDeArchivo":
-        try:
-            resultado = await servicio.confirmar(
-                token, forzar_compartido=bool(forzar_compartido),
-                file_id_esperado=file_id, serie_id_esperado=series_id)
-        except Exception as exc:  # noqa: BLE001
-            tareas.error(tid, tipo_error=type(exc).__name__)
-            if exc.__class__.__name__ in ("TokenCaducadoError", "TokenInvalidoError"):
-                if request.headers.get("HX-Request") == "true":
-                    return _sin_cache_conversion(templates.TemplateResponse(
-                        request, "_conversion_error.html",
-                        {"series": series, "file_id": file_id, "mensaje": str(exc)}))
-                codigo = 410 if exc.__class__.__name__ == "TokenCaducadoError" else 400
-                raise HTTPException(status_code=codigo, detail=str(exc)) from None
-            raise
-        tareas.terminar(tid, resumen="Conversión terminada")
-        return _sin_cache_conversion(templates.TemplateResponse(
-            request, "conversion_resultado.html",
-            {"series": series, "resultado": resultado}))
     _CONVERSIONES[tid] = {"tipo": "individual", "series": series,
                           "file_id": file_id, "resultado": None, "error": None}
     _CONVERSIONES_ACTIVAS[clave] = tid
@@ -2180,21 +2207,34 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
             if type(servicio).__name__ == "ConversionDeArchivo":
                 await _fondo_confirmar(tid, token, file_id, series_id, forzar)
             else:
+                tareas.actualizar(tid, fase="Convirtiendo", hechos=0, total=1)
                 _CONVERSIONES[tid]["resultado"] = await servicio.confirmar(
                     token, forzar_compartido=forzar,
                     file_id_esperado=file_id, serie_id_esperado=series_id)
+                tareas.actualizar(tid, fase="Comprobando", hechos=1, total=1)
                 tareas.terminar(tid, resumen="Conversión terminada")
         except BaseException as exc:
             _CONVERSIONES[tid]["error"] = type(exc).__name__
+            _CONVERSIONES[tid]["error_obj"] = exc
             tareas.error(tid, tipo_error=type(exc).__name__)
         finally:
             _CONVERSIONES_ACTIVAS.pop(clave, None)
+            _CONVERSIONES_FIN[tid] = time.monotonic()
 
-    tarea_asyncio = asyncio.create_task(_trabajo())
-    await asyncio.wait({tarea_asyncio}, timeout=0.1)
-    if tarea_asyncio.done():
+    real = type(servicio).__name__ == "ConversionDeArchivo"
+    real = True
+    lanzado = _lanzar_fondo(_trabajo, real)
+    if await _esperar_resultado(tid, lanzado, real):
         datos = _CONVERSIONES[tid]
         if datos["error"]:
+            exc = datos.get("error_obj")
+            if exc is not None and type(exc).__name__ in ("TokenCaducadoError", "TokenInvalidoError"):
+                if request.headers.get("HX-Request") == "true":
+                    return _sin_cache_conversion(templates.TemplateResponse(
+                        request, "_conversion_error.html",
+                        {"series": series, "file_id": file_id, "mensaje": str(exc)}))
+                codigo = 410 if type(exc).__name__ == "TokenCaducadoError" else 400
+                raise HTTPException(status_code=codigo, detail=str(exc)) from None
             return _sin_cache_conversion(templates.TemplateResponse(
                 request, "_conversion_error.html",
                 {"series": series, "file_id": file_id,
@@ -2208,11 +2248,13 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
 @router.get("/{series_id}/conversion/estado/{tid}", response_class=HTMLResponse)
 async def conversion_estado(series_id: UUID, tid: str, request: Request,
                              db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    _podar_conversiones()
     datos = _CONVERSIONES.get(tid)
-    if datos is None:
+    if datos is None or str(datos["series"].id) != str(series_id):
         return _sin_cache_conversion(templates.TemplateResponse(
             request, "_conversion_error.html",
-            {"series": None, "file_id": None, "mensaje": "La conversión ya no está disponible."}))
+            {"series": None, "file_id": None, "mensaje": "La conversión ya no está disponible."},
+            status_code=404))
     series = datos["series"]
     if datos.get("error"):
         return _sin_cache_conversion(templates.TemplateResponse(
@@ -2290,41 +2332,30 @@ async def convertir_lote_confirmar(series_id: UUID, request: Request,
     ya = _CONVERSIONES_ACTIVAS.get(clave)
     if ya:
         return _sin_cache_conversion(_fragmento_en_curso(request, ya, series, lote=True))
-    tarea = tareas.iniciar("convertir", enlace=f"/ui/series/{series_id}", origen=clave)
+    lote_previo = await _servicio_conversion(db).previsualizar_lote(series_id)
+    total_lote = len(getattr(lote_previo, "archivos", []) or [])
+    tarea = tareas.iniciar("convertir", total=total_lote or None,
+                           enlace=f"/ui/series/{series_id}", origen=clave)
     if tarea is None:
         return _sin_cache_conversion(templates.TemplateResponse(
             request, "_conversion_error.html",
             {"series": series, "file_id": None,
              "mensaje": "Hay demasiadas tareas en curso. Inténtalo en un momento."}))
     tid = tarea.id
-    servicio_fake = _servicio_conversion(db)
-    if type(servicio_fake).__name__ != "ConversionDeArchivo":
-        resultado = await servicio_fake.convertir_lote(series_id)
-        lote = await servicio_fake.previsualizar_lote(series_id)
-        tareas.terminar(tid, resumen="Lote convertido")
-        return _sin_cache_conversion(templates.TemplateResponse(
-            request, "_conversion_lote.html",
-            {"series": series, "lote": lote, "resultado": resultado}))
     _CONVERSIONES[tid] = {"tipo": "lote", "series": series,
                           "resultado": None, "lote": None, "error": None}
     _CONVERSIONES_ACTIVAS[clave] = tid
 
     async def _trabajo() -> None:
         try:
-            async with database.async_session_factory() as sesion:
-                servicio = ConversionDeArchivo(sesion)
-                _CONVERSIONES[tid]["resultado"] = await servicio.convertir_lote(series_id)
-                _CONVERSIONES[tid]["lote"] = await servicio.previsualizar_lote(series_id)
-            tareas.terminar(tid, resumen="Lote convertido")
-        except BaseException as exc:
-            _CONVERSIONES[tid]["error"] = type(exc).__name__
-            tareas.error(tid, tipo_error=type(exc).__name__)
+            await _fondo_lote(tid, series_id)
         finally:
             _CONVERSIONES_ACTIVAS.pop(clave, None)
+            _CONVERSIONES_FIN[tid] = time.monotonic()
 
-    tarea_asyncio = asyncio.create_task(_trabajo())
-    await asyncio.wait({tarea_asyncio}, timeout=0.1)
-    if tarea_asyncio.done():
+    real = True
+    lanzado = _lanzar_fondo(_trabajo, real)
+    if await _esperar_resultado(tid, lanzado, real):
         datos = _CONVERSIONES[tid]
         if datos.get("error"):
             return _sin_cache_conversion(templates.TemplateResponse(
