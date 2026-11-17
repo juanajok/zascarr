@@ -180,7 +180,7 @@ la biblioteca real.
 navegador. Los RAR5 sólidos ya fallan con el `unar` actual (ADR 0015) y los reales de percentil
 alto quedan NOT RUN. La contención del turno único no se midió.
 
-## 13. Notas sobre la propuesta externa## 13. Notas sobre la propuesta externa
+## 13. Notas sobre la propuesta externa
 
 - **PyMuPDF:** la propuesta dice que su AGPL obligaría a relicenciar ZascArr. La GPLv3 (§13) permite combinarla con AGPLv3; lo que se arrastra es la obligación de ofrecer el código por red en esa parte. Evitarla sigue siendo prudente, y además los PDF están fuera (L13).
 - **«Convertir CBR a CBZ al importar»** contradice D3 y D4 de BL-CNV (#476) y supone una «copia organizada» que ZascArr no tiene (vincula en su sitio, ADR 0007).
