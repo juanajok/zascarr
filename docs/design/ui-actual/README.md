@@ -1,5 +1,11 @@
 # Capturas actuales de la interfaz (V14, 2026-11-14)
 
+> **Capturas retiradas del repo público (OCTA-E2, 2026-11-17).** Las 12 imágenes de
+> `ui-actual/` mostraban la biblioteca real del PO (portadas comerciales y títulos). Se movieron a
+> un archivo privado fuera de Git; este README queda como índice histórico de qué se capturó y cómo.
+> No hay imágenes públicas en este directorio.
+
+
 > **Qué es.** La foto de la UI al cerrar la migración de la Épica V (V0–V14). Sustituye a las
 > capturas por hito (`ui-v1` … `ui-v13`) como referencia de cómo se ve la app hoy.
 > **No es una verificación de accesibilidad ni sustituye a la revisión en navegador real con lector

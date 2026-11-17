@@ -1,5 +1,10 @@
 # Capturas de U13 en la Pi — 2026-11-14
 
+> **Capturas retiradas del repo público (OCTA-E2, 2026-11-17).** Las 6 imágenes mostraban rutas,
+> nombres y recuentos de la biblioteca real. Están en el archivo privado fuera de Git; este README
+> conserva el método y qué enseñaba cada una.
+
+
 | | |
 |---|---|
 | **Qué es** | Render real de las tres hijas de U13 sobre la app desplegada en la Pi. Complementa (no sustituye) la verificación local de `verificacion-navegador-u13a-u13b-2026-10-22.md` y `verificacion-u13c-2026-10-23.md`. |

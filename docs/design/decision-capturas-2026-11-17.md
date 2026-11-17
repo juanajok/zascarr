@@ -24,3 +24,12 @@
 - El repo conserva ~30 MiB en el árbol de trabajo; es el coste aceptado de mantener la evidencia.
 - Si en el futuro se decide reducir el clon, la vía sería un repo de documentación o una reescritura
   de historia explícita, nunca un borrado silencioso.
+
+
+## Revisión E2 (2026-11-17)
+
+La revisión de [E2 #937](https://github.com/juanajok/zascarr/issues/937) encontró 45 capturas con
+biblioteca real, portadas comerciales o rutas privadas. **E2 prevalece sobre A3 para esas
+capturas**: se retiraron de `HEAD` y se movieron al archivo privado del operador. Las capturas
+sintéticas o de componentes que no mostraban datos reales se conservan. El detalle está en
+`docs/design/evidencia-retirada-E2-2026-11-17.md`.
