@@ -27,6 +27,7 @@ MENSAJE_SIN_CONTRASENA = "Escribe la contraseña actual de ZascArr."
 MENSAJE_NO_ACTIVADA = "Activa la contraseña en Ajustes → Seguridad antes de restaurar una copia."
 MENSAJE_OPERACION = "ZascArr está haciendo otra tarea de mantenimiento. Espera a que termine."
 MENSAJE_ENTENDIDO = "No se ha cambiado nada."
+MENSAJE_RESTAURANDO = "Hay una restauración en marcha. Vuelve a probar cuando termine."
 
 
 async def revision_actual(db: AsyncSession) -> str | None:
@@ -37,12 +38,19 @@ async def revision_actual(db: AsyncSession) -> str | None:
     return str(valor) if valor else None
 
 
-def ofrecer(copias: list[dict] | None, revision: str | None, auth_mode: str) -> list[dict]:
-    """Cada copia con `restaurable` y el motivo corto cuando no lo es."""
+def ofrecer(copias: list[dict] | None, revision: str | None, auth_mode: str,
+            permitir: bool = True) -> list[dict]:
+    """Cada copia con `restaurable` y el motivo corto cuando no lo es.
+
+    `permitir=False` mientras hay una copia o una restauración en marcha (FR-29/AC-21): no se
+    ofrece el botón.
+    """
     salida: list[dict] = []
     for copia in copias or []:
         motivo = ""
-        if auth_mode not in ("password", "user_password"):
+        if not permitir:
+            motivo = MENSAJE_RESTAURANDO
+        elif auth_mode not in ("password", "user_password"):
             motivo = "Activa la contraseña para restaurar."
         elif not copia.get("verificada"):
             motivo = "Esta copia no se verificó; no se puede restaurar desde aquí."
@@ -74,6 +82,8 @@ async def solicitar(db: AsyncSession, settings: Settings, *, copia: str, contras
         return CodigoOps.COPIA_DESCONOCIDA, MENSAJE_COPIA
     vista = ops_host.resolver_estado(settings)
     if vista.en_marcha:
+        return CodigoOps.OPERACION_EN_CURSO, MENSAJE_OPERACION
+    if ops_host.resolver_restauracion(settings).en_marcha:
         return CodigoOps.OPERACION_EN_CURSO, MENSAJE_OPERACION
     reauth = await comprobar_contrasena_actual(contrasena, settings)
     if reauth.resultado is Reauth.INCORRECTA:

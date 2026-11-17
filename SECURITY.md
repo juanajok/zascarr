@@ -223,8 +223,12 @@ auxiliar del host; la app **no** recibe Docker ni root y nunca sube un archivo.
   `fuentes_heredadas` vigentes; las claves de integración vienen de la copia. Se relee y se compara antes de arrancar.
 - **Copias = secretos:** un `.sql.gz` contiene hashes, `secret_key` y claves; quien lo obtenga puede falsificar cookies de esa
   versión. Restaurar conserva la `secret_key` vigente y cierra las sesiones anteriores.
-- **Límites:** una restauración cada 30 min, 3/24 h y bloqueo de prueba tras 5 fallos/15 min. Durante una operación no se ofrece
-  otra. La recuperación usa la copia previa verificada; el diario no lleva rutas.
+- **Límites:** una restauración cada 30 min, 3/24 h y bloqueo de prueba durante 30 min desde el quinto fallo (5 en 15 min). Durante
+  una operación no se ofrece otra. La recuperación usa la copia previa verificada; el diario no lleva rutas.
+- **Cambio por renombrado:** la copia se carga en `<DB>_restaurando` con la app sirviendo y solo se cambia por `ALTER DATABASE … RENAME`
+  cuando la base nueva, con la seguridad vigente reaplicada, ha pasado las comprobaciones; la vuelta atrás también es por renombrado y
+  `_previa` no se borra hasta que el arranque responde. El estado por fases (`ops-restaurar.json`) y el aviso de `/login` no llevan
+  secretos ni fechas. `_fallida`/`_previa` sobrantes no se borran solas (pueden ser la única copia) y bloquean la siguiente restauración.
 - **Pendiente:** systemd real, restauración de punta a punta en la Pi y prueba C-10 con PostgreSQL real. **No desplegado.**
 
 ## Registros de acceso (#361)

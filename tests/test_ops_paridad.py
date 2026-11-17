@@ -77,6 +77,15 @@ def test_completitud_de_causas_ac45():
     assert {"status_write_failed"} == ops_host.RESERVADOS_NO_EMITIDOS
 
 
+def test_los_umbrales_de_fallos_y_bloqueo_coinciden_con_la_app():
+    """AC-39/F-08: 5 fallos/15 min y bloqueo de 30 min son los mismos en el auxiliar y en la app."""
+    from zascarr.services import reautenticacion
+
+    assert aux.UMBRAL_FALLOS == reautenticacion.UMBRAL_FALLOS
+    assert aux.VENTANA_FALLOS_S == reautenticacion.VENTANA_S
+    assert aux.BLOQUEO_FALLOS_S == reautenticacion.BLOQUEO_S
+
+
 def test_la_firma_v2_y_la_peticion_de_restaurar_coinciden():
     clave = bytes(range(32))
     assert ops_host.firma_restaurar_de(clave, 2, "a" * 32, "backup-20260101_120000",
