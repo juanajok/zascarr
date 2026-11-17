@@ -158,6 +158,7 @@ services:
       - OMITIDA_FILE=/run/backup-status/omitida.json
       - COVERS_CACHE_PATH=/config/covers
       - LECTOR_CACHE_PATH=/config/lector
+      - LECTOR_CACHE_BYTES=${LECTOR_CACHE_BYTES:-1073741824}
       # Logs persistidos/rotados para consultar incidencias anteriores desde la UI.
       - LOG_DIR=/config/logs
       - LOG_MAX_BYTES=${LOG_MAX_BYTES:-5242880}
