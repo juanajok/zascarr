@@ -496,6 +496,10 @@ material de la interfaz.
 - **Pendiente cuando el PO la acepte:** enlazarla desde #822/#828 (el tablero no se toca
   desde este documento). Por su alcance, va en una **PR solo de documentos** antes de abrir
   la siguiente historia de lector (regla de §13).
+- **Anexo B — features del lector para la biblioteca:** cinco candidatas publicadas como
+  [#1076](https://github.com/juanajok/zascarr/issues/1076) (agrupación) e
+  [#1077](https://github.com/juanajok/zascarr/issues/1077)–[#1081](https://github.com/juanajok/zascarr/issues/1081)
+  (historias), en Backlog; las aplazadas y bloqueadas quedan documentadas en el anexo.
 - **Historias derivadas:** la épica [`epica-BL-LECUX-lector.md`](epica-BL-LECUX-lector.md)
   recoge las candidatas de §7.4 y los huecos de acabado del lector; está **publicada para
   triaje** como [#1067](https://github.com/juanajok/zascarr/issues/1067) con las historias
@@ -698,6 +702,125 @@ decisión de ZascArr se toma por idea (§4), no por nota de aplicación.
   no es cliente OPDS ni sirve para LEC5, y su modelo de sync no aplica.
 - **Veredicto.** **Construir sobre lo propio** como referencia; **Descartar** su
   integración.
+
+---
+
+## Anexo B — Features del lector con valor para la biblioteca
+
+> **Pregunta del PO (2026-11-17):** ¿qué funciones de los lectores y gestores del benchmark
+> sirven para **gestionar la biblioteca** —catálogo, estado de lectura, organización— y no
+> solo para leer?
+> **Método:** revisión del código en `main` `4b64637e` (sin ejecutar apps ni tocar la Pi) y
+> las fichas de la épica BL-LEC. No es una historia: es una extensión del benchmark.
+> **Resultado:** **5 candidatas** (3 sin migración; 2 con decisión de PO), **2 aplazadas** y
+> **2 que no son del lector**. Tarjetas publicadas: agrupación
+> [#1076](https://github.com/juanajok/zascarr/issues/1076) e historias
+> [#1077](https://github.com/juanajok/zascarr/issues/1077)–[#1081](https://github.com/juanajok/zascarr/issues/1081),
+> en el tablero con estado **Backlog**.
+
+### B.1 Lo que ya está cubierto (no se reabre)
+
+| Función del lector/gestor | Dónde está en ZascArr |
+|---|---|
+| Bloqueo de campos para que el enriquecimiento no pise lo editado (Kavita) | `locked_fields` en `Series`, `Creator` e `Issue`; lo respetan ComicInfo y la consolidación |
+| Progreso de lectura por serie en la tarjeta | barra «% leído · X de Y» en `_rejilla_biblioteca.html` |
+| Filtros de leído/leyendo y favoritos | `web/library.py` y `_filtros_panel_campos.html` |
+| Colecciones de series y sagas | BL-D6 y C4; las tablas de **listas de lectura** existen pero no se usan (B.3.4) |
+| ComicInfo, metadatos y procedencia | B6, ADR 0013 y B22 |
+| «Continuar leyendo» | Inicio (CUR5) y botón «Continuar» en la ficha |
+
+### B.2 Candidatas
+
+| # | Feature | De dónde | Uso en la biblioteca | Estado hoy | Coste | Veredicto |
+|---|---|---|---|---|---|---|
+| 1 | Filtrar y ordenar por puntuación | Kavita/Komga | «mejores valorados», «sin valorar» | la puntuación 1–5 existe; la biblioteca no la expone | S, sin migración | **Adoptar** → [#1077](https://github.com/juanajok/zascarr/issues/1077) |
+| 2 | Archivo preferido por número | nace de LEC1, no del informe | elegir qué archivo abre «Leer» en números con ediciones | `archivo_por_defecto`: progreso o el primero por nombre | S, sin migración (JSONB) | **Adoptar** → [#1078](https://github.com/juanajok/zascarr/issues/1078) |
+| 3 | Páginas reales del archivo | Panels/Chunky/OpenComic muestran páginas | porcentaje de lectura y `PageCount` correctos | el lector calcula `total_paginas`; no lo persiste | S, sin migración | **Adoptar** → [#1079](https://github.com/juanajok/zascarr/issues/1079) |
+| 4 | Listas de lectura | YACReader/Komga/Kavita | listas curadas que cruzan series; alimentan el «siguiente» de LEC3 | `reading_lists` existe desde la migración 0001 y está **sin uso** | M, sin migración | **Adaptar** (decisión PO) → [#1080](https://github.com/juanajok/zascarr/issues/1080) |
+| 5 | Filtrar y ordenar por última lectura | lectores con «continuar» | retomar lo empezado y ordenar por actividad | no hay `last_read_at`; `started_at` no se actualiza | M, **con migración** | **Adaptar** (decisión PO) → [#1081](https://github.com/juanajok/zascarr/issues/1081) |
+| 6 | Vistas guardadas / filtros guardados | Kavita (*smart filters*) | repetir consultas en una biblioteca grande | los filtros viven solo en la URL | M | **Aplazar** |
+| 7 | Marcar leído en lote | gestores | poner al día el estado sin ir número a número | BL-C3 solo uno a uno | S/M | **Aplazar** |
+| 8 | Progreso desde Kavita | Kavita (WK5) | no marcar dos veces lo leído | spike #343 descartado con condiciones; LEC5 no devuelve progreso | L | **No ahora** |
+| 9 | Progreso/estado de un pack | — (no es del lector) | números cubiertos por un archivo | `covered_issue_ids` se inicializa vacío; B22 abierta | — | **Bloqueado por B22** |
+
+### B.3 Detalle por candidata
+
+#### B.3.1 Puntuación ([#1077](https://github.com/juanajok/zascarr/issues/1077))
+
+- **Problema.** La puntuación 1–5 por número existe (`reading_progress.rating`, BL-C3), pero
+  los filtros no la incluyen y el orden de `web/library.py` solo ofrece título, año y
+  añadidas. No se puede consultar «mejores valorados» ni «sin valorar».
+- **Propuesta.** Filtro «Puntuación» a nivel de serie (la serie entra si algún número
+  cumple), con opciones «Todas / Con valoración / Sin valorar / 4–5»; orden «Mejor valoradas»
+  por máximo de la serie, con `NULL` al final. URL canónica, chips y recuento como BL-IT01.
+- **Coste y límites.** S, sin migración; una consulta agregada, sin N+1.
+- **Decisión PO.** Semántica del filtro (máximo por serie propuesto) y set de opciones.
+
+#### B.3.2 Archivo preferido ([#1078](https://github.com/juanajok/zascarr/issues/1078))
+
+- **Problema.** `services/lector.py::archivo_por_defecto` elige el archivo del progreso o el
+  primero por nombre. En un número con varias ediciones no hay forma de decir «para leer,
+  este».
+- **Propuesta.** Marcar un archivo legible como «Archivo para leer» en la ficha; guardarlo en
+  `Issue.metadata_["lector_archivo"]` (JSONB, sin migración); prioridad preferido → progreso
+  → primero, con fallback si desaparece.
+- **Coste y límites.** S; no duplica el progreso ni escribe en la biblioteca.
+- **Decisión PO.** JSONB (propuesto) frente a columna; ubicación del control.
+
+#### B.3.3 Páginas reales ([#1079](https://github.com/juanajok/zascarr/issues/1079))
+
+- **Problema.** `Issue.page_count` viene de ComicInfo, fuente o tagger y puede faltar o no
+  coincidir con el archivo; el lector calcula `total_paginas` al abrir pero no lo guarda.
+- **Propuesta.** Al guardar progreso (el `POST` que ya existe, nunca un `GET`), rellenar
+  `Issue.page_count` si es `NULL`, con `metadata_["page_count_origen"]="lector"`. No pisar un
+  valor existente; con varios archivos de distinto total, no escribir.
+- **Coste y límites.** S; sin migración; no recorre la biblioteca entera.
+- **Decisión PO.** Rellenar huecos (propuesto) frente a sobrescribir.
+
+#### B.3.4 Listas de lectura ([#1080](https://github.com/juanajok/zascarr/issues/1080))
+
+- **Problema.** `reading_lists` y `reading_list_items` existen desde la migración 0001 y no
+  se usan en ninguna ruta. YACReader/Komga/Kavita ofrecen listas; ZascArr tiene colecciones
+  de series (BL-D6) y sagas (C4), pero no una lista curada de números que cruce series.
+- **Propuesta.** CRUD de listas e ítems, añadir desde la ficha del número, reordenar con
+  `position`, progreso leído/total; entrada de navegación a decidir.
+- **Coste y límites.** M, sin migración. **No es una cola de lectura** (descartada en el
+  backlog): es una lista curada.
+- **Decisión PO.** Alcance, navegación, relación con colecciones/sagas y si LEC3 usará el
+  «siguiente de la lista».
+
+#### B.3.5 Última lectura ([#1081](https://github.com/juanajok/zascarr/issues/1081))
+
+- **Problema.** `ReadingProgress` tiene `started_at` y `completed_at`, pero no una fecha de
+  última actividad; «continuar leyendo» usa `started_at`, que no refleja el avance.
+- **Propuesta.** Migración aditiva `reading_progress.last_read_at`, actualizada al guardar
+  progreso y al marcar estado; orden «Leídas recientemente» en Biblioteca; relleno inicial
+  desde `started_at`/`completed_at` o `NULL` (decisión PO).
+- **Coste y límites.** M con migración; no es historial ni estadísticas.
+- **Decisión PO.** Aceptar la migración y su política de relleno.
+
+### B.4 Aplazado, bloqueado y descartado
+
+- **Vistas guardadas** (Kavita *smart filters*): útiles cuando la biblioteca crezca, pero hoy
+  los filtros de BL-IT01 cubren el caso; sin tarjeta hasta que el PO lo pida.
+- **Marcar leído en lote**: útil para poner al día el estado, pero no nace del benchmark y
+  exige decidir la semántica de «anteriores»; sin tarjeta.
+- **WK5 (progreso desde Kavita)**: sigue descartado con condiciones (spike #343); B20 está
+  fusionado pero sin uso real, y OPDS-PSE no devuelve progreso. No es una historia nueva.
+- **Progreso de un pack**: no es una feature de lector; `File.covered_issue_ids` se inicializa
+  vacío y no tiene procedencia. Queda bloqueado por **B22** (modelo de coberturas).
+- **Descartado de raíz**: estadísticas e historial de lectura, anotaciones y subrayados,
+  búsqueda OCR dentro del cómic (coste imposible en la Pi), cola de lectura separada de
+  Deseados y sincronización de anotaciones con apps. Ya estaban fuera en §7.5 y en el
+  backlog.
+
+### B.5 Límites
+
+- No se ha ejecutado ninguna app ni se ha medido uso real: las conclusiones son de código y
+  del benchmark, no de una prueba en vivo.
+- Las tarjetas son **propuestas en Backlog**; el PO decide prioridad, alcance y migraciones.
+- Caducidad: la misma de esta ficha (~60 días, 2027-01-16), o antes si cambia el modelo de
+  lectura (LEC3/LECUX2/B22).
 
 ---
 
