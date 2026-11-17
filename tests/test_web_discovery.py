@@ -134,6 +134,25 @@ class TestBuscar:
         assert "Batman" in r.text
         assert "Comic Vine" in r.text and "comic_vine" not in r.text.split("<main", 1)[-1].lower().replace('value="comic_vine"', "")
 
+    def test_tebeosfera_no_ofrece_portada_aunque_traiga_cover_url(self):
+        """OCTA-E5: se sigue leyendo la ficha, pero no se descarga su portada."""
+        resultado = _resultado(
+            source=MetadataSource.TEBEOSFERA,
+            external_id="thorgal_1981",
+            title="Thorgal",
+            site_url="https://www.tebeosfera.com/colecciones/thorgal_1981.html",
+            cover_url="https://www.tebeosfera.com/T3content/img/x.jpg",
+        )
+        with use_fake_session(FakeSession()) as client, \
+             patch("zascarr.web.discovery.DiscoveryService.search_detallada",
+                   AsyncMock(return_value=Busqueda([resultado], [], {"tebeosfera": "ok"}))):
+            r = client.get("/ui/descubrir/buscar", params={"q": "Thorgal"})
+
+        assert r.status_code == 200
+        assert "Thorgal" in r.text
+        assert 'class="portada-marca"' in r.text
+        assert "https://www.tebeosfera.com/T3content/img/x.jpg" not in r.text
+
     def test_sin_resultados_muestra_mensaje(self):
         with use_fake_session(FakeSession()) as client, \
              patch("zascarr.web.discovery.DiscoveryService.search_detallada",

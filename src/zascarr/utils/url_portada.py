@@ -46,9 +46,9 @@ from zascarr.utils.cortesia import (
     intervalo_de_portada,
 )
 
-#: Dominios (y sus subdominios) de los que se aceptan portadas. Son los mismos de `/ui/descubrir/portada`.
+#: Dominios (y sus subdominios) de los que se aceptan portadas. Tebeosfera queda fuera a propósito (OCTA-E5): se leen sus metadatos, no sus imágenes.
 HOSTS_PERMITIDOS: tuple[str, ...] = (
-    "comicvine.gamespot.com", "cbsistatic.com", "anilist.co", "tebeosfera.com", "comics.org",
+    "comicvine.gamespot.com", "cbsistatic.com", "anilist.co", "comics.org",
     "covers.openlibrary.org",
     # CDN de portadas de las dos wikis de Fandom (DC/Marvel Database). La URL viene de
     # `action=query&prop=imageinfo`; `Special:FilePath` no se usa (redirige cross-origin).
