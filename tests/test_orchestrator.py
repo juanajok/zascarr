@@ -306,6 +306,7 @@ class TestBackoffEnvios:
         assert item.status == WishlistStatus.FAILED
         assert item.retry_count == 1
         assert item.next_retry_at is not None
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
         assert antes + timedelta(minutes=10) <= item.next_retry_at
 
     @pytest.mark.asyncio
@@ -395,6 +396,7 @@ class TestBackoffEnvios:
         assert item.status == WishlistStatus.FAILED
         assert item.retry_count == 1
         assert item.next_retry_at is not None
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
 
     @pytest.mark.asyncio
     async def test_el_envio_manual_con_exito_limpia_el_backoff_y_no_espera(self):
@@ -414,9 +416,10 @@ class TestBackoffEnvios:
         assert item.next_retry_at is None
 
     @pytest.mark.asyncio
-    async def test_el_envio_extra_fallido_programa_el_backoff(self):
-        """Envío EXTRA sobre un deseo ya en descarga: si el cliente falla,
-        también queda registrado para no insistir antes de tiempo."""
+    async def test_el_envio_extra_fallido_no_toca_estado_ni_backoff(self):
+        """Envío EXTRA auxiliar sobre un deseo ya en descarga: si el cliente
+        falla, no degrada la descarga principal ni programa el backoff del ciclo
+        (decisión de producto tras QA B1, 2026-11-17)."""
         item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
         orch = Orchestrator(db=FakeSession())
         orch._transmission = AsyncMock()
@@ -425,8 +428,12 @@ class TestBackoffEnvios:
         result = await orch.send_manual_candidate(item, make_result(seeders=10))
 
         assert result is False
-        assert item.retry_count == 1
-        assert item.next_retry_at is not None
+        # Decisión de producto (QA B1 2026-11-17): el envío extra es auxiliar;
+        # no degrada la descarga principal ni programa el backoff del ciclo.
+        assert item.status == WishlistStatus.DOWNLOADING
+        assert not item.retry_count
+        assert item.next_retry_at is None
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
 
 
 # ═══════════════════════════════════════════════════════════════════════════
