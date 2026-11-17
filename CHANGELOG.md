@@ -186,6 +186,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **«Buscar ahora» devolvía 500 (2026-11-17).** La etiqueta de resultados construía el
+  título con `_row(item)` sobre un `item` cargado sin relaciones precargadas; en async
+  eso lanza `MissingGreenlet`. Ahora la ruta no toca `item.series`/`item.issue`: usa la
+  consulta guardada (`search_query`) para la etiqueta, con prueba de regresión que falla
+  si se accede a una relación perezosa.
+
 - **El fallo de envío nombra al cliente que no responde (2026-11-17).** El deseo decía
   «No se pudo enviar a ningún cliente de descarga», sin distinguir Transmission de aMule.
   Ahora el motivo es «Transmission no respondió — se reintentará más tarde» o «aMule no

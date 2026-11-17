@@ -643,3 +643,37 @@ def test_la_pagina_carga_el_panel_de_progreso():
         r = client.get("/ui/wishlist")
     assert 'hx-get="/ui/wishlist/progreso"' in r.text
     assert "every 30s" in r.text
+
+
+def test_buscar_ahora_no_accede_a_relaciones_sin_precargar(monkeypatch):
+    """Regresión 2026-11-17: `_row(item)` sobre un `db.get` sin eager lanzaba
+    MissingGreenlet en async y la búsqueda devolvía 500. La ruta no debe tocar
+    `item.series`/`item.issue`; con un objeto que falla si se accede, responde 200."""
+    item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED, search_query="Absolute Batman")
+    serie = Series(id=uuid4(), title="Absolute Batman", tradition=ComicTradition.AMERICAN)
+    item.series_id = serie.id
+
+    # Un `Wishlist` real no permitiría este parche por el descriptor de SQLAlchemy,
+    # así que se simula el acceso perezoso con un objeto mínimo para la ruta.
+    class ItemSinRelaciones:
+        id = item.id
+        search_query = "Absolute Batman"
+        status = WishlistStatus.WANTED
+        last_error = None
+
+        @property
+        def series(self):  # pragma: no cover - debe fallar si se llama
+            raise AssertionError("la ruta no debe leer item.series sin eager")
+
+        @property
+        def issue(self):  # pragma: no cover - idem
+            raise AssertionError("la ruta no debe leer item.issue sin eager")
+
+    monkeypatch.setattr(Orchestrator, "preview_candidates",
+                        AsyncMock(return_value=[_candidato_de_prueba()]))
+    sesion = FakeSession(get_map={(Wishlist, item.id): ItemSinRelaciones()},
+                         exec_queue=[_accepted()])
+    with use_fake_session(sesion) as client:
+        r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
+    assert r.status_code == 200
+    assert "Resultados encontrados" in r.text
