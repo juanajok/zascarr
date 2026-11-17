@@ -227,3 +227,59 @@ del ciclo; (2) aviso; (3) fecha de venta fiable y prueba con datos reales.
 - Suwayomi Server README: https://github.com/Suwayomi/Suwayomi-Server · WebUI README:
   https://github.com/Suwayomi/Suwayomi-WebUI · release v2.4.2366:
   https://github.com/Suwayomi/Suwayomi-Server/releases/tag/v2.4.2366
+
+
+## 12. Addendum (2026-11-17): la señal es la FUENTE, no la fecha de papel
+
+**Corrección del PO:** «las novedades son publicaciones en papel, no novedades en las fuentes de
+descarga». Tiene razón: una fecha de portada/venta no dice cuándo hay un `ed2k`/torrent
+disponible. El símil correcto no es el calendario de TVDB, es el **RSS Sync de Sonarr**: Sonarr
+consulta los **releases que publican los indexers** y los cruza con los episodios monitorizados;
+no espera a la parrilla. ZascArr debe hacer lo mismo con sus fuentes:
+
+- **Foro**: el subforo **E-links diarios** (`index.php?showforum=5`) es el feed real de lo que se
+  publica cada día. Requiere sesión (sin login devuelve «no tienes permiso»; el `lofiversion` no
+  sirve para f-5 sin autenticar). Autenticado, el scraper ya puede `_get`/`_pedir` y abrir temas;
+  falta un parser de **listado de foro** (título, id, última actividad) y decidir qué es «nuevo»:
+  tema nuevo del día o **tema actualizado** con enlaces añadidos.
+- **Prowlarr**: releases recientes (RSS/API) cruzados con las series seguidas; el cliente actual
+  busca por consulta, así que hay que comprobar si Prowlarr expone RSS por indexer o hacer una
+  consulta periódica por serie (con presupuesto).
+- **Novedades (Comic Vine + Norma/Panini)** deja de ser el disparador y pasa a ser
+  **calendario/anticipación y pista de matching**: sirve para saber qué esperar y para cruzar
+  títulos, pero **no** para decidir que se puede descargar.
+
+### Diseño revisado (sigue siendo Opción A: flag independiente)
+
+1. `Series.follow_new_issues` (flag) + UI «Seguir esta serie», independiente de «completar huecos».
+2. Job `seguimiento` cada 30–60 min (no cada 5: la cortesía del foro manda):
+   - **Foro**: leer `showforum=5` autenticado; por cada tema nuevo o actualizado desde la última
+     pasada, abrir y extraer `ed2k`/`magnet` (reutilizar `_enlaces_del_tema`); casar el **nombre del
+     fichero** con las series seguidas (el título del tema diario no basta; los enlaces sí llevan
+     serie y número). Descartar lo ya poseído/deseado.
+   - **Prowlarr**: releases nuevos; mismo cruce.
+   - **Novedades**: solo se consulta como calendario; no genera deseos por sí sola.
+3. Estado de «visto»: hace falta persistir qué temas/última actividad y qué enlaces se procesaron
+   (tabla `seguimiento_visto` o marca equivalente; migración) para no reabrir los mismos temas ni
+   duplicar deseos. El `Wishlist` y el `File` cubren el dedupe de contenido, pero no el de la fuente.
+4. Aviso: `Notifier` (webhook existente) con evento «número nuevo detectado» y/o «importado».
+5. Dejar de seguir: deja de escanear fuentes para esa serie; los deseos pendientes se retiran a mano
+   (o por origen `SEGUIMIENTO` en una segunda pasada).
+
+### Riesgos nuevos (además de los de §10)
+
+- **Login del foro y cortesía**: cada lectura cuenta para la cola compartida; escanear solo temas
+  nuevos/actualizados, con tope por pasada, y no usar la búsqueda (25 s) para esto.
+- **Temas actualizados, no solo nuevos**: el hilo diario se edita/añade; hay que mirar la última
+  actividad del tema, no solo su creación.
+- **Nombre del fichero ≠ nombre del tema**: el match debe hacerse por los `ed2k`/título del fichero
+  (ya lo hace `_forum_fallback`), no por el título del hilo.
+- **Prowlarr sin RSS claro**: verificar endpoints; si no, consulta periódica por serie acotada.
+- **Falsos positivos**: sin número de grapa inequívoco no se crea deseo (especiales/tomos).
+
+### Impacto en la recomendación
+
+La **Opción A** sigue siendo la elegida, pero el generador de deseos **no** sale de
+`cargar_semana` (papel): sale de un adaptador de **fuentes** (foro E-links diarios + Prowlarr),
+con Novedades como calendario. Esto añade un parser de listado de foro, estado «visto» y un
+pequeño adaptador de Prowlarr; no cambia el flag ni el notificador.
