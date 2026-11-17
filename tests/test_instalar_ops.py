@@ -147,7 +147,8 @@ def test_las_unidades_cumplen_fr29_y_fr01():
     sock = (REPO / "deploy/systemd/zascarr-ops.socket").read_text().splitlines()
     for linea in ("Accept=yes", "SocketUser=root", "SocketGroup=@GRUPO@", "SocketMode=0660", "MaxConnections=4"):
         assert linea in sock, linea
-    assert (REPO / "deploy/systemd/zascarr-ops.tmpfiles.conf").read_text().strip() == "d /run/zascarr-ops 0700 root root -"
+    assert ((REPO / "deploy/systemd/zascarr-ops.tmpfiles.conf").read_text().strip()
+            == "d /run/zascarr-ops 0700 root root -\nd /run/zascarr-ops/docker 0700 root root -")
     assert os.access(SCRIPT, os.R_OK)
 
 
