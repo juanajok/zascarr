@@ -106,12 +106,14 @@ async def publicar_e_importar(s: AsyncSession, operacion_id: UUID) -> PaqueteOpe
         raise PaquetePublicacionError("sin_temporal", "No queda contenido extraído.")
     descargas = _descargas()
     paquetes = _validar_cadena_oculta(descargas)
-    staging = paquetes / str(op.id)
+    # Un staging de un intento anterior no se reutiliza nunca.
+    previo = paquetes / str(op.id)
+    if previo.exists():
+        await asyncio.to_thread(shutil.rmtree, previo, True)
+    staging = await asyncio.to_thread(_preparar_staging, descargas, str(op.id))
     final = _nombre_libre(descargas, Path(op.paquete_path).stem)
     try:
-        paquetes.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(staging.parent, 0o700)  # noqa: S103 — carpeta propia
-        staging.mkdir(mode=0o700)
         st_staging = staging.lstat()
         if not stat.S_ISDIR(st_staging.st_mode) or staging.is_symlink():
             raise PaquetePublicacionError("staging", "La carpeta temporal no es segura.")
@@ -149,8 +151,16 @@ async def publicar_e_importar(s: AsyncSession, operacion_id: UUID) -> PaqueteOpe
         op.items = items
         op.temp_dir = None
         op.staging_dir = None
-        if all(i["resultado"] in {"importado", "duplicado", "revisar"} for i in items):
+        if (all(i["resultado"] in {"importado", "duplicado", "revisar"} for i in items)
+                and not (items and all(i["resultado"] == "duplicado" for i in items))):
             op.estado = PaqueteEstado.IMPORTADO
+            op.finalizada = datetime.now(UTC)
+        elif all(i["resultado"] == "duplicado" for i in items):
+            # Ningún tebeo nuevo: no se presenta como importado (y no se
+            # reextrae; el original sigue intacto).
+            op.estado = PaqueteEstado.ERROR
+            op.error_codigo = "duplicado"
+            op.error_mensaje = "Todo el contenido ya estaba en la biblioteca; no se importó nada."
             op.finalizada = datetime.now(UTC)
         else:
             op.estado = PaqueteEstado.ERROR

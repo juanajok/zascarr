@@ -645,11 +645,81 @@ async def paquete_previa(request: Request, token: str = "") -> HTMLResponse:
         {"listado": listado, "error": None, "clave_accion": clave_accion}))
 
 
+_TAREAS_PAQUETES: dict[str, asyncio.Task] = {}
+_TAREAS_LOCK = asyncio.Lock()
+
+
+def _etiqueta_estado(estado: PaqueteEstado) -> str:
+    return {
+        PaqueteEstado.LISTANDO: "Leyendo el paquete…",
+        PaqueteEstado.EXTRAYENDO: "Extrayendo una copia temporal…",
+        PaqueteEstado.VERIFICANDO: "Comprobando lo extraído…",
+        PaqueteEstado.VERIFICADO: "Copia verificada; publicando…",
+        PaqueteEstado.PUBLICANDO: "Publicando en Descargas…",
+        PaqueteEstado.IMPORTANDO: "Importando como si fueran sueltos…",
+        PaqueteEstado.IMPORTADO: "Terminado.",
+        PaqueteEstado.ERROR: "No se pudo completar.",
+    }.get(estado, "Trabajando…")
+
+
+def _token_reintento(op: PaqueteOperacion) -> str | None:
+    """Token nuevo para reintentar un paquete que quedó en ERROR."""
+    try:
+        ruta = Path(op.paquete_path)
+        if not ruta.is_file():
+            return None
+        return crear_token_paquete(SimpleNamespace(
+            ruta=ruta, raiz=ruta.parent, dev=op.paquete_dev, ino=op.paquete_ino,
+            tamano=op.paquete_size, mtime_ns=op.paquete_mtime_ns, firma=op.firma))
+    except (OSError, ValueError):
+        return None
+
+
+async def _procesar_paquete(op_id: str) -> None:
+    """Trabajo en segundo plano; la UI sondea su estado por HTMX."""
+    try:
+        async with database.async_session_factory() as s:
+            op = await s.get(PaqueteOperacion, UUID(op_id))
+            if op is None or op.estado is PaqueteEstado.IMPORTADO:
+                return
+            if op.estado is not PaqueteEstado.VERIFICADO:
+                await extraer_y_verificar(s, op.id, conservar_temporal=True)
+            op = await s.get(PaqueteOperacion, UUID(op_id))
+            if op is not None and op.estado is PaqueteEstado.VERIFICADO:
+                await publicar_e_importar(s, op.id)
+    except (PaqueteExtraccionError, PaquetePublicacionError) as exc:
+        logger.warning("paquetes.tarea_fallida", error=getattr(exc, "codigo", type(exc).__name__))
+    except Exception:  # noqa: BLE001 — el estado de la operación es el canal de la UI
+        logger.exception("paquetes.tarea_inesperada")
+    finally:
+        _TAREAS_PAQUETES.pop(op_id, None)
+
+
+@router.get("/paquetes/estado/{operacion_id}", response_class=HTMLResponse)
+async def paquete_estado(operacion_id: UUID, request: Request,
+                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento de progreso; al terminar devuelve el resultado (sin bucle)."""
+    op = await db.get(PaqueteOperacion, operacion_id)
+    if op is None:
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html",
+            {"op": None, "error": "La operación ya no existe."}))
+    terminal = op.estado in (PaqueteEstado.IMPORTADO, PaqueteEstado.ERROR)
+    if terminal:
+        error = op.error_mensaje if op.estado is PaqueteEstado.ERROR else None
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html",
+            {"op": op, "error": error, "token_reintento": _token_reintento(op)}))
+    return _no_store(templates.TemplateResponse(
+        request, "_paquete_progreso.html",
+        {"op": op, "etiqueta": _etiqueta_estado(op.estado), "op_id": str(op.id)}))
+
+
 @router.post("/paquetes/extraer", response_class=HTMLResponse)
 async def paquete_extraer(request: Request, token: str = Form("", alias="clave"),
                           confirmo: str = Form(""),
                           db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    """Extrae y publica el paquete con un token de un solo uso; no borra el original."""
+    """Arranca la extracción/publicación en segundo plano y devuelve progreso."""
     if confirmo != "si":
         return _no_store(templates.TemplateResponse(
             request, "_paquete_resultado.html",
@@ -657,22 +727,22 @@ async def paquete_extraer(request: Request, token: str = Form("", alias="clave")
     try:
         paquete = await asyncio.to_thread(verificar_token_paquete, token)
         op = await crear_operacion(db, paquete)
-        if op.estado is not PaqueteEstado.IMPORTADO:
-            await extraer_y_verificar(db, op.id, conservar_temporal=True)
-            op = await publicar_e_importar(db, op.id)
-        return _no_store(templates.TemplateResponse(
-            request, "_paquete_resultado.html", {"op": op, "error": None}))
-    except (TokenPaqueteInvalido, PaqueteExtraccionError,
-            PaquetePublicacionError) as exc:
+    except (TokenPaqueteInvalido, PaqueteExtraccionError) as exc:
         return _no_store(templates.TemplateResponse(
             request, "_paquete_resultado.html",
             {"op": None, "error": getattr(exc, "mensaje", None)
-             or "No se pudo completar la operación."}))
-    except Exception:  # noqa: BLE001 — no filtrar detalles internos
-        logger.exception("paquetes.extraer_inesperado")
+             or "No se pudo preparar la operación."}))
+    if op.estado is PaqueteEstado.IMPORTADO:
         return _no_store(templates.TemplateResponse(
-            request, "_paquete_resultado.html",
-            {"op": None, "error": "No se pudo completar la operación. Inténtalo de nuevo."}))
+            request, "_paquete_resultado.html", {"op": op, "error": None}))
+    clave = str(op.id)
+    async with _TAREAS_LOCK:
+        tarea = _TAREAS_PAQUETES.get(clave)
+        if tarea is None or tarea.done():
+            _TAREAS_PAQUETES[clave] = asyncio.create_task(_procesar_paquete(clave))
+    return _no_store(templates.TemplateResponse(
+        request, "_paquete_progreso.html",
+        {"op": op, "etiqueta": _etiqueta_estado(op.estado), "op_id": clave}))
 
 
 @router.post("/analizar", response_class=HTMLResponse)
