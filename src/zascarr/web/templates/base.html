@@ -27,9 +27,9 @@
     <div class="tareas-fuera">
       <div id="tareas-global">
         <div id="tareas-hay" hidden></div>
-        <details id="tareas-detalles" class="tareas-panel"
-                 hx-post="/ui/_tareas/visto/ultimo" hx-trigger="toggle" hx-swap="none">
-          <summary><span id="tareas-contador" class="tareas-chip">Ahora</span>
+        <details id="tareas-detalles" class="tareas-panel">
+          <summary hx-post="/ui/_tareas/visto" hx-trigger="click[!this.parentElement.open]"
+                   hx-target="#tareas-global" hx-swap="none"><span id="tareas-contador" class="tareas-chip">Ahora</span>
             <span id="tareas-nombre" class="tareas-nombre"></span></summary>
           <div id="tareas-lista" class="tareas-lista"></div>
         </details>
