@@ -496,9 +496,11 @@ material de la interfaz.
 - **Pendiente cuando el PO la acepte:** enlazarla desde #822/#828 (el tablero no se toca
   desde este documento). Por su alcance, va en una **PR solo de documentos** antes de abrir
   la siguiente historia de lector (regla de §13).
-- **Historias derivadas:** la épica propuesta
-  [`epica-BL-LECUX-lector.md`](epica-BL-LECUX-lector.md) recoge las candidatas de §7.4 y los
-  huecos de acabado del lector; no está aprobada ni publicada.
+- **Historias derivadas:** la épica [`epica-BL-LECUX-lector.md`](epica-BL-LECUX-lector.md)
+  recoge las candidatas de §7.4 y los huecos de acabado del lector; está **publicada para
+  triaje** como [#1067](https://github.com/juanajok/zascarr/issues/1067) con las historias
+  [#1068](https://github.com/juanajok/zascarr/issues/1068)–[#1073](https://github.com/juanajok/zascarr/issues/1073)
+  (estado Backlog), y sigue **sin aprobar**: el PO decide prioridad y D-LUX.
 - Fuentes externas verificadas el 2026-11-17: [releases de Kavita](https://github.com/Kareadita/Kavita/releases/tag/v0.9.1.4)
   y [su wiki de OPDS](https://wiki.kavitareader.com/guides/features/opds/); [Komga 1.30.1](https://github.com/gotson/komga/releases/tag/1.30.1),
   [sus guías de OPDS](https://komga.org/docs/guides/opds), [Chunky](https://komga.org/docs/guides/chunky/),

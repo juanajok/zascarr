@@ -3,13 +3,17 @@
 <!-- zascarr-kanban:v1:BL-LECUX -->
 
 > **Épica propuesta, no aprobada.** Fecha: 2026-11-17.
+> **Publicada para triaje:** [épica #1067](https://github.com/juanajok/zascarr/issues/1067) e
+> historias [#1068](https://github.com/juanajok/zascarr/issues/1068)–[#1073](https://github.com/juanajok/zascarr/issues/1073),
+> en el tablero con estado **Backlog**. Esto no es aprobación: la prioridad y las decisiones
+> D-LUX siguen siendo del PO.
 > **Base contrastada:** `origin/main` `edf2fa61` (BL-LEC4 ya fusionada; LEC3 y LEC5 abiertas).
 > **Fuente:** [`benchmark-BL-LEC-mercado-lectores-2026.md`](benchmark-BL-LEC-mercado-lectores-2026.md)
 > (ficha §13) y [`benchmark-BL-LEC-lector.md`](benchmark-BL-LEC-lector.md) (contrato de servido).
 > **Persona:** «El Coleccionista» — no técnico, lee en el PC, la tablet o el móvil; no abre
 > terminales ni JSON. Raspberry Pi 4/5 compartida con 512 MiB para ZascArr; sin SPA ni Redis;
 > un solo worker; un solo JavaScript propio, el del lector (ADR 0021).
-> **Insumo, no aprobación:** decide el PO. No autoriza implementar ni publicar en el tablero.
+> **Insumo, no aprobación:** decide el PO. No autoriza implementar.
 
 ---
 
@@ -528,7 +532,7 @@ No vuelven sin un motivo nuevo y una ficha propia (benchmark §7.5):
 | D-LUX3 | Ajustes de imagen: qué controles y límites | Brillo y contraste con rango acotado; sepia e invertir; sin nitidez ni recorte |
 | D-LUX4 | ¿Integrar LECUX2 dentro de #826 (LEC3) en vez de tarjeta aparte? | Sí, si #826 aún no ha empezado; si ya está en curso, historia aparte |
 | D-LUX5 | ¿Hay lector de pantalla disponible para verificar LECUX5? | Si no, NOT RUN y no se declara la épica cerrada del todo |
-| D-LUX6 | Publicar como épica del tablero con sus historias | Sí, cuando el PO apruebe; el marcador `zascarr-kanban:v1:BL-LECUX` ya va en este documento |
+| D-LUX6 | Publicar como épica del tablero con sus historias | **Hecho (2026-11-17):** #1067 y #1068–#1073, en Backlog; la aprobación de prioridad sigue siendo D-LUX1 |
 | D-LUX7 | Lectura inmersiva: ¿por defecto o accionable? | **Por defecto**: abrir el lector ya sin marco y con chrome auto-oculto; el fullscreen del navegador es un extra |
 | D-LUX8 | Flechas superpuestas: ¿siempre visibles o al pasar el ratón? | Al pasar el ratón/enfocar en PC; nunca en táctil (el gesto manda) |
 | D-LUX9 | Al ocultar el pie, ¿dónde queda el aviso legal? | Enlace «Aviso legal» dentro de «Opciones» y en la ficha al volver |
@@ -560,8 +564,15 @@ No vuelven sin un motivo nuevo y una ficha propia (benchmark §7.5):
   MEJORAR) y §7.4 (candidatas).
 - [Ficha BL-LEC](benchmark-BL-LEC-lector.md): contrato de servido, matriz §9, medición §12 y
   decisiones D-L1–D-L4.
-- Épica base **#822** y subhistorias **#823** (LEC0), **#824** (LEC1), **#825** (LEC2),
+- **Épica base #822** (BL-LEC) y subhistorias **#823** (LEC0), **#824** (LEC1), **#825** (LEC2),
   **#826** (LEC3), **#827** (LEC4) y **#828** (LEC5).
+- **Tarjetas publicadas (2026-11-17):** épica [#1067](https://github.com/juanajok/zascarr/issues/1067)
+  e historias [#1068](https://github.com/juanajok/zascarr/issues/1068) (LECUX1),
+  [#1069](https://github.com/juanajok/zascarr/issues/1069) (LECUX2),
+  [#1070](https://github.com/juanajok/zascarr/issues/1070) (LECUX3),
+  [#1071](https://github.com/juanajok/zascarr/issues/1071) (LECUX4),
+  [#1072](https://github.com/juanajok/zascarr/issues/1072) (LECUX5) y
+  [#1073](https://github.com/juanajok/zascarr/issues/1073) (LECUX6); en el tablero, Backlog.
 - **Petición del PO (2026-11-17):** leer a pantalla completa sin el marco de ZascArr, deslizar
   en tablet/móvil y flechas superpuestas en el PC, al estilo de un visor de fotos (LECUX6).
 - `CLAUDE.md` §6 (UX), §8 (pruebas) y §10 (sin SPA, excepción ADR 0021); sistema de diseño;
@@ -573,8 +584,9 @@ No vuelven sin un motivo nuevo y una ficha propia (benchmark §7.5):
 ## 14. Historial de revisión
 
 - **2026-11-17:** creación de la épica a partir del benchmark de mercado y de la revisión del
-  lector en `origin/main` `edf2fa61`. No se ha publicado en el tablero ni se ha abierto
-  ninguna historia.
+  lector en `origin/main` `edf2fa61`.
 - **2026-11-17 (revisión 2):** añadida **BL-LECUX6** (lectura inmersiva, flechas superpuestas
   y gesto) por petición del PO; LECUX5 pasa a depender también de ella. Sin cambios en las
   demás historias ni en los descartes.
+- **2026-11-17 (revisión 3):** publicada como épica **#1067** con las historias **#1068–#1073**
+  (PR de documentos **#1065**), en el tablero con estado Backlog.
