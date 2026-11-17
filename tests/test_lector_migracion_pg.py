@@ -1,4 +1,4 @@
-"""Migración 0049 (BL-LEC1): `reading_progress.file_id`, FK e índice — Postgres real."""
+"""Migración 0050 (BL-LEC1): `reading_progress.file_id`, FK e índice — Postgres real."""
 from __future__ import annotations
 
 import asyncio
@@ -24,7 +24,7 @@ async def _consultar(url: str, sql: str):
         await motor.dispose()
 
 
-def test_0049_crea_columna_fk_indice_y_es_reversible():
+def test_0050_crea_columna_fk_indice_y_es_reversible():
     with bd_efimera_sync(URL) as url:
         migrar_a_head(url)
         columnas = asyncio.run(_consultar(url, """
@@ -43,7 +43,7 @@ def test_0049_crea_columna_fk_indice_y_es_reversible():
             WHERE tablename='reading_progress' AND indexname='ix_reading_progress_file_id'
         """))
         assert indice == [(1,)]
-        alembic(url, "downgrade", "0048")
+        alembic(url, "downgrade", "0049")
         columnas = asyncio.run(_consultar(url, """
             SELECT column_name FROM information_schema.columns
             WHERE table_name='reading_progress' AND column_name='file_id'
