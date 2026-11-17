@@ -4,7 +4,7 @@
 - **Autor:** Builder (TDD), a partir del informe `secops-BL-OPS2-2026-11-17.md` (SecOps) y de `especificacion-BL-OPS2.md` (v1.4).
 - **Worktree:** `/mnt/Datos/Documentos/wt-ops2builder` (detached en `929aa6c8`, base `fix/ops2-bloqueantes`; el merge de la PR #1031, `5cf947b4`, es ancestro).
 - **Rama:** `feat/ops2-builder` (commits nuevos sobre `929aa6c8`). **Sin fusión ni despliegue.**
-- **SHA final:** `7be56b30af6d0e05e7062351c62cb7c16996bb22` (este commit; QA debe revalidar ESE SHA, sin parches manuales).
+- **SHA del código y las pruebas:** `a39af25859ce20c168f8309ce8258c91e048d4c3`. El **head del PR** añade encima solo este documento (mismo árbol de código y pruebas): QA debe revalidar el head, sin parches manuales.
 - **Naturaleza:** cambios de código + pruebas. **No** se ha tocado la Pi, producción, los informes de SecOps/QA, ni el worktree principal.
 
 ---
@@ -238,7 +238,7 @@ fallo. Las pruebas PG se saltan solas si no hay Docker.)
 - `c261cbf5` — límites v2 con reloj inyectado, bloqueo de 30 min y PostgreSQL real (F-18/F-08).
 - `b567f8ca` — tipos estrictos de la lista, F-16/F-22.
 - `b226d4fb` — ADR 0023 y SECURITY (F-23).
-- `7be56b30af6d0e05e7062351c62cb7c16996bb22` — `DOCKER_CONFIG`/`HEALTH_URL` (QA VM) + esta evidencia.
+- `a39af25859ce20c168f8309ce8258c91e048d4c3` — `DOCKER_CONFIG`/`HEALTH_URL` (QA VM): **SHA del código y las pruebas**. Este documento va en el commit de encima (head del PR).
 - **Rama:** `feat/ops2-builder`; **PR draft a `main`:** ver enlace en el mensaje al Lead. **No fusionado, no desplegado.**
 
 ---
