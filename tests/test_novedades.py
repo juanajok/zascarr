@@ -296,3 +296,69 @@ def test_el_matching_real_de_norma_y_panini_no_cruza_vecinos():
     assert interesa["El Depravado [Ed. de lujo]"]
     assert interesa["Cyberpunk 2077. Chrome"]
     assert interesa["Biblioteca Conan. Conan el Bárbaro. 24"]
+
+
+def test_las_tarjetas_usan_portada_local_y_marcador_si_no_hay_serie(monkeypatch):
+    from uuid import uuid4
+
+    from zascarr.main import app
+    from zascarr.services.novedades import Novedad
+    from zascarr.web import novedades as web
+
+    sid = uuid4()
+
+    async def _cargar(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio, novedades=[
+            Novedad(cv_id=None, volumen_id=None, serie="Con portada", numero="1",
+                    fecha=inicio, publicado=False, editorial="Norma Editorial",
+                    url=None, interes=True, series_id=sid, fuente="Norma",
+                    tiene_portada=True),
+            Novedad(cv_id=None, volumen_id=None, serie="Sin portada", numero="",
+                    fecha=inicio, publicado=False, editorial="Panini Comics",
+                    url=None, interes=False, series_id=None, fuente="Panini"),
+        ])
+
+    monkeypatch.setattr(web, "cargar_semana", _cargar)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r = TestClient(app).get("/ui/novedades?semana=2026-11-23")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    assert f"/ui/series/{sid}/portada?v=2" in r.text
+    assert r.text.count('class="portada ') >= 2
+    assert 'class="portada-carga' not in r.text
+    assert "Sin portada" in r.text
+
+
+def test_si_la_serie_casa_pero_no_tiene_portada_no_se_pide_la_imagen(monkeypatch):
+    from uuid import uuid4
+
+    from zascarr.main import app
+    from zascarr.services.novedades import Novedad
+    from zascarr.web import novedades as web
+
+    sid = uuid4()
+
+    async def _cargar(db, inicio, **kw):
+        return Semana(inicio=inicio, fin=inicio, novedades=[Novedad(
+            cv_id=None, volumen_id=None, serie="Serie sin imagen", numero="1",
+            fecha=inicio, publicado=False, editorial="Norma Editorial", url=None,
+            interes=True, series_id=sid, fuente="Norma", tiene_portada=False)])
+
+    monkeypatch.setattr(web, "cargar_semana", _cargar)
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        r = TestClient(app).get("/ui/novedades?semana=2026-11-23")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert f"/ui/series/{sid}/portada" not in r.text
+    assert 'class="portada ' in r.text  # marcador de ZascArr
+
+
+def test_la_rejilla_no_pasa_de_tres_columnas():
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
+    assert "grid-template-columns: repeat(4" not in css
+    assert ".novedad-portada a:focus-visible" in css

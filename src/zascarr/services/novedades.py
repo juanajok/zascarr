@@ -11,6 +11,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from zascarr.core.matcher import normalize_title
 from zascarr.models import Issue, Publisher, Series, Wishlist, WishlistPolicy, WishlistStatus
 from zascarr.services.comic_vine import ComicVineClient
 from zascarr.services.novedades_es import cargar_novedades_es
+from zascarr.services.portada_coleccion import portada_cacheada
 
 logger = structlog.get_logger()
 
@@ -54,6 +56,7 @@ class Novedad:
     interes: bool
     series_id: UUID | None
     fuente: str = "Comic Vine"
+    tiene_portada: bool = False
 
 
 @dataclass(frozen=True)
@@ -227,6 +230,9 @@ def construir_semana(
             interes=interes,
             series_id=series_id,
             fuente=fuente,
+            tiene_portada=bool(
+                series_id is not None
+                and portada_cacheada(Path(get_settings().covers_cache_path), series_id)),
         ))
     novedades.sort(key=lambda n: (n.fecha, n.serie.casefold(), n.numero))
     return Semana(inicio=inicio, fin=fin, novedades=novedades,
