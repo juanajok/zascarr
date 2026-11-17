@@ -1,6 +1,6 @@
 # Datos de la 2.ª tanda — evaluación del lector RAR/CBR (#308)
 
-> Salida de los pasos 6, 7 y 8 del kit `scripts/medicion/evaluacion_rar/`, ejecutados **en la Pi** el 2026-10-23 (paso 6: 10:31; paso 7: 10:42). Contexto, método y conclusiones: `evaluacion-lector-rar-tanda2-2026-10-23.md`. Las muestras se citan por código (`m01`…`m11`, `s01`…`s26`). **Se ha omitido la columna `detalle`** de `resumen2.md` porque lleva nombres de páginas y de series del PO; los textos de error relevantes se citan en la ficha.
+> Salida de los pasos 6, 7 y 8 del kit histórico (entonces en `scripts/medicion/evaluacion_rar/`; archivado en OCTA-A6, ver `docs/design/mediciones/evaluacion-rar-archivada.md`), ejecutados **en la Pi** el 2026-10-23 (paso 6: 10:31; paso 7: 10:42). Contexto, método y conclusiones: `evaluacion-lector-rar-tanda2-2026-10-23.md`. Las muestras se citan por código (`m01`…`m11`, `s01`…`s26`). **Se ha omitido la columna `detalle`** de `resumen2.md` porque lleva nombres de páginas y de series del PO; los textos de error relevantes se citan en la ficha.
 
 ## Paso 6 — integridad, daños, topes, cifrado y ComicInfo (`resumen2.md`, sin la columna `detalle`)
 
