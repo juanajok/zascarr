@@ -781,6 +781,13 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
   font-size: var(--text-secundario);
   color: var(--ink-soft);
 }
+/* Cola/progreso de Deseados (benchmark 2026-11-16): una fila por descarga,
+   con barra nativa y texto; refresco htmx desde la propia página. */
+.wishlist-progreso { margin-top: var(--space-3); }
+.wishlist-progreso-lista { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: 6px; }
+.wishlist-progreso-fila { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.wishlist-progreso-titulo { flex: 1 1 12rem; font-weight: 600; }
+.wishlist-progreso progress { width: 9rem; max-width: 100%; height: 10px; }
 
 /* ── 12. FICHA DE SERIE (C2) ─────────────────────────────────────────────── */
 .issue-grid { display: flex; flex-wrap: wrap; gap: 7px; margin: var(--space-2) 0 20px; }
