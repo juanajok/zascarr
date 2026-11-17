@@ -92,11 +92,14 @@ class WishlistService:
 
     async def retry(self, item_id: UUID) -> Wishlist:
         """Reintento manual desde la UI: salta el cooldown de
-        process_wishlist limpiando last_searched_at."""
+        process_wishlist limpiando last_searched_at y, desde T-62, también el
+        backoff de envío (el coleccionista manda: no espera 10 min/6 h)."""
         item = await self.db.get(Wishlist, item_id)
         if not item:
             raise ValueError("Item no encontrado")
         item.status = WishlistStatus.WANTED
         item.last_searched_at = None
+        item.retry_count = 0
+        item.next_retry_at = None
         await self.db.flush()
         return item

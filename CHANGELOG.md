@@ -210,6 +210,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   La predicción de enlace exige ahora clave utilizable, no tener identidad externa (incluidas
   Fandom) y respetar el plazo de reintento; usa las mismas condiciones SQL que el enriquecedor.
   Una prueba PG de paridad falla si Python y SQL discrepan. Sin cambios en el flujo de enriquecimiento.
+- **Backoff propio tras un fallo de envío en Deseados (2026-11-17).** Un fallo del
+  cliente de descargas (`_send` sin referencia) ya no deja el deseo esperando el
+  cooldown global de 6 h junto con todos los demás: se reintenta a los 10 min, 30 min,
+  2 h y 6 h (tope), con dos columnas nuevas en `wishlist` (`retry_count` y
+  `next_retry_at`, migración 0046). Un envío correcto —automático, manual o extra—
+  limpia el backoff, y «Reintentar» lo salta; «sin resultados» y «candidato rechazado»
+  no lo activan porque no son fallos del cliente.
+ (feat(deseos): backoff persistente tras fallos de envío (10m/30m/2h/6h))
 
 - **«Buscar ahora» devolvía 500 (2026-11-17).** La etiqueta de resultados construía el
   título con `_row(item)` sobre un `item` cargado sin relaciones precargadas; en async
