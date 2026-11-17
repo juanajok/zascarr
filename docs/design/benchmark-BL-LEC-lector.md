@@ -149,15 +149,38 @@ Para CBZ no hay matriz: L3 (leer la entrada directamente) gana sin discusión.
 | D-L3 | Caché de RAR | **Propuesta aceptada:** volumen del contenedor en el disco de datos, nunca en la tarjeta SD; cuota fija de ~1 GiB que BL-LEC0 ajusta con la medición; se limpia lo más antiguo salvo lo que se está leyendo. |
 | D-L4 | Cómo se abre el lector | **Botón «Leer» / «Continuar (pág. N)» en la ficha del número**; el doble clic, solo como atajo en el PC. |
 
-## 12. NOT RUN
+## 12. Medición BL-LEC0 (2026-11-17)
 
-- Latencia y memoria de servir una página de CBZ en la Pi.
-- Tiempo y espacio de extraer un RAR sólido grande completo con `unar` en la Pi, y el tamaño de caché que haría falta.
-- Comportamiento de Panels, Chunky, Mihon y YACReader con el OPDS-PSE de ZascArr.
-- Qué ofrecen Komga y Kavita al terminar un libro (siguiente libro, listas de lectura).
-- Cifras de la propuesta externa (< 100 ms la primera página, < 15 MB de RAM, ~1 s en extraer un sólido): sin medir.
+Guion reproducible: `scripts/medicion/medir_lector_pi.py`. Se ejecutó **dentro del contenedor
+`zascarr-orquestador` de la Pi** (`unar` 1.10.8), sobre copias sintéticas en `/tmp`, nunca sobre
+la biblioteca real.
 
-## 13. Notas sobre la propuesta externa
+| Medición | Resultado | Veredicto |
+|---|---|---|
+| CBZ sintético, 120 páginas / 1,8 MB | primera 0,7 ms; p50 0,7 ms; p95 1,2 ms; RSS 13,7 MB | **PASS** |
+| CBZ sintético, 20 páginas / 42,1 MB (página de 2,1 MB) | primera 2,0 ms; p50 1,9 ms; p95 2,2 ms; RSS 19,5 MB | **PASS** |
+| RAR4 sólido, 20 imágenes / 42,1 MB | extracción completa 0,99 s; 42,1 MB extraídos; 20 ficheros; RSS hijo ≤23 MB | **PASS** |
+| RAR4 sólido, 40 imágenes / 84,2 MB | extracción completa 1,79 s; 84,2 MB extraídos; 40 ficheros | **PASS** |
+| RAR5 sólido con `unar` 1.10.8 | falla «Attempted to read more data than was available» (limitación conocida de ADR 0015) | **FAIL conocido**, no del lector: los RAR5 sólidos quedan fuera de la extracción |
+| Contención del turno único con una portada RAR | no se hizo un ensayo de concurrencia controlado | **NOT RUN** |
+| Cuota de caché | con 42,1 MB de media, 1 GiB ≈ **24** tebeos; con 84,2 MB ≈ **12** | **PASS (cálculo)** |
+| RAR de percentil alto (>84 MB) y sólidos reales de la distribución | no se usó la biblioteca real; solo sintéticos | **NOT RUN** |
+| Navegador real / móvil / tablet | BL-LEC0 no implementa pantalla | **NOT RUN** |
+
+**Decisión de la medición (opción B, caché de extracción): GO.** Extraer 42 MB tarda ≈1 s y
+84 MB ≈1,8 s; con una cuota de **1 GiB** caben ≈24 tebeos medios y ≈12 grandes. Se propone:
+
+- cuota **1 GiB** en el volumen de datos (no en la SD), LRU salvo lecturas activas;
+- extracción entera con topes propuestos: **120 s**, **2 GiB** de bytes extraídos y **2.000
+  ficheros** (no se reutiliza el tope de 10 s por entrada);
+- **turno separado** para extracción entera si la contención con portadas resulta apreciable;
+  queda como propuesta de BL-LEC4, no se implementa aquí.
+
+**Límites honestos:** las cifras son sintéticas; no incluyen la latencia de red ni el render del
+navegador. Los RAR5 sólidos ya fallan con el `unar` actual (ADR 0015) y los reales de percentil
+alto quedan NOT RUN. La contención del turno único no se midió.
+
+## 13. Notas sobre la propuesta externa## 13. Notas sobre la propuesta externa
 
 - **PyMuPDF:** la propuesta dice que su AGPL obligaría a relicenciar ZascArr. La GPLv3 (§13) permite combinarla con AGPLv3; lo que se arrastra es la obligación de ofrecer el código por red en esa parte. Evitarla sigue siendo prudente, y además los PDF están fuera (L13).
 - **«Convertir CBR a CBZ al importar»** contradice D3 y D4 de BL-CNV (#476) y supone una «copia organizada» que ZascArr no tiene (vincula en su sitio, ADR 0007).
