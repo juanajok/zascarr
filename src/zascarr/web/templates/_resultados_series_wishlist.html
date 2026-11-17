@@ -11,7 +11,7 @@
             hx-target="#wishlist-list" hx-swap="beforeend"
             hx-disable="this"
             hx-on::before-request="this.textContent='Añadiendo…'"
-            hx-on::after-request="this.textContent='Añadido'; this.disabled = true">
+            hx-on::after-request="if (event.detail.successful) { this.textContent='Añadido'; this.disabled = true; } else { this.textContent='No se pudo añadir'; this.disabled = false; }">
       Añadir a deseados
     </button>
   </li>

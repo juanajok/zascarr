@@ -199,6 +199,15 @@ class TestBuscarSerie:
             r = client.get("/ui/wishlist/buscar-serie?q=zzz")
         assert "Sin coincidencias" in r.text
 
+    def test_el_boton_no_dice_anadido_si_la_peticion_falla(self):
+        """OCTA-C2: el texto de éxito solo se pone con event.detail.successful."""
+        series = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN)
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([series])])) as client:
+            r = client.get("/ui/wishlist/buscar-serie?q=bat")
+        assert r.status_code == 200
+        assert "event.detail.successful" in r.text
+        assert "No se pudo añadir" in r.text
+
 
 class TestAnadir:
 
