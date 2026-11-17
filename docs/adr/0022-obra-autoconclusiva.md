@@ -1,6 +1,8 @@
 # ADR 0022: obra autoconclusiva y publicaciones sin numeración editorial
 
-- **Estado:** **Propuesto** (2026-11-17). **No aceptado; no autoriza migración ni código.**
+- **Estado:** **Aceptado por el PO (2026-11-17)**. Autoriza la implementación según la
+  especificación, con migración 0049 aditiva y sin backfill. Las decisiones abiertas de la
+  propuesta quedaron resueltas (ver «Decisiones aceptadas»).
 - **Relación:** [ADR 0003](0003-identidad-editorial.md) (vocabulario Serie/Edición/Publicación/Formato)
   y [ADR 0016](0016-publicacion-sin-numero.md) (publicación sin número). Benchmark y propuesta de
   producto revisados: matriz de cinco casos de «tomos y números únicos».
@@ -62,7 +64,7 @@ alternativa compatible con el modelo existente y separa lo que es una **decisió
    numeración; si se cataloga por obra suelta, cada obra es una serie one-shot. Decide el
    coleccionista, no el parser.
 
-## Decisión propuesta (pendiente de aprobación del PO)
+## Decisión (aceptada por el PO el 2026-11-17)
 
 **D1 — Mantener `Series → Issue`; no crear Issues huérfanos ni una entidad «obra».** La obra se
 representa por su serie, aunque tenga una sola publicación. No se reutiliza `edition_type`; se
@@ -135,14 +137,15 @@ defecto, con un interruptor «mostrar también tomos únicos» para reemplazos.
 - **Riesgo aceptado**: una serie abierta con un solo número **no** es one-shot; la marca es una
   decisión humana, no una inferencia por `total_issues == 1`.
 
-## Decisiones abiertas para el PO
+## Decisiones aceptadas por el PO (2026-11-17)
 
-1. ¿Se acepta `SeriesKind.ONE_SHOT` y el número solo-si-la-fuente-lo-da, o se prefiere otro nombre?
-2. ¿La obra one-shot debe mostrar «1/1 completa» o «Tomo único · completo» sin cifras de grapa?
-3. ¿Los integrales/omnibus se quedan fuera hasta la Edición, o se admite una marca provisional
-   distinta de one-shot?
-4. ¿`SeriesGroup` en ComicInfo se pospone a ETQ6/B6 o entra en el primer corte?
-5. ¿Backfill de obras ya catalogadas con `total_issues=1` y un único Issue, o solo alta nueva?
+1. **Sí** a `SeriesKind.ONE_SHOT`; el número se copia **solo si la fuente lo da**; si no, `NULL`.
+2. La ficha muestra **«Tomo único · completo» sin cifras de grapa**, no «1/1».
+3. **Integrales/omnibus fuera** de esta decisión hasta que exista la entidad *Edición*; no se
+   marcan como one-shot.
+4. **`SeriesGroup` en ComicInfo se pospone** a ETQ6/B6; no entra en el primer corte.
+5. **Sin backfill** de obras existentes en v1; si se quiere, será un dry-run separado con
+   confirmación.
 
 ## No verificado / NOT RUN
 
