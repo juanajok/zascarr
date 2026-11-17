@@ -59,3 +59,13 @@ Matriz ponderada (densidad 25 · coste Pi 20 · identidad 15 · seguridad 15 · 
 No se abrió una sesión autenticada de Sonarr/Radarr ni de ZascArr, no hay captura propia de
 la UI, no se midió el render a 1280/375 px ni el DOM/tiempo en la Pi. El benchmark no decide
 filtros/orden ni tamaño de página: quedan como siguiente iteración si el PO los pide.
+
+## 6. Segunda iteración (2026-11-17)
+
+Se añaden, sin cambiar el cursor:
+
+- **Filtro «Solo con sugerencia»** (`?solo_sugerencia=1`), aplicado a la lista, al rango y a la posición con el mismo `_condiciones_pendientes`; no cambia qué es un pendiente para el menú.
+- **Tamaño de página 25/50** (`?tamano=25|50`), conservado en los enlaces de cursor e inicio.
+- **Indicador «Preparando la previa…»** con `hx-indicator`, sin JS propio.
+
+El orden por nombre/formato queda fuera de esta iteración: exige una clave de cursor distinta y no se adopta el `OFFSET` de Sonarr/Radarr.
