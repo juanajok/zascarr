@@ -20,6 +20,8 @@
   {% include "_filtros_panel_campos.html" %}
 </div>
 <input type="hidden" id="f-vista" name="vista" value="{{ filtros.vista }}" hx-swap-oob="true">
+<input type="hidden" id="f-densidad" name="densidad" value="{{ densidad }}" hx-swap-oob="true">
+<input type="hidden" id="f-modo" name="modo" value="{{ modo }}" hx-swap-oob="true">
 {% include "_control_vista.html" %}
 {% endif %}
 <div id="resumen-biblioteca" class="resumen-biblioteca">

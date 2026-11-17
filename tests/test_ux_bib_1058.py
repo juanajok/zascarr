@@ -109,8 +109,33 @@ def test_chips_ficha_y_control_visible():
     css = Path("src/zascarr/static/web.css").read_text()
     control = Path("src/zascarr/web/templates/_control_vista.html").read_text()
     assert 'publisher_id={{ series.publisher.id }}' in ficha
-    assert 'hx-get="/ui/biblioteca/resultados?publisher_id=' in ficha
+    assert 'hx-target="#rejilla"' not in ficha
+    assert 'href="/ui/biblioteca?publisher_id=' in ficha
     assert 'author_id={{ a.id }}' in ficha
     assert "barra-densidad-texto" in control
     assert ".barra-vista-texto { display: none; }" in css
     assert ".barra-densidad-texto { display: inline; }" in css
+
+
+def test_modo_y_densidad_como_hidden_en_formulario():
+    bib = Path("src/zascarr/web/templates/biblioteca.html").read_text()
+    rejilla = Path("src/zascarr/web/templates/_rejilla_biblioteca.html").read_text()
+    assert 'id="f-modo" name="modo"' in bib and 'id="f-densidad" name="densidad"' in bib
+    assert 'id="f-modo" name="modo"' in rejilla and 'hx-swap-oob="true"' in rejilla
+
+
+def test_modo_gestion_se_conserva_y_escaparate_avisa():
+    gestion = _leer(modo="gestion")
+    assert gestion.modo == "gestion"
+    esc = _leer(modo="escaparate")
+    assert esc.modo == "gestion" and any("escaparate" in a for a in esc.avisos)
+
+
+def test_cambio_de_q_conserva_densidad_compacta():
+    with _cliente_fragmento() as client:
+        r = client.get(
+            "/ui/biblioteca/resultados?densidad=compacta&q=Thorgal&orden=titulo&page=1",
+            headers={"HX-Request": "true"})
+    assert "library-grid-compacta" in r.text
+    assert 'id="f-densidad" name="densidad" value="compacta"' in r.text
+    assert "q=Thorgal" in r.headers["HX-Push-Url"]
