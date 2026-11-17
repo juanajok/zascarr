@@ -289,7 +289,8 @@ class TestLanzador:
         assert not os.path.exists(estado.ruta_ops_status), "SOLO `aceptada` escribe ops-status.json"
 
     def test_la_unidad_se_deduce_de_la_tabla_del_codigo_no_de_la_peticion(self, estado):
-        assert ops.UNIDADES == {"copia": "zascarr-backup.service"}
+        assert ops.UNIDADES == {"copia": "zascarr-backup.service",
+                              "restaurar": "zascarr-restaurar@.service"}
         r, lanz = correr(peticion(), estado)
         assert lanz.iniciadas == [ops.UNIDADES["copia"]]
 
@@ -300,7 +301,6 @@ class TestOpsStatus:
         correr(peticion(id_=_id(1)), estado)
         antes = Path(estado.ruta_ops_status).read_bytes()
         for r in (correr(peticion(id_=_id(2)), estado, ahora=AHORA + 1)[0],               # demasiado_pronto
-                  correr(peticion(id_=_id(3), accion="restaurar"), estado, ahora=AHORA + 2)[0],
                   correr(peticion(id_=_id(4)), estado, Lanzador(ocupado=True), ahora=AHORA + 400)[0]):
             assert r.resultado == "rechazada"
         assert Path(estado.ruta_ops_status).read_bytes() == antes
@@ -308,7 +308,7 @@ class TestOpsStatus:
 
 # ── lectura acotada y diario (AC-05, FR-30) ──────────────────────────────────────────────────────────────────────
 class TestEntradaSalida:
-    def test_no_lee_mas_de_513_bytes_de_una_megabyte(self):
+    def test_no_lee_mas_de_1025_bytes_de_una_megabyte(self):
         a, b = socket.socketpair()
         try:
             # el envío va en un hilo: el búfer del socket es menor que 1 MB y `sendall` bloquearía la prueba
@@ -317,7 +317,7 @@ class TestEntradaSalida:
                     a.sendall(b"x" * 1_000_000)
             hilo = threading.Thread(target=_enviar, daemon=True)
             hilo.start()
-            assert len(ops.leer_linea(b.fileno(), tiempo_s=2)) == 513
+            assert len(ops.leer_linea(b.fileno(), tiempo_s=2)) == 1025
         finally:
             a.close()
             b.close()
@@ -365,3 +365,89 @@ class TestEntradaSalida:
             r, _ = correr(linea, estado)
             cuerpo = json.loads(r.linea())
             assert set(cuerpo) == {"v", "id", "resultado", "codigo"} and cuerpo["codigo"] in ops.CODIGOS
+
+
+# ── BL-OPS2: canal v2 (T-01…T-04) ─────────────────────────────────────────────────────────────────────────────────
+class LanzadorRestaurar(Lanzador):
+    def restauraciones_ocupadas(self):
+        return False
+
+
+class Verificador:
+    def __init__(self, modo="password", correcta=True):
+        self.modo, self.correcta = modo, correcta
+
+    def leer(self):
+        return self.modo, "pbkdf2_sha256$10000$00$" + "11" * 32
+
+    def comprobar(self, prueba, _hash):
+        return self.correcta and prueba == "secreta"
+
+
+def peticion_restaurar(*, id_=None, copia="backup-20260101_120000", prueba="secreta",
+                       creada=AHORA, v=2, firma=None, **extra):
+    id_ = id_ or _id()
+    cuerpo = {"v": v, "id": id_, "accion": "restaurar", "copia": copia,
+              "prueba": prueba, "creada": creada}
+    cuerpo["firma"] = firma if firma is not None else ops.firma_de(
+        CLAVE, v, id_, "restaurar", creada, copia, prueba)
+    cuerpo.update(extra)
+    return json.dumps(cuerpo, separators=(",", ":")).encode() + b"\n"
+
+
+def correr_restaurar(linea, estado, *, verificador=None, lanzador=None, copias=None):
+    lanzador = lanzador or LanzadorRestaurar()
+    return ops.procesar(linea, AHORA, CLAVE, estado, lanzador,
+                        verificador or Verificador(),
+                        copias if copias is not None else ["backup-20260101_120000"]), lanzador
+
+
+class TestRestaurarV2:
+    def test_acepta_y_arranca_la_unidad_con_ts(self, estado):
+        r, lanz = correr_restaurar(peticion_restaurar(), estado)
+        assert r.resultado == "aceptada" and r.v == 2
+        assert lanz.iniciadas == ["zascarr-restaurar@20260101_120000.service"]
+        escrito = json.loads(Path(estado.ruta_ops_status).read_text())
+        assert escrito["accion"] == "restaurar" and escrito["copia"] == "backup-20260101_120000"
+
+    def test_copia_desconocida_no_verifica(self, estado):
+        r, lanz = correr_restaurar(peticion_restaurar(copia="backup-20200101_000000"), estado,
+                                   copias=["backup-20260101_120000"])
+        assert r.codigo == "copia_desconocida" and lanz.iniciadas == []
+
+    def test_contrasena_incorrecta_no_arranca_y_cuenta(self, estado):
+        r, lanz = correr_restaurar(peticion_restaurar(), estado,
+                                   verificador=Verificador(correcta=False))
+        assert r.codigo == "prueba_invalida" and lanz.iniciadas == []
+        assert Path(estado.ruta_pruebas).exists()
+
+    def test_sin_contrasena_activada(self, estado):
+        r, lanz = correr_restaurar(peticion_restaurar(), estado,
+                                   verificador=Verificador(modo="none"))
+        assert r.codigo == "autenticacion_no_activada" and lanz.iniciadas == []
+
+    @pytest.mark.parametrize("cambio", [
+        {"prueba": ""},
+        {"copia": "../backup"},
+        {"copia": "backup-20260101_120000", "extra": "x"},
+    ])
+    def test_esquema_v2_cerrado(self, estado, cambio):
+        linea = peticion_restaurar(**cambio)
+        r, lanz = correr_restaurar(linea, estado)
+        assert r.codigo == "esquema_invalido" and lanz.iniciadas == []
+
+    def test_firma_v2_protege_la_prueba(self, estado):
+        linea = bytearray(peticion_restaurar())
+        linea = bytes(linea).replace(b'"prueba":"secreta"', b'"prueba":"otra"')
+        r, lanz = correr_restaurar(linea, estado)
+        assert r.codigo == "firma_invalida" and lanz.iniciadas == []
+
+
+def test_verificador_comprueba_hash_real_y_rechaza_alterado():
+    import hashlib
+    sal = b"sal-de-prueba"
+    digest = hashlib.pbkdf2_hmac("sha256", "contraseña-ñ".encode(), sal, 10_000)
+    almacenado = f"pbkdf2_sha256$10000${sal.hex()}${digest.hex()}"
+    assert ops.VerificadorPrueba.comprobar("contraseña-ñ", almacenado)
+    assert not ops.VerificadorPrueba.comprobar("otra", almacenado)
+    assert not ops.VerificadorPrueba.comprobar("contraseña-ñ", "roto")

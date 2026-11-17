@@ -43,6 +43,8 @@ ALEMBIC_ESPERADA=""
 PROYECTO_ESPERADO="zascarr-123a"
 ASUMIR_SI=0
 DRY_RUN=0
+PRODUCCION=0
+COPIA_TS=""
 
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 info() { printf '→ %s\n' "$*"; }
@@ -62,6 +64,8 @@ while [[ $# -gt 0 ]]; do
         --proyecto-esperado) [[ -n "${2:-}" ]] || die "--proyecto-esperado necesita un valor"; PROYECTO_ESPERADO="$2"; shift 2 ;;
         --yes|-y)            ASUMIR_SI=1; shift ;;
         --dry-run)           DRY_RUN=1; shift ;;
+        --produccion)        PRODUCCION=1; shift ;;
+        --copia)             [[ -n "${2:-}" ]] || die "--copia necesita un valor"; COPIA_TS="$2"; shift 2 ;;
         --forzar)            die "--forzar está prohibido: este script no cambia el código ni descarta cambios." ;;
         -h|--help)           uso; exit 0 ;;
         -*)                  die "Opción desconocida: $1" ;;
@@ -74,8 +78,6 @@ done
 source "${SCRIPT_DIR}/_cerrojo.sh"
 tomar_cerrojo_operaciones || exit $?
 
-[[ -n "$DUMP" ]] || die "Falta --dump."
-[[ -n "$SHA_ESPERADO" ]] || die "Falta --sha (el commit que debe seguir puesto al terminar)."
 for cmd in docker git jq gzip gunzip sha256sum stat curl awk; do
     command -v "$cmd" >/dev/null 2>&1 || die "No encuentro $cmd."
 done
@@ -86,6 +88,17 @@ limpio() { printf '%s' "$1" | tr -cd '[:alnum:]_.-' | cut -c1-64; }
 for var in REPO_DIR ENV_FILE COMPOSE_FILE BACKUP_DIR DB_NAME DB_USER; do
     [[ -n "${!var:-}" ]] || die "Falta $var. Este script no usa valores por defecto de producción."
 done
+if (( PRODUCCION )); then
+    [[ "$COPIA_TS" =~ ^[0-9]{8}_[0-9]{6}$ ]] || die "--copia no tiene el formato esperado."
+    [[ -z "$DUMP" && -z "$MANIFEST" && -z "$ALEMBIC_ESPERADA" && (-z "$SHA_ESPERADO" || "$SHA_ESPERADO" == "HEAD") ]] || \
+        die "Con --produccion no se aceptan --dump, --manifest, --sha ni --alembic-esperada."
+    DUMP="$BACKUP_DIR/backup_${COPIA_TS}.sql.gz"
+    MANIFEST="$BACKUP_DIR/MANIFIESTO-backup_${COPIA_TS}.json"
+    SHA_ESPERADO="HEAD"
+    ASUMIR_SI=1
+fi
+[[ -n "$DUMP" ]] || die "Falta --dump."
+[[ -n "$SHA_ESPERADO" ]] || die "Falta --sha (el commit que debe seguir puesto al terminar)."
 [[ -d "$REPO_DIR" ]] || die "REPO_DIR no es un directorio."
 [[ -f "$ENV_FILE" && -r "$ENV_FILE" ]] || die "ENV_FILE no existe o no se puede leer."
 [[ -f "$COMPOSE_FILE" ]] || die "COMPOSE_FILE no existe."
@@ -109,6 +122,9 @@ git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
 HEAD_ANTES="$(git -C "$REPO_DIR" rev-parse HEAD)" || die "No puedo leer HEAD."
 SHA_NORMALIZADA="$(git -C "$REPO_DIR" rev-parse --verify --quiet "${SHA_ESPERADO}^{commit}")" || \
     die "--sha no es un commit de este repo."
+if (( PRODUCCION )); then
+    SHA_NORMALIZADA="$HEAD_ANTES"
+fi
 if [[ "$HEAD_ANTES" != "$SHA_NORMALIZADA" ]]; then
     die "El HEAD actual no es el esperado. El código no se toca; no sigo."
 fi
@@ -121,11 +137,15 @@ if ! PROYECTO="$( "${COMPOSE[@]}" config --format json 2>/dev/null | jq -r '.nam
     die "No pude renderizar docker compose config."
 fi
 [[ -n "$PROYECTO" ]] || die "docker compose config no declara un proyecto."
-if [[ "$PROYECTO" == "zascarr" ]]; then
-    die "El proyecto Compose es 'zascarr' (producción). Este script exige una copia aislada."
-fi
-if [[ "$PROYECTO" != "$PROYECTO_ESPERADO" ]]; then
-    die "El proyecto Compose es '$PROYECTO'; se esperaba '$PROYECTO_ESPERADO'."
+if (( PRODUCCION )); then
+    [[ "$PROYECTO" == "zascarr" ]] || die "Con --produccion el proyecto debe ser 'zascarr'."
+else
+    if [[ "$PROYECTO" == "zascarr" ]]; then
+        die "El proyecto Compose es 'zascarr' (producción). Este script exige una copia aislada."
+    fi
+    if [[ "$PROYECTO" != "$PROYECTO_ESPERADO" ]]; then
+        die "El proyecto Compose es '$PROYECTO'; se esperaba '$PROYECTO_ESPERADO'."
+    fi
 fi
 
 # ── Manifiesto ───────────────────────────────────────────────────────────────
@@ -165,7 +185,7 @@ fi
 if [[ -n "$M_ALEMBIC" && -n "$ALEMBIC_ESPERADA" && "$M_ALEMBIC" != "$ALEMBIC_ESPERADA" ]]; then
     die "El manifiesto declara Alembic '$(limpio "$M_ALEMBIC")'; se esperaba '$(limpio "$ALEMBIC_ESPERADA")'."
 fi
-if [[ "$M_DESTINO" != "$HEAD_ANTES" && "$M_DESPLEGADO" != "$HEAD_ANTES" ]]; then
+if (( ! PRODUCCION )) && [[ "$M_DESTINO" != "$HEAD_ANTES" && "$M_DESPLEGADO" != "$HEAD_ANTES" ]]; then
     die "El manifiesto no acredita el commit actual. No restauro datos de otro código."
 fi
 
@@ -318,6 +338,28 @@ else
     chmod 600 "$LOG" 2>/dev/null || true
 fi
 
+# BL-OPS2: configuración vigente de seguridad, para reaplicarla sobre la copia restaurada.
+FILA_SEGURIDAD=""
+FILA_RESTAURADA=""
+FILA_FINAL=""
+if (( PRODUCCION )); then
+    FILA_SEGURIDAD="$(mktemp "${BACKUP_DIR}/seguridad.XXXXXX")" || die "No pude preparar la configuración vigente."
+    chmod 600 "$FILA_SEGURIDAD"
+    if ! "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -At \
+            -c "select values::text from runtime_settings where id=1" >"$FILA_SEGURIDAD" 2>/dev/null \
+            || [[ ! -s "$FILA_SEGURIDAD" ]]; then
+        rm -f "$FILA_SEGURIDAD"
+        die "No pude leer la configuración vigente. No se ha tocado la BD."
+    fi
+    if ! jq -e '(.auth_mode == "password" or .auth_mode == "user_password")
+                and (.auth_password_hash | type == "string" and length > 0)
+                and (.secret_key | type == "string" and length > 0)' \
+            "$FILA_SEGURIDAD" >/dev/null 2>&1; then
+        rm -f "$FILA_SEGURIDAD"
+        die "La seguridad vigente no está activada o está incompleta. No se ha tocado la BD."
+    fi
+fi
+
 # ── Recuperación best-effort ─────────────────────────────────────────────────
 recuperar() {
     local motivo="$1"
@@ -373,6 +415,57 @@ info "Restaurando datos..."
 if ! gzip -dc "$DUMP" | "${COMPOSE[@]}" exec -T postgres psql -q -v ON_ERROR_STOP=1 \
         -U "$DB_USER" -d "$DB_NAME" >>"$LOG" 2>&1; then
     recuperar "la restauración del dump falló"
+fi
+
+if (( PRODUCCION )); then
+    FASE="configuración vigente"
+    FILA_RESTAURADA="${FILA_SEGURIDAD}.restaurada"
+    FILA_FINAL="${FILA_SEGURIDAD}.final"
+    if ! "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -At \
+            -c "select values::text from runtime_settings where id=1" >"$FILA_RESTAURADA" 2>/dev/null \
+            || [[ ! -s "$FILA_RESTAURADA" ]]; then
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA"
+        recuperar "no pude leer la configuración de la copia"
+    fi
+    jq -c -n --slurpfile c "$FILA_SEGURIDAD" --slurpfile r "$FILA_RESTAURADA" '
+        def segura($k):
+            ((["auth_mode", "auth_username", "auth_password_hash", "secret_key",
+                "base_url", "fuentes_heredadas"] | index($k)) != null)
+            or ($k | endswith("_enabled")) or ($k | startswith("webhook_"));
+        ($c[0] // {}) as $cur | ($r[0] // {}) as $rest |
+        (($rest | with_entries(select(segura(.key) | not)))
+         + ($cur | with_entries(select(segura(.key)))))
+        | .auth_session_version = ((($cur.auth_session_version // 0) | tonumber) + 1)
+    ' >"$FILA_FINAL" 2>/dev/null || {
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL"
+        recuperar "no pude combinar la configuración vigente"
+    }
+    ETIQUETA="zascarr_$(date +%s)_$$"
+    if grep -Fq "$ETIQUETA" "$FILA_FINAL"; then
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL"
+        recuperar "la etiqueta de seguridad coincide con el contenido"
+    fi
+    if ! {
+        printf 'INSERT INTO runtime_settings (id, "values") VALUES (1, $%s' "$ETIQUETA"
+        cat "$FILA_FINAL"
+        printf '$%s::jsonb) ON CONFLICT (id) DO UPDATE SET "values" = EXCLUDED."values";\n' "$ETIQUETA"
+    } | "${COMPOSE[@]}" exec -T postgres psql -q -v ON_ERROR_STOP=1 \
+            -U "$DB_USER" -d "$DB_NAME" >>"$LOG" 2>&1; then
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL"
+        recuperar "no pude reaplicar la configuración vigente"
+    fi
+    # Relectura byte a byte (canónica): si no coincide, se deshace.
+    if ! "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -At \
+            -c "select values::text from runtime_settings where id=1" >"${FILA_FINAL}.db" 2>/dev/null \
+            || ! jq -S . "$FILA_FINAL" >"${FILA_FINAL}.esperado" 2>/dev/null \
+            || ! jq -S . "${FILA_FINAL}.db" >"${FILA_FINAL}.obtenido" 2>/dev/null \
+            || ! cmp -s "${FILA_FINAL}.esperado" "${FILA_FINAL}.obtenido"; then
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL" "${FILA_FINAL}.db" \
+            "${FILA_FINAL}.esperado" "${FILA_FINAL}.obtenido"
+        recuperar "la configuración reaplicada no coincide con la vigente"
+    fi
+    rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL" "${FILA_FINAL}.db" \
+        "${FILA_FINAL}.esperado" "${FILA_FINAL}.obtenido"
 fi
 
 # ── Verificación ─────────────────────────────────────────────────────────────
@@ -445,3 +538,9 @@ printf '  Recuentos:         series=%s issues=%s files=%s operaciones=%s wishlis
 printf '  Vínculos huérfanos: 0\n'
 printf '  Health:            %s (%s intentos)\n' "$HEALTH_URL" "$HEALTH_INTENTOS"
 printf '  Detalle:           %s\n' "$(basename "$LOG")"
+if (( PRODUCCION )); then
+    jq -n --arg copia "backup-${COPIA_TS}" --argjson series "$R_SERIES" --argjson issues "$R_ISSUES" \
+        --argjson files "$R_FILES" --argjson ops "$R_OPS" --argjson wish "$R_WISH" \
+        '{schema: 1, accion: "restaurar", copia: $copia, resultado: "hecha", series: $series, issues: $issues, files: $files, operaciones: $ops, wishlist: $wish}' \
+        >"${BACKUP_STATUS_DIR:-/var/lib/zascarr/backup-status}/ops-restaurar.json" 2>/dev/null || true
+fi

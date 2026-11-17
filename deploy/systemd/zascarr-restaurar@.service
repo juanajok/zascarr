@@ -1,0 +1,21 @@
+[Unit]
+Description=ZascArr — restaurar la copia %i (BL-OPS2)
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=-/etc/default/zascarr
+Environment=ZASCARR_REPO=/opt/zascarr/zascarr
+ExecStart=/usr/local/lib/zascarr/restaurar-produccion %i
+SuccessExitStatus=75
+TimeoutStartSec=600
+RuntimeMaxSec=600
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/zascarr /var/lib/zascarr /var/backups/zascarr
+CapabilityBoundingSet=
