@@ -19,3 +19,14 @@
     <span class="barra-vista-texto">Lista</span>
   </a>
 </div>
+<div id="control-densidad" class="barra-vista barra-vista-grupo" role="group" aria-label="Densidad de la biblioteca"
+     {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% for valor, etiqueta in (("grande", "Grande"), ("intermedia", "Intermedia"), ("compacta", "Compacta")) %}
+  {% set url = url_densidad_grande if valor == "grande" else (url_densidad_intermedia if valor == "intermedia" else url_densidad_compacta) %}
+  {% set frag = url_densidad_grande_fragmento if valor == "grande" else (url_densidad_intermedia_fragmento if valor == "intermedia" else url_densidad_compacta_fragmento) %}
+  <a class="barra-densidad-opcion{% if densidad == valor %} barra-vista-opcion-actual{% endif %}"
+     href="{{ url }}" hx-get="{{ frag }}" hx-target="#rejilla" hx-swap="innerHTML"
+     {% if densidad == valor %}aria-current="true"{% endif %}
+     title="Densidad {{ etiqueta|lower }}"><span class="barra-densidad-texto">{{ etiqueta }}</span></a>
+  {% endfor %}
+</div>

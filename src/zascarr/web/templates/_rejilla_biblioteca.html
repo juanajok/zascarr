@@ -20,6 +20,8 @@
   {% include "_filtros_panel_campos.html" %}
 </div>
 <input type="hidden" id="f-vista" name="vista" value="{{ filtros.vista }}" hx-swap-oob="true">
+<input type="hidden" id="f-densidad" name="densidad" value="{{ densidad }}" hx-swap-oob="true">
+<input type="hidden" id="f-modo" name="modo" value="{{ modo }}" hx-swap-oob="true">
 {% include "_control_vista.html" %}
 {% endif %}
 <div id="resumen-biblioteca" class="resumen-biblioteca">
@@ -132,7 +134,7 @@
   </tbody>
 </table>
 {% else %}
-<div class="library-grid">
+<div class="library-grid library-grid-{{ densidad }}">
   {% for series in items %}
   <div class="library-card-wrap">
   <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}">
@@ -159,6 +161,16 @@
       </div>
     </div>
   </a>
+  <div class="library-card-chips">
+    {% if series.start_year %}
+    {% set u = url_chip("anio_desde", series.start_year|string) %}
+    <a class="chip chip-filtro" href="{{ u }}" hx-get="/ui/biblioteca/resultados?{{ u.split('?', 1)[1] }}" hx-target="#rejilla" hx-swap="innerHTML">{{ series.start_year }}</a>
+    {% endif %}
+    {% if series.tradition %}
+    {% set u = url_chip("tradition", series.tradition) %}
+    <a class="chip chip-filtro" href="{{ u }}" hx-get="/ui/biblioteca/resultados?{{ u.split('?', 1)[1] }}" hx-target="#rejilla" hx-swap="innerHTML">{{ series.tradition|tradicion }}</a>
+    {% endif %}
+  </div>
   {% set compacto = true %}{% include "_favorito_boton.html" %}
   <a class="btn ghost sm visor-portada-boton visor-tarjeta"
      href="/ui/series/{{ series.id }}/portada-hd.jpg"

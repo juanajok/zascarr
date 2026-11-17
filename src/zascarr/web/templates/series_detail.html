@@ -28,7 +28,7 @@
   </span>
   <div>
     <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle anio-titulo">({{ series.start_year }})</span>{% endif %}</h1>
-    {% if series.publisher %}<p class="series-meta">{{ series.publisher.name }}</p>{% endif %}
+    {% if series.publisher %}<p class="series-meta"><a class="chip chip-filtro" href="/ui/biblioteca?publisher_id={{ series.publisher.id }}">{{ series.publisher.name }}</a></p>{% endif %}
     {% if series.genres %}
     <p class="series-meta">{{ series.genres|map(attribute="name")|join(", ") }}</p>
     {% endif %}
@@ -166,7 +166,7 @@
     {% if sinopsis_resto %}<details><summary>{{ textos_ficha.sinopsis_completa }}</summary><p>{{ sinopsis_resto }}</p></details>{% endif %}
   </div>
   <dl class="ficha-serie-meta">
-    <div><dt>{{ textos_ficha.editorial }}</dt><dd>{% if series.publisher %}{{ series.publisher.name }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
+    <div><dt>{{ textos_ficha.editorial }}</dt><dd>{% if series.publisher %}<a class="chip chip-filtro" href="/ui/biblioteca?publisher_id={{ series.publisher.id }}">{{ series.publisher.name }}</a>{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos_ficha.inicio }}</dt><dd>{% if series.start_year %}{{ series.start_year }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
     <div><dt>Referencia</dt><dd>{% if series.reference_name %}{{ series.reference_name }}{% else %}{{ series.title }}{% endif %}</dd></div>
     {% if series.language %}
@@ -189,7 +189,7 @@
   <dl class="ficha-autores">
     {% for clave, etiqueta in roles_ficha %}
     {% if clave in ("writer", "penciler") and ficha.autores.get(clave) %}
-    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{% if a.id %}<a href="/ui/biblioteca?author_id={{ a.id }}">{{ a.nombre }}</a>{% else %}{{ a.nombre }}{% endif %} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
+    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{% if a.id %}<a class="chip chip-filtro" href="/ui/biblioteca?author_id={{ a.id }}">{{ a.nombre }}</a>{% else %}{{ a.nombre }}{% endif %} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
     {% endif %}
     {% endfor %}
   </dl>
