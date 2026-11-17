@@ -24,6 +24,7 @@ TITULOS = {
     "rescanear": "Revisando la biblioteca",
     "registrar": "Registrando tu biblioteca",
     "convertir": "Convirtiendo tebeos",
+    "deshacer": "Deshaciendo una conversión",
     "paquete": "Preparando un paquete",
     "descarga": "Descargando de Deseados",
     "copia": "Copiando y verificando",
@@ -35,6 +36,7 @@ class TipoTarea(StrEnum):
     RESCANEAR = "rescanear"
     REGISTRAR = "registrar"
     CONVERTIR = "convertir"
+    DESHACER = "deshacer"
     PAQUETE = "paquete"
     DESCARGA = "descarga"
     COPIA = "copia"
@@ -109,7 +111,8 @@ def iniciar(tipo: TipoTarea | str, *, total: int | None = None, fase: str | None
             enlace = None
         unidades = {"importar": "archivos", "registrar": "archivos",
                     "rescanear": "archivos", "descarga": "deseos",
-                    "copia": "elementos", "convertir": "tebeos", "paquete": "tebeos"}
+                    "copia": "elementos", "convertir": "tebeos", "deshacer": "tebeos",
+                    "paquete": "tebeos"}
         t = Tarea(id=secrets.token_hex(4), tipo=tipo, titulo=TITULOS[tipo.value],
                   fase=fase, total=total, enlace=enlace, run_id=run_id,
                   unidad=unidades.get(tipo.value),

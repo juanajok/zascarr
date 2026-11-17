@@ -123,3 +123,104 @@ def test_estado_no_expone_conversion_de_otra_serie(monkeypatch):
     finally:
         app.dependency_overrides.pop(get_db, None)
         web._CONVERSIONES.clear()
+
+
+def test_poda_de_conversiones():
+    serie = _serie()
+    web._CONVERSIONES.clear()
+    web._CONVERSIONES_FIN.clear()
+    for i in range(25):
+        web._CONVERSIONES[f"t{i}"] = {"tipo": "individual", "series": serie}
+    web._podar_conversiones()
+    assert len(web._CONVERSIONES) <= 20
+
+
+def test_error_obj_en_fondo_confirmar(monkeypatch):
+
+    class TokenCaducadoError(Exception):
+        pass
+
+    class _SesionCtx:
+        async def __aenter__(self):
+            return SimpleNamespace()
+
+        async def __aexit__(self, *a):
+            return False
+
+    class _Servicio:
+        def __init__(self, *_a, **_k):
+            pass
+
+        async def confirmar(self, *_a, **_k):
+            raise TokenCaducadoError("caducado")
+
+    web._CONVERSIONES.clear()
+    web._CONVERSIONES["tid-err"] = {"tipo": "individual", "series": _serie(),
+                                    "file_id": uuid4(), "resultado": None, "error": None}
+    monkeypatch.setattr(web.database, "async_session_factory", lambda: _SesionCtx())
+    monkeypatch.setattr(web, "ConversionDeArchivo", _Servicio)
+    asyncio.run(web._fondo_confirmar("tid-err", "tok", uuid4(), uuid4(), False))
+    assert web._CONVERSIONES["tid-err"]["error"] == "TokenCaducadoError"
+    assert isinstance(web._CONVERSIONES["tid-err"]["error_obj"], TokenCaducadoError)
+    web._CONVERSIONES.clear()
+
+
+def test_deshacer_no_bloquea(monkeypatch):
+    serie = _serie()
+
+    async def _db():
+        yield _Sesion(serie)
+
+    app.dependency_overrides[get_db] = _db
+    tareas._reset_para_pruebas()
+
+    async def _lento(*_a, **_k):
+        await asyncio.sleep(2.0)
+
+    monkeypatch.setattr(web, "_fondo_deshacer", _lento)
+    try:
+        c = TestClient(app)
+        inicio = time.monotonic()
+        r = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/convertir/deshacer",
+                   data={"token": "x"}, headers={"HX-Request": "true"})
+        assert r.status_code == 200 and time.monotonic() - inicio < 1.0
+        assert "Conversión en curso" in r.text
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        tareas._reset_para_pruebas()
+        web._CONVERSIONES.clear()
+        web._CONVERSIONES_ACTIVAS.clear()
+        web._CONVERSIONES_FIN.clear()
+
+
+def test_paquete_crea_y_cierra_tarea(monkeypatch):
+    from zascarr.models import PaqueteEstado
+    from zascarr.web import auditoria
+
+    class _Op:
+        id = uuid4()
+        estado = PaqueteEstado.VERIFICADO
+        total_entradas = 2
+        items = [{"nombre": "a.cbz"}, {"nombre": "b.cbz"}]
+
+    class _SesionCtx:
+        async def __aenter__(self):
+            return SimpleNamespace(get=lambda *a, **k: _async_return(_Op()))
+
+        async def __aexit__(self, *a):
+            return False
+
+    async def _publicar(*_a, **_k):
+        return _Op()
+
+    tareas._reset_para_pruebas()
+    monkeypatch.setattr(auditoria.database, "async_session_factory", lambda: _SesionCtx())
+    monkeypatch.setattr(auditoria, "publicar_e_importar", _publicar)
+    asyncio.run(auditoria._procesar_paquete(str(uuid4())))
+    recientes = tareas.snapshot(incluir_recientes=True, ahora=time.monotonic() + 1)["tareas"]
+    assert recientes and recientes[-1]["tipo"] == "paquete"
+    assert recientes[-1]["estado"] in {"terminada", "error"}
+
+
+async def _async_return(valor):
+    return valor
