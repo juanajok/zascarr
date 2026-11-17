@@ -1675,6 +1675,13 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
 
 **Notas de proceso:**
 
+- **Benchmark de «seguir serie» (2026-11-17, nivel 2 §13):** ficha en
+  `docs/design/benchmark-seguimiento-series-2026-11-17.md` con Sonarr 4.0.20, Radarr 7.0.3,
+  Mylar3 0.8.3, Kapowarr 1.3.2 y Suwayomi 2.4.2366. Conclusión: reutilizar **Novedades**
+  (Comic Vine + Norma/Panini, ya cruza series seguidas) y el **notificador** webhook, con
+  un flag `follow_new_issues` por serie (opción A) en vez de reutilizar la política de
+  huecos; pendiente decidir la señal de disponibilidad (`store_date` vs `cover_date`) y
+  el origen `SEGUIMIENTO` frente a `MANUAL`.
 - **Huecos del benchmark de Deseados cerrados (2026-11-17):** #973 (panel de cola/progreso),
   #983 (cancelar la espera + buscar en lote, máx. 8), #984 (carpeta de Transmission
   editable y aviso al probar; §5.8 con SecOps favorable sobre `9b91a826`) y #985
@@ -2151,7 +2158,12 @@ como importado con «recuperado»).
   previo a D8, vive en `huecos_de_serie`, y queda pendiente de medir con la
   biblioteca real.
 
-## Deuda técnica registrada (observabilidad del logging, 2026-09-30)
+## Deuda técnica registrada (observabilidad del logging, 2026-09-30) — resuelta parcialmente 2026-11-17
+
+> `LOG_LEVEL`/`LOG_JSON` ya se cablean a structlog, stdout es JSON y las peticiones llevan
+> `request_id`; ver `docs/design/benchmark-logs-zascarr.md`. La rotación sigue siendo de Docker
+> y el saneo de #369 no cambia.
+
 
 Encontrado al implementar E4 (el aviso de importación): el módulo de avisos
 construye URLs que **llevan el secreto dentro** (en Telegram, el token del bot:

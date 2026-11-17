@@ -842,7 +842,7 @@ class Importer:
             report.duplicates.append(
                 f"{path.name} — duplicado de {outcome.duplicate_of}, descartado"
             )
-            logger.info(
+            logger.debug(
                 "importer.duplicate",
                 inodo=path.stat(follow_symlinks=False).st_ino,
                 formato=path.suffix.lstrip(".") or "sin_extension",

@@ -306,7 +306,8 @@ class TestIgnorar:
         with use_fake_session(FakeSession(get_map={(File, file.id): file})) as client:
             r = client.post(f"/ui/pendientes/{file.id}/ignorar")
         assert r.status_code == 200
-        assert r.text == RECONTAR_MENU          # la tarjeta desaparece; el menú recuenta
+        assert RECONTAR_MENU in r.text          # el menú recuenta
+        assert f'<li id="item-{file.id}" hx-swap-oob="delete"></li>' in r.text
         assert file.review_dismissed is True
 
     def test_ignorar_confirma_antes_de_responder(self, tmp_path):

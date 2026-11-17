@@ -102,6 +102,9 @@ def _card(f: File) -> dict:
     return {
         "file": f,
         "detected": _detected_label(f.file_name),
+        "formato": ((f.file_format.value.upper()
+                     if getattr(f, "file_format", None) is not None else
+                     Path(f.file_name).suffix.lstrip(".").upper()) or "?"),
         "suggestion": _suggestion(f),
         "puede_vincular": _puede_vincular(f),
         # U12: ausencia CONOCIDA (por la extensión, sin I/O): ni `<img>` ni petición ni bloque.
@@ -775,4 +778,7 @@ async def ignorar(file_id: UUID, db: AsyncSession = Depends(get_db)) -> HTMLResp
     # Se confirma AQUÍ y no en `get_db` (que lo hace DESPUÉS de responder): el menú pide su contador
     # en cuanto llega la respuesta y, si el commit aún no ha ocurrido, contaría el archivo ignorado.
     await db.commit()
-    return HTMLResponse(RECONTAR_MENU)
+    # La fila es un <li>; quitar solo #card dejaría un <li> vacío en la lista.
+    # `delete` fuera de banda retira el contenedor completo.
+    return HTMLResponse(
+        RECONTAR_MENU + f'<li id="item-{file_id}" hx-swap-oob="delete"></li>')
