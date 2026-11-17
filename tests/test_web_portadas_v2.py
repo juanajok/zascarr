@@ -342,7 +342,8 @@ class TestRenderNoGeneraPortadas:
                 self._cola = [_R([]), _R(len(series)), _R(series)]
 
             async def execute(self, _statement):
-                return self._cola.pop(0)
+                # BL-INF7: la rejilla pide una consulta agregada de números.
+                return self._cola.pop(0) if self._cola else _R([])
 
         return _Sesion()
 
