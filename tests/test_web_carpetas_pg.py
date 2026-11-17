@@ -1357,7 +1357,7 @@ class TestMarcaCarpetaMixta382:
         )
         r = await pagina({"serie": str(sid_a)})
         t = visible(r.text)
-        assert "Sugerida para esta serie" in t
+        assert re.search(CHIP_SUGERIDA, r.text)
         assert "La sugieren 3 de 5 registros con sugerencia; el resto apunta a otra serie." in t
 
     async def test_minoria_no_lleva_marca_y_el_detalle_no_afirma_que_sea_de_la_serie(self, banco):
@@ -1371,7 +1371,7 @@ class TestMarcaCarpetaMixta382:
         )
         r = await pagina({"serie": str(sid_a)})
         t = visible(r.text)
-        assert "Sugerida para esta serie" not in t
+        assert not re.search(CHIP_SUGERIDA, r.text)
         assert "La sugieren 3 de 5 registros con sugerencia; el resto apunta a otra serie." in t
 
     async def test_homogenea_dice_todos(self, banco):
@@ -1382,7 +1382,7 @@ class TestMarcaCarpetaMixta382:
         )
         r = await pagina({"serie": str(sid)})
         t = visible(r.text)
-        assert "Sugerida para esta serie" in t
+        assert re.search(CHIP_SUGERIDA, r.text)
         assert "La sugieren los 3 registros con sugerencia." in t
 
 
@@ -1394,7 +1394,7 @@ class TestMarcaCarpetaMixta382:
             archivo("Comics/Empate/B 01.cbz", estado="direct", cands=candidatas(sid_b, "SERIE B", 2021)),
         )
         r = await pagina({"serie": str(sid_a)})
-        assert "Sugerida para esta serie" not in visible(r.text)
+        assert not re.search(CHIP_SUGERIDA, r.text)
 
     async def test_un_solo_registro_singular(self, banco):
         sid = await banco.serie("SERIE UNICA", 2020)
@@ -1404,3 +1404,11 @@ class TestMarcaCarpetaMixta382:
         r = await pagina({"serie": str(sid)})
         t = visible(r.text)
         assert "La sugiere el único registro con sugerencia." in t
+
+
+    async def test_sin_sugerencia_no_lleva_chip_ni_recuento(self, banco):
+        sid = await banco.serie("SERIE A", 2020)
+        await banco.sembrar(archivo("Comics/SinSugerencia/X 01.cbz"))
+        r = await pagina({"serie": str(sid)})
+        assert not re.search(CHIP_SUGERIDA, r.text)
+        assert "La sugieren" not in visible(r.text)
