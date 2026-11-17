@@ -35,6 +35,7 @@ class EstadoBarrida:
     recolectadas: int = 0
     aplicados: int = 0
     conflictos: int = 0
+    fallos: int = 0
     series_conflictos: tuple[dict, ...] = ()
     iniciada_en: datetime | None = None
     terminada_en: datetime | None = None
@@ -86,7 +87,7 @@ def iniciar_barrida() -> bool:
 
 
 def _series_con_id():
-    return select(Series).where(or_(
+    return select(Series.id).where(or_(
         Series.comic_vine_id.is_not(None),
         Series.tebeosfera_slug.is_not(None),
         Series.gcd_id.is_not(None),
@@ -114,8 +115,10 @@ async def ejecutar_barrida() -> None:
                 ids = list((await db.execute(_series_con_id())).scalars().all())
                 _actualizar(total=len(ids))
                 for pos, serie_id in enumerate(ids, start=1):
-                    await _procesar_serie(db, abierto["adaptadores"], serie_id)
-                    _actualizar(procesadas=pos, lote=((pos - 1) // 20) + 1)
+                    correcta = await _procesar_serie(db, abierto["adaptadores"], serie_id)
+                    _actualizar(
+                        procesadas=pos, lote=((pos - 1) // 20) + 1,
+                        fallos=_ESTADO.fallos + (0 if correcta else 1))
                 _actualizar(estado="completada", terminada_en=datetime.now(UTC))
         except Exception as exc:  # noqa: BLE001 — el fondo no tumba la app
             logger.exception("ccm.barrida_fallida")
@@ -126,12 +129,12 @@ async def ejecutar_barrida() -> None:
                 await abierto["pila"].aclose()
 
 
-async def _procesar_serie(db, adaptadores, serie_id) -> None:
+async def _procesar_serie(db, adaptadores, serie_id) -> bool:
     """Recolecta una serie, aplica huecos seguros y cuenta conflictos."""
     try:
         serie = await db.get(Series, serie_id)
         if serie is None:
-            return
+            return False
         informe = await Recolector(db, adaptadores).recolectar_serie(serie)
         await db.commit()
         _actualizar(recolectadas=_ESTADO.recolectadas + informe.guardados)
@@ -158,6 +161,8 @@ async def _procesar_serie(db, adaptadores, serie_id) -> None:
                     "campos": len(conflictos),
                 },),
             )
+        return True
     except Exception:  # noqa: BLE001 — una serie no corta la barrida
         await db.rollback()
         logger.exception("ccm.barrida_serie_fallida", serie_id=str(serie_id))
+        return False

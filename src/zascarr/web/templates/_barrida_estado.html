@@ -4,9 +4,10 @@
   {% if barrida.estado == "en_curso" %}
     <p><strong>Barrida inicial en curso.</strong> Se procesan las series con ID en tandas de 20; puedes seguir usando ZascArr.</p>
     {{ ui.progreso(barrida.procesadas, barrida.total, "Series procesadas en la barrida inicial") }}
-    <p class="caption">{{ barrida.procesadas }} de {{ barrida.total }} series · lote {{ barrida.lote }} · {{ barrida.recolectadas }} fichas · {{ barrida.aplicados }} campos completados · {{ barrida.conflictos }} conflictos.</p>
+    <p class="caption">{{ barrida.procesadas }} de {{ barrida.total }} series · lote {{ barrida.lote }} · {{ barrida.recolectadas }} fichas · {{ barrida.aplicados }} campos completados · {{ barrida.conflictos }} conflictos{% if barrida.fallos %} · {{ barrida.fallos }} fallos{% endif %}.</p>
   {% elif barrida.estado == "completada" %}
     {{ ui.aviso("ok", "Barrida inicial terminada: " ~ barrida.recolectadas ~ " fichas, " ~ barrida.aplicados ~ " campos completados y " ~ barrida.conflictos ~ " conflictos para revisar.") }}
+    {% if barrida.fallos %}{{ ui.aviso("amber", barrida.fallos ~ " series no se pudieron procesar. Vuelve a lanzar la barrida para reintentarlas.") }}{% endif %}
     {% if barrida.terminada_en %}<p class="caption">Terminada el {{ barrida.terminada_en.strftime("%d-%m-%Y %H:%M") }}.</p>{% endif %}
   {% elif barrida.estado == "error" %}
     {{ ui.aviso("amber", barrida.error or "La barrida se ha detenido.") }}
