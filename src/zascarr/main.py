@@ -154,6 +154,31 @@ async def _rescan_loop(interval_minutes: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
+async def _ccm_comicinfo_loop() -> None:
+    """CCM-5: sincroniza `ComicInfo.xml` de números consolidados, de uno en uno.
+
+    Un solo worker, pausa de I/O y commits por número. No corre en el GET ni
+    dentro de la petición de consolidación; si un archivo está compartido o
+    ausente queda pendiente para la siguiente vuelta.
+    """
+    from zascarr.database import async_session_factory
+    from zascarr.services.consolidacion.cola_comicinfo import SincronizadorComicInfo
+
+    logger.info("ccm.comicinfo_scheduler_started")
+    while True:
+        try:
+            async with async_session_factory() as db:
+                informe = await SincronizadorComicInfo(db).procesar_lote()
+            if informe.escritos or informe.aplazados or informe.errores:
+                logger.info("ccm.comicinfo_cycle_done",
+                            escritos=informe.escritos,
+                            aplazados=informe.aplazados,
+                            errores=informe.errores)
+        except Exception:
+            logger.exception("ccm.comicinfo_cycle_failed")
+        await asyncio.sleep(60)
+
+
 async def _upgrades_loop() -> None:
     """BL-D3: escaneo acotado de mejoras, con cadencia leída en cada vuelta.
 
@@ -435,6 +460,7 @@ async def lifespan(app: FastAPI):
             )),
             asyncio.create_task(
                 _seguimiento_loop(settings.seguimiento_interval_minutes)),
+            asyncio.create_task(_ccm_comicinfo_loop()),
         ]
         # BL-R9: rescan periódico de la biblioteca; 0 lo desactiva.
         if settings.rescan_interval_minutes > 0:
