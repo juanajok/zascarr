@@ -9,7 +9,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import InterfaceError, OperationalError, ProgrammingError
 
 from zascarr.config import get_settings
 from zascarr.services.ciclo_importador import ejecutar_ciclo_y_avisar
@@ -541,7 +541,12 @@ def create_app() -> FastAPI:
     from zascarr.web.desvinculacion import router as desvinculacion_ui_router
     from zascarr.web.discovery import router as discovery_router
     from zascarr.web.disponibilidad import router as disponibilidad_router
-    from zascarr.web.errores import manejar_http, manejar_inesperado, pagina_error
+    from zascarr.web.errores import (
+        manejar_bd_no_disponible,
+        manejar_http,
+        manejar_inesperado,
+        pagina_error,
+    )
     from zascarr.web.estado import router as estado_router
     from zascarr.web.exportar import router as exportar_router
     from zascarr.web.lector import router as lector_router
@@ -651,6 +656,8 @@ def create_app() -> FastAPI:
     # Página de error propia para quien navega (404, otros HTTPException y 500): la API y HTMX
     # conservan su respuesta. Ver web/errores.py.
     app.add_exception_handler(StarletteHTTPException, manejar_http)
+    app.add_exception_handler(OperationalError, manejar_bd_no_disponible)
+    app.add_exception_handler(InterfaceError, manejar_bd_no_disponible)
     app.add_exception_handler(Exception, manejar_inesperado)
 
     return app
