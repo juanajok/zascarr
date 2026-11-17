@@ -20,7 +20,8 @@ def test_constantes_hd_y_plantilla_dialogo():
     assert "portada-hd.jpg" in ficha
     assert "visor-portada-boton" in ficha and 'href="/ui/series/' in ficha
     assert "visor-portada-boton" in rejilla and "portada-hd.jpg" in rejilla
-    assert "visor-portada.js" in base
+    assert "visor-portada.js" in ficha and "visor-portada.js" in Path("src/zascarr/web/templates/biblioteca.html").read_text()
+    assert "visor-portada.js" not in base
     assert "restaurar" not in js and "invocador.focus()" in js and "showModal" in js
     assert "ArrowLeft" in js and "ArrowRight" in js
 
