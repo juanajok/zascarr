@@ -70,6 +70,14 @@ Implicaciones para ZascArr:
 
 ---
 
+### 4.1 Registro de aceptación (OCTA-E3)
+
+La aceptación del aviso se guarda en `legal_acknowledgments` con `id`, `accepted_at` y
+`legal_version` (sha256 de este fichero). No se guarda IP, user-agent ni identidad: no hay
+cuentas y ZascArr es de un solo operador. La tabla es **append-only** por contrato de la app;
+no hay ruta que borre o actualice aceptaciones. Si cambia este documento, cambia el hash y la
+aceptación anterior deja de ser válida automáticamente.
+
 ## 5. Responsabilidades del usuario
 
 Al usar ZascArr, el usuario acepta que:
@@ -100,14 +108,14 @@ Algunas fuentes de metadatos usadas por ZascArr tienen licencias propias:
 
 | Fuente | Licencia / Términos | Obligaciones |
 |---|---|---|
-| **Gran Catálogo de la Historieta (Tebeosfera)** | Uso personal; base de datos protegida por derecho *sui generis* | No redistribuir extractos; respetar `robots.txt`; uso local del usuario |
+| **Gran Catálogo de la Historieta (Tebeosfera)** | Uso personal; base de datos protegida por derecho *sui generis* | No redistribuir extractos; respetar `robots.txt`; uso local del usuario. **No se descargan sus portadas** (OCTA-E5); se leen solo datos factuales y se enlaza a la ficha |
 | **Whakoom** | CC-BY-SA para contenido textual; portadas  editoriales | Atribución requerida si se redistribuye; portadas no incluidas |
 | **Comic Vine** | Términos de uso propios; API con rate limits | Uso conforme a sus términos; no redistribución masiva |
 | **AniList** | API pública con términos de uso | Uso conforme a sus términos |
 | **Grand Comics Database (GCD)** | CC BY-SA 4.0; API REST pública en `/api/`, anónima, con límite por hora no especificado | Atribución + enlace de vuelta a la ficha de GCD (cumplido: enlace directo en cada resultado de `/ui/descubrir`); sin redistribución masiva, solo búsqueda puntual bajo demanda del coleccionista |
 | **Metron** | CC BY-SA 4.0; API con token propio y 20 peticiones/min | Atribución visible en la ficha (enlace a la ficha y a la licencia CC BY-SA 4.0). **Sin portadas**: no se descargan ni cachean. Solo se leen datos bibliográficos y la descripción para rellenar huecos por id; sin búsqueda por título ni redistribución de textos |
 | **Open Library** | Datos de Internet Archive; licencia vigente en su web | Atribución visible en la ficha (enlace a la obra y a su página de licencias). Solo obras/tomos ya identificados por su id; sin portadas en el relleno ni redistribución de textos |
-| **DC Database y Marvel Database (Fandom)** | Texto de la comunidad bajo CC-BY-SA 3.0; las portadas son *fair use* editorial (no cubiertas por esa licencia); se consumen solo por su API oficial `/api.php`, apagadas por defecto y con 1,5 s entre peticiones por wiki | Atribución visible en la UI: enlace al artículo original **y** a la licencia CC-BY-SA 3.0. Las portadas se cachean en el disco del usuario solo para identificar su colección (sin hotlinking ni redistribución) y **no** se etiquetan como CC-BY-SA. Sin redistribución de textos ni de fichas |
+| **DC Database y Marvel Database (Fandom)** | Texto de la comunidad bajo CC-BY-SA 3.0; las portadas son © de sus titulares y **no** están cubiertas por esa licencia; se consumen solo por su API oficial `/api.php`, apagadas por defecto y con 1,5 s entre peticiones por wiki | Atribución visible en la UI: enlace al artículo original **y** a la licencia CC-BY-SA 3.0. Las portadas se cachean en el disco del usuario solo para identificar su colección (sin hotlinking ni redistribución) y **no** se etiquetan como CC-BY-SA. Sin redistribución de textos ni de fichas |
 | **Comic Book Reading Orders** | Solo **referencias fácticas** de lectura (serie, número y orden); declara `Content-Signal: use=reference`; se lee su HTML público y su `sitemap.xml`, apagada por defecto y con 2,5 s entre peticiones | No se almacena ni redistribuye la prosa del autor ni se usa en IA: solo se guardan el título de la guía, el enlace a la guía y las referencias (serie/número/año/orden). Respetar `robots.txt`; atribución con enlace a la guía original en la vista de la saga. Uso personal del usuario |
 | **Continuity Guide** | Solo **referencias fácticas** de lectura; se lee su HTML público y su `sitemap.xml` (nunca `?format=json`, que su `robots.txt` prohíbe), apagada por defecto y con 3,5 s entre peticiones | No se almacena ni redistribuye la prosa ni los títulos de arco entre comillas; solo la referencia y el enlace a la guía. Sin hotlinking ni descarga de sus imágenes. Atribución con enlace a la guía original. Uso personal del usuario |
 
@@ -122,6 +130,14 @@ El resto de campos del ComicInfo (año, editorial, créditos, género, páginas)
 El marcador `comicinfo_propio` **no es una prueba de autoría jurídica**: solo indica que ZascArr escribió ese campo en una pasada anterior y puede actualizarlo sin tratar el valor actual como texto manual ajeno. Si la persona comparte el archivo, sigue siendo su decisión y su responsabilidad; ZascArr no controla los programas P2P ni la licitud de la compartición.
 
 Esta decisión sustituye a la parte de CNV5-4 que iba a aplicar datos de fuentes al archivo. No se crea una base de datos pre-poblada ni se redistribuyen metadatos de terceros; la caché local del usuario no cambia.
+
+### 7.2 Reglas de extracción (OCTA-E4)
+
+Solo se consultan **datos factuales** (título, año, editorial, número, créditos, fecha,
+identificadores y enlace) para uso privado. No se copian sinopsis, reseñas ni prosa creativa, y
+no se publican volcados, CSV completos ni bases pre-pobladas. Cada fuente conserva su límite de
+la tabla de §7; Tebeosfera exige permiso explícito para cualquier reutilización de su base. El
+dictamen completo está en `docs/design/politica-extraccion-fuentes-2026-11-17.md`.
 
 ---
 
