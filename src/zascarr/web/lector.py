@@ -59,6 +59,7 @@ async def leer(request: Request, file_id: UUID,
         "origen_sentido": origen_sentido,
     })
     respuesta.headers["Cache-Control"] = "no-store"
+    respuesta.headers["X-Content-Type-Options"] = "nosniff"
     return respuesta
 
 

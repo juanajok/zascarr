@@ -112,25 +112,35 @@
     if (nuevo !== "ancho" && nuevo !== "pantalla" && nuevo !== "doble") return;
     modo = nuevo;
     if (modo !== "doble") { desplazamiento = 0; paginaBVisible = false; }
+    else decidirPareja();
     try { window.localStorage.setItem("zascarr.lector.modo", modo); } catch (_) { /* igual */ }
     pinta();
   };
   const cambiarSentido = () => {
+    const anteriorSentido = sentido;
     sentido = sentido === "rtl" ? "ltr" : "rtl";
+    const aviso = document.getElementById("lector-origen-sentido");
     fetch(urlSentido, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ sentido }).toString(),
       credentials: "same-origin",
-    }).catch(() => {});
-    const aviso = document.getElementById("lector-origen-sentido");
-    if (aviso) aviso.textContent = "Sentido guardado para esta serie.";
+    }).then((respuesta) => {
+      if (!respuesta.ok) throw new Error("no guardado");
+      if (aviso) aviso.textContent = "Sentido guardado para esta serie.";
+    }).catch(() => {
+      sentido = anteriorSentido;
+      if (aviso) aviso.textContent = "No se pudo guardar el sentido; sigue valiendo el anterior.";
+    }).finally(pinta);
     pinta();
   };
 
-  imagen.addEventListener("load", () => {
-    if (modo !== "doble") { paginaBVisible = false; pinta(); return; }
+  const decidirPareja = () => {
+    if (modo !== "doble" || !imagen.naturalWidth) { paginaBVisible = false; return; }
     paginaBVisible = !esApaisada(imagen);
+  };
+  imagen.addEventListener("load", () => {
+    decidirPareja();
     pinta();
   });
   imagenB.addEventListener("load", () => {
@@ -150,12 +160,18 @@
     pinta();
   });
   botonSentido.addEventListener("click", cambiarSentido);
-  if (botonPantalla && botonPantalla.requestFullscreen) {
+  const pantallaDisponible = typeof document.documentElement.requestFullscreen === "function";
+  const alternarPantalla = () => {
+    if (!pantallaDisponible) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    } else {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  };
+  if (botonPantalla && pantallaDisponible) {
     botonPantalla.hidden = false;
-    botonPantalla.addEventListener("click", () => {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else document.documentElement.requestFullscreen().catch(() => {});
-    });
+    botonPantalla.addEventListener("click", alternarPantalla);
   }
 
   document.addEventListener("keydown", (evento) => {
@@ -165,7 +181,7 @@
     if (evento.key === siguienteTecla || evento.key === "PageDown") { evento.preventDefault(); avanzar(); }
     else if (evento.key === anteriorTecla || evento.key === "PageUp") { evento.preventDefault(); retroceder(); }
     else if (evento.key === " ") { evento.preventDefault(); evento.shiftKey ? retroceder() : avanzar(); }
-    else if (evento.key === "f") { evento.preventDefault(); if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => {}); }
+    else if (evento.key === "f") { evento.preventDefault(); alternarPantalla(); }
     else if (evento.key === "m") { evento.preventDefault(); cambiarModo(modo === "ancho" ? "pantalla" : modo === "pantalla" ? "doble" : "ancho"); }
     else if (evento.key === "Escape") { if (menu.hidden) window.location.assign(volver); else alternarMenu(); }
     else if (evento.key === "Home") { evento.preventDefault(); ir(1); }
@@ -197,5 +213,7 @@
     else alternarMenu();
   }, { passive: true });
 
+  pinta();
+  if (imagen.complete && imagen.naturalWidth) decidirPareja();
   pinta();
 })();
