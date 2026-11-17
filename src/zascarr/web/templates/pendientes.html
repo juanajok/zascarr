@@ -32,7 +32,7 @@
 {% endif %}
 {% if not cards %}
 {% if solo_sugerencia %}
-{{ ui.estado_vacio("No hay pendientes con sugerencia", "Puedes ver todos los pendientes o revisar por carpeta.", ("Ver todos los pendientes", url_todos)) }}
+{{ ui.estado_vacio("No hay pendientes con sugerencia", "Puedes quitarlo desde «Ver todos los pendientes».") }}
 {% else %}
 {{ ui.estado_vacio("Nada pendiente", "Todo lo importado se ha podido clasificar.") }}
 {% endif %}
