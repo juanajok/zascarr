@@ -13,7 +13,9 @@ from zascarr.models import File, Issue, ReadingProgress, Series
 from zascarr.services.lector import (
     LectorError,
     guardar_progreso,
+    guardar_sentido,
     pagina,
+    sentido_de_lectura,
     total_paginas,
 )
 from zascarr.utils.cover import cached_image_response
@@ -50,11 +52,14 @@ async def leer(request: Request, file_id: UUID,
     if actual < 1 or actual > total:
         actual = 1
     serie = await db.get(Series, numero.series_id)
+    sentido, origen_sentido = await sentido_de_lectura(db, file_id)
     respuesta = templates.TemplateResponse(request, "lector.html", {
         "archivo": f, "numero": numero, "serie": serie, "total": total,
-        "pagina_actual": actual,
+        "pagina_actual": actual, "sentido": sentido,
+        "origen_sentido": origen_sentido,
     })
     respuesta.headers["Cache-Control"] = "no-store"
+    respuesta.headers["X-Content-Type-Options"] = "nosniff"
     return respuesta
 
 
@@ -73,6 +78,16 @@ async def pagina_imagen(request: Request, file_id: UUID, n: str,
         request, recurso.datos, recurso.content_type, recurso.etag)
     respuesta.headers["X-Content-Type-Options"] = "nosniff"
     return respuesta
+
+
+@router.post("/{file_id}/sentido", response_class=Response)
+async def cambiar_sentido(file_id: UUID, sentido: str = Form(...),
+                          db: AsyncSession = Depends(get_db)) -> Response:
+    try:
+        await guardar_sentido(db, file_id, sentido)
+    except LectorError:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/{file_id}/progreso", response_class=Response)

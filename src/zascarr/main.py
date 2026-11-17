@@ -228,6 +228,7 @@ async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
     solo saltarse ese ciclo y reintentar en el siguiente.
     """
     from zascarr.database import async_session_factory
+    from zascarr.services.borradores_revision import BorradoresRevision
     from zascarr.services.enricher import EnrichmentService
     from zascarr.utils.cache_http import purgar_cache
 
@@ -240,6 +241,13 @@ async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
             # destruiría el ETag y el cuerpo que hacen posible el 304). `purgar_cache` ya
             # contiene el try/except: un fallo de purga no tumba el ciclo.
             await purgar_cache()
+            # OCTA-D3: los borradores de revisión caducan a los 7 días y nadie
+            # los purgaba. Se hace en el mantenimiento, no en la lectura.
+            async with async_session_factory() as session_borradores:
+                purgados = await BorradoresRevision(session_borradores).purgar_caducados()
+                await session_borradores.commit()
+            if purgados:
+                logger.info("borradores.purgados", total=purgados)
             if report.total_enriched or report.errors:
                 logger.info(
                     "enricher.cycle_done",

@@ -17,6 +17,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.core.comicinfo_write import MAX_COMICINFO_BYTES
 from zascarr.core.formato_contenedor import (
     IMAGE_EXTS,
     MAX_ENTRADAS,
@@ -27,7 +28,8 @@ from zascarr.core.formato_contenedor import (
     natural_key,
     se_lee_como_zip,
 )
-from zascarr.models import File, Issue, ReadingProgress, ReadingStatus
+from zascarr.core.importer_triage import parse_comic_info
+from zascarr.models import File, Issue, ReadingProgress, ReadingStatus, Series
 from zascarr.utils.cover import puede_dar_portada
 
 
@@ -41,6 +43,9 @@ class PaginaFueraDeRangoError(LectorError):
 
 class ArchivoNoLegibleError(LectorError):
     pass
+
+
+SENTIDOS = {"ltr": "izquierda a derecha", "rtl": "derecha a izquierda"}
 
 
 @dataclass(frozen=True)
@@ -70,8 +75,14 @@ def _extension(f: File) -> str:
 
 
 def _es_legible(f: File) -> bool:
-    fc = (f.metadata_ or {}).get("formato_contenido")
+    meta = f.metadata_ or {}
+    fc = meta.get("formato_contenido")
     ext = _extension(f)
+    # La conversión CBR→CBZ cambia `file_format` y la ruta, pero el `formato_contenido`
+    # guardado puede seguir diciendo «rar»: el archivo ya es un ZIP y el botón debe salir.
+    # La lectura vuelve a comprobar la firma antes de servir una página.
+    if ext in (".cbz", ".zip") and (meta.get("conversion") or {}).get("estado") == "convertida":
+        return True
     resultado = puede_dar_portada(ext, fc)
     if resultado is None:
         return ext in (".cbz", ".zip")
@@ -205,6 +216,52 @@ async def guardar_progreso(db: AsyncSession, file_id: UUID, n: int) -> None:
         progreso.status = ReadingStatus.READING
     if progreso.started_at is None:
         progreso.started_at = datetime.now(UTC)
+    await db.flush()
+    await db.commit()
+
+
+def _manga_del_archivo(path: Path) -> str | None:
+    """`<Manga>` del ComicInfo.xml, si el archivo lo trae. Solo lee esa entrada."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            for info in zf.infolist():
+                if Path(info.filename).name.lower() == "comicinfo.xml":
+                    if info.file_size > MAX_COMICINFO_BYTES:
+                        return None
+                    datos = leer_acotado(zf, info, tope=MAX_COMICINFO_BYTES)
+                    return parse_comic_info(datos).manga
+    except (OSError, zipfile.BadZipFile, EntradaNoLegible, ValueError, SyntaxError):
+        return None
+    return None
+
+
+async def sentido_de_lectura(db: AsyncSession, file_id: UUID) -> tuple[str, str]:
+    """Devuelve `(sentido, origen)`; prioridad serie > ComicInfo > tradición."""
+    f = await _abrir(db, file_id)
+    issue = await db.get(Issue, f.issue_id)
+    serie = await db.get(Series, issue.series_id) if issue is not None else None
+    if serie is not None:
+        elegido = (serie.metadata_ or {}).get("lector_sentido")
+        if elegido in SENTIDOS:
+            return elegido, "serie"
+    manga = await asyncio.to_thread(_manga_del_archivo, Path(f.file_path))
+    if manga == "YesAndRightToLeft":
+        return "rtl", "comicinfo"
+    tradicion = getattr(getattr(serie, "tradition", None), "value", None)
+    if tradicion == "manga":
+        return "rtl", "tradicion"
+    return "ltr", "tradicion"
+
+
+async def guardar_sentido(db: AsyncSession, file_id: UUID, sentido: str) -> None:
+    if sentido not in SENTIDOS:
+        raise LectorError("Ese sentido de lectura no existe.")
+    f = await _abrir(db, file_id)
+    issue = await db.get(Issue, f.issue_id)
+    serie = await db.get(Series, issue.series_id) if issue is not None else None
+    if serie is None:
+        raise ArchivoNoLegibleError("Ese archivo no está vinculado a una serie.")
+    serie.metadata_ = {**(serie.metadata_ or {}), "lector_sentido": sentido}
     await db.flush()
     await db.commit()
 

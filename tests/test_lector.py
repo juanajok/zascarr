@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 from tests.test_pendientes import FakeExecResult, FakeSession, use_fake_session
+from zascarr.core.importer_triage import parse_comic_info
 from zascarr.main import app
 from zascarr.models import File, FileFormat, Issue, Series
 from zascarr.services import lector
@@ -71,7 +72,8 @@ async def test_archivos_legibles_por_db(tmp_path):
 def test_pantalla_y_pagina(tmp_path):
     f = _file(tmp_path)
     issue = SimpleNamespace(id=f.issue_id, issue_number="1", series_id=uuid4())
-    serie = SimpleNamespace(id=issue.series_id, title="Serie")
+    serie = SimpleNamespace(id=issue.series_id, title="Serie", metadata_={},
+                            tradition=SimpleNamespace(value="american"))
     db = FakeSession(get_map={(File, f.id): f, (Issue, issue.id): issue,
                               (Series, serie.id): serie},
                      exec_queue=[FakeExecResult([None])])
@@ -127,3 +129,89 @@ def test_la_ficha_tiene_el_enlace_de_leer_sin_escribir():
          / "templates" / "issue_detail.html").read_text(encoding="utf-8")
     assert "lector_archivo" in t and "/ui/leer/" in t
     assert "Continuar (pág." in t
+
+
+def test_comicinfo_lee_manga():
+    info = parse_comic_info(b'<ComicInfo><Manga>YesAndRightToLeft</Manga></ComicInfo>')
+    assert info.manga == "YesAndRightToLeft"
+
+
+@pytest.mark.asyncio
+async def test_sentido_prioridad_serie_comicinfo_tradicion(tmp_path, monkeypatch):
+    f = _file(tmp_path)
+    issue = SimpleNamespace(id=f.issue_id, series_id=uuid4())
+    serie = SimpleNamespace(id=issue.series_id, metadata_={},
+                            tradition=SimpleNamespace(value="manga"))
+    db = FakeSession(get_map={(File, f.id): f, (Issue, issue.id): issue,
+                              (Series, serie.id): serie})
+    monkeypatch.setattr(lector, "_manga_del_archivo", lambda _p: None)
+    assert await lector.sentido_de_lectura(db, f.id) == ("rtl", "tradicion")
+    monkeypatch.setattr(lector, "_manga_del_archivo",
+                        lambda _p: "YesAndRightToLeft")
+    assert await lector.sentido_de_lectura(db, f.id) == ("rtl", "comicinfo")
+    serie.metadata_ = {"lector_sentido": "ltr"}
+    assert await lector.sentido_de_lectura(db, f.id) == ("ltr", "serie")
+
+
+@pytest.mark.asyncio
+async def test_guardar_sentido_por_serie(tmp_path):
+    f = _file(tmp_path)
+    issue = SimpleNamespace(id=f.issue_id, series_id=uuid4())
+    serie = SimpleNamespace(id=issue.series_id, metadata_={"otro": 1},
+                            tradition=SimpleNamespace(value="american"))
+    db = FakeSession(get_map={(File, f.id): f, (Issue, issue.id): issue,
+                              (Series, serie.id): serie})
+    await lector.guardar_sentido(db, f.id, "rtl")
+    assert serie.metadata_ == {"otro": 1, "lector_sentido": "rtl"}
+    assert db.commit.await_count == 1
+
+
+def test_js_lector_tiene_los_contratos_de_lec2():
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
+          / "lector.js").read_text(encoding="utf-8")
+    for pieza in ("localStorage", "Math.abs(dx) >= 50", "2 * Math.abs(dy)",
+                  "requestFullscreen", "touch-action"):
+        assert pieza in js or pieza in (Path(__file__).resolve().parents[1] / "src"
+                                        / "zascarr" / "static" / "web.css").read_text()
+
+
+def test_ruta_sentido_guarda_por_serie(tmp_path):
+    f = _file(tmp_path)
+    issue = SimpleNamespace(id=f.issue_id, series_id=uuid4())
+    serie = SimpleNamespace(id=issue.series_id, metadata_={},
+                            tradition=SimpleNamespace(value="american"))
+    db = FakeSession(get_map={(File, f.id): f, (Issue, issue.id): issue,
+                              (Series, serie.id): serie})
+    with use_fake_session(db):
+        from fastapi.testclient import TestClient
+        r = TestClient(app).post(f"/ui/leer/{f.id}/sentido", data={"sentido": "rtl"})
+    assert r.status_code == 204
+    assert serie.metadata_["lector_sentido"] == "rtl"
+
+
+@pytest.mark.asyncio
+async def test_un_cbz_convertido_con_formato_viejo_es_legible(tmp_path):
+    f = _file(tmp_path)
+    f.metadata_ = {"conversion": {"estado": "convertida"},
+                   "formato_contenido": {"firma": "rar", "contrato": 1}}
+    db = FakeSession(exec_queue=[FakeExecResult([f])])
+    filas = await lector.archivos_legibles(db, f.issue_id)
+    assert [a.id for a in filas] == [str(f.id)]
+
+
+def test_comicinfo_roto_no_tumba_el_lector(tmp_path):
+    ruta = tmp_path / "roto.cbz"
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("ComicInfo.xml", b"<ComicInfo><Manga>YesAndRightToLeft")
+        z.writestr("01.jpg", _jpeg())
+    assert lector._manga_del_archivo(ruta) is None
+
+
+def test_comicinfo_demasiado_grande_se_ignora(tmp_path):
+    ruta = tmp_path / "grande.cbz"
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("ComicInfo.xml", b"<ComicInfo><Manga>YesAndRightToLeft</Manga></ComicInfo>"
+                                   + b" " * (lector.MAX_COMICINFO_BYTES + 10))
+        z.writestr("01.jpg", _jpeg())
+    assert lector._manga_del_archivo(ruta) is None

@@ -363,6 +363,9 @@ h1, h2, h3 {
 html { scroll-padding-bottom: 96px; }
 
 @media (max-width: 860px) {
+  /* El lector es inmersivo: sin barra inferior, que tapaba los controles. Se vuelve con «Volver al número». */
+  body:has(.lector) .nav { display: none; }
+  body:has(.lector) .app > main.content { padding-bottom: 1rem; }
   .app { display: block; }
   .side {
     height: auto; overflow: visible; z-index: 30;
@@ -2745,6 +2748,38 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .lector-controles .btn { flex: 1 1 8rem; min-height: 44px; }
 }
 
+
+
+/* ── Lector BL-LEC2 (#825): modos, táctil y sentido ────────────────────── */
+.lector-lienzo { touch-action: pan-y pinch-zoom; position: relative; }
+.lector-paginas { display: flex; gap: 4px; align-items: center; justify-content: center;
+  width: 100%; max-height: 100%; }
+.lector[data-sentido="rtl"] .lector-paginas { flex-direction: row-reverse; }
+.lector[data-modo="ancho"] .lector-pagina {
+  max-width: 100%; max-height: calc(100vh - 22rem); max-height: calc(100dvh - 22rem); }
+.lector[data-modo="pantalla"] .lector-pagina {
+  max-width: 100%; max-height: calc(100vh - 12rem); max-height: calc(100dvh - 12rem); }
+.lector[data-modo="doble"] .lector-pagina {
+  max-width: 49%; max-height: calc(100vh - 12rem); max-height: calc(100dvh - 12rem); }
+.lector-controles .btn, .lector-menu .btn { min-height: 44px; min-width: 44px; }
+.lector-menu { display: grid; gap: var(--space-2); width: 100%; max-width: 42rem;
+  padding: var(--space-3); border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-panel); background: var(--paper); }
+.lector-menu[hidden] { display: none; }
+.lector-menu-titulo { margin: 0; font-weight: 700; }
+.lector-modos { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.lector-modos .btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+@media (max-width: 480px) {
+  .lector { padding-bottom: 1rem; }
+  .lector .lector-pagina,
+  .lector[data-modo="ancho"] .lector-pagina { max-height: calc(100vh - 30rem); max-height: calc(100dvh - 30rem); }
+  .lector[data-modo="pantalla"] .lector-pagina,
+  .lector[data-modo="doble"] .lector-pagina { max-height: calc(100vh - 30rem); max-height: calc(100dvh - 30rem); }
+  .lector-controles { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .lector-contador { grid-column: 1 / -1; order: -1; text-align: center; }
+  .lector-controles .btn { width: 100%; }
+  .lector-menu .btn { width: 100%; }
+}
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
