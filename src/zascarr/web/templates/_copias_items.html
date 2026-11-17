@@ -6,7 +6,8 @@
       {% for c in copias %}
       <li>{{ c.fecha }} · {{ c.tamano }} · también en el disco de respaldo: {{ "sí" if c.fuera_del_disco else "no" }}
         {% if c.id %}
-          {% if c.restaurable %}<a class="btn ghost sm" href="/ui/copias/restaurar/{{ c.id }}">Restaurar…</a>
+          {% if c.restaurable and not restaurando %}<a class="btn ghost sm" href="/ui/copias/restaurar/{{ c.id }}">Restaurar…</a>
+          {% elif c.restaurable and restaurando %}<span class="muted">Hay una restauración en marcha.</span>
           {% else %}<span class="muted">{{ c.motivo }}</span>{% endif %}
         {% endif %}
       </li>

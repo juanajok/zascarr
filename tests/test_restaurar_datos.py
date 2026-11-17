@@ -52,7 +52,8 @@ if [[ "$cmd" == *" psql"* ]]; then
     if [[ "$cmd" == *" -c "* ]]; then
         if [[ "$cmd" == *"select values::text"* ]]; then
             if [[ -s "$RESTORE_LOG" ]]; then
-                if [[ -n "${FAKE_SEGURIDAD_FINAL:-}" && -s "${FAKE_SEGURIDAD_FINAL:-}" ]]; then
+                if [[ -n "${FAKE_SEGURIDAD_FINAL:-}" && -s "${FAKE_SEGURIDAD_FINAL:-}" ]] \
+                        && grep -q 'INSERT INTO runtime_settings' "$RESTORE_LOG"; then
                     cat "$FAKE_SEGURIDAD_FINAL"
                 else
                     cat "$FAKE_SEGURIDAD_RESTAURADA"
@@ -856,53 +857,39 @@ class TestMasGuardasDeLaRestauracion:
 
 @pytest.mark.skipif(shutil.which("jq") is None, reason="requiere jq")
 def test_produccion_conserva_seguridad_vigente_y_claves_de_la_copia(tmp_path):
-    """La fila resultante mezcla credenciales/interruptores vigentes con integraciones de la copia."""
-    ctx = _preparar(tmp_path)
-    ts = "20260101_120000"
-    dump = ctx["backup"] / f"backup_{ts}.sql.gz"
-    dump.write_bytes(gzip.compress(_sql().encode("utf-8")))
-    manifest = ctx["backup"] / f"MANIFIESTO-backup_{ts}.json"
-    manifest.write_text(json.dumps(_manifest(dump, ctx["head"])), encoding="utf-8")
-    # El fake de compose debe llamarse zascarr para el modo producción.
-    compose_json = tmp_path / "compose-prod.json"
-    compose_json.write_text(json.dumps({"name": "zascarr", "services": {
-        "postgres": {"container_name": "zascarr-db"},
-        "zascarr": {"container_name": "zascarr-orquestador"}}}), encoding="utf-8")
-    seguridad = tmp_path / "seguridad.json"
-    seguridad.write_text(json.dumps({
-        "auth_mode": "password", "auth_username": "ana", "auth_password_hash": "hash-nuevo",
-        "secret_key": "sk-nueva", "base_url": "https://nuevo", "auth_session_version": 7,
-        "comicvine_enabled": False, "webhook_url": "https://webhook-nuevo",
-        "prowlarr_api_key": "clave-vigente", "fuentes_heredadas": ["x"]}), encoding="utf-8")
-    restaurada = tmp_path / "restaurada.json"
-    final = tmp_path / "final.json"
-    final.write_text(json.dumps({
-        "auth_mode": "password", "auth_username": "ana", "auth_password_hash": "hash-nuevo",
-        "secret_key": "sk-nueva", "base_url": "https://nuevo", "auth_session_version": 8,
-        "comicvine_enabled": False, "webhook_url": "https://webhook-nuevo",
-        "prowlarr_api_key": "clave-copia", "fuentes_heredadas": ["x"]}), encoding="utf-8")
-    restaurada.write_text(json.dumps({
-        "auth_mode": "none", "auth_username": "viejo", "auth_password_hash": "hash-viejo",
-        "secret_key": "sk-vieja", "base_url": "https://viejo", "auth_session_version": 3,
-        "comicvine_enabled": True, "webhook_url": "https://webhook-viejo",
-        "prowlarr_api_key": "clave-copia", "fuentes_heredadas": ["y"]}), encoding="utf-8")
-    r = _ejecutar(
-        ctx,
-        args=["--produccion", "--copia", ts],
-        extra_env={"FAKE_COMPOSE_JSON": str(compose_json),
-                   "FAKE_SEGURIDAD": str(seguridad),
-                   "FAKE_SEGURIDAD_RESTAURADA": str(restaurada),
-                   "FAKE_SEGURIDAD_FINAL": str(final),
-                   "BACKUP_STATUS_DIR": str(ctx["status"])},
+    """FR-34: la fila resultante mezcla credenciales/interruptores vigentes con integraciones de la copia.
+
+    Adaptada a F-03/F-04: el flujo aprobado carga en `zascarr_restaurando`, reaplica con la app parada y cambia
+    por renombrado; el arnés vive en `tests/_restaurar_produccion.py`. Las aserciones sobre la mezcla no cambian.
+    """
+    from tests._restaurar_produccion import ejecutar as ejecutar_produccion
+    from tests._restaurar_produccion import estado_restaurar, preparar
+
+    ctx = preparar(
+        tmp_path,
+        seguridad_actual={
+            "auth_mode": "password", "auth_username": "ana", "auth_password_hash": "hash-nuevo",
+            "secret_key": "sk-nueva", "base_url": "https://nuevo", "auth_session_version": 7,
+            "comicvine_enabled": False, "webhook_url": "https://webhook-nuevo",
+            "prowlarr_api_key": "clave-vigente", "fuentes_heredadas": False,
+        },
+        seguridad_copia={
+            "auth_mode": "none", "auth_username": "viejo", "auth_password_hash": "hash-viejo",
+            "secret_key": "sk-vieja", "base_url": "https://viejo", "auth_session_version": 3,
+            "comicvine_enabled": True, "webhook_url": "https://webhook-viejo",
+            "prowlarr_api_key": "clave-copia", "fuentes_heredadas": True,
+        },
     )
+    r = ejecutar_produccion(ctx, extra_env={"FAKE_ENFORCE_STOP": "1"})
     assert r.returncode == 0, r.stdout + r.stderr
-    log = _log(ctx, "restore")
+    log = ctx["restore"].read_text(encoding="utf-8")
     # La sentencia reaplicada contiene la mezcla esperada (JSON entre comillas de dólar).
     assert '"auth_mode":"password"' in log and '"auth_password_hash":"hash-nuevo"' in log
     assert '"prowlarr_api_key":"clave-copia"' in log
     assert '"comicvine_enabled":false' in log and '"webhook_url":"https://webhook-nuevo"' in log
     assert '"auth_session_version":8' in log
     assert "sk-nueva" in log and "sk-vieja" not in log
+    assert estado_restaurar(ctx)["resultado"] == "hecha"
 
 
 @pytest.mark.skipif(shutil.which("jq") is None, reason="requiere jq")

@@ -308,7 +308,7 @@ class TestOpsStatus:
 
 # ── lectura acotada y diario (AC-05, FR-30) ──────────────────────────────────────────────────────────────────────
 class TestEntradaSalida:
-    def test_no_lee_mas_de_1025_bytes_de_una_megabyte(self):
+    def test_no_lee_mas_de_4097_bytes_de_una_megabyte(self):
         a, b = socket.socketpair()
         try:
             # el envío va en un hilo: el búfer del socket es menor que 1 MB y `sendall` bloquearía la prueba
@@ -317,7 +317,7 @@ class TestEntradaSalida:
                     a.sendall(b"x" * 1_000_000)
             hilo = threading.Thread(target=_enviar, daemon=True)
             hilo.start()
-            assert len(ops.leer_linea(b.fileno(), tiempo_s=2)) == 1025
+            assert len(ops.leer_linea(b.fileno(), tiempo_s=2)) == 4097
         finally:
             a.close()
             b.close()
@@ -344,7 +344,7 @@ class TestEntradaSalida:
         secreto = "FIRMA-SECRETA-" + "0" * 50
         r, _ = correr(peticion(id_=_id(5)), estado)
         texto = ops.linea_de_diario(r, uid=1000, ms=3)
-        assert texto.startswith("accion=copia id=") and "uid=1000" in texto and "ms=3" in texto
+        assert texto.startswith("accion=copia copia=- id=") and "uid=1000" in texto and "ms=3" in texto
         assert "0" * 64 not in texto and secreto not in texto and "/" not in texto
         # una acción que no es la conocida no se vuelca (la cadena es del atacante)
         otro, _ = correr(peticion(accion="X\nINYECTADA"), estado)
@@ -395,9 +395,9 @@ def peticion_restaurar(*, id_=None, copia="backup-20260101_120000", prueba="secr
     return json.dumps(cuerpo, separators=(",", ":")).encode() + b"\n"
 
 
-def correr_restaurar(linea, estado, *, verificador=None, lanzador=None, copias=None):
+def correr_restaurar(linea, estado, *, verificador=None, lanzador=None, copias=None, ahora=AHORA):
     lanzador = lanzador or LanzadorRestaurar()
-    return ops.procesar(linea, AHORA, CLAVE, estado, lanzador,
+    return ops.procesar(linea, ahora, CLAVE, estado, lanzador,
                         verificador or Verificador(),
                         copias if copias is not None else ["backup-20260101_120000"]), lanzador
 
@@ -451,3 +451,145 @@ def test_verificador_comprueba_hash_real_y_rechaza_alterado():
     assert ops.VerificadorPrueba.comprobar("contraseña-ñ", almacenado)
     assert not ops.VerificadorPrueba.comprobar("otra", almacenado)
     assert not ops.VerificadorPrueba.comprobar("contraseña-ñ", "roto")
+
+
+# ── F-18 (SecOps): límites v2 de la restauración con reloj inyectado (AC-08, AC-10, AC-11, AC-12) ──────────────
+class VerificadorContado(Verificador):
+    """Cuenta cuántas veces se verifica la contraseña (el bloqueo no debe gastar PBKDF2)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.llamadas = 0
+
+    def comprobar(self, prueba, hash_):
+        self.llamadas += 1
+        return super().comprobar(prueba, hash_)
+
+
+def _restaurar(estado, ahora, *, id_, verificador=None, lanzador=None):
+    return correr_restaurar(peticion_restaurar(id_=id_, creada=ahora), estado,
+                            verificador=verificador, lanzador=lanzador, ahora=ahora)
+
+
+class TestLimitesV2:
+    def test_una_cada_30_minutos_y_tres_por_24_horas(self, estado):
+        """AC-11: 29 min ⇒ demasiado_pronto; a los 30 se acepta; a la 4.ª de la ventana, limite_restauraciones."""
+        assert _restaurar(estado, AHORA, id_=_id(100))[0].codigo == "aceptada"
+        assert _restaurar(estado, AHORA + 29 * 60, id_=_id(101))[0].codigo == "demasiado_pronto"
+        assert _restaurar(estado, AHORA + 30 * 60, id_=_id(102))[0].codigo == "aceptada"
+        assert _restaurar(estado, AHORA + 60 * 60, id_=_id(103))[0].codigo == "aceptada"
+        r, lanz = _restaurar(estado, AHORA + 90 * 60, id_=_id(104))
+        assert r.codigo == "limite_restauraciones" and lanz.iniciadas == []
+
+    def test_el_tope_de_24_horas_es_una_ventana_movil(self, estado):
+        """AC-11: pasadas 24 h desde la primera, su hueco se libera sin tocar las demás."""
+        for i, ahora in enumerate((AHORA, AHORA + 30 * 60, AHORA + 60 * 60)):
+            assert _restaurar(estado, ahora, id_=_id(200 + i))[0].codigo == "aceptada"
+        # 24 h + 31 min: la primera (y solo ella) sale de la ventana; la 4.ª ya cabe.
+        r, _ = _restaurar(estado, AHORA + 24 * 3600 + 31 * 60, id_=_id(210))
+        assert r.codigo == "aceptada"
+        assert len(estado.leer_restauradas(AHORA + 24 * 3600 + 31 * 60)) <= 3
+
+    def test_cinco_fallos_bloquean_30_minutos_y_no_gastan_pbkdf2(self, estado):
+        """AC-08: 5 `prueba_invalida` en 15 min ⇒ bloqueo_temporal durante 30 min desde el último fallo."""
+        for i in range(ops.UMBRAL_FALLOS):
+            ahora = AHORA + i
+            r, _ = _restaurar(estado, ahora, id_=_id(300 + i), verificador=Verificador(correcta=False))
+            assert r.codigo == "prueba_invalida"
+        vigilado = VerificadorContado(correcta=True)
+        r, lanz = _restaurar(estado, AHORA + 10, id_=_id(310), verificador=vigilado)
+        assert r.codigo == "bloqueo_temporal" and lanz.iniciadas == [] and vigilado.llamadas == 0
+        # Justo antes de los 30 min desde el último fallo (AHORA+4) sigue bloqueado.
+        r, _ = _restaurar(estado, AHORA + 4 + ops.BLOQUEO_FALLOS_S - 1, id_=_id(311), verificador=vigilado)
+        assert r.codigo == "bloqueo_temporal"
+        # A los 30 min se libera (los fallos ya están fuera de la ventana de 15 min) y el acierto limpia el contador.
+        r, _ = _restaurar(estado, AHORA + 4 + ops.BLOQUEO_FALLOS_S, id_=_id(312), verificador=vigilado)
+        assert r.codigo == "aceptada"
+        assert not Path(estado.ruta_pruebas).exists()
+
+    def test_el_cerrojo_ocupado_no_gasta_restauracion_ni_verifica(self, estado):
+        """AC-10: con otra operación en curso ⇒ operacion_en_curso, sin PBKDF2 y sin escribir estado de restauración."""
+        previo = json.dumps({"schema": 1, "accion": "copia", "id": _id(1), "pedida_epoch": AHORA,
+                             "resultado": "aceptada"})
+        Path(estado.ruta_ops_status).write_text(previo)
+        vigilado = VerificadorContado()
+        r, lanz = _restaurar(estado, AHORA, id_=_id(400), verificador=vigilado,
+                             lanzador=LanzadorRestaurar(ocupado=True))
+        assert r.codigo == "operacion_en_curso" and vigilado.llamadas == 0 and lanz.iniciadas == []
+        assert not Path(estado.ruta_restauradas).exists()
+        assert Path(estado.ruta_ops_status).read_text() == previo
+
+    def test_una_unidad_de_restauracion_activa_es_operacion_en_curso(self, estado):
+        class LanzadorRestaurando(LanzadorRestaurar):
+            def restauraciones_ocupadas(self):
+                return True
+
+        r, lanz = _restaurar(estado, AHORA, id_=_id(401), lanzador=LanzadorRestaurando())
+        assert r.codigo == "operacion_en_curso" and lanz.iniciadas == []
+
+    def test_los_contadores_de_copias_y_restauraciones_son_independientes(self, estado):
+        """AC-11: pedir copias no gasta restauraciones ni al revés."""
+        # Una copia aceptada y una restauración aceptada conviven.
+        assert correr(peticion(id_=_id(500)), estado)[0].codigo == "aceptada"
+        assert _restaurar(estado, AHORA, id_=_id(501))[0].codigo == "aceptada"
+        # La restauración ya hecha no bloquea una copia (su intervalo es de 5 min, no 30).
+        assert correr(peticion(id_=_id(502), creada=AHORA + 300), estado, ahora=AHORA + 300)[0].codigo == "aceptada"
+        # Y una copia más tarde no gasta el cupo de restauraciones.
+        assert len(estado.leer_restauradas(AHORA)) == 1
+        assert len(estado.leer_aceptadas(AHORA + 300)) == 2
+
+    def test_el_diario_lleva_la_copia_pedida_sin_la_prueba(self, estado):
+        """F-12/FR-33: `copia=<id>` en el diario; nunca la prueba."""
+        r, _ = _restaurar(estado, AHORA, id_=_id(600))
+        texto = ops.linea_de_diario(r, uid=1000, ms=7)
+        assert texto.startswith("accion=restaurar copia=backup-20260101_120000 id=")
+        assert "secreta" not in texto
+
+
+# ── F-21: tipos estrictos de la lista propia del auxiliar ──────────────────────────────────────────────────────
+def _copia_de_prueba(tmp_path: Path, *, bytes_=1, sha="a" * 64, schema=1, nombre="20260101_120000"):
+    dump = tmp_path / f"backup_{nombre}.sql.gz"
+    dump.write_bytes(b"x")
+    (tmp_path / f"MANIFIESTO-backup_{nombre}.json").write_text(
+        json.dumps({"sha256": sha, "bytes": bytes_, **({} if schema is None else {"schema": schema})}),
+        encoding="utf-8")
+    return dump
+
+
+class TestListaPropia:
+    def test_un_manifiesto_valido_entra_y_los_tipos_laxos_no(self, tmp_path, monkeypatch):
+        """F-21/FR-10: `true` no es un entero válido para `bytes`/`schema`; un sha256 no-hex no vale."""
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda _r: True)
+        _copia_de_prueba(tmp_path, nombre="20260101_010101")
+        _copia_de_prueba(tmp_path, bytes_=True, nombre="20260101_020202")
+        _copia_de_prueba(tmp_path, bytes_=-1, nombre="20260101_030303")
+        _copia_de_prueba(tmp_path, sha="no-es-hex", nombre="20260101_040404")
+        _copia_de_prueba(tmp_path, sha="a" * 63, nombre="20260101_050505")
+        _copia_de_prueba(tmp_path, schema=True, nombre="20260101_060606")
+        _copia_de_prueba(tmp_path, schema=2, nombre="20260101_070707")
+        (tmp_path / "backup_20260101_080808.sql.gz").write_bytes(b"x")     # sin manifiesto
+        (tmp_path / "update_20260101_090909.sql.gz").write_bytes(b"x")     # no es backup_*
+        assert ops.listar_copias(str(tmp_path)) == ["backup-20260101_010101"]
+
+    def test_el_manifiesto_se_verifica_como_fichero_regular_de_root(self, tmp_path, monkeypatch):
+        """FR-10: si el dump o el manifiesto no son ficheros regulares de root sin escritura de grupo/otros, no entra."""
+        dump = _copia_de_prueba(tmp_path, nombre="20260101_111111")
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda ruta: ruta == str(dump))
+        assert ops.listar_copias(str(tmp_path)) == []                     # el manifiesto no pasó la comprobación
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda _r: True)
+        assert ops.listar_copias(str(tmp_path)) == ["backup-20260101_111111"]
+
+    def test_se_quedan_las_30_mas_recientes(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda _r: True)
+        for i in range(35):
+            _copia_de_prueba(tmp_path, nombre=f"20260101_{i:06d}")
+        lista = ops.listar_copias(str(tmp_path))
+        assert len(lista) == 30 and lista[0] == "backup-20260101_000034"
+
+
+def test_verificar_regular_root_rechaza_enlaces_y_permisos_abiertos(tmp_path, monkeypatch):
+    """FR-10/AC-06: solo fichero regular de root sin escritura para grupo u otros."""
+    ruta = tmp_path / "fichero"
+    ruta.write_bytes(b"x")
+    assert ops._verificar_regular_root(str(ruta)) is False          # no es de root (uid 1000)
+    assert ops._verificar_regular_root(str(tmp_path / "no-existe")) is False

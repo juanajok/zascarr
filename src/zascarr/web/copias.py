@@ -31,21 +31,32 @@ ENTRE_COPIAS_MIN = ops_host.ENTRE_COPIAS_S // 60
 _tarea_copia = None
 
 
+MSG_RESTAURACION_EN_MARCHA = "Hay una restauración en marcha. Cuando termine podrás hacer copias."
+
+
 def _contexto(vista: VistaCopias, copias: list[dict] | None, mensaje_pedir: str = "", con_lista: bool = True,
-              oob_accion: bool = False, foco: bool = False) -> dict:
+              oob_accion: bool = False, foco: bool = False, vr=None, restaurando: bool = False) -> dict:
     """`oob_accion`: solo se recambia el botón cuando CAMBIA (htmx no devuelve el foco a un elemento recambiado);
-    `foco`: lleva el foco al estado cuando el botón pasa a deshabilitado."""
+    `foco`: lleva el foco al estado cuando el botón pasa a deshabilitado. `vr`/`restaurando` son el estado de la
+    restauración (BL-OPS2): mientras corre no hay botones «Restaurar…» ni se piden copias (FR-29/AC-21)."""
+    if restaurando and vista.boton:
+        vista = VistaCopias(vista.estado, MSG_RESTAURACION_EN_MARCHA, vista.detalle, boton=True,
+                            habilitado=False, en_marcha=vista.en_marcha, nivel="amber",
+                            nocturna_omitida=vista.nocturna_omitida, extra=vista.extra)
     return {"v": vista, "copias": copias, "mensaje_pedir": mensaje_pedir, "con_lista": con_lista,
-            "oob_accion": oob_accion, "foco": foco, "oob": False}
+            "oob_accion": oob_accion, "foco": foco, "oob": False, "vr": vr, "restaurando": restaurando}
 
 
 async def contexto_bloque(settings=None, revision_actual: str | None = None) -> dict:
     """Lo que necesita el bloque completo de `/estado` (la primera vez que se pinta)."""
     settings = settings or get_settings()
     vista = await asyncio.to_thread(ops_host.resolver_estado, settings)
+    vr = await asyncio.to_thread(ops_host.resolver_restauracion, settings)
+    restaurando = vr.en_marcha
     copias = await asyncio.to_thread(ops_host.leer_copias, settings) if vista.estado != EstadoCopia.NO_ACTIVADO else None
-    copias = restauracion.ofrecer(copias, revision_actual, settings.auth_mode)
-    return _contexto(vista, copias)
+    copias = restauracion.ofrecer(copias, revision_actual, settings.auth_mode,
+                                  permitir=not (vista.en_marcha or restaurando))
+    return _contexto(vista, copias, vr=vr, restaurando=restaurando)
 
 
 def _fragmento(request: Request, contexto: dict) -> HTMLResponse:
@@ -59,6 +70,8 @@ async def _fragmento_actual(request: Request, mensaje_pedir: str = "", boton_cam
     global _tarea_copia
     settings = get_settings()
     vista = await asyncio.to_thread(ops_host.resolver_estado, settings)
+    vr = await asyncio.to_thread(ops_host.resolver_restauracion, settings)
+    restaurando = vr.en_marcha
     if vista.en_marcha and _tarea_copia is None:
         _tarea_copia = tareas.iniciar_copia()
     elif not vista.en_marcha and _tarea_copia is not None:
@@ -71,9 +84,13 @@ async def _fragmento_actual(request: Request, mensaje_pedir: str = "", boton_cam
     # El listado solo se vuelve a pintar cuando no hay copia en marcha: la última respuesta de un sondeo, o tras pedir.
     con_lista = not vista.en_marcha and vista.estado != EstadoCopia.NO_ACTIVADO
     copias = await asyncio.to_thread(ops_host.leer_copias, settings) if con_lista else None
-    # Sondeo: el botón ya está deshabilitado mientras hay copia en marcha; solo cambia al terminar.
-    cambia = (not vista.en_marcha) if boton_cambia is None else boton_cambia
-    return _fragmento(request, _contexto(vista, copias, mensaje_pedir, con_lista=con_lista, oob_accion=cambia))
+    # Sondeo: el botón ya está deshabilitado mientras hay copia en marcha; solo cambia al terminar. Con una
+    # restauración en marcha también se sondea (para volver a ofrecer las acciones al terminar).
+    cambia = (not vista.en_marcha and not restaurando) if boton_cambia is None else boton_cambia
+    if restaurando:
+        con_lista = False
+    return _fragmento(request, _contexto(vista, copias, mensaje_pedir, con_lista=con_lista,
+                                        oob_accion=cambia, vr=vr, restaurando=restaurando))
 
 
 @router.get("/ui/copias/estado", response_class=HTMLResponse)
@@ -97,6 +114,9 @@ async def pedir_copia(request: Request) -> HTMLResponse:
                          tipo_error="copia_" + str(vista.estado))
         _tarea_copia = None
     if vista.estado == EstadoCopia.NO_ACTIVADO:
+        return await _fragmento_actual(request, boton_cambia=True)
+    if (await asyncio.to_thread(ops_host.resolver_restauracion, settings)).en_marcha:
+        # Garantía (AC-21): con otra operación en marcha no se contacta con el auxiliar.
         return await _fragmento_actual(request, boton_cambia=True)
     if vista.en_marcha:
         return await _fragmento_actual(request, boton_cambia=False)      # el botón ya estaba deshabilitado
@@ -123,12 +143,16 @@ async def restaurar_confirmar(copia: str, request: Request) -> HTMLResponse:
     async with async_session_factory() as db:
         revision = await restauracion.revision_actual(db)
     copias = restauracion.ofrecer(ops_host.leer_copias(settings), revision,
-                                  settings.auth_mode)
+                                  settings.auth_mode,
+                                  permitir=not ops_host.resolver_restauracion(settings).en_marcha)
     elegida = next((c for c in copias if c["id"] == copia), None)
     if elegida is None:
         raise HTTPException(status_code=404)
+    restaurando = ops_host.resolver_restauracion(settings).en_marcha
     respuesta = templates.TemplateResponse(request, "_restaurar_confirmar.html", {
-        "copia": elegida, "error": None, "activa": settings.auth_mode != "none",
+        "copia": elegida, "error": None,
+        "activa": settings.auth_mode != "none" and not restaurando,
+        "restaurando": restaurando,
     })
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta

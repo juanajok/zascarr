@@ -53,7 +53,7 @@ CLAVES_PETICION = ("v", "id", "accion", "creada", "firma")
 CLAVES_PETICION_RESTAURAR = ("v", "id", "accion", "copia", "prueba", "creada", "firma")
 MAX_BYTES = 512
 MAX_BYTES_V1 = 512
-MAX_BYTES_RESTAURAR = 1024
+MAX_BYTES_RESTAURAR = 4096
 LEER_MAX = MAX_BYTES_RESTAURAR + 1
 RESTAURACION_ESPERA_S = 30 * 60
 LIMITE_RESTAURACIONES = 3
@@ -92,7 +92,7 @@ class Respuesta:
     """`resultado` es `aceptada` o `rechazada`; `codigo` es de la lista cerrada. Nunca lleva texto libre ni rutas."""
 
     def __init__(self, resultado: str, codigo: str, id_: str | None = None, accion: str | None = None,
-                 diario: str | None = None, v: int = 1) -> None:
+                 diario: str | None = None, v: int = 1, copia: str | None = None) -> None:
         self.resultado = resultado
         self.codigo = codigo
         self.id = id_
@@ -100,6 +100,7 @@ class Respuesta:
         #: Código EXTRA solo para el diario (`clave_ausente`, `contador_ilegible`…): no sale por el socket.
         self.diario = diario
         self.v = v
+        self.copia = copia
 
     def linea(self) -> bytes:
         cuerpo = {"v": self.v, "id": self.id, "resultado": self.resultado, "codigo": self.codigo}
@@ -278,7 +279,9 @@ class EstadoOps:
         vigentes = [t for t in previas if ahora - t < VENTANA_S]
         self._escribir_atomico(self.ruta_aceptadas, json.dumps(vigentes + [ahora]), 0o600)
 
-    def _leer_epocas(self, ruta: str) -> list:
+    def _leer_epocas(self, ruta: str, ahora: int) -> list:
+        """El reloj entra por parámetro (como en el resto del auxiliar): así el bloqueo y los topes se pueden
+        probar con un reloj inyectado. En producción `ahora` es `time.time()`."""
         try:
             with open(ruta, encoding="ascii") as fh:
                 datos = json.loads(fh.read())
@@ -288,13 +291,13 @@ class EstadoOps:
             raise ContadorIlegible from exc
         if not isinstance(datos, list) or not all(_es_entero(t) for t in datos):
             raise ContadorIlegible
-        if any(t > time.time() + TOLERANCIA_RELOJ_S for t in datos):
+        if any(t > ahora + TOLERANCIA_RELOJ_S for t in datos):
             raise ContadorIlegible
         return list(datos)
 
     def leer_restauradas(self, ahora: int) -> list:
         try:
-            return [t for t in self._leer_epocas(self.ruta_restauradas)
+            return [t for t in self._leer_epocas(self.ruta_restauradas, ahora)
                     if t <= ahora + TOLERANCIA_RELOJ_S]
         except ContadorIlegible:
             raise
@@ -304,10 +307,7 @@ class EstadoOps:
         self._escribir_atomico(self.ruta_restauradas, json.dumps(vigentes + [ahora]), 0o600)
 
     def leer_fallos(self, ahora: int) -> list:
-        try:
-            return self._leer_epocas(self.ruta_pruebas)
-        except ContadorIlegible:
-            raise
+        return self._leer_epocas(self.ruta_pruebas, ahora)
 
     def anotar_fallo(self, ahora: int, previos: list) -> None:
         vigentes = [t for t in previos if ahora - t < VENTANA_FALLOS_S]
@@ -445,11 +445,16 @@ def listar_copias(dir_backup: str, maximo: int = 30) -> list[str]:
         try:
             with open(manifiesto, "rb") as fh:
                 datos = _json.loads(fh.read(4097).decode("utf-8"))
-            if not isinstance(datos, dict) or datos.get("schema", 1) not in (1, None):
+            if not isinstance(datos, dict):
                 continue
-            if not re.fullmatch(r"[0-9a-f]{64}", str(datos.get("sha256", ""))):
+            # F-21: tipos ESTRICTOS (`true` no es un entero válido). El script revalida el dump después; esto
+            # solo evita ofrecer como restaurable lo que ni siquiera tiene un manifiesto coherente.
+            schema = datos.get("schema", 1)
+            if schema is not None and (not _es_entero(schema) or schema != 1):
                 continue
-            if not isinstance(datos.get("bytes"), int) or datos["bytes"] < 0:
+            if not isinstance(datos.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", datos["sha256"]):
+                continue
+            if not _es_entero(datos.get("bytes")) or datos["bytes"] < 0:
                 continue
         except (OSError, ValueError):
             continue
@@ -541,11 +546,13 @@ def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, l
         return _rechazo("no_disponible", id_, diario="vistos_ilegible")
 
     if peticion["v"] == VERSION_RESTAURAR:
-        return _procesar_restaurar(peticion, ahora, estado, lanzador,
-                                   verificador or VerificadorPrueba(),
-                                   copias if copias is not None else listar_copias(
-                                       dir_backup or os.environ.get("BACKUP_DIR")
-                                       or os.environ.get("ZASCARR_BACKUP_DIR", RUTA_COPIAS)))
+        respuesta = _procesar_restaurar(peticion, ahora, estado, lanzador,
+                                         verificador or VerificadorPrueba(),
+                                         copias if copias is not None else listar_copias(
+                                             dir_backup or os.environ.get("BACKUP_DIR")
+                                             or os.environ.get("ZASCARR_BACKUP_DIR", RUTA_COPIAS)))
+        respuesta.copia = peticion["copia"]
+        return respuesta
     if accion != ACCION_COPIA:
         return _rechazo("accion_no_disponible", id_)
     unidad = UNIDADES[accion]
@@ -565,6 +572,11 @@ def _procesar_restaurar(peticion: dict, ahora: int, estado: EstadoOps, lanzador,
     id_ = peticion["id"]
     copia = peticion["copia"]
     accion = ACCION_RESTAURAR
+
+    def _r(resp):
+        resp.copia = copia
+        return resp
+
     if copia not in copias:
         return _rechazo("copia_desconocida", id_, accion, v=VERSION_RESTAURAR)
     try:
@@ -586,8 +598,10 @@ def _procesar_restaurar(peticion: dict, ahora: int, estado: EstadoOps, lanzador,
                 fallos = estado.leer_fallos(ahora)
             except ContadorIlegible:
                 return _rechazo("no_disponible", id_, accion, diario="contador_ilegible", v=VERSION_RESTAURAR)
-            bloqueo = [t for t in fallos if ahora - t < VENTANA_FALLOS_S]
-            if len(bloqueo) >= UMBRAL_FALLOS:
+            # FR-13: el fichero solo conserva los fallos de los últimos 15 min de la última escritura, así que
+            # «5 fallos en 15 min» es `len(fallos) >= UMBRAL_FALLOS`; el bloqueo dura 30 min desde el ÚLTIMO
+            # fallo (F-08: antes se reutilizaba la ventana de 15 min y el bloqueo efectivo era más corto).
+            if len(fallos) >= UMBRAL_FALLOS and ahora < max(fallos) + BLOQUEO_FALLOS_S:
                 return _rechazo("bloqueo_temporal", id_, accion, v=VERSION_RESTAURAR)
             leido = verificador.leer()
             if leido is None:
@@ -705,8 +719,9 @@ def linea_de_diario(respuesta: Respuesta, uid: int, ms: int) -> str:
     clave ni rutas; `accion` solo si es la única conocida (no se vuelca una cadena del atacante) y `codigo` incluye el
     código extra del diario si lo hay."""
     codigo = respuesta.diario or respuesta.codigo
-    return (f"accion={respuesta.accion if respuesta.accion == ACCION_COPIA else '-'} "
-            f"id={respuesta.id or '-'} uid={uid} resultado={respuesta.resultado} codigo={codigo} ms={ms}")
+    return (f"accion={respuesta.accion if respuesta.accion in (ACCION_COPIA, ACCION_RESTAURAR) else '-'} "
+            f"copia={respuesta.copia or '-'} id={respuesta.id or '-'} uid={uid} "
+            f"resultado={respuesta.resultado} codigo={codigo} ms={ms}")
 
 
 def main() -> int:

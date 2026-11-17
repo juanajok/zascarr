@@ -13,7 +13,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "instalar_ops.sh"
 HERRAMIENTAS = ("bash", "sed", "tr", "cut", "cat", "cmp", "mktemp", "rm", "mv", "mkdir", "chmod", "id", "dirname",
-                "tail", "getent", "env", "umask", "head", "date")
+                "tail", "getent", "env", "umask", "head", "date", "docker")
 
 
 @pytest.fixture()
@@ -148,7 +148,8 @@ def test_las_unidades_cumplen_fr29_y_fr01():
     for linea in ("Accept=yes", "SocketUser=root", "SocketGroup=@GRUPO@", "SocketMode=0660", "MaxConnections=4"):
         assert linea in sock, linea
     assert ((REPO / "deploy/systemd/zascarr-ops.tmpfiles.conf").read_text().strip()
-            == "d /run/zascarr-ops 0700 root root -\nd /run/zascarr-ops/docker 0700 root root -")
+            == "d /run/zascarr-ops 0700 root root -\nd /run/zascarr-ops/docker 0700 root root -"
+               "\nf /run/zascarr-ops.lock 0600 root root -")
     assert os.access(SCRIPT, os.R_OK)
 
 
@@ -192,3 +193,61 @@ def test_una_clave_que_aparece_durante_la_instalacion_no_se_pisa(entorno):
     """`mv -n`: si otra ejecución creó la clave entre la comprobación y el `mv`, no se sobrescribe."""
     texto = SCRIPT.read_text()
     assert "mv -n" in texto and "mv -f" not in texto
+
+
+def test_restaurar_tiene_entorno_y_cerrojo_escribible():
+    """B-1/B-2 de SecOps: el wrapper exporta lo que exige el script y la unidad puede crear el cerrojo."""
+    unidad = (REPO / "deploy/systemd/zascarr-restaurar@.service").read_text()
+    envoltorio = (REPO / "deploy/ops/restaurar-produccion.sh").read_text()
+    for var in ("REPO_DIR", "ENV_FILE", "COMPOSE_FILE", "DB_NAME", "DB_USER"):
+        assert f"export {var}=" in envoltorio
+    assert "Environment=ZASCARR_REPO=" not in unidad
+    assert "ReadWritePaths=/run/zascarr-ops.lock" in unidad
+    assert "f /run/zascarr-ops.lock 0600 root root -" in (
+        REPO / "deploy/systemd/zascarr-ops.tmpfiles.conf").read_text()
+    assert '=~ ^[0-9]{8}_[0-9]{6}$' in envoltorio
+    # QA en la VM: con ProtectHome=true el cliente docker necesita un DOCKER_CONFIG de root dentro de /run, y
+    # la app real escucha en el 8000 (el 18000 solo era del arnés).
+    assert "export DOCKER_CONFIG=" in envoltorio and "/run/zascarr-ops/docker" in envoltorio
+    assert "HEALTH_URL" in envoltorio and "127.0.0.1:8000" in envoltorio
+    assert "DOCKER_CONFIG=/run/zascarr-ops/docker" in unidad
+    assert "HEALTH_URL=http://127.0.0.1:8000/api/health" in unidad
+
+
+def test_la_unidad_de_restauracion_no_deja_marcadores_y_escribe_en_la_carpeta_de_copias(entorno):
+    """F-16/QA: sin `BACKUP_DIR` definido, `@BACKUP_DIR@` quedaba sin sustituir (o vacío) y con
+    `ProtectSystem=strict` el script no podía escribir en la carpeta de copias."""
+    import re
+
+    r = _correr(entorno, "--yes")
+    assert r.returncode == 0, r.stderr
+    unidad = (entorno["tmp"] / "units" / "zascarr-restaurar@.service").read_text()
+    assert "@BACKUP_DIR@" not in unidad and "@BACKUP_STATUS_DIR@" not in unidad
+    assert not re.search(r"@[A-Z_]+@", unidad), unidad          # ningún marcador sin sustituir
+    assert "ProtectSystem=strict" in unidad
+    assert f"{entorno['datos']}/backup-status" in unidad
+    assert "/var/backups/zascarr/postgres" in unidad            # valor por defecto de _comun.sh/instalar_backup.sh
+    readwrite = next(linea for linea in unidad.splitlines() if linea.startswith("ReadWritePaths="))
+    assert "/var/backups/zascarr/postgres" in readwrite
+    assert "/opt/zascarr" not in readwrite                               # no se escribe código de la app
+    # F-16: endurecimiento de la unidad de restauración (el mismo conjunto que el auxiliar donde aplica).
+    for linea in ("Requires=docker.service", "NoNewPrivileges=true", "ProtectSystem=strict", "ProtectHome=true",
+                  "PrivateTmp=true", "ProtectKernelTunables=true", "ProtectKernelModules=true",
+                  "ProtectControlGroups=true", "PrivateDevices=true", "RestrictNamespaces=true",
+                  "RestrictSUIDSGID=true", "UMask=0077", "CapabilityBoundingSet=", "SuccessExitStatus=75"):
+        assert linea in unidad.splitlines(), linea
+    assert "TimeoutStartSec=2700" in unidad                              # 45 min (FR-26)
+    assert "RuntimeMaxSec=" not in unidad                                # no mata una recuperación a mitad
+
+
+def test_backup_dir_del_env_se_usa_en_la_unidad_de_restauracion(entorno):
+    """Si `/etc/default/zascarr` (o el entorno) fija `BACKUP_DIR`, la unidad debe escribir ahí y no en el fijo."""
+    env_file = entorno["tmp"] / "zascarr.env"
+    env_file.write_text("BACKUP_DIR=/srv/copias-zascarr\n", encoding="utf-8")
+    r = _correr(entorno, "--yes", env_extra={"ENV_FILE": str(env_file)})
+    assert r.returncode == 0, r.stderr
+    unidad = (entorno["tmp"] / "units" / "zascarr-restaurar@.service").read_text()
+    readwrite = next(linea for linea in unidad.splitlines() if linea.startswith("ReadWritePaths="))
+    assert "/srv/copias-zascarr" in readwrite
+    assert "/var/backups/zascarr/postgres" not in readwrite
+    assert "@BACKUP_DIR@" not in unidad

@@ -156,6 +156,7 @@ services:
       - OPS_STATUS_FILE=/run/backup-status/ops-status.json
       - COPIAS_FILE=/run/backup-status/copias.json
       - OMITIDA_FILE=/run/backup-status/omitida.json
+      - OPS_RESTAURAR_STATUS_FILE=/run/backup-status/ops-restaurar.json
       - COVERS_CACHE_PATH=/config/covers
       - LECTOR_CACHE_PATH=/config/lector
       - LECTOR_CACHE_BYTES=${LECTOR_CACHE_BYTES:-1073741824}

@@ -40,7 +40,7 @@ VERSION = 1
 VERSION_RESTAURAR = 2
 MAX_BYTES = 1024
 MAX_BYTES_V1 = 512
-MAX_BYTES_RESTAURAR = 1024
+MAX_BYTES_RESTAURAR = 4096
 CADUCIDAD_S = 120
 PURGA_VISTOS_S = 300
 ENTRE_COPIAS_S = 300
@@ -340,7 +340,13 @@ def resolver_estado(settings: Settings, ahora: int | None = None, disponible: bo
 
     estado = _leer_json(settings.backup_status_file) or {}
     ops = _leer_json(settings.ops_status_file) or {}
+    # ops-status.json también lo escribe la restauración (BL-OPS2); aquí solo cuenta `copia`.
+    if ops.get("accion") not in (None, "copia"):
+        ops = {}
     omitida = _leer_json(settings.omitida_file) or {}
+    # `omitida.json` también lo escribe la restauración (BL-OPS2, accion:"restaurar"); aquí solo cuenta la copia.
+    if omitida.get("accion") not in (None, "copia"):
+        omitida = {}
     pedida = _epoch(ops.get("pedida_epoch"))
     if pedida is not None and pedida > ahora + TOLERANCIA_RELOJ_S:
         pedida = None                      # una petición «del futuro» no deja la copia en marcha para siempre
@@ -415,3 +421,172 @@ def leer_copias(settings: Settings, ahora: int | None = None) -> list[dict] | No
             "fuera_del_disco": item.get("fuera_del_disco") is True,
         })
     return salida
+
+
+# ── BL-OPS2: estado de la restauración (FR-24/FR-25/FR-29/FR-30/FR-32) ────────────────────────────────────────
+# El script `restaurar_datos.sh` es el ÚNICO escritor de `ops-restaurar.json`. Aquí solo se lee, y lo que se pinta
+# sale de mapas cerrados: jamás una cadena libre del fichero (C-13). `/login` es público: su aviso no lleva fecha.
+class EstadoRestaurar:
+    """Estados de la restauración en la interfaz, evaluados de arriba abajo (FR-29)."""
+
+    SIN_DATOS = "sin_datos"
+    NO_ARRANCO = "no_arranco"
+    EN_MARCHA = "en_marcha"
+    SIN_NOTICIAS = "sin_noticias"
+    HECHA = "hecha"
+    FALLO = "fallo"
+
+
+#: Pasados estos minutos sin que el script actualice el estado, se deja de decir «en marcha» (FR-25; la unidad
+#: tiene `TimeoutStartSec=45min`).
+SIN_NOTICIAS_RESTAURAR_S = 50 * 60
+#: El aviso de `/login` dura una hora desde que terminó la restauración (FR-32).
+AVISO_LOGIN_S = 3600
+FASES_APP_SIRVIENDO = frozenset({"verificando", "preparando", "restaurando", "comprobando"})
+FASES_APP_PARADA = frozenset({"parando", "seguridad", "copia_previa", "cambiando", "arrancando"})
+SIN_FASE = frozenset()
+
+MSG_REST_NO_ARRANCO = "No se pudo restaurar: había otra tarea en marcha. Vuelve a probar cuando termine."
+MSG_REST_SIN_NOTICIAS = ("No hay noticias de la restauración. Si ZascArr no responde, avisa a quien instaló ZascArr.")
+MSG_REST_EN_MARCHA_SIRVIENDO = "Preparando la copia del {fecha}. ZascArr sigue funcionando."
+MSG_REST_EN_MARCHA_PARADA = ("Cambiando los datos. ZascArr dejará de responder unos minutos. Si no vuelve, "
+                             "recarga la página. Si pasan más de 10 minutos, avisa a quien instaló ZascArr.")
+MSG_REST_HECHA = ("Copia del {fecha} restaurada: {series} series, {issues} números y {files} archivos anotados. "
+                  "Entra con tu contraseña de siempre.")
+MSG_REST_HECHA_SIN_FECHA = ("Se restauró una copia: {series} series, {issues} números y {files} archivos anotados. "
+                            "Entra con tu contraseña de siempre.")
+MSG_LOGIN_RESTAURADA = "Se restauró una copia. Entra con tu contraseña de siempre."
+MSG_REST_BASE_FUERA = " ZascArr podría no responder ahora mismo."
+GENERICA_RESTAURAR = "No se sabe por qué falló. Si ZascArr no responde, avisa a quien instaló ZascArr."
+
+#: `error` de §9.2 → «causa → qué hacer». Lo desconocido cae en `GENERICA_RESTAURAR` (AC-20).
+CAUSAS_RESTAURAR: dict[str, str] = {
+    "precondition_failed": "ZascArr no pudo preparar la restauración. No se ha cambiado nada. Avisa a quien instaló ZascArr.",
+    "copia_no_encontrada": "Esa copia ya no está en el disco. Elige otra.",
+    "copia_no_valida": "Esa copia está dañada, así que no se ha usado. Elige otra.",
+    "revision_distinta": "Esa copia es de otra versión de ZascArr y no se puede restaurar desde aquí. Elige una más reciente.",
+    "sin_espacio": "No hay sitio en el disco para restaurar. Libera espacio y vuelve a probar. No se ha cambiado nada.",
+    "seguridad_ilegible": "ZascArr no pudo conservar tu configuración de acceso, así que no ha restaurado nada. Avisa a quien instaló ZascArr.",
+    "seguridad_no_aplicada": "ZascArr no pudo conservar tu configuración de acceso, así que no ha restaurado nada. Avisa a quien instaló ZascArr.",
+    "autenticacion_no_activada": "Activa la contraseña en Ajustes → Seguridad antes de restaurar una copia.",
+    "restauracion_fallida": "La copia no se pudo cargar o no pasó las comprobaciones. Tus datos siguen como estaban. Prueba con otra copia.",
+    "verificacion_fallida": "La copia no se pudo cargar o no pasó las comprobaciones. Tus datos siguen como estaban. Prueba con otra copia.",
+    "copia_previa_fallida": "No se pudo guardar una copia de lo de ahora, así que no se ha restaurado nada. Comprueba que hay sitio en el disco de copias.",
+    "cambio_fallido": "La restauración no salió bien y ZascArr volvió a como estaba. Avisa a quien instaló ZascArr.",
+    "arranque_fallido": "La restauración no salió bien y ZascArr volvió a como estaba. Avisa a quien instaló ZascArr.",
+    "recuperacion_fallida": "Se guardó una copia de lo de antes de restaurar. ZascArr no pudo volver atrás solo. Avisa a quien instaló ZascArr cuanto antes.",
+    "unexpected": GENERICA_RESTAURAR,
+}
+
+
+def miles(n: int) -> str:
+    """Separador español de miles independiente de la configuración regional del equipo (AC-49)."""
+    return f"{int(n):,}".replace(",", ".")
+
+
+@dataclass(frozen=True)
+class VistaRestaurar:
+    estado: str
+    mensaje: str = ""
+    detalle: str = ""
+    en_marcha: bool = False
+    nivel: str = ""
+    base_en_su_sitio: bool | None = None
+    recuentos: dict | None = None
+    copia_epoch: int | None = None
+
+
+def _recuentos_restaurar(valor: object) -> dict | None:
+    """Solo tres enteros positivos: lo que no sea eso se ignora (nunca se pinta un valor libre del fichero)."""
+    if not isinstance(valor, dict):
+        return None
+    salida: dict[str, int] = {}
+    for clave in ("series", "issues", "files"):
+        n = _epoch(valor.get(clave))
+        if n is None:
+            return None
+        salida[clave] = n
+    return salida
+
+
+def _mensaje_en_marcha(fase: object, copia_epoch: int | None) -> str:
+    fecha = _dia_llano(copia_epoch) if copia_epoch is not None else "ahora"
+    if isinstance(fase, str) and fase in FASES_APP_PARADA:
+        return MSG_REST_EN_MARCHA_PARADA
+    return MSG_REST_EN_MARCHA_SIRVIENDO.format(fecha=fecha)
+
+
+def resolver_restauracion(settings: Settings, ahora: int | None = None) -> VistaRestaurar:
+    """El estado de la restauración, de arriba abajo según FR-29. Solo lee ficheros del host: no sondea el
+    auxiliar (si no está activado, estos ficheros no existen y el estado es `sin_datos`)."""
+    ahora = int(time.time()) if ahora is None else ahora
+    datos = _leer_json(settings.ops_restaurar_status_file) or {}
+    resultado = datos.get("resultado")
+    actualizado = _epoch(datos.get("actualizado_epoch"))
+    copia_epoch = _epoch(datos.get("copia_epoch"))
+    fase = datos.get("fase")
+    ops = _leer_json(settings.ops_status_file) or {}
+    pedida = _epoch(ops.get("pedida_epoch")) if ops.get("accion") == "restaurar" else None
+
+    # 1) El auxiliar la aceptó pero el script no llegó a escribir fases (el cerrojo lo tenía otro proceso).
+    omitida = _leer_json(settings.omitida_file) or {}
+    if omitida.get("accion") == "restaurar":
+        omitida_epoch = _epoch(omitida.get("omitida_epoch"))
+        if omitida_epoch is not None and (actualizado is None or actualizado < omitida_epoch) \
+                and (pedida is None or omitida_epoch >= pedida):
+            return VistaRestaurar(EstadoRestaurar.NO_ARRANCO, MSG_REST_NO_ARRANCO,
+                                  nivel="amber", copia_epoch=copia_epoch)
+
+    if not datos:
+        # Entre la aceptación del auxiliar y la primera fase del script: `ops-status.json` ya lleva la petición.
+        if pedida is not None and -TOLERANCIA_RELOJ_S <= ahora - pedida <= SIN_NOTICIAS_RESTAURAR_S:
+            return VistaRestaurar(EstadoRestaurar.EN_MARCHA,
+                                  MSG_REST_EN_MARCHA_SIRVIENDO.format(fecha="ahora"),
+                                  en_marcha=True, copia_epoch=None)
+        return VistaRestaurar(EstadoRestaurar.SIN_DATOS)
+
+    # 2) En curso y reciente / obsoleto.
+    if resultado == "en_curso":
+        if actualizado is not None and ahora - actualizado > SIN_NOTICIAS_RESTAURAR_S:
+            return VistaRestaurar(EstadoRestaurar.SIN_NOTICIAS, MSG_REST_SIN_NOTICIAS,
+                                  nivel="amber", copia_epoch=copia_epoch)
+        return VistaRestaurar(EstadoRestaurar.EN_MARCHA, _mensaje_en_marcha(fase, copia_epoch),
+                              en_marcha=True, copia_epoch=copia_epoch)
+
+    # 3) Hecha, con recuentos (solo números) y fecha de la copia.
+    if resultado == "hecha":
+        recuentos = _recuentos_restaurar(datos.get("recuentos"))
+        if recuentos is None:
+            return VistaRestaurar(EstadoRestaurar.HECHA, MSG_LOGIN_RESTAURADA, nivel="ok",
+                                  copia_epoch=copia_epoch)
+        plantilla = MSG_REST_HECHA if copia_epoch is not None else MSG_REST_HECHA_SIN_FECHA
+        mensaje = plantilla.format(fecha=_dia_llano(copia_epoch), series=miles(recuentos["series"]),
+                                   issues=miles(recuentos["issues"]), files=miles(recuentos["files"]))
+        return VistaRestaurar(EstadoRestaurar.HECHA, mensaje, nivel="ok", recuentos=recuentos,
+                              copia_epoch=copia_epoch)
+
+    # 4) Fallida: causa cerrada + acción; `base_en_su_sitio:false` añade el aviso de que puede no responder.
+    if resultado == "fallida":
+        error = datos.get("error")
+        causa = CAUSAS_RESTAURAR.get(error, GENERICA_RESTAURAR) if isinstance(error, str) else GENERICA_RESTAURAR
+        base = datos.get("base_en_su_sitio")
+        base_en_su_sitio = base if isinstance(base, bool) else None
+        mensaje = causa + (MSG_REST_BASE_FUERA if base_en_su_sitio is False else "")
+        return VistaRestaurar(EstadoRestaurar.FALLO, mensaje, nivel="warn",
+                              base_en_su_sitio=base_en_su_sitio, copia_epoch=copia_epoch)
+
+    return VistaRestaurar(EstadoRestaurar.SIN_DATOS)
+
+
+def aviso_de_login(settings: Settings, ahora: int | None = None) -> str | None:
+    """Texto del aviso de `/login` si consta una restauración `hecha` de la última hora (FR-32). Sin fecha."""
+    ahora = int(time.time()) if ahora is None else ahora
+    datos = _leer_json(settings.ops_restaurar_status_file) or {}
+    if datos.get("resultado") != "hecha":
+        return None
+    actualizado = _epoch(datos.get("actualizado_epoch"))
+    if actualizado is None or actualizado > ahora + TOLERANCIA_RELOJ_S:
+        return None
+    if ahora - actualizado > AVISO_LOGIN_S:
+        return None
+    return MSG_LOGIN_RESTAURADA

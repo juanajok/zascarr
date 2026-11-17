@@ -275,6 +275,8 @@ class Settings(BaseSettings):
     ops_status_file: str = Field(default="/run/backup-status/ops-status.json")
     copias_file: str = Field(default="/run/backup-status/copias.json")
     omitida_file: str = Field(default="/run/backup-status/omitida.json")
+    # BL-OPS2 (FR-24/FR-30): estado por fases de la restauración, escrito por `restaurar_datos.sh`.
+    ops_restaurar_status_file: str = Field(default="/run/backup-status/ops-restaurar.json")
 
     # ── Orquestador ────────────────────────────────────────────────
     scan_interval_minutes: int = 60

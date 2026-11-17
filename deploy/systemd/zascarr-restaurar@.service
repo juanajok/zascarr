@@ -1,21 +1,31 @@
 [Unit]
 Description=ZascArr — restaurar la copia %i (BL-OPS2)
 After=docker.service
+Requires=docker.service
 
 [Service]
 Type=oneshot
 User=root
 Group=root
 EnvironmentFile=-/etc/default/zascarr
-Environment=ZASCARR_REPO=/opt/zascarr/zascarr
+# QA en la VM: con ProtectHome=true el cliente docker necesita DOCKER_CONFIG dentro de /run, y el health real
+# de la app está en el 8000 (el wrapper repite estos valores como respaldo si se ejecuta a mano).
+Environment=DOCKER_CONFIG=/run/zascarr-ops/docker
+Environment=HEALTH_URL=http://127.0.0.1:8000/api/health
 ExecStart=/usr/local/lib/zascarr/restaurar-produccion %i
 SuccessExitStatus=75
-TimeoutStartSec=600
-RuntimeMaxSec=600
+TimeoutStartSec=2700
 Nice=10
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/zascarr /var/lib/zascarr /var/backups/zascarr
+ReadWritePaths=/run/zascarr-ops.lock /run/zascarr-ops/docker @BACKUP_STATUS_DIR@ @BACKUP_DIR@
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+PrivateDevices=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+UMask=0077
 CapabilityBoundingSet=
