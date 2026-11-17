@@ -90,6 +90,37 @@
     </div>
     {% endif %}
 
+    <details class="guardar-one-shot">
+      <summary>Es un tomo único / novela gráfica / one-shot<span class="sr">: «{{ c.file.file_name }}»</span></summary>
+      <form method="post" action="/ui/pendientes/{{ c.file.id }}/one-shot"
+            hx-post="/ui/pendientes/{{ c.file.id }}/one-shot"
+            hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">
+        <label>Título de la obra
+          <input type="text" name="titulo" required maxlength="500"
+                 value="{{ c.suggestion.title if c.suggestion else c.detected }}">
+        </label>
+        <label>Tradición
+          <select name="tradicion">
+            <option value="american">Cómic americano</option>
+            <option value="franco_belgian">Cómic europeo / BD</option>
+            <option value="manga">Manga / manhwa / manhua</option>
+          </select>
+        </label>
+        <label>Formato de la publicación
+          <select name="formato">
+            <option value="graphic_novel">Novela gráfica</option>
+            <option value="trade_paperback">Tomo en rústica</option>
+            <option value="hardcover">Tapa dura</option>
+            <option value="album">Álbum</option>
+            <option value="manga_tankobon">Tomo de manga</option>
+          </select>
+        </label>
+        <p class="efecto-asignacion">No se pide número: si no consta, la publicación queda sin
+          número (nunca se inventa un #1). El archivo se enlaza sin moverlo.</p>
+        <button type="submit" class="btn ghost sm">Crear tomo único<span class="sr">: «{{ c.file.file_name }}»</span></button>
+      </form>
+    </details>
+
     <div class="pending-pie">
       <details class="elegir-otra-serie">
         <summary>Elegir otra serie<span class="sr">: «{{ c.file.file_name }}»</span></summary>
@@ -100,6 +131,11 @@
                hx-trigger="input changed delay:400ms, search"
                hx-target="#resultados-{{ c.file.id }}"
                hx-swap="innerHTML">
+        <label class="caption"><input type="checkbox" name="mostrar_tomos" value="1"
+                 hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
+                 hx-include="#q-{{ c.file.id }}, this"
+                 hx-target="#resultados-{{ c.file.id }}" hx-swap="innerHTML">
+          Mostrar también tomos únicos</label>
         <div id="resultados-{{ c.file.id }}" class="series-results"></div>
       </details>
       <button type="button" class="btn-ignorar"

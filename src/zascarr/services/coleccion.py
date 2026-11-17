@@ -14,7 +14,7 @@ from uuid import UUID
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.models import Series, WishlistPolicy
+from zascarr.models import Issue, Series, SeriesKind, WishlistPolicy
 from zascarr.services.series import (
     UNIDAD_DE_GRAPA,
     compute_missing_issues,
@@ -141,6 +141,8 @@ def estado_puro(series: Series, poseidos: set[int]) -> EstadoColeccion:
     """Estado sin BD, para tests y para reutilizar la misma regla en la ficha."""
     if decision_no_completar(series):
         return EstadoColeccion(NO_COMPLETAR)
+    if series.kind == SeriesKind.ONE_SHOT:
+        return EstadoColeccion(COMPLETA)
     no_calculable = razon_de_no_calculable(series)
     if no_calculable is not None:
         return EstadoColeccion(NO_CALCULABLE, motivo=no_calculable.motivo)
@@ -180,18 +182,35 @@ async def ids_por_estado(db: AsyncSession, tipo: str) -> set[UUID]:
     if tipo not in TIPOS:
         return set()
     filas = (await db.execute(
-        select(Series.id, Series.total_issues, Series.metadata_source, Series.metadata_)
+        select(Series.id, Series.total_issues, Series.metadata_source, Series.metadata_,
+               Series.kind)
     )).all()
     if tipo == NO_COMPLETAR:
-        return {sid for sid, _total, _fuente, metadata in filas
-                if isinstance(metadata, dict)
-                and bool((metadata.get(CLAVE_METADATA) or {}).get("no_completar"))}
+        return {fila[0] for fila in filas
+                if len(fila) > 3 and isinstance(fila[3], dict)
+                and bool((fila[3].get(CLAVE_METADATA) or {}).get("no_completar"))}
     poseidos = await numeros_poseidos_por_serie(db)
+    # Una obra autoconclusiva está completa si tiene alguna publicación; si no,
+    # cae en «no calculable» con el motivo de sin publicación (nunca en «faltan»).
+    con_publicacion = {
+        fila[0] for fila in filas
+        if len(fila) > 4 and fila[4] == SeriesKind.ONE_SHOT}
+    if con_publicacion:
+        con_publicacion = set((await db.execute(
+            select(Issue.series_id).where(Issue.series_id.in_(con_publicacion)).distinct()
+        )).scalars().all())
     salida: set[UUID] = set()
-    for sid, total, fuente, metadata in filas:
+    for fila in filas:
+        sid, total, fuente, metadata = fila[0], fila[1], fila[2], fila[3]
+        kind = fila[4] if len(fila) > 4 else None
         decidida = (isinstance(metadata, dict)
                     and bool((metadata.get(CLAVE_METADATA) or {}).get("no_completar")))
         if decidida:
+            continue
+        if kind == SeriesKind.ONE_SHOT:
+            tiene = sid in con_publicacion
+            if (tipo == COMPLETA and tiene) or (tipo == NO_CALCULABLE and not tiene):
+                salida.add(sid)
             continue
         # Réplica exacta de `razon_de_no_calculable` sin cargar la Serie entera.
         no_calculable = not total or fuente not in UNIDAD_DE_GRAPA
