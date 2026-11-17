@@ -10,6 +10,7 @@ import asyncio
 import os
 import shutil
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -61,11 +62,15 @@ class CacheLectura:
     max_ficheros: int
     _tareas: dict[str, asyncio.Task] = field(default_factory=dict)
     _errores: dict[str, str] = field(default_factory=dict)
-    _locks: dict[str, asyncio.Lock] = field(default_factory=dict)
+    _cuota_lock: threading.Lock = field(default_factory=threading.Lock)
 
     @classmethod
     def desde_ajustes(cls, settings: Settings | None = None) -> CacheLectura:
         s = settings or get_settings()
+        base = s.lector_cache_path.resolve()
+        biblioteca = s.library_path.resolve()
+        if base == biblioteca or base.is_relative_to(biblioteca):
+            raise ValueError("La caché del lector no puede estar dentro de la biblioteca")
         return cls(s.lector_cache_path, s.lector_cache_bytes, s.lector_extraccion_timeout_s,
                    s.lector_extraccion_max_bytes, s.lector_extraccion_max_ficheros)
 
@@ -110,7 +115,9 @@ class CacheLectura:
         except CacheError as exc:
             self._errores[clave] = str(exc)
         except ErrorRar as exc:
-            self._errores[clave] = _MOTIVO.get(exc.motivo, _MOTIVO[MotivoRar.INESPERADO])
+            if exc.motivo not in (MotivoRar.OCUPADO, MotivoRar.TIEMPO,
+                                  MotivoRar.HERRAMIENTA_AUSENTE):
+                self._errores[clave] = _MOTIVO.get(exc.motivo, _MOTIVO[MotivoRar.INESPERADO])
         except Exception as exc:  # noqa: BLE001 — una extracción no puede tumbar el proceso
             logger.warning("lector.cache_error", tipo=type(exc).__name__)
             self._errores[clave] = _MOTIVO[MotivoRar.INESPERADO]
@@ -126,11 +133,15 @@ class CacheLectura:
         return total
 
     def _hacer_sitio(self, necesario: int, clave_actual: str) -> None:
+        with self._cuota_lock:
+            self._hacer_sitio_bloqueado(necesario, clave_actual)
+
+    def _hacer_sitio_bloqueado(self, necesario: int, clave_actual: str) -> None:
         self.base.mkdir(parents=True, exist_ok=True)
         actuales = []
         total = 0
         for hijo in self.base.iterdir():
-            if not hijo.is_dir() or hijo.name.startswith(".tmp-"):
+            if not hijo.is_dir():
                 continue
             tam = self._tamano(hijo)
             total += tam
@@ -138,16 +149,25 @@ class CacheLectura:
         if total + necesario <= self.cuota:
             return
         ahora = time.time()
-        for hijo, tam in sorted(actuales, key=lambda x: x[0].stat().st_mtime):
-            if hijo.name == clave_actual or hijo.name in self._tareas:
+        for hijo, tam in sorted(actuales,
+                                key=lambda x: self._mtime(x[0])):
+            if (hijo.name == clave_actual or hijo.name in self._tareas
+                    or hijo.name.startswith(".tmp-")):
                 continue
-            if ahora - hijo.stat().st_mtime < ACTIVO_S:
+            if ahora - self._mtime(hijo) < ACTIVO_S:
                 continue
             shutil.rmtree(hijo, ignore_errors=True)
             total -= tam
             if total + necesario <= self.cuota:
                 return
         raise CacheError("No hay espacio en la caché de lectura para preparar este tebeo.")
+
+    @staticmethod
+    def _mtime(ruta: Path) -> float:
+        try:
+            return ruta.stat().st_mtime
+        except OSError:
+            return 0.0
 
     def _extraer_sync(self, file: File) -> None:
         clave = self.clave(file)
@@ -159,12 +179,15 @@ class CacheLectura:
             raise CacheError("Este tebeo es demasiado grande para prepararlo para leer.")
         self._hacer_sitio(max(declarado, 1), clave)
         self.base.mkdir(parents=True, exist_ok=True)
+        libre = max(0, self.cuota - self._tamano(self.base))
+        if libre <= 0:
+            raise CacheError("No hay espacio en la caché de lectura para preparar este tebeo.")
         trabajo = Path(tempfile.mkdtemp(prefix=f".tmp-{clave}-", dir=self.base))
         try:
             salida = trabajo / "salida"
             imagenes = extraer_completo(
                 ruta, salida, temporal=trabajo,
-                timeout=self.timeout, max_bytes=self.max_bytes,
+                timeout=self.timeout, max_bytes=min(self.max_bytes, libre),
                 max_ficheros=self.max_ficheros)
             total_extraido = sum(i.tamano for i in imagenes)
             if total_extraido > self.cuota:
