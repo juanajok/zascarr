@@ -519,7 +519,8 @@ def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, l
     peticion = parsear(linea)
     if clave is None:
         # sin clave el auxiliar contesta no_disponible a todo y lo dice en el diario con un código genérico
-        return _rechazo("no_disponible", peticion["id"] if peticion else None, diario="clave_ausente")
+        return _rechazo("no_disponible", peticion["id"] if peticion else None,
+                        diario="clave_ausente", v=peticion["v"] if peticion else 1)
     if peticion is None:
         return _rechazo("esquema_invalido")
     id_ = peticion["id"]

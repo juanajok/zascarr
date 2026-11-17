@@ -16,6 +16,7 @@ ENV_FILE="${ENV_FILE:-${ZASCARR_ROOT}/.env}"
 
 # Destinos: fijos en producción; las pruebas los desvían con ZASCARR_PRUEBAS=1.
 DEST_AUXILIAR="/usr/local/lib/zascarr/zascarr-ops"
+DEST_RESTAURAR="/usr/local/lib/zascarr/restaurar-produccion"
 DEST_UNIDADES="/etc/systemd/system"
 DEST_TMPFILES="/etc/tmpfiles.d/zascarr-ops.conf"
 if [[ "${ZASCARR_PRUEBAS:-}" == "1" ]]; then
@@ -23,6 +24,7 @@ if [[ "${ZASCARR_PRUEBAS:-}" == "1" ]]; then
     DEST_UNIDADES="${OPS_DEST_UNIDADES:-${DEST_UNIDADES}}"
     DEST_TMPFILES="${OPS_DEST_TMPFILES:-${DEST_TMPFILES}}"
 fi
+DEST_RESTAURAR="${OPS_DEST_RESTAURAR:-${DEST_AUXILIAR%/*}/restaurar-produccion}"
 
 DRY_RUN=0
 YES=0
@@ -115,7 +117,8 @@ if [[ "${MODO}" == "quitar" ]]; then
     say "Quitando «Hacer una copia ahora»..."
     run systemctl disable --now zascarr-ops.socket 2>/dev/null || true
     run rm -f "${DEST_UNIDADES}/zascarr-ops.socket" "${DEST_UNIDADES}/zascarr-ops@.service" \
-        "${DEST_TMPFILES}" "${DEST_AUXILIAR}"
+        "${DEST_UNIDADES}/zascarr-restaurar@.service" "${DEST_TMPFILES}" \
+        "${DEST_AUXILIAR}" "${DEST_RESTAURAR}"
     run systemctl daemon-reload
     if (( BORRAR_CLAVE )); then
         run rm -f "${OPS_DIR}/ops.key"
@@ -136,8 +139,9 @@ command -v systemctl >/dev/null 2>&1 || { echo "No encuentro systemctl." >&2; ex
 command -v python3 >/dev/null 2>&1 || { echo "No encuentro python3 (hace falta 3.9 o superior)." >&2; exit 1; }
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' \
     || { echo "Hace falta python3 3.9 o superior." >&2; exit 1; }
-for f in deploy/ops/zascarr_ops.py deploy/systemd/zascarr-ops.socket deploy/systemd/zascarr-ops@.service \
-         deploy/systemd/zascarr-ops.tmpfiles.conf; do
+for f in deploy/ops/zascarr_ops.py deploy/ops/restaurar-produccion.sh \
+         deploy/systemd/zascarr-ops.socket deploy/systemd/zascarr-ops@.service \
+         deploy/systemd/zascarr-restaurar@.service deploy/systemd/zascarr-ops.tmpfiles.conf; do
     [[ -f "${REPO_DIR}/${f}" ]] || { echo "Falta ${REPO_DIR}/${f}" >&2; exit 1; }
 done
 GRUPO="$(resolver_grupo)" || {
@@ -175,6 +179,8 @@ else
 fi
 
 instalar_si_cambia "${REPO_DIR}/deploy/ops/zascarr_ops.py" "${DEST_AUXILIAR}" 0755 && CAMBIO=1
+instalar_si_cambia "${REPO_DIR}/deploy/ops/restaurar-produccion.sh" "${DEST_RESTAURAR}" 0755 && CAMBIO=1
+instalar_si_cambia "${REPO_DIR}/deploy/systemd/zascarr-restaurar@.service" "${DEST_UNIDADES}/zascarr-restaurar@.service" 0644 && CAMBIO=1
 instalar_si_cambia "${REPO_DIR}/deploy/systemd/zascarr-ops@.service" "${DEST_UNIDADES}/zascarr-ops@.service" 0644 && CAMBIO=1
 instalar_si_cambia "${REPO_DIR}/deploy/systemd/zascarr-ops.socket" "${DEST_UNIDADES}/zascarr-ops.socket" 0644 && CAMBIO=1
 instalar_si_cambia "${REPO_DIR}/deploy/systemd/zascarr-ops.tmpfiles.conf" "${DEST_TMPFILES}" 0644 && CAMBIO=1
