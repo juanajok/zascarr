@@ -486,6 +486,42 @@ def test_la_eleccion_externa_gana_a_la_previa_con_ancho_suficiente(tmp_path, mon
     assert r.status_code == 200 and r.content == esperado
 
 
+def test_una_v3_suficiente_borra_la_externa_cacheada(tmp_path, monkeypatch):
+    """OCTA-E8: si ya hay portada del archivo, la externa redundante desaparece."""
+    serie = _series()
+    covers = _covers(tmp_path, externa=True, serie=serie, ancho=600)
+    v3 = covers / "v3" / f"{serie.id}.jpg"
+    v3.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (600, 900), (7, 8, 9)).save(v3, "JPEG")
+    esperado = v3.read_bytes()
+    ajustes = get_settings().model_copy(update={"covers_cache_path": covers})
+    monkeypatch.setattr("zascarr.web.series.get_settings", lambda: ajustes)
+    session = FakeSession([], series=serie)
+
+    with _use(session) as client:
+        r = client.get(f"/ui/series/{serie.id}/portada")
+
+    assert r.status_code == 200 and r.content == esperado
+    assert not (covers / "externa" / f"{serie.id}.jpg").exists()
+
+
+def test_sin_v3_la_externa_suficiente_se_conserva(tmp_path, monkeypatch):
+    """La externa puede ser la buena si el archivo no llega al umbral (BL-PORT5)."""
+    serie = _series()
+    covers = _covers(tmp_path, externa=True, serie=serie, ancho=600)
+    externa = covers / "externa" / f"{serie.id}.jpg"
+    esperado = externa.read_bytes()
+    ajustes = get_settings().model_copy(update={"covers_cache_path": covers})
+    monkeypatch.setattr("zascarr.web.series.get_settings", lambda: ajustes)
+    session = FakeSession([], series=serie)
+
+    with _use(session) as client:
+        r = client.get(f"/ui/series/{serie.id}/portada")
+
+    assert r.status_code == 200 and r.content == esperado
+    assert externa.exists()
+
+
 def test_la_eleccion_de_archivo_sirve_la_v3_sin_volver_a_extraer(tmp_path, monkeypatch):
     serie = _series()
     covers = _covers(tmp_path)
