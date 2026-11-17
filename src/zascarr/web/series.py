@@ -2015,14 +2015,22 @@ async def portada(series_id: UUID, request: Request,
     # escribir ni copiar nada. Una `v2` ya escrita queda en disco, sin uso (#418).
     previa = await asyncio.to_thread(portada_previa_suficiente, covers, series_id)
     if previa is not None:
-        try:
-            etag = _etag_for(previa.ruta)
-        except OSError:       # desapareció entre leerla y servirla: el ETag sale de los bytes
-            etag = _etag_de_bytes(previa.datos)
-        return cached_image_response(request, previa.datos, "image/jpeg", etag)
+        # OCTA-E8: si la previa que iba a servirse es la externa y ya hay una
+        # portada extraída del archivo (`v3`), la del archivo manda y la externa
+        # deja de ser necesaria. Si no hay `v3`, BL-PORT5 conserva la externa.
+        if previa.ruta == externa_path and v3_path.exists():
+            await asyncio.to_thread(_borrar_portada_externa, externa_path)
+        else:
+            try:
+                etag = _etag_for(previa.ruta)
+            except OSError:       # desapareció entre leerla y servirla: el ETag sale de los bytes
+                etag = _etag_de_bytes(previa.datos)
+            return cached_image_response(request, previa.datos, "image/jpeg", etag)
 
     data_v3 = await asyncio.to_thread(_leer_cache_de_portada, v3_path)
     if data_v3 is not None:
+        # OCTA-E8: una v3 de archivo hace redundante la externa; se retira.
+        await asyncio.to_thread(_borrar_portada_externa, externa_path)
         return cached_image_response(request, data_v3, "image/jpeg", _etag_for(v3_path))
 
     # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya no
@@ -2037,6 +2045,10 @@ async def portada(series_id: UUID, request: Request,
         if efimera:
             # H-1: salió de un archivo posterior porque un RAR anterior no tuvo turno; no se cachea
             return Response(content=data, media_type=content_type, headers={"Cache-Control": "no-store"})
+        if escrita and v3_path.exists():
+            # OCTA-E8: acabamos de extraer una portada suficiente del archivo;
+            # la externa antigua ya no hace falta.
+            await asyncio.to_thread(_borrar_portada_externa, externa_path)
         etag = _etag_for(v3_path) if escrita else _etag_de_bytes(data)
         return cached_image_response(request, data, content_type, etag)
 
@@ -2094,6 +2106,20 @@ async def portada(series_id: UUID, request: Request,
     cabeceras = ({"Cache-Control": "no-store"}
                  if ("cortesia" in motivo_fallo or ocupado or sin_lector) else None)
     raise HTTPException(status_code=404, detail="Sin portada disponible", headers=cabeceras)
+
+
+def _borrar_portada_externa(ruta: Path) -> None:
+    """Borra la portada externa cacheada cuando ya hay una del archivo suficiente.
+
+    Best-effort: si el fichero no está o no se puede borrar, la cascada sigue
+    funcionando; no se registra la ruta.
+    """
+    try:
+        ruta.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("cover.externa_no_borrada", error=type(exc).__name__)
 
 
 def _leer_cache_de_portada(path: Path) -> bytes | None:
