@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% import "_componentes.html" as ui %}
+{% block title %}Revisar datos — ZascArr{% endblock %}
+{% block content %}
+<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>
+<h1>Revisar datos</h1>
+<p class="subtitle">Qué series tienen fichas de fuentes recogidas y cuántos campos tienen procedencia. Esta pantalla no cambia nada.</p>
+{% if lanzado %}{{ ui.aviso("ok", "Se ha lanzado el relleno de huecos seguros de hasta 20 series. Puedes seguir usando ZascArr; no se resuelven conflictos.") }}{% endif %}
+<div class="pending-card">
+  <p><strong>{{ total_con_ficha }}</strong> series con alguna ficha de fuente recogida · <strong>{{ total_con_procedencia }}</strong> series con procedencia por campo.</p>
+  {% if series %}
+  <table class="tabla-simple">
+    <thead><tr><th scope="col">Serie</th><th scope="col">Revisar</th></tr></thead>
+    <tbody>
+      {% for s in series %}
+      <tr><td>{{ s.title }}</td><td><a class="btn ghost sm" href="/ui/series/{{ s.id }}/datos">Completar datos</a></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Todavía no hay fichas de fuentes recogidas. Cuando la recolección se ejecute, aparecerán aquí.</p>
+  {% endif %}
+  {% if series %}
+  <form method="post" action="/ui/datos/rellenar">
+    <button type="submit" class="btn primary">Rellenar huecos seguros (hasta 20 series)</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

@@ -375,7 +375,7 @@ async def pedir_con_cache(
 
     respuesta = await mirar_cache()
     if respuesta is not None:
-        logger.info("cache_http.hit", url_hash=url_hash[:12], domain=domain)
+        logger.debug("cache_http.hit", url_hash=url_hash[:12], domain=domain)
         return respuesta
 
     candado: asyncio.Lock | None = None
@@ -391,7 +391,7 @@ async def pedir_con_cache(
         if candado is not None:
             respuesta = await mirar_cache()
             if respuesta is not None:
-                logger.info("cache_http.hit", url_hash=url_hash[:12], domain=domain)
+                logger.debug("cache_http.hit", url_hash=url_hash[:12], domain=domain)
                 return respuesta
 
         politica_red = await _politica_con_robots(
@@ -463,7 +463,7 @@ async def pedir_con_cache(
             body_zlib=comprimido, fetched_at=momento,
             fresh_until=fresco, retain_until=retenido,
         ))
-        logger.info("cache_http.guardada", url_hash=url_hash[:12], domain=domain,
+        logger.debug("cache_http.guardada", url_hash=url_hash[:12], domain=domain,
                     negativa=es_negativa)
         return respuesta
     finally:
@@ -520,7 +520,7 @@ async def _devolver_revalidada(cache: CacheHttpProtocolo, fila: FilaCache, url_h
                                    retain_until=retenido)
     if renovadas == 0:  # la purga la borró mientras tanto: se reescribe con el cuerpo guardado
         await cache.escribir(fila)
-    logger.info("cache_http.revalidada", url_hash=url_hash[:12])
+    logger.debug("cache_http.revalidada", url_hash=url_hash[:12])
     respuesta = await _respuesta_de_fila(fila, "revalidada")
     if respuesta is None:  # no debería: el cuerpo venía de una fila válida
         raise RespuestaNoTransitoria(304)
@@ -540,7 +540,7 @@ async def _guardar_negativa(cache: CacheHttpProtocolo, url_hash: str, url_canoni
         last_modified=None, body_zlib=None, fetched_at=momento,
         fresh_until=fresco, retain_until=retenido,
     ))
-    logger.info("cache_http.negativa_guardada", url_hash=url_hash[:12], codigo=codigo)
+    logger.debug("cache_http.negativa_guardada", url_hash=url_hash[:12], codigo=codigo)
 
 
 # ── Purga periódica (una vez por ciclo del enricher) ───────────────────────────────────────────

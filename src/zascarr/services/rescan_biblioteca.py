@@ -1,4 +1,5 @@
 # ruff: noqa: E501
+
 """Rescan de la biblioteca a petición y periódico (#BL-R9).
 
 Una sola operación de disco a la vez: el rescan comparte el cerrojo consultivo de ciclo `(326, 2)`
@@ -23,6 +24,7 @@ from enum import StrEnum
 import structlog
 from sqlalchemy import text
 
+from zascarr.services import tareas
 from zascarr.services.comprobacion_disco import CLAVE_CERROJO_CICLO
 from zascarr.services.library_adopter import LibraryAdopter, RescanReport
 
@@ -106,11 +108,23 @@ async def _correr(fabrica, disparador: str) -> RescanReport:
 
 
 async def _ejecutar_tarea(fabrica, disparador: str) -> None:
+    tarea = tareas.iniciar("rescanear", enlace="/ui/auditoria#rescan-biblioteca",
+                           origen=f"rescan:{disparador}")
+    try:
+        await _ejecutar_tarea_con_cerrojo(fabrica, disparador, tarea)
+    finally:
+        if tarea is not None and tarea.estado.value == "en_curso":
+            tareas.terminar(tarea.id, resumen="Revisión terminada")
+
+
+async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
     async with _cerrojo_ciclo(fabrica) as libre:
         if not libre:
             _estado.fase = FaseRescan.OCUPADO
             _estado.terminado = datetime.now(UTC)
             logger.info("rescan.ocupado", disparador=disparador)
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error="ocupado")
             return
         try:
             informe = await _correr(fabrica, disparador)
@@ -124,12 +138,18 @@ async def _ejecutar_tarea(fabrica, disparador: str) -> None:
                 revisados=informe.files_scanned,
                 nuevos=informe.nuevos_registrados + informe.nuevos_a_revisar,
                 re_triados=informe.re_triados,
-                desaparecidos=informe.desaparecidos)
+                desaparecidos=informe.desaparecidos,
+                duracion_ms=int((informe.finished_at - informe.started_at).total_seconds() * 1000)
+                if informe.finished_at and informe.started_at else None)
         except asyncio.CancelledError:
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error="CancelledError")
             _estado.fase = FaseRescan.INACTIVO
             _estado.causa = "CancelledError"
             raise
         except Exception as exc:  # noqa: BLE001 — el estado no propaga detalle técnico
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error=type(exc).__name__)
             _estado.fase = FaseRescan.ERROR
             _estado.causa = type(exc).__name__
             logger.warning("rescan.fallido", disparador=disparador, error=type(exc).__name__)
@@ -163,18 +183,26 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
             _estado = EstadoRescan()
             logger.info("rescan.auto_skipped", motivo="cerrojo_ocupado")
             return None
+        tarea = tareas.iniciar("rescanear", enlace="/ui/auditoria#rescan-biblioteca",
+                               origen="rescan")
         try:
             informe = await _correr(fabrica, DISPARADOR_AUTOMATICO)
+            if tarea is not None:
+                tareas.terminar(tarea.id, resumen="Biblioteca revisada")
             _estado.informe = informe
             _estado.fase = FaseRescan.TERMINADO
             _estado.run_id = str(informe.run_id) if informe.run_id else None
             _estado.foco_resultado = True
             return informe
         except asyncio.CancelledError:
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error="CancelledError")
             _estado.fase = FaseRescan.INACTIVO
             _estado.causa = "CancelledError"
             raise
         except Exception as exc:  # noqa: BLE001
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error=type(exc).__name__)
             _estado.fase = FaseRescan.ERROR
             _estado.causa = type(exc).__name__
             logger.warning("rescan.fallido", disparador=DISPARADOR_AUTOMATICO,

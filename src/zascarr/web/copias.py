@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse
 
 from zascarr.config import get_settings
 from zascarr.models import CodigoOps
-from zascarr.services import ops_host
+from zascarr.services import ops_host, tareas
 from zascarr.services.ops_host import EstadoCopia, VistaCopias
 from zascarr.web.routes import crear_templates
 
@@ -26,6 +26,7 @@ templates = crear_templates()
 router = APIRouter(tags=["ui"])
 
 ENTRE_COPIAS_MIN = ops_host.ENTRE_COPIAS_S // 60
+_tarea_copia = None
 
 
 def _contexto(vista: VistaCopias, copias: list[dict] | None, mensaje_pedir: str = "", con_lista: bool = True,
@@ -52,8 +53,18 @@ def _fragmento(request: Request, contexto: dict) -> HTMLResponse:
 
 
 async def _fragmento_actual(request: Request, mensaje_pedir: str = "", boton_cambia: bool | None = None) -> HTMLResponse:
+    global _tarea_copia
     settings = get_settings()
     vista = await asyncio.to_thread(ops_host.resolver_estado, settings)
+    if vista.en_marcha and _tarea_copia is None:
+        _tarea_copia = tareas.iniciar_copia()
+    elif not vista.en_marcha and _tarea_copia is not None:
+        if vista.estado in (EstadoCopia.HECHA, EstadoCopia.DIARIO):
+            tareas.terminar(_tarea_copia.id, resumen="Copia terminada")
+        else:
+            tareas.error(_tarea_copia.id,
+                         tipo_error="copia_" + str(vista.estado))
+        _tarea_copia = None
     # El listado solo se vuelve a pintar cuando no hay copia en marcha: la última respuesta de un sondeo, o tras pedir.
     con_lista = not vista.en_marcha and vista.estado != EstadoCopia.NO_ACTIVADO
     copias = await asyncio.to_thread(ops_host.leer_copias, settings) if con_lista else None
@@ -70,8 +81,18 @@ async def estado_copias(request: Request) -> HTMLResponse:
 @router.post("/ui/copias/pedir", response_class=HTMLResponse)
 async def pedir_copia(request: Request) -> HTMLResponse:
     """Pide una copia al auxiliar. Si ya hay una en marcha NO envía nada y devuelve el estado actual (FR-24)."""
+    global _tarea_copia
     settings = get_settings()
     vista = await asyncio.to_thread(ops_host.resolver_estado, settings)
+    if vista.en_marcha and _tarea_copia is None:
+        _tarea_copia = tareas.iniciar_copia()
+    elif not vista.en_marcha and _tarea_copia is not None:
+        if vista.estado in (EstadoCopia.HECHA, EstadoCopia.DIARIO):
+            tareas.terminar(_tarea_copia.id, resumen="Copia terminada")
+        else:
+            tareas.error(_tarea_copia.id,
+                         tipo_error="copia_" + str(vista.estado))
+        _tarea_copia = None
     if vista.estado == EstadoCopia.NO_ACTIVADO:
         return await _fragmento_actual(request, boton_cambia=True)
     if vista.en_marcha:

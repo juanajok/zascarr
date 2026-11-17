@@ -483,8 +483,14 @@ def extraer_entrada_a(ruta: Path, entrada: EntradaRar, destino: Path, tope: int,
         salida_fd = (os.open(destino.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL
                              | os.O_NOFOLLOW, 0o600, dir_fd=destino_dir_fd)
                      if destino_dir_fd is not None else None)
-        with open(fichero, "rb") as entrada_f, (
-                os.fdopen(salida_fd, "wb") if salida_fd is not None else open(destino, "xb")) as salida_f:
+        try:
+            entrada_f = open(fichero, "rb")  # noqa: SIM115
+        except BaseException:
+            if salida_fd is not None:
+                os.close(salida_fd)
+            raise
+        with entrada_f, (os.fdopen(salida_fd, "wb") if salida_fd is not None
+                         else open(destino, "xb")) as salida_f:
             while bloque := entrada_f.read(1024 * 1024):
                 total += len(bloque)
                 crc = zlib.crc32(bloque, crc)

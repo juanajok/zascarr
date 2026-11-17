@@ -276,6 +276,16 @@ class Settings(BaseSettings):
     # benchmark-BL-R9-rescan-biblioteca.md); 0 lo desactiva. Como los demás
     # intervalos, se fija en el `.env` (no se edita desde Ajustes).
     rescan_interval_minutes: int = Field(default=1440, ge=0)
+    # #993: seguimiento de números nuevos. Configuración SOLO por .env (sin UI
+    # en v1); defaults confirmados por el PO. 45 min, 10 temas/series/deseos y
+    # 5 avisos por pasada; los vistos se purgan a los 90 días.
+    seguimiento_interval_minutes: int = Field(default=45, ge=15, le=180)
+    seguimiento_foro_id: int = Field(default=5, ge=1)
+    seguimiento_max_temas: int = Field(default=10, ge=0, le=100)
+    seguimiento_max_series_prowlarr: int = Field(default=10, ge=0, le=100)
+    seguimiento_max_deseos: int = Field(default=10, ge=0, le=100)
+    seguimiento_max_avisos: int = Field(default=5, ge=0, le=50)
+    seguimiento_retencion_dias: int = Field(default=90, ge=1, le=3650)
     max_concurrent_downloads: int = 2
     # D1: cuánto esperar antes de reintentar un item sin resultados o cuya
     # descarga falló (mismo patrón que enrichment_attempted_at del enricher,
@@ -388,6 +398,13 @@ class Settings(BaseSettings):
     app_version: str = "1.15.1"
     log_level: str = "INFO"
     log_json: bool = True
+    # Persistencia/rotación propia para consultar logs anteriores desde la UI.
+    # En Docker se monta `${ZASCARR_DATA_DIR}/logs`; si no existe/es escribible,
+    # la app sigue usando solo stdout y el búfer en memoria.
+    log_dir: Path = Field(default=Path("/config/logs"))
+    log_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    log_backups: int = Field(default=3, ge=0, le=50)
+    log_retention_days: int = Field(default=30, ge=1, le=3650)
     debug: bool = False
 
     @model_validator(mode="after")

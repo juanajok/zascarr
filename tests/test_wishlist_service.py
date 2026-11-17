@@ -105,9 +105,11 @@ class TestRetry:
 
     @pytest.mark.asyncio
     async def test_reintentar_resetea_estado_y_cooldown(self):
-        from datetime import datetime, timezone
+        from datetime import datetime, timedelta, timezone
         item = Wishlist(id=uuid4(), status=WishlistStatus.FAILED,
-                        last_searched_at=datetime.now(timezone.utc))
+                        last_searched_at=datetime.now(timezone.utc),
+                        retry_count=3,
+                        next_retry_at=datetime.now(timezone.utc) + timedelta(hours=6))
         session = FakeSession(get_map={(Wishlist, item.id): item})
         service = WishlistService(db=session)
 
@@ -115,6 +117,9 @@ class TestRetry:
 
         assert result.status == WishlistStatus.WANTED
         assert result.last_searched_at is None
+        # T-62: el reintento manual del coleccionista salta también el backoff.
+        assert result.retry_count == 0
+        assert result.next_retry_at is None
 
     @pytest.mark.asyncio
     async def test_item_inexistente_lanza_error(self):

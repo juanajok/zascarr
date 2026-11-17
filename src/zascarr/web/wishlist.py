@@ -300,6 +300,81 @@ async def buscar_ahora(
     })
 
 
+#: Tope de deseos por tanda: cada búsqueda puede tardar hasta ~2 min (foro/cortesía).
+MAX_LOTE = 8
+
+
+def _resultado_lote(request: Request, mensaje: str, parciales: list[str]):
+    """Aviso de la tanda + parciales de candidatos en OOB (sin tocar el estado del deseo)."""
+    return templates.TemplateResponse(request, "_resultado_lote.html", {
+        "mensaje": mensaje,
+        "parciales": "".join(parciales),
+    })
+
+
+@router.post("/buscar-lote", response_class=HTMLResponse,
+             dependencies=[Depends(require_legal_acknowledgment)])
+async def buscar_lote(
+    request: Request,
+    item_id: list[UUID] = Form(default=[]),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Busca varios deseos en secuencia y devuelve cada panel de candidatos en OOB.
+
+    No usa `_row()`: los items vienen de `db.get` sin relaciones precargadas y tocar
+    `item.series`/`item.issue` lanzaría MissingGreenlet (regresión 2026-11-17). El panel se
+    renderiza con `templates.env.get_template(...).render(...)` para poder incrustarlo en la
+    respuesta OOB conservando el mismo parcial que «Buscar ahora». No cambia el estado del
+    deseo ni envía nada a los clientes de descarga.
+    """
+    ids = list(dict.fromkeys(item_id))
+    if not ids:
+        return _resultado_lote(request, "No has seleccionado ningún deseo.", [])
+    if len(ids) > MAX_LOTE:
+        return _resultado_lote(
+            request,
+            f"Has seleccionado {len(ids)} deseos; el máximo por tanda es {MAX_LOTE}. "
+            "Marca menos y vuelve a intentarlo.", [])
+    orquestador = Orchestrator(db)
+    secret = get_settings().secret_key
+    parciales: list[str] = []
+    buscados = 0
+    saltados = 0
+    plantilla = templates.env.get_template("_candidatos_wishlist.html")
+    for ident in ids:
+        item = await db.get(Wishlist, ident)
+        if item is None:
+            saltados += 1
+            continue
+        resultado = await orquestador.preview_candidates(item)
+        filas = [
+            {"c": candidato, "formato": _formato_de(candidato.title),
+             "token": crear_token_candidato(ident, candidato, secret)}
+            for candidato in (resultado or [])
+        ]
+        parcial = plantilla.render(
+            item_id=ident,
+            item_titulo=(item.search_query or "").strip(),
+            candidatos=filas,
+            no_se_pudo_buscar=resultado is None,
+            sin_candidatos=resultado is not None and not resultado,
+            motivo=item.last_error if resultado is not None and not resultado else None,
+        )
+        # El root del parcial ya tiene el id vivo: se le añade el swap OOB para que htmx
+        # sustituya ESE panel y no todo el contenedor del lote.
+        parcial = parcial.replace(
+            f'<div class="candidatos-wishlist" id="candidatos-{ident}">',
+            f'<div class="candidatos-wishlist" id="candidatos-{ident}" '
+            f'hx-swap-oob="outerHTML:#candidatos-{ident}">', 1)
+        parciales.append(parcial)
+        buscados += 1
+    mensaje = (f"Se buscaron {buscados} deseo{'s' if buscados != 1 else ''}; "
+               "cada resultado está en su fila.")
+    if saltados:
+        mensaje += f" {saltados} ya no estaban en la lista."
+    return _resultado_lote(request, mensaje, parciales)
+
+
 @router.post("/{item_id}/cancelar-busqueda", response_class=HTMLResponse)
 async def cancelar_busqueda(item_id: UUID) -> HTMLResponse:
     """D10: cancelar no deja nada a medias — no se tocó Transmission/aMule
