@@ -94,7 +94,8 @@ async def anadir_a_deseos(file_id: UUID, db: AsyncSession = Depends(get_db)) -> 
         return HTMLResponse("No se ha podido añadir el número.", status_code=404)
     await WishlistService(db).add(series_id=issue.series_id)
     await db.commit()
-    return HTMLResponse('<p class="aviso">Añadido a Deseados.</p>')
+    return HTMLResponse('<p class="aviso">Añadido a Deseados.</p>',
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/{file_id}/estado", response_class=JSONResponse)

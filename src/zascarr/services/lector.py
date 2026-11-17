@@ -362,13 +362,15 @@ async def siguiente_numero(db: AsyncSession, file_id: UUID) -> Siguiente:
     k = g + 1
     poseidos = await numeros_poseidos(db, serie.id)
     if k in poseidos:
-        issue = (await db.execute(
+        # `numeros_poseidos` normaliza «006» a 6: no se compara el texto crudo.
+        candidatos = (await db.execute(
             select(Issue).where(
                 Issue.series_id == serie.id,
-                Issue.issue_number == str(k),
                 Issue.format == IssueFormat.SINGLE_ISSUE,
-            ).order_by(Issue.id).limit(1)
-        )).scalar_one_or_none()
+            ).order_by(Issue.id)
+        )).scalars().all()
+        issue = next((i for i in candidatos
+                      if numero_de_grapa(i.issue_number, i.format) == k), None)
         archivo = await archivo_por_defecto(db, issue.id) if issue is not None else None
         if issue is not None and archivo is not None:
             return Siguiente(LEER, serie, k, issue, archivo)

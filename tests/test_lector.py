@@ -340,3 +340,13 @@ def test_anadir_a_deseos_reutiliza_wishlist(tmp_path):
         assert db.commit.await_count == 1
     finally:
         app.dependency_overrides.pop(require_legal_acknowledgment, None)
+
+
+def test_deseo_sin_aviso_legal_da_403_y_no_escribe(tmp_path):
+    f = _file(tmp_path)
+    db = FakeSession(exec_queue=[FakeExecResult([])])
+    with use_fake_session(db) as client:
+        r = client.post(f"/ui/leer/{f.id}/deseo")
+    assert r.status_code == 403
+    assert r.headers["hx-redirect"] == "/ui/legal"
+    assert db.commit.await_count == 0
