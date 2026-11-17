@@ -105,7 +105,7 @@
       </details>
       <button type="button" class="btn-ignorar"
               hx-post="/ui/pendientes/{{ c.file.id }}/ignorar"
-              hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML"
+              hx-target="#pend-recontar" hx-swap="innerHTML"
               hx-disable="this"
               hx-confirm="¿Ignorar este archivo? No volverá a aparecer aquí.">
         Ignorar<span class="sr">: «{{ c.file.file_name }}»</span>
