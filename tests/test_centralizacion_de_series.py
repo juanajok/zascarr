@@ -34,6 +34,9 @@ RAIZ = Path(zascarr.__file__).parent
 #: ÚNICOS lugares de `src/` que construyen una `Series(...)`: el servicio de alta y, por excepción A1, `POST /api/series`.
 CONSTRUCTORES_ESPERADOS = {
     ("services/alta_serie.py", "_crear_en_transaccion"): 1,     # AltaDeSerie: el camino de creación común
+    # #1027: el alta de una obra autoconclusiva crea la serie con `kind=one_shot`
+    # y su publicación; es un camino propio, no una edición del alta genérica.
+    ("services/obras_autoconclusivas.py", "crear_obra_autoconclusiva"): 1,
     ("api/series.py", "create_series"): 1,                       # C3: obsoleto, FUERA de la centralización (A1)
 }
 
