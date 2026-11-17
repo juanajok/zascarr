@@ -40,6 +40,9 @@ def _docker_ok() -> bool:
         return False
 
 
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("TEST_DATABASE_URL") and not os.environ.get("ZASCARR_PG_IT"),
+    reason="requiere el job de PostgreSQL o ZASCARR_PG_IT=1")
 pytestmark = pytest.mark.skipif(not _docker_ok(), reason="requiere Docker arrancado")
 
 
