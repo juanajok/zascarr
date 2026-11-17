@@ -12,6 +12,7 @@
   {% endif %}
   {% if row.puede_buscar_ahora %}
   <button type="button" class="btn-buscar-ahora"
+          id="boton-buscar-{{ row.item.id }}"
           hx-post="/ui/wishlist/{{ row.item.id }}/buscar-ahora"
           hx-target="#candidatos-{{ row.item.id }}" hx-swap="outerHTML"
           hx-indicator="#buscando-{{ row.item.id }}" hx-disable="this"
@@ -21,6 +22,10 @@
   <span class="htmx-indicator wishlist-buscando" id="buscando-{{ row.item.id }}"
         role="status" aria-live="polite">
     Buscando en Prowlarr y en el foro… puede tardar hasta 2 minutos; no cierres la página.
+    <button type="button" class="btn ghost sm"
+            hx-on::click="htmx.trigger('#boton-buscar-{{ row.item.id }}', 'htmx:abort')"
+            aria-label="Cancelar la búsqueda de {{ row.titulo }}">Cancelar búsqueda</button>
+    <span class="muted">La espera se cancela; lo ya enviado no se deshace.</span>
   </span>
   {% endif %}
   {% if row.puede_marcar_conseguido %}
