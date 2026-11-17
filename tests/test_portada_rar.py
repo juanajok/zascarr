@@ -30,6 +30,9 @@ from zascarr.models import ComicTradition, Firma, MotivoRar, Series, Tratamiento
 from zascarr.utils import lector_rar, portada_rar
 from zascarr.utils.cover import (
     CACHE_VERSION,
+    CACHE_VERSION_ANTERIOR,
+    CARPETA_EXTERNA,
+    MAX_BYTES_PORTADA_PREVIA,
     es_candidato_de_portada,
     extract_cover_thumbnail,
     puede_tener_portada,
@@ -849,8 +852,8 @@ class TestSinEfectosColaterales:
 
 # ── Sustituir lo ya guardado (AC-29..31) ─────────────────────────────────────────────────────────
 class TestV3YExterna:
-    def test_una_v2_ya_escrita_no_se_sirve_ni_se_borra(self, tmp_path, mundo, falso):
-        """AC-29 / mutación «servir v2»."""
+    def test_una_v2_ya_escrita_no_se_sirve_con_archivo_ni_se_borra(self, tmp_path, mundo, falso):
+        """AC-29 / mutación «servir v2»: con un archivo legible gana `v3`; `v2` queda intacta."""
         _listado_de_una_pagina(falso)
         series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
         v2 = covers / "v2" / f"{series.id}.jpg"
@@ -929,4 +932,144 @@ def test_506_respaldo_viejo_con_lector_ocupado_lleva_no_store(
     # Libre otra vez: la portada buena se genera en v3 y se cachea con la cabecera normal.
     r2 = _pedir(series)
     assert r2.status_code == 200 and r2.headers["cache-control"] == "private, max-age=86400"
+    assert (covers / "v3" / f"{series.id}.jpg").exists()
+
+
+class TestRespaldoV2YCabeceras:
+    """#529: los huecos de #506 que faltaban en la batería."""
+
+    @staticmethod
+    def _ocupar_lector(monkeypatch):
+        monkeypatch.setattr(lector_rar, "RAR_ESPERA_TURNO_S", 0.1)
+        assert lector_rar._SEMAFORO.acquire(timeout=1)
+
+    def test_v2_con_lector_ocupado_se_sirve_sin_cachear_y_luego_gana_v3(
+            self, tmp_path, mundo, falso, monkeypatch):
+        _listado_de_una_pagina(falso)
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        v2 = covers / CACHE_VERSION_ANTERIOR / f"{series.id}.jpg"
+        v2.parent.mkdir(parents=True)
+        v2.write_bytes(_jpeg(100, color=(0, 255, 0)))
+        self._ocupar_lector(monkeypatch)
+        try:
+            r = _pedir(series)
+        finally:
+            lector_rar._SEMAFORO.release()
+        assert r.status_code == 200 and _ancho(r.content) == 100
+        assert r.headers["cache-control"] == "no-store" and "etag" not in r.headers
+        assert not (covers / "v3" / f"{series.id}.jpg").exists()
+        r2 = _pedir(series)
+        assert r2.status_code == 200 and _ancho(r2.content) == 600
+        assert (covers / "v3" / f"{series.id}.jpg").exists()
+
+    def test_externa_existente_con_lector_ocupado_lleva_no_store(
+            self, tmp_path, mundo, falso, monkeypatch):
+        _listado_de_una_pagina(falso)
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        externa = covers / "externa" / f"{series.id}.jpg"
+        externa.parent.mkdir(parents=True)
+        externa.write_bytes(_jpeg(100, color=(0, 255, 0)))
+        self._ocupar_lector(monkeypatch)
+        try:
+            r = _pedir(series)
+        finally:
+            lector_rar._SEMAFORO.release()
+        assert r.status_code == 200 and _ancho(r.content) == 100
+        assert r.headers["cache-control"] == "no-store" and "etag" not in r.headers
+
+    def test_externa_descargada_con_lector_ocupado_lleva_no_store(
+            self, tmp_path, mundo, falso, monkeypatch):
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)],
+                                  cover_url="https://comicvine.gamespot.com/a/uploads/c.jpg")
+
+        async def _externa(url, dest, **kwargs):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(_jpeg(100, color=(0, 255, 0)))
+            return True
+
+        monkeypatch.setattr("zascarr.web.series.fetch_and_cache_cover", _externa)
+        self._ocupar_lector(monkeypatch)
+        try:
+            r = _pedir(series)
+        finally:
+            lector_rar._SEMAFORO.release()
+        assert r.status_code == 200 and _ancho(r.content) == 100
+        assert r.headers["cache-control"] == "no-store"
+
+    def test_304_sobre_v2(self, tmp_path, mundo, falso):
+        series, covers, _ = mundo([])
+        v2 = covers / CACHE_VERSION_ANTERIOR / f"{series.id}.jpg"
+        v2.parent.mkdir(parents=True)
+        v2.write_bytes(_jpeg(100))
+        r = _pedir(series)
+        assert r.status_code == 200
+        etag = r.headers["etag"]
+        from fastapi.testclient import TestClient
+
+        from zascarr.main import app
+        r2 = TestClient(app).get(f"/ui/series/{series.id}/portada",
+                                 headers={"If-None-Match": etag})
+        assert r2.status_code == 304
+
+    def test_v2_gana_a_la_legada_cuando_no_hay_archivos(self, tmp_path, mundo, falso):
+        series, covers, _ = mundo([])
+        v2 = covers / CACHE_VERSION_ANTERIOR / f"{series.id}.jpg"
+        v2.parent.mkdir(parents=True)
+        v2.write_bytes(_jpeg(100))
+        (covers / f"{series.id}.jpg").write_bytes(_jpeg(120))
+        assert _ancho(_pedir(series).content) == 100
+
+
+def test_404_sin_herramienta_o_con_interruptor_apagado_no_se_cachea(
+        tmp_path, mundo, falso, monkeypatch):
+    """#529: el 404 no puede heredar la caché de un día cuando el lector no está disponible."""
+    series, _covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+    monkeypatch.setattr(wseries, "lector_rar_disponible", lambda: False)
+    r = _pedir(series)
+    assert r.status_code == 404 and r.headers["cache-control"] == "no-store"
+
+
+def test_404_con_lector_apagado_no_se_cachea(tmp_path, mundo, falso, monkeypatch):
+    series, _covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+    real = wseries.get_settings
+
+    def _apagado():
+        return real().model_copy(update={"lector_rar_enabled": False})
+
+    monkeypatch.setattr(wseries, "get_settings", _apagado)
+    r = _pedir(series)
+    assert r.status_code == 404 and r.headers["cache-control"] == "no-store"
+    assert falso.llamadas() == []
+
+
+def test_una_cache_demasiado_grande_se_ignora_sin_leerla(tmp_path, mundo, falso, monkeypatch):
+    """#529: tope de lectura compartido con las previas; una v2 gigante no se sube a memoria."""
+    series, covers, _ = mundo([])
+    v2 = covers / CACHE_VERSION_ANTERIOR / f"{series.id}.jpg"
+    v2.parent.mkdir(parents=True)
+    v2.write_bytes(b"\0" * (MAX_BYTES_PORTADA_PREVIA + 1))
+    monkeypatch.setattr(wseries, "lector_rar_disponible", lambda: False)
+    r = _pedir(series)
+    assert r.status_code == 404 and r.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("carpeta", [CACHE_VERSION_ANTERIOR, CARPETA_EXTERNA, ""])
+def test_respaldo_con_lector_ocupado_no_store_y_al_liberar_se_cachea_v3(
+        tmp_path, mundo, falso, monkeypatch, carpeta):
+    """#529: v2, externa y legado comparten el contrato de respaldo; al liberar, gana v3."""
+    _listado_de_una_pagina(falso)
+    series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+    respaldo = covers / ((carpeta + "/" if carpeta else "") + f"{series.id}.jpg")
+    respaldo.parent.mkdir(parents=True, exist_ok=True)
+    respaldo.write_bytes(_jpeg(100, color=(0, 255, 0)))
+    monkeypatch.setattr(lector_rar, "RAR_ESPERA_TURNO_S", 0.1)
+    assert lector_rar._SEMAFORO.acquire(timeout=1)
+    try:
+        r = _pedir(series)
+    finally:
+        lector_rar._SEMAFORO.release()
+    assert r.status_code == 200 and _ancho(r.content) == 100
+    assert r.headers["cache-control"] == "no-store" and "etag" not in r.headers
+    r2 = _pedir(series)
+    assert r2.status_code == 200 and _ancho(r2.content) == 600
     assert (covers / "v3" / f"{series.id}.jpg").exists()

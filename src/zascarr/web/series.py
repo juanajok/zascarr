@@ -178,7 +178,9 @@ from zascarr.services.vinculacion import (
 )
 from zascarr.utils.cover import (
     CACHE_VERSION,
+    CACHE_VERSION_ANTERIOR,
     CARPETA_EXTERNA,
+    MAX_BYTES_PORTADA_PREVIA,
     SERIES_COVER_MAX_WIDTH,
     cached_image_response,
     es_candidato_de_portada,
@@ -1433,7 +1435,7 @@ async def portada(series_id: UUID, request: Request,
 
     covers = get_settings().covers_cache_path
     v3_path = covers / CACHE_VERSION / f"{series_id}.jpg"
-    v2_path = covers / "v2" / f"{series_id}.jpg"
+    v2_path = covers / CACHE_VERSION_ANTERIOR / f"{series_id}.jpg"
     legacy_path = covers / f"{series_id}.jpg"
     externa_path = covers / CARPETA_EXTERNA / f"{series_id}.jpg"
 
@@ -1454,9 +1456,9 @@ async def portada(series_id: UUID, request: Request,
             etag = _etag_de_bytes(previa.datos)
         return cached_image_response(request, previa.datos, "image/jpeg", etag)
 
-    if await asyncio.to_thread(v3_path.exists):
-        data = await asyncio.to_thread(v3_path.read_bytes)
-        return cached_image_response(request, data, "image/jpeg", _etag_for(v3_path))
+    data_v3 = await asyncio.to_thread(_leer_cache_de_portada, v3_path)
+    if data_v3 is not None:
+        return cached_image_response(request, data_v3, "image/jpeg", _etag_for(v3_path))
 
     # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya no
     # está en disco — sin este filtro, la portada podía intentar (y
@@ -1477,8 +1479,9 @@ async def portada(series_id: UUID, request: Request,
     # sigue siendo mejor que el marcador y que el respaldo viejo. Se sirve sin copiarla ni borrarla.
     # Con el lector ocupado es un sustituto pasajero: no se cachea (la próxima petición puede
     # generar la `v3` correcta).
-    if await asyncio.to_thread(v2_path.exists):
-        data = await asyncio.to_thread(v2_path.read_bytes)
+    data_v2 = await asyncio.to_thread(_leer_cache_de_portada, v2_path)
+    if data_v2 is not None:
+        data = data_v2
         if ocupado:
             return Response(content=data, media_type="image/jpeg",
                             headers={"Cache-Control": "no-store"})
@@ -1487,8 +1490,9 @@ async def portada(series_id: UUID, request: Request,
     # Respaldo: la caché antigua (240/320) se sirve sin red y no se copia. Si hay un archivo
     # utilizable se regenera arriba; esta rama es para archivos ausentes o ilegibles, o series que ya
     # solo conservan la caché vieja (Q-1 del PO).
-    if await asyncio.to_thread(legacy_path.exists):
-        data = await asyncio.to_thread(legacy_path.read_bytes)
+    data_legacy = await asyncio.to_thread(_leer_cache_de_portada, legacy_path)
+    if data_legacy is not None:
+        data = data_legacy
         if ocupado:
             return Response(content=data, media_type="image/jpeg",
                             headers={"Cache-Control": "no-store"})
@@ -1497,8 +1501,9 @@ async def portada(series_id: UUID, request: Request,
     # #418: la portada externa vive APARTE de `v3`: mientras no haya portada de archivo se siguen
     # evaluando los candidatos (barato: los fallidos están marcados) y la serie cambia sola cuando uno
     # se hace legible.
-    if await asyncio.to_thread(externa_path.exists):
-        data = await asyncio.to_thread(externa_path.read_bytes)
+    data_externa = await asyncio.to_thread(_leer_cache_de_portada, externa_path)
+    if data_externa is not None:
+        data = data_externa
         if ocupado:
             return Response(content=data, media_type="image/jpeg",
                             headers={"Cache-Control": "no-store"})
@@ -1510,17 +1515,36 @@ async def portada(series_id: UUID, request: Request,
             and await fetch_and_cache_cover(series.cover_url, externa_path,
                                             ancho=SERIES_COVER_MAX_WIDTH,
                                             motivo_fallo=motivo_fallo)):
-        data = await asyncio.to_thread(externa_path.read_bytes)
-        if ocupado:
-            return Response(content=data, media_type="image/jpeg",
-                            headers={"Cache-Control": "no-store"})
-        return cached_image_response(request, data, "image/jpeg", _etag_for(externa_path))
+        data = await asyncio.to_thread(_leer_cache_de_portada, externa_path)
+        if data is not None:
+            if ocupado:
+                return Response(content=data, media_type="image/jpeg",
+                                headers={"Cache-Control": "no-store"})
+            return cached_image_response(request, data, "image/jpeg", _etag_for(externa_path))
 
     # Una espera de cortesía no es un «no hay portada» definitivo: el navegador no debe
     # cachear la ausencia (mañana podría descargarse).
     # Tampoco lo es un lector ocupado (#418): la portada puede salir en cuanto quede libre.
-    cabeceras = {"Cache-Control": "no-store"} if ("cortesia" in motivo_fallo or ocupado) else None
+    sin_lector = (not get_settings().lector_rar_enabled) or not lector_rar_disponible()
+    cabeceras = ({"Cache-Control": "no-store"}
+                 if ("cortesia" in motivo_fallo or ocupado or sin_lector) else None)
     raise HTTPException(status_code=404, detail="Sin portada disponible", headers=cabeceras)
+
+
+def _leer_cache_de_portada(path: Path) -> bytes | None:
+    """Lee una caché de portada con el mismo tope que las previas (FR-09/AC-29).
+
+    Una imagen mayor que `MAX_BYTES_PORTADA_PREVIA` no es una portada de ZascArr: no se
+    sube a memoria en la Pi; se ignora y la cascada sigue.
+    """
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        if path.stat().st_size > MAX_BYTES_PORTADA_PREVIA:
+            return None
+        return path.read_bytes()
+    except OSError:
+        return None
 
 
 def _etag_for(path: Path) -> str:
