@@ -58,7 +58,7 @@ def configurar_logs(settings=None) -> None:
     # instalados: reconfigurar el formato no debe desactivar la privacidad.
     previos = list(structlog.get_config().get("processors") or [])
     conservar = [p for p in previos
-                 if getattr(p, "__name__", "") in {"sanear_evento", "capturar"}]
+                 if getattr(p, "__name__", "") in {"sanear_evento", "escribir_evento", "capturar"}]
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,

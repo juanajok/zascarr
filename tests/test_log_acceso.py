@@ -401,6 +401,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "semana", "editorial",
     # #797: abrir el desplegable de alta tras un error (estado de la vista).
     "abrir",
+    # Logs persistidos: filtros de fecha/hora/evento (solo lectura, saneados).
+    "fecha", "hora", "evento",
 })
 
 
