@@ -57,6 +57,8 @@ def main(argv: list[str] | None = None) -> int:
             items = _escribir_zip(paquete, listado, temp, fd, temp_fd, _progreso)
         else:
             items = _escribir_rar(paquete, listado, temp, fd, temp_fd, _progreso)
+        with contextlib.suppress(OSError):
+            os.unlink(".progreso", dir_fd=temp_fd)
         _verificar_contenido(items, temp, temp_fd)
     finally:
         os.close(temp_fd)
