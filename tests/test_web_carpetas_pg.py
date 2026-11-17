@@ -1341,3 +1341,46 @@ class TestArticulosYPuntuacion:
             assert "El texto no contiene palabras que buscar; no se aplica el filtro de nombre." in visible(r.text)
             assert set(claves(r.text)) == {"Comics/Los Vengadores", "Comics/El Sandman",
                                            "Comics/S.H.I.E.L.D."}
+
+
+class TestMarcaCarpetaMixta382:
+    """#382: el recuento distingue «todos» de «una parte» en la marca de la carpeta."""
+
+    async def test_mayoria_de_la_serie_muestra_recuento(self, banco):
+        sid_a = await banco.serie("SERIE A", 2020)
+        sid_b = await banco.serie("SERIE B", 2021)
+        await banco.sembrar(
+            *[archivo(f"Comics/Mixta/A {n:02d}.cbz", cands=candidatas(sid_a, "SERIE A", 2020))
+              for n in range(1, 4)],
+            *[archivo(f"Comics/Mixta/B {n:02d}.cbz", cands=candidatas(sid_b, "SERIE B", 2021))
+              for n in range(1, 3)],
+        )
+        r = await pagina({"serie": str(sid_a)})
+        t = visible(r.text)
+        assert "Sugerida para esta serie" in t
+        assert "La sugieren 3 de 5 registros con sugerencia; el resto apunta a otra serie." in t
+
+    async def test_minoria_no_lleva_marca_y_el_detalle_no_afirma_que_sea_de_la_serie(self, banco):
+        sid_a = await banco.serie("SERIE A", 2020)
+        sid_b = await banco.serie("SERIE B", 2021)
+        await banco.sembrar(
+            *[archivo(f"Comics/Minoria/A {n:02d}.cbz", cands=candidatas(sid_a, "SERIE A", 2020))
+              for n in range(1, 3)],
+            *[archivo(f"Comics/Minoria/B {n:02d}.cbz", cands=candidatas(sid_b, "SERIE B", 2021))
+              for n in range(1, 4)],
+        )
+        r = await pagina({"serie": str(sid_a)})
+        t = visible(r.text)
+        assert "Sugerida para esta serie" not in t
+        assert "La sugieren 3 de 5 registros con sugerencia; el resto apunta a otra serie." in t
+
+    async def test_homogenea_dice_todos(self, banco):
+        sid = await banco.serie("SERIE UNICA", 2020)
+        await banco.sembrar(
+            *[archivo(f"Comics/Unica/U {n:02d}.cbz", cands=candidatas(sid, "SERIE UNICA", 2020))
+              for n in range(1, 4)],
+        )
+        r = await pagina({"serie": str(sid)})
+        t = visible(r.text)
+        assert "Sugerida para esta serie" in t
+        assert "La sugieren los 3 registros con sugerencia." in t
