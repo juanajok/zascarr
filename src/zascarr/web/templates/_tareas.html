@@ -1,0 +1,27 @@
+<div id="tareas-global" hx-get="/ui/_tareas"
+     hx-trigger="{% if t.hay_tareas %}every 2s{% else %}every 10s{% endif %}, load"
+     hx-swap="outerHTML">
+{% if t.hay_tareas %}
+  <details class="tareas-panel" {% if t.errores %}open{% endif %}>
+    <summary>
+      <span class="tareas-chip" role="status" aria-live="polite">
+        {% if t.errores %}Revisar{% elif t.activas %}{{ t.activas }} tarea{% if t.activas != 1 %}s{% endif %}{% else %}Listo{% endif %}
+      </span>
+    </summary>
+    <section class="tareas-lista" aria-label="Ahora">
+      <h2>Ahora</h2>
+      {% for x in t.tareas %}
+        <article class="tarea {{ x.estado }}">
+          <h3>{{ x.titulo }}</h3>
+          <p>{% if x.fase %}{{ x.fase }}{% elif x.estado == "en_curso" %}Trabajando…{% elif x.estado == "atascada" %}Tarda más{% elif x.estado == "error" %}Error{% else %}Hecho{% endif %}</p>
+          {% if x.total and x.hechos is not none %}<progress value="{{ x.hechos }}" max="{{ x.total }}"></progress>{% elif x.estado == "en_curso" %}<progress></progress>{% endif %}
+          {% if x.estado == "atascada" %}<p>Está tardando más de lo normal. Puedes seguir usando ZascArr.</p>{% endif %}
+          {% if x.enlace %}<a href="{{ x.enlace }}">Ver la tarea</a>{% endif %}
+        </article>
+      {% endfor %}
+    </section>
+  </details>
+{% else %}
+  <span class="tareas-vacio" hidden></span>
+{% endif %}
+</div>

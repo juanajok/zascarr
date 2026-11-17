@@ -432,6 +432,8 @@ def create_app() -> FastAPI:
     settings = get_settings()
     # #361: el registro de acceso de uvicorn no lleva la query (carpetas, cursores, tokens).
     instalar_filtro_de_acceso()
+    from zascarr.services import tareas as registro_tareas
+    registro_tareas.limpiar_al_arrancar()
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
@@ -487,6 +489,8 @@ def create_app() -> FastAPI:
     from zascarr.web.retirada_serie import router as retirada_serie_ui_router
     from zascarr.web.routes import router as ui_router
     from zascarr.web.series import router as series_ui_router
+    from zascarr.web.tareas import api_router as tareas_api_router
+    from zascarr.web.tareas import ui_router as tareas_ui_router
     from zascarr.web.vistas_trabajo import router as vistas_router
     from zascarr.web.wishlist import router as wishlist_ui_router
 
@@ -507,6 +511,8 @@ def create_app() -> FastAPI:
     app.include_router(wishlist_router, prefix="/api")
     app.include_router(auth_router)
     app.include_router(ui_router)
+    app.include_router(tareas_ui_router)
+    app.include_router(tareas_api_router)
     app.include_router(ajustes_router)
     app.include_router(auditoria_router)
     app.include_router(dashboard_router)

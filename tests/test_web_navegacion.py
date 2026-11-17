@@ -741,7 +741,7 @@ class TestAutenticacion:
         assert FRAGMENTO in RUTAS_FRAGMENTO_SILENCIOSO
         assert FRAGMENTO not in _RUTAS_DIAGNOSTICO
         assert FRAGMENTO not in servicio_auth._RUTAS_EXENTAS
-        assert frozenset({FRAGMENTO}) == RUTAS_FRAGMENTO_SILENCIOSO
+        assert frozenset({FRAGMENTO, "/ui/_tareas"}) == RUTAS_FRAGMENTO_SILENCIOSO
 
 
 class TestArranqueDegradado:

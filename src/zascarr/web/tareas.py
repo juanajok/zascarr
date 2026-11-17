@@ -1,0 +1,38 @@
+"""#991 C1: API y fragmento HTMX del indicador global de tareas."""
+from __future__ import annotations
+
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+
+from zascarr.services import tareas
+from zascarr.web.routes import crear_templates
+
+templates = crear_templates()
+api_router = APIRouter(prefix="/api", tags=["tareas"])
+ui_router = APIRouter()
+
+
+@api_router.get("/tareas")
+async def api_tareas() -> JSONResponse:
+    return JSONResponse(tareas.snapshot(incluir_recientes=True),
+                        headers={"Cache-Control": "no-store"})
+
+
+@ui_router.get("/ui/_tareas", response_class=HTMLResponse)
+async def fragmento_tareas(request: Request) -> HTMLResponse:
+    datos = tareas.snapshot(incluir_recientes=True)
+    respuesta = templates.TemplateResponse(request, "_tareas.html", {"t": datos})
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@ui_router.post("/ui/_tareas/visto/{tid}", response_class=HTMLResponse)
+async def marcar_visto(request: Request, tid: str) -> HTMLResponse:
+    tareas.marcar_visto(tid)
+    return await fragmento_tareas(request)
+
+
+@ui_router.post("/ui/_tareas/ver", response_class=HTMLResponse)
+async def ver_tarea(request: Request, tid: str = Form("")) -> HTMLResponse:
+    tareas.marcar_visto(tid)
+    return await fragmento_tareas(request)

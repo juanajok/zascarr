@@ -15,6 +15,7 @@
   <div class="app">
     <div class="side">
       <a href="/ui/" class="brand">ZascArr</a>
+      <div id="tareas-global" hx-get="/ui/_tareas" hx-trigger="load, every 10s" hx-swap="outerHTML"></div>
       {{ ui.menu(request.url.path) }}
       {% if auth_activo() %}
       <div class="side-foot">
