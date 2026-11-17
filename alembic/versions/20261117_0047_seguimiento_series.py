@@ -5,8 +5,9 @@ Revises: 0046
 
 Aditiva y reversible. El valor nuevo del enum `wishlist_origen` NO se usa en
 esta migración (PG 15 no deja usar un valor añadido en la misma transacción);
-solo se añade. El downgrade retira tabla, índice y columnas; el valor del enum
-queda documentado como irreversible (no se puede quitar sin recrear el tipo).
+solo se añade. El índice único parcial vive en 0048 (predicado inmutable); el
+downgrade de esta migración retira tabla y columnas, y el valor del enum queda
+documentado como irreversible (no se puede quitar sin recrear el tipo).
 """
 from __future__ import annotations
 
