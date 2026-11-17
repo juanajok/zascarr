@@ -36,6 +36,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   combina las colecciones: `excluir` gana sobre `incluir`, y `incluir` sobre la política guardada.
   Portada y exportación leen la tabla puente.
 
+### Corregido
+
+- **Seguimiento: parser del listado real del foro.** El primer enlace de cada fila es la
+  imagen «nuevo mensaje» (sin título) y el foro sirve la última actividad en inglés
+  (`5th August 2026 - 18:24`). El parser usa el ancla `tid-link` para el título y entiende
+  fechas inglesas/españolas; sin esto `showforum=5` devolvía 0 temas.
+
 ### Añadido
 
 - **Seguir una serie: números nuevos desde las fuentes (2026-11-17).** La ficha gana

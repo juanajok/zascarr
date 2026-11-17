@@ -11,6 +11,12 @@ def _serie(titulo="Batman", **kw) -> Series:
     return Series(id=uuid4(), title=titulo, tradition=ComicTradition.AMERICAN, **kw)
 
 
+def test_no_casa_recopilatorios_que_el_parser_no_marca_como_edicion():
+    serie = Series(id=uuid4(), title="One Piece", tradition=ComicTradition.AMERICAN)
+    assert casar_fichero("One Piece 01 - Edición 3 en 1 (Planeta).cbr", serie, set()) is None
+    assert casar_fichero("One Piece 1100.cbz", serie, set()) == 1100
+
+
 def test_casa_numero_por_nombre_de_fichero():
     assert casar_fichero("Batman Vol. 3 012.cbz", _serie(), set()) == 12
     assert casar_fichero("Batman #12.cbz", _serie(), set()) == 12
