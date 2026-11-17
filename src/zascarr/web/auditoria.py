@@ -689,7 +689,12 @@ async def _procesar_paquete(op_id: str) -> None:
             if tarea is not None:
                 tareas.actualizar(tarea.id, fase="Extrayendo", total=op.total_entradas or None)
             if op.estado is not PaqueteEstado.VERIFICADO:
-                await extraer_y_verificar(s, op.id, conservar_temporal=True)
+                def _avance(hechos: int, total: int) -> None:
+                    if tarea is not None:
+                        tareas.actualizar(tarea.id, fase="Extrayendo",
+                                          hechos=hechos, total=total or None)
+                await extraer_y_verificar(s, op.id, conservar_temporal=True,
+                                          progreso=_avance)
             op = await s.get(PaqueteOperacion, UUID(op_id))
             if op is not None and op.estado is PaqueteEstado.VERIFICADO:
                 if tarea is not None:
