@@ -18,7 +18,7 @@
   <a class="btn ghost" href="/ui/vistas">Ver las vistas de trabajo</a>
 </div>
 {% if not cards %}
-<p class="empty">Nada pendiente — todo lo importado se ha podido clasificar.</p>
+{{ ui.estado_vacio("Nada pendiente", "Todo lo importado se ha podido clasificar.") }}
 {% else %}
 {% include "_pendientes_rango.html" %}
 {#- Las claves de los extremos de la página: el refresco tras resolver una tarjeta las envía para recalcular el rango. -#}
@@ -36,10 +36,10 @@
 {% if inicio or anterior or siguiente %}{{ paginas("pend-paginas-arriba", "Páginas de pendientes, arriba") }}{% endif %}
 {% endif %}
 
-<div class="pending-grid">
+<ul class="pending-grid" role="list">
   {% for c in cards %}
-  {% include "_tarjeta_pendiente.html" %}
+  <li class="pending-item">{% include "_tarjeta_pendiente.html" %}</li>
   {% endfor %}
-</div>
+</ul>
 {% if cards and (inicio or anterior or siguiente) %}{{ paginas("pend-paginas-abajo", "Páginas de pendientes, abajo") }}{% endif %}
 {% endblock %}
