@@ -80,7 +80,7 @@ async def leer(request: Request, file_id: UUID,
 @router.get("/{file_id}/estado", response_class=JSONResponse)
 async def estado(file_id: UUID, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     f = await db.get(File, file_id)
-    if f is None or f.issue_id is None:
+    if f is None or f.issue_id is None or f.is_missing is True:
         return JSONResponse({"estado": "error", "motivo": "Ese archivo no está disponible."},
                             headers={"Cache-Control": "no-store"})
     if not es_rar_real(f):

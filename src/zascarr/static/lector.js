@@ -4,6 +4,7 @@
   const espera = document.querySelector("[data-estado-url]");
   if (espera) {
     const aviso = document.getElementById("lector-preparando");
+    let intentos = 0;
     const consultar = () => fetch(espera.dataset.estadoUrl, { credentials: "same-origin" })
       .then((r) => r.json())
       .then((datos) => {

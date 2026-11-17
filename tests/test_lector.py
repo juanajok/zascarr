@@ -66,7 +66,7 @@ async def test_archivos_legibles_por_db(tmp_path):
                file_name="x.cbr", file_format=FileFormat.CBR, metadata_={})
     db = FakeSession(exec_queue=[FakeExecResult([f, cbr])])
     filas = await lector.archivos_legibles(db, f.issue_id)
-    assert [a.id for a in filas] == [str(f.id)]
+    assert [a.id for a in filas] == [str(f.id), str(cbr.id)]
 
 
 def test_pantalla_y_pagina(tmp_path):

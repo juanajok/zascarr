@@ -115,8 +115,7 @@ class CacheLectura:
         except CacheError as exc:
             self._errores[clave] = str(exc)
         except ErrorRar as exc:
-            if exc.motivo not in (MotivoRar.OCUPADO, MotivoRar.TIEMPO,
-                                  MotivoRar.HERRAMIENTA_AUSENTE):
+            if exc.motivo not in (MotivoRar.OCUPADO, MotivoRar.TIEMPO):
                 self._errores[clave] = _MOTIVO.get(exc.motivo, _MOTIVO[MotivoRar.INESPERADO])
         except Exception as exc:  # noqa: BLE001 — una extracción no puede tumbar el proceso
             logger.warning("lector.cache_error", tipo=type(exc).__name__)
@@ -170,6 +169,12 @@ class CacheLectura:
             return 0.0
 
     def _extraer_sync(self, file: File) -> None:
+        # La cuota se contabiliza y se publica con el lock tomado: dos archivos distintos no
+        # pueden reservar el mismo hueco ni superar el total.
+        with self._cuota_lock:
+            self._extraer_sync_bloqueado(file)
+
+    def _extraer_sync_bloqueado(self, file: File) -> None:
         clave = self.clave(file)
         ruta = Path(file.file_path)
         if ruta.is_symlink() or not ruta.is_file():
@@ -177,7 +182,7 @@ class CacheLectura:
         declarado = file.file_size_bytes or 0
         if declarado > self.cuota:
             raise CacheError("Este tebeo es demasiado grande para prepararlo para leer.")
-        self._hacer_sitio(max(declarado, 1), clave)
+        self._hacer_sitio_bloqueado(max(declarado, 1), clave)
         self.base.mkdir(parents=True, exist_ok=True)
         libre = max(0, self.cuota - self._tamano(self.base))
         if libre <= 0:
