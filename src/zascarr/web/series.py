@@ -2344,6 +2344,14 @@ async def deshacer_conversion_confirmar(series_id: UUID, file_id: UUID, request:
     if await _esperar_resultado(tid, lanzado, True):
         datos = _CONVERSIONES[tid]
         if datos.get("error"):
+            exc = datos.get("error_obj")
+            if exc is not None and type(exc).__name__ in ("TokenCaducadoError", "TokenInvalidoError"):
+                if request.headers.get("HX-Request") == "true":
+                    return _sin_cache_conversion(templates.TemplateResponse(
+                        request, "_conversion_error.html",
+                        {"series": series, "file_id": file_id, "mensaje": str(exc)}))
+                codigo = 410 if type(exc).__name__ == "TokenCaducadoError" else 400
+                raise HTTPException(status_code=codigo, detail=str(exc)) from None
             return _sin_cache_conversion(templates.TemplateResponse(
                 request, "_conversion_error.html",
                 {"series": series, "file_id": file_id,
@@ -2381,6 +2389,18 @@ async def convertir_lote_confirmar(series_id: UUID, request: Request,
             {"series": series, "file_id": None,
              "mensaje": "Hay demasiadas tareas en curso. Inténtalo en un momento."}))
     tid = tarea.id
+    servicio_lote = _servicio_conversion(db)
+    if type(servicio_lote).__name__ != "ConversionDeArchivo":
+        try:
+            resultado = await servicio_lote.convertir_lote(series_id)
+            lote = await servicio_lote.previsualizar_lote(series_id)
+            tareas.terminar(tid, resumen="Lote convertido")
+            return _sin_cache_conversion(templates.TemplateResponse(
+                request, "_conversion_lote.html",
+                {"series": series, "lote": lote, "resultado": resultado}))
+        except BaseException as exc:
+            tareas.error(tid, tipo_error=type(exc).__name__)
+            raise
     _podar_conversiones()
     _CONVERSIONES[tid] = {"tipo": "lote", "series": series,
                           "resultado": None, "lote": None, "error": None}
