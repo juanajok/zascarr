@@ -395,6 +395,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "anadidos", "ya_pedidos", "en_biblioteca",
     # #843: importación de una guía de lectura (fuente, aviso de resultado y recuentos).
     "fuente", "importada", "enlazados", "omitidos", "motivos",
+    # #1027: el selector de Pendientes puede incluir tomos únicos.
+    "mostrar_tomos",
     # #155: filtros del alta de series y selección de candidatas (estado de la vista).
     "serie_ids", "tradicion",
     # D5 (#162): semana y editorial de Novedades (estado de la vista).

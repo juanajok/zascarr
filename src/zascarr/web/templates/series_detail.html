@@ -35,7 +35,9 @@
     {#- «Completa» solo si los huecos se pudieron calcular: sin `computable` no hay con qué restar, y antes
         una serie de AniList con 8 de 30 decía «Ningún hueco — la tienes completa» (caso real, 2026-10-20). -#}
     <p class="subtitle">
-      {% if estado_coleccion.tipo == "no_completar" %}
+      {% if es_obra_unica %}
+        Tomo único · {{ "completo" if estado_coleccion.tipo == "completa" else "sin publicación" }}.
+      {% elif estado_coleccion.tipo == "no_completar" %}
         No la vas a completar. Sus huecos no cuentan como faltas en el Inicio ni en esta ficha.
       {% elif huecos.computable %}
         {{ series.total_issues }} números en total —
@@ -48,6 +50,7 @@
         Número total de la serie desconocido todavía: no se puede calcular huecos.
       {% endif %}
     </p>
+    {% include "_obra_unica_serie.html" %}
     {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
     <form method="post" action="/ui/series/{{ series.id }}/favorito" class="favorito-form">
       <input type="hidden" name="volver" value="{{ volver or '' }}">

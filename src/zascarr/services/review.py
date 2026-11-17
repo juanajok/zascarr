@@ -39,6 +39,7 @@ from zascarr.models import (
     IssueFormat,
     MetadataSource,
     Series,
+    SeriesKind,
 )
 from zascarr.services.alias_decisiones import aprender_alias
 from zascarr.services.importer import build_library_path
@@ -251,18 +252,22 @@ class ReviewService:
                    clave <= self._ref(primero), clave >= self._ref(ultimo))
         )).scalar_one()
 
-    async def search_series(self, query: str, limit: int = 20) -> list[Series]:
+    async def search_series(self, query: str, limit: int = 20, *,
+                            incluir_one_shot: bool = False) -> list[Series]:
         """Búsqueda manual para el selector de la bandeja: coincidencia
         parcial de título, no la lógica estricta de SeriesMatcher (esa es
         para decidir sola; aquí decide una persona mirando la pantalla)."""
         query = (query or "").strip()
         if not query:
             return []
+        consulta = select(Series).where(Series.title.ilike(f"%{query}%"))
+        if not incluir_one_shot:
+            # #1027: los tomos únicos no se ofrecen para asignar un número por
+            # defecto; siguen en biblioteca y búsquedas. El selector tiene su
+            # interruptor explícito para reemplazos.
+            consulta = consulta.where(Series.kind != SeriesKind.ONE_SHOT)
         return list((await self.db.execute(
-            select(Series)
-            .where(Series.title.ilike(f"%{query}%"))
-            .order_by(Series.title)
-            .limit(limit)
+            consulta.order_by(Series.title).limit(limit)
         )).scalars().all())
 
     async def assign_to_series(self, file_id, series_id, issue_number: str) -> File:
