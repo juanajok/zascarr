@@ -188,6 +188,9 @@ info "Reiniciando ZascArr..."
 # compose; sin esto seguiría vivo, gastando RAM, sin que nada lo use.
 "${COMPOSE[@]}" up -d --remove-orphans zascarr || die \
     "No pude arrancar ZascArr. Revisa: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr"
+# Si Docker creó el bind en este arranque, se ajusta también DESPUÉS de crearlo.
+chown "${PUID:-1000}:${PGID:-1000}" "${DATA_DIR}/lector" 2>/dev/null || true
+chmod 750 "${DATA_DIR}/lector" 2>/dev/null || true
 
 info "Verificando healthcheck (${HEALTH_URL})..."
 esperar_healthcheck "${HEALTH_TIMEOUT}" || die \
