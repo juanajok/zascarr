@@ -25,6 +25,11 @@ COLUMNA_ID = {
     "comic_vine": "comic_vine_id",
     "tebeosfera": "tebeosfera_slug",
     "gcd": "gcd_id",
+    "anilist": "anilist_id",
+    "metron": "metron_id",
+    "open_library": "open_library_id",
+    "fandom_dc": "fandom_dc_slug",
+    "fandom_marvel": "fandom_marvel_slug",
 }
 COLUMNA_ID_ISSUE = {
     "comic_vine": "comic_vine_id",
@@ -148,6 +153,11 @@ class Recolector:
                 (Series.comic_vine_id.is_not(None))
                 | (Series.tebeosfera_slug.is_not(None))
                 | (Series.gcd_id.is_not(None))
+                | (Series.anilist_id.is_not(None))
+                | (Series.metron_id.is_not(None))
+                | (Series.open_library_id.is_not(None))
+                | (Series.fandom_dc_slug.is_not(None))
+                | (Series.fandom_marvel_slug.is_not(None))
             ).order_by(Series.id).limit(limite)
         )).scalars().all()
         informes: list[InformeRecoleccion] = []

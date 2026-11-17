@@ -5,11 +5,16 @@ from zascarr.core.consolidacion.ambitos import Ambito
 
 POLITICA_VERSION = 1
 
-#: Solo se incluyen fuentes que la Fase 2 puede recolectar; las demás no
-#: aparecen hasta que sus adaptadores existan.
-_PRIORIDAD_EDICION_ES = ("tebeosfera", "gcd", "comic_vine")
-_PRIORIDAD_EDICION_US = ("comic_vine", "gcd")
-_PRIORIDAD_OBRA = ("comic_vine", "tebeosfera", "gcd")
+#: Solo se incluyen fuentes con adaptador CCM. El orden no es global: se
+#: elige por tradición y ámbito.
+_PRIORIDAD_EDICION_ES = ("tebeosfera", "gcd", "open_library", "comic_vine",
+                         "metron", "fandom_dc", "fandom_marvel", "anilist")
+_PRIORIDAD_EDICION_US = ("comic_vine", "gcd", "metron", "open_library",
+                         "fandom_dc", "fandom_marvel")
+_PRIORIDAD_EDICION_MANGA = ("anilist", "tebeosfera", "open_library", "gcd")
+_PRIORIDAD_EDICION_FUMETTI = ("metron", "tebeosfera", "gcd", "open_library")
+_PRIORIDAD_OBRA = ("comic_vine", "fandom_dc", "fandom_marvel", "tebeosfera",
+                   "gcd", "anilist", "metron", "open_library")
 
 
 def es_edicion_es(tradicion: str | None, idioma: str | None) -> bool:
@@ -24,6 +29,11 @@ def orden_fuentes(tradicion: str | None, ambito: Ambito,
         return _PRIORIDAD_OBRA
     if es_edicion_es(tradicion, idioma):
         return _PRIORIDAD_EDICION_ES
+    trad = (tradicion or "").lower()
+    if trad in {"manga", "manhwa", "manhua"}:
+        return _PRIORIDAD_EDICION_MANGA
+    if trad == "fumetti":
+        return _PRIORIDAD_EDICION_FUMETTI
     return _PRIORIDAD_EDICION_US
 
 
