@@ -34,6 +34,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Cola/progreso de Deseados en la propia pantalla (2026-11-17).** Cuando hay deseos
+  en descarga, Deseados muestra un panel «Descargas en curso» que se refresca solo
+  (cada 30 s) y lee **una vez** Transmission por refresco: barra de progreso y
+  porcentaje para los torrents, estado para aMule (su web no expone progreso). Cierra
+  el hueco declarado en el benchmark de Deseados (§13) sin depender de abrir el cliente.
+
 - **Pasada de UI/UX en Deseados (2026-11-16).** Introducción más corta y «¿Cómo funciona?»
   plegado (menos ruido antes de la acción), indicador «Buscando series…» al buscar,
   resumen «N deseos · M en descarga», estado vacío con siguiente paso, nombres
