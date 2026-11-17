@@ -306,3 +306,25 @@ def test_el_analisis_de_segundo_plano_no_da_falsos_positivos_ni_se_deja_nada(lin
 def test_las_unidades_de_copia_y_restauracion_aceptan_el_75_como_exito(unidad):
     texto = (RAIZ / "deploy" / "systemd" / unidad).read_text(encoding="utf-8")
     assert re.search(r"^SuccessExitStatus=75\s*$", texto, flags=re.M)
+
+
+@pytest.mark.parametrize("unidad", ["zascarr-backup.service", "zascarr-restore.service"])
+def test_las_unidades_de_copia_y_restauracion_estan_endurecidas(unidad):
+    """OCTA-B2: aislamiento básico sin cambiar de usuario (necesitan Docker)."""
+    texto = (RAIZ / "deploy" / "systemd" / unidad).read_text(encoding="utf-8")
+    for linea in (
+        "NoNewPrivileges=true",
+        "PrivateTmp=true",
+        "ProtectSystem=full",
+        "ProtectHome=read-only",
+        "ProtectKernelTunables=true",
+        "ProtectKernelModules=true",
+        "ProtectControlGroups=true",
+        "RestrictSUIDSGID=true",
+        "LockPersonality=true",
+        "RestrictRealtime=true",
+        "ProtectClock=true",
+        "ProtectHostname=true",
+        "UMask=0022",
+    ):
+        assert re.search(rf"^{re.escape(linea)}\s*$", texto, flags=re.M), (unidad, linea)

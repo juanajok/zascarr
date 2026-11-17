@@ -13,5 +13,22 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 TimeoutStartSec=30min
+# OCTA-B2: aislamiento básico. No se cambia el usuario: las unidades necesitan
+# Docker, el socket y escribir el estado de la copia; sí se limita lo que pueden
+# tocar y se impide ganar privilegios. `ProtectSystem=full` deja /usr, /boot y
+# /etc en solo lectura; /media/Backup y /var/lib/zascarr siguen escribibles.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+ProtectClock=true
+ProtectHostname=true
+UMask=0022
 # 75 = había otra operación de ZascArr en marcha: no es un fallo de la unidad (BL-OPS1, FR-12.4)
 SuccessExitStatus=75
