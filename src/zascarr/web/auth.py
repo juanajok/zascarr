@@ -55,10 +55,14 @@ async def login_form(request: Request, next: str = "/") -> HTMLResponse:
         # Nada que pedir — no tiene sentido enseñar un formulario de
         # contraseña para una instalación que no la tiene activada.
         return RedirectResponse(next)
+    # BL-OPS2 (FR-32): tras una restauración reciente, /login lo dice (solo lee el fichero; sin fecha).
+    from zascarr.services.ops_host import aviso_de_login
+
     return templates.TemplateResponse(request, "login.html", {
         "next": next,
         "pide_usuario": settings.auth_mode == "user_password",
         "error": None,
+        "aviso": aviso_de_login(settings),
     })
 
 

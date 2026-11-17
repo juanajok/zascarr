@@ -21,6 +21,9 @@ def ajustes(monkeypatch):
     monkeypatch.setattr(restauracion.ops_host, "leer_copias", lambda _s: BUENA)
     monkeypatch.setattr(restauracion.ops_host, "resolver_estado",
                         lambda _s: SimpleNamespace(en_marcha=False))
+    # F-06: el arnés usa un Settings mínimo; el estado de restauración se simula como «no hay ninguna en marcha».
+    monkeypatch.setattr(restauracion.ops_host, "resolver_restauracion",
+                        lambda _s: SimpleNamespace(en_marcha=False))
     monkeypatch.setattr(restauracion, "revision_actual", AsyncMock(return_value="0046"))
     return s
 
