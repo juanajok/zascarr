@@ -4,6 +4,7 @@
 <a href="/ui/biblioteca" class="back-link">← Biblioteca</a>
 <h1>Revisar datos</h1>
 <p class="subtitle">Qué series tienen fichas de fuentes recogidas y cuántos campos tienen procedencia. Esta pantalla no cambia nada.</p>
+{% if lanzado %}<div class="aviso ok" role="status">Se ha lanzado el relleno de huecos seguros de hasta 20 series. Puedes seguir usando ZascArr; no se resuelven conflictos.</div>{% endif %}
 <div class="pending-card">
   <p><strong>{{ total_con_ficha }}</strong> series con alguna ficha de fuente recogida · <strong>{{ total_con_procedencia }}</strong> series con procedencia por campo.</p>
   {% if series %}
@@ -17,6 +18,11 @@
   </table>
   {% else %}
   <p class="muted">Todavía no hay fichas de fuentes recogidas. Cuando la recolección se ejecute, aparecerán aquí.</p>
+  {% endif %}
+  {% if series %}
+  <form method="post" action="/ui/datos/rellenar">
+    <button type="submit" class="btn primary">Rellenar huecos seguros (hasta 20 series)</button>
+  </form>
   {% endif %}
 </div>
 {% endblock %}
