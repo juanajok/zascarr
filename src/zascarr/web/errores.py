@@ -21,7 +21,7 @@ from http import HTTPStatus
 import structlog
 from fastapi import Request
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from zascarr.web.routes import crear_templates
@@ -85,6 +85,32 @@ async def manejar_http(request: Request, exc: StarletteHTTPException) -> Respons
     detalle = exc.detail if _es_frase(exc.detail, exc.status_code) else None
     return pagina_error(request, exc.status_code, detalle=detalle,
                         headers=getattr(exc, "headers", None))
+
+
+async def manejar_bd_no_disponible(
+    request: Request, exc: Exception
+) -> Response:
+    """503 cuando la base de datos no responde (OCTA-C1).
+
+    `OperationalError`/`InterfaceError` suelen ser conexión caída, no un error
+    de la página. La API conserva JSON; una petición HTMX recibe texto llano
+    (no se intercambia una página completa dentro de un fragmento); quien navega
+    ve la página de error propia con enlace a Estado.
+    """
+    logger.warning("bd_no_disponible", tipo=type(exc).__name__)
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "No se puede conectar con la base de datos."},
+        )
+    if not quiere_pagina(request):
+        return PlainTextResponse(
+            "No se puede conectar con la base de datos.", status_code=503)
+    return pagina_error(
+        request, 503,
+        mensaje="ZascArr no puede conectar con su base de datos. "
+                "Reinicia ZascArr; si sigue igual, vuelve a ejecutar la actualización.",
+    )
 
 
 async def manejar_inesperado(request: Request, exc: Exception) -> Response:
