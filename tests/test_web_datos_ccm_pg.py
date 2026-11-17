@@ -80,6 +80,7 @@ async def test_pantalla_muestra_roles_conflictos_y_huecos(banco):
     assert "Comic Vine" in r.text
     assert "Huecos listos" in r.text
     assert "Edición que tengo" in r.text
+    assert "Hay datos de edición que no se están usando" in r.text
     async with cliente() as c:
         lote = await c.get("/ui/datos")
     assert lote.status_code == 200 and "Revisar datos" in lote.text
