@@ -34,6 +34,11 @@
       role="status" aria-live="polite">Buscando series…</span>
 <div id="resultados-wishlist" class="series-results"></div>
 
+{% if en_descarga %}
+<div id="wishlist-progreso" hx-get="/ui/wishlist/progreso" hx-trigger="load, every 30s"
+     hx-swap="innerHTML" aria-live="polite"></div>
+{% endif %}
+
 {% if not rows %}
 <p class="empty">Nada en la lista de deseos todavía. Busca una serie arriba y pulsa «Añadir a deseados».</p>
 {% else %}
