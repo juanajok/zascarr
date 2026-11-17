@@ -90,6 +90,7 @@ sustituir() {
     texto="${texto//@ZASCARR_DATA_DIR@/${DATA_DIR}}"
     texto="${texto//@GRUPO@/${GRUPO}}"
     texto="${texto//@BACKUP_STATUS_DIR@/${BACKUP_STATUS_DIR}}"
+    texto="${texto//@BACKUP_DIR@/${BACKUP_DIR:-$(leer_env BACKUP_DIR)}}"
     printf '%s' "${texto}"
 }
 
@@ -136,6 +137,7 @@ fi
 
 # ── Requisitos: se comprueban todos antes de escribir nada ───────────────────────────────────────
 command -v systemctl >/dev/null 2>&1 || { echo "No encuentro systemctl." >&2; exit 1; }
+command -v docker >/dev/null 2>&1 || { echo "No encuentro docker: el auxiliar lo necesita para comprobar la contraseña." >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "No encuentro python3 (hace falta 3.9 o superior)." >&2; exit 1; }
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' \
     || { echo "Hace falta python3 3.9 o superior." >&2; exit 1; }
