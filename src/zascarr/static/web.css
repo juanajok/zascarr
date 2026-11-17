@@ -2647,6 +2647,30 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .novedad-cuerpo { padding-right: var(--space-1); }
 }
 
+
+/* #991: indicador global de tareas */
+#tareas-hay[hidden] + #tareas-detalles { display: none; }
+.tareas-panel { margin: var(--space-2) 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
+.tareas-panel > summary { min-height: 44px; padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none; display: flex; gap: var(--space-2); align-items: center; }
+.tareas-panel > summary::-webkit-details-marker { display: none; }
+.tareas-chip { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 28px; padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--paper); color: var(--ink); font-size: var(--text-secundario); font-variant-numeric: tabular-nums; }
+.tareas-chip.error { background: var(--paper); color: var(--ink); border: var(--border-chip) solid currentColor; }
+.tareas-nombre { color: var(--ink-soft); font-size: var(--text-secundario); }
+.tareas-lista { padding: var(--space-2) var(--space-3) var(--space-3); display: grid; gap: var(--space-2); }
+.tarea { border-top: var(--border-chip) solid var(--ink-soft); padding-top: var(--space-2); }
+.tarea h3 { margin: 0 0 var(--space-1); font-size: var(--text-boton); }
+.tarea p { margin: 0 0 var(--space-1); color: var(--ink-soft); font-size: var(--text-secundario); }
+.tarea progress { width: 100%; height: 8px; accent-color: var(--ink); }
+.tarea.error { border-left: var(--border-panel) solid var(--ink); padding-left: var(--space-2); }
+.tareas-anuncio { font-size: var(--text-secundario); color: var(--ink-soft); }
+@media (max-width: 480px) {
+  .side .tareas-nombre { display: none; }
+  .side .tareas-panel > summary { padding: var(--space-1) var(--space-2); }
+  .side .tareas-chip { min-height: 32px; font-size: var(--text-secundario); }
+}
+@media (min-width: 1280px) { .side .tareas-panel { max-width: 280px; } }
+@media (prefers-reduced-motion: reduce) { .tareas-panel, .tarea, .tareas-chip { transition: none !important; animation: none !important; } }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

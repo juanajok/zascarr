@@ -14,8 +14,17 @@ ui_router = APIRouter()
 
 @api_router.get("/tareas")
 async def api_tareas() -> JSONResponse:
-    return JSONResponse(tareas.snapshot(incluir_recientes=True),
-                        headers={"Cache-Control": "no-store"})
+    datos = tareas.snapshot(incluir_recientes=True)
+    cuerpo = {
+        "version": 1,
+        "generado": datos["generado"],
+        "resumen": datos["resumen"],
+        "tareas": [{k: t[k] for k in ("id", "tipo", "titulo", "fase", "hechos",
+                                     "total", "pct", "unidad", "estado", "atascada",
+                                     "iniciada", "actualizada", "enlace")}
+                   for t in datos["tareas"]],
+    }
+    return JSONResponse(cuerpo, headers={"Cache-Control": "no-store"})
 
 
 @ui_router.get("/ui/_tareas", response_class=HTMLResponse)
