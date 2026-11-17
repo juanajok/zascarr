@@ -343,6 +343,13 @@
                   hx-get="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/previa"
                   hx-target="next .previa-numero" hx-swap="innerHTML"
                   hx-trigger="click">Ver portada<span class="sr"> del número {{ n.numero }}</span></button>
+          <a class="btn ghost sm visor-portada-boton"
+             href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/portada-hd.jpg"
+             data-visor-src="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/portada-hd.jpg"
+             data-visor-titulo="Número {{ n.numero }}{% if n.titulo %} · {{ n.titulo }}{% endif %}"
+             {% if loop.previtem %}data-visor-prev="/ui/series/{{ series.id }}/numero/{{ loop.previtem.issue_id }}/portada-hd.jpg"{% endif %}
+             {% if loop.nextitem %}data-visor-next="/ui/series/{{ series.id }}/numero/{{ loop.nextitem.issue_id }}/portada-hd.jpg"{% endif %}
+             >Ver portada ampliada<span class="sr"> del número {{ n.numero }}</span></a>
           <span class="previa-numero" id="previa-archivo-{{ n.issue_id }}" aria-hidden="true"></span>
         </span>
       </h3>
@@ -379,4 +386,11 @@
   </ul>
 </section>
 {% endif %}
+
+
+
+
+
+{% include "_visor_portada.html" %}
+  <script src="/static/visor-portada.js" defer></script>
 {% endblock %}

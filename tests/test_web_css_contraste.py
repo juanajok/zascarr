@@ -299,6 +299,10 @@ SIN_TEXTO = ("dot", "progress-value", "progress-bar")
 # Pares que el resolvedor no debe tener que entender y que se excluyen A PROPÓSITO:
 # {(selector, fg, bg): motivo}. Vacío: cada entrada nueva exige su justificación.
 EXCLUSIONES: dict[tuple[str, str, str], str] = {
+    # Capa de atenuación del visor HD: no contiene texto; el color oscuro translúcido
+    # (fijo en ambos temas) no participa en el contraste del texto del diálogo.
+    (".visor-portada::backdrop", "var(--ink)", "rgb(12 12 12 / 72%)"):
+        "capa de atenuación sin texto; color fijo de backdrop, no texto sobre él",
     # La inicial de la portada que falta (ui.portada): una letra de ~46 % del ancho de la tarjeta (≥ 37 px
     # incluso en la más pequeña), decorativa y aria-hidden (el título va en texto debajo). Es texto
     # grande: le vale 3:1, y el caso peor, magenta en claro, mide 3,68:1

@@ -2712,6 +2712,25 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (max-width: 480px) { .library-card-wrap .favorito-form { top: var(--space-1); right: var(--space-1); } }
 
 
+/* #1044: visor de portada HD */
+.visor-portada-boton { min-width: 44px; min-height: 44px; white-space: nowrap; }
+.visor-tarjeta { position: absolute; left: var(--space-2); top: var(--space-2); z-index: 2; width: 44px; height: 44px; min-width: 44px; padding: 0; opacity: 0; }
+.library-card-wrap:hover .visor-tarjeta, .library-card-wrap:focus-within .visor-tarjeta { opacity: 1; }
+.visor-tarjeta:focus-visible { opacity: 1; }
+@media (hover: none) { .visor-tarjeta { opacity: 1; } }
+.visor-portada { width: min(96vw, 1100px); max-width: 1100px; max-height: 92vh; margin: auto; padding: 0; border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); color: var(--ink); }
+.visor-portada::backdrop { background: rgb(12 12 12 / 72%); }
+.visor-portada-cabecera { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: var(--border-chip) solid var(--ink-soft); }
+.visor-portada-cabecera h2 { margin: 0; font-size: var(--text-boton); }
+.visor-portada-imagen { display: flex; justify-content: center; align-items: center; min-height: 0; max-height: calc(92vh - 140px); overflow: auto; padding: var(--space-2); }
+.visor-portada-imagen img { max-width: 100%; max-height: calc(92vh - 160px); object-fit: contain; }
+.visor-portada-acciones { display: flex; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-top: var(--border-chip) solid var(--ink-soft); }
+.visor-portada-acciones button[disabled] { opacity: .55; }
+.visor-portada .btn { min-height: 44px; }
+.visor-portada-control svg { width: 18px; height: 18px; }
+.visor-portada-control [data-visor-prev] svg, .visor-portada-acciones [data-visor-prev] svg { transform: rotate(90deg); }
+.visor-portada-acciones [data-visor-next] svg { transform: rotate(-90deg); }
+
 /* ── Lector BL-LEC1 (#824) ─────────────────────────────────────────────── */
 .lector { display: grid; gap: var(--space-3); justify-items: center; }
 .lector-lienzo {
@@ -2728,6 +2747,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .lector-controles { width: 100%; }
   .lector-controles .btn { flex: 1 1 8rem; min-height: 44px; }
 }
+
+
 
 /* ── Lector BL-LEC2 (#825): modos, táctil y sentido ────────────────────── */
 .lector-lienzo { touch-action: pan-y pinch-zoom; position: relative; }

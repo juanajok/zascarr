@@ -217,3 +217,20 @@ async def test_no_hay_mas_de_dos_generaciones_simultaneas(tmp_path, monkeypatch)
     await asyncio.gather(*(portada_numero.ruta_previa(
         sesion, uuid4(), uuid4(), settings=ajustes) for sesion in sesiones))
     assert maximo <= 2
+
+
+@pytest.mark.asyncio
+async def test_hd_1200_tiene_su_propia_cache_e_invalida_por_huella(tmp_path, monkeypatch):
+    cbz = _cbz(tmp_path / "Tebeo 01.cbz")
+    fid = uuid4()
+    sesion = _Sesion([(fid, str(cbz), None)])
+    ajustes = _settings(tmp_path)
+    hd = await portada_numero.ruta_previa(sesion, uuid4(), uuid4(), ancho=1200, settings=ajustes)
+    assert hd is not None and hd.name == f"{fid}-1200.jpg"
+    # Sustituir el archivo invalida la huella: vuelve a generar.
+    cbz.write_bytes(b"contenido nuevo")
+    llamadas = []
+    monkeypatch.setattr(portada_numero, "_generar", lambda *a, **k: llamadas.append(1) or None)
+    assert await portada_numero.ruta_previa(sesion, uuid4(), uuid4(), ancho=1200,
+                                            settings=ajustes) is None
+    assert llamadas == [1]
