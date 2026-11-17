@@ -1415,3 +1415,17 @@ class TestMarcaCarpetaMixta382:
         r = await pagina({"serie": str(sid)})
         assert not re.search(CHIP_SUGERIDA, r.text)
         assert "La sugieren" not in visible(r.text)
+
+
+    async def test_varias_series_alternativas_dice_otras_series(self, banco):
+        sid_a = await banco.serie("SERIE A", 2020)
+        sid_b = await banco.serie("SERIE B", 2021)
+        sid_c = await banco.serie("SERIE C", 2022)
+        await banco.sembrar(
+            archivo("Comics/Varias/A 01.cbz", estado="direct", cands=candidatas(sid_a, "SERIE A", 2020)),
+            archivo("Comics/Varias/B 01.cbz", estado="direct", cands=candidatas(sid_b, "SERIE B", 2021)),
+            archivo("Comics/Varias/C 01.cbz", estado="direct", cands=candidatas(sid_c, "SERIE C", 2022)),
+        )
+        r = await pagina({"serie": str(sid_a)})
+        t = visible(r.text)
+        assert "La sugiere" in t and "otras series" in t
