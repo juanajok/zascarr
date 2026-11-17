@@ -62,7 +62,7 @@ UMBRAL_FALLOS = 5
 VENTANA_FALLOS_S = 15 * 60
 BLOQUEO_FALLOS_S = 30 * 60
 BLOQUEO_ESPERA_RESTAURAR_S = 12
-RUTA_COPIAS = "/var/lib/zascarr/backups"
+RUTA_COPIAS = "/var/backups/zascarr/postgres"
 RE_COPIA = re.compile(r"backup-[0-9]{8}_[0-9]{6}")
 RE_TS = re.compile(r"[0-9]{8}_[0-9]{6}")
 TIEMPO_LECTURA_S = 5             # y espera la línea como mucho esto
@@ -544,8 +544,8 @@ def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, l
         return _procesar_restaurar(peticion, ahora, estado, lanzador,
                                    verificador or VerificadorPrueba(),
                                    copias if copias is not None else listar_copias(
-                                       dir_backup or os.environ.get("ZASCARR_BACKUP_DIR",
-                                                                    "/var/lib/zascarr/backups")))
+                                       dir_backup or os.environ.get("BACKUP_DIR")
+                                       or os.environ.get("ZASCARR_BACKUP_DIR", RUTA_COPIAS)))
     if accion != ACCION_COPIA:
         return _rechazo("accion_no_disponible", id_)
     unidad = UNIDADES[accion]
