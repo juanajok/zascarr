@@ -206,9 +206,6 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
                 vistos = valor
                 with __import__("contextlib").suppress(Exception):
                     progreso(valor, total)
-        if progreso is not None and total:
-            with __import__("contextlib").suppress(Exception):
-                progreso(total, total)
 
     hilo_progreso = threading.Thread(target=_vigilar_progreso, daemon=True)
     hilo_progreso.start()
@@ -335,6 +332,8 @@ def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
                 os.close(fd_out)
             items.append({"nombre": nombre, "origen": entrada.nombre, "bytes": total,
                           "sha256": h.hexdigest(), "estado": "verificado"})
+            if progreso is not None:
+                progreso(len(items))
     return items
 
 
@@ -583,6 +582,7 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
             _extraer_en_proceso, paquete, temp, paquete.fd,
             "zip" if paquete.firma == "ZIP" else "rar", temp_fd,
             _progreso, total_items)
+        _progreso(len(items), total_items)
         _verificar_contenido(items, temp, temp_fd)
         op.estado = PaqueteEstado.VERIFICANDO
         op.items = list(items)
