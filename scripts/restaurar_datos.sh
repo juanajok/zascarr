@@ -45,6 +45,8 @@ ASUMIR_SI=0
 DRY_RUN=0
 PRODUCCION=0
 COPIA_TS=""
+ASUMIR_PEDIDO=0
+PROYECTO_PEDIDO=0
 
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 info() { printf '→ %s\n' "$*"; }
@@ -61,8 +63,8 @@ while [[ $# -gt 0 ]]; do
         --manifest)          [[ -n "${2:-}" ]] || die "--manifest necesita un valor"; MANIFEST="$2"; shift 2 ;;
         --sha)               [[ -n "${2:-}" ]] || die "--sha necesita un valor"; SHA_ESPERADO="$2"; shift 2 ;;
         --alembic-esperada)  [[ -n "${2:-}" ]] || die "--alembic-esperada necesita un valor"; ALEMBIC_ESPERADA="$2"; shift 2 ;;
-        --proyecto-esperado) [[ -n "${2:-}" ]] || die "--proyecto-esperado necesita un valor"; PROYECTO_ESPERADO="$2"; shift 2 ;;
-        --yes|-y)            ASUMIR_SI=1; shift ;;
+        --proyecto-esperado) [[ -n "${2:-}" ]] || die "--proyecto-esperado necesita un valor"; PROYECTO_ESPERADO="$2"; PROYECTO_PEDIDO=1; shift 2 ;;
+        --yes|-y)            ASUMIR_SI=1; ASUMIR_PEDIDO=1; shift ;;
         --dry-run)           DRY_RUN=1; shift ;;
         --produccion)        PRODUCCION=1; shift ;;
         --copia)             [[ -n "${2:-}" ]] || die "--copia necesita un valor"; COPIA_TS="$2"; shift 2 ;;
@@ -97,8 +99,9 @@ for var in REPO_DIR ENV_FILE COMPOSE_FILE BACKUP_DIR DB_NAME DB_USER; do
 done
 if (( PRODUCCION )); then
     [[ "$COPIA_TS" =~ ^[0-9]{8}_[0-9]{6}$ ]] || die "--copia no tiene el formato esperado."
-    [[ -z "$DUMP" && -z "$MANIFEST" && -z "$ALEMBIC_ESPERADA" && (-z "$SHA_ESPERADO" || "$SHA_ESPERADO" == "HEAD") ]] || \
-        die "Con --produccion no se aceptan --dump, --manifest, --sha ni --alembic-esperada."
+    [[ -z "$DUMP" && -z "$MANIFEST" && -z "$ALEMBIC_ESPERADA" && (-z "$SHA_ESPERADO" || "$SHA_ESPERADO" == "HEAD") \
+        && "$ASUMIR_PEDIDO" == "0" && "$PROYECTO_PEDIDO" == "0" && "$DRY_RUN" == "0" ]] || \
+        die "Con --produccion no se aceptan opciones de ensayo (--dump/--manifest/--sha/--alembic-esperada/--proyecto-esperado/--yes/--dry-run)."
     DUMP="$BACKUP_DIR/backup_${COPIA_TS}.sql.gz"
     MANIFEST="$BACKUP_DIR/MANIFIESTO-backup_${COPIA_TS}.json"
     SHA_ESPERADO="HEAD"

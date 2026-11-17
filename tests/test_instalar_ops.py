@@ -13,7 +13,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "instalar_ops.sh"
 HERRAMIENTAS = ("bash", "sed", "tr", "cut", "cat", "cmp", "mktemp", "rm", "mv", "mkdir", "chmod", "id", "dirname",
-                "tail", "getent", "env", "umask", "head", "date")
+                "tail", "getent", "env", "umask", "head", "date", "docker")
 
 
 @pytest.fixture()
