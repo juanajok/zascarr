@@ -128,22 +128,27 @@ class ReviewService:
         self._library: Path | None = None   # solo para dobles de prueba heredados
 
     @staticmethod
-    def _condiciones_pendientes() -> tuple:
+    def _condiciones_pendientes(*, solo_sugerencia: bool = False) -> tuple:
         """El filtro de «pendiente», UNO solo: lo usan la lista y el recuento del menú (V3). Si el
-        recuento tuviera su propio filtro, el número del menú dejaría de coincidir con la lista."""
-        return (
+        recuento tuviera su propio filtro, el número del menú dejaría de coincidir con la lista.
+        «Con sugerencia» es un filtro de vista: no cambia lo que es un pendiente."""
+        condiciones = (
             File.issue_id.is_(None),
             File.review_dismissed.is_(False),
             File.metadata_["match_status"].astext == "unsorted",
         )
+        if solo_sugerencia:
+            condiciones += (File.metadata_["candidates"].is_not(None),)
+        return condiciones
 
-    async def count_pending(self) -> int:
+    async def count_pending(self, *, solo_sugerencia: bool = False) -> int:
         """Cuántos archivos hay por revisar, SIN el tope de 50 de `pending_files`."""
         return (await self.db.execute(
-            select(func.count()).select_from(File).where(*self._condiciones_pendientes())
+            select(func.count()).select_from(File)
+            .where(*self._condiciones_pendientes(solo_sugerencia=solo_sugerencia))
         )).scalar_one()
 
-    async def pending_files(self, limit: int = 50) -> list[File]:
+    async def pending_files(self, limit: int = 50, *, solo_sugerencia: bool = False) -> list[File]:
         """Archivos sin match fiable que nadie ha resuelto ni descartado.
 
         Bug real (reportado, B11): filtraba por vivir bajo `_Unsorted/`
@@ -164,7 +169,7 @@ class ReviewService:
         """
         return list((await self.db.execute(
             select(File)
-            .where(*self._condiciones_pendientes())
+            .where(*self._condiciones_pendientes(solo_sugerencia=solo_sugerencia))
             .order_by(File.imported_at.desc())
             .limit(limit)
         )).scalars().all())
@@ -176,7 +181,7 @@ class ReviewService:
 
     async def pagina_de_pendientes(
         self, *, despues: ClavePendiente | None = None, antes: ClavePendiente | None = None,
-        limite: int = POR_PAGINA,
+        limite: int = POR_PAGINA, solo_sugerencia: bool = False,
     ) -> PaginaPendientes:
         """Una página de la cola, por CURSOR sobre `(imported_at DESC, id DESC)` (U12).
 
@@ -193,10 +198,11 @@ class ReviewService:
         Presupuesto: una consulta de lista y dos `COUNT` (el total y la posición del
         primero mostrado), sin `OFFSET`."""
         clave = tuple_(_MOMENTO, File.id)
-        total = await self.count_pending()
+        total = await self.count_pending(solo_sugerencia=solo_sugerencia)
         filas: list[File] = []
         if antes is not None or despues is not None:
-            consulta = select(File).where(*self._condiciones_pendientes())
+            consulta = select(File).where(
+                *self._condiciones_pendientes(solo_sugerencia=solo_sugerencia))
             if antes is not None:
                 consulta = (consulta.where(clave > self._ref(antes))
                             .order_by(_MOMENTO.asc(), File.id.asc()).limit(limite))
@@ -207,31 +213,35 @@ class ReviewService:
                 filas = list((await self.db.execute(consulta)).scalars().all())
         if not filas:                       # sin cursor, o un cursor que ya no lleva a nada
             filas = list((await self.db.execute(
-                select(File).where(*self._condiciones_pendientes())
+                select(File).where(
+                    *self._condiciones_pendientes(solo_sugerencia=solo_sugerencia))
                 .order_by(_MOMENTO.desc(), File.id.desc()).limit(limite)
             )).scalars().all())
         if not filas:
             return PaginaPendientes([], total, 0, 0, False, False)
-        delante = await self.contar_antes_de(ClavePendiente.de(filas[0]))
+        delante = await self.contar_antes_de(
+            ClavePendiente.de(filas[0]), solo_sugerencia=solo_sugerencia)
         return PaginaPendientes(
             archivos=filas, total=total, desde=delante + 1, hasta=delante + len(filas),
             hay_anterior=delante > 0, hay_siguiente=total - delante - len(filas) > 0)
 
-    async def contar_antes_de(self, c: ClavePendiente) -> int:
+    async def contar_antes_de(self, c: ClavePendiente, *,
+                              solo_sugerencia: bool = False) -> int:
         """Cuántos pendientes van ANTES de esa clave en el orden de la lista."""
         return (await self.db.execute(
             select(func.count()).select_from(File)
-            .where(*self._condiciones_pendientes(),
+            .where(*self._condiciones_pendientes(solo_sugerencia=solo_sugerencia),
                    tuple_(_MOMENTO, File.id) > self._ref(c))
         )).scalar_one()
 
-    async def contar_entre(self, primero: ClavePendiente, ultimo: ClavePendiente) -> int:
+    async def contar_entre(self, primero: ClavePendiente, ultimo: ClavePendiente, *,
+                           solo_sugerencia: bool = False) -> int:
         """Cuántos pendientes hay hoy entre dos claves, ambas incluidas: lo que queda de
         una página que ya se mostró."""
         clave = tuple_(_MOMENTO, File.id)
         return (await self.db.execute(
             select(func.count()).select_from(File)
-            .where(*self._condiciones_pendientes(),
+            .where(*self._condiciones_pendientes(solo_sugerencia=solo_sugerencia),
                    clave <= self._ref(primero), clave >= self._ref(ultimo))
         )).scalar_one()
 

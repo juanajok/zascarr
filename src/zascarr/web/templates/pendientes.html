@@ -25,6 +25,18 @@
 <div id="pend-clave" hidden>
   <input type="hidden" name="primero" value="{{ primero }}">
   <input type="hidden" name="ultimo" value="{{ ultimo }}">
+  <input type="hidden" name="solo_sugerencia" value="{{ '1' if solo_sugerencia else '' }}">
+</div>
+<div class="pend-opciones" role="group" aria-label="Filtro y tamaño de la lista">
+  {% if solo_sugerencia %}
+  <a class="btn ghost sm" href="{{ url_todos }}">Ver todos los pendientes</a>
+  {% else %}
+  <a class="btn ghost sm" href="{{ url_solo }}">Solo con sugerencia</a>
+  {% endif %}
+  <span class="caption">Por página:</span>
+  {% for n in (25, 50) %}
+  <a class="btn ghost sm" href="{{ url_tamano[n] }}" {% if n == tamano %}aria-current="true"{% endif %}>{{ n }}</a>
+  {% endfor %}
 </div>
 {#- Destino fuera de la fila para el recuento tras ignorar: el OOB que retira
     el <li> no puede llevarse también los disparadores del menú/rango. -#}
