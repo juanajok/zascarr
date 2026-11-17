@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ series.title }} — ZascArr  <script src="/static/visor-portada.js" defer></script>
-{% endblock %}
+{% block title %}{{ series.title }} — ZascArr{% endblock %}
 {% block content %}
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
 {% from "_atribucion_fandom.html" import aviso_de_atribucion %}
@@ -393,4 +392,5 @@
 
 
 {% include "_visor_portada.html" %}
+  <script src="/static/visor-portada.js" defer></script>
 {% endblock %}
