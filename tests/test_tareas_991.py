@@ -239,8 +239,51 @@ def test_visto_form_y_panel():
     r = cliente.post("/ui/_tareas/visto", data={"tid": t.id})
     assert r.status_code == 200
     base = Path("src/zascarr/web/templates/base.html").read_text()
-    assert 'hx-post="/ui/_tareas/visto/ultimo"' in base
+    assert 'hx-post="/ui/_tareas/visto"' in base
     t2 = tareas.iniciar("importar", origen="visto2")
     time.sleep(0.41)
     tareas.error(t2.id, tipo_error="OSError")
     assert cliente.post("/ui/_tareas/visto", data={"tid": "ultimo"}).status_code == 200
+
+
+def test_visto_marca_todos_los_errores_y_trigger_solo_apertura():
+    cliente = TestClient(app)
+    ids = []
+    for i in range(2):
+        t = tareas.iniciar("importar", origen=f"v{i}")
+        time.sleep(0.41)
+        tareas.error(t.id, tipo_error="OSError")
+        ids.append(t.id)
+    r = cliente.post("/ui/_tareas/visto")
+    assert r.status_code == 200
+    datos = tareas.snapshot(incluir_recientes=True)["tareas"]
+    assert all(x["visto"] for x in datos if x["id"] in ids)
+    base = Path("src/zascarr/web/templates/base.html").read_text()
+    assert 'hx-trigger="click[!this.parentElement.open]"' in base
+    assert 'hx-trigger="toggle"' not in base
+
+
+def test_copia_exito_y_fallo(monkeypatch):
+    from zascarr.services import ops_host
+    from zascarr.web import copias
+
+    copias._tarea_copia = None
+    tareas._reset_para_pruebas()
+    estados = {"v": type("V", (), {"en_marcha": True, "estado": "en_marcha"})()}
+    monkeypatch.setattr(ops_host, "resolver_estado", lambda _s: estados["v"])
+    monkeypatch.setattr(ops_host, "leer_copias", lambda _s: [])
+    cliente = TestClient(app)
+    assert cliente.get("/ui/copias/estado").status_code == 200
+    time.sleep(0.41)
+    assert tareas.snapshot(incluir_recientes=True)["activas"] == 1
+    estados["v"] = type("V", (), {"en_marcha": False, "estado": "hecha"})()
+    assert cliente.get("/ui/copias/estado").status_code == 200
+    assert tareas.snapshot(incluir_recientes=True)["activas"] == 0
+    copias._tarea_copia = None
+    tareas._reset_para_pruebas()
+    estados["v"] = type("V", (), {"en_marcha": True, "estado": "en_marcha"})()
+    assert cliente.get("/ui/copias/estado").status_code == 200
+    time.sleep(0.41)
+    estados["v"] = type("V", (), {"en_marcha": False, "estado": "fallo"})()
+    cliente.get("/ui/copias/estado")
+    assert any(x["estado"] == "error" for x in tareas.snapshot(incluir_recientes=True)["tareas"])
