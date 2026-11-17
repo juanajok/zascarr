@@ -34,6 +34,16 @@ CAMPOS_SERIE: dict[str, Ambito] = {
 
 ROLES = frozenset({RolVinculo.EDICION_PROPIA.value, RolVinculo.OBRA_REFERENCIA.value})
 
+#: Campos de número que la Fase 4 puede consolidar. `format` exige mapeo de
+#: fuente a `IssueFormat`; se incorpora cuando exista esa normalización.
+CAMPOS_ISSUE: dict[str, Ambito] = {
+    "title": Ambito.EDICION,
+    "release_date": Ambito.EDICION,
+    "page_count": Ambito.EDICION,
+    "isbn": Ambito.EDICION,
+    "synopsis": Ambito.OBRA,
+}
+
 
 def campos_de(ambito: Ambito) -> tuple[str, ...]:
     return tuple(campo for campo, valor in CAMPOS_SERIE.items() if valor is ambito)
