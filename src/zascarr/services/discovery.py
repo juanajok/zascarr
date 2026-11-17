@@ -41,6 +41,7 @@ from zascarr.services.detalle_edicion import (
     detalle_desde_gcd_serie,
     detalle_desde_numero,
 )
+from zascarr.services.fandom import FandomClient
 from zascarr.services.gcd import GCDClient, GCDSerie, es_edicion_espanola
 from zascarr.services.identificadores import (
     Identificador,
@@ -66,14 +67,19 @@ CAMPO_ID_EXTERNO: dict[MetadataSource, str] = {
     MetadataSource.GCD: "gcd_id",
     MetadataSource.METRON: "metron_id",
     MetadataSource.OPEN_LIBRARY: "open_library_id",
+    MetadataSource.FANDOM_DC: "fandom_dc_slug",
+    MetadataSource.FANDOM_MARVEL: "fandom_marvel_slug",
 }
-CAMPOS_ID_DE_TEXTO = {"tebeosfera_slug", "open_library_id"}
+CAMPOS_ID_DE_TEXTO = {
+    "tebeosfera_slug", "open_library_id", "fandom_dc_slug", "fandom_marvel_slug",
+}
 
 #: Orden FIJO y neutro de las fuentes en cualquier listado (nunca «la mejor primero»).
 ORDEN_DE_FUENTES: tuple[MetadataSource, ...] = (
     MetadataSource.COMIC_VINE, MetadataSource.ANILIST,
     MetadataSource.TEBEOSFERA, MetadataSource.GCD,
     MetadataSource.METRON, MetadataSource.OPEN_LIBRARY,
+    MetadataSource.FANDOM_DC, MetadataSource.FANDOM_MARVEL,
 )
 
 # #133: el conjunto cerrado y `EstadoFuente` viven en un módulo stdlib-only para que las
@@ -100,6 +106,8 @@ _INTERRUPTOR = {
     MetadataSource.GCD: "gcd_enabled",
     MetadataSource.METRON: "metron_enabled",
     MetadataSource.OPEN_LIBRARY: "open_library_enabled",
+    MetadataSource.FANDOM_DC: "fandom_dc_enabled",
+    MetadataSource.FANDOM_MARVEL: "fandom_marvel_enabled",
 }
 
 
@@ -522,6 +530,37 @@ class DiscoveryService:
             for h in hits
         ]
 
+    async def _search_fandom(self, fuente: MetadataSource, query: str,
+                             limit: int) -> list[DiscoveryResult]:
+        """Busca volúmenes en la wiki y devuelve el slug de página como ID.
+
+        Fandom no tiene IDs numéricos: el slug se usa como identidad. Se piden
+        fichas de los primeros resultados para no ofrecer páginas de personajes
+        o números como si fueran volúmenes.
+        """
+        from urllib.parse import quote
+
+        host = "dc.fandom.com" if fuente is MetadataSource.FANDOM_DC else "marvel.fandom.com"
+        prefijo = "https://" + host + "/wiki/"
+        async with FandomClient(host) as cliente:
+            paginas = await cliente.search_series(query, limit=limit)
+            resultados: list[DiscoveryResult] = []
+            for pagina in paginas:
+                volumen = await cliente.get_volume(pagina, incluir_portada=False)
+                if volumen is None:
+                    continue
+                slug = "_".join(str(pagina).replace("/", " ").split())
+                resultados.append(DiscoveryResult(
+                    source=fuente, external_id=slug, title=volumen.title,
+                    start_year=volumen.start_year, description=volumen.description,
+                    cover_url=None, site_url=prefijo + quote(slug, safe="_"),
+                    tradition_guess=ComicTradition.AMERICAN,
+                    tradition_provenance=ProcedenciaTradicion.POR_DEFECTO,
+                ))
+                if len(resultados) >= limit:
+                    break
+        return resultados
+
     async def resolver_identificador(self, texto: str) -> ResolucionIdentificador:
         """BL-R5 (#234): resuelve por id exacto ANTES que por título.
 
@@ -656,7 +695,7 @@ class DiscoveryService:
         """
         query = (query or "").strip()
         settings = get_settings()
-        if not getattr(settings, _INTERRUPTOR[fuente]):
+        if not getattr(settings, _INTERRUPTOR[fuente], False):
             detalle = _estado(fuente, FUENTE_APAGADA, "Está apagada en Ajustes.")
             return Busqueda([], [], {fuente.value: detalle.estado}, {fuente.value: detalle})
         if fuente is MetadataSource.COMIC_VINE and not settings.comicvine_api_key:
@@ -675,6 +714,10 @@ class DiscoveryService:
             MetadataSource.GCD: self._search_gcd,
             MetadataSource.METRON: self._search_metron,
             MetadataSource.OPEN_LIBRARY: self._search_open_library,
+            MetadataSource.FANDOM_DC: lambda q, n: self._search_fandom(
+                MetadataSource.FANDOM_DC, q, n),
+            MetadataSource.FANDOM_MARVEL: lambda q, n: self._search_fandom(
+                MetadataSource.FANDOM_MARVEL, q, n),
         }
         try:
             outcome = await constructores[fuente](query, limit)
