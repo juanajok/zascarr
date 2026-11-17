@@ -1,6 +1,13 @@
 <section class="audit-block" id="paquete-resultado">
   {% if error %}
-    <p class="caption" role="status">{{ error }}</p>
+    <p class="caption" role="alert">{{ error }}</p>
+    {% if token_reintento %}
+    <form hx-post="/ui/auditoria/paquetes/extraer" hx-target="#paquete-resultado" hx-swap="innerHTML">
+      <input type="hidden" name="clave" value="{{ token_reintento }}">
+      <input type="hidden" name="confirmo" value="si">
+      <button type="submit">Reintentar</button>
+    </form>
+    {% endif %}
   {% else %}
     <p class="caption" role="status">El paquete se ha importado o se ha dejado para revisar. El archivo original sigue en Descargas.</p>
     <ul class="audit-lista">

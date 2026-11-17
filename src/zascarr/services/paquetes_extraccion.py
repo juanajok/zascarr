@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import zipfile
 import zipfile as _zip
 from dataclasses import dataclass
@@ -169,11 +170,27 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
     os.set_inheritable(temp_fd, True)
     salida_fichero = tempfile.TemporaryFile(dir=temp)  # noqa: SIM115
     error_fichero = tempfile.TemporaryFile(dir=temp)  # noqa: SIM115
+    limite_stdout, limite_stderr = 1024 * 1024, 64 * 1024
+    parar = threading.Event()
+
+    def _vigilar_salida() -> None:
+        while not parar.wait(0.1):
+            try:
+                if (os.fstat(salida_fichero.fileno()).st_size > limite_stdout
+                        or os.fstat(error_fichero.fileno()).st_size > limite_stderr):
+                    with __import__("contextlib").suppress(OSError):
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    return
+            except OSError:
+                return
+
     proc = subprocess.Popen(  # noqa: S603 — lista, sin shell, ruta absoluta
         [sys.executable, "-m", "zascarr.services.paquetes_worker", json.dumps(datos),
          modo, str(fd), str(temp), str(temp_fd)],
         stdin=subprocess.DEVNULL, stdout=salida_fichero, stderr=error_fichero,
         env=entorno, close_fds=True, pass_fds=(fd, temp_fd), start_new_session=True)
+    vigilante = threading.Thread(target=_vigilar_salida, daemon=True)
+    vigilante.start()
     try:
         try:
             proc.communicate(timeout=_ZIP_TIMEOUT)
@@ -193,6 +210,8 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
         if len(salida) > 1024 * 1024:
             raise PaqueteExtraccionError("extraccion", "La extracción devolvió demasiados datos.")
     finally:
+        parar.set()
+        vigilante.join(timeout=1)
         salida_fichero.close()
         error_fichero.close()
     try:
@@ -479,6 +498,10 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
     op = await s.get(PaqueteOperacion, operacion_id, with_for_update=True)
     if op is None:
         raise PaqueteExtraccionError("no_existe", "La operación no existe.")
+    if op.estado is PaqueteEstado.VERIFICADO and op.temp_dir:
+        # Un segundo POST reutiliza la extracción ya verificada; no reextrae.
+        return ResultadoExtraccion(
+            operacion_id=op.id, items=tuple(op.items or ()), total_bytes=op.total_bytes or 0)
     if op.estado not in (PaqueteEstado.LISTANDO, PaqueteEstado.EXTRAYENDO,
                          PaqueteEstado.VERIFICANDO):
         raise PaqueteExtraccionError("estado", "La operación no es reanudable.")
@@ -579,6 +602,21 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
 
 async def limpiar_huerfanos(s: AsyncSession) -> int:
     """Marca error las operaciones vivas de un arranque anterior y borra sus temporales."""
+    # Primero staging de publicaciones interrumpidas: el primer barrido las
+    # convierte a ERROR y, si se hiciera después, ya no se encontrarían.
+    atascadas = (await s.execute(select(PaqueteOperacion).where(
+        PaqueteOperacion.estado.in_(
+            [PaqueteEstado.PUBLICANDO, PaqueteEstado.IMPORTANDO])))).scalars().all()
+    for op in atascadas:
+        if op.staging_dir:
+            _borrar_temp(Path(op.staging_dir))
+        op.estado = PaqueteEstado.ERROR
+        op.error_codigo = "interrumpida"
+        op.error_mensaje = "La publicación se interrumpió; se puede reintentar."
+        op.staging_dir = None
+        s.add(op)
+    if atascadas:
+        await s.commit()
     vivas = (
         (
             await s.execute(
@@ -586,8 +624,7 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
                     PaqueteOperacion.temp_dir.is_not(None),
                     PaqueteOperacion.estado.in_(
                         [PaqueteEstado.LISTANDO, PaqueteEstado.EXTRAYENDO,
-                         PaqueteEstado.VERIFICANDO, PaqueteEstado.PUBLICANDO,
-                         PaqueteEstado.IMPORTANDO, PaqueteEstado.ERROR]))
+                         PaqueteEstado.VERIFICANDO, PaqueteEstado.ERROR]))
             )
         )
         .scalars()
@@ -604,19 +641,8 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
         s.add(op)
     if vivas:
         await s.commit()
-    # PUBLICANDO/IMPORTANDO interrumpidos: limpiar staging y marcar reintentable.
-    atascadas = (await s.execute(select(PaqueteOperacion).where(
-        PaqueteOperacion.estado.in_(
-            [PaqueteEstado.PUBLICANDO, PaqueteEstado.IMPORTANDO])))).scalars().all()
-    for op in atascadas:
-        if op.staging_dir:
-            _borrar_temp(Path(op.staging_dir))
-        op.estado = PaqueteEstado.ERROR
-        op.error_codigo = "interrumpida"
-        op.error_mensaje = "La publicación se interrumpió; se puede reintentar."
-        s.add(op)
-    if atascadas:
-        await s.commit()
+    # El recuento devuelto incluye ambas familias; se devuelve al final.
+    total_huerfanos = len(vivas) + len(atascadas)
     try:
         base = _base_temporal()
         referenciados = {Path(x) for x in (await s.execute(
@@ -627,4 +653,4 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
                 _borrar_temp(hijo)
     except OSError:
         logger.warning("paquetes.barrido_temporales_fallido")
-    return len(vivas)
+    return total_huerfanos

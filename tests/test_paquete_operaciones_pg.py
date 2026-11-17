@@ -702,3 +702,56 @@ def test_staging_symlink_rechaza_publicacion(tmp_path):
     (d / ".zascarr").symlink_to(fuera, target_is_directory=True)
     with pytest.raises(PaquetePublicacionError, match="no es segura"):
         _validar_cadena_oculta(d)
+
+
+@pytest.mark.asyncio
+async def test_verificado_se_reutiliza_sin_reextraer(tmp_path, monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.services import paquetes_extraccion as modulo
+    _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            temp = tmp_path / "config" / ".paquetes" / str(op.id)
+            temp.mkdir(parents=True)
+            (temp / "0001.cbz").write_bytes(_cbz_bytes())
+            op.estado = PaqueteEstado.VERIFICADO
+            op.temp_dir = str(temp)
+            op.items = [{"nombre": "0001.cbz", "bytes": len(_cbz_bytes()),
+                         "sha256": "a" * 64, "estado": "verificado"}]
+            op.total_bytes = len(_cbz_bytes())
+            s.add(op)
+            await s.commit()
+
+            def no_llamar(*_a, **_k):
+                raise AssertionError("no debe reextraer un VERIFICADO")
+
+            monkeypatch.setattr(modulo, "_extraer_en_proceso", no_llamar)
+            resultado = await extraer_y_verificar(s, op.id, conservar_temporal=True)
+            assert resultado.items[0]["nombre"] == "0001.cbz"
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_huerfano_publicando_limpia_staging(tmp_path, monkeypatch):
+    from zascarr.config import get_settings
+    from zascarr.services.paquetes_extraccion import limpiar_huerfanos
+    _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        staging = tmp_path / "staging-publicando"
+        staging.mkdir()
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            op.estado = PaqueteEstado.PUBLICANDO
+            op.staging_dir = str(staging)
+            op.temp_dir = None
+            s.add(op)
+            await s.commit()
+            assert await limpiar_huerfanos(s) >= 1
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.ERROR and not staging.exists()
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
