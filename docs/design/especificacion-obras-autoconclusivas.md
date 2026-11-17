@@ -1,8 +1,8 @@
 # Especificación — obras autoconclusivas (one-shot) y publicaciones sin numeración
 
-> **Estado:** v0.1 **para decisión del PO** (2026-11-17). Acompaña al
-> [ADR 0022](../adr/0022-obra-autoconclusiva.md) (**Propuesto**). **No autoriza migración ni
-> implementación** hasta que el PO acepte el ADR y cierre las decisiones abiertas.
+> **Estado:** v1.0 **aceptada por el PO** (2026-11-17). Acompaña al
+> [ADR 0022](../adr/0022-obra-autoconclusiva.md) (**Aceptado**). Autoriza la implementación del
+> primer corte (modelo/dominio/alta/UI); ComicInfo y backfill quedan fuera de este corte.
 > Base: `origin/main` `b26d5dad`. Lo que no se ha medido va como **NOT RUN**.
 
 ## 1. Alcance
@@ -175,13 +175,13 @@
   probado.
 - ComicInfo se retrasa: no se promete compatibilidad perfecta con Komga/Kavita hasta la fase 4.
 
-## 9. Decisiones abiertas (PO)
+## 9. Decisiones aceptadas (PO 2026-11-17)
 
-1. `SeriesKind.ONE_SHOT` y número solo-si-la-fuente-lo-da? (recomendado)
-2. Completitud «Tomo único · completo» sin cifras vs «1/1».
-3. Integrales: fuera hasta Edición o marca provisional distinta.
-4. `SeriesGroup` en ComicInfo: posponer a ETQ6/B6 (recomendado).
-5. Backfill de obras existentes: no en v1 (recomendado), o dry-run separado.
+1. **`SeriesKind.ONE_SHOT`** y número solo si la fuente lo da; si no, `NULL`.
+2. Ficha **«Tomo único · completo» sin cifras de grapa**.
+3. **Integrales/omnibus fuera** hasta la entidad *Edición*; no se marcan one-shot.
+4. **`SeriesGroup`** en ComicInfo **pospuesto** a ETQ6/B6.
+5. **Sin backfill** en v1; un dry-run separado si se decide.
 
 **NOT RUN:** censo de series con `total_issues=1`; navegador real; migración; ComicInfo. Nada de
 esto se implementa antes de la aceptación del ADR 0022.
