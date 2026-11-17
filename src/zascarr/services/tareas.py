@@ -166,6 +166,16 @@ def error(tid: str, *, tipo_error: str, fase: str | None = None,
         t._fin = _ahora(ahora)
 
 
+def marcar_visto_ultimo() -> str | None:
+    """Marca el error no visto más reciente; devuelve su id (o None)."""
+    with _lock:
+        for t in _tareas.values():
+            if t.estado is EstadoTarea.ERROR and not t.visto:
+                marcar_visto(t.id)
+                return t.id
+    return None
+
+
 def marcar_visto(tid: str) -> None:
     with _lock:
         t = _tareas.get(tid)

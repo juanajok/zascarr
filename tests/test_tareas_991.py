@@ -222,3 +222,25 @@ def test_oob_no_reemplaza_details_y_conserva_foco():
     for ident in ("tareas-lista", "tareas-contador", "tareas-anuncio", "tareas-cadencia"):
         assert f'id="{ident}"' in frag and "hx-swap-oob" in frag
     assert "every 2s" in frag and "every 10s" in frag
+
+
+def test_css_movil_usa_contenedor_externo():
+    css = Path("src/zascarr/static/web.css").read_text()
+    assert ".tareas-fuera .tareas-panel" in css
+    assert ".side .tareas-panel" not in css
+    assert "position: fixed" in css and "bottom: 72px" in css
+
+
+def test_visto_form_y_panel():
+    t = tareas.iniciar("importar", origen="visto")
+    time.sleep(0.41)
+    tareas.error(t.id, tipo_error="OSError")
+    cliente = TestClient(app)
+    r = cliente.post("/ui/_tareas/visto", data={"tid": t.id})
+    assert r.status_code == 200
+    base = Path("src/zascarr/web/templates/base.html").read_text()
+    assert 'hx-post="/ui/_tareas/visto/ultimo"' in base
+    t2 = tareas.iniciar("importar", origen="visto2")
+    time.sleep(0.41)
+    tareas.error(t2.id, tipo_error="OSError")
+    assert cliente.post("/ui/_tareas/visto", data={"tid": "ultimo"}).status_code == 200

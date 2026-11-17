@@ -2670,14 +2670,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 #tareas-hay[hidden] + #tareas-detalles { display: none; }
 .app { position: relative; }
 .tareas-fuera { position: absolute; left: 252px; top: var(--space-3); z-index: 50; }
-.tareas-panel { position: absolute; left: calc(100% + var(--space-2)); top: 140px; z-index: 50; width: 360px; max-height: min(70vh, 520px); overflow: auto; box-shadow: var(--shadow-ink-sm); margin: 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
+.tareas-panel { position: absolute; left: calc(100% + var(--space-2)); top: 0; z-index: 50; width: 360px; max-height: min(70vh, 520px); overflow: auto; box-shadow: var(--shadow-ink-sm); margin: 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
 .tareas-panel:not([open]) { left: 0; right: auto; top: 0; width: auto; max-height: none; overflow: visible; border: 0; background: transparent; box-shadow: none; }
 .tareas-panel > summary { min-height: 44px; padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none; display: inline-flex; gap: var(--space-2); align-items: center; border-radius: var(--radius-pill); }
-.tareas-panel:not([open]) > summary { padding: 0; }
+.tareas-panel:not([open]) > summary { padding: 0; border: var(--border-chip) solid var(--ink); box-shadow: var(--shadow-ink-sm); height: 44px; }
 .tareas-panel:not([open]) .tareas-nombre { display: none; }
+.tareas-panel:not([open]) > *:not(summary) { display: none; }
 .tareas-panel > summary::-webkit-details-marker { display: none; }
 .tareas-panel > summary:focus-visible { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
-.tareas-chip { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 44px; padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--paper); color: var(--ink); font-size: var(--text-secundario); font-variant-numeric: tabular-nums; }
+.tareas-chip { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 44px; white-space: nowrap; padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--paper); color: var(--ink); font-size: var(--text-secundario); font-variant-numeric: tabular-nums; }
 .tareas-chip.error { background: var(--paper); color: var(--ink); border: var(--border-chip) solid currentColor; }
 .tareas-nombre { color: var(--ink-soft); font-size: var(--text-secundario); }
 .tareas-lista { padding: var(--space-2) var(--space-3) var(--space-3); display: grid; gap: var(--space-2); }
@@ -2689,11 +2690,11 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .tareas-anuncio { font-size: var(--text-secundario); color: var(--ink-soft); }
 @media (max-width: 480px) {
   .tareas-fuera { position: static; }
-  .side .tareas-nombre { display: none; }
-  .side .tareas-panel { position: fixed; left: var(--space-2); right: var(--space-2); top: auto; bottom: 72px; width: auto; max-width: none; max-height: 70vh; }
+  .tareas-fuera .tareas-nombre { display: none; }
+  .tareas-fuera .tareas-panel { position: fixed; left: var(--space-2); right: var(--space-2); top: auto; bottom: 72px; width: auto; max-width: none; max-height: 70vh; }
   .tareas-panel:not([open]) { bottom: 72px; right: var(--space-2); left: auto; }
-  .side .tareas-panel > summary { padding: var(--space-1) var(--space-2); }
-  .side .tareas-chip { min-height: 44px; font-size: var(--text-secundario); }
+  .tareas-fuera .tareas-panel > summary { padding: var(--space-1) var(--space-2); }
+  .tareas-fuera .tareas-chip { min-height: 44px; font-size: var(--text-secundario); }
 }
 @media (min-width: 1280px) { .tareas-panel { width: 360px; max-width: 360px; } }
 @media (prefers-reduced-motion: reduce) { .tareas-panel, .tarea, .tareas-chip { transition: none !important; animation: none !important; } }
