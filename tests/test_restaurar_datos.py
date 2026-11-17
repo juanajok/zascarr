@@ -52,7 +52,8 @@ if [[ "$cmd" == *" psql"* ]]; then
     if [[ "$cmd" == *" -c "* ]]; then
         if [[ "$cmd" == *"select values::text"* ]]; then
             if [[ -s "$RESTORE_LOG" ]]; then
-                if [[ -n "${FAKE_SEGURIDAD_FINAL:-}" && -s "${FAKE_SEGURIDAD_FINAL:-}" ]]; then
+                if [[ -n "${FAKE_SEGURIDAD_FINAL:-}" && -s "${FAKE_SEGURIDAD_FINAL:-}" ]] \
+                        && grep -q 'INSERT INTO runtime_settings' "$RESTORE_LOG"; then
                     cat "$FAKE_SEGURIDAD_FINAL"
                 else
                     cat "$FAKE_SEGURIDAD_RESTAURADA"
@@ -897,6 +898,7 @@ def test_produccion_conserva_seguridad_vigente_y_claves_de_la_copia(tmp_path):
     )
     assert r.returncode == 0, r.stdout + r.stderr
     log = _log(ctx, "restore")
+    print("OPS2LOG", log[-2500:])
     # La sentencia reaplicada contiene la mezcla esperada (JSON entre comillas de dólar).
     assert '"auth_mode":"password"' in log and '"auth_password_hash":"hash-nuevo"' in log
     assert '"prowlarr_api_key":"clave-copia"' in log

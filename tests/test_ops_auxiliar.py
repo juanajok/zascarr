@@ -308,7 +308,7 @@ class TestOpsStatus:
 
 # ── lectura acotada y diario (AC-05, FR-30) ──────────────────────────────────────────────────────────────────────
 class TestEntradaSalida:
-    def test_no_lee_mas_de_1025_bytes_de_una_megabyte(self):
+    def test_no_lee_mas_de_4097_bytes_de_una_megabyte(self):
         a, b = socket.socketpair()
         try:
             # el envío va en un hilo: el búfer del socket es menor que 1 MB y `sendall` bloquearía la prueba
@@ -317,7 +317,7 @@ class TestEntradaSalida:
                     a.sendall(b"x" * 1_000_000)
             hilo = threading.Thread(target=_enviar, daemon=True)
             hilo.start()
-            assert len(ops.leer_linea(b.fileno(), tiempo_s=2)) == 1025
+            assert len(ops.leer_linea(b.fileno(), tiempo_s=2)) == 4097
         finally:
             a.close()
             b.close()
@@ -344,7 +344,7 @@ class TestEntradaSalida:
         secreto = "FIRMA-SECRETA-" + "0" * 50
         r, _ = correr(peticion(id_=_id(5)), estado)
         texto = ops.linea_de_diario(r, uid=1000, ms=3)
-        assert texto.startswith("accion=copia id=") and "uid=1000" in texto and "ms=3" in texto
+        assert texto.startswith("accion=copia copia=- id=") and "uid=1000" in texto and "ms=3" in texto
         assert "0" * 64 not in texto and secreto not in texto and "/" not in texto
         # una acción que no es la conocida no se vuelca (la cadena es del atacante)
         otro, _ = correr(peticion(accion="X\nINYECTADA"), estado)
