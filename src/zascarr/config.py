@@ -229,6 +229,14 @@ class Settings(BaseSettings):
     # C1: caché unificada de portadas (extraídas de CBZ o descargadas de
     # fuentes externas una sola vez) — ver utils/cover.py.
     covers_cache_path: Path = Field(default=Path("/config/covers"))
+    # BL-LEC4 (#827): caché de extracción de CBR/RAR. Va al volumen de datos (nunca a la SD ni
+    # dentro de la biblioteca); 1 GiB por D-L3/BL-LEC0.
+    lector_cache_path: Path = Field(default=Path("/config/lector"))
+    lector_cache_bytes: int = Field(default=1024 * 1024 * 1024)
+    # Topes de la extracción ENTERA acordados en BL-LEC0 (no son los de una entrada).
+    lector_extraccion_timeout_s: float = Field(default=120.0)
+    lector_extraccion_max_bytes: int = Field(default=2 * 1024 * 1024 * 1024)
+    lector_extraccion_max_ficheros: int = Field(default=2000)
     # #418 (ADR 0015): interruptor del lector de .cbr que son RAR (`unar`/`lsar`). `true` por
     # defecto (el lector está adoptado); `false` lo apaga sin reconstruir la imagen: ningún RAR se
     # envía a `unar`, el recorrido de portada lo trata como no candidato SIN gastar intento ni dejar

@@ -4,14 +4,16 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
 from zascarr.models import File, Issue, ReadingProgress, Series
 from zascarr.services.lector import (
+    CACHE,
     LectorError,
+    es_rar_real,
     guardar_progreso,
     guardar_sentido,
     pagina,
@@ -41,6 +43,18 @@ async def leer(request: Request, file_id: UUID,
     numero = await db.get(Issue, f.issue_id)
     if numero is None:
         return _error(request, "Ese archivo no está vinculado a un número.")
+    if es_rar_real(f):
+        estado = await CACHE.preparar(f)
+        if estado.estado == "error":
+            return _error(request, estado.motivo)
+        if estado.estado != "listo":
+            respuesta = templates.TemplateResponse(request, "lector.html", {
+                "archivo": f, "numero": numero, "serie": await db.get(Series, numero.series_id),
+                "total": 0, "pagina_actual": 1, "sentido": "ltr",
+                "origen_sentido": "tradicion", "preparando": True,
+            })
+            respuesta.headers["Cache-Control"] = "no-store"
+            return respuesta
     try:
         total = await total_paginas(db, file_id)
     except LectorError as exc:
@@ -61,6 +75,20 @@ async def leer(request: Request, file_id: UUID,
     respuesta.headers["Cache-Control"] = "no-store"
     respuesta.headers["X-Content-Type-Options"] = "nosniff"
     return respuesta
+
+
+@router.get("/{file_id}/estado", response_class=JSONResponse)
+async def estado(file_id: UUID, db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    f = await db.get(File, file_id)
+    if f is None:
+        return JSONResponse({"estado": "error", "motivo": "Ese archivo no está disponible."},
+                            headers={"Cache-Control": "no-store"})
+    if not es_rar_real(f):
+        return JSONResponse({"estado": "listo", "motivo": ""},
+                            headers={"Cache-Control": "no-store"})
+    actual = await CACHE.preparar(f)
+    return JSONResponse({"estado": actual.estado, "motivo": actual.motivo},
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/{file_id}/pagina/{n}", response_class=Response)
