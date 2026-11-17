@@ -166,6 +166,21 @@ class RuntimeSettingsService:
         row = await self._row()
         return bool((row.values or {}).get(key, False))
 
+    async def get_valor_sin_crear(self, key: str) -> tuple[bool, Any]:
+        """¿Existe la clave y qué valor tiene? Lectura pura, sin crear ni escribir.
+
+        A diferencia de `get_flag`, no convierte a `bool`: un marcador `"false"`,
+        `1` o `{}` se devuelve tal cual para que quien lo interpreta pueda
+        distinguir «ausente» de «presente pero no válido».
+        """
+        row = (await self.db.execute(
+            select(RuntimeSetting).where(RuntimeSetting.id == _SETTINGS_ROW_ID)
+        )).scalar_one_or_none()
+        if row is None:
+            return False, None
+        valores = row.values or {}
+        return key in valores, valores.get(key)
+
     async def get_flag_sin_crear(self, key: str) -> bool:
         """Lee un marcador con SELECT puro: NUNCA crea la fila ni hace flush.
 

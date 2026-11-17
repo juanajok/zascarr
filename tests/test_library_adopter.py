@@ -93,8 +93,8 @@ class TestShouldRun:
 
         with pytest.MonkeyPatch().context() as mp:
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=True),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(True, True)),
             )
             assert await adopter.should_run() is False
 
@@ -109,8 +109,8 @@ class TestShouldRun:
 
         with pytest.MonkeyPatch().context() as mp:
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=False),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(False, None)),
             )
             assert await adopter.should_run() is False
 
@@ -125,8 +125,8 @@ class TestShouldRun:
 
         with pytest.MonkeyPatch().context() as mp:
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=False),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(False, None)),
             )
             assert await adopter.should_run() is False
 
@@ -142,8 +142,8 @@ class TestShouldRun:
 
         with pytest.MonkeyPatch().context() as mp:
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=False),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(False, None)),
             )
             assert await adopter.should_run() is True
 
@@ -160,9 +160,10 @@ class TestEstado:
         cola = [] if marcador else [FakeExecResult(series)]
         adopter = LibraryAdopter(db=FakeSession(cola))
         with pytest.MonkeyPatch().context() as mp:
+            valor = (True, marcador) if marcador is not False else (False, None)
             mp.setattr(
-                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                AsyncMock(return_value=marcador),
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=valor),
             )
             return await adopter.estado()
 
@@ -206,9 +207,10 @@ class TestEstado:
             )
             adopter = LibraryAdopter(db=FakeSession([] if marcador else [FakeExecResult(series)]))
             with pytest.MonkeyPatch().context() as mp:
+                valor = (True, marcador) if marcador is not False else (False, None)
                 mp.setattr(
-                    "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
-                    AsyncMock(return_value=marcador),
+                    "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                    AsyncMock(return_value=valor),
                 )
                 assert await adopter.should_run() is esperado
 
@@ -395,3 +397,26 @@ class TestAdopt:
 
         run = next(o for o in session.added if isinstance(o, ImportRun))
         assert run.details["kind"] == "adoption"
+
+
+class TestMarcadorInvalido:
+    """#367: el marcador solo vale si es exactamente `True`; no hay fail-open."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("valor", ["false", 1, {}, []])
+    async def test_no_se_presenta_registrada_ni_ofrece_incremental(self, monkeypatch, tmp_path, valor):
+        make_cbz(tmp_path / "Batman 001.cbz")
+        monkeypatch.setattr(
+            "zascarr.services.library_adopter.get_settings",
+            lambda: MagicMock(library_path=tmp_path),
+        )
+        adopter = LibraryAdopter(db=FakeSession([]))
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_valor_sin_crear",
+                AsyncMock(return_value=(True, valor)),
+            )
+            assert await adopter.estado() is EstadoAdopcion.MARCADOR_INVALIDO
+            assert await adopter.should_run() is False
+            assert await adopter.puede_registrar() is False
+            assert await adopter.ofrece_registro_incremental() is False
