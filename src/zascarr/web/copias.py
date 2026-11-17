@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""«Hacer una copia ahora» (BL-OPS1, ADR 0018) — `POST /ui/copias/pedir` y `GET /ui/copias/estado`.
+"""«Hacer una copia ahora» (BL-OPS1, ADR 0021) — `POST /ui/copias/pedir` y `GET /ui/copias/estado`.
 
 Router fino: la lógica vive en `services/ops_host.py`. Solo existe bajo `/ui` (nunca `/api/*`: AC-16), sin campos de
 formulario (el cuerpo se ignora) y protegido por el Origen/Sesión del middleware existente. Lee solo los ficheros que
