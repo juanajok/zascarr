@@ -105,6 +105,14 @@ async def _set_values(m: Mundo, patch: dict) -> None:
         await s.commit()
 
 
+async def _quitar_clave(m: Mundo, clave: str) -> None:
+    async with m.fabrica() as s:
+        await s.execute(text(
+            'UPDATE runtime_settings SET "values" = "values" - :k WHERE id = 1'),
+            {"k": clave})
+        await s.commit()
+
+
 async def _runs(m: Mundo, kind: str) -> list[ImportRun]:
     async with m.fabrica() as s:
         return list((await s.execute(
@@ -281,6 +289,23 @@ class TestAceptacionPersistente:
         assert (await _valores(mundo))[CLAVE_MARCADOR] == valor
         assert await _runs(mundo, "adoption_acceptance") == []
 
+    async def test_registro_huerfano_get_y_post_coinciden_y_no_se_pisa(self, mundo, carpeta_cerrada):
+        await _adopt(mundo)
+        run = await _ultima_adopcion(mundo)
+        await _aceptar(mundo, run.id, 1)
+        await _quitar_clave(mundo, CLAVE_MARCADOR)
+        antes = await _snapshot(mundo)
+
+        evaluacion = await _evaluar(mundo)
+        resultado = await _aceptar(mundo, run.id, 1)
+
+        assert evaluacion.oferta is False and "sin marcador" in (evaluacion.aviso or "")
+        assert resultado.status == 409 and resultado.reason == "orphan_record"
+        assert await _snapshot(mundo) == antes
+        valores = await _valores(mundo)
+        assert CLAVE_MARCADOR not in valores and CLAVE_ACEPTACION in valores
+        assert len(await _runs(mundo, "adoption_acceptance")) == 1
+
     async def test_registro_corrupto_no_autoriza(self, mundo, carpeta_cerrada):
         await _adopt(mundo)
         run = await _ultima_adopcion(mundo)
@@ -362,6 +387,37 @@ class TestEvaluacionDeLaOferta:
         assert ev.oferta is True
         assert ev.unreadable == 1 and ev.run_id == str(run.id)
         assert ev.aceptacion is None and ev.aviso is None
+
+    async def test_huerfano_no_arranca_el_registro_por_la_puerta_trasera(self, mundo, carpeta_cerrada):
+        await _adopt(mundo)
+        run = await _ultima_adopcion(mundo)
+        await _aceptar(mundo, run.id, 1)
+        await _quitar_clave(mundo, CLAVE_MARCADOR)
+        antes = await _snapshot(mundo)
+        async with _cliente(mundo) as c:
+            r = await c.post("/ui/auditoria/adoptar", headers={"HX-Request": "true"})
+        assert r.status_code == 200
+        assert "No se puede verificar el registro" in r.text
+        assert await _snapshot(mundo) == antes
+        assert not registro_biblioteca.estado_actual().en_marcha
+
+    async def test_huerfano_get_y_post_coinciden_sin_ofrecer_ni_escribir(self, mundo, carpeta_cerrada):
+        await _adopt(mundo)
+        run = await _ultima_adopcion(mundo)
+        await _aceptar(mundo, run.id, 1)
+        await _quitar_clave(mundo, CLAVE_MARCADOR)
+        antes = await _snapshot(mundo)
+        async with _cliente(mundo) as c:
+            html = await _get(c)
+            respuesta = await _post(c, run.id, 1)
+        plano = " ".join(html.split())
+        assert "No se puede verificar el registro" in plano
+        assert "aceptación guardada sin marcador" in plano
+        assert "Registrar de todos modos" not in html
+        assert "Buscar archivos sin registrar" not in html
+        assert respuesta.status_code == 200
+        assert "No se puede verificar el registro" in respuesta.text
+        assert await _snapshot(mundo) == antes
 
     async def test_sin_oferta_con_adopcion_completa(self, mundo):
         await _adopt(mundo)

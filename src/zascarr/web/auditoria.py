@@ -146,9 +146,21 @@ async def _ultimo_informe(db: AsyncSession) -> dict | None:
 
 
 
+MOTIVOS_ACEPTACION = {
+    "orphan_record": ("Hay una aceptación guardada sin marcador. No se autoriza nada y no se "
+                      "sobrescribe: revisa el estado antes de continuar."),
+    "corrupt_flag": ("El marcador de adopción guardado no es válido. No se autoriza nada y no se "
+                     "borra."),
+    "corrupt_record": ("La aceptación guardada no se puede verificar. No se autoriza nada y no se "
+                       "borra."),
+    "in_progress": "Hay un registro en marcha; no se acepta nada mientras tanto.",
+}
+
+
 async def _fragmento_registro(request: Request, db: AsyncSession, *, inc: InventarioBiblioteca | None = None,
                               cambio: bool = False, recien_aceptado: bool = False,
-                              conflicto: bool = False) -> HTMLResponse:
+                              conflicto: bool = False,
+                              motivo_conflicto: str | None = None) -> HTMLResponse:
     """Lo que el coleccionista debe ver del registro AHORA: progreso, resultado o inventario previo.
     `inc` (#326) es el inventario de archivos NUEVOS que se acaba de calcular a petición suya; `cambio`, que al confirmar la carpeta
     ya no era la que revisó; `recien_aceptado`, que la petición acaba de aceptar (para el foco); `conflicto`, que el intento
@@ -156,10 +168,14 @@ async def _fragmento_registro(request: Request, db: AsyncSession, *, inc: Invent
     reg = registro_biblioteca.estado_actual()
     contexto: dict = {"reg": reg, "estado": EstadoAdopcion.HECHA, "inv": None, "series": 0, "inc": inc,
                       "cambio": cambio, "adopcion": await evaluar(db, en_marcha=reg.en_marcha),
-                      "recien_aceptado": recien_aceptado, "conflicto": conflicto}
+                      "recien_aceptado": recien_aceptado, "conflicto": conflicto,
+                      "motivo_conflicto": MOTIVOS_ACEPTACION.get(motivo_conflicto or "")}
     if reg.fase is registro_biblioteca.FaseRegistro.INACTIVO:
         adopter = LibraryAdopter(db)
         contexto["estado"] = await adopter.estado()
+        if contexto["adopcion"].aviso and contexto["estado"] in (
+                EstadoAdopcion.PENDIENTE, EstadoAdopcion.CATALOGO_PREVIO):
+            contexto["estado"] = EstadoAdopcion.ACEPTACION_HUERFANA
         if contexto["estado"] in (EstadoAdopcion.PENDIENTE, EstadoAdopcion.CATALOGO_PREVIO):
             contexto["inv"] = await adopter.inventario()
             contexto["series"] = (await db.execute(select(func.count(Series.id)))).scalar() or 0
@@ -180,7 +196,10 @@ async def adoptar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
     página lo vuelve a pedir hasta que termina. Si ya hay uno en marcha no lanza otro. Repetirlo tras un
     fallo continúa donde se quedó."""
     en_marcha = registro_biblioteca.estado_actual().fase is registro_biblioteca.FaseRegistro.CORRIENDO
-    if not en_marcha and await LibraryAdopter(db).puede_registrar():
+    # #367: un marcador corrupto o un registro huérfano no se repara iniciando
+    # otro registro en silencio; la pantalla pide revisar el estado.
+    if (not en_marcha and not (await evaluar(db)).aviso
+            and await LibraryAdopter(db).puede_registrar()):
         registro_biblioteca.iniciar(database.async_session_factory)
     return await _fragmento_registro(request, db)
 
@@ -198,7 +217,7 @@ async def aceptar_ilegibles(request: Request, run_id: UUID = Form(...),
     if request.headers.get("HX-Request") == "true":
         return await _fragmento_registro(
             request, db, recien_aceptado=resultado.reason == "accepted",
-            conflicto=not resultado.ok)
+            conflicto=not resultado.ok, motivo_conflicto=resultado.reason)
     if not resultado.ok:
         return JSONResponse({"reason": resultado.reason}, status_code=resultado.status)
     return await _fragmento_registro(request, db, recien_aceptado=True)
