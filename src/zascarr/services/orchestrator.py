@@ -150,8 +150,25 @@ MOTIVO_NUMERO_DISTINTO = (
     "en Pendientes: ZascArr aprenderá ese nombre para la próxima búsqueda"
 )
 MOTIVO_CLIENTE_INACCESIBLE = (
-    "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
+    "No se pudo enviar al cliente de descarga — se reintentará más tarde"
 )
+#: UX 2026-11-17: decir CUÁL no responde evita que el coleccionista tenga que
+#: adivinar entre Transmission y aMule (antes ambos compartían el genérico).
+MOTIVO_TRANSMISSION_INACCESIBLE = (
+    "Transmission no respondió — se reintentará más tarde"
+)
+MOTIVO_AMULE_INACCESIBLE = (
+    "aMule no respondió — se reintentará más tarde"
+)
+
+
+def motivo_de_cliente(backend) -> str:
+    """Mensaje concreto del cliente que falló (o el genérico si no se sabe)."""
+    if backend == DownloadBackend.TRANSMISSION:
+        return MOTIVO_TRANSMISSION_INACCESIBLE
+    if backend == DownloadBackend.AMULE:
+        return MOTIVO_AMULE_INACCESIBLE
+    return MOTIVO_CLIENTE_INACCESIBLE
 MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
 
 
@@ -395,7 +412,7 @@ class Orchestrator:
         # Hubo candidatos pero ninguno se pudo enviar (backend caído, etc.):
         # esto sí es un fallo real, distinto de "sin resultados todavía".
         item.status = WishlistStatus.FAILED
-        item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+        item.last_error = motivo_de_cliente(backend)
         await self.db.flush()
         return False
 
@@ -648,7 +665,7 @@ class Orchestrator:
                     return False
                 ref = await self._send(backend, candidate)
                 if ref is None:
-                    item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+                    item.last_error = motivo_de_cliente(backend)
                     await self.db.flush()
                     return False
                 _marcar_enviado(item.id, candidate.download_url)
@@ -695,7 +712,7 @@ class Orchestrator:
         ref = await self._send(backend, candidate)
         if ref is None:
             item.status = WishlistStatus.FAILED
-            item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+            item.last_error = motivo_de_cliente(backend)
             await self.db.flush()
             return False
 

@@ -180,6 +180,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **El fallo de envío nombra al cliente que no responde (2026-11-17).** El deseo decía
+  «No se pudo enviar a ningún cliente de descarga», sin distinguir Transmission de aMule.
+  Ahora el motivo es «Transmission no respondió — se reintentará más tarde» o «aMule no
+  respondió — se reintentará más tarde» según el backend del candidato (el genérico queda
+  solo para un backend desconocido). Aplica al ciclo automático y a las descargas manuales.
+
 - **Transmission: si la carpeta configurada no existe, usa la suya (2026-11-16).**
   Caso real: Ajustes apuntaba a `/media/downloads/comics`, que no existía en el host, y
   Transmission rechazaba cada `torrent-add` en silencio. Ahora se registra
