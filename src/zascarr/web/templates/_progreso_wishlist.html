@@ -1,0 +1,17 @@
+<section class="wishlist-progreso" aria-label="Descargas en curso">
+  <h2 class="titulo-frase">Descargas en curso</h2>
+  <ul class="wishlist-progreso-lista">
+    {% for fila in filas %}
+    <li class="wishlist-progreso-fila">
+      <span class="wishlist-progreso-titulo">{{ fila.titulo }}</span>
+      {% if fila.pct is not none %}
+      <progress max="100" value="{{ fila.pct }}"
+                aria-label="Progreso de {{ fila.titulo }}">{{ fila.pct }}%</progress>
+      <span class="muted">{{ fila.pct }}% · {{ fila.detalle }}</span>
+      {% else %}
+      <span class="muted">{{ fila.detalle }}</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>

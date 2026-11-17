@@ -28,6 +28,7 @@ from zascarr.services.orchestrator import (
     prowlarr_configurado,
     verificar_token_candidato,
 )
+from zascarr.services.transmission import TransmissionClient
 from zascarr.services.wishlist import WishlistService
 from zascarr.web.routes import crear_templates
 
@@ -145,6 +146,65 @@ async def anadir(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     row = await _get_row(db, item.id)
     return templates.TemplateResponse(request, "_fila_wishlist.html", {"row": row})
+
+
+@router.get("/progreso", response_class=HTMLResponse)
+async def progreso(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Cola/progreso de los deseos en descarga (hueco del benchmark 2026-11-16).
+
+    Una sola consulta a Transmission por refresco (no una por fila); aMule no
+    expone progreso por su web, así que se indica como tal. Solo incluye deseos
+    en DOWNLOADING/DOWNLOADED: el resto de la pantalla no se duplica.
+    """
+    items = list((await db.execute(
+        select(Wishlist)
+        .where(Wishlist.status.in_([WishlistStatus.DOWNLOADING,
+                                    WishlistStatus.DOWNLOADED]))
+        .options(*_EAGER)
+        .order_by(Wishlist.added_at.asc())
+    )).scalars().all())
+    if not items:
+        return HTMLResponse("")
+
+    settings = get_settings()
+    torrents: dict[str, dict] = {}
+    hay_transmission = any(
+        (i.download_backend or "") == "transmission" and i.download_ref for i in items)
+    if hay_transmission and getattr(settings, "transmission_enabled", False):
+        try:
+            torrents = {
+                str(t.get("hashString", "")).lower(): t
+                for t in await TransmissionClient().list_torrents()
+                if t.get("hashString")
+            }
+        except Exception:
+            # Sin acceso al cliente se sigue mostrando el deseo como «en cola».
+            torrents = {}
+
+    filas = []
+    for item in items:
+        row = _row(item)
+        backend = (item.download_backend or "").lower()
+        pct: int | None = None
+        detalle = "En cola de descarga"
+        if backend == "transmission" and item.download_ref:
+            torrent = torrents.get(str(item.download_ref).lower())
+            if torrent is not None:
+                pct = round(float(torrent.get("percentDone") or 0) * 100)
+                detalle = "Completado, pendiente de importar" if pct >= 100 else "Transmission"
+            else:
+                detalle = "Transmission (no está en la lista del cliente)"
+        elif backend == "amule":
+            detalle = "aMule (sin progreso por aquí)"
+        filas.append({
+            "item_id": item.id,
+            "titulo": row["titulo"],
+            "backend": backend,
+            "pct": pct,
+            "detalle": detalle,
+        })
+    return templates.TemplateResponse(
+        request, "_progreso_wishlist.html", {"filas": filas})
 
 
 @router.post("/{item_id}/marcar-conseguido", response_class=HTMLResponse)
