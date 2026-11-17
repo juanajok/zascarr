@@ -105,6 +105,7 @@ def _descargar(fila, token, *, reclamar=None, enviar=None):
     c = _cliente()
     try:
         with patch("zascarr.web.mejoras.obtener_mejora", AsyncMock(return_value=fila)), \
+             patch("zascarr.web.mejoras.historial_mejoras", AsyncMock(return_value=[])), \
              patch("zascarr.web.mejoras.listar_mejoras",
                    AsyncMock(return_value=PaginaMejoras([], 0, 1, 1))), \
              patch("zascarr.web.mejoras.get_settings",
@@ -167,7 +168,8 @@ def test_el_token_de_la_lista_se_liga_a_la_propuesta_no_al_numero():
     fila = _fila()
     c = _cliente()
     try:
-        with patch("zascarr.web.mejoras.listar_mejoras",
+        with patch("zascarr.web.mejoras.historial_mejoras", AsyncMock(return_value=[])), \
+             patch("zascarr.web.mejoras.listar_mejoras",
                    AsyncMock(return_value=PaginaMejoras([fila], 1, 1, 1))), \
              patch("zascarr.web.mejoras.get_settings",
                    return_value=SimpleNamespace(secret_key=SECRETO)):
