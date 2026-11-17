@@ -57,10 +57,9 @@ class TestAusenciaConocida:
     @pytest.mark.parametrize("nombre,formato", [
         ("Flash 01.cbr", FileFormat.CBR), ("Flash 02.cb7", FileFormat.CB7),
         ("Flash 03.pdf", FileFormat.PDF), ("Flash 04.epub", FileFormat.EPUB)])
-    def test_sin_extractor_hay_chip_de_formato_pero_no_img_ni_peticion(self, nombre, formato):
+    def test_sin_extractor_hay_marcador_pero_no_img_ni_peticion(self, nombre, formato):
         t = _tarjetas(_archivo(nombre, formato))[nombre]
-        assert 'class="pending-formato"' in t and formato.value.upper() in t
-        assert 'class="portada ' not in t and "portada-marca" not in t
+        assert 'class="portada ' in t and "portada-marca" in t
         assert "<img" not in t and "/portada" not in t             # ni petición que dará 404
         assert "onerror" not in t
         assert nombre in t                                         # el resto de la fila sigue

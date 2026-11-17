@@ -18,6 +18,7 @@ from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_c
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
 from zascarr.utils.portada_rar import barrer_temporales
 from zascarr.utils.registro import configurar_logs
+from zascarr.utils.registro_archivo import instalar_archivo_logs
 from zascarr.utils.registro_reciente import instalar_captura
 from zascarr.utils.saneado_logs import (
     instalar_filtro_registros,
@@ -33,6 +34,7 @@ configurar_logs()
 # #369: el saneador va ANTES de la captura para que el búfer no guarde rutas.
 instalar_saneo_structlog()
 refrescar_raices()
+instalar_archivo_logs()
 instalar_captura()
 instalar_filtro_registros()
 logger = structlog.get_logger()

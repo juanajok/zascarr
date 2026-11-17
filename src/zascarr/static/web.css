@@ -653,15 +653,6 @@ button.primary,
   border: var(--border-chip) solid var(--ink);
   border-radius: var(--radius-panel);
 }
-.pending-formato {
-  display: flex; align-items: center; justify-content: center;
-  width: 64px; height: 64px;
-  border: var(--border-chip) solid var(--ink-faint);
-  border-radius: var(--radius-panel);
-  background: var(--paper);
-  color: var(--ink-soft);
-  font-size: var(--text-etiqueta); font-weight: 700; letter-spacing: .06em;
-}
 .pending-body { padding: var(--space-2) var(--space-3) var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-1); flex: 1; min-width: 0; }
 .pending-cabecera { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 /* U12: el nombre se lee ENTERO: se parte si no cabe (también uno largo y sin espacios), nunca se recorta. */
@@ -673,6 +664,9 @@ button.primary,
 .detected { font-size: var(--text-secundario); color: var(--ink-faint); }
 .pending-sep { color: var(--ink-faint); }
 .pending-pie { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); }
+.pend-opciones { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; }
+.pend-opciones .caption { margin: 0; }
+.pend-opciones [aria-current="true"] { background: var(--yellow); color: var(--on-yellow); border-color: var(--ink); }
 .pending-pie .elegir-otra-serie { flex: 1 1 16rem; }
 .pending-pie .btn-ignorar { margin-left: auto; }
 
@@ -1533,7 +1527,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (max-width: 480px) {
   .pending-grid { gap: var(--space-2); }
   .pending-media { flex-basis: 72px; padding: var(--space-2) 0 var(--space-2) var(--space-2); }
-  .pending-card .portada-pendiente, .pending-formato { width: 56px; height: 56px; }
+  .pending-card .portada-pendiente { width: 56px; }
   .pending-body { padding: var(--space-2); }
   .assign-form, .vincular-form { display: flex; flex-wrap: wrap; gap: 8px; }
   .assign-form .issue-input, .vincular-form .issue-input { flex: 1 1 8rem; width: 100%; min-height: 44px; }
