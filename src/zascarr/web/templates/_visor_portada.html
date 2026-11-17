@@ -1,11 +1,11 @@
 <dialog id="visor-portada" class="visor-portada" aria-labelledby="visor-portada-titulo">
   <div class="visor-portada-cabecera">
     <h2 id="visor-portada-titulo">Portada ampliada</h2>
-    <form method="dialog"><button class="btn ghost sm" type="submit">Cerrar</button></form>
+    <form method="dialog"><button class="btn ghost sm visor-portada-control" type="submit" aria-label="Cerrar el visor">{{ "x"|icono }}<span class="sr">Cerrar</span></button></form>
   </div>
   <div class="visor-portada-imagen"><a class="visor-portada-enlace" href="#" download>Abrir la imagen HD</a></div>
   <div class="visor-portada-acciones">
-    <button class="btn ghost sm" type="button" data-visor-prev disabled>← Anterior</button>
-    <button class="btn ghost sm" type="button" data-visor-next disabled>Siguiente →</button>
+    <button class="btn ghost sm visor-portada-control" type="button" data-visor-prev disabled aria-label="Portada anterior">{{ "chevron_down"|icono }}<span class="sr">Anterior</span></button>
+    <button class="btn ghost sm visor-portada-control" type="button" data-visor-next disabled aria-label="Portada siguiente">{{ "chevron_down"|icono }}<span class="sr">Siguiente</span></button>
   </div>
 </dialog>
