@@ -266,20 +266,33 @@ verificar_dump() {
 
 # pg_dump -> .sql.gz atómico (temporal + mv). Un fallo a mitad nunca deja un .gz
 # parcial con pinta de válido, y el resultado se verifica antes de darlo por bueno.
+# Deja la causa en VOLCAR_ERROR_CODE para que backup.sh no la confunda con un
+# pg_dump caído: un .gz truncado es gzip_invalid, no pg_dump_failed.
+VOLCAR_ERROR_CODE=""
 volcar_postgres() {
     local destino="$1" tmp="${1}.tmp"
+    VOLCAR_ERROR_CODE=""
     rm -f "${tmp}"
     # El temporal nace 600 (umask 077): con la umask 022 de los scripts sería legible por todos durante TODO el pg_dump.
-    ( umask 077; : > "${tmp}" ) || return 1
+    ( umask 077; : > "${tmp}" ) || {
+        VOLCAR_ERROR_CODE="pg_dump_failed"
+        return 1
+    }
     if ! "${COMPOSE[@]}" exec -T postgres pg_dump -U "${DB_USER}" "${DB_NAME}" | gzip > "${tmp}"; then
         rm -f "${tmp}"
+        VOLCAR_ERROR_CODE="pg_dump_failed"
         return 1
     fi
     if ! gzip -t "${tmp}" 2>/dev/null; then
         rm -f "${tmp}"
+        VOLCAR_ERROR_CODE="gzip_invalid"
         return 1
     fi
-    mv "${tmp}" "${destino}"
+    if ! mv "${tmp}" "${destino}"; then
+        rm -f "${tmp}"
+        VOLCAR_ERROR_CODE="pg_dump_failed"
+        return 1
+    fi
     chmod 600 "${destino}" 2>/dev/null || true
     return 0
 }
