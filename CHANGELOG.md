@@ -39,6 +39,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   conexión» compara esa carpeta con la que Transmission tiene configurada y, si difieren,
   avisa con las dos rutas (si la de ZascArr no existe en la Pi, los envíos fallarán).
   Se valida que la ruta sea absoluta y sin «..».
+- **Cancelar la espera de «Buscar ahora» y buscar en lote (2026-11-17).** Durante la
+  búsqueda manual aparece «Cancelar búsqueda», que aborta la petición del navegador
+  (htmx:abort); avisa de que lo ya enviado no se deshace. Además, cada deseo buscable
+  tiene checkbox y la barra «Buscar seleccionados» lanza hasta 8 búsquedas seguidas y
+  rellena cada panel de resultados (OOB) sin cambiar el estado ni enviar descargas; la
+  ruta conserva el aviso legal y el tope avisa antes de buscar.
+ (feat(deseos): cancelar búsqueda en curso y buscar en lote (hasta 8))
 
 - **Cola/progreso de Deseados en la propia pantalla (2026-11-17).** Cuando hay deseos
   en descarga, Deseados muestra un panel «Descargas en curso» que se refresca solo
