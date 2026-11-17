@@ -211,3 +211,14 @@ def test_la_lista_es_una_lista_y_el_vacio_usa_el_componente_del_sistema(monkeypa
     with use_fake_session(FakeSession(exec_queue=cola_de([]))) as client:
         vacia = client.get("/ui/pendientes")
     assert vacia.status_code == 200 and 'class="empty-state"' in vacia.text
+
+
+def test_ignorar_deja_el_recuento_fuera_de_la_fila_que_se_borra():
+    """El OOB delete retira el <li>; los disparadores del menú/rango no pueden
+    vivir dentro de él o se borrarían con la fila."""
+    plantilla = (Path(__file__).resolve().parents[1] / "src" / "zascarr" /
+                 "web" / "templates" / "_tarjeta_pendiente.html").read_text("utf-8")
+    assert 'hx-target="#pend-recontar" hx-swap="innerHTML"' in plantilla
+    pagina = (Path(__file__).resolve().parents[1] / "src" / "zascarr" /
+              "web" / "templates" / "pendientes.html").read_text("utf-8")
+    assert 'id="pend-recontar"' in pagina
