@@ -1,4 +1,6 @@
-# ADR 0018: auxiliar del host para operaciones pedidas desde la interfaz («Hacer una copia ahora»)
+# ADR 0021: auxiliar del host para operaciones pedidas desde la interfaz («Hacer una copia ahora»)
+
+> **Renumerado el 2026-11-17:** se creó como ADR 0018 y chocó con `0018-cache-http-y-fuentes-externas-lectura.md` (aceptado el 2026-11-14). Pasa a ser el **0021**; el 0018 de la caché HTTP conserva su número.
 
 - **Estado:** **Propuesto** (2026-11-13). El PO decidió fusionar BL-OPS1 entera; la aceptación del ADR
   la da el PO al fusionar. **No autoriza instalar el auxiliar en ninguna Pi**: lo instala quien opera,

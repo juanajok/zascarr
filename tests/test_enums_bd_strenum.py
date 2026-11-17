@@ -111,6 +111,7 @@ MIEMBROS = {
         "REGULAR": "regular",
         "ANNUAL": "annual",
         "SPECIAL": "special",
+        "ONE_SHOT": "one_shot",
     },
     DownloadBackend: {"TRANSMISSION": "transmission", "AMULE": "amule"},
 }

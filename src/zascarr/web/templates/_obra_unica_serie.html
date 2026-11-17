@@ -1,0 +1,28 @@
+{#- #1027/ADR 0022: badge y control de obra autoconclusiva. Sin `.primary`:
+    la ficha ya tiene acciones. -#}
+<div id="obra-unica-serie" class="obra-unica">
+  {% if aviso_obra_unica %}{{ ui.aviso("warn", aviso_obra_unica) }}{% endif %}
+  {% if es_obra_unica %}
+  <p class="obra-unica-estado" role="status">
+    {{ ui.chip("info", "Tomo único") }}
+    {% if estado_coleccion.tipo == "completa" %}· completo{% else %}· sin publicación todavía{% endif %}
+  </p>
+  {% endif %}
+  {% if puede_marcar_obra_unica %}
+  <details class="obra-unica-control">
+    <summary>{{ "Dejar de tratar esta ficha como tomo único" if es_obra_unica else "Marcar como tomo único / novela gráfica" }}</summary>
+    <form hx-post="/ui/series/{{ series.id }}/one-shot"
+          hx-target="#obra-unica-serie" hx-swap="outerHTML">
+      <label class="legal-checkbox">
+        <input type="checkbox" name="one_shot" value="true"
+               {% if es_obra_unica %}checked{% endif %}>
+        Es una obra autoconclusiva
+      </label>
+      <p class="caption">Una obra autoconclusiva no tiene números que completar ni se ofrece al
+        seguimiento. Solo se puede marcar si tiene como mucho una publicación; al desmarcarla
+        vuelve a serie normal.</p>
+      <button type="submit" class="btn ghost sm">Guardar</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
