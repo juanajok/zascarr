@@ -383,7 +383,8 @@ escribir_copias_json() {
         verificada="$(jq -r '(.verificacion.sha256 // "") == "ok"' "${manifiesto}")"
         lineas+="$(jq -cn --arg id "${stem/backup_/backup-}" --argjson epoch "${epoch}" --argjson bytes "${bytes}" \
             --argjson fuera "${fuera}" --argjson ver "${verificada}" \
-            '{id: $id, creada_epoch: $epoch, bytes: $bytes, fuera_del_disco: $fuera, verificada: $ver}')"$'\n'
+            --arg rev "$(jq -r '.alembic // ""' "${manifiesto}")" \
+            '{id: $id, creada_epoch: $epoch, bytes: $bytes, fuera_del_disco: $fuera, verificada: $ver, revision: $rev}')"$'\n'
         n=$(( n + 1 ))
     done < <(find "${dir}" -maxdepth 1 -name 'backup_*.sql.gz' -type f 2>/dev/null | sort -r)
     tmp="${estado}/copias.json.tmp.$$"

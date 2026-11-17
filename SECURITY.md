@@ -213,6 +213,20 @@ Es opcional y **no está activado por defecto**: lo instala quien opera el equip
 - **Registro:** el auxiliar escribe una línea por conexión (`accion`, `id`, `uid`, `resultado`, `codigo`, `ms`); nunca la clave,
   la firma, el cuerpo ni rutas.
 
+## Restaurar una copia (BL-OPS2, ADR 0023)
+
+Restaurar exige que la contraseña esté activada. La app muestra el botón solo para copias verificadas de la misma revisión,
+pide la contraseña actual (reautenticación compartida con Ajustes) y una confirmación explícita. La petición va firmada al
+auxiliar del host; la app **no** recibe Docker ni root y nunca sube un archivo.
+
+- **Qué se conserva:** credenciales, `secret_key`, `base_url`, `auth_session_version+1`, `*_enabled`, webhook y
+  `fuentes_heredadas` vigentes; las claves de integración vienen de la copia. Se relee y se compara antes de arrancar.
+- **Copias = secretos:** un `.sql.gz` contiene hashes, `secret_key` y claves; quien lo obtenga puede falsificar cookies de esa
+  versión. Restaurar conserva la `secret_key` vigente y cierra las sesiones anteriores.
+- **Límites:** una restauración cada 30 min, 3/24 h y bloqueo de prueba tras 5 fallos/15 min. Durante una operación no se ofrece
+  otra. La recuperación usa la copia previa verificada; el diario no lleva rutas.
+- **Pendiente:** systemd real, restauración de punta a punta en la Pi y prueba C-10 con PostgreSQL real. **No desplegado.**
+
 ## Registros de acceso (#361)
 
 El registro de acceso de uvicorn **no incluye la query** de las peticiones (`?clave=…&cursor=…&ref=…&q=…`): `zascarr.utils.log_acceso` deja método, ruta y estado, y sustituye lo demás por `?…`. En ZascArr la query puede llevar el nombre de una carpeta, un cursor que decodifica a un nombre de archivo, una referencia firmada al resultado (válida hasta 24 h desde que se firmó la vinculación) o lo que se busca. Tampoco se registra la query de una petición de `Upgrade` a WebSocket (la imagen arranca con `--ws none`, y la aplicación no tiene rutas WebSocket). Si una versión futura de uvicorn cambiara el formato del registro, el filtro **falla cerrado**: pierde esa línea en lugar de dejar pasar la query. Los registros de los contenedores rotan (`json-file`, 10 MB × 3 ficheros, 30 MB **nominales** por contenedor en disco; no es un límite global ni una medición); la rotación se aplica al recrear los contenedores (`update.sh` lo hace), y las líneas ya copiadas de `docker logs` antes siguen donde se copiaron.

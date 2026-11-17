@@ -37,14 +37,22 @@ logger = structlog.get_logger()
 
 # ── Protocolo (idéntico al del auxiliar; lo comprueba la prueba de paridad) ─────────────────────────────────────
 VERSION = 1
-MAX_BYTES = 512
+VERSION_RESTAURAR = 2
+MAX_BYTES = 1024
+MAX_BYTES_V1 = 512
+MAX_BYTES_RESTAURAR = 1024
 CADUCIDAD_S = 120
 PURGA_VISTOS_S = 300
 ENTRE_COPIAS_S = 300
+ENTRE_RESTAURACIONES_S = 30 * 60
 LIMITE_DIARIO = 6
+LIMITE_RESTAURACIONES = 3
 TIEMPO_TOTAL_S = 5.0
+TIEMPO_RESTAURAR_S = 20.0
 RUTA_CERROJO = "/run/zascarr-ops.lock"
 CLAVES_FIRMA = ("v", "id", "accion", "creada")
+CLAVES_FIRMA_RESTAURAR = ("v", "id", "accion", "copia", "creada", "prueba")
+_RE_COPIA = re.compile(r"backup-[0-9]{8}_[0-9]{6}")
 #: Pasados estos minutos sin que la copia pedida dé señales, se deja de decir «en marcha» (FR-22).
 SIN_NOTICIAS_TRAS_S = 35 * 60
 #: Tope de lo que se lee de cualquiera de los ficheros de estado (son JSON de unos cientos de bytes).
@@ -69,6 +77,31 @@ def leer_clave(ruta: str) -> bytes | None:
     return bytes.fromhex(texto) if _RE_CLAVE.fullmatch(texto) else None
 
 
+def firma_restaurar_de(clave: bytes, v: int, id_: str, copia: str, creada: int,
+                        prueba: str) -> str:
+    """HMAC-SHA256(clave, "{v}|{id}|restaurar|{copia}|{creada}|{prueba}")."""
+    return hmac.new(
+        clave,
+        f"{v}|{id_}|restaurar|{copia}|{creada}|{prueba}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def construir_peticion_restaurar(clave: bytes, copia: str, prueba: str,
+                                 ahora: int | None = None,
+                                 id_: str | None = None) -> tuple[bytes, str]:
+    """(línea, id) de una petición `restaurar` v2 firmada, terminada en `\n`."""
+    if not _RE_COPIA.fullmatch(copia):
+        raise ValueError("copia")
+    id_ = id_ or secrets.token_hex(16)
+    creada = int(time.time() if ahora is None else ahora)
+    cuerpo = {"v": VERSION_RESTAURAR, "id": id_, "accion": OpsAccion.RESTAURAR.value,
+              "copia": copia, "creada": creada, "prueba": prueba,
+              "firma": firma_restaurar_de(clave, VERSION_RESTAURAR, id_, copia,
+                                          creada, prueba)}
+    return json.dumps(cuerpo, separators=(",", ":")).encode("ascii") + b"\n", id_
+
+
 def construir_peticion(clave: bytes, ahora: int | None = None, id_: str | None = None) -> tuple[bytes, str]:
     """(línea, id) de una petición `copia` firmada, terminada en `\\n`."""
     id_ = id_ or secrets.token_hex(16)
@@ -82,7 +115,7 @@ def interpretar_respuesta(linea: bytes, id_enviado: str) -> CodigoOps:
     """El código de la respuesta, o `NO_DISPONIBLE` si es ilegible, de otro `id` o de un código que no está en la lista."""
     try:
         cuerpo = json.loads(linea.decode("ascii"))
-        if cuerpo["v"] != VERSION or cuerpo["id"] != id_enviado:
+        if cuerpo.get("v") not in (VERSION, VERSION_RESTAURAR) or cuerpo["id"] != id_enviado:
             return CodigoOps.NO_DISPONIBLE
         return CodigoOps(cuerpo["codigo"])
     except (UnicodeDecodeError, ValueError, KeyError, TypeError):
@@ -99,6 +132,31 @@ async def _conversar(ruta_socket: str, peticion: bytes) -> bytes:
         escritor.close()
         with contextlib.suppress(OSError):
             await escritor.wait_closed()
+
+
+async def pedir_restaurar(settings: Settings, copia: str, prueba: str,
+                          conversar=_conversar) -> CodigoOps:
+    """Pide restaurar una copia propia. La contraseña viaja solo en la petición firmada;
+    nunca se registra ni se devuelve. Cualquier fallo es `NO_DISPONIBLE`."""
+    clave = leer_clave(settings.ops_key_file)
+    if clave is None:
+        logger.warning("ops.no_disponible", error="clave")
+        return CodigoOps.NO_DISPONIBLE
+    try:
+        peticion, id_ = construir_peticion_restaurar(clave, copia, prueba)
+    except ValueError:
+        return CodigoOps.COPIA_DESCONOCIDA
+    try:
+        linea = await asyncio.wait_for(
+            conversar(settings.ops_socket_file, peticion),
+            timeout=TIEMPO_RESTAURAR_S,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ops.no_disponible", error=type(exc).__name__)
+        return CodigoOps.NO_DISPONIBLE
+    codigo = interpretar_respuesta(linea, id_)
+    logger.info("ops.restauracion_pedida", id=id_, codigo=codigo.value)
+    return codigo
 
 
 async def pedir_copia(settings: Settings, conversar=_conversar) -> CodigoOps:
@@ -154,13 +212,28 @@ RESERVADOS_NO_EMITIDOS = frozenset({"status_write_failed"})
 
 _FRASE_NO_SE_PUDO = ("No se pudo pedir la copia. Inténtalo otra vez; si sigue igual, avisa a quien instaló ZascArr. "
                      "Mira Estado, arriba.")
+MENSAJES_RESTAURAR: dict[CodigoOps, str] = {
+    CodigoOps.COPIA_DESCONOCIDA: "Esa copia ya no está disponible. Actualiza la lista.",
+    CodigoOps.AUTENTICACION_NO_ACTIVADA: "Activa la contraseña en Ajustes → Seguridad antes de restaurar una copia.",
+    CodigoOps.PRUEBA_INVALIDA: "La contraseña no es correcta.",
+    CodigoOps.BLOQUEO_TEMPORAL: "Demasiados intentos seguidos. Espera unos minutos y vuelve a intentarlo.",
+    CodigoOps.LIMITE_RESTAURACIONES: "Has restaurado varias veces en las últimas horas. Prueba más tarde.",
+    CodigoOps.OPERACION_EN_CURSO: "ZascArr está haciendo otra tarea de mantenimiento. Espera a que termine.",
+}
+
 MENSAJES_PEDIR: dict[CodigoOps, str] = {
     CodigoOps.OPERACION_EN_CURSO: "ZascArr está haciendo otra tarea de mantenimiento. Espera a que termine.",
     CodigoOps.DEMASIADO_PRONTO: f"Acabas de pedir una copia. Prueba otra vez dentro de {ENTRE_COPIAS_S // 60} minutos.",
     CodigoOps.LIMITE_DIARIO: ("Has pedido ya el máximo de copias en un día. La de esta noche se hará igualmente; "
                               "prueba otra vez más tarde."),
+    CodigoOps.COPIA_DESCONOCIDA: "Esa copia ya no está disponible. Actualiza la lista.",
+    CodigoOps.AUTENTICACION_NO_ACTIVADA: ("Activa la contraseña en Ajustes → Seguridad antes de restaurar una copia."),
+    CodigoOps.PRUEBA_INVALIDA: "La contraseña no es correcta.",
+    CodigoOps.BLOQUEO_TEMPORAL: ("Demasiados intentos seguidos. Espera unos minutos y vuelve a intentarlo."),
+    CodigoOps.LIMITE_RESTAURACIONES: ("Has restaurado varias veces en las últimas horas. Prueba más tarde."),
     **{c: _FRASE_NO_SE_PUDO for c in (CodigoOps.NO_DISPONIBLE, CodigoOps.FIRMA_INVALIDA, CodigoOps.CADUCADA,
-                                      CodigoOps.REPETIDA, CodigoOps.ESQUEMA_INVALIDO, CodigoOps.ACCION_NO_DISPONIBLE)},
+                                      CodigoOps.REPETIDA, CodigoOps.ESQUEMA_INVALIDO, CodigoOps.ACCION_NO_DISPONIBLE,
+                                      CodigoOps.COPIA_DESCONOCIDA)},
 }
 
 
@@ -333,6 +406,12 @@ def leer_copias(settings: Settings, ahora: int | None = None) -> list[dict] | No
         creada, tamano = _epoch(item.get("creada_epoch")), _epoch(item.get("bytes"))
         if creada is None or tamano is None:
             continue
-        salida.append({"creada_epoch": creada, "fecha": hora_llana(creada, ahora), "tamano": tamano_llano(tamano),
-                       "fuera_del_disco": item.get("fuera_del_disco") is True})
+        salida.append({
+            "id": item.get("id") if isinstance(item.get("id"), str) else "",
+            "revision": item.get("revision") if isinstance(item.get("revision"), str) else "",
+            "verificada": item.get("verificada") is True,
+            "creada_epoch": creada, "fecha": hora_llana(creada, ahora),
+            "tamano": tamano_llano(tamano),
+            "fuera_del_disco": item.get("fuera_del_disco") is True,
+        })
     return salida

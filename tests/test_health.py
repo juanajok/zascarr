@@ -521,9 +521,9 @@ class TestHealthRestore:
         from zascarr.web.routes import TEMPLATES_DIR
 
         html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
-        assert 'restore: "Restauración"' in html
-        assert "Restauración reciente verificada" in html
-        assert "La última restauración falló" in html
+        assert 'restore: "Comprobación de restauración"' in html
+        assert "Comprobación de restauración reciente verificada" in html
+        assert "La última comprobación de restauración falló" in html
 
 
 class TestDiscoFueraDelBucle:

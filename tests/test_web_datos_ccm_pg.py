@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from uuid import UUID
 
 import httpx
@@ -10,6 +11,12 @@ from sqlalchemy import select
 
 from tests._pg import bd_efimera_sync, migrar_a_head
 from tests.test_revision_carpetas_pg import Banco
+from zascarr.core.consolidacion.tipos import (
+    EstadoFetch,
+    FichaRecolectada,
+    ResultadoFetch,
+    hash_payload,
+)
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import EntitySourceRecord, FieldProvenance, Series
@@ -136,3 +143,60 @@ async def test_conflicto_se_puede_resolver_y_mantener(banco):
             FieldProvenance.entity_id == sid2,
             FieldProvenance.field == "total_issues"))).scalar_one()
         assert proc.value["descartados"]["comic_vine"]["valor_descartado"] == 544
+
+
+@pytest.mark.asyncio
+async def test_boton_buscar_fichas_recolecta_sin_red_externa(banco, monkeypatch):
+    sid = await banco.serie("Green Lantern", 2005)
+    async with banco.fabrica() as db:
+        fila = await db.get(Series, sid)
+        fila.comic_vine_id = 4050
+        await db.commit()
+
+    class _Adaptador:
+        async def fetch_serie(self, external_id, *, hash_previo=None):
+            ficha = FichaRecolectada(
+                fuente="comic_vine", entidad="series", external_id=external_id,
+                url=None, licencia="CV", raw_acotado={"name": "Green Lantern"},
+                normalizado={"edition_scope": {"start_year": 2005}},
+                normalizer_version=1, payload_hash=hash_payload({"x": 1}),
+                observado_en=datetime.now(UTC),
+            )
+            return ResultadoFetch(EstadoFetch.OK, ficha)
+
+    class _Pila:
+        async def aclose(self):
+            return None
+
+    async def _abrir():
+        return {"adaptadores": {"comic_vine": _Adaptador()}, "pila": _Pila()}
+
+    monkeypatch.setattr("zascarr.web.series.abrir_adaptadores", _abrir)
+    async with cliente() as c:
+        r = await c.post(f"/ui/series/{sid}/datos/recolectar")
+    assert r.status_code == 303
+    async with banco.fabrica() as db:
+        total = (await db.execute(select(EntitySourceRecord).where(
+            EntitySourceRecord.entity_id == sid))).scalars().all()
+        assert len(total) == 1 and total[0].source == "comic_vine"
+
+
+@pytest.mark.asyncio
+async def test_lote_lanza_recoleccion_en_segundo_plano(banco, monkeypatch):
+    llamado = []
+
+    async def _falso(limite=20):
+        llamado.append(limite)
+
+    async def _abrir():
+        class _Pila:
+            async def aclose(self):
+                return None
+        return {"adaptadores": {"comic_vine": object()}, "pila": _Pila()}
+
+    monkeypatch.setattr("zascarr.web.datos.abrir_adaptadores", _abrir)
+    monkeypatch.setattr("zascarr.web.datos._recolectar_en_segundo_plano", _falso)
+    async with cliente() as c:
+        r = await c.post("/ui/datos/recolectar")
+        assert r.status_code == 303
+    assert llamado == [20]

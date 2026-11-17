@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
+from zascarr.database import get_db
 from zascarr.models import CodigoOps
-from zascarr.services import ops_host, tareas
+from zascarr.services import ops_host, restauracion, tareas
 from zascarr.services.ops_host import EstadoCopia, VistaCopias
 from zascarr.web.routes import crear_templates
 
@@ -37,11 +39,12 @@ def _contexto(vista: VistaCopias, copias: list[dict] | None, mensaje_pedir: str 
             "oob_accion": oob_accion, "foco": foco, "oob": False}
 
 
-async def contexto_bloque(settings=None) -> dict:
+async def contexto_bloque(settings=None, revision_actual: str | None = None) -> dict:
     """Lo que necesita el bloque completo de `/estado` (la primera vez que se pinta)."""
     settings = settings or get_settings()
     vista = await asyncio.to_thread(ops_host.resolver_estado, settings)
     copias = await asyncio.to_thread(ops_host.leer_copias, settings) if vista.estado != EstadoCopia.NO_ACTIVADO else None
+    copias = restauracion.ofrecer(copias, revision_actual, settings.auth_mode)
     return _contexto(vista, copias)
 
 
@@ -107,3 +110,43 @@ async def pedir_copia(request: Request) -> HTMLResponse:
     # Rechazada: el botón sigue habilitado y conserva el foco; el mensaje va a la zona aria-live.
     return await _fragmento_actual(request, ops_host.MENSAJES_PEDIR.get(codigo, ops_host.MENSAJES_PEDIR[CodigoOps.NO_DISPONIBLE]),
                                    boton_cambia=False)
+
+
+@router.get("/ui/copias/restaurar/{copia}", response_class=HTMLResponse)
+async def restaurar_confirmar(copia: str, request: Request) -> HTMLResponse:
+    """Pantalla de confirmación de BL-OPS2; solo lectura, sin tocar la BD."""
+    if not restauracion.RE_COPIA.fullmatch(copia):
+        raise HTTPException(status_code=404)
+    settings = get_settings()
+    revision = None
+    from zascarr.database import async_session_factory
+    async with async_session_factory() as db:
+        revision = await restauracion.revision_actual(db)
+    copias = restauracion.ofrecer(ops_host.leer_copias(settings), revision,
+                                  settings.auth_mode)
+    elegida = next((c for c in copias if c["id"] == copia), None)
+    if elegida is None:
+        raise HTTPException(status_code=404)
+    respuesta = templates.TemplateResponse(request, "_restaurar_confirmar.html", {
+        "copia": elegida, "error": None, "activa": settings.auth_mode != "none",
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/ui/copias/restaurar", response_class=HTMLResponse)
+async def restaurar_solicitar(
+    request: Request, copia: str = Form(default=""),
+    contrasena: str = Form(default=""), entiendo: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Manual, sin restricciones de Form: ninguna respuesta repite la contraseña."""
+    settings = get_settings()
+    codigo, mensaje = await restauracion.solicitar(
+        db, settings, copia=copia, contrasena=contrasena, entiendo=entiendo == "si")
+    respuesta = templates.TemplateResponse(request, "_restaurar_resultado.html", {
+        "codigo": codigo, "mensaje": mensaje,
+        "aceptada": codigo is CodigoOps.ACEPTADA,
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta

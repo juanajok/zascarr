@@ -59,6 +59,7 @@ from zascarr.services.coleccion import (
 from zascarr.services.colecciones import colecciones_de_serie, etiqueta_politica
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO, ComicInfoFichaService
+from zascarr.services.consolidacion.adaptadores import abrir_adaptadores
 from zascarr.services.consolidacion.aplicador import Aplicador, PlanCaducadoError
 from zascarr.services.consolidacion.aplicador_issue import (
     AplicadorIssue,
@@ -71,6 +72,7 @@ from zascarr.services.consolidacion.consulta_issue import (
 from zascarr.services.consolidacion.consulta_issue import (
     cargar_contexto_issue,
 )
+from zascarr.services.consolidacion.recolector import Recolector
 from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.discrepancias import (
     clave_valida,
@@ -845,12 +847,17 @@ async def _datos_ccm(db: AsyncSession, series_id: UUID) -> dict:
 
 
 def _redirect_datos(series_id: UUID, *, guardado: str = "", elegido: str = "",
+                    recolectado: str = "", sin_fuentes: str = "",
                     error: str = "") -> RedirectResponse:
     destino = f"/ui/series/{series_id}/datos"
     if guardado:
         destino += f"?guardado={guardado}"
     elif elegido:
         destino += f"?elegido={elegido}"
+    elif recolectado:
+        destino += f"?recolectado={recolectado}"
+    elif sin_fuentes:
+        destino += "?sin_fuentes=1"
     elif error:
         destino += f"?error={error}"
     return RedirectResponse(destino, status_code=303)
@@ -860,6 +867,8 @@ def _redirect_datos(series_id: UUID, *, guardado: str = "", elegido: str = "",
 async def datos_serie(series_id: UUID, request: Request,
                       guardado: str = Query(default=""),
                       elegido: str = Query(default=""),
+                      recolectado: str = Query(default=""),
+                      sin_fuentes: str = Query(default=""),
                       error: str = Query(default=""),
                       db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     try:
@@ -875,11 +884,33 @@ async def datos_serie(series_id: UUID, request: Request,
     contexto.update({
         "guardado": f"Guardados {guardado} cambios." if guardado.isdigit() and guardado != "0" else "",
         "elegido": f"Elegido el dato de {NOMBRE_DE_FUENTE.get(elegido, elegido)}." if elegido else "",
+        "recolectado": (f"Recolectadas {recolectado} fichas de fuentes."
+                        if recolectado.isdigit() and recolectado != "0" else ""),
+        "sin_fuentes": ("No hay fuentes de metadatos activas. Enciéndelas en Ajustes."
+                        if sin_fuentes == "1" else ""),
         "error": avisos.get(error, ""),
     })
     respuesta = templates.TemplateResponse(request, "datos_serie.html", contexto)
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
+
+
+@router.post("/{series_id}/datos/recolectar", response_class=HTMLResponse)
+async def datos_recolectar(series_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Busca fichas de las fuentes asociadas a UNA serie.
+
+    Es una acción explícita y acotada; no aplica metadatos. No se ejecuta en GET.
+    """
+    serie = await _serie_o_404(db, series_id)
+    abierto = await abrir_adaptadores()
+    try:
+        informe = await Recolector(db, abierto["adaptadores"]).recolectar_serie(serie)
+        await db.commit()
+    finally:
+        await abierto["pila"].aclose()
+    if not abierto["adaptadores"]:
+        return _redirect_datos(series_id, sin_fuentes="1")
+    return _redirect_datos(series_id, recolectado=str(informe.guardados))
 
 
 @router.post("/{series_id}/datos/aplicar", response_class=HTMLResponse)

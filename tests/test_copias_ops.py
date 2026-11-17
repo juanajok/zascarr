@@ -135,7 +135,7 @@ def test_el_listado_trae_fecha_tamano_y_nada_mas(ajustes):
     _escribir(ajustes, "copias.json", {"schema": 1, "copias": copias})
     lista = ops_host.leer_copias(ajustes.s, AHORA)
     assert len(lista) == 30                                  # AC-21
-    assert set(lista[0]) == {"creada_epoch", "fecha", "tamano", "fuera_del_disco"}
+    assert set(lista[0]) == {"id", "revision", "verificada", "creada_epoch", "fecha", "tamano", "fuera_del_disco"}
     assert "secreto" not in json.dumps(lista) and "ab" * 32 not in json.dumps(lista)
     (ajustes.dir / "copias.json").write_text("roto")
     assert ops_host.leer_copias(ajustes.s, AHORA) is None
