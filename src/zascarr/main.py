@@ -544,8 +544,8 @@ def create_app() -> FastAPI:
     from zascarr.web.errores import manejar_http, manejar_inesperado, pagina_error
     from zascarr.web.estado import router as estado_router
     from zascarr.web.exportar import router as exportar_router
-    from zascarr.web.legal import router as legal_ui_router
     from zascarr.web.lector import router as lector_router
+    from zascarr.web.legal import router as legal_ui_router
     from zascarr.web.library import router as library_router
     from zascarr.web.mejoras import router as mejoras_ui_router
     from zascarr.web.navegacion import router as navegacion_router
