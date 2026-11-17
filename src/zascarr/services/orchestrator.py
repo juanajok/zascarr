@@ -1293,28 +1293,38 @@ class Orchestrator:
         pedía? El import loop periódico ya existente es quien de verdad
         clasifica el archivo; esto solo refleja ese hecho en la wishlist."""
         global _tarea_descargas
-        items = list((await self.db.execute(
-            select(Wishlist)
-            .where(Wishlist.status == WishlistStatus.DOWNLOADING)
-            .limit(limit)
-        )).scalars().all())
+        try:
+            items = list((await self.db.execute(
+                select(Wishlist)
+                .where(Wishlist.status == WishlistStatus.DOWNLOADING)
+                .limit(limit)
+            )).scalars().all())
 
-        if items and _tarea_descargas is None:
-            _tarea_descargas = tareas.iniciar_descargas(total=len(items))
-        completed = 0
-        for item in items:
-            if await self._is_fulfilled(item):
-                item.status = WishlistStatus.IMPORTED
-                item.downloaded_at = datetime.now(UTC)
-                await self.db.flush()
-                completed += 1
-                logger.info("orchestrator.item_imported", id=str(item.id))
-        if not items and _tarea_descargas is not None:
-            tareas.terminar(_tarea_descargas.id, resumen="Descargas revisadas")
-            _tarea_descargas = None
-        elif _tarea_descargas is not None:
-            tareas.actualizar(_tarea_descargas.id, hechos=completed)
-        return completed
+            if items and _tarea_descargas is None:
+                _tarea_descargas = tareas.iniciar_descargas(total=len(items))
+            completed = 0
+            for item in items:
+                if await self._is_fulfilled(item):
+                    item.status = WishlistStatus.IMPORTED
+                    item.downloaded_at = datetime.now(UTC)
+                    await self.db.flush()
+                    completed += 1
+                    logger.info("orchestrator.item_imported", id=str(item.id))
+            if not items and _tarea_descargas is not None:
+                tareas.terminar(_tarea_descargas.id, resumen="Descargas revisadas")
+                _tarea_descargas = None
+            elif _tarea_descargas is not None:
+                tareas.actualizar(_tarea_descargas.id, hechos=completed)
+            return completed
+        except BaseException as exc:
+            if _tarea_descargas is not None:
+                tareas.error(_tarea_descargas.id, tipo_error=type(exc).__name__)
+                _tarea_descargas = None
+            raise
+        finally:
+            if _tarea_descargas is not None and _tarea_descargas.estado.value == "en_curso":
+                tareas.terminar(_tarea_descargas.id, resumen="Descargas revisadas")
+                _tarea_descargas = None
 
     async def _is_fulfilled(self, item: Wishlist) -> bool:
         # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya

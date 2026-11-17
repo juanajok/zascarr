@@ -59,7 +59,11 @@ async def _fragmento_actual(request: Request, mensaje_pedir: str = "", boton_cam
     if vista.en_marcha and _tarea_copia is None:
         _tarea_copia = tareas.iniciar_copia()
     elif not vista.en_marcha and _tarea_copia is not None:
-        tareas.terminar(_tarea_copia.id, resumen="Copia terminada")
+        if vista.estado in (EstadoCopia.HECHA, EstadoCopia.DIARIO):
+            tareas.terminar(_tarea_copia.id, resumen="Copia terminada")
+        else:
+            tareas.error(_tarea_copia.id,
+                         tipo_error="copia_" + str(vista.estado))
         _tarea_copia = None
     # El listado solo se vuelve a pintar cuando no hay copia en marcha: la última respuesta de un sondeo, o tras pedir.
     con_lista = not vista.en_marcha and vista.estado != EstadoCopia.NO_ACTIVADO
@@ -83,7 +87,11 @@ async def pedir_copia(request: Request) -> HTMLResponse:
     if vista.en_marcha and _tarea_copia is None:
         _tarea_copia = tareas.iniciar_copia()
     elif not vista.en_marcha and _tarea_copia is not None:
-        tareas.terminar(_tarea_copia.id, resumen="Copia terminada")
+        if vista.estado in (EstadoCopia.HECHA, EstadoCopia.DIARIO):
+            tareas.terminar(_tarea_copia.id, resumen="Copia terminada")
+        else:
+            tareas.error(_tarea_copia.id,
+                         tipo_error="copia_" + str(vista.estado))
         _tarea_copia = None
     if vista.estado == EstadoCopia.NO_ACTIVADO:
         return await _fragmento_actual(request, boton_cambia=True)

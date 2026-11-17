@@ -178,7 +178,8 @@ def _publicable(t: Tarea, ahora: float) -> bool:
     return ahora - t._creada_mono >= UMBRAL_MS / 1000
 
 
-def snapshot(*, ahora: float | None = None, incluir_recientes: bool = False) -> dict[str, Any]:
+def snapshot(*, ahora: float | None = None, incluir_recientes: bool = False,
+             consumir_anuncio: bool = False) -> dict[str, Any]:
     momento = _ahora(ahora)
     with _lock:
         _podar(momento)
@@ -210,7 +211,7 @@ def snapshot(*, ahora: float | None = None, incluir_recientes: bool = False) -> 
         global _ultimo_anuncio
         firma = (activas, errores)
         anuncio = None
-        if firma != _ultimo_anuncio:
+        if consumir_anuncio and firma != _ultimo_anuncio:
             _ultimo_anuncio = firma
             if errores:
                 anuncio = "Una tarea ha fallado."
