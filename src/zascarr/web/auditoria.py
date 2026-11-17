@@ -447,9 +447,26 @@ def _size_grupo(d) -> int:
     return int(d.get("size_bytes") or 0) if isinstance(d, dict) else int(getattr(d, "size_bytes", 0) or 0)
 
 
+def _raices_config() -> list[Path]:
+    s = get_settings()
+    crudas = [p.strip() for p in (getattr(s, "library_roots", "") or "").split(",") if p.strip()]
+    if not crudas:
+        crudas = [str(s.library_path)]
+    return [Path(p) for p in crudas]
+
+
+def _raiz_de_ruta(ruta: str | Path) -> Path:
+    candidatas = []
+    for raiz in _raices_config():
+        base = str(raiz).rstrip("/")
+        if str(ruta) == base or str(ruta).startswith(base + "/"):
+            candidatas.append(raiz)
+    return max(candidatas, key=lambda r: len(r.parts)) if candidatas else Path(get_settings().library_path)
+
+
 def _ruta_relativa(ruta: str) -> str:
     try:
-        raiz = get_settings().library_path.resolve()
+        raiz = _raiz_de_ruta(ruta).resolve()
         p = Path(ruta).resolve()
         return p.relative_to(raiz).as_posix()
     except (OSError, ValueError):
@@ -494,20 +511,27 @@ async def _contexto_duplicados(db: AsyncSession, informe: dict | None) -> dict:
 
 
 def _resumen_cuarentena() -> dict:
-    base = Path(get_settings().library_path) / ".zascarr" / "apartados"
+    por_raiz = []
     archivos = 0
     bytes_ = 0
-    try:
-        for raiz, _dirs, ficheros in os.walk(base, followlinks=False):
-            for nombre in ficheros:
-                try:
-                    archivos += 1
-                    bytes_ += (Path(raiz) / nombre).stat().st_size
-                except OSError:
-                    continue
-    except OSError:
-        pass
-    return {"ruta": str(base), "archivos": archivos, "bytes": bytes_}
+    for raiz in _raices_config():
+        base = raiz / ".zascarr" / "apartados"
+        n = b = 0
+        try:
+            for actual, _dirs, ficheros in os.walk(base, followlinks=False):
+                for nombre in ficheros:
+                    try:
+                        n += 1
+                        b += (Path(actual) / nombre).stat().st_size
+                    except OSError:
+                        continue
+        except OSError:
+            pass
+        archivos += n
+        bytes_ += b
+        por_raiz.append({"ruta": str(base), "archivos": n, "bytes": b})
+    return {"ruta": por_raiz[0]["ruta"] if por_raiz else "",
+            "archivos": archivos, "bytes": bytes_, "raices": por_raiz}
 
 
 async def _operaciones_apartadas(db: AsyncSession) -> list[dict]:
@@ -765,7 +789,7 @@ async def revisar_carpetas(request: Request, ruta_a: str = Form(default=""),
         ruta_a = str(crudos[par].get("ruta_a") or "")
         ruta_b = str(crudos[par].get("ruta_b") or "")
     try:
-        detalle = await analizar_par(ruta_a, ruta_b, Path(get_settings().library_path))
+        detalle = await analizar_par(ruta_a, ruta_b, _raiz_de_ruta(ruta_a))
     except (ApartadoError, OSError) as exc:
         return _no_store(templates.TemplateResponse(
             request, "_carpetas_detalle.html",
@@ -783,7 +807,7 @@ async def previsualizar_carpetas_dup(request: Request, ruta_a: str = Form(...),
     try:
         vista = await previsualizar_carpetas(
             db, ruta_a, ruta_b, keep,
-            library=Path(get_settings().library_path),
+            library=_raiz_de_ruta(ruta_a),
             secret=get_settings().secret_key)
     except (ApartadoError, OSError, ValueError) as exc:
         return _no_store(templates.TemplateResponse(
@@ -815,7 +839,7 @@ async def confirmar_carpetas_dup(
     if apartar_vacia and ruta_apartar:
         try:
             operacion = await apartar_carpeta_vacia(
-                db, ruta_apartar, library=Path(get_settings().library_path),
+                db, ruta_apartar, library=_raiz_de_ruta(ruta_apartar),
                 secret=get_settings().secret_key)
             carpeta = {"operacion": operacion}
         except (ApartadoError, OSError, ValueError) as exc:
