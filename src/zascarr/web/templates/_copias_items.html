@@ -1,6 +1,8 @@
 <div id="copias-items"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
   {% if copias is none %}
     <p class="muted">Aún no hay lista de copias.</p>
+  {% elif not copias %}
+    <p class="muted">No hay copias restaurables para esta versión.</p>
   {% else %}
     <ul>
       {% for c in copias %}
