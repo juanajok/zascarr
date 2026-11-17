@@ -108,11 +108,23 @@ async def _correr(fabrica, disparador: str) -> RescanReport:
 
 
 async def _ejecutar_tarea(fabrica, disparador: str) -> None:
+    tarea = tareas.iniciar("rescanear", enlace="/ui/auditoria#rescan-biblioteca",
+                           origen=f"rescan:{disparador}")
+    try:
+        await _ejecutar_tarea_con_cerrojo(fabrica, disparador, tarea)
+    finally:
+        if tarea is not None and tarea.estado.value == "en_curso":
+            tareas.terminar(tarea.id, resumen="Revisión terminada")
+
+
+async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
     async with _cerrojo_ciclo(fabrica) as libre:
         if not libre:
             _estado.fase = FaseRescan.OCUPADO
             _estado.terminado = datetime.now(UTC)
             logger.info("rescan.ocupado", disparador=disparador)
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error="ocupado")
             return
         try:
             informe = await _correr(fabrica, disparador)
@@ -134,6 +146,8 @@ async def _ejecutar_tarea(fabrica, disparador: str) -> None:
             _estado.causa = "CancelledError"
             raise
         except Exception as exc:  # noqa: BLE001 — el estado no propaga detalle técnico
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error=type(exc).__name__)
             _estado.fase = FaseRescan.ERROR
             _estado.causa = type(exc).__name__
             logger.warning("rescan.fallido", disparador=disparador, error=type(exc).__name__)
