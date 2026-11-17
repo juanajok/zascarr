@@ -80,3 +80,18 @@ async def test_acierto_envia_una_peticion_v2(ajustes, monkeypatch):
         object(), ajustes, copia=COPIA, contrasena="correcta", entiendo=True)
     assert codigo is CodigoOps.ACEPTADA and "en marcha" in mensaje
     llamada.assert_awaited_once()
+
+
+def test_rutas_no_ecoan_la_contrasena_y_validan_el_id():
+    from fastapi.testclient import TestClient
+
+    from zascarr.main import app
+
+    cliente = TestClient(app)
+    assert cliente.get("/ui/copias/restaurar/no-es-una-copia").status_code == 404
+    r = cliente.post("/ui/copias/restaurar", data={
+        "copia": "backup-20260101_120000", "contrasena": "CENTINELA-SECRETO",
+        "entiendo": ""})
+    assert r.status_code == 200
+    assert "CENTINELA-SECRETO" not in r.text
+    assert "Marca que entiendes" in r.text
