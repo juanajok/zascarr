@@ -104,7 +104,10 @@ class SerieSinIdentidadError(LookupError):
     """D-A: A solo se ofrece para series que ya tienen al menos una identidad de fuente."""
 
 
-_IDENTIDADES = ("comic_vine_id", "anilist_id", "tebeosfera_slug", "gcd_id")
+_IDENTIDADES = (
+    "comic_vine_id", "anilist_id", "tebeosfera_slug", "gcd_id",
+    "metron_id", "open_library_id", "fandom_dc_slug", "fandom_marvel_slug",
+)
 
 
 def tiene_identidad(serie: Series) -> bool:

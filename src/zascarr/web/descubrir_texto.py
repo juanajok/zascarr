@@ -34,7 +34,8 @@ from zascarr.utils.texto_html import (
 #: Cómo se llama cada fuente: los mismos nombres que usa el servicio en sus avisos.
 ETIQUETAS = {
     "comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera",
-    "gcd": "GCD", "metron": "Metron", "open_library": "Open Library"}
+    "gcd": "GCD", "metron": "Metron", "open_library": "Open Library",
+    "fandom_dc": "DC Database", "fandom_marvel": "Marvel Database"}
 OTRA_FUENTE = "otra fuente"
 
 #: Capacidades verificadas por el contrato, con su nombre para la persona. Lo que no esté aquí
@@ -150,6 +151,8 @@ def fuentes_que_se_consultan(ajustes) -> list[str]:
         "metron": bool(getattr(ajustes, "metron_enabled", False)
                        and getattr(ajustes, "metron_token", "")),
         "open_library": bool(getattr(ajustes, "open_library_enabled", False)),
+        "fandom_dc": bool(getattr(ajustes, "fandom_dc_enabled", False)),
+        "fandom_marvel": bool(getattr(ajustes, "fandom_marvel_enabled", False)),
     }
     return [ETIQUETAS[f.value] for f in ORDEN_DE_FUENTES if activas[f.value]]
 

@@ -42,12 +42,20 @@ _FUENTES = (
     (MetadataSource.ANILIST, "AniList", "1 petición"),
     (MetadataSource.TEBEOSFERA, "Tebeosfera", "2–8 peticiones (búsqueda y reintentos)"),
     (MetadataSource.GCD, "GCD", "1–3 peticiones (hasta 3 páginas)"),
+    (MetadataSource.METRON, "Metron", "1 petición"),
+    (MetadataSource.OPEN_LIBRARY, "Open Library", "1 petición"),
+    (MetadataSource.FANDOM_DC, "DC Database", "hasta 4 peticiones"),
+    (MetadataSource.FANDOM_MARVEL, "Marvel Database", "hasta 4 peticiones"),
 )
 _ATRIBUTO = {
     MetadataSource.COMIC_VINE: "comicvine_enabled",
     MetadataSource.ANILIST: "anilist_enabled",
     MetadataSource.TEBEOSFERA: "tebeosfera_enabled",
     MetadataSource.GCD: "gcd_enabled",
+    MetadataSource.METRON: "metron_enabled",
+    MetadataSource.OPEN_LIBRARY: "open_library_enabled",
+    MetadataSource.FANDOM_DC: "fandom_dc_enabled",
+    MetadataSource.FANDOM_MARVEL: "fandom_marvel_enabled",
 }
 
 
@@ -69,13 +77,16 @@ def _opciones() -> list[dict]:
     settings = get_settings()
     opciones = []
     for fuente, nombre, coste in _FUENTES:
-        disponible = bool(getattr(settings, _ATRIBUTO[fuente]))
+        disponible = bool(getattr(settings, _ATRIBUTO[fuente], False))
         detalle = "Encendida"
         if not disponible:
             detalle = "Apagada en Ajustes"
         elif fuente is MetadataSource.COMIC_VINE and not settings.comicvine_api_key:
             disponible = False
             detalle = "Falta la clave en Ajustes"
+        elif fuente is MetadataSource.METRON and not getattr(settings, "metron_token", ""):
+            disponible = False
+            detalle = "Falta el token en Ajustes"
         opciones.append({"clave": fuente.value, "nombre": nombre,
                          "disponible": disponible, "detalle": detalle, "coste": coste})
     return opciones
