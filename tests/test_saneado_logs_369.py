@@ -433,3 +433,13 @@ def test_filtro_invalida_exc_info_en_registro_directo():
     FiltroSaneado().filter(record)
     handler.emit(record)
     assert "/media/library" not in stream.getvalue() and "foo.cbz" not in stream.getvalue()
+
+
+def test_plantilla_de_uvicorn_con_args_conserva_sus_placeholders():
+    """Regresión real: el saneo de `%s://%s/%s` no puede dejar solo dos `%s`."""
+    record = logging.LogRecord(
+        "uvicorn.error", logging.INFO, __file__, 1,
+        "Uvicorn running on %s://%s/%s (Press CTRL+C to quit)",
+        ("http", "0.0.0.0", 8000), None)
+    FiltroSaneado().filter(record)
+    assert record.getMessage() == "Uvicorn running on http://0.0.0.0/8000 (Press CTRL+C to quit)"
