@@ -90,7 +90,7 @@ for var in REPO_DIR ENV_FILE COMPOSE_FILE BACKUP_DIR DB_NAME DB_USER; do
 done
 if (( PRODUCCION )); then
     [[ "$COPIA_TS" =~ ^[0-9]{8}_[0-9]{6}$ ]] || die "--copia no tiene el formato esperado."
-    [[ -z "$DUMP" && -z "$MANIFEST" && -z "$ALEMBIC_ESPERADA" && "$SHA_ESPERADO" == "HEAD" ]] || \
+    [[ -z "$DUMP" && -z "$MANIFEST" && -z "$ALEMBIC_ESPERADA" && (-z "$SHA_ESPERADO" || "$SHA_ESPERADO" == "HEAD") ]] || \
         die "Con --produccion no se aceptan --dump, --manifest, --sha ni --alembic-esperada."
     DUMP="$BACKUP_DIR/backup_${COPIA_TS}.sql.gz"
     MANIFEST="$BACKUP_DIR/MANIFIESTO-backup_${COPIA_TS}.json"
