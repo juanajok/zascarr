@@ -113,7 +113,7 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
 def _preparar(tmp_path: Path) -> dict:
     repo = tmp_path / "repo"
     (repo / "scripts").mkdir(parents=True)
-    for nombre in ("backup.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh"):
+    for nombre in ("backup.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh", "_cerrojo.sh"):
         shutil.copy2(SCRIPTS / nombre, repo / "scripts" / nombre)
     (repo / "docker-compose.yml").write_text("", encoding="utf-8")
     _git(repo, "init", "-q")
@@ -176,7 +176,9 @@ def _ejecutar(
             "BACKUP_OFFSITE_MOUNT": mount,
             "BACKUP_SKIP_DEVICE_CHECK": "1",
             "BACKUP_STATUS_DIR": str(ctx["status"]),
-            "BACKUP_LOCK_FILE": str(ctx["lock"]),
+            # el cerrojo único (BL-OPS1): solo con ZASCARR_PRUEBAS=1 se admite otra ruta
+            "ZASCARR_PRUEBAS": "1",
+            "OPS_LOCK_FILE": str(ctx["lock"]),
         }
     )
     if extra_env:

@@ -1,0 +1,36 @@
+[Unit]
+Description=Auxiliar de «Hacer una copia ahora» de ZascArr (una conexión)
+Documentation=https://github.com/juanajok/zascarr
+# El auxiliar solo ordena iniciar zascarr-backup.service: no depende de Docker él mismo.
+
+[Service]
+Type=simple
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+Environment=ZASCARR_OPS_DIR=@ZASCARR_DATA_DIR@/ops
+Environment=ZASCARR_BACKUP_STATUS_DIR=@BACKUP_STATUS_DIR@
+ExecStart=/usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-ops
+TimeoutStartSec=15s
+RuntimeMaxSec=45s
+MemoryMax=64M
+NoNewPrivileges=yes
+ProtectSystem=strict
+# Solo el estado de la copia (ops-status.json) y el registro de ids vistos; el cerrojo se abre en lectura.
+ReadWritePaths=@BACKUP_STATUS_DIR@ /run/zascarr-ops
+ProtectHome=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+UMask=0077
+PrivateTmp=yes
+# `systemctl` habla con /run/systemd/private (AF_UNIX): no necesita red.
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+# P-5 (SecOps): conjunto de capacidades mínimo. Vacío es el punto de partida (root es dueño de todo lo que toca,
+# así que no hace falta DAC_OVERRIDE); NO se ha comprobado en la Pi: si `systemctl start` falla, subir de aquí.
+CapabilityBoundingSet=

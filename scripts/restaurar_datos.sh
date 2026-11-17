@@ -69,6 +69,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Cerrojo único de operaciones (BL-OPS1). Este script no usa `_comun.sh`: carga solo el cerrojo.
+# shellcheck source=scripts/_cerrojo.sh
+source "${SCRIPT_DIR}/_cerrojo.sh"
+tomar_cerrojo_operaciones || exit $?
+
 [[ -n "$DUMP" ]] || die "Falta --dump."
 [[ -n "$SHA_ESPERADO" ]] || die "Falta --sha (el commit que debe seguir puesto al terminar)."
 for cmd in docker git jq gzip gunzip sha256sum stat curl awk; do

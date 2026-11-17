@@ -1,0 +1,20 @@
+[Unit]
+Description=Socket de «Hacer una copia ahora» de ZascArr (BL-OPS1)
+Documentation=https://github.com/juanajok/zascarr
+
+[Socket]
+# Un proceso por conexión (Accept=yes): el auxiliar no queda residente en la Pi.
+ListenStream=@ZASCARR_DATA_DIR@/ops/ops.sock
+Accept=yes
+SocketUser=root
+SocketGroup=@GRUPO@
+SocketMode=0660
+DirectoryMode=0750
+MaxConnections=4
+# Ráfaga de activaciones acotada (FR-29e): pasado el límite systemd deja el socket en `failed` y la app
+# muestra «No activado en este equipo». Solo afecta al grupo con acceso al socket.
+TriggerLimitIntervalSec=10s
+TriggerLimitBurst=20
+
+[Install]
+WantedBy=sockets.target

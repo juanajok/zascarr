@@ -25,6 +25,7 @@ from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.services import cobertura, disponibilidad
 from zascarr.services.cortesia_estado import filas_cortesia, snapshot_publico
+from zascarr.web.copias import contexto_bloque as contexto_copias
 from zascarr.web.disponibilidad import registrar_filtros
 from zascarr.web.routes import crear_templates
 
@@ -59,4 +60,10 @@ async def estado(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRe
         contexto["cobertura_error"] = True
         with contextlib.suppress(Exception):
             await db.rollback()
+    # BL-OPS1: bloque «Copias de seguridad» (solo ficheros del host; nunca tumba la página).
+    try:
+        contexto.update(await contexto_copias())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("estado.copias_no_leidas", error=type(exc).__name__)
+        contexto.update(copias_error=True)
     return templates.TemplateResponse(request, "estado.html", contexto)
