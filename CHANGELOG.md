@@ -34,6 +34,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Ajustes → Transmission: carpeta de descargas y aviso de incoherencia (2026-11-17).**
+  Se puede editar la carpeta que ZascArr pasa a Transmission (ruta del **host**). «Probar
+  conexión» compara esa carpeta con la que Transmission tiene configurada y, si difieren,
+  avisa con las dos rutas (si la de ZascArr no existe en la Pi, los envíos fallarán).
+  Se valida que la ruta sea absoluta y sin «..».
+
 - **Cola/progreso de Deseados en la propia pantalla (2026-11-17).** Cuando hay deseos
   en descarga, Deseados muestra un panel «Descargas en curso» que se refresca solo
   (cada 30 s) y lee **una vez** Transmission por refresco: barra de progreso y
