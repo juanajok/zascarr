@@ -105,3 +105,10 @@ class TestPuedeEnlazarseConComicVine:
             make_series(metadata_source=None, tradition=ComicTradition.MANGA),
             comic_vine_activo=True,
         )
+
+
+def test_sin_clave_utilizable_no_se_promete_el_enlace():
+    serie = make_series()
+    assert not puede_enlazarse_con_comic_vine(serie, True, "")
+    assert not puede_enlazarse_con_comic_vine(serie, True, "   ")
+    assert puede_enlazarse_con_comic_vine(serie, True, "clave")
