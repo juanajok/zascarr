@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.config import get_settings
 from zascarr.models import MetadataSource, Series, VinculacionOperacion
 from zascarr.services.asociar_fuente import CandidataComparada, huella_de_asociacion
-from zascarr.services.discovery import CAMPO_ID_EXTERNO
+from zascarr.services.discovery import CAMPO_ID_EXTERNO, CAMPOS_ID_DE_TEXTO
 from zascarr.services.tokens_revision import (
     TTL_SEGUNDOS,
     AsociacionFirmada,
@@ -49,12 +49,20 @@ _NOMBRES = {
     MetadataSource.ANILIST: "AniList",
     MetadataSource.TEBEOSFERA: "Tebeosfera",
     MetadataSource.GCD: "GCD",
+    MetadataSource.METRON: "Metron",
+    MetadataSource.OPEN_LIBRARY: "Open Library",
+    MetadataSource.FANDOM_DC: "DC Database",
+    MetadataSource.FANDOM_MARVEL: "Marvel Database",
 }
 _ATRIBUTOS = {
     MetadataSource.COMIC_VINE: "comicvine_enabled",
     MetadataSource.ANILIST: "anilist_enabled",
     MetadataSource.TEBEOSFERA: "tebeosfera_enabled",
     MetadataSource.GCD: "gcd_enabled",
+    MetadataSource.METRON: "metron_enabled",
+    MetadataSource.OPEN_LIBRARY: "open_library_enabled",
+    MetadataSource.FANDOM_DC: "fandom_dc_enabled",
+    MetadataSource.FANDOM_MARVEL: "fandom_marvel_enabled",
 }
 MENSAJES = {
     "propuesta_no_asociable": "Esa ficha no se puede asociar: no es una serie.",
@@ -122,7 +130,7 @@ def _columna(fuente: str) -> str:
 
 def _valor(fuente: str, id_externo: str) -> int | str:
     campo = _columna(fuente)
-    return id_externo if campo == "tebeosfera_slug" else int(id_externo)
+    return id_externo if campo in CAMPOS_ID_DE_TEXTO else int(id_externo)
 
 
 def _nombre(fuente: str) -> str:

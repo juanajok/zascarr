@@ -270,8 +270,10 @@ class AdaptadorFandom:
         })
 
     async def fetch_serie(self, external_id: str, *, hash_previo: str | None = None):
+        # Los slugs nuevos usan `_` (id firmable); Fandom espera el título con espacios.
+        titulo = str(external_id).replace("_", " ") if "_" in str(external_id) else str(external_id)
         try:
-            ficha = await self._cliente.get_volume(str(external_id), incluir_portada=False)
+            ficha = await self._cliente.get_volume(titulo, incluir_portada=False)
         except Exception as exc:  # noqa: BLE001
             return _error(exc)
         if ficha is None:
