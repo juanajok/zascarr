@@ -151,8 +151,8 @@ fi
 # ── Volcado local, verificado ────────────────────────────────────────────────
 info "Volcando ${DB_NAME}..."
 if ! volcar_postgres "${DEST}"; then
-    escribir_estado "failed" "pg_dump_failed" "" "" 0 false || true
-    die "pg_dump falló; no se ha guardado nada."
+    escribir_estado "failed" "${VOLCAR_ERROR_CODE:-pg_dump_failed}" "" "" 0 false || true
+    die "El volcado falló (${VOLCAR_ERROR_CODE:-pg_dump_failed}); no se ha guardado nada."
 fi
 if ! verificar_dump "${DEST}"; then
     rm -f "${DEST}"
