@@ -190,6 +190,7 @@ class TestLaAceptacionProtegeLoMismo:
         y su confirmación de descarga. El lote de Deseados (#983) busca en Prowlarr/foro,
         así que también exige el aviso legal aceptado."""
         assert _acciones_protegidas() == {
+            ("lector", "POST", "/ui/leer/{file_id}/deseo"),
             ("wishlist", "POST", "/ui/wishlist/anadir"),
             ("wishlist", "POST", "/ui/wishlist/{item_id}/reintentar"),
             ("wishlist", "POST", "/ui/wishlist/{item_id}/buscar-ahora"),
