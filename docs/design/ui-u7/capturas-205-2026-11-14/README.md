@@ -1,5 +1,10 @@
 # Capturas de la verificación de #205 (AC5) — 2026-11-14
 
+> **Capturas retiradas del repo público (OCTA-E2, 2026-11-17).** Las 6 imágenes mostraban la
+> biblioteca real del PO con portadas comerciales. Están en el archivo privado fuera de Git; este
+> README conserva el método y qué demostraba cada captura.
+
+
 > **Qué es.** Evidencia de navegador real de la aplicación **desplegada en la Pi** con los textos
 > del glosario U7 aplicados (#205 BL-U18 AC5). No es una validación con usuarios ni una prueba de
 > accesibilidad con lector de pantalla.

@@ -15,7 +15,7 @@
 
 ## Evidencia visual
 
-`docs/design/ui-156/ajustes-discos-320.png` (320×1950 px, recorte de la captura real a 320):
+La captura `docs/design/ui-156/ajustes-discos-320.png` (320×1950 px) **se retiró del repo público por E2** (mostraba la ruta y el recuento reales de la biblioteca); está en el archivo privado del operador. La validación descrita se conserva como evidencia textual:
 
 - La tarjeta ocupa el ancho disponible (≈306 px útiles) y **no hay recorte horizontal**.
 - Cada tradición va en su línea, con etiqueta encima y selector debajo (ancho completo).
