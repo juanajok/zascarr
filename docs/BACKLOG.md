@@ -613,7 +613,7 @@ Publicar estas tarjetas no autoriza código, migraciones en producción ni despl
 | E4 | Como coleccionista, quiero un aviso al móvil cuando una descarga se importa, para no estar mirando el dashboard | Webhook configurable (Gotify/ntfy/Telegram/URL genérica) al completar descarga+import; desactivado por defecto | ✅ Hecho | S |
 
 - **E4 (2026-09-28, hecho):** webhook de importación con **entrega de mejor esfuerzo** (decisión explícita de la ficha: sin cola ni reintentos persistentes, que exigirían otro alcance). `services/notifier.py` soporta `generic`/`gotify`/`ntfy`/`telegram`, apagado por defecto (`webhook_enabled`), configurable desde `/ui/ajustes` reutilizando D11 (grupo `avisos`; `webhook_token` en `SECRET_FIELDS`). `main.py::_ejecutar_ciclo_y_avisar` avisa **después del `commit`** y solo con `report.imported` (nunca adopción ni duplicados); un fallo del webhook se registra sin URL ni token y no revierte la importación. Ficha en `docs/design/benchmark-E4-avisos.md`. Regresión: `tests/test_notifier.py` (receptor falso + orden commit/rollback).
-| E5 | Como coleccionista que reporta un fallo, quiero un botón en el dashboard que genere un fichero con los logs recientes, sin tocar la terminal | Botón "Descargar logs" en el dashboard, sin acceso a shell | P2 | S |
+| E5 | Como coleccionista que reporta un fallo, quiero un acceso que genere un fichero con los registros recientes, sin tocar la terminal | **Hecho**, acceso movido a **Estado → Registro de la aplicación** (UX 2026-11-17; antes «Descargar logs» en Inicio); sin acceso a shell | P2 | S |
 | E6 | Como administrador, quiero que `/api/health` distinga "sin conexión con Postgres" de "conectado pero sin migrar" de "esquema incompatible" de "listo", en vez de un `database: ok/error` binario, para resolver una instalación rota sin leer tracebacks | Nuevos valores de `checks.database`: `unreachable` (no conecta), `migration_required` (conecta pero `alembic_version` no está en `head` — comparar revisión actual contra `head` de `alembic/versions`), `schema_incompatible` (conecta, migrado, pero falta una tabla de dominio esperada — señal de una restauración/rollback a medias), `ok`. Cada estado con su texto y acción en español en `/estado`; ninguna vista de `/ui/*` debe devolver un 500 crudo por tabla ausente — degradar con el mismo diagnóstico en vez de reventar | ✅ Hecho | S |
 | E7 | Como coleccionista, quiero saber si GCD puede **enriquecer** (no solo buscar) mis tebeos españoles, con datos reales de sus fichas, antes de conectar el enricher | **Evaluación, no implementación.** Con un caso real (Absolute Batman 2025, Panini España): contrastar ficha de serie, resumen de serie y ficha de número contra las **respuestas reales de la API** de GCD (endpoints separados; no inferirlas de la página web) — qué campos de la edición española (editorial, fechas, formato, créditos) se pueden incorporar, si la **portada es recuperable como URL de la API** y con qué rate limit. **Criterio de parada:** si no hay portada ni datos por número aprovechables, GCD **no** entra para portadas ni números; la evaluación puede recomendar igualmente usar sus campos **de serie** de la edición española (editorial, fechas, formato), que son valor propio. No añade GCD a `EnrichmentService`. | ✅ Hecho | S |
 
@@ -1675,6 +1675,14 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
 
 **Notas de proceso:**
 
+- **Huecos del benchmark de Deseados cerrados (2026-11-17):** #973 (panel de cola/progreso),
+  #983 (cancelar la espera + buscar en lote, máx. 8), #984 (carpeta de Transmission
+  editable y aviso al probar; §5.8 con SecOps favorable sobre `9b91a826`) y #985
+  (backoff 10 min/30 min/2 h/6 h tras fallos de envío). Informes: QA
+  `docs/design/informe-qa-lote-cancelar-2026-11-17.md`, QA
+  `docs/design/informe-qa-backoff-2026-11-17.md` y SecOps
+  `docs/design/secops-aviso-carpeta-2026-11-17.md`. Deuda menor aceptada: índice sobre
+  `next_retry_at`, revalidación de estado en el lote y cancelación solo de navegador.
 - **Benchmark de Deseados cerrado (2026-11-16, nivel 2 §13):** ficha en
   `docs/design/benchmark-DESEADOS-2026-11-16.md` con Sonarr 4.0.20, Radarr 7.0.3,
   Kapowarr 1.3.2, Mylar3 0.8.3 y Suwayomi 2.4.2366 (matriz ponderada, IGUALAR/MEJORAR
@@ -1683,6 +1691,12 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
   varios deseos y el aviso proactivo de carpeta de descargas inválida. También se documenta
   como **Mejorar** lo del foro+Prowlarr en una lista, el tomo que cubre 1-12 y cerrar el
   deseo con «Ya lo tengo».
+- **Backoff de envíos de Deseados cerrado (2026-11-17, T-62):** de los huecos declarados del
+  benchmark, «reintento automático/backoff tras un fallo de envío» deja de depender del cooldown
+  global. Migración 0046 (`wishlist.retry_count`, `wishlist.next_retry_at`) y helper
+  `Orchestrator._programar_reintento`: 10 min → 30 min → 2 h → 6 h (tope) solo cuando falla el
+  **envío** (no «sin resultados» ni «candidato rechazado»); un envío correcto o «Reintentar»
+  limpian el backoff. El cooldown de `last_searched_at` (6 h) no se toca: sigue para el resto.
 - **«Probar conexión» del foro cerrada (2026-11-16, PR [#880](https://github.com/juanajok/zascarr/pull/880), merge `04e24c08`):** la tarjeta Foro de Ajustes permite comprobar URL/usuario/contraseña antes de guardar (contraseña en blanco = la guardada), con **solo login** (sin búsqueda), funcionando aunque el foro esté apagado y con mensajes llanos (OK, credenciales, espera por cortesía/flood, URL inválida, red), sin persistir ni mostrar credenciales. QA apto (7.181×2, sonda 13/13) y SecOps favorable con **§5.8** sobre el SHA final `7876dfeb`. Menor aceptado: hereda `espera_max_s=30` (reducible).
 - **m-1 de UI/UX cerrado (2026-11-15, PR [#875](https://github.com/juanajok/zascarr/pull/875), merge `b8faa7cc`):** el error htmx de Importar guía actualiza `aria-invalid`/`aria-describedby` del input (reemplazo out-of-band con el valor conservado y nombre accesible propio), igual que el POST completo. Suite 7.162 passed.
 - **Lectura de temas del foro validada en vivo (2026-11-15):** con el hilo `showtopic=115142` en la Pi, login OK y **27 enlaces `ed2k`** extraídos (0 `magnet`), enlaces URL-encoded; sin cambios de código. Se cierra la deuda de validación de SCR4 (queda como fixturable para regresión futura).

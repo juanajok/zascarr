@@ -82,6 +82,17 @@ logger = structlog.get_logger()
 COMIC_CATEGORIES = [7030, 7020]
 MAX_SIZE_BYTES = 500 * 1024 * 1024
 
+# T-62: espera entre fallos de envío consecutivos al cliente de descargas.
+# Crece con cada intento y se queda en el tope: un cliente caído no quema
+# Prowlarr/foro en cada ciclo, pero el deseo no queda fuera para siempre. El
+# usuario puede saltárselo con «Reintentar» (limpia `next_retry_at`).
+BACKOFF_ENVIOS = (
+    timedelta(minutes=10),
+    timedelta(minutes=30),
+    timedelta(hours=2),
+    timedelta(hours=6),
+)
+
 
 def prowlarr_indexers_seleccionados(settings) -> list[int]:
     """IDs elegidos en Ajustes; lista vacía = todos los indexers de Prowlarr."""
@@ -301,14 +312,29 @@ class Orchestrator:
             return 0
 
         settings = get_settings()
+        ahora = datetime.now(UTC)
         cooldown = timedelta(hours=settings.orchestrator_retry_cooldown_hours)
-        cutoff = datetime.now(UTC) - cooldown
+        cutoff = ahora - cooldown
         elegibles = (
             select(Wishlist)
             .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
+            # T-62: un fallo de ENVÍO se rige por su propio backoff (10 min,
+            # 30 min, 2 h, 6 h); vencido, entra aunque el cooldown global de 6 h
+            # aún no haya pasado — si no, las esperas cortas nunca servirían.
+            # El cooldown de `last_searched_at` sigue gobernando los intentos
+            # que no programaron reintento (sin resultados, candidato rechazado).
             .where(or_(
-                Wishlist.last_searched_at.is_(None),
-                Wishlist.last_searched_at < cutoff,
+                and_(
+                    Wishlist.next_retry_at.is_not(None),
+                    Wishlist.next_retry_at <= ahora,
+                ),
+                and_(
+                    Wishlist.next_retry_at.is_(None),
+                    or_(
+                        Wishlist.last_searched_at.is_(None),
+                        Wishlist.last_searched_at < cutoff,
+                    ),
+                ),
             ))
             .order_by(Wishlist.priority.asc(), Wishlist.added_at.asc())
         )
@@ -388,6 +414,27 @@ class Orchestrator:
             await self.db.commit()
         await self.db.flush()
 
+    def _programar_reintento(self, item: Wishlist,
+                             ahora: datetime | None = None) -> datetime:
+        """Programa el siguiente intento tras un fallo de ENVÍO al cliente.
+
+        T-62: el fallo de envío (cliente inaccesible) se reintenta con espera
+        creciente — 10 min, 30 min, 2 h, 6 h (tope) — en vez de depender del
+        cooldown global de 6 h, que además bloqueaba a todos los deseos a la
+        vez. Suma un fallo consecutivo y fija `next_retry_at`; lo limpia un
+        envío correcto o el reintento manual. No se llama por «sin resultados»
+        ni por «candidato rechazado»: eso no es un fallo del cliente.
+        """
+        item.retry_count = (item.retry_count or 0) + 1
+        espera = BACKOFF_ENVIOS[min(item.retry_count, len(BACKOFF_ENVIOS)) - 1]
+        item.next_retry_at = (ahora or datetime.now(UTC)) + espera
+        return item.next_retry_at
+
+    def _limpiar_reintento(self, item: Wishlist) -> None:
+        """Un envío correcto recupera el deseo: fuera el backoff pendiente."""
+        item.retry_count = 0
+        item.next_retry_at = None
+
     async def _process_item(self, item: Wishlist) -> bool:
         candidates = await self._search_and_rank(item)
         if not candidates:
@@ -403,6 +450,7 @@ class Orchestrator:
                 item.download_backend = backend.value
                 item.download_ref = ref
                 item.last_error = None  # D9: ya no aplica, se recuperó
+                self._limpiar_reintento(item)  # T-62: el cliente volvió a responder
                 await self.db.flush()
                 logger.info(
                     "orchestrator.download_started", title=candidate.title, backend=backend.value
@@ -413,6 +461,7 @@ class Orchestrator:
         # esto sí es un fallo real, distinto de "sin resultados todavía".
         item.status = WishlistStatus.FAILED
         item.last_error = motivo_de_cliente(backend)
+        self._programar_reintento(item)
         await self.db.flush()
         return False
 
@@ -666,9 +715,15 @@ class Orchestrator:
                 ref = await self._send(backend, candidate)
                 if ref is None:
                     item.last_error = motivo_de_cliente(backend)
+                    # T-62: el envío extra es auxiliar. Un fallo NO cambia el estado
+                    # del deseo (la descarga principal sigue en DOWNLOADING) ni
+                    # programa el backoff del ciclo (que solo mira WANTED/FAILED):
+                    # se informa en ese candidato y el coleccionista decide.
                     await self.db.flush()
                     return False
+                self._limpiar_reintento(item)
                 _marcar_enviado(item.id, candidate.download_url)
+                await self.db.flush()
                 logger.info("orchestrator.download_started", title=candidate.title,
                             backend=backend.value, manual=True, extra=True)
                 return True
@@ -713,6 +768,7 @@ class Orchestrator:
         if ref is None:
             item.status = WishlistStatus.FAILED
             item.last_error = motivo_de_cliente(backend)
+            self._programar_reintento(item)
             await self.db.flush()
             return False
 
@@ -720,6 +776,7 @@ class Orchestrator:
         item.download_backend = backend.value
         item.download_ref = ref
         item.last_error = None
+        self._limpiar_reintento(item)  # T-62: el envío manual recupera el deseo
         _marcar_enviado(item.id, candidate.download_url)
         # Hora de la BD (FR-23).
         item.last_searched_at = (await self.db.execute(select(func.now()))).scalar_one()
@@ -1209,6 +1266,10 @@ class Orchestrator:
                     "download_ref": None,
                     "download_backend": None,
                     "last_error": None,
+                    # T-62: una reactivación de política empieza de cero; un
+                    # backoff viejo no debe retrasar el deseo reactivado.
+                    "retry_count": 0,
+                    "next_retry_at": None,
                 },
                 # Defensa contra dos ciclos solapados: entre el SELECT de
                 # `_generar_lo_que_falta` y este INSERT, el otro ciclo puede

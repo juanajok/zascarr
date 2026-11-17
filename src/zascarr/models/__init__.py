@@ -1188,6 +1188,13 @@ class Wishlist(Base):
     # Sin timestamp propio: se correlaciona con last_searched_at, ya
     # marcado en el mismo punto donde se decide la causa.
     last_error:       Mapped[str|None]        = mapped_column(Text)
+    # T-62: backoff de envío. `retry_count` son los fallos consecutivos del
+    # cliente de descargas; `next_retry_at` es el momento antes del cual el
+    # ciclo automático no vuelve a intentarlo. Los limpia un envío correcto o
+    # el reintento manual del coleccionista (`WishlistService.retry`).
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0"))
+    next_retry_at:    Mapped[datetime|None]   = mapped_column(DateTime(timezone=True))
     series: Mapped["Series|None"] = relationship()
     issue:  Mapped["Issue|None"]  = relationship()
 
