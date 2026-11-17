@@ -755,3 +755,46 @@ async def test_huerfano_publicando_limpia_staging(tmp_path, monkeypatch):
     finally:
         await motor.dispose()
         get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_duplicado_no_se_presenta_como_importado(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+
+    from zascarr.config import get_settings
+    from zascarr.services import paquetes_publicacion as pub
+    from zascarr.services.importer import ImportReport
+    _url, motor, fabrica, paquete = await _con_paquete(tmp_path, monkeypatch)
+    try:
+        async with fabrica() as s:
+            op = await crear_operacion(s, paquete)
+            temp = tmp_path / "config" / ".paquetes" / str(op.id)
+            temp.mkdir(parents=True)
+            (temp / "0001.cbz").write_bytes(_cbz_bytes())
+            op.estado = PaqueteEstado.VERIFICADO
+            op.temp_dir = str(temp)
+            op.items = [{"nombre": "0001.cbz", "bytes": len(_cbz_bytes()),
+                         "sha256": "a" * 64, "estado": "verificado"}]
+            op.total_bytes = len(_cbz_bytes())
+            s.add(op)
+            await s.commit()
+
+            class ImportadorDuplicado:
+                def __init__(self, _s):
+                    self._scan_dirs = []
+
+                async def scan_and_import(self, **_kw):
+                    return ImportReport(started_at=datetime.now(UTC),
+                                        duplicates=["0001.cbz"])
+
+            monkeypatch.setenv("TRANSMISSION_DOWNLOAD_DIR", str(paquete.ruta.parent))
+            get_settings.cache_clear()
+            monkeypatch.setattr(pub, "Importer", ImportadorDuplicado)
+            op = await pub.publicar_e_importar(s, op.id)
+            await s.refresh(op)
+            assert op.estado is PaqueteEstado.ERROR
+            assert op.error_codigo == "duplicado"
+            assert op.items[0]["resultado"] == "duplicado"
+    finally:
+        await motor.dispose()
+        get_settings.cache_clear()
