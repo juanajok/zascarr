@@ -340,6 +340,8 @@ fi
 
 # BL-OPS2: configuración vigente de seguridad, para reaplicarla sobre la copia restaurada.
 FILA_SEGURIDAD=""
+FILA_RESTAURADA=""
+FILA_FINAL=""
 if (( PRODUCCION )); then
     FILA_SEGURIDAD="$(mktemp "${BACKUP_DIR}/seguridad.XXXXXX")" || die "No pude preparar la configuración vigente."
     chmod 600 "$FILA_SEGURIDAD"
@@ -349,10 +351,13 @@ if (( PRODUCCION )); then
         rm -f "$FILA_SEGURIDAD"
         die "No pude leer la configuración vigente. No se ha tocado la BD."
     fi
-    # La sesión vigente deja de valer tras restaurar (FR-35): se sube la versión.
-    jq -c '.auth_session_version = ((.auth_session_version // 0) + 1)' "$FILA_SEGURIDAD" >"${FILA_SEGURIDAD}.n" \
-        || { rm -f "$FILA_SEGURIDAD" "${FILA_SEGURIDAD}.n"; die "No pude preparar la configuración vigente."; }
-    mv "${FILA_SEGURIDAD}.n" "$FILA_SEGURIDAD"
+    if ! jq -e '(.auth_mode == "password" or .auth_mode == "user_password")
+                and (.auth_password_hash | type == "string" and length > 0)
+                and (.secret_key | type == "string" and length > 0)' \
+            "$FILA_SEGURIDAD" >/dev/null 2>&1; then
+        rm -f "$FILA_SEGURIDAD"
+        die "La seguridad vigente no está activada o está incompleta. No se ha tocado la BD."
+    fi
 fi
 
 # ── Recuperación best-effort ─────────────────────────────────────────────────
@@ -414,18 +419,53 @@ fi
 
 if (( PRODUCCION )); then
     FASE="configuración vigente"
+    FILA_RESTAURADA="${FILA_SEGURIDAD}.restaurada"
+    FILA_FINAL="${FILA_SEGURIDAD}.final"
+    if ! "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -At \
+            -c "select values::text from runtime_settings where id=1" >"$FILA_RESTAURADA" 2>/dev/null \
+            || [[ ! -s "$FILA_RESTAURADA" ]]; then
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA"
+        recuperar "no pude leer la configuración de la copia"
+    fi
+    jq -c -n --slurpfile c "$FILA_SEGURIDAD" --slurpfile r "$FILA_RESTAURADA" '
+        def segura($k):
+            ((["auth_mode", "auth_username", "auth_password_hash", "secret_key",
+                "base_url", "fuentes_heredadas"] | index($k)) != null)
+            or ($k | endswith("_enabled")) or ($k | startswith("webhook_"));
+        ($c[0] // {}) as $cur | ($r[0] // {}) as $rest |
+        (($rest | with_entries(select(segura(.key) | not)))
+         + ($cur | with_entries(select(segura(.key)))))
+        | .auth_session_version = ((($cur.auth_session_version // 0) | tonumber) + 1)
+    ' >"$FILA_FINAL" 2>/dev/null || {
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL"
+        recuperar "no pude combinar la configuración vigente"
+    }
     ETIQUETA="zascarr_$(date +%s)_$$"
-    if grep -Fq "$ETIQUETA" "$FILA_SEGURIDAD"; then
+    if grep -Fq "$ETIQUETA" "$FILA_FINAL"; then
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL"
         recuperar "la etiqueta de seguridad coincide con el contenido"
     fi
     if ! {
         printf 'INSERT INTO runtime_settings (id, "values") VALUES (1, $%s' "$ETIQUETA"
-        cat "$FILA_SEGURIDAD"
+        cat "$FILA_FINAL"
         printf '$%s::jsonb) ON CONFLICT (id) DO UPDATE SET "values" = EXCLUDED."values";\n' "$ETIQUETA"
     } | "${COMPOSE[@]}" exec -T postgres psql -q -v ON_ERROR_STOP=1 \
             -U "$DB_USER" -d "$DB_NAME" >>"$LOG" 2>&1; then
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL"
         recuperar "no pude reaplicar la configuración vigente"
     fi
+    # Relectura byte a byte (canónica): si no coincide, se deshace.
+    if ! "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -At \
+            -c "select values::text from runtime_settings where id=1" >"${FILA_FINAL}.db" 2>/dev/null \
+            || ! jq -S . "$FILA_FINAL" >"${FILA_FINAL}.esperado" 2>/dev/null \
+            || ! jq -S . "${FILA_FINAL}.db" >"${FILA_FINAL}.obtenido" 2>/dev/null \
+            || ! cmp -s "${FILA_FINAL}.esperado" "${FILA_FINAL}.obtenido"; then
+        rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL" "${FILA_FINAL}.db" \
+            "${FILA_FINAL}.esperado" "${FILA_FINAL}.obtenido"
+        recuperar "la configuración reaplicada no coincide con la vigente"
+    fi
+    rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL" "${FILA_FINAL}.db" \
+        "${FILA_FINAL}.esperado" "${FILA_FINAL}.obtenido"
 fi
 
 # ── Verificación ─────────────────────────────────────────────────────────────

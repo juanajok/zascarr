@@ -144,7 +144,7 @@
     amule: "aMule",
     vpn: "VPN",
     backup: "Copias de seguridad",
-    restore: "Restauración",
+    restore: "Comprobación de restauración",
     disk: "Disco",
   };
 
@@ -159,7 +159,7 @@
     amule:        { ok: "Conectado",  unreachable: "No responde", disabled: "Desactivado" },
     vpn:          { ok: "Activa", warning: "No protege", unknown: "Sin datos" },
     backup:       { ok: "Copia reciente verificada", warning: "Copia atrasada o incompleta", error: "La última copia falló" },
-    restore:      { ok: "Restauración reciente verificada", warning: "Restauración atrasada o con aviso", error: "La última restauración falló" },
+    restore:      { ok: "Comprobación de restauración reciente verificada", warning: "Comprobación de restauración atrasada o con aviso", error: "La última comprobación de restauración falló" },
     disk:         { ok: "Espacio suficiente", warning: "Queda poco espacio", error: "Sin espacio suficiente", disabled: "Sin dato" },
   };
 
@@ -169,6 +169,10 @@
       unreachable: "ZascArr no consigue hablar con su base de datos. Reinicia ZascArr; si sigue igual, vuelve a ejecutar la actualización (sudo bash scripts/update.sh --rama main).",
       migration_required: "Falta un paso de la última actualización. Vuelve a ejecutarla (sudo bash scripts/update.sh --rama main): lo completa sin tocar tus datos.",
       schema_incompatible: "A la base de datos le faltan partes, seguramente por una copia de seguridad restaurada a medias. Vuelve a restaurarla o a actualizar.",
+    },
+    restore: {
+      warning: "La comprobación de restauración tiene un problema: revisa el aviso técnico.",
+      error: "La comprobación de restauración tiene un problema: revisa el aviso técnico.",
     },
     disk: {
       warning: "Libera espacio o mueve la biblioteca a otro disco antes de que se llene. ZascArr no ha borrado nada.",

@@ -441,3 +441,13 @@ class TestRestaurarV2:
         linea = bytes(linea).replace(b'"prueba":"secreta"', b'"prueba":"otra"')
         r, lanz = correr_restaurar(linea, estado)
         assert r.codigo == "firma_invalida" and lanz.iniciadas == []
+
+
+def test_verificador_comprueba_hash_real_y_rechaza_alterado():
+    import hashlib
+    sal = b"sal-de-prueba"
+    digest = hashlib.pbkdf2_hmac("sha256", "contraseña-ñ".encode(), sal, 10_000)
+    almacenado = f"pbkdf2_sha256$10000${sal.hex()}${digest.hex()}"
+    assert ops.VerificadorPrueba.comprobar("contraseña-ñ", almacenado)
+    assert not ops.VerificadorPrueba.comprobar("otra", almacenado)
+    assert not ops.VerificadorPrueba.comprobar("contraseña-ñ", "roto")
