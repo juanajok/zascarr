@@ -1,6 +1,6 @@
 # Evaluación del lector RAR/CBR en la Pi — 2.ª tanda (spike #308)
 
-> **Estado: FICHA PARA REVISIÓN. No se ha implementado nada**, no se ha tocado la imagen de ZascArr ni ninguna biblioteca (las muestras eran copias con hash verificado; la biblioteca no se montó en ningún contenedor). Cierra los NOT RUN de `evaluacion-lector-rar-2026-10-23.md` (#315). Datos celda a celda: `evaluacion-lector-rar-tanda2-2026-10-23-datos.md`. Kit: `scripts/medicion/evaluacion_rar/` (#317, #319).
+> **Estado: FICHA PARA REVISIÓN. No se ha implementado nada**, no se ha tocado la imagen de ZascArr ni ninguna biblioteca (las muestras eran copias con hash verificado; la biblioteca no se montó en ningún contenedor). Cierra los NOT RUN de `evaluacion-lector-rar-2026-10-23.md` (#315). Datos celda a celda: `evaluacion-lector-rar-tanda2-2026-10-23-datos.md`. Kit: histórico en `scripts/medicion/evaluacion_rar/` (#317, #319), retirado en OCTA-A6 y documentado en `docs/design/mediciones/evaluacion-rar-archivada.md`.
 
 ## 1. Veredicto en pocas líneas
 - **`unar` leyó íntegra la página en las 35 muestras RAR evaluadas (34 distintas)** (RAR4, 6 RAR5 distintos, 4 sólidos hasta 215 MB): tamaño y **CRC32 del listado** coinciden y `Image.load()` decodifica (140 de 140 con `unar` y `unrar`). Pico de memoria **≤ 25,8 MiB**; primera página **≤ 0,09 s** en caliente y **≤ ~0,33 s en frío** (listar + primera, copias en el disco del sistema).
