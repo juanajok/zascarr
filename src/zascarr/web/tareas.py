@@ -36,9 +36,23 @@ async def fragmento_tareas(request: Request) -> HTMLResponse:
     return respuesta
 
 
+@ui_router.post("/ui/_tareas/visto", response_class=HTMLResponse)
+async def marcar_visto_form(request: Request, tid: str = Form("")) -> HTMLResponse:
+    """Contrato: POST con `tid`; vacío/«ultimo» marca el error más reciente."""
+    if tid and tid != "ultimo":
+        tareas.marcar_visto(tid)
+    else:
+        tareas.marcar_visto_ultimo()
+    return await fragmento_tareas(request)
+
+
 @ui_router.post("/ui/_tareas/visto/{tid}", response_class=HTMLResponse)
 async def marcar_visto(request: Request, tid: str) -> HTMLResponse:
-    tareas.marcar_visto(tid)
+    """Contrato definitivo: POST /ui/_tareas/visto/{tid}."""
+    if tid == "ultimo":
+        tareas.marcar_visto_ultimo()
+    else:
+        tareas.marcar_visto(tid)
     return await fragmento_tareas(request)
 
 
