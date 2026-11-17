@@ -516,6 +516,17 @@ async def _contexto(
         total = 0
         pagina = 1
 
+    numeros_tarjetas: dict = {}
+    if filtros.vista == "tarjetas" and items and not error:
+        try:
+            numeros_tarjetas = await SeriesService(db).numeros_para_tarjetas(
+                [serie.id for serie in items])
+        except SQLAlchemyError as exc:
+            logger.warning("biblioteca.numeros_tarjetas_fallidos",
+                           error=type(exc).__name__)
+            with contextlib.suppress(Exception):
+                await db.rollback()
+
     paginas = (total + _PAGE_SIZE - 1) // _PAGE_SIZE if total else 0
     recuento_lectura_texto = None
     if filtros.leido:
@@ -582,6 +593,7 @@ async def _contexto(
     url_canonica = _url_pagina(filtros_finales, page=pagina)
     return {
         "items": items,
+        "numeros_tarjetas": numeros_tarjetas,
         "total": total,
         "page": pagina,
         "pages": paginas,
