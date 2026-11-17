@@ -95,6 +95,7 @@
   <a class="btn ghost sm" href="#numeros-serie">Números</a>
   <a class="btn ghost sm" href="#sagas-serie">Sagas</a>
   <a class="btn ghost sm" href="#politica-serie">Búsqueda</a>
+  <a class="btn ghost sm" href="#seguimiento-serie">Seguimiento</a>
   <a class="btn ghost sm" href="#etiquetas-serie">Etiquetas</a>
   <a class="btn ghost sm" href="#colecciones-serie">Colecciones</a>
   <a class="btn ghost sm" href="#coleccion-serie">Completitud</a>
@@ -254,6 +255,7 @@
 <section id="colecciones-serie" class="series-colecciones" aria-label="Colecciones"
          hx-get="/ui/series/{{ series.id }}/colecciones" hx-trigger="load" hx-swap="outerHTML"></section>
 {% include "_politica_serie.html" %}
+{% include "_seguimiento_serie.html" %}
 {% include "_nota_serie.html" %}
 
     <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo"

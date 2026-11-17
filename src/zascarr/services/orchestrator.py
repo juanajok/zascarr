@@ -72,14 +72,18 @@ from zascarr.services.politica import (
     querer_de_serie,
     retirar_de_serie,
 )
-from zascarr.services.prowlarr import ProwlarrClient, SearchResult
+from zascarr.services.prowlarr import (
+    COMIC_CATEGORIES,
+    ProwlarrClient,
+    SearchResult,
+    prowlarr_indexers_seleccionados,
+)
 from zascarr.services.series import numero_de_grapa
 from zascarr.services.transmission import TransmissionClient
 from zascarr.utils.naming import normalize_series_name, parse_comic_filename
 
 logger = structlog.get_logger()
 
-COMIC_CATEGORIES = [7030, 7020]
 MAX_SIZE_BYTES = 500 * 1024 * 1024
 
 # T-62: espera entre fallos de envío consecutivos al cliente de descargas.
@@ -92,17 +96,6 @@ BACKOFF_ENVIOS = (
     timedelta(hours=2),
     timedelta(hours=6),
 )
-
-
-def prowlarr_indexers_seleccionados(settings) -> list[int]:
-    """IDs elegidos en Ajustes; lista vacía = todos los indexers de Prowlarr."""
-    crudo = getattr(settings, "prowlarr_indexer_ids", "") or ""
-    ids: list[int] = []
-    for trozo in crudo.replace(";", ",").split(","):
-        trozo = trozo.strip()
-        if trozo.isdigit() and int(trozo) > 0 and int(trozo) not in ids:
-            ids.append(int(trozo))
-    return ids
 
 
 def prowlarr_configurado(settings) -> bool:

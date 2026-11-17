@@ -260,6 +260,24 @@ async def _orchestrator_loop(interval_minutes: int, limit: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
+async def _seguimiento_loop(interval_minutes: int) -> None:
+    """#993: job periódico del seguimiento de series (foro + Prowlarr).
+
+    No hace red si no hay series seguidas, fuentes o acuse legal: `ejecutar_pasada`
+    lo comprueba antes de abrir clientes. Un fallo se registra y no tumba el bucle.
+    """
+    from zascarr.database import async_session_factory
+    from zascarr.services.seguimiento import ejecutar_pasada
+
+    while True:
+        try:
+            async with async_session_factory() as session:
+                await ejecutar_pasada(session)
+        except Exception as exc:
+            logger.warning("seguimiento.loop_failed", error=type(exc).__name__)
+        await asyncio.sleep(interval_minutes * 60)
+
+
 async def _library_audit_task() -> None:
     """B16: AUDITA la biblioteca en el primer arranque; ya no la adopta.
 
@@ -413,6 +431,8 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_orchestrator_loop(
                 settings.scan_interval_minutes, settings.max_concurrent_downloads
             )),
+            asyncio.create_task(
+                _seguimiento_loop(settings.seguimiento_interval_minutes)),
         ]
         # BL-R9: rescan periódico de la biblioteca; 0 lo desactiva.
         if settings.rescan_interval_minutes > 0:
