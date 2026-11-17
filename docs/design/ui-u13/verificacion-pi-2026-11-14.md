@@ -10,7 +10,7 @@
 | **Fecha** | 2026-11-14, 17:40–17:45 (Europe/Madrid) |
 | **Método** | Chrome headless con sesión real, `Page.captureScreenshot`; comprobación de `scrollWidth`/`innerWidth` y de textos en el DOM |
 | **Datos** | Biblioteca real (656 por revisar: 579 en 174 carpetas + 77 sueltos) |
-| **Capturas** | `capturas-pi-2026-11-14/` (README con detalle) |
+| **Capturas** | `capturas-pi-2026-11-14/` (README con detalle). **Retiradas del repo público por E2 el 2026-11-17**: están en el archivo privado del operador |
 
 ## PASS
 
