@@ -379,7 +379,10 @@ def test_el_modulo_no_conoce_portadas_ni_la_web():
         doc = getattr(lector_rar, nombre).__doc__ or ""
         assert "portada" not in doc.lower()
     importados = [ln for ln in cuerpo.splitlines() if ln.startswith("from zascarr")]
-    assert importados == ["from zascarr.models import MotivoRar"]
+    assert importados == [
+        "from zascarr.core.formato_contenedor import IMAGE_EXTS, RUIDO, natural_key",
+        "from zascarr.models import MotivoRar",
+    ]
 
 
 # ── Dictamen de SecOps sobre #455 ─────────────────────────────────────────────────────────────────

@@ -66,7 +66,7 @@ async def test_archivos_legibles_por_db(tmp_path):
                file_name="x.cbr", file_format=FileFormat.CBR, metadata_={})
     db = FakeSession(exec_queue=[FakeExecResult([f, cbr])])
     filas = await lector.archivos_legibles(db, f.issue_id)
-    assert [a.id for a in filas] == [str(f.id)]
+    assert [a.id for a in filas] == [str(f.id), str(cbr.id)]
 
 
 def test_pantalla_y_pagina(tmp_path):
@@ -215,3 +215,56 @@ def test_comicinfo_demasiado_grande_se_ignora(tmp_path):
                                    + b" " * (lector.MAX_COMICINFO_BYTES + 10))
         z.writestr("01.jpg", _jpeg())
     assert lector._manga_del_archivo(ruta) is None
+
+
+def _rar_file(tmp_path):
+    ruta = tmp_path / "lectura.cbr"
+    ruta.write_bytes(b"Rar!\x1a\x07\x00" + b"x" * 20)
+    return File(id=uuid4(), issue_id=uuid4(), file_path=str(ruta),
+                file_name=ruta.name, file_format=FileFormat.CBR,
+                metadata_={"formato_contenido": {"firma": "rar", "contrato": 1}})
+
+
+def test_un_cbr_rar_es_legible_para_el_lector(tmp_path):
+    f = _rar_file(tmp_path)
+    assert lector._es_legible(f) is True
+
+
+def test_pantalla_rar_muestra_preparando(tmp_path, monkeypatch):
+    from zascarr.services.cache_lectura import Estado
+    from zascarr.web import lector as wlector
+
+    f = _rar_file(tmp_path)
+    issue = SimpleNamespace(id=f.issue_id, issue_number="1", series_id=uuid4())
+    serie = SimpleNamespace(id=issue.series_id, title="Serie", metadata_={},
+                            tradition=SimpleNamespace(value="american"))
+
+    class Cache:
+        async def preparar(self, _f):
+            return Estado("preparando")
+
+    monkeypatch.setattr(wlector, "CACHE", Cache())
+    db = FakeSession(get_map={(File, f.id): f, (Issue, issue.id): issue,
+                              (Series, serie.id): serie})
+    with use_fake_session(db) as client:
+        r = client.get(f"/ui/leer/{f.id}")
+    assert r.status_code == 200
+    assert "Preparando el tebeo" in r.text
+    assert f"/ui/leer/{f.id}/estado" in r.text
+
+
+def test_estado_rar_listo(tmp_path, monkeypatch):
+    from zascarr.services.cache_lectura import Estado
+    from zascarr.web import lector as wlector
+
+    f = _rar_file(tmp_path)
+
+    class Cache:
+        def estado(self, _f):
+            return Estado("listo")
+
+    monkeypatch.setattr(wlector, "CACHE", Cache())
+    db = FakeSession(get_map={(File, f.id): f})
+    with use_fake_session(db) as client:
+        r = client.get(f"/ui/leer/{f.id}/estado")
+    assert r.status_code == 200 and r.json() == {"estado": "listo", "motivo": ""}

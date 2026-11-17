@@ -5,6 +5,12 @@
 <h1>Leer{% if numero.issue_number %} · número {{ numero.issue_number }}{% endif %}</h1>
 {% if serie %}<p class="subtitle">{{ serie.title }}</p>{% endif %}
 
+{% if preparando %}
+<div class="lector lector-preparando" data-estado-url="/ui/leer/{{ archivo.id }}/estado">
+  <p class="lector-contador" id="lector-preparando" aria-live="polite">Preparando el tebeo…</p>
+  <p class="caption">La primera vez tarda un poco; luego se abre al momento.</p>
+</div>
+{% else %}
 <div class="lector" data-lector
      data-total="{{ total }}" data-pagina="{{ pagina_actual }}"
      data-sentido="{{ sentido }}" data-origen-sentido="{{ origen_sentido }}"
@@ -45,6 +51,7 @@
   </div>
   <p class="caption lector-ayuda">Usa las flechas del teclado. ZascArr guarda la página por la que vas.</p>
 </div>
+{% endif %}
 <noscript>{{ ui.aviso("amber", "Para pasar páginas hace falta JavaScript. La primera página sí se ve.") }}</noscript>
 <script src="/static/lector.js" defer></script>
 {% endblock %}

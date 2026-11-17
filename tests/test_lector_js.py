@@ -104,3 +104,39 @@ def test_lector_js_fullscreen_doble_y_teclado(tmp_path):
         "fullscreenConApi": True, "fullscreenSinApi": True,
         "dobleActiva": True, "avanzaConFlecha": True, "fSinApiNoRompe": True,
     }
+
+
+HARNESS_ESTADO = r'''
+const fs = require("fs");
+const vm = require("vm");
+const js = fs.readFileSync(process.argv[2], "utf8");
+let recargas = 0;
+let consultas = 0;
+const espera = { dataset: { estadoUrl: "/estado" } };
+const aviso = { textContent: "" };
+const sandbox = {
+  document: {
+    querySelector: (sel) => (sel === "[data-estado-url]" ? espera : null),
+    getElementById: () => aviso,
+  },
+  window: { location: { reload: () => { recargas += 1; } },
+            localStorage: { getItem: () => null, setItem: () => {} } },
+  URLSearchParams,
+  fetch: () => { consultas += 1; return Promise.resolve({
+    json: () => Promise.resolve({ estado: "preparando" }) }); },
+  setTimeout: (fn) => { fn(); },
+  HTMLInputElement: function () {}, HTMLTextAreaElement: function () {}, console,
+};
+vm.createContext(sandbox);
+vm.runInContext(js, sandbox);
+setTimeout(() => process.stdout.write(JSON.stringify({ recargas, consultas })), 50);
+'''
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="requiere Node para ejecutar el JS")
+def test_el_sondeo_de_preparando_reintenta_y_recarga(tmp_path):
+    harness = tmp_path / "estado.js"
+    harness.write_text(HARNESS_ESTADO, encoding="utf-8")
+    r = subprocess.run(["node", str(harness), str(JS)], capture_output=True, text=True,
+                       timeout=30, check=True)
+    assert json.loads(r.stdout) == {"recargas": 1, "consultas": 5}

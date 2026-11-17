@@ -458,7 +458,7 @@ info "Creando estructura de directorios..."
 # Datos de los contenedores (Postgres, estado de VPN, portadas),
 # separados del código (ZASCARR_ROOT) — mismo patrón que el resto de la
 # suite *arr: código en /opt, datos en /var/lib.
-mkdir -p "${ZASCARR_DATA_DIR}/"{postgres,covers,vpn-state} || die \
+mkdir -p "${ZASCARR_DATA_DIR}/"{postgres,covers,lector,vpn-state} || die \
     "No puedo crear ${ZASCARR_DATA_DIR}/. ¿Tienes permisos de escritura?"
 
 # Biblioteca (donde el coleccionista haya dicho que vive).
@@ -517,6 +517,9 @@ chown -R "${ZASCARR_USER}:${ZASCARR_GROUP}" "${ZASCARR_DATA_DIR}/vpn-state" 2>/d
 # que no hay nada que se pueda corromper.
 chown -R "${RESOLVED_UID}:${RESOLVED_GID}" "${ZASCARR_DATA_DIR}/covers" 2>/dev/null || \
     warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/covers"
+# BL-LEC4 (#827): caché de extracción de CBR, también en el volumen de datos.
+chown -R "${RESOLVED_UID}:${RESOLVED_GID}" "${ZASCARR_DATA_DIR}/lector" 2>/dev/null || \
+    warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/lector"
 success "Directorios creados en ${LIBRARY}"
 
 info "Validando .env..."
