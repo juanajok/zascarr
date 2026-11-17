@@ -108,15 +108,18 @@ async def _abrir(db: AsyncSession, file_id: UUID) -> File:
         raise ArchivoNoLegibleError("Ese archivo no está vinculado a un número.")
     if f.is_missing:
         raise ArchivoNoLegibleError("Ese archivo no está disponible en el disco.")
+    ruta = Path(f.file_path)
+    if ruta.is_symlink():
+        raise ArchivoNoLegibleError("Ese archivo no se puede abrir con seguridad.")
     if not _es_legible(f):
         raise ArchivoNoLegibleError(
-            "Este archivo no se puede leer todavía: es un RAR real. "
+            "Este archivo no se puede leer todavía: no es un ZIP de tebeo. "
             "La lectura de CBR llegará en una próxima entrega.")
     return f
 
 
 def _listado(path: Path) -> list[zipfile.ZipInfo]:
-    if not path.is_file():
+    if path.is_symlink() or not path.is_file():
         raise ArchivoNoLegibleError("El archivo no está en el disco.")
     ext = path.suffix.lower()
     try:
