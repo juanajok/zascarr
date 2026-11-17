@@ -42,7 +42,8 @@ def ofrecer(copias: list[dict] | None, revision: str | None, auth_mode: str,
             permitir: bool = True) -> list[dict]:
     """Cada copia con `restaurable` y el motivo corto cuando no lo es.
 
-    `permitir=False` mientras hay una copia o una restauración en marcha (FR-29/AC-21): no se ofrece el botón.
+    `permitir=False` mientras hay una copia o una restauración en marcha (FR-29/AC-21): no se
+    ofrece el botón.
     """
     salida: list[dict] = []
     for copia in copias or []:
