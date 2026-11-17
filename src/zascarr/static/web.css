@@ -647,7 +647,7 @@ button.primary,
   overflow: hidden;
   display: flex; flex-direction: row; align-items: stretch;
 }
-.pending-media { flex: 0 0 64px; padding: var(--space-2); }
+.pending-media { flex: 0 0 80px; padding: var(--space-2); }
 .pending-card .portada-pendiente {
   width: 64px; margin: 0;
   border: var(--border-chip) solid var(--ink);
@@ -1532,7 +1532,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 @media (max-width: 480px) {
   .pending-grid { gap: var(--space-2); }
-  .pending-media { flex-basis: 56px; padding: var(--space-2) 0 var(--space-2) var(--space-2); }
+  .pending-media { flex-basis: 72px; padding: var(--space-2) 0 var(--space-2) var(--space-2); }
   .pending-card .portada-pendiente, .pending-formato { width: 56px; height: 56px; }
   .pending-body { padding: var(--space-2); }
   .assign-form, .vincular-form { display: flex; flex-wrap: wrap; gap: 8px; }
