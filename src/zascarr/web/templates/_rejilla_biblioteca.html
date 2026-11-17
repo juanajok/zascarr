@@ -160,6 +160,11 @@
     </div>
   </a>
   {% set compacto = true %}{% include "_favorito_boton.html" %}
+  <a class="btn ghost sm visor-portada-boton visor-tarjeta"
+     href="/ui/series/{{ series.id }}/portada-hd.jpg"
+     data-visor-src="/ui/series/{{ series.id }}/portada-hd.jpg"
+     data-visor-titulo="{{ series.title }}"
+     aria-label="Ver portada ampliada de {{ series.title }}">{{ "descubrir"|icono }}<span class="sr">Ver portada ampliada</span></a>
   </div>
   {% endfor %}
 </div>
