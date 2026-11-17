@@ -42,6 +42,7 @@ from zascarr.models import (
     WishlistStatus,
     collection_series,
 )
+from zascarr.services import tareas
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.arcos import sagas_de_serie
 from zascarr.services.calidad import buscar_mejoras
@@ -2097,12 +2098,15 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
                               forzar_compartido: str = Form(default=""),
                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = await _serie_o_404(db, series_id)
+    tarea = tareas.iniciar("convertir", total=1, enlace=f"/ui/series/{series_id}")
     try:
         resultado = await _servicio_conversion(db).confirmar(
             token, forzar_compartido=bool(forzar_compartido),
             file_id_esperado=file_id, serie_id_esperado=series_id)
     except Exception as exc:  # noqa: BLE001
         if exc.__class__.__name__ in ("TokenCaducadoError", "TokenInvalidoError"):
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error=exc.__class__.__name__)
             if request.headers.get("HX-Request") == "true":
                 # Un error en una petición HTMX no se pinta: se devuelve un fragmento con aviso.
                 return _sin_cache_conversion(templates.TemplateResponse(
@@ -2110,7 +2114,11 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
                     {"series": series, "file_id": file_id, "mensaje": str(exc)}))
             codigo = 410 if exc.__class__.__name__ == "TokenCaducadoError" else 400
             raise HTTPException(status_code=codigo, detail=str(exc)) from None
+        if tarea is not None:
+            tareas.error(tarea.id, tipo_error=type(exc).__name__)
         raise
+    if tarea is not None:
+        tareas.terminar(tarea.id, resumen="Conversión terminada")
     return _sin_cache_conversion(templates.TemplateResponse(
         request, "conversion_resultado.html", {"series": series, "resultado": resultado}))
 
@@ -2171,7 +2179,15 @@ async def convertir_lote_confirmar(series_id: UUID, request: Request,
                                    db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = await _serie_o_404(db, series_id)
     servicio = _servicio_conversion(db)
-    resultado = await servicio.convertir_lote(series_id)
+    tarea = tareas.iniciar("convertir", total=None, enlace=f"/ui/series/{series_id}")
+    try:
+        resultado = await servicio.convertir_lote(series_id)
+    except BaseException as exc:
+        if tarea is not None:
+            tareas.error(tarea.id, tipo_error=type(exc).__name__)
+        raise
+    if tarea is not None:
+        tareas.terminar(tarea.id, resumen="Lote convertido")
     lote = await servicio.previsualizar_lote(series_id)
     return _sin_cache_conversion(templates.TemplateResponse(request, "_conversion_lote.html", {
         "series": series, "lote": lote, "resultado": resultado}))

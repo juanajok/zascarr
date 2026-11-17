@@ -44,7 +44,7 @@ from zascarr.models import (
     PaqueteOperacion,
     Series,
 )
-from zascarr.services import registro_biblioteca, rescan_biblioteca
+from zascarr.services import registro_biblioteca, rescan_biblioteca, tareas
 from zascarr.services.aceptacion_adopcion import MAX_ILEGIBLES, aceptar, evaluar
 from zascarr.services.apartado_duplicados import (
     ApartadoDuplicadosService,
@@ -677,19 +677,33 @@ def _token_reintento(op: PaqueteOperacion) -> str | None:
 
 async def _procesar_paquete(op_id: str) -> None:
     """Trabajo en segundo plano; la UI sondea su estado por HTMX."""
+    tarea = tareas.iniciar("paquete", enlace="/ui/auditoria#paquetes-descargas",
+                           origen=f"paquete:{op_id}")
     try:
         async with database.async_session_factory() as s:
             op = await s.get(PaqueteOperacion, UUID(op_id))
             if op is None or op.estado is PaqueteEstado.IMPORTADO:
                 return
+            if tarea is not None:
+                tareas.actualizar(tarea.id, fase="Extrayendo", total=op.total_entradas or None)
             if op.estado is not PaqueteEstado.VERIFICADO:
                 await extraer_y_verificar(s, op.id, conservar_temporal=True)
             op = await s.get(PaqueteOperacion, UUID(op_id))
             if op is not None and op.estado is PaqueteEstado.VERIFICADO:
+                if tarea is not None:
+                    tareas.actualizar(tarea.id, fase="Importando",
+                                      total=op.total_entradas or None,
+                                      hechos=len(op.items or []))
                 await publicar_e_importar(s, op.id)
+            if tarea is not None:
+                tareas.terminar(tarea.id, resumen="Paquete preparado")
     except (PaqueteExtraccionError, PaquetePublicacionError) as exc:
+        if tarea is not None:
+            tareas.error(tarea.id, tipo_error=getattr(exc, "codigo", type(exc).__name__))
         logger.warning("paquetes.tarea_fallida", error=getattr(exc, "codigo", type(exc).__name__))
     except Exception:  # noqa: BLE001 — el estado de la operación es el canal de la UI
+        if tarea is not None:
+            tareas.error(tarea.id, tipo_error="inesperado")
         logger.exception("paquetes.tarea_inesperada")
     finally:
         _TAREAS_PAQUETES.pop(op_id, None)
