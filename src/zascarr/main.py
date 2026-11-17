@@ -368,6 +368,12 @@ async def lifespan(app: FastAPI):
     huerfanos = await asyncio.to_thread(barrer_temporales, settings.covers_cache_path)
     if huerfanos:
         logger.info("lector_rar.temporales_barridos", cantidad=huerfanos)
+    # BL-LEC4: temporales de extracciones de CBR que dejó un proceso muerto.
+    from zascarr.services.cache_lectura import barrer_temporales as barrer_cache_lectura
+    huerfanos_lectura = await asyncio.to_thread(
+        barrer_cache_lectura, settings.lector_cache_path)
+    if huerfanos_lectura:
+        logger.info("lector.cache_temporales_barridos", cantidad=huerfanos_lectura)
     from sqlalchemy import text
 
     from zascarr.database import async_session_factory, engine

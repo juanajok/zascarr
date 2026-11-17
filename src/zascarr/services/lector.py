@@ -17,6 +17,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.config import get_settings
 from zascarr.core.comicinfo_write import MAX_COMICINFO_BYTES
 from zascarr.core.formato_contenedor import (
     IMAGE_EXTS,
@@ -29,7 +30,8 @@ from zascarr.core.formato_contenedor import (
     se_lee_como_zip,
 )
 from zascarr.core.importer_triage import parse_comic_info
-from zascarr.models import File, Issue, ReadingProgress, ReadingStatus, Series
+from zascarr.models import File, Firma, Issue, ReadingProgress, ReadingStatus, Series
+from zascarr.services.cache_lectura import CacheError, CacheLectura
 from zascarr.utils.cover import puede_dar_portada
 
 
@@ -46,6 +48,24 @@ class ArchivoNoLegibleError(LectorError):
 
 
 SENTIDOS = {"ltr": "izquierda a derecha", "rtl": "derecha a izquierda"}
+#: Una sola caché por proceso: comparte tareas, errores y cuota entre peticiones.
+CACHE = CacheLectura.desde_ajustes()
+
+
+def es_rar_real(f: File) -> bool:
+    ext = _extension(f)
+    fc = (f.metadata_ or {}).get("formato_contenido") or {}
+    if ext not in (".cbr", ".cb7", ".rar"):
+        return False
+    if fc.get("firma") == "rar":
+        return True
+    if fc.get("firma") == "zip":
+        return False
+    # Metadatos antiguos sin formato: se mira la firma (512 B) para no romper los CBR legados.
+    try:
+        return firma_de(Path(f.file_path)) is Firma.RAR
+    except OSError:
+        return True
 
 
 @dataclass(frozen=True)
@@ -85,8 +105,11 @@ def _es_legible(f: File) -> bool:
         return True
     resultado = puede_dar_portada(ext, fc)
     if resultado is None:
-        return ext in (".cbz", ".zip")
-    return bool(resultado)
+        return ext in (".cbz", ".zip", ".cbr", ".cb7")
+    if resultado:
+        return True
+    # BL-LEC4: un CBR/CB7 que es RAR se prepara con `unar` (si el lector está encendido).
+    return es_rar_real(f) and get_settings().lector_rar_enabled
 
 
 async def archivos_legibles(db: AsyncSession, issue_id: UUID) -> list[ArchivoDeLectura]:
@@ -191,18 +214,34 @@ async def pagina(db: AsyncSession, file_id: UUID, n: int) -> RecursoPagina:
     path = Path(f.file_path)
     if not path.is_file():
         raise ArchivoNoLegibleError("El archivo no está en el disco.")
+    if es_rar_real(f):
+        if not (await asyncio.to_thread(CACHE._paginas, f)):
+            raise ArchivoNoLegibleError("El tebeo todavía se está preparando.")
+        try:
+            datos, content_type = await asyncio.to_thread(CACHE.leer_pagina, f, n)
+        except CacheError as exc:
+            raise ArchivoNoLegibleError(str(exc)) from exc
+        return RecursoPagina(datos, content_type, _etag(f, n, path))
     recurso = await asyncio.to_thread(_leer_pagina, path, n)
     return RecursoPagina(recurso.datos, recurso.content_type, _etag(f, n, path))
 
 
 async def total_paginas(db: AsyncSession, file_id: UUID) -> int:
     f = await _abrir(db, file_id)
+    if es_rar_real(f):
+        return len(await asyncio.to_thread(CACHE._paginas, f))
     return len(await asyncio.to_thread(_listado, Path(f.file_path)))
 
 
 async def guardar_progreso(db: AsyncSession, file_id: UUID, n: int) -> None:
     f = await _abrir(db, file_id)
-    total = len(await asyncio.to_thread(_listado, Path(f.file_path)))
+    if es_rar_real(f):
+        paginas = await asyncio.to_thread(CACHE._paginas, f)
+        total = len(paginas)
+    else:
+        total = len(await asyncio.to_thread(_listado, Path(f.file_path)))
+    if total == 0:
+        raise ArchivoNoLegibleError("El tebeo todavía se está preparando.")
     n = max(1, min(int(n), total))
     progreso = (await db.execute(
         select(ReadingProgress).where(ReadingProgress.issue_id == f.issue_id)
