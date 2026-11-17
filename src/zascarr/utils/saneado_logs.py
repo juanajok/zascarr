@@ -34,6 +34,9 @@ _ARCHIVO_SIMPLE = re.compile(rf"(?i)\b[^\s\"'<>/]+\.({_EXT})\b")
 _RUTA_ABS = re.compile(
     r"(?<![:/\w])/(?:[^\n\"'<>]*?)(?=:\s|$|[\"';,\)\]]|\s+\(|\s+-\s)",
     re.MULTILINE)
+#: Placeholders de printf en un `LogRecord.msg` con `args`: el saneo de la
+#: plantilla no puede cambiar su número, o `record.getMessage()` revienta.
+_FORMATO = re.compile(r"%(?:\([^)]+\))?[#0\- +]?\d*(?:\.\d+)?[hlL]?[diouxXeEfFgGcrsa%]")
 _MAX = 2000
 #: Prefiltro barato: si no hay nada con pinta sensible, no se recorren los regex.
 _SOSPECHOSO = re.compile(
@@ -169,6 +172,36 @@ def sanear_evento(_logger: Any, _metodo: str, evento: dict[str, Any]) -> dict[st
         return {"event": "log.saneo_fallido"}
 
 
+def _sanear_mensaje(record: logging.LogRecord) -> None:
+    """Sanea `record.msg` sin tocar sus placeholders de printf.
+
+    Con `args`, el mensaje es una plantilla: se sanean solo los tramos
+    literales y se conservan `%s`/`%d` (si se sustituyeran por `[ruta]`, el
+    `record.getMessage()` de uvicorn fallaría por número de argumentos).
+    """
+    if not isinstance(record.msg, str):
+        record.msg = sanear_valor(record.msg)
+        return
+    if not record.args:
+        record.msg = sanear_texto(record.msg)
+        return
+    def _tramo(texto: str) -> str:
+        # Un tramo de solo puntuación («/», «://») no es una ruta: saneado
+        # lo convertiría en «[ruta]» y rompería el formato de uvicorn.
+        if not texto.strip("/:.- "):
+            return texto
+        return sanear_texto(texto)
+
+    partes: list[str] = []
+    ultimo = 0
+    for m in _FORMATO.finditer(record.msg):
+        partes.append(_tramo(record.msg[ultimo:m.start()]))
+        partes.append(m.group(0))
+        ultimo = m.end()
+    partes.append(_tramo(record.msg[ultimo:]))
+    record.msg = "".join(partes)
+
+
 class FiltroSaneado(logging.Filter):
     """Filtro stdlib/uvicorn: sanea msg, args y exc_text sin silenciar el evento."""
 
@@ -176,10 +209,7 @@ class FiltroSaneado(logging.Filter):
         if record.name == "uvicorn.access":
             return True  # #361 ya quita la query; #369 no toca ese registro
         try:
-            if isinstance(record.msg, str):
-                record.msg = sanear_texto(record.msg)
-            else:
-                record.msg = sanear_valor(record.msg)
+            _sanear_mensaje(record)
             if record.args:
                 if isinstance(record.args, dict):
                     record.args = {
@@ -252,10 +282,7 @@ def _sanear_record_en_origen(record: logging.LogRecord) -> None:
     if getattr(record, "_sec_log_saneado", False):
         return
     try:
-        if isinstance(record.msg, str):
-            record.msg = sanear_texto(record.msg)
-        else:
-            record.msg = sanear_valor(record.msg)
+        _sanear_mensaje(record)
         if record.args:
             if isinstance(record.args, dict):
                 record.args = {str(k): sanear_valor(v, clave=str(k))
