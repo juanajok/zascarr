@@ -34,6 +34,7 @@ from pathlib import Path
 
 import structlog
 
+from zascarr.core.formato_contenedor import IMAGE_EXTS, RUIDO, natural_key
 from zascarr.models import MotivoRar
 
 logger = structlog.get_logger()
@@ -507,3 +508,64 @@ def extraer_entrada_a(ruta: Path, entrada: EntradaRar, destino: Path, tope: int,
     finally:
         with contextlib.suppress(OSError):
             fichero.unlink()
+
+
+@dataclass(frozen=True)
+class ImagenExtraida:
+    """Una imagen ya extraída del RAR, con su ruta temporal y su tamaño."""
+    ruta: Path
+    tamano: int
+
+
+def extraer_completo(ruta: Path, destino: Path, *, temporal: Path,
+                     timeout: float, max_bytes: int, max_ficheros: int) -> tuple[ImagenExtraida, ...]:
+    """Extrae el RAR ENTERO al directorio vacío `destino`, con el turno único compartido.
+
+    Es el contrato nuevo de BL-LEC4: no reutiliza el tope de una entrada. Lista primero para
+    conocer el tamaño declarado y luego deja que `unar` extraiga todo a un temporal; las rutas
+    finales las sanea y renombra el servicio de caché. Falla con `ErrorRar`.
+    """
+    unar = _localizar("unar")
+    if unar is None:
+        raise ErrorRar(MotivoRar.HERRAMIENTA_AUSENTE)
+    _exigir_ruta_absoluta(ruta)
+    destino.mkdir(mode=0o700, parents=True, exist_ok=False)
+    with turno():  # listado + extracción completos bajo el mismo turno
+        listado = listar(ruta, temporal=temporal, max_bytes_declarados=max_bytes)
+        imagenes = [e for e in listado.entradas
+                    if not e.es_directorio and Path(e.nombre).suffix.lower() in IMAGE_EXTS
+                    and Path(e.nombre).name.lower() not in RUIDO]
+        if not imagenes:
+            raise ErrorRar(MotivoRar.SIN_IMAGENES)
+        if len(imagenes) > max_ficheros:
+            raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
+        if sum(e.tamano for e in imagenes) > max_bytes:
+            raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
+        codigo, salida, error = _ejecutar_con_turno(
+            [unar, "-D", "-f", "-q", "-o", str(destino), str(ruta)],
+            home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_ERROR,
+            vigilar=destino, tope_escrito=max_bytes, pass_fds=())
+        if codigo != 0:
+            raise ErrorRar(_motivo_por_mensaje(error + salida))
+    raiz = destino.resolve()
+    halladas: list[ImagenExtraida] = []
+    total = 0
+    for actual in destino.rglob("*"):
+        if actual.is_symlink():
+            raise ErrorRar(MotivoRar.ILEGIBLE)
+        if not actual.is_file():
+            continue
+        resuelta = actual.resolve()
+        if not str(resuelta).startswith(str(raiz) + os.sep):
+            raise ErrorRar(MotivoRar.ILEGIBLE)
+        if actual.suffix.lower() not in IMAGE_EXTS or actual.name.lower() in RUIDO:
+            continue
+        tam = resuelta.stat().st_size
+        total += tam
+        if len(halladas) >= max_ficheros or total > max_bytes:
+            raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
+        halladas.append(ImagenExtraida(resuelta, tam))
+    if not halladas:
+        raise ErrorRar(MotivoRar.SIN_IMAGENES)
+    halladas.sort(key=lambda i: natural_key(str(i.ruta.relative_to(raiz))))
+    return tuple(halladas)

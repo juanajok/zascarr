@@ -157,6 +157,7 @@ services:
       - COPIAS_FILE=/run/backup-status/copias.json
       - OMITIDA_FILE=/run/backup-status/omitida.json
       - COVERS_CACHE_PATH=/config/covers
+      - LECTOR_CACHE_PATH=/config/lector
       # Logs persistidos/rotados para consultar incidencias anteriores desde la UI.
       - LOG_DIR=/config/logs
       - LOG_MAX_BYTES=${LOG_MAX_BYTES:-5242880}
@@ -203,6 +204,8 @@ services:
       # BL-OPS1 (FR-28): el único volumen nuevo, de solo lectura (socket y clave del auxiliar). Nada de docker.sock.
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/ops:/run/zascarr-ops:ro
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/covers:/config/covers
+      # BL-LEC4: caché de extracción de CBR; disco de datos, nunca la SD ni la biblioteca.
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/lector:/config/lector
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/logs:/config/logs
     # #418 (ADR 0015): esta app abre con `unar` archivos de terceros que llegan por P2P. Sin
     # `no-new-privileges` ningún proceso del contenedor puede ganar privilegios (setuid); el tope de

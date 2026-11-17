@@ -1,6 +1,20 @@
 /* Lector de tebeos (BL-LEC1/2, ADR 0021). Un fichero, sin dependencias. */
 (() => {
   "use strict";
+  const espera = document.querySelector("[data-estado-url]");
+  if (espera) {
+    const aviso = document.getElementById("lector-preparando");
+    const consultar = () => fetch(espera.dataset.estadoUrl, { credentials: "same-origin" })
+      .then((r) => r.json())
+      .then((datos) => {
+        if (datos.estado === "listo") window.location.reload();
+        else if (datos.estado === "error") {
+          aviso.textContent = datos.motivo || "No se ha podido preparar el tebeo.";
+        } else { setTimeout(consultar, 1500); }
+      }).catch(() => setTimeout(consultar, 1500));
+    consultar();
+    return;
+  }
   const raiz = document.querySelector("[data-lector]");
   if (!raiz) return;
   const total = Number.parseInt(raiz.dataset.total || "1", 10);
