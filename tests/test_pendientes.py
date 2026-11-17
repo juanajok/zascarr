@@ -441,21 +441,36 @@ class TestPreviaAsignacion:
 
 
 def test_tamano_de_pagina_25_conserva_el_cursor_y_el_filtro():
+    from zascarr.services.review import ClavePendiente
     archivos = [File(id=uuid4(), file_path=f"/lib/x{i}.cbz", file_name=f"x{i}.cbz",
                      file_format=FileFormat.CBZ)
                 for i in range(2)]
+    from urllib.parse import quote_plus
+    clave = ClavePendiente.de(archivos[0]).a_texto()
     with use_fake_session(FakeSession(exec_queue=cola_de(archivos))) as client:
-        r = client.get("/ui/pendientes?tamano=25&solo_sugerencia=1")
+        r = client.get(
+            f"/ui/pendientes?tamano=25&solo_sugerencia=1&despues={quote_plus(clave)}")
     assert r.status_code == 200
     assert 'name="tamano"' not in r.text          # el tamaño se elige con enlaces, no con un campo libre
     assert 'aria-current="true">25</a>' in r.text
     assert "solo_sugerencia=1" in r.text
+    assert f"despues={quote_plus(clave)}" in r.text
+
+
+def test_si_el_filtro_queda_vacio_se_puede_quitar():
+    with use_fake_session(FakeSession(exec_queue=cola_de([]))) as client:
+        r = client.get("/ui/pendientes?solo_sugerencia=1")
+    assert r.status_code == 200
+    assert "No hay pendientes con sugerencia" in r.text
+    assert "Ver todos los pendientes" in r.text
+    assert "Nada pendiente" not in r.text
 
 
 def test_el_filtro_con_sugerencia_usa_metadata_candidates():
     from sqlalchemy import select
-    from zascarr.services.review import ReviewService
     from sqlalchemy.dialects import postgresql
+
+    from zascarr.services.review import ReviewService
 
     stmt = select(File).where(*ReviewService._condiciones_pendientes(solo_sugerencia=True))
     sql = str(stmt.compile(dialect=postgresql.dialect(),

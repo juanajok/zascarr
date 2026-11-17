@@ -137,8 +137,13 @@ def _enlace(parametro: str, clave: ClavePendiente, *, solo_sugerencia: bool = Fa
     return f"/ui/pendientes?{urlencode(parametros)}"
 
 
-def _url_inicio(*, solo_sugerencia: bool, tamano: int) -> str:
+def _url_inicio(*, solo_sugerencia: bool, tamano: int,
+                despues: str = "", antes: str = "") -> str:
     parametros = {}
+    if despues:
+        parametros["despues"] = despues
+    elif antes:
+        parametros["antes"] = antes
     if solo_sugerencia:
         parametros["solo_sugerencia"] = "1"
     if tamano != 50:
@@ -186,8 +191,12 @@ async def index(
         "tamano": limite,
         "url_solo": _url_inicio(solo_sugerencia=True, tamano=limite),
         "url_todos": _url_inicio(solo_sugerencia=False, tamano=limite),
-        "url_tamano": {n: _url_inicio(solo_sugerencia=solo_sugerencia, tamano=n)
-                       for n in TAMANOS_DE_PAGINA},
+        "url_tamano": {
+            n: _url_inicio(
+                solo_sugerencia=solo_sugerencia, tamano=n,
+                despues=(k_despues.a_texto() if k_despues else ""),
+                antes=(k_antes.a_texto() if k_antes else ""))
+            for n in TAMANOS_DE_PAGINA},
         "siguiente": None, "anterior": None, "inicio": None, "primero": None, "ultimo": None}
     if pagina.archivos:
         primero = ClavePendiente.de(pagina.archivos[0])

@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import DateTime, func, literal, select, tuple_
+from sqlalchemy import DateTime, case, func, literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.core.matcher import normalize_title
@@ -138,7 +138,13 @@ class ReviewService:
             File.metadata_["match_status"].astext == "unsorted",
         )
         if solo_sugerencia:
-            condiciones += (File.metadata_["candidates"].is_not(None),)
+            candidatas = File.metadata_["candidates"]
+            hay_candidatas = case(
+                (func.jsonb_typeof(candidatas) == "array",
+                 func.jsonb_array_length(candidatas)),
+                else_=0,
+            ) > 0
+            condiciones += (hay_candidatas,)
         return condiciones
 
     async def count_pending(self, *, solo_sugerencia: bool = False) -> int:
