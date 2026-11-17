@@ -134,6 +134,7 @@
 {% else %}
 <div class="library-grid">
   {% for series in items %}
+  <div class="library-card-wrap">
   <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}">
     {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id) }}
     {% set leidos = series.lectura_leidos|default(0, true) %}
@@ -158,6 +159,8 @@
       </div>
     </div>
   </a>
+  {% set compacto = true %}{% include "_favorito_boton.html" %}
+  </div>
   {% endfor %}
 </div>
 {% endif %}
