@@ -385,7 +385,9 @@ inspeccionar_tablas() {
     '
 }
 
-psql_en() { "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$1" -At -c "$2"; }
+# `< /dev/null`: esta función se usa dentro de un `while read` con sustitución de procesos; si `docker exec`
+# heredara esa entrada, se comería las líneas que faltan (lo destapó la prueba con PostgreSQL real, F-18).
+psql_en() { "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$1" -At -c "$2" </dev/null; }
 db_existe() { [[ "$(psql_en postgres "select 1 from pg_database where datname = '$1'" 2>/dev/null | tr -d '[:space:]')" == "1" ]]; }
 crear_db() { "${COMPOSE[@]}" exec -T postgres createdb -U "$DB_USER" "$1" >/dev/null; }
 borrar_db() { "${COMPOSE[@]}" exec -T postgres dropdb -U "$DB_USER" --if-exists --force "$1" >/dev/null 2>&1; }

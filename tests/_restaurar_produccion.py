@@ -113,6 +113,11 @@ if [[ -z "$sql" ]]; then
     payload="$(cat)"
     printf '%s\n' "$payload" >> "$FAKE_RESTORE_LOG"
     if [[ "$payload" == *"INSERT INTO runtime_settings"* ]]; then
+        if [[ "${FAKE_INSERT_FAIL:-0}" == "1" ]]; then
+            evento "reaplicar_seguridad_fallida"
+            echo "invalid input syntax for type json" >&2
+            exit 1
+        fi
         # Extrae el literal entre comillas de dólar y guárdalo como fila resultante de la base nueva.
         printf '%s' "$payload" > "$FAKE_ESTADO_DIR/insert.sql"
         python3 - "$FAKE_ESTADO_DIR/insert.sql" "$FAKE_ESTADO_DIR/seg_nueva.json" <<'PYEOF'

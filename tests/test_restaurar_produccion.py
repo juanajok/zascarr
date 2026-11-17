@@ -157,6 +157,21 @@ def test_una_restauracion_anterior_sin_cerrar_aborta_antes_de_tocar_nada(tmp_pat
     assert estado["error"] == "precondition_failed" and estado["base_en_su_sitio"] is True
 
 
+def test_si_la_reaplicacion_no_cabe_en_jsonb_falla_cerrado(tmp_path):
+    """AC-45: `jsonb` rechaza el valor ⇒ seguridad_no_aplicada, base_en_su_sitio:true y la viva sin renombrar."""
+    ctx = preparar(tmp_path)
+    r = ejecutar(ctx, extra_env={"FAKE_ENFORCE_STOP": "1", "FAKE_INSERT_FAIL": "1"})
+    assert r.returncode != 0
+    ev = eventos(ctx)
+    assert "reaplicar_seguridad_fallida" in ev
+    assert "dropdb zascarr_restaurando" in ev
+    assert not any(e.startswith("renombrar ") for e in ev)
+    estado = estado_restaurar(ctx)
+    assert estado["resultado"] == "fallida" and estado["error"] == "seguridad_no_aplicada"
+    assert estado["base_en_su_sitio"] is True
+    assert "up zascarr" in ev                                            # la app se vuelve a arrancar
+
+
 # ── F-15/AC-51: recuentos genéricos de todas las tablas base ───────────────────────────────────────────────────
 def test_una_tabla_cargada_a_medias_se_detecta_por_el_recuento_generico(tmp_path):
     """AC-51: una tabla que no está en la lista de siempre (0030/0031 y futuras) también se cuenta."""

@@ -279,7 +279,9 @@ class EstadoOps:
         vigentes = [t for t in previas if ahora - t < VENTANA_S]
         self._escribir_atomico(self.ruta_aceptadas, json.dumps(vigentes + [ahora]), 0o600)
 
-    def _leer_epocas(self, ruta: str) -> list:
+    def _leer_epocas(self, ruta: str, ahora: int) -> list:
+        """El reloj entra por parámetro (como en el resto del auxiliar): así el bloqueo y los topes se pueden
+        probar con un reloj inyectado. En producción `ahora` es `time.time()`."""
         try:
             with open(ruta, encoding="ascii") as fh:
                 datos = json.loads(fh.read())
@@ -289,13 +291,13 @@ class EstadoOps:
             raise ContadorIlegible from exc
         if not isinstance(datos, list) or not all(_es_entero(t) for t in datos):
             raise ContadorIlegible
-        if any(t > time.time() + TOLERANCIA_RELOJ_S for t in datos):
+        if any(t > ahora + TOLERANCIA_RELOJ_S for t in datos):
             raise ContadorIlegible
         return list(datos)
 
     def leer_restauradas(self, ahora: int) -> list:
         try:
-            return [t for t in self._leer_epocas(self.ruta_restauradas)
+            return [t for t in self._leer_epocas(self.ruta_restauradas, ahora)
                     if t <= ahora + TOLERANCIA_RELOJ_S]
         except ContadorIlegible:
             raise
@@ -305,10 +307,7 @@ class EstadoOps:
         self._escribir_atomico(self.ruta_restauradas, json.dumps(vigentes + [ahora]), 0o600)
 
     def leer_fallos(self, ahora: int) -> list:
-        try:
-            return self._leer_epocas(self.ruta_pruebas)
-        except ContadorIlegible:
-            raise
+        return self._leer_epocas(self.ruta_pruebas, ahora)
 
     def anotar_fallo(self, ahora: int, previos: list) -> None:
         vigentes = [t for t in previos if ahora - t < VENTANA_FALLOS_S]
@@ -594,8 +593,10 @@ def _procesar_restaurar(peticion: dict, ahora: int, estado: EstadoOps, lanzador,
                 fallos = estado.leer_fallos(ahora)
             except ContadorIlegible:
                 return _rechazo("no_disponible", id_, accion, diario="contador_ilegible", v=VERSION_RESTAURAR)
-            bloqueo = [t for t in fallos if ahora - t < VENTANA_FALLOS_S]
-            if len(bloqueo) >= UMBRAL_FALLOS and ahora < max(bloqueo) + BLOQUEO_FALLOS_S:
+            # FR-13: el fichero solo conserva los fallos de los últimos 15 min de la última escritura, así que
+            # «5 fallos en 15 min» es `len(fallos) >= UMBRAL_FALLOS`; el bloqueo dura 30 min desde el ÚLTIMO
+            # fallo (F-08: antes se reutilizaba la ventana de 15 min y el bloqueo efectivo era más corto).
+            if len(fallos) >= UMBRAL_FALLOS and ahora < max(fallos) + BLOQUEO_FALLOS_S:
                 return _rechazo("bloqueo_temporal", id_, accion, v=VERSION_RESTAURAR)
             leido = verificador.leer()
             if leido is None:
