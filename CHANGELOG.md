@@ -193,6 +193,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **C6-O1: la ficha y el enriquecedor comparten la condición de Comic Vine (2026-11-17).**
+  La predicción de enlace exige ahora clave utilizable, no tener identidad externa (incluidas
+  Fandom) y respetar el plazo de reintento; usa las mismas condiciones SQL que el enriquecedor.
+  Una prueba PG de paridad falla si Python y SQL discrepan. Sin cambios en el flujo de enriquecimiento.
+
 - **«Buscar ahora» devolvía 500 (2026-11-17).** La etiqueta de resultados construía el
   título con `_row(item)` sobre un `item` cargado sin relaciones precargadas; en async
   eso lanza `MissingGreenlet`. Ahora la ruta no toca `item.series`/`item.issue`: usa la
