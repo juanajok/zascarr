@@ -81,6 +81,8 @@ def test_lote_no_bloquea_y_duplicado(monkeypatch):
         async def previsualizar_lote(self, _sid):
             return clase
 
+    _S.__name__ = "ConversionDeArchivo"
+
     monkeypatch.setattr(web, "_servicio_conversion", lambda _db: _S())
 
     async def _db():
