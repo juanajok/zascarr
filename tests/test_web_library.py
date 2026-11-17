@@ -50,6 +50,10 @@ class FakeSession:
     async def execute(self, _statement):
         if self._error is not None:
             raise self._error
+        # BL-INF7 añade una consulta agregada a las tarjetas; las suites que no
+        # la preparan reciben una página sin números, no un IndexError.
+        if not self._queue:
+            return FakeExecResult([])
         return self._queue.pop(0)
 
 
@@ -576,7 +580,8 @@ class TestContextoDeRetorno:
         session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
         with use_fake_session(session) as client:
             r = client.get("/ui/biblioteca?q=thor&page=1")
-        href = re.search(rf'<a class="library-card" id="serie-{series.id}" href="([^"]+)"', r.text)
+        assert f'id="serie-{series.id}"' in r.text
+        href = re.search(r'<a class="library-card-enlace" href="([^"]+)"', r.text)
         assert href is not None
         url = href.group(1).replace("&amp;", "&")
         destino = unquote(parse_qs(urlsplit(url).query)["volver"][0])
@@ -826,3 +831,47 @@ def test_tradicion_none_sin_anio_deja_la_tarjeta_vacia():
     inicio = r.text.index(">", inicio) + 1
     tarjeta = r.text[inicio:r.text.index("</div>", inicio)]
     assert tarjeta.strip() == ""
+
+
+class TestNumerosEnTarjetas:
+    """BL-INF7 (#593): tira de números y previa sin N+1 ni portadas al cargar."""
+
+    @staticmethod
+    def _fila(series_id, issue_id, numero, total, fila):
+        from types import SimpleNamespace
+        return SimpleNamespace(series_id=series_id, id=issue_id,
+                               issue_number=numero, total=total, fila=fila)
+
+    def test_muestra_primeros_numeros_mas_el_resto_y_una_sola_consulta(self):
+        serie = make_series("Saga")
+        filas = [self._fila(serie.id, uuid4(), str(n), 14, n) for n in range(1, 15)]
+        session = FakeSession([
+            FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie]),
+            FakeExecResult(filas),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca?vista=tarjetas")
+        assert r.status_code == 200
+        assert "library-card-numeros" in r.text
+        assert "#1" in r.text and "#12" in r.text
+        assert "+2" in r.text
+        assert f'hx-get="/ui/series/{serie.id}/numero/{filas[0].id}/previa"' in r.text
+        assert f'hx-target="#previa-t-{filas[0].id}"' in r.text
+        assert "previa.jpg" not in r.text          # nada se pide sin interacción
+        assert not session._queue                   # exactamente una consulta agregada
+
+    def test_la_lista_no_pide_numeros(self):
+        serie = make_series("Saga")
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca?vista=lista")
+        assert "library-card-numeros" not in r.text
+        assert not session._queue
+
+    def test_sin_numeros_la_tarjeta_sigue_siendo_enlace(self):
+        serie = make_series("Saga")
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([serie])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert f'id="serie-{serie.id}"' in r.text
+        assert 'class="library-card-enlace"' in r.text
