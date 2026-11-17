@@ -1372,7 +1372,10 @@ class TestMarcaCarpetaMixta382:
         r = await pagina({"serie": str(sid_a)})
         t = visible(r.text)
         assert not re.search(CHIP_SUGERIDA, r.text)
+        # El detalle habla de la serie SUGERIDA (B, 3/5), no de la fijada (A, 2/5):
+        # no hay frase que presente 2/5 como si la carpeta fuera de A.
         assert "La sugieren 3 de 5 registros con sugerencia; el resto apunta a otra serie." in t
+        assert "2 de 5" not in t
 
     async def test_homogenea_dice_todos(self, banco):
         sid = await banco.serie("SERIE UNICA", 2020)
