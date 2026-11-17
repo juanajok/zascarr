@@ -23,3 +23,10 @@ def test_constantes_hd_y_plantilla_dialogo():
     assert "visor-portada.js" in base
     assert "restaurar" not in js and "invocador.focus()" in js and "showModal" in js
     assert "ArrowLeft" in js and "ArrowRight" in js
+
+
+def test_biblioteca_incluye_el_dialogo_en_el_cuerpo():
+    bib = Path("src/zascarr/web/templates/biblioteca.html").read_text()
+    head, body = bib.split("{% block content %}", 1)
+    assert '_visor_portada.html' in body
+    assert '_visor_portada.html' not in head
