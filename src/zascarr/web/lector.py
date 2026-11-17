@@ -69,7 +69,10 @@ async def pagina_imagen(request: Request, file_id: UUID, n: str,
         recurso = await pagina(db, file_id, numero)
     except LectorError:
         return Response(status_code=404, headers={"Cache-Control": "no-store"})
-    return cached_image_response(request, recurso.datos, recurso.content_type, recurso.etag)
+    respuesta = cached_image_response(
+        request, recurso.datos, recurso.content_type, recurso.etag)
+    respuesta.headers["X-Content-Type-Options"] = "nosniff"
+    return respuesta
 
 
 @router.post("/{file_id}/progreso", response_class=Response)
