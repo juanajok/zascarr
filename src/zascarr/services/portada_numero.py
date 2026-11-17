@@ -49,6 +49,8 @@ logger = structlog.get_logger()
 ANCHO_PREVIA = 240
 #: Ancho de la portada en la ficha del número (mismo tamaño que la portada de serie).
 ANCHO_FICHA = 600
+#: Portada ampliada del visor (HD).
+ANCHO_HD = 1200
 #: Archivos que se miran como mucho por número (hay números con varias ediciones/archivos).
 MAX_ARCHIVOS_NUMERO = 3
 #: Tope de tiempo para no bloquear un hover con una serie de CBR lentos.
@@ -56,6 +58,7 @@ PRESUPUESTO_PREVIA_S = 6.0
 #: Presupuesto de memoria por miniatura: una página de 40 Mpx no se decodifica para 240 px.
 MAX_PIXELES_PREVIA = 6_000_000
 MAX_PIXELES_FICHA = 12_000_000
+MAX_PIXELES_HD = 20_000_000
 #: Generaciones simultáneas como máximo en todo el proceso.
 _GENERACIONES = asyncio.Semaphore(2)
 
@@ -189,7 +192,8 @@ async def ruta_previa(db: AsyncSession, serie_id: UUID, issue_id: UUID, *,
         if all(_huella_vigente(_camino(carpeta, fid, ancho), Path(ruta), negativa=True)
                for fid, ruta, _formato in archivos):
             return None
-        max_pixeles = MAX_PIXELES_PREVIA if ancho == ANCHO_PREVIA else MAX_PIXELES_FICHA
+        max_pixeles = (MAX_PIXELES_PREVIA if ancho == ANCHO_PREVIA
+                       else MAX_PIXELES_HD if ancho == ANCHO_HD else MAX_PIXELES_FICHA)
         try:
             async with _GENERACIONES:
                 generado = await asyncio.wait_for(

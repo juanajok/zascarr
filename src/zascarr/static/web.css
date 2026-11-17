@@ -2709,6 +2709,17 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (hover: none) { .library-card-wrap .favorito-btn { opacity: 1; } }
 @media (max-width: 480px) { .library-card-wrap .favorito-form { top: var(--space-1); right: var(--space-1); } }
 
+
+/* #1044: visor de portada HD */
+.visor-portada { width: min(96vw, 1100px); max-width: 1100px; max-height: 92vh; margin: auto; padding: 0; border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper); color: var(--ink); }
+.visor-portada::backdrop { background: var(--ink); color: var(--paper); }
+.visor-portada-cabecera { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: var(--border-chip) solid var(--ink-soft); }
+.visor-portada-cabecera h2 { margin: 0; font-size: var(--text-boton); }
+.visor-portada-imagen { display: flex; justify-content: center; align-items: center; min-height: 0; max-height: calc(92vh - 140px); overflow: auto; padding: var(--space-2); }
+.visor-portada-imagen img { max-width: 100%; max-height: calc(92vh - 160px); object-fit: contain; }
+.visor-portada-acciones { display: flex; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-top: var(--border-chip) solid var(--ink-soft); }
+.visor-portada-acciones button[disabled] { opacity: .55; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

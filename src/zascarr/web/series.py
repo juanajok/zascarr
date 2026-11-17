@@ -152,7 +152,7 @@ from zascarr.services.politica import (
     texto_de_cota,
 )
 from zascarr.services.portada_coleccion import portada_cacheada
-from zascarr.services.portada_numero import ANCHO_FICHA, ruta_previa
+from zascarr.services.portada_numero import ANCHO_FICHA, ANCHO_HD, ruta_previa
 from zascarr.services.portada_serie import (
     MAX_CANDIDATAS,
     TIPO_ARCHIVO,
@@ -1937,6 +1937,24 @@ async def portada_numero_imagen(series_id: UUID, issue_id: UUID, request: Reques
     if issue is None or issue.series_id != series_id:
         return Response(status_code=404, headers={"Cache-Control": "no-store"})
     ruta = await ruta_previa(db, series_id, issue_id, ancho=ANCHO_FICHA)
+    if ruta is None:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    try:
+        datos = await asyncio.to_thread(ruta.read_bytes)
+        etag = f'"{ruta.stat().st_mtime_ns}"'
+    except OSError:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    return cached_image_response(request, datos, "image/jpeg", etag)
+
+
+@router.get("/{series_id}/numero/{issue_id}/portada-hd.jpg")
+async def portada_numero_hd(series_id: UUID, issue_id: UUID, request: Request,
+                           db: AsyncSession = Depends(get_db)) -> Response:
+    """Visor #1044: portada ampliada (1200 px), misma caché e invalidación por huella."""
+    issue = await db.get(Issue, issue_id)
+    if issue is None or issue.series_id != series_id:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    ruta = await ruta_previa(db, series_id, issue_id, ancho=ANCHO_HD)
     if ruta is None:
         return Response(status_code=404, headers={"Cache-Control": "no-store"})
     try:

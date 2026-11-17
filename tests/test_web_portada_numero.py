@@ -132,3 +132,22 @@ def test_fragmento_en_htmx_con_numero_ajeno_queda_vacio():
         _cerrar()
 
     assert r.status_code == 200 and r.text == ""
+
+
+def test_portada_hd_sirve_1200_con_etag_y_404():
+    from zascarr.services.portada_numero import ANCHO_HD
+
+    serie, issue = uuid4(), uuid4()
+    jpg = __import__("pathlib").Path("/tmp") / f"hd-{uuid4()}.jpg"
+    jpg.write_bytes(b"\xff\xd8\xff\xd9")
+    c = _cliente(serie, previa=jpg)
+    try:
+        with patch.object(web, "ruta_previa", AsyncMock(return_value=jpg)) as mock:
+            r = c.get(f"/ui/series/{serie}/numero/{issue}/portada-hd.jpg")
+            r304 = c.get(f"/ui/series/{serie}/numero/{issue}/portada-hd.jpg",
+                         headers={"If-None-Match": r.headers["ETag"]})
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and r304.status_code == 304
+    assert mock.await_args.kwargs["ancho"] == ANCHO_HD
+    assert r.headers["Cache-Control"] == "private, max-age=86400"
