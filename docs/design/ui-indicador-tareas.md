@@ -662,3 +662,12 @@ modificado código.
 8. **Estados:** «Listo» 8 s, «Revisar» en error, «Tarda más» a los 10 min; sin ansiedad ni rojo por tardar.
 9. **Accesibilidad:** un solo `aria-live` para cambios de estado, nunca un anuncio por tick; foco y 44 px.
 10. **B/C no ahora:** los bloques contextuales ya son la B; C duplicaría. Sin tokens, JS ni migración nuevos; **NOT RUN**.
+
+---
+
+## 12. Decisión del PO (2026-11-17)
+
+- **Aprobada A**: chip global en `.side` + panel «Ahora».
+- **Aprobado ampliar el alcance**: además de las tareas de fondo, el chip incluye **conversión CBR→CBZ** y **extracción de paquetes**.
+
+Consecuencia: esas dos operaciones dejan de ser esperas locales y pasan a **tareas de fondo** con el mismo chip, contador, fases y aviso de fin. La UI local actual se mantiene mientras la tarea sea de página; cuando se ejecute en segundo plano, su indicador será el global. Esto amplía el trabajo y exige especificación técnica antes de implementar; no cambia tokens, componentes ni copy ya redactados.
