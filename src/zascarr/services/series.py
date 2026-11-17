@@ -19,7 +19,6 @@ from uuid import UUID
 from sqlalchemy import Integer, and_, case, cast, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.core.formato_contenedor import natural_key
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
     Character,
@@ -286,38 +285,6 @@ class SeriesService:
             corregir_pagina=False,
         )
         return items, total
-
-    async def numeros_para_tarjetas(
-        self, series_ids, *, limite: int = 12
-    ) -> dict[UUID, dict]:
-        """Primeros números por serie para las tarjetas de Biblioteca (BL-INF7).
-
-        **Una sola consulta por página**: se traen los números de las series
-        visibles y se agrupan/ordenan en memoria con el mismo `natural_key` que
-        la ficha (así 2 < 10). No hay una consulta por tarjeta.
-        """
-        ids = list(series_ids)
-        if not ids:
-            return {}
-        consulta = (
-            select(Issue.series_id, Issue.id, Issue.issue_number)
-            .where(Issue.series_id.in_(ids), Issue.issue_number.is_not(None))
-        )
-        filas = (await self.db.execute(consulta)).all()
-        agrupados: dict[UUID, list[dict]] = {}
-        for fila in filas:
-            sid = getattr(fila, "series_id", None)
-            issue_id = getattr(fila, "id", None)
-            numero = getattr(fila, "issue_number", None)
-            if sid is None:
-                sid, issue_id, numero = fila[0], fila[1], fila[2]
-            agrupados.setdefault(sid, []).append(
-                {"id": issue_id, "numero": numero})
-        resultado: dict[UUID, dict] = {}
-        for sid, numeros in agrupados.items():
-            numeros.sort(key=lambda n: natural_key(str(n["numero"] or "")))
-            resultado[sid] = {"numeros": numeros[:limite], "total": len(numeros)}
-        return resultado
 
     async def list_series_paginado(
         self,
