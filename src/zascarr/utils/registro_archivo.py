@@ -16,6 +16,7 @@ sumidero falla cerrado y deja el evento solo en stdout.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -116,11 +117,9 @@ class EscritorJsonl:
 
 def escribir_evento(_logger=None, _metodo=None, evento=None):
     """Procesador structlog: escribe el evento ya saneado al fichero."""
-    try:
-        if isinstance(evento, dict) and _writer is not None:
+    if isinstance(evento, dict) and _writer is not None:
+        with contextlib.suppress(Exception):  # nunca romper una petición por el sumidero
             _writer.escribir(evento)
-    except Exception:  # noqa: BLE001 — nunca romper una petición por el sumidero
-        pass
     return evento
 
 
