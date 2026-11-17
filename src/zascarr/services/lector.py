@@ -23,6 +23,7 @@ from zascarr.core.formato_contenedor import (
     EntradaNoLegible,
     firma_de,
     leer_acotado,
+    motivo_fuera_de_limite,
     natural_key,
     se_lee_como_zip,
 )
@@ -124,6 +125,9 @@ def _listado(path: Path) -> list[zipfile.ZipInfo]:
         raise ArchivoNoLegibleError("No se pudo leer el archivo.") from exc
     if not se_lee_como_zip(ext, firma):
         raise ArchivoNoLegibleError("Este archivo no es un tebeo ZIP legible.")
+    if motivo_fuera_de_limite(path) is not None:
+        raise ArchivoNoLegibleError(
+            "El archivo tiene demasiadas entradas o un índice demasiado grande.")
     try:
         with zipfile.ZipFile(path) as zf:
             infos = [i for i in zf.infolist()
