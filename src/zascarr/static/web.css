@@ -2693,7 +2693,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (min-width: 1280px) { .tareas-panel { width: 360px; max-width: 360px; } }
 @media (prefers-reduced-motion: reduce) { .tareas-panel, .tarea, .tareas-chip { transition: none !important; animation: none !important; } }
 
-
 /* #1035: favorito en tarjetas de la biblioteca */
 .library-card-wrap { position: relative; min-width: 0; }
 .library-card-wrap .favorito-form { position: absolute; top: var(--space-2); right: var(--space-2); z-index: 2; margin: 0; }
@@ -2719,6 +2718,24 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .visor-portada-imagen img { max-width: 100%; max-height: calc(92vh - 160px); object-fit: contain; }
 .visor-portada-acciones { display: flex; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-top: var(--border-chip) solid var(--ink-soft); }
 .visor-portada-acciones button[disabled] { opacity: .55; }
+
+/* ── Lector BL-LEC1 (#824) ─────────────────────────────────────────────── */
+.lector { display: grid; gap: var(--space-3); justify-items: center; }
+.lector-lienzo {
+  width: 100%; min-height: 50vh; display: flex; align-items: center; justify-content: center;
+  background: var(--paper-2); border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-panel); overflow: hidden;
+}
+.lector-pagina { max-width: 100%; max-height: 78vh; width: auto; height: auto; display: block; }
+.lector-controles { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2); }
+.lector-contador { margin: 0; font-variant-numeric: tabular-nums; }
+.lector-ayuda { text-align: center; }
+@media (max-width: 480px) {
+  .lector-pagina { max-height: 68vh; }
+  .lector-controles { width: 100%; }
+  .lector-controles .btn { flex: 1 1 8rem; min-height: 44px; }
+}
+
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
