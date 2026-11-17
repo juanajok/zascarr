@@ -589,11 +589,6 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   reemplazas, la portada se vuelve a sacar de él), sobrevive a recargas y al enriquecimiento, y si
   ese archivo deja de dar portada la ficha vuelve a la de siempre sin borrar tu elección. El
   panel permite además volver a la portada automática. Miniaturas perezosas y sin JS nuevo.
-- **Números y previa en las tarjetas de Biblioteca (BL-INF7, #593).** Cada tarjeta de la
-  rejilla muestra sus primeros 12 números y «+N» en una tira de chips; al pasar el ratón o
-  enfocar un chip se reutiliza la previa de BL-INF4, sin pedir ninguna imagen hasta que hay
-  interacción. Una sola consulta agregada por página (`row_number()`/`count()` por serie), sin
-  N+1 ni cambios en paginación/filtros; en móvil, tocar el número abre la ficha.
 - **Vista previa de la portada de cada número (BL-INF4, #590).** Al pasar el ratón o enfocar un
   número en la ficha se enseña su portada, sin abrirlo: tarjeta de 220 px con «Nº N · título» y
   «Pulsa para abrir la ficha», flecha al chip y un pequeño retardo para no dispararse al barrer. La
