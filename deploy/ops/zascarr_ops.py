@@ -445,11 +445,16 @@ def listar_copias(dir_backup: str, maximo: int = 30) -> list[str]:
         try:
             with open(manifiesto, "rb") as fh:
                 datos = _json.loads(fh.read(4097).decode("utf-8"))
-            if not isinstance(datos, dict) or datos.get("schema", 1) not in (1, None):
+            if not isinstance(datos, dict):
                 continue
-            if not re.fullmatch(r"[0-9a-f]{64}", str(datos.get("sha256", ""))):
+            # F-21: tipos ESTRICTOS (`true` no es un entero válido). El script revalida el dump después; esto
+            # solo evita ofrecer como restaurable lo que ni siquiera tiene un manifiesto coherente.
+            schema = datos.get("schema", 1)
+            if schema is not None and (not _es_entero(schema) or schema != 1):
                 continue
-            if not isinstance(datos.get("bytes"), int) or datos["bytes"] < 0:
+            if not isinstance(datos.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", datos["sha256"]):
+                continue
+            if not _es_entero(datos.get("bytes")) or datos["bytes"] < 0:
                 continue
         except (OSError, ValueError):
             continue

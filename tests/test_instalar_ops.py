@@ -223,6 +223,15 @@ def test_la_unidad_de_restauracion_no_deja_marcadores_y_escribe_en_la_carpeta_de
     assert "/var/backups/zascarr/postgres" in unidad            # valor por defecto de _comun.sh/instalar_backup.sh
     readwrite = next(linea for linea in unidad.splitlines() if linea.startswith("ReadWritePaths="))
     assert "/var/backups/zascarr/postgres" in readwrite
+    assert "/opt/zascarr" not in readwrite                               # no se escribe código de la app
+    # F-16: endurecimiento de la unidad de restauración (el mismo conjunto que el auxiliar donde aplica).
+    for linea in ("Requires=docker.service", "NoNewPrivileges=true", "ProtectSystem=strict", "ProtectHome=true",
+                  "PrivateTmp=true", "ProtectKernelTunables=true", "ProtectKernelModules=true",
+                  "ProtectControlGroups=true", "PrivateDevices=true", "RestrictNamespaces=true",
+                  "RestrictSUIDSGID=true", "UMask=0077", "CapabilityBoundingSet=", "SuccessExitStatus=75"):
+        assert linea in unidad.splitlines(), linea
+    assert "TimeoutStartSec=2700" in unidad                              # 45 min (FR-26)
+    assert "RuntimeMaxSec=" not in unidad                                # no mata una recuperación a mitad
 
 
 def test_backup_dir_del_env_se_usa_en_la_unidad_de_restauracion(entorno):
