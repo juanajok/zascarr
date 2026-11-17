@@ -38,6 +38,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Seguir una serie: números nuevos desde las fuentes (2026-11-17).** La ficha gana
+  «Seguir esta serie» (independiente de «Qué buscar»). Un job (45 min, configurable)
+  mira el subforo **E-links diarios** autenticado y Prowlarr; cuando aparece un número
+  nuevo de una serie seguida crea el deseo (`origen=seguimiento`) y el ciclo normal lo
+  busca/descarga con su cortesía y backoff. Avisa una vez por pasada por el webhook
+  existente. No descarga el histórico: empieza en lo posterior a la activación.
+
 - **Ajustes → Transmission: carpeta de descargas y aviso de incoherencia (2026-11-17).**
   Se puede editar la carpeta que ZascArr pasa a Transmission (ruta del **host**). «Probar
   conexión» compara esa carpeta con la que Transmission tiene configurada y, si difieren,

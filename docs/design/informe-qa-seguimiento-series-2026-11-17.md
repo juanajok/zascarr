@@ -194,3 +194,54 @@ PYTHONPATH=src … <venv>/bin/python .qa-seg/probe_prowlarr.py  # 5/5 OK
 `notifier.py`, `orchestrator.py`, `politica.py`, `prowlarr.py`, `services/seguimiento.py` (555
 líneas), `web/series.py`, `web/templates/_seguimiento_serie.html`, `series_detail.html` y 7 ficheros
 de pruebas nuevas/ajustadas. Sin `web/ajustes.py`.
+
+---
+
+## Addendum — re-dictamen de B1/B2 sobre `8cf17b73` (2026-11-17)
+
+**SHA corregido:** `8cf17b73810c3bc58ccd0145743db0b7cc91fb56`. Diff desde `5dea7363`: migración
+partida **0047** (columnas/enum/tabla) + **0048** (índice parcial), modelo y `_procesar_foro`, spec,
+la prueba PG y `tests/test_seguimiento_foro_pasada.py` nuevos.
+
+### B1 — cerrado: migración real subir/bajar
+
+* `TEST_DATABASE_URL=… zascarr_qa_seg2_test pytest -q tests/test_migracion_seguimiento_pg.py` →
+  **1 passed** (8,54 s).
+* Sonda independiente en base efímera **0046 → 0047 → 0048 → 0046 → head (8/8 OK)**:
+  una sola cabeza `0048 (head)`; columnas `follow_new_issues boolean NOT NULL` y
+  `follow_new_issues_since timestamptz NULL`; enum `seguimiento`; tabla `seguimiento_vistos`;
+  índice `uq_wishlist_seguimiento_numero` con predicado
+  `origen <> 'manual' AND numero IS NOT NULL` (inmutable; política+seguimiento, sin manuales);
+  bajar a 0047 **solo** retira el índice y conserva columnas/tabla; bajar a 0046 retira columnas y
+  tabla; volver a head restaura todo. La prueba ya no falla por `functions in index predicate must
+  be marked IMMUTABLE`.
+
+### B2 — cerrado: frontera por serie y tema actualizado
+
+Sonda independiente **4/4 OK**:
+
+* serie vieja (Sandman, since enero) + serie nueva (Batman, since 17/11) + tema del 01/06 con
+  `Batman 12.cbz` ⇒ **sin hallazgo** (el tema puede abrirse por la serie vieja, pero el hallazgo de
+  Batman se filtra por su propio `since`);
+* una sola serie nueva con el mismo tema ⇒ se salta sin abrir;
+* tema actualizado (misma clave, huella distinta) ⇒ se abre y crea el hallazgo;
+* tema nuevo posterior al `since` ⇒ se abre y crea el hallazgo.
+
+`tests/test_seguimiento_foro_pasada.py` añade esos dos casos (nuevo 2 passed); la suite tocada
+incluye ya 324 passed / 1 skip.
+
+### Regresión final
+
+* Suite completa ×2: **7705 passed / 2383 skipped / 0 fallos** (428,46 s y 447,10 s; 2 tests nuevos
+  respecto a la QA anterior).
+* Suites tocadas (seguimiento*, web_serie_seguimiento, enums, orchestrator, notifier,
+  migraciones_cadena, migración seguimiento, web_series): **324 passed, 1 skip**.
+* `ruff check src/`: **All checks passed!**
+* Dedupe/legal/caps/notifier/UI no cambian en el fix; sus pruebas siguen verdes. La deuda declarada
+  (tests Prowlarr/rotación, integración aviso único/máx. 5, AC-16, NOT RUN real de `showforum=5`)
+  sigue como deuda menor, no bloqueante.
+
+**Veredicto actualizado: APTO para `8cf17b73`.** B1 y B2 quedan cerrados; no aparece bloqueante
+nuevo. Observaciones menores: el docstring de 0047 aún dice «retira … índice» aunque el índice vive
+en 0048 (solo documentación), y un tema con `ultima_actividad` no reconocida se marca visto sin
+abrir en primera pasada (fail-closed); ambas son deuda menor.
