@@ -23,6 +23,7 @@ import asyncio
 import errno
 import json
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -55,8 +56,17 @@ from zascarr.models import (
 )
 from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.etiquetas_comicinfo import aplicar_comicinfo
-from zascarr.utils.fs import listar_comics, safe_move_async, sanitize_segment
+from zascarr.services.raices import (
+    FotoDeRaices,
+    RaizNoDisponibleError,
+    RaizResuelta,
+    es_componente_de,
+)
+from zascarr.services.upgrades import reconciliar_mejora_importada
+from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
+from zascarr.utils.fs import listar_comics, safe_move_en_raiz_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
+from zascarr.utils.nombres_biblioteca import construir_nombre, es_pack
 
 logger = structlog.get_logger()
 
@@ -95,6 +105,20 @@ TRADITION_MAP = {
 _ERRNOS_DE_AUSENCIA = frozenset({errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP})
 
 
+def _mensaje_sin_rutas(exc: BaseException, path: Path) -> str:
+    """Mensaje para el informe sin la ruta absoluta del archivo/carpeta."""
+    texto = str(exc)
+    reemplazos = {
+        str(path): path.name, str(path.resolve()): path.name,
+        str(path.parent): "<carpeta>", str(path.parent.resolve()): "<carpeta>",
+    }
+    for absoluta, visible in reemplazos.items():
+        if absoluta:
+            texto = texto.replace(absoluta, visible)
+    # Cualquier otra ruta absoluta que venga de una causa (p. ej. la raíz).
+    return re.sub(r"(?<![\w.])/(?:[^\n\r\t]+?)(?=\s*(?:$|[.;:)]))", "<ruta>", texto)
+
+
 def _existe(ruta: str) -> bool:
     try:
         os.stat(ruta)
@@ -126,6 +150,9 @@ class ComprobacionBiblioteca:
     ausentes: int | None = None  # rutas registradas que no estaban (solo si se llegó a mirarlas)
     desaparecidos: list[str] = field(default_factory=list)
     reaparecidos: list[str] = field(default_factory=list)
+    #: Estado observado POR RAÍZ (#156, corte C). Compatible: una instalación de una raíz
+    #: deja una sola entrada. Cada entrada: id, nombre, resultado, archivos, ausentes.
+    raices: list[dict] = field(default_factory=list)
 
     @property
     def bajas_omitidas(self) -> bool:
@@ -140,6 +167,7 @@ class ComprobacionBiblioteca:
             "ausentes": self.ausentes,
             "bajas_omitidas": self.bajas_omitidas,
             "fecha": self.fecha.isoformat(),
+            "raices": self.raices,
         }
 
 
@@ -315,7 +343,8 @@ async def _coincidencias_de_hash(db: AsyncSession, sha256: str) -> list[File]:
     )).scalars().all())
 
 
-async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
+async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path, *,
+                          root_id: UUID | None = None) -> None:
     """Actualiza la fila `is_missing` para que describa el fichero que YA está
     en `dest` (quien llama decide si lo movió —Importer— o ya estaba ahí
     —LibraryAdopter—).
@@ -330,6 +359,8 @@ async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
     vuelve con otra extensión no puede seguir anunciando la vieja. El formato
     REAL por contenido va aparte, en `metadata_["formato_contenido"]`."""
     fila.file_path = str(dest)
+    if root_id is not None:
+        fila.root_id = root_id
     fila.file_name = dest.name
     fila.file_format = FileFormat(dest.suffix.lstrip(".").lower())
     stat_dest = dest.stat()
@@ -482,8 +513,10 @@ def serialize_candidates(candidates: list[SeriesHit]) -> list[dict]:
 
 
 class Importer:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, *, foto_raices: FotoDeRaices | None = None):
         self._db = db
+        self._foto_inyectada = foto_raices
+        self._foto_raices = foto_raices
         s = get_settings()
         self._library = s.library_path
         self._scan_dirs = [
@@ -493,6 +526,8 @@ class Importer:
         ]
 
     async def scan_and_import(self, *, disparador: str = "automatico") -> ImportReport:
+        # Foto nueva por ciclo: un cambio de mapeo a mitad no cambia el destino de este ciclo.
+        self._foto_raices = getattr(self, "_foto_inyectada", None)
         report = ImportReport(started_at=datetime.now(UTC), disparador=disparador)
 
         # Dedupe por (st_dev, st_ino), no por ruta: ver `listar_comics`. El
@@ -521,17 +556,25 @@ class Importer:
                 report.errors.append("El ciclo se detuvo antes de mirar el resto de las descargas")
                 break
             except Exception as exc:
-                logger.exception("importer.file_failed", path=str(path))
-                report.errors.append(f"{path.name}: {exc}")
+                try:
+                    inodo = path.stat(follow_symlinks=False).st_ino
+                except OSError:
+                    inodo = None
+                logger.error(
+                    "importer.file_failed", inodo=inodo,
+                    formato=path.suffix.lstrip(".") or "sin_extension",
+                    error_tipo=type(exc).__name__)
+                report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
 
         # B7: revisión de la biblioteca YA importada, no de lo nuevo que
         # acaba de llegar — un paso independiente del bucle de arriba.
         try:
             comprobacion = await self._comprobar_biblioteca()
-        except Exception:
+        except Exception as exc:
             # Un fallo no marca ninguna baja, pero tampoco puede pasar por «no pasó nada»: queda
             # escrito en el informe (#231, criterio 11), sin afirmar causa.
-            logger.exception("importer.deteccion_desaparecidos_fallida")
+            logger.error("importer.deteccion_desaparecidos_fallida",
+                         error=type(exc).__name__)
             comprobacion = ComprobacionBiblioteca(
                 resultado=ResultadoComprobacion.FALLO_DETECCION, fecha=datetime.now(UTC))
         report.comprobacion = comprobacion
@@ -645,70 +688,135 @@ class Importer:
         return comprobacion.desaparecidos, comprobacion.reaparecidos
 
     async def _comprobar_biblioteca(self) -> ComprobacionBiblioteca:
-        """Misma revisión que describe `_detectar_desaparecidos` (B7), pero devolviendo también
-        QUÉ observó (#231): el motivo de cada guardarraíl deja de ir solo al log. No cambia cuándo
-        se marca una baja ni los umbrales. Una excepción NO se captura aquí: la recoge
-        `scan_and_import` y la registra como `FALLO_DETECCION`."""
+        """Revisa la disponibilidad POR RAÍZ (#156, corte C).
+
+        Una raíz caída, vacía o con desaparición masiva se omite ENTERA y no marca bajas de
+        sus archivos ni contamina a las demás. Los `File.root_id NULL` no se atribuyen a
+        ninguna raíz ni se marcan por la caída de otra. En una instalación de una sola raíz
+        el resultado y los recuentos son los mismos que antes.
+        """
         fecha = datetime.now(UTC)
-
-        def omitida(resultado, registrados=None, ausentes=None):
-            return ComprobacionBiblioteca(resultado=resultado, fecha=fecha,
-                                          archivos_registrados=registrados, ausentes=ausentes)
-
-        if not self._library.exists() or not self._library.is_dir():
-            logger.warning(
-                "importer.biblioteca_inaccesible_omitiendo_desaparecidos", ruta=str(self._library)
-            )
-            registrados = (await self._db.execute(
-                select(func.count()).select_from(File))).scalar_one()
-            return omitida(ResultadoComprobacion.RAIZ_INACCESIBLE, registrados)
-
-        files = list((await self._db.execute(select(File))).scalars().all())
-        if not files:
-            return ComprobacionBiblioteca(resultado=ResultadoComprobacion.COMPROBADA, fecha=fecha,
-                                          archivos_registrados=0, ausentes=0)
-
-        biblioteca_vacia = await asyncio.to_thread(lambda: not any(self._library.iterdir()))
-        if biblioteca_vacia:
-            logger.warning(
-                "importer.biblioteca_vacia_omitiendo_desaparecidos", ruta=str(self._library)
-            )
-            return omitida(ResultadoComprobacion.RAIZ_VACIA, len(files))
-
-        rutas = [f.file_path for f in files]
-        # Un único hop a un hilo para todo el lote, no uno por fichero —
-        # `stat` es síncrono (I/O bloqueante, CLAUDE.md §4).
-        ausentes = await asyncio.to_thread(lambda: {r for r in rutas if not _existe(r)})
-
-        if (
-            len(files) >= UMBRAL_DESAPARICION_MASIVA_MINIMO
-            and len(ausentes) > len(files) * UMBRAL_DESAPARICION_MASIVA_FRACCION
-        ):
-            logger.error(
-                "importer.desaparicion_masiva_anomala_abortando",
-                ausentes=len(ausentes), total_files=len(files), ruta=str(self._library),
-            )
-            return omitida(ResultadoComprobacion.DESAPARICION_MASIVA, len(files), len(ausentes))
-
+        foto = await self._foto()
+        todas = list((await self._db.execute(select(File))).scalars().all())
+        estados: list[dict] = []
         desaparecidos: list[str] = []
         reaparecidos: list[str] = []
-        for f in files:
-            ausente = f.file_path in ausentes
-            if ausente and not f.is_missing:
-                f.is_missing = True
-                f.missing_since = datetime.now(UTC)
-                desaparecidos.append(f.file_name)
-            elif not ausente and f.is_missing:
-                f.is_missing = False
-                f.missing_since = None
-                reaparecidos.append(f.file_name)
+        ausentes_total: int | None = 0
+        vistos: set[object] = set()
+
+        raices = [r for r in foto.raices if bool(getattr(r, "enabled", True))]
+        for raiz in raices:
+            def de_esta_raiz(f: File, raiz=raiz) -> bool:
+                if getattr(raiz, "id", None) is None:
+                    # Compatibilidad con dobles de una sola raíz sin tabla.
+                    return f.root_id is None and es_componente_de(f.file_path, raiz.path)
+                # `root_id NULL` bajo la raíz es una fila heredada aún sin backfill: se
+                # cuenta en su raíz por componentes, nunca en otra.
+                return (f.root_id is not None and str(f.root_id) == str(raiz.id)) or (
+                    f.root_id is None and es_componente_de(f.file_path, raiz.path))
+
+            archivos = [f for f in todas if de_esta_raiz(f)]
+            vistos.update(id(f) for f in archivos)
+            ruta = Path(raiz.path)
+            info = {"id": str(raiz.id) if getattr(raiz, "id", None) is not None else None,
+                    "nombre": str(raiz.name), "resultado": "", "archivos": len(archivos),
+                    "ausentes": None}
+            if not await asyncio.to_thread(ruta.is_dir):
+                logger.warning("importer.raiz_inaccesible_omitiendo_desaparecidos", raiz=raiz.name)
+                info["resultado"] = ResultadoComprobacion.RAIZ_INACCESIBLE.value
+                ausentes_total = None
+                estados.append(info)
+                continue
+            if not archivos:
+                info["resultado"] = ResultadoComprobacion.COMPROBADA.value
+                info["ausentes"] = 0
+                estados.append(info)
+                continue
+            vacia = await asyncio.to_thread(lambda ruta=ruta: not any(ruta.iterdir()))
+            if vacia:
+                logger.warning("importer.raiz_vacia_omitiendo_desaparecidos", raiz=raiz.name)
+                info["resultado"] = ResultadoComprobacion.RAIZ_VACIA.value
+                estados.append(info)
+                continue
+            rutas = [f.file_path for f in archivos]
+            ausentes = await asyncio.to_thread(
+                lambda rutas=rutas: {r for r in rutas if not _existe(r)})
+            ausentes_total += len(ausentes)
+            if (
+                len(archivos) >= UMBRAL_DESAPARICION_MASIVA_MINIMO
+                and len(ausentes) > len(archivos) * UMBRAL_DESAPARICION_MASIVA_FRACCION
+            ):
+                logger.error("importer.desaparicion_masiva_anomala_abortando",
+                             ausentes=len(ausentes), total_files=len(archivos), raiz=raiz.name)
+                info["resultado"] = ResultadoComprobacion.DESAPARICION_MASIVA.value
+                info["ausentes"] = len(ausentes)
+                estados.append(info)
+                continue
+            for f in archivos:
+                ausente = f.file_path in ausentes
+                if ausente and not f.is_missing:
+                    f.is_missing = True
+                    f.missing_since = datetime.now(UTC)
+                    desaparecidos.append(f.file_name)
+                elif not ausente and f.is_missing:
+                    f.is_missing = False
+                    f.missing_since = None
+                    reaparecidos.append(f.file_name)
+            info["resultado"] = ResultadoComprobacion.COMPROBADA.value
+            info["ausentes"] = len(ausentes)
+            estados.append(info)
+
+        # Los archivos fuera de toda raíz no se atribuyen ni se dan de baja por una raíz caída.
+        fuera_de_raiz = sum(1 for f in todas if id(f) not in vistos)
+        if fuera_de_raiz:
+            estados.append({"id": None, "nombre": "Fuera de raíz", "resultado": "fuera_de_raiz",
+                            "archivos": fuera_de_raiz, "ausentes": None})
+
+        resultados = [e["resultado"] for e in estados]
+        if not raices or ResultadoComprobacion.RAIZ_INACCESIBLE.value in resultados:
+            resultado = ResultadoComprobacion.RAIZ_INACCESIBLE
+        elif ResultadoComprobacion.RAIZ_VACIA.value in resultados:
+            resultado = ResultadoComprobacion.RAIZ_VACIA
+        elif ResultadoComprobacion.DESAPARICION_MASIVA.value in resultados:
+            resultado = ResultadoComprobacion.DESAPARICION_MASIVA
+        else:
+            resultado = ResultadoComprobacion.COMPROBADA
 
         if desaparecidos or reaparecidos:
             await self._db.flush()
         return ComprobacionBiblioteca(
-            resultado=ResultadoComprobacion.COMPROBADA, fecha=fecha,
-            archivos_registrados=len(files), ausentes=len(ausentes),
-            desaparecidos=desaparecidos, reaparecidos=reaparecidos)
+            resultado=resultado, fecha=fecha, archivos_registrados=len(todas),
+            ausentes=ausentes_total, desaparecidos=desaparecidos,
+            reaparecidos=reaparecidos, raices=estados)
+
+    async def _foto(self) -> FotoDeRaices:
+        """Foto de raíces por ciclo: una consulta, aunque haya muchos archivos."""
+        foto = getattr(self, "_foto_raices", None)
+        if foto is None:
+            if isinstance(self._db, AsyncSession):
+                foto = await FotoDeRaices.cargar(self._db)
+                biblioteca = getattr(self, "_library", None)
+                if foto.raices and biblioteca is not None and not any(
+                        str(biblioteca) == str(r.path) for r in foto.raices):
+                    # Configuración de una sola raíz antigua (o doble de prueba): la raíz de
+                    # settings sigue siendo la que se recorre. En producción las filas mandan.
+                    foto = FotoDeRaices.compatibilidad(path=biblioteca)
+            else:
+                # Dobles de prueba sin tabla de raíces: reproducción de una instalación de una raíz.
+                foto = FotoDeRaices.compatibilidad(
+                    path=getattr(self, "_library", None))
+            self._foto_raices = foto
+        return foto
+
+    async def _raiz(
+        self, tradicion, *, por_defecto: bool = False
+    ) -> tuple[FotoDeRaices, RaizResuelta]:
+        foto = await self._foto()
+        raiz = foto.por_defecto() if por_defecto else foto.por_tradicion(tradicion)
+        # H3: la foto conserva el mapeo, pero se revalida la raíz en cada movimiento.
+        if raiz.id is not None:
+            raiz = foto.raiz_para_escritura(raiz.id)
+        return foto, raiz
 
     async def _import_file(
         self, path: Path, report: ImportReport, pista: PistaDeCohorte | None = None
@@ -727,25 +835,92 @@ class Importer:
             )
             logger.info(
                 "importer.duplicate",
-                path=str(path),
-                hash=outcome.tr.sha256[:12] if outcome.tr.sha256 else None,
+                inodo=path.stat(follow_symlinks=False).st_ino,
+                formato=path.suffix.lstrip(".") or "sin_extension",
             )
             return
         tr, result = outcome.tr, outcome.result
         is_unsorted = result.status == MatchStatus.UNSORTED or not result.series_id
+        ajustes = get_settings()
 
-        # Determinar tradición y ruta destino
-        if is_unsorted:
-            dest = self._library / "_Unsorted" / path.name
-        else:
+        # Resolver la raíz ANTES de construir la ruta o mover: si no está
+        # disponible, el archivo se queda en la cola y no se inventa otra.
+        series_obj = None
+        if not is_unsorted:
             series_obj = (await self._db.execute(
                 select(Series).where(Series.id == result.series_id)
             )).scalar_one_or_none()
-            dest = self._build_dest(series_obj, tr, path)
+            if series_obj is None:
+                is_unsorted = True
+        parsed_para_destino = parse_comic_filename(path.name, carpeta=path.parent.name)
+        numero_destino: str | None = (
+            (tr.comic_info.number if tr.strong_candidate and tr.comic_info else None)
+            or parsed_para_destino.issue_number
+        )
+        crear_numero = bool(getattr(ajustes, "import_create_missing_issue", False))
+        if not crear_numero and result.issue_id is None:
+            # Sin la opción B23 se conserva el nombre original: es el contrato
+            # histórico de los archivos que no tienen número enlazado.
+            numero_destino = None
+        # El número se crea DESPUÉS de mover: si falla la raíz o el espacio,
+        # no puede quedar un Issue huérfano. Si ya hay catálogo, el archivo no
+        # inventa el número: va a Pendientes como discrepancia. Un especial,
+        # un pack o un nombre poco fiable tampoco identifican UNA grapa.
+        puede_crear_numero = bool(
+            numero_destino
+            and parsed_para_destino.edition_kind is None
+            and not parsed_para_destino.is_special
+            and not parsed_para_destino.is_pack
+            and (tr.strong_candidate or parsed_para_destino.confidence >= 0.7)
+        )
+        if (not is_unsorted and result.issue_id is None and crear_numero
+                and (not puede_crear_numero
+                     or await self._serie_tiene_numeros(result.series_id))):
+            is_unsorted = True
+            result.status = MatchStatus.UNSORTED
+            result.notes.append(
+                "número no enlazado en una serie ya catalogada: se deja para revisar")
+        elif (not is_unsorted and result.issue_id is None and not crear_numero
+                and result.notes):
+            # Comportamiento histórico seguro: un match de serie sin número
+            # registrado no se presenta como importado. Los dobles de prueba
+            # sin notas conservan su contrato de raíz.
+            is_unsorted = True
+            result.status = MatchStatus.UNSORTED
+        try:
+            foto, raiz = await self._raiz(
+                getattr(series_obj, "tradition", None), por_defecto=is_unsorted)
+        except RaizNoDisponibleError as exc:
+            causa = _mensaje_sin_rutas(exc, path)
+            report.errors.append(f"{path.name}: {causa}")
+            logger.warning("importer.raiz_no_disponible",
+                           raiz=exc.raiz, motivo=type(exc).__name__,
+                           formato=path.suffix.lstrip(".") or "sin_extension")
+            return
+        if is_unsorted:
+            dest = raiz.path / "_Unsorted" / path.name
+        else:
+            dest = self._build_dest(
+                series_obj, tr, path, base=raiz.path, issue_number=numero_destino)
+
+        # La raíz de DESTINO debe tener espacio antes de copiar; never fallback.
+        try:
+            await asyncio.to_thread(
+                comprobar_espacio, raiz.path, path.stat().st_size, "importar a la biblioteca")
+        except EspacioInsuficienteError as exc:
+            report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
+            logger.warning("importer.raiz_sin_espacio", raiz=raiz.name,
+                           formato=path.suffix.lstrip(".") or "sin_extension")
+            return
+        except OSError as exc:
+            report.errors.append(
+                f"{path.name}: no se pudo comprobar el espacio de la raíz: "
+                f"{_mensaje_sin_rutas(exc, path)}")
+            return
 
         # A3: mover a destino verificado — nunca sobreescribe y no borra el
         # original hasta que la copia está completa (ver utils/fs.safe_move).
-        final_dest = await safe_move_async(path, dest)
+        final_dest = await safe_move_en_raiz_async(path, dest, raiz.path)
         dest_stat = final_dest.stat()
 
         metadata: dict = {
@@ -764,6 +939,7 @@ class Importer:
 
         file_rec = File(
             issue_id=str(result.issue_id) if result.issue_id else None,
+            root_id=raiz.id,
             file_path=str(final_dest),
             file_name=final_dest.name,
             file_format=FileFormat(path.suffix.lstrip(".").lower()),
@@ -784,16 +960,56 @@ class Importer:
         )
         self._db.add(file_rec)
         await self._db.flush()
+        if (not is_unsorted and result.issue_id is None and crear_numero
+                and numero_destino is not None):
+            creado = await self._crear_issue_de_serie_vacia(result, tr, path)
+            if creado is not None:
+                file_rec.issue_id = result.issue_id
+                await self._db.flush()
+            else:
+                # No se puede dejar un archivo en la carpeta de la serie sin
+                # número: se mueve a _Unsorted y se declara Pendientes.
+                from zascarr.utils.fs import safe_move_async
 
+                destino_pendiente = raiz.path / "_Unsorted" / final_dest.name
+                final_dest = await safe_move_async(final_dest, destino_pendiente)
+                file_rec.file_path = str(final_dest)
+                file_rec.file_name = final_dest.name
+                file_rec.metadata_ = {
+                    **(file_rec.metadata_ or {}),
+                    "match_status": MatchStatus.UNSORTED.value,
+                }
+                result.status = MatchStatus.UNSORTED
+                result.notes.append("no se pudo crear el número al importar")
+                is_unsorted = True
+        if result.issue_id is not None and not is_unsorted:
+            try:
+                await reconciliar_mejora_importada(
+                    self._db, result.issue_id, file_rec.id)
+            except Exception:  # noqa: BLE001 — la conciliación no tumba la importación
+                logger.warning("upgrade.reconciliacion_fallida",
+                               issue_id=str(result.issue_id))
+
+        if (getattr(ajustes, "import_convert_cbr", False)
+                and not is_unsorted and result.series_id is not None
+                and path.suffix.lower() == ".cbr"):
+            convertido = await self._convertir_cbr_importado(file_rec, result)
+            if convertido is not None:
+                final_dest = convertido
+
+        prefijo_raiz = "" if len(foto.raices) <= 1 else f"{raiz.name}: "
         if is_unsorted:
             motivo = "; ".join(result.notes) or "sin match fiable"
-            report.unsorted.append(f"{path.name} → _Unsorted ({motivo})")
+            report.unsorted.append(
+                f"{path.name} → {prefijo_raiz}_Unsorted ({motivo})")
         else:
             avisos = await self._aplicar_comicinfo(result, tr, final_dest)
             sufijo = f" (ComicInfo: {'; '.join(avisos)})" if avisos else ""
             report.imported.append(
-                f"{path.name} → {final_dest.relative_to(self._library)}{sufijo}")
-        logger.info("importer.imported", dest=str(final_dest), status=result.status)
+                f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)}{sufijo}")
+        logger.info("importer.imported", file_id=str(file_rec.id), root=raiz.name,
+                    formato=path.suffix.lstrip(".") or "sin_extension",
+                    status=result.status)
 
     async def _aplicar_comicinfo(
             self, result: MatchResult, tr: TriageResult, ruta: Path) -> list[str]:
@@ -840,28 +1056,48 @@ class Importer:
         numero: str | None = None
         if fila.issue_id:
             fila_issue = (await self._db.execute(
-                select(Issue.issue_number, Series)
+                select(Issue.issue_number, Issue.title, Issue.format, Series)
                 .join(Series, Issue.series_id == Series.id)
                 .where(Issue.id == fila.issue_id)
             )).first()
             if fila_issue:
-                numero, serie = fila_issue
+                numero, titulo_issue, formato_issue, serie = fila_issue
 
+        try:
+            foto, raiz = await self._raiz(
+                getattr(serie, "tradition", None), por_defecto=serie is None)
+        except RaizNoDisponibleError as exc:
+            causa = _mensaje_sin_rutas(exc, path)
+            report.errors.append(f"{path.name}: {causa}")
+            logger.warning("importer.raiz_no_disponible",
+                           raiz=exc.raiz, motivo=type(exc).__name__,
+                           formato=path.suffix.lstrip(".") or "sin_extension")
+            return
         if serie is None:
-            dest = self._library / "_Unsorted" / path.name
+            dest = raiz.path / "_Unsorted" / path.name
         else:
             dest = build_library_path(
-                self._library, serie, numero, path.suffix, fallback_name=path.name)
+                raiz.path, serie, numero, path.suffix, fallback_name=path.name,
+                issue_title=titulo_issue, issue_format=formato_issue)
+        try:
+            await asyncio.to_thread(
+                comprobar_espacio, raiz.path, path.stat().st_size, "recuperar en la biblioteca")
+        except (EspacioInsuficienteError, OSError) as exc:
+            report.errors.append(
+                f"{path.name}: no se pudo comprobar el espacio: {_mensaje_sin_rutas(exc, path)}")
+            return
 
         # A3: mismo mover verificado que una importación normal.
-        final_dest = await safe_move_async(path, dest)
+        final_dest = await safe_move_en_raiz_async(path, dest, raiz.path)
 
-        await _reenlazar_fila(fila, tr, final_dest)
+        await _reenlazar_fila(fila, tr, final_dest, root_id=raiz.id)
         await self._db.flush()
 
+        prefijo_raiz = "" if len(foto.raices) <= 1 else f"{raiz.name}: "
         report.imported.append(
-            f"{path.name} → {final_dest.relative_to(self._library)} (recuperado)")
-        logger.info("importer.recuperado", dest=str(final_dest))
+            f"{path.name} → {prefijo_raiz}{final_dest.relative_to(raiz.path)} (recuperado)")
+        logger.info("importer.recuperado", file_id=str(fila.id), root=raiz.name,
+                    formato=path.suffix.lstrip(".") or "sin_extension")
 
     async def _persist_run(self, report: ImportReport) -> None:
         run = ImportRun(
@@ -889,17 +1125,116 @@ class Importer:
         await self._db.flush()
         report.run_id = run.id
 
-    def _build_dest(self, series, tr: TriageResult, orig: Path) -> Path:
+    async def _serie_tiene_numeros(self, series_id) -> bool:
+        """¿La serie ya tiene catálogo? Se consulta antes de mover."""
+        return bool((await self._db.execute(
+            select(func.count()).select_from(Issue).where(Issue.series_id == series_id)
+        )).scalar_one())
+
+    async def _crear_issue_de_serie_vacia(
+        self, result: MatchResult, tr: TriageResult, path: Path
+    ) -> str | None:
+        """B23: si la serie no tiene NINGÚN número, crea el que trae el archivo.
+
+        Solo actúa en una serie vacía: en una catálogo existente, un número que el
+        matcher no encontró es una discrepancia que se revisa, no se inventa.
+        """
+        if result.series_id is None:
+            return None
+        parsed = parse_comic_filename(path.name, carpeta=path.parent.name)
+        numero = (
+            (tr.comic_info.number if tr.strong_candidate and tr.comic_info else None)
+            or parsed.issue_number
+        )
+        if not numero or parsed.edition_kind is not None or parsed.is_special or parsed.is_pack:
+            return None
+        if not tr.strong_candidate and parsed.confidence < 0.7:
+            return None
+        numero = str(numero).strip()
+        if not numero or es_pack(numero):
+            return None
+        # Serializa la creación por serie y evita que dos importadores creen
+        # "1" y "001" como dos filas lógicas distintas.
+        await self._db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"b23:issue:{result.series_id}"})
+        existentes = (await self._db.execute(
+            select(func.count()).select_from(Issue)
+            .where(Issue.series_id == result.series_id)
+        )).scalar_one()
+        if existentes:
+            return None
+        formato = EDITION_KIND_A_FORMAT.get(parsed.edition_kind, IssueFormat.SINGLE_ISSUE)
+        try:
+            orden = float(numero.replace(",", "."))
+        except (TypeError, ValueError):
+            orden = None
+        issue = Issue(
+            series_id=result.series_id, issue_number=numero, format=formato,
+            sort_order=orden, metadata_={"origen": "importador"}, locked_fields=[],
+        )
+        try:
+            async with self._db.begin_nested():
+                self._db.add(issue)
+                await self._db.flush()
+        except Exception:  # noqa: BLE001 — carrera con otro importador/alta
+            logger.info("importer.issue_nueva_carrera", numero=numero)
+            issue = (await self._db.execute(
+                select(Issue).where(Issue.series_id == result.series_id,
+                                    Issue.issue_number == numero)
+            )).scalar_one_or_none()
+            if issue is None:
+                return None
+        result.issue_id = issue.id
+        logger.info("importer.issue_creada_al_importar",
+                    serie=str(result.series_id), numero=numero)
+        return numero
+
+    async def _convertir_cbr_importado(self, file_rec: File,
+                                       result: MatchResult) -> Path | None:
+        """B23: convierte el CBR importado con la verificación reversible de siempre."""
+        if result.series_id is None:
+            return None
+        try:
+            from zascarr.services.conversion import ConversionDeArchivo
+
+            servicio = ConversionDeArchivo(self._db, secret=get_settings().secret_key)
+            vista = await servicio.previsualizar(result.series_id, file_rec.id)
+            if not vista.puede_convertir or not vista.token:
+                logger.info("importer.conversion_omitida",
+                            file_id=str(file_rec.id), motivo=vista.motivo)
+                return None
+            resultado = await servicio.confirmar(vista.token, forzar_compartido=True)
+            if resultado.resultado not in ("convertida", "ya_convertida"):
+                logger.info("importer.conversion_no_aplicada",
+                            file_id=str(file_rec.id), resultado=resultado.resultado)
+                return None
+            ruta = Path(file_rec.file_path)
+            logger.info("importer.conversion_ok", file_id=str(file_rec.id),
+                        formato=ruta.suffix.lstrip(".") or "sin_extension")
+            return ruta
+        except Exception:  # noqa: BLE001 — nunca se pierde el CBR por una conversión
+            logger.exception("importer.conversion_fallida", file_id=str(file_rec.id))
+            return None
+
+    def _build_dest(self, series, tr: TriageResult, orig: Path, *, base: Path,
+                    issue_number: str | None = None) -> Path:
         if not series:
-            return self._library / "_Unsorted" / orig.name
-        number = tr.comic_info.number if tr.comic_info else None
+            return base / "_Unsorted" / orig.name
+        number = issue_number or (tr.comic_info.number if tr.comic_info else None)
+        edition_kind = parse_comic_filename(orig.name).edition_kind
         return build_library_path(
-            self._library, series, number, orig.suffix, fallback_name=orig.name
+            base, series, number, orig.suffix, fallback_name=orig.name,
+            issue_title=getattr(tr.comic_info, "title", None) if tr.comic_info else None,
+            issue_format=EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE),
         )
 
 
 def build_library_path(library: Path, series: Series, issue_number: str | None,
-                       suffix: str, fallback_name: str | None = None) -> Path:
+                       suffix: str, fallback_name: str | None = None,
+                       *, issue_title: str | None = None,
+                       issue_format: IssueFormat | str | None = None,
+                       pack: bool = False, especial: bool = False) -> Path:
     """Ruta canónica /library/{tradición}/{Serie (Año)}/{Serie #NNN.ext}.
 
     Compartida entre el importer (issue_number viene de ComicInfo.xml, si
@@ -921,9 +1256,22 @@ def build_library_path(library: Path, series: Series, issue_number: str | None,
     folder = f"{safe_title}{year_suffix}"
 
     if issue_number:
-        num = sanitize_segment(str(issue_number)).zfill(3)
-        filename = f"{safe_title} #{num}{suffix}"
+        ajustes = get_settings()
+        if getattr(ajustes, "naming_enabled", False):
+            nombre = construir_nombre(
+                series, issue_number, titulo=issue_title, formato=issue_format,
+                pack=pack or es_pack(issue_number),
+                preset=getattr(ajustes, "naming_preset", "clasico"),
+                padding=getattr(ajustes, "naming_padding", 0))
+            filename = f"{nombre}{suffix}"
+        else:
+            num = sanitize_segment(str(issue_number)).zfill(3)
+            filename = f"{safe_title} #{num}{suffix}"
     else:
         filename = fallback_name or f"{safe_title}{suffix}"
+        if especial:
+            # Especiales/tomos sin número: van a su propia carpeta dentro de la
+            # serie (decisión del PO, 2026-11-16), no al _Unsorted general.
+            folder = f"{folder}/Especiales"
 
     return library / tradition_folder / folder / filename

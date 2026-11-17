@@ -39,7 +39,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +47,7 @@ from zascarr.api.revision import ejecutar_vinculacion
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import Series
+from zascarr.services.borradores_revision import BorradoresRevision, BorradorNoValidoError
 from zascarr.services.descubrimiento_grupo import GrupoNoEncontradoError
 from zascarr.services.ficha_numero import FORMATOS_LEGIBLES
 from zascarr.services.tokens_revision import (
@@ -73,6 +74,7 @@ from zascarr.services.vinculacion_previa import (
     SerieElegidaNoExisteError,
     VistaPreviaDeVinculacion,
 )
+from zascarr.web.contexto_carpetas import ContextoCarpetas
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
@@ -93,7 +95,7 @@ MENSAJE_SIN_CLAVE = "ZascArr no tiene clave para firmar lo que ves: reinícialo 
 MENSAJE_SERIE_NO_VALIDA = ("Hace falta una serie de tu biblioteca para preparar la vinculación. Elige o crea la serie "
                            "primero: una candidata de búsqueda no basta.")
 MENSAJE_SERIE_NO_EXISTE = "La serie elegida ya no existe en tu biblioteca. Vuelve a elegirla."
-MENSAJE_GRUPO_NO_EXISTE = "Esa carpeta ya no tiene registros pendientes: puede que se hayan vinculado o descartado."
+MENSAJE_GRUPO_NO_EXISTE = "Esa carpeta ya no tiene pendientes: puede que se hayan vinculado o descartado."
 MENSAJE_BORRADOR_NO_VALE = ("No se ha podido reconstruir lo que habías marcado y escrito en esa página, así que se muestra "
                             "sin ello. Ese borrador no cuenta como una revisión válida.")
 
@@ -310,7 +312,8 @@ def _sin_cache(resp: HTMLResponse) -> HTMLResponse:
 
 
 def _contexto_de_la_revision(r: RespuestaVinculacion, cursor_actual: str, otros: dict[str, Borrador],
-                             avisos: list[str], accion: dict | None = None) -> dict:
+                             avisos: list[str], accion: dict | None = None,
+                             borrador_guardado=None) -> dict:
     por_id = {a.id: a for a in r.archivos}
     pendientes = [
         {"clave": k, "desde": b.desde, "hasta": b.hasta, "n_marcados": len(b.marcados), "n_numeros": len(b.numeros)}
@@ -322,18 +325,23 @@ def _contexto_de_la_revision(r: RespuestaVinculacion, cursor_actual: str, otros:
         "nombres_de": lambda ids: [por_id[i].nombre for i in ids if i in por_id],
         "borradores_json": json.dumps({k: b.a_json() for k, b in otros.items() if not b.vacio()}, ensure_ascii=False),
         "pendientes": pendientes, "incluidos": incluidos, "excluidos": excluidos, "limite": LIMITE_ARCHIVOS,
+        "archivos_por_id": {a.id: a for a in r.archivos},
+        "n_marcados": sum(1 for a in r.archivos if a.marcado),
+        "n_incluidos": len(incluidos),
+        "n_bloqueados": sum(1 for a in r.archivos if a.marcado and not a.marcable),
         "motivos_legibles": motivos_legibles, "texto_de_la_pagina": texto_de_la_pagina(r.pagina), "accion": accion,
         "formatos": FORMATOS_LEGIBLES, "tradiciones": TRADICIONES_ES, "fuentes": FUENTES_ES,
         "url_reabrir_vista": RUTA,
         "texto_legible": texto_legible,
         "hay_que_marcar": any(a.marcable and not a.marcado for a in r.archivos),
         "hay_marcados": any(a.marcado for a in r.archivos),
+        "borrador_guardado": borrador_guardado,
     }
 
 
 async def _revisar(request: Request, db: AsyncSession, clave: str, series_id: str, *, estado: Borrador,
                    cursor: str, otros: dict[str, Borrador], avisos: list[str], pagina_completa: bool,
-                   accion: str = "") -> HTMLResponse:
+                   accion: str = "", borrador_guardado=None) -> HTMLResponse:
     """Pide la vista previa al servicio y la pinta. Un fallo recuperable se explica; nunca deja un token a la vista."""
     secreto = get_settings().secret_key
     plantilla = "asistente_vinculacion.html" if pagina_completa else "_vinculacion_revision.html"
@@ -397,8 +405,17 @@ async def _revisar(request: Request, db: AsyncSession, clave: str, series_id: st
         avisos.append(MENSAJE_BORRADOR_NO_VALE)
         cursor = ""
         resultado_accion = None            # la página que se pidió ya no vale: no se cuenta una acción sobre otra
-    ctx = _contexto_de_la_revision(r, cursor, otros, avisos, resultado_accion)
+    ctx = _contexto_de_la_revision(r, cursor, otros, avisos, resultado_accion, borrador_guardado)
     return _sin_cache(templates.TemplateResponse(request, plantilla, {**base, **ctx, "error": None}))
+
+
+async def _leer_borrador(db: AsyncSession, clave: str, series_id: str):
+    """Un borrador guardado nunca es una decisión: se ignora si falla la lectura."""
+    try:
+        return await BorradoresRevision(db).obtener(clave=clave, series_id=series_id)
+    except Exception as exc:  # noqa: BLE001 — un adorno no puede romper el asistente
+        logger.warning("asistente.borrador_ilegible", error=type(exc).__name__)
+        return None
 
 
 @router.get("", response_class=HTMLResponse)
@@ -411,8 +428,87 @@ async def abrir(
 ) -> HTMLResponse:
     """Abre la preparación para un grupo y una serie LOCAL. Todo empieza sin marcar; no escribe nada. `cursor` (opcional)
     es la posición de la página a la que se vuelve tras una confirmación: un cursor que no vale da la primera página."""
+    guardado = await _leer_borrador(db, clave, series_id)
     return await _revisar(request, db, clave, series_id, estado=Borrador(), cursor=cursor, otros={}, avisos=[],
-                          pagina_completa=True)
+                          pagina_completa=True, borrador_guardado=guardado)
+
+
+@router.get("/reabrir", response_class=HTMLResponse)
+async def reabrir(
+    request: Request,
+    clave: str = Query(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
+    series_id: str = Query(..., min_length=1, max_length=64),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Carga el borrador guardado y lo reevalúa; no vincula nada."""
+    guardado = await _leer_borrador(db, clave, series_id)
+    if guardado is None:
+        return await _revisar(request, db, clave, series_id, estado=Borrador(), cursor="", otros={},
+                              avisos=["No hay un borrador guardado o ha caducado."],
+                              pagina_completa="hx-request" not in request.headers)
+    otros = leer_borradores(json.dumps(guardado.paginas, ensure_ascii=False))
+    cursor = guardado.cursor if guardado.cursor in otros else (next(iter(otros), ""))
+    estado = otros.pop(cursor, Borrador())
+    return await _revisar(request, db, clave, series_id, estado=estado, cursor=cursor, otros=otros,
+                          avisos=["Revisión reanudada. Nada se vincula hasta que lo confirmes."],
+                          pagina_completa="hx-request" not in request.headers,
+                          borrador_guardado=guardado)
+
+
+@router.post("/guardar", response_class=HTMLResponse)
+async def guardar_borrador(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
+    """Guarda marcas y números para después. No evalúa ni vincula nada."""
+    f = await request.form()
+    clave = str(f.get("clave", ""))
+    series_id = str(f.get("series_id", ""))
+    cursor_actual = str(f.get("cursor_actual", INICIO))
+    cursor = "" if cursor_actual == INICIO else cursor_actual
+    otros = leer_borradores(str(f.get("borradores", "")))
+    estado = leer_estado_de_la_pagina(f)
+    estado.desde, estado.hasta = _entero(f.get("pagina_desde")), _entero(f.get("pagina_hasta"))
+    otros.pop(cursor, None)
+    if not estado.vacio():
+        otros[cursor] = estado
+    paginas = {k: v.a_json() for k, v in otros.items()}
+    salir = str(f.get("salir", "")) == "1"
+    if salir:
+        destino = ContextoCarpetas.desde(request).url("/ui/pendientes/carpetas")
+        try:
+            await BorradoresRevision(db).guardar(clave=clave, series_id=series_id,
+                                                cursor=cursor or INICIO, paginas=paginas)
+            await db.commit()
+        except BorradorNoValidoError:
+            return await _revisar(request, db, clave, series_id, estado=estado, cursor=cursor, otros=otros,
+                                  avisos=["No se pudo guardar el borrador: los datos de esta página no son válidos."],
+                                  pagina_completa=True)
+        if request.headers.get("hx-request"):
+            return Response(status_code=204, headers={"HX-Redirect": destino})
+        return RedirectResponse(destino, status_code=303)
+    try:
+        guardado = await BorradoresRevision(db).guardar(
+            clave=clave, series_id=series_id, cursor=cursor or INICIO, paginas=paginas)
+        await db.commit()
+    except BorradorNoValidoError:
+        return await _revisar(request, db, clave, series_id, estado=estado, cursor=cursor, otros=otros,
+                              avisos=["No se pudo guardar el borrador: los datos de esta página no son válidos."],
+                              pagina_completa=True)
+    aviso = (f"Borrador guardado ({guardado.total_marcados} marcado"
+             f"{'s' if guardado.total_marcados != 1 else ''}). Al volver podrás reanudarlo.")
+    return await _revisar(request, db, clave, series_id, estado=estado, cursor=cursor, otros=otros,
+                          avisos=[aviso], pagina_completa="hx-request" not in request.headers)
+
+
+@router.post("/descartar", response_class=HTMLResponse)
+async def descartar_borrador(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    f = await request.form()
+    clave = str(f.get("clave", ""))
+    series_id = str(f.get("series_id", ""))
+    try:
+        await BorradoresRevision(db).borrar(clave=clave, series_id=series_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("asistente.borrador_no_borrado", error=type(exc).__name__)
+    return await _revisar(request, db, clave, series_id, estado=Borrador(), cursor="", otros={},
+                          avisos=["Borrador descartado."], pagina_completa="hx-request" not in request.headers)
 
 
 @router.post("/revisar", response_class=HTMLResponse)
@@ -426,6 +522,9 @@ async def revisar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
     otros = leer_borradores(str(f.get("borradores", "")))
     estado = leer_estado_de_la_pagina(f)
     estado.desde, estado.hasta = _entero(f.get("pagina_desde")), _entero(f.get("pagina_hasta"))
+    quitar = str(f.get("quitar", ""))
+    if _es_uuid(quitar):
+        estado.marcados = [i for i in estado.marcados if i != quitar]
 
     # Una acción masiva vale para la página que se ve; si a la vez se cambia de página, no se aplica.
     accion = str(f.get("accion", ""))
@@ -529,7 +628,7 @@ def _entero(valor: object) -> int:
 #: Qué pasó con cada archivo omitido y qué se puede hacer con lo que el contrato ofrece (revisar de nuevo). El servicio
 #: devuelve solo el CÓDIGO; el texto es presentación. Un código que no esté aquí no se inventa: sale con su código.
 TEXTO_DE_MOTIVO: dict[str, str] = {
-    "archivo_inexistente": "El registro ya no existe: puede que se haya borrado o vinculado desde otro sitio.",
+    "archivo_inexistente": "El archivo ya no existe: puede que se haya borrado o vinculado desde otro sitio.",
     "descartado": "Lo descartaste de la bandeja de pendientes, así que no se vincula.",
     "ya_vinculado_a_otro": "Ya estaba vinculado a otro número: no se cambia por ti.",
     "en_curso": "Tiene una asignación en curso: espera a que termine y revísalo de nuevo.",
@@ -607,8 +706,10 @@ async def confirmar(
     contexto = _contexto_de_la_confirmacion(token)
     base = {**contexto, "cursor_actual": cursor_actual, "inicio": INICIO,
             "pagina": f"{_entero(pagina_desde)}–{_entero(pagina_hasta)}" if _entero(pagina_hasta) else None}
-    plantilla = "asistente_vinculacion.html" if "hx-request" not in request.headers else "_vinculacion_resultado.html"
+    es_htmx = "hx-request" in request.headers
+    plantilla = "asistente_vinculacion.html" if not es_htmx else "_vinculacion_resultado.html"
     base["titulo_serie"] = await _titulo_de_la_serie(db, contexto["series_id"])
+    base.update({"oob_cabecera": es_htmx, "foco_resultado": es_htmx})
     def pagina_de_fallo(codigo: str, mensaje: str) -> HTMLResponse:
         titulo, definitivo, repetible = FALLOS.get(codigo, ("No se pudo vincular", True, False))
         return _sin_cache(templates.TemplateResponse(request, plantilla, {

@@ -170,7 +170,7 @@ class TestColaDeSueltos:
         assert r.status_code == 200
         t = visible(r.text)
         assert t.count("No se pudo leer la sugerencia guardada") == 4
-        assert "No se pudieron leer los archivos sueltos" not in t
+        assert "No se pudieron leer los pendientes sueltos" not in t
         assert "Sugerencia guardada:" not in t
 
     async def test_el_nombre_largo_se_lee_entero_y_la_tarjeta_tiene_nombre_accesible(self, banco):
@@ -187,14 +187,15 @@ class TestColaDeSueltos:
         r = await pagina(ruta="/ui/pendientes")
         assert r.status_code == 200
         assert 'href="/ui/pendientes/sueltos"' in principal(r.text)
-        assert "Ver los archivos sueltos" in visible(r.text)
+        assert "Ver los pendientes sueltos" in visible(r.text)
 
     async def test_sin_sueltos_el_vacio_no_se_confunde_con_error(self, banco):
         await banco.sembrar(archivo("Comics/Una serie/Agrupado.cbz"))
         r = await pagina()
         assert r.status_code == 200
         t = visible(r.text)
-        assert "No hay archivos sueltos." in t
+        assert "No hay pendientes sueltos." in t
+        assert "Archivos sueltos" not in t
         assert "No se pudieron leer" not in t
         assert "Volver a las carpetas" in t
         assert "Sueltos 0" not in t
@@ -359,7 +360,8 @@ class TestFallo:
         assert r.status_code == 503
         assert r.headers["cache-control"] == "no-store"
         t = visible(r.text)
-        assert "No se pudieron leer los archivos sueltos" in t
+        assert "No se pudieron leer los pendientes sueltos" in t
+        assert "Archivos sueltos" not in t
         assert "No se muestran recuentos parciales" in t
         assert "Sueltos 1" not in t and "de 1 por revisar" not in t
         assert "Reintentar" in t

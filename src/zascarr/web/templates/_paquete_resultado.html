@@ -1,0 +1,12 @@
+<section class="audit-block" id="paquete-resultado">
+  {% if error %}
+    <p class="caption" role="status">{{ error }}</p>
+  {% else %}
+    <p class="caption" role="status">El paquete se ha importado o se ha dejado para revisar. El archivo original sigue en Descargas.</p>
+    <ul class="audit-lista">
+      {% for i in op.items %}
+        <li class="audit-fila"><span>{{ i.nombre }}</span><span>{{ i.resultado }}</span></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>

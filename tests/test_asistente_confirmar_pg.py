@@ -52,7 +52,15 @@ from tests.test_asistente_vinculacion_pg import (  # noqa: F401  (fixtures y ayu
 from tests.test_vinculacion_pg import ent, firmar  # noqa: F401
 from zascarr.models import IssueFormat
 from zascarr.services.tokens_revision import candidata_firmable, crear_token_candidata
-from zascarr.services.vinculacion import MOTIVOS, VinculacionDeArchivos
+from zascarr.services.vinculacion import (
+    MOTIVOS,
+    ArchivoResultado,
+    Presentacion,
+    RespuestaEjecucion,
+    ResultadoVinculacion,
+    TotalesResultado,
+    VinculacionDeArchivos,
+)
 from zascarr.web import asistente_vinculacion
 from zascarr.web.asistente_vinculacion import FALLOS, TEXTO_DE_MOTIVO
 
@@ -260,6 +268,28 @@ class TestCriterio3Resultado:
         assert f'href="/ui/pendientes/carpetas?serie={p.serie}"' in r.t
         assert "Volver a la ficha de la serie" in r.visible
         assert "Elegir otra carpeta para esta serie" in r.visible
+
+    async def test_archivo_inexistente_habla_de_archivo_no_de_registro(self, ent, monkeypatch):
+        p = await listo(ent, UNO)
+
+        async def resultado_con_archivo_inexistente(_db, _token):
+            return RespuestaEjecucion(
+                operacion_id="op-prueba", repetida=False,
+                resultado=ResultadoVinculacion(
+                    version=1, operacion_id="op-prueba", serie_id=str(p.serie),
+                    fecha="2026-11-14T00:00:00Z", global_="vinculados_parcialmente",
+                    totales=TotalesResultado(vinculados=0, ya_estaban=0, omitidos=1,
+                                             issues_creados=0, con_conflicto_incluidos=0),
+                    archivos=[ArchivoResultado(
+                        id="a", estado="omitido", motivo="archivo_inexistente", numero="1",
+                        formato="cbz", issue_creado=False, conflictos=[])]),
+                presentacion=Presentacion(nombres_actuales={"a": UNO}),
+            )
+
+        monkeypatch.setattr(asistente_vinculacion, "ejecutar_vinculacion", resultado_con_archivo_inexistente)
+        r = await confirmar(p)
+        assert "El archivo ya no existe: puede que se haya borrado o vinculado desde otro sitio." in r.visible
+        assert "El registro ya no existe" not in r.visible
 
     async def test_el_resultado_no_inventa_estados_y_cada_motivo_del_contrato_tiene_texto(self, ent):
         assert set(MOTIVOS) <= set(TEXTO_DE_MOTIVO), set(MOTIVOS) - set(TEXTO_DE_MOTIVO)

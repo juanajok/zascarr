@@ -365,8 +365,11 @@ class TestSnapshot:
         assert set(datos) == {"coordinacion", "generado", "fuentes", "hosts"}
         assert datos["coordinacion"] == "proceso"
         assert [f["fuente"] for f in datos["fuentes"]] == [
+            # SCR2/SCR3: Fandom y las dos guías de lectura son fuentes declaradas (apagadas
+            # por defecto e incluidas siempre en el snapshot, como el resto de la allowlist).
             "comicvine", "anilist", "tebeosfera", "gcd", "metron", "open_library",
-            "foro", "portada"]
+            "fandom_dc", "fandom_marvel", "reading_orders", "continuity_guide",
+            "comic_book_herald", "foro", "portada"]
         cv = next(f for f in datos["fuentes"] if f["fuente"] == "comicvine")
         assert cv["intervalo_min_s"] == 1.0 and cv["max_intentos"] == 3
         assert cv["ultimos_intentos"][0]["resultado"] == "429"
@@ -387,7 +390,8 @@ class TestSnapshot:
             lim.registrar_resultado("comicvine", "ok", intento=i + 1)
         datos = lim.snapshot(AjustesFalsos())
         assert all(len(f["ultimos_intentos"]) <= 3 for f in datos["fuentes"])
-        assert len(datos["fuentes"]) == 8
+        # SCR2/SCR3/SCR5: 8 históricas + DC/Marvel Database + las dos guías + Comic Book Herald.
+        assert len(datos["fuentes"]) == 13
 
 
 class TestFuenteHabilitada:

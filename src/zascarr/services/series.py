@@ -22,8 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
     Character,
+    Creator,
     File,
     Issue,
+    IssueCreator,
     IssueFormat,
     MetadataSource,
     Publisher,
@@ -51,6 +53,16 @@ def pagina_efectiva(page: int, total: int, page_size: int) -> int:
     return min(max(page, 1), paginas)
 
 
+async def alternar_favorita(db: AsyncSession, series_id: UUID) -> bool | None:
+    """Marca/desmarca una serie como favorita local; devuelve el valor o None."""
+    serie = await db.get(Series, series_id)
+    if serie is None:
+        return None
+    serie.favorite = not bool(serie.favorite)
+    await db.flush()
+    return serie.favorite
+
+
 class SeriesService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -65,6 +77,12 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        author_id: UUID | None = None,
+        solo_favoritas: bool = False,
+        language: str | None = None,
+        edition_kind: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -121,6 +139,22 @@ class SeriesService:
                 .join(StoryArcIssue, StoryArcIssue.issue_id == Issue.id)
                 .where(StoryArcIssue.story_arc_id == story_arc_id)
             ))
+        if author_id:
+            query = query.where(Series.id.in_(
+                select(Issue.series_id)
+                .join(IssueCreator, IssueCreator.issue_id == Issue.id)
+                .where(IssueCreator.creator_id == author_id)
+            ))
+        if solo_favoritas:
+            query = query.where(Series.favorite.is_(True))
+        if language:
+            query = query.where(Series.language == language)
+        if edition_kind:
+            query = query.where(Series.edition_kind == edition_kind)
+        if year_from is not None:
+            query = query.where(Series.start_year >= year_from)
+        if year_to is not None:
+            query = query.where(Series.start_year <= year_to)
 
         # BL-ETQ1b: EXISTS/NOT EXISTS por token; nunca JOIN+DISTINCT.
         for normalizado in etiquetas_positivas:
@@ -220,6 +254,12 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        author_id: UUID | None = None,
+        solo_favoritas: bool = False,
+        language: str | None = None,
+        edition_kind: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -233,6 +273,12 @@ class SeriesService:
             page=page, page_size=page_size, tradition=tradition, status=status,
             search=search, publisher_id=publisher_id, character_id=character_id,
             story_arc_id=story_arc_id,
+            author_id=author_id,
+            solo_favoritas=solo_favoritas,
+            language=language,
+            edition_kind=edition_kind,
+            year_from=year_from,
+            year_to=year_to,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
@@ -250,6 +296,12 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        author_id: UUID | None = None,
+        solo_favoritas: bool = False,
+        language: str | None = None,
+        edition_kind: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
@@ -267,6 +319,12 @@ class SeriesService:
             page=page, page_size=page_size, tradition=tradition, status=status,
             search=search, publisher_id=publisher_id, character_id=character_id,
             story_arc_id=story_arc_id,
+            author_id=author_id,
+            solo_favoritas=solo_favoritas,
+            language=language,
+            edition_kind=edition_kind,
+            year_from=year_from,
+            year_to=year_to,
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
@@ -286,6 +344,7 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        author_id: UUID | None = None,
     ) -> dict[str, str | None]:
         """Nombres legibles de los filtros activos, para sus chips.
 
@@ -306,6 +365,10 @@ class SeriesService:
             nombres["story_arc"] = (await self.db.execute(
                 select(StoryArc.title).where(StoryArc.id == story_arc_id)
             )).scalar()
+        if author_id is not None:
+            nombres["author"] = (await self.db.execute(
+                select(Creator.name).where(Creator.id == author_id)
+            )).scalar()
         return nombres
 
     async def search_characters(self, query: str, limit: int = 20) -> list[Character]:
@@ -322,6 +385,16 @@ class SeriesService:
             return []
         return list((await self.db.execute(
             select(StoryArc).where(StoryArc.title.ilike(f"%{query}%")).order_by(StoryArc.title).limit(limit)
+        )).scalars().all())
+
+    async def search_creators(self, query: str, limit: int = 20) -> list[Creator]:
+        """Autores cuyo nombre coincide; el filtro se aplica después por id."""
+        texto = (query or "").strip()
+        if not texto:
+            return []
+        return list((await self.db.execute(
+            select(Creator).where(Creator.name.ilike(f"%{texto}%"))
+            .order_by(Creator.name).limit(limit)
         )).scalars().all())
 
 
@@ -436,8 +509,13 @@ async def numeros_poseidos_por_serie(db: AsyncSession) -> dict[UUID, set[int]]:
     """
     filas = (await db.execute(
         select(Issue.series_id, Issue.issue_number, Issue.format,
-               exists().where(File.issue_id == Issue.id,
-                              File.is_missing.is_(False)).label("disponible"))
+               or_(
+                   exists().where(File.issue_id == Issue.id,
+                                  File.is_missing.is_(False)),
+                   # Un tomo recopilatorio marca en el Issue que cubre ese número
+                   # (2026-11-16): cuenta como poseído igual que un archivo real.
+                   Issue.metadata_.has_key("cubierto_por_tomo"),
+               ).label("disponible"))
     )).all()
     por_serie: dict[UUID, set[int]] = {}
     for series_id, numero, formato, disponible in filas:
@@ -464,8 +542,11 @@ async def numeros_poseidos(db: AsyncSession, series_id: UUID) -> set[int]:
     """
     filas = (await db.execute(
         select(Issue.issue_number, Issue.format,
-               exists().where(File.issue_id == Issue.id,
-                              File.is_missing.is_(False)).label("disponible"))
+               or_(
+                   exists().where(File.issue_id == Issue.id,
+                                  File.is_missing.is_(False)),
+                   Issue.metadata_.has_key("cubierto_por_tomo"),
+               ).label("disponible"))
         .where(Issue.series_id == series_id)
     )).all()
     poseidos: set[int] = set()

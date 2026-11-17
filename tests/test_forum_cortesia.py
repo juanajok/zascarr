@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -111,12 +112,12 @@ class TestForoSinTurno:
     async def test_un_bloqueo_mayor_que_el_presupuesto_no_devuelve_lista_vacia(self):
         """AC-16: la espera no es «sin resultados» y no se registra como fallo."""
         mundo = Mundo(lambda r: httpx.Response(200, text=HTML))
-        mundo.lim.bloquear("foro", f"{BASE}:443", 60.0, motivo="429")
+        mundo.lim.bloquear("foro", f"{BASE}:443", 90.0, motivo="429")
         with structlog.testing.capture_logs() as registros, \
                 pytest.raises(CortesiaEnEspera) as exc:
             await mundo.scraper(espera_max_s=5.0).use_ipb_search("thorgal")
         assert exc.value.fuente == "foro" and exc.value.motivo == "bloqueo_fuente"
-        assert exc.value.espera_estimada_s >= 5.0
+        assert exc.value.espera_estimada_s >= 60.0
         assert mundo.peticiones == []
         assert not any(r["event"] == "forum.search_failed" for r in registros)
 
@@ -137,7 +138,60 @@ class TestForoSinTurno:
         with structlog.testing.capture_logs() as registros:
             resultado = await modulo_orchestrator.Orchestrator(
                 db=MagicMock())._forum_fallback("thorgal")
-        assert resultado is None
+        assert resultado == []
         eventos = [r["event"] for r in registros]
         assert "orchestrator.forum_fallback_error" not in eventos
         assert "orchestrator.forum_sin_turno" in eventos
+
+
+async def test_la_cortesia_del_foro_se_muestra_como_espera_no_como_sin_resultados(monkeypatch):
+    """El foro no devolvió vacío: IPB pidió esperar. La UI debe decirlo."""
+    from zascarr.models import WishlistStatus
+    from zascarr.services.orchestrator import MOTIVO_FORO_ESPERA, Orchestrator
+    orq = Orchestrator(db=SimpleNamespace(flush=AsyncMock(), execute=AsyncMock(), commit=AsyncMock()))
+    orq._build_query = AsyncMock(return_value="consulta")
+    orq._marcar_busqueda = AsyncMock()
+    orq._forum_fallback = AsyncMock(side_effect=CortesiaEnEspera(
+        "foro", "foro.example:80", 25.0, "cortesia"))
+    item = SimpleNamespace(id=uuid4(), status=None, last_error=None, numero=None,
+                           series_id=None, search_query=None)
+    ajustes = SimpleNamespace(forum_enabled=True, forum_url="http://foro.example/forum",
+                              forum_username="lector", prowlarr_enabled=False,
+                              transmission_enabled=False, amule_enabled=False)
+    monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+
+    assert await orq._search_and_rank(item) == []
+    assert item.last_error == MOTIVO_FORO_ESPERA
+    assert item.status is WishlistStatus.WANTED
+    orq.db.flush.assert_awaited()
+
+
+async def test_si_prowlarr_trajo_pero_se_descarto_la_espera_lo_dice(monkeypatch):
+    """Bug UX 2026-11-16: el aviso del foro tapaba que Prowlarr sí había respondido
+    y que sus resultados se descartaron."""
+    from zascarr.models import WishlistStatus
+    from zascarr.services.orchestrator import (
+        MOTIVO_ESPERA_CON_DESCARTES, Orchestrator,
+    )
+    from zascarr.services.prowlarr import SearchResult
+    orq = Orchestrator(db=SimpleNamespace(flush=AsyncMock(), execute=AsyncMock(), commit=AsyncMock()))
+    orq._build_query = AsyncMock(return_value="DC K.O.")
+    orq._marcar_busqueda = AsyncMock()
+    orq._forum_fallback = AsyncMock(side_effect=CortesiaEnEspera(
+        "foro", "foro.example:80", 25.0, "cortesia"))
+    orq._prowlarr_candidates = AsyncMock(return_value=([
+        SearchResult(title="Manual de ginecología", indexer="x",
+                     download_url="magnet:?xt=urn:btih:abc", size_bytes=1,
+                     seeders=5, category="books"),
+    ], None))
+    item = SimpleNamespace(id=uuid4(), status=None, last_error=None, numero=None,
+                           series_id=None, search_query="DC K.O.")
+    ajustes = SimpleNamespace(forum_enabled=True, forum_url="http://foro.example/forum",
+                              forum_username="lector", prowlarr_enabled=True,
+                              transmission_enabled=True, amule_enabled=False,
+                              blog_feed_enabled=False)
+    monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: ajustes)
+
+    assert await orq._search_and_rank(item) == []
+    assert item.last_error == MOTIVO_ESPERA_CON_DESCARTES
+    assert item.status is WishlistStatus.WANTED

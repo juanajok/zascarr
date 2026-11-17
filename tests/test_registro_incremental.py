@@ -5,6 +5,7 @@ coleccionista. El comportamiento con ficheros y Postgres reales está en `tests/
 from __future__ import annotations
 
 import re
+from types import SimpleNamespace
 
 from zascarr.services.library_adopter import EstadoAdopcion, InventarioBiblioteca
 from zascarr.services.registro_biblioteca import EstadoRegistro, FaseRegistro
@@ -206,3 +207,28 @@ class TestEstadoConRecorridoIlegible:
         t = _texto(_render(reg=EstadoRegistro(fase=FaseRegistro.TERMINADO, incremental=True, total=5, procesados=5, ilegibles=1)))
         assert "ha quedado incompleto" in t and "No se ha podido leer 1 carpeta o archivo" in t
         assert "Archivos sin registrar revisados" not in t and "No se pudo registrar 0" not in t
+
+
+class TestMarcadorInvalidoEnPantalla:
+    """#367: un marcador corrupto no se presenta como registrado ni ofrece incremental."""
+
+    def test_avisa_y_no_dice_registrada(self):
+        adopcion = SimpleNamespace(aviso="El marcador no es válido.", oferta=False,
+                                   aceptacion=None, run_id=None)
+        t = _texto(_render(estado=EstadoAdopcion.MARCADOR_INVALIDO, adopcion=adopcion))
+        assert "No se puede verificar el registro" in t
+        assert "ya está registrada" not in t
+        assert "Buscar archivos sin registrar" not in t
+        assert "marcador no es válido" in t
+
+
+    def test_huerfano_avisa_y_no_ofrece_registro(self):
+        adopcion = SimpleNamespace(
+            aviso="Hay una aceptación guardada sin marcador. No se autoriza nada.",
+            oferta=False, aceptacion=None, run_id=None)
+        t = _texto(_render(estado=EstadoAdopcion.ACEPTACION_HUERFANA,
+                            adopcion=adopcion))
+        assert "No se puede verificar el registro" in t
+        assert "aceptación guardada sin marcador" in t
+        assert "Registrar mi biblioteca" not in t
+        assert "Buscar archivos sin registrar" not in t

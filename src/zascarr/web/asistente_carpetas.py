@@ -203,7 +203,7 @@ async def manual(
         if not propuesta:
             propuesta = (await DescubrimientoDeGrupo(db, secret="").abrir(clave)).consulta_propuesta
     except GrupoNoEncontradoError:
-        return _fragmento_error(request, "Esa carpeta ya no tiene registros pendientes.")
+        return _fragmento_error(request, "Esa carpeta ya no tiene pendientes.")
     return _sin_cache(templates.TemplateResponse(request, "_asistente_manual.html", {
         "clave": clave, "titulo": propuesta, "anio": "", "error": None, "tradicion_elegida": "",
         "tradiciones": _tradiciones(),
@@ -237,11 +237,15 @@ async def elegir(
     if firmada is None:
         return _fragmento_error(request, MENSAJE_BUSQUEDA_CADUCADA)
     if tradicion is None:
-        return _sin_cache(templates.TemplateResponse(request, "_asistente_paso.html", {
-            "clave": clave, "token": candidata, "sugerida": firmada.tradicion, "consulta": consulta,
-            "etiqueta_sugerida": _etiqueta_de_tradicion(firmada.tradicion) if firmada.tradicion else None,
+        # La tradición se pide en el paso de confirmación, no en la tarjeta de resultados.
+        return _sin_cache(templates.TemplateResponse(request, "_asistente_tradicion.html", {
+            "clave": clave, "candidata": candidata, "consulta": consulta,
+            "titulo": firmada.titulo, "anio": firmada.anio,
+            "sugerida": _etiqueta_de_tradicion(firmada.tradicion) if firmada.tradicion else None,
             "procedencia": firmada.procedencia,
-            "error": MENSAJE_FALTA_TRADICION, "tradiciones": _tradiciones(), "pista": pista}))
+            "tradiciones": _tradiciones(), "pista": pista,
+            "contexto_campos": [],
+        }))
     plantilla, contexto = await preparar_vista_previa(
         request, db, candidata=candidata, titulo=None, anio=None, clave=clave, tradition=tradicion, consulta=consulta)
     if plantilla == "_fragmento_sin_clave":

@@ -390,7 +390,7 @@ class TestEnlaceYControles:
         assert reglas, "el selector de tradición no tiene regla propia: sale el control nativo"
         d = reglas[0]
         assert d.get("background") == "var(--paper)" and d.get("color") == "var(--ink)"
-        assert d.get("border") == "2px solid var(--ink)" and "min-height" in d and float(d["min-height"][:-2]) >= 40
+        assert d.get("border") == "var(--border-chip) solid var(--ink)" and "min-height" in d and float(d["min-height"][:-2]) >= 40
 
     def test_el_select_conserva_su_nombre_accesible_y_no_viene_preseleccionado(self, web):
         t = buscar(busqueda([_resultado()]))

@@ -37,7 +37,11 @@
 
 {% block content %}
 <div class="dashboard">
-  <h1>Inicio</h1>
+  <div class="dashboard-cabecera">
+    <h1>Inicio</h1>
+    <a class="btn ghost sm dashboard-logs" href="/ui/logs">Descargar logs</a>
+  </div>
+  <p class="caption">Si algo no funciona, descarga los últimos registros. Las rutas y nombres de tus archivos se ocultan; contraseñas y tokens también.</p>
 
   {#- Una sola cuenta que cuadra (caso real, 2026-10-20: «encontramos 1542 · registrados 1325», paso 1 «Hecho»
       y «Revisa 1322» sin decir cómo encajaban): lo registrado y en qué punto está, con partes que suman el
@@ -59,11 +63,34 @@
   {% if informe %}
   {#- La fecha exacta da la procedencia; «hace…» dice si sigue valiendo sin hacer cuentas. Si es vieja,
       la forma de renovarla va al lado del dato, no en otra pantalla. -#}
-  <p class="procedencia muted">En tu disco había <b>{{ informe.archivos_leidos }}</b> el {{ informe.fecha|fecha_llana }}{% if v.informe_hace %} ({{ v.informe_hace }}){% endif %}.
+  <p class="procedencia muted">En tu disco había <b>{{ informe.archivos_leidos }}</b> {{ "tebeo" if informe.archivos_leidos == 1 else "tebeos" }} el {{ informe.fecha|fecha_llana }}{% if v.informe_hace %} ({{ v.informe_hace }}){% endif %}.
     {%- if v.copias_descartadas %} Al registrarlos dejamos fuera <b>{{ v.copias_descartadas }}</b> {{ "copia idéntica" if v.copias_descartadas == 1 else "copias idénticas" }}: el mismo archivo no se registra dos veces.{% endif %}
     {%- if v.informe_antiguo %} <a href="/ui/auditoria">Volver a mirar el disco</a>{% endif %}</p>
   {% elif d.total %}
   <p class="procedencia muted">Todavía no has mirado tu disco en busca de repetidos.</p>
+  {% endif %}
+
+  {% if v.continuar %}
+  {% set c = v.continuar %}
+  <section class="continuar-leyendo" aria-labelledby="h-continuar">
+    <div class="continuar-card">
+      <p class="rotulo">Continuar leyendo</p>
+      <h2 id="h-continuar" class="titulo-frase">{{ c.series_title }}</h2>
+      <p class="continuar-numero">#{{ c.issue_number }}{% if c.issue_title %} · {{ c.issue_title }}{% endif %}</p>
+      {% if c.page_count and c.current_page %}
+      {% set pct = (c.current_page * 100 / c.page_count)|round|int %}
+      <div class="barra-lectura" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+           aria-valuenow="{{ pct }}" aria-label="Leído: {{ pct }}% ({{ c.current_page }} de {{ c.page_count }} páginas)">
+        <span class="barra-lectura-relleno" style="width: {{ pct }}%"></span>
+      </div>
+      <p class="barra-lectura-texto">{{ c.current_page }} de {{ c.page_count }} páginas</p>
+      {% endif %}
+      <div class="continuar-acciones">
+        <a class="btn" href="/ui/series/{{ c.series_id }}/numero/{{ c.issue_id }}">Seguir con este número</a>
+        <a class="btn ghost sm" href="/ui/series/{{ c.series_id }}">Ver la serie</a>
+      </div>
+    </div>
+  </section>
   {% endif %}
 
   <section class="primeros-pasos" aria-labelledby="h-pasos">
@@ -167,8 +194,9 @@
     <form action="/ui/descubrir" method="get" class="search-form" role="search">
       <label class="sr" for="q-inicio">Título de la serie</label>
       <input id="q-inicio" type="search" name="q" placeholder="Título de la serie…" class="search-input" required>
-      <button type="submit" class="btn sm neutro">Buscar →</button>
+      <button type="submit" class="btn sm">Buscar →</button>
     </form>
   </section>
+
 </div>
 {% endblock %}

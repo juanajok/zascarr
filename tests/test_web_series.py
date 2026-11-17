@@ -71,7 +71,11 @@ class FakeSession:
     def add(self, objeto):
         self.added.append(objeto)
 
-    async def execute(self, _statement):
+    async def execute(self, statement):
+        # Las colecciones de la ficha se cargan en un fragmento aparte; si una
+        # prueba antigua no lo declara, la consulta de pertenencia va vacía.
+        if "collection_series" in str(statement):
+            return FakeExecResult([])
         return self._queue.pop(0)
 
     async def get(self, _model, _id):
@@ -560,7 +564,15 @@ class TestPresupuestoTextoU21:
         antes = re.sub(r'<p class="series-acciones">.*?</p>', '', antes, flags=re.S)
         # BL-INF1 (#447): el bloque informativo va después de la cabecera y no compite
         # con el presupuesto de la entrada de #208.
-        antes = re.sub(r'<section class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
+        antes = re.sub(r'<section[^>]*class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
+        # #803: la navegación por anclas es un control de la ficha, no texto de entrada.
+        antes = re.sub(r'<nav class="ficha-nav".*?</nav>', '', antes, flags=re.S)
+        # Los números son el contenido principal, no la entrada de texto de #208.
+        antes = re.sub(r'<section id="numeros-serie".*?</section>', '', antes, flags=re.S)
+        # «Retirar» es un control destructivo plegado, no copy de entrada.
+        antes = re.sub(r'<details class="series-retirar".*?</details>', '', antes, flags=re.S)
+        # La marca de favorita es un control de la ficha, no copy de entrada.
+        antes = re.sub(r'<form[^>]*class="favorito-form".*?</form>', '', antes, flags=re.S)
         # BL-INF6: «Elegir portada» es un CONTROL de acción (abre el selector), como los botones de
         # `.series-acciones`: no es texto de entrada y no compite con el presupuesto de #208.
         antes = re.sub(r'<details class="elegir-portada".*?</details>', '', antes, flags=re.S)
@@ -575,6 +587,18 @@ class TestPresupuestoTextoU21:
         palabras = re.findall(r"\w+", self._texto(antes))
         assert len(palabras) <= 50, (len(palabras), " ".join(palabras))
 
+    def test_navegacion_por_anclas_y_completitud_sin_ambiguedad(self):
+        html = self._render()
+        assert 'class="ficha-nav"' in html
+        for ancla in ("#numeros-serie", "#sagas-serie", "#politica-serie",
+                      "#etiquetas-serie", "#colecciones-serie", "#coleccion-serie",
+                      "#datos-serie"):
+            assert f'href="{ancla}"' in html
+        assert 'id="numeros-serie"' in html
+        assert 'id="datos-serie"' in html
+        assert ">Completitud</h2>" in html
+        assert "Estado de la colección</h2>" not in html
+
     def test_presupuesto_de_la_accion_nueva(self):
         html = self._render()
         accion = re.search(r'<p class="series-acciones">(.*?)</p>', html, re.S)
@@ -583,9 +607,9 @@ class TestPresupuestoTextoU21:
         assert len(palabras) <= 24, (len(palabras), " ".join(palabras))
         assert "Añadir números del disco" in self._texto(accion.group(1))
 
-    def test_la_accion_va_antes_que_el_listado(self):
+    def test_los_numeros_van_antes_que_la_politica(self):
         html = self._render()
-        assert html.index('id="wishlist_policy"') < html.index("Te faltan")
+        assert html.index('id="numeros-serie"') < html.index('id="wishlist_policy"')
 
     def test_las_fuentes_van_plegadas_y_no_se_pierden(self):
         html = self._render()
@@ -593,11 +617,10 @@ class TestPresupuestoTextoU21:
             r'<details class="series-fuentes">(.*?)</details>', html, re.S
         )
         assert detalle is not None
-        assert "<summary>Fuentes y atribución</summary>" in detalle.group(1)
+        assert "<summary>Aviso legal</summary>" in detalle.group(1)
         assert "Los metadatos de esta ficha proceden de fuentes de terceros" in detalle.group(1)
-        assert "Fuentes y atribución" not in html.split('id="politica-serie"', 1)[0].replace(
-            "<summary>Fuentes y atribución</summary>", ""
-        )
+        assert html.split('id="politica-serie"', 1)[0].count(
+            "<summary>Aviso legal</summary>") == 1
 
     def test_la_garantia_va_junto_al_selector_y_no_al_final(self):
         html = self._render()
@@ -988,6 +1011,15 @@ class TestVolverALaBiblioteca:
         assert 'href="/ui/biblioteca?q=thor&amp;page=2#serie-' in r.text
         assert "Volver a la biblioteca" in r.text
 
+    def test_desde_una_coleccion_vuelve_a_la_coleccion(self):
+        series = make_series(total_issues=3)
+        destino = f"/ui/colecciones/{uuid4()}"
+        r = self._get(series, destino)
+        assert r.status_code == 200
+        assert f'href="{destino}" class="back-link"' in r.text
+        assert "Volver a la colección" in r.text
+
+
     def test_sin_contexto_ofrece_biblioteca_sin_inventar_busqueda(self):
         series = make_series(total_issues=3)
         r = self._get(series)
@@ -1175,3 +1207,191 @@ class TestEstadoColeccionWK2:
         assert "Volver a completarla" in r.text
         assert "<h2>Te faltan</h2>" not in r.text
         assert "No la vas a completar. Sus huecos no cuentan como faltas" in r.text
+
+
+
+@pytest.mark.parametrize("valor,etiqueta", [
+    (WishlistPolicy.FUTURE, "Números futuros (todavía no disponible)"),
+    (WishlistPolicy.ALL, "Todos los números (reservado)"),
+])
+def test_opcion_reservada_usa_etiqueta_no_valor_crudo(valor, etiqueta):
+    """R2 #789: las opciones reservadas conservan su value real y se leen en llano."""
+    from types import SimpleNamespace
+
+    from zascarr.web.series import templates
+
+    html = templates.env.get_template("_politica_serie.html").render(
+        series=SimpleNamespace(id=uuid4()),
+        politica_actual=valor,
+        politica_actual_etiqueta=etiqueta,
+        politicas_ofrecidas={},
+        motivo_futuros="la fuente no publica números futuros",
+        politica_efectiva=valor,
+        politica_efectiva_etiqueta=etiqueta,
+        coleccion_causa=None,
+        veredicto=SimpleNamespace(tipo="ninguno", no_calculable=False),
+        querer=SimpleNamespace(motivo=None, numeros=[]),
+        lote=25,
+        aviso_legal_pendiente=False,
+        retirados=0,
+        retirados_ahora=None,
+    )
+    assert f'value="{valor.value}"' in html
+    assert etiqueta in html
+    assert f">{valor.value}" not in html
+
+
+class TestAtribucionFandomVisible:
+    """SCR2 m-1: la atribución CC-BY-SA se ve sin desplegar «Fuentes y atribución»."""
+
+    def test_la_atribucion_se_ve_fuera_del_desplegable(self):
+        series = make_series(total_issues=3)
+        series.fandom_dc_slug = "Batman"
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert 'href="https://dc.fandom.com/wiki/Batman"' in r.text
+        assert "Creative Commons BY-SA 3.0" in r.text
+        dentro = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[0]
+        assert "BY-SA" not in dentro                    # el desplegable mantiene el aviso genérico
+        assert "DC/Marvel Database" in dentro
+        fuera = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[1]
+        assert "Creative Commons BY-SA 3.0" in fuera
+
+
+def test_panel_sagas_muestra_posicion_y_no_pinta_si_no_hay_sagas():
+    from unittest.mock import AsyncMock, patch
+
+    from zascarr.services.arcos import SagaDeSerie
+    series = make_series(total_issues=3)
+    session = FakeSession([], series=series)
+    with patch("zascarr.web.series.sagas_de_serie", AsyncMock(return_value=[
+            SagaDeSerie("a1", "Court of Owls", True, 3, 4, 12)])), \
+            use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}/sagas")
+    assert r.status_code == 200
+    assert "Court of Owls" in r.text
+    assert "puestos 3–4 de 12" in r.text and "Cruza series" in r.text
+    assert r.headers["cache-control"] == "no-store"
+    assert 'href="/ui/arcos/a1"' in r.text
+
+    session2 = FakeSession([], series=series)
+    with patch("zascarr.web.series.sagas_de_serie", AsyncMock(return_value=[])), \
+            use_fake_session(session2) as client:
+        vacio = client.get(f"/ui/series/{series.id}/sagas")
+    assert vacio.status_code == 200 and vacio.text == ""
+    assert vacio.headers["cache-control"] == "no-store"
+
+
+def test_marcar_favorita_alterna_y_vuelve_al_origen():
+    series = make_series(total_issues=3)
+    session = FakeSession([], series=series)
+    session.commit = AsyncMock()
+    with use_fake_session(session) as client:
+        r = client.post(f"/ui/series/{series.id}/favorito",
+                        data={"volver": "/ui/biblioteca"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/ui/biblioteca"
+    assert series.favorite is True
+    session.commit.assert_awaited_once()
+
+
+def test_serie_larga_colapsa_los_numeros_y_deja_los_primeros_visibles():
+    series = make_series(total_issues=200)
+    presentes = [(str(i), "single_issue", True) for i in range(1, 101)]
+    session = FakeSession([
+        FakeExecResult([series]),
+        FakeExecResult(presentes),
+        acuse(), retirados(), FakeExecResult([]),
+    ])
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}")
+    assert r.status_code == 200
+    assert r.text.count('class="ficha-mas"') == 2
+    assert "Ver los 70 números que faltan" in r.text
+    assert "Ver los 70 números que tienes" in r.text
+    assert "#1" in r.text and "#100" in r.text
+    assert "#101" in r.text and "#200" in r.text
+
+
+def test_otras_fuentes_no_aparece_si_la_serie_no_tiene_fuente():
+    series = make_series(total_issues=3)
+    session = FakeSession([
+        FakeExecResult([series]),
+        FakeExecResult([]),
+        acuse(), retirados(), FakeExecResult([]),
+    ])
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}")
+    assert "Otras fuentes" not in r.text
+    assert "Buscar en otra fuente" not in r.text
+
+
+def test_retirar_esta_plegado_y_no_compite_con_la_accion_principal():
+    series = make_series(total_issues=3)
+    session = FakeSession([
+        FakeExecResult([series]),
+        FakeExecResult([]),
+        acuse(), retirados(), FakeExecResult([]),
+    ])
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{series.id}")
+    assert '<details class="series-retirar">' in r.text
+    assert "<summary>Retirar de mi biblioteca</summary>" in r.text
+    assert f'href="/ui/series/{series.id}/retirar"' in r.text
+
+
+class TestAtribucionRellenoVisible:
+    """SCR7: la ficha muestra la atribución de GCD/Metron/Open Library sin desplegar."""
+
+    def test_la_atribucion_del_relleno_se_ve_fuera_del_desplegable(self):
+        series = make_series(total_issues=3)
+        series.metadata_ = {"relleno": {
+            "metron": {"id": "88", "campos": ["description", "start_year"],
+                       "ultimo_intento": "2026-11-14T12:00:00+00:00",
+                       "url_ficha": "https://metron.cloud/series/88/"},
+        }}
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        fuera = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[1]
+        assert "Metron" in fuera
+        assert 'href="https://metron.cloud/series/88/"' in fuera
+        assert 'href="https://creativecommons.org/licenses/by-sa/4.0/"' in fuera
+        assert "CC BY-SA 4.0" in fuera
+
+    def test_sin_campos_rellenados_no_se_pinta_la_atribucion(self):
+        series = make_series(total_issues=3)
+        series.metadata_ = {"relleno": {"gcd": {"id": "1", "campos": [],
+                                               "ultimo_intento": "2026-11-14T12:00:00+00:00",
+                                               "url_ficha": "https://www.comics.org/series/1/"}}}
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200 and "Grand Comics Database" not in r.text
+
+
+class TestAtribucionRellenoSinUrl:
+    """O3 (deudas SCR7): si la URL de ficha no valida, se pinta nombre+licencia sin enlace."""
+
+    def test_la_atribucion_se_muestra_aunque_la_url_no_sea_valida(self):
+        series = make_series(total_issues=3)
+        series.metadata_ = {"relleno": {
+            "gcd": {"id": "1", "campos": ["start_year"],
+                    "ultimo_intento": "2026-11-14T12:00:00+00:00",
+                    "url_ficha": "https://atacante.example/series/1/"},
+        }}
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        fuera = r.text.split('<details class="series-fuentes">', 1)[1].split("</details>", 1)[1]
+        assert "Grand Comics Database" in fuera and "CC BY-SA 4.0" in fuera
+        assert 'href="https://atacante.example/series/1/"' not in fuera
+        assert 'href=""' not in fuera

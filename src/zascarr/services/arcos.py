@@ -11,7 +11,17 @@ from uuid import UUID
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.models import File, Issue, Series, StoryArc, StoryArcIssue
+from zascarr.models import (
+    File,
+    Issue,
+    ReadingProgress,
+    ReadingStatus,
+    Series,
+    StoryArc,
+    StoryArcIssue,
+    Wishlist,
+    WishlistOrigin,
+)
 
 POR_PAGINA = 50
 
@@ -23,6 +33,10 @@ class ArcoResumen:
     is_crossover: bool
     numeros: int
     series: int
+    leidos: int = 0
+    #: `metadata_["origen"]` del arco (`fandom_dc`, `reading_orders`, `continuity_guide`…);
+    #: None en un arco manual. Solo se usa para la atribución del listado (SCR2 m-2).
+    origen: str | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +49,7 @@ class FilaArco:
     titulo: str | None
     fecha: str | None
     disponible: bool
+    leido: bool = False
 
 
 @dataclass(frozen=True)
@@ -45,6 +60,20 @@ class PaginaArcos:
     paginas: int
     desde: int
     hasta: int
+    #: ¿Hay en la página algún arco de Fandom? El listado pinta el aviso CC-BY-SA una vez.
+    hay_fandom: bool = False
+    #: ¿Hay algún arco reconciliado de una guía? El listado enlaza su fuente original.
+    hay_guia: bool = False
+
+
+@dataclass(frozen=True)
+class SagaDeSerie:
+    id: str
+    title: str
+    is_crossover: bool
+    desde: int
+    hasta: int
+    total: int
 
 
 @dataclass(frozen=True)
@@ -56,6 +85,10 @@ class DetalleArco:
     filas: list[FilaArco]
     series: int
 
+    @property
+    def leidos(self) -> int:
+        return sum(1 for f in self.filas if f.leido)
+
 
 async def listar_arcos(db: AsyncSession, pagina: int = 1) -> PaginaArcos:
     total = (await db.execute(
@@ -66,19 +99,55 @@ async def listar_arcos(db: AsyncSession, pagina: int = 1) -> PaginaArcos:
     filas = (await db.execute(
         select(
             StoryArc.id, StoryArc.title, StoryArc.is_crossover,
+            StoryArc.metadata_["origen"].astext.label("origen"),
+            StoryArc.metadata_["fandom_dc"].astext.label("fandom_dc"),
             func.count(StoryArcIssue.issue_id).label("numeros"),
             func.count(func.distinct(Issue.series_id)).label("series"),
         )
         .outerjoin(StoryArcIssue, StoryArcIssue.story_arc_id == StoryArc.id)
         .outerjoin(Issue, Issue.id == StoryArcIssue.issue_id)
-        .group_by(StoryArc.id, StoryArc.title, StoryArc.is_crossover)
+        .group_by(StoryArc.id, StoryArc.title, StoryArc.is_crossover,
+                  StoryArc.metadata_["origen"].astext,
+                  StoryArc.metadata_["fandom_dc"].astext)
         .order_by(StoryArc.title, StoryArc.id)
         .offset(desde).limit(POR_PAGINA))).all()
+    ids = [f.id for f in filas]
+    leidos: dict = {}
+    if ids:
+        leidos = dict((await db.execute(
+            select(StoryArcIssue.story_arc_id, func.count(ReadingProgress.id))
+            .join(ReadingProgress, ReadingProgress.issue_id == StoryArcIssue.issue_id)
+            .where(StoryArcIssue.story_arc_id.in_(ids),
+                   ReadingProgress.status == ReadingStatus.COMPLETED)
+            .group_by(StoryArcIssue.story_arc_id)
+        )).all())
+    resumenes = [
+        ArcoResumen(str(f.id), f.title, bool(f.is_crossover),
+                    int(f.numeros or 0), int(f.series or 0),
+                    int(leidos.get(f.id, 0)),
+                    origen=f.origen or ("fandom_dc" if f.fandom_dc else None))
+        for f in filas
+    ]
     return PaginaArcos(
-        filas=[ArcoResumen(str(f.id), f.title, bool(f.is_crossover),
-                           int(f.numeros or 0), int(f.series or 0)) for f in filas],
+        filas=resumenes,
         total=total, pagina=pagina, paginas=paginas, desde=desde,
-        hasta=min(desde + POR_PAGINA, total))
+        hasta=min(desde + POR_PAGINA, total),
+        hay_fandom=any(fila.origen == "fandom_dc" for fila in resumenes),
+        hay_guia=any(fila.origen in ("reading_orders", "continuity_guide")
+                     for fila in resumenes))
+
+
+async def primera_portada_de_arco(db: AsyncSession, arco_id: UUID) -> tuple[str, str] | None:
+    """Serie y número del primer miembro con archivo disponible (o el primero, si no hay)."""
+    disponible = exists().where(File.issue_id == Issue.id, File.is_missing.is_(False))
+    fila = (await db.execute(
+        select(Issue.series_id, Issue.id)
+        .join(StoryArcIssue, StoryArcIssue.issue_id == Issue.id)
+        .where(StoryArcIssue.story_arc_id == arco_id)
+        .order_by(disponible.desc(), StoryArcIssue.reading_order)
+        .limit(1)
+    )).first()
+    return None if fila is None else (str(fila[0]), str(fila[1]))
 
 
 async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
@@ -94,9 +163,11 @@ async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
             Series.title.label("series_title"),
             exists().where(File.issue_id == Issue.id,
                            File.is_missing.is_(False)).label("disponible"),
+            ReadingProgress.status.label("lectura"),
         )
         .join(Issue, Issue.id == StoryArcIssue.issue_id)
         .join(Series, Series.id == Issue.series_id)
+        .outerjoin(ReadingProgress, ReadingProgress.issue_id == Issue.id)
         .where(StoryArcIssue.story_arc_id == arco_id)
         .order_by(StoryArcIssue.reading_order, Series.title, Issue.issue_number)
     )).all()
@@ -106,13 +177,117 @@ async def detalle_arco(db: AsyncSession, arco_id: UUID) -> DetalleArco | None:
             series_id=str(f.series_id), series=f.series_title,
             numero=f.issue_number or "Sin número", titulo=f.issue_title,
             fecha=f.release_date.isoformat() if f.release_date else None,
-            disponible=bool(f.disponible))
+            disponible=bool(f.disponible),
+            leido=f.lectura == ReadingStatus.COMPLETED)
         for f in filas
     ]
     return DetalleArco(
         id=str(arco.id), title=arco.title, description=arco.description,
         is_crossover=bool(arco.is_crossover), filas=detalle,
         series=len({f.series_id for f in detalle}))
+
+
+@dataclass
+class ResultadoPedidoArco:
+    """BL-D7: resultado de pedir de una vez los números de una saga."""
+    ok: bool
+    errores: dict[str, str] = field(default_factory=dict)
+    anadidos: int = 0
+    ya_pedidos: int = 0
+    en_biblioteca: int = 0
+    total: int = 0
+
+
+async def pedir_arco(db: AsyncSession, arco_id: UUID) -> ResultadoPedidoArco:
+    """BL-D7: añade al wishlist los números de la saga que falten.
+
+    No crea una tabla nueva: un deseo por `issue` es suficiente y el orden se
+    conserva en `StoryArcIssue.reading_order` y en la prioridad del deseo. Los
+    deseos son manuales: la retirada automática de la política de una serie no
+    los toca. Los que ya están pedidos (incluidos los retirados) se omiten.
+    """
+    arco = await db.get(StoryArc, arco_id)
+    if arco is None:
+        return ResultadoPedidoArco(False, {"general": "La saga ya no existe."})
+    filas = (await db.execute(
+        select(StoryArcIssue.issue_id, StoryArcIssue.reading_order,
+               Issue.series_id, Issue.issue_number)
+        .join(Issue, Issue.id == StoryArcIssue.issue_id)
+        .where(StoryArcIssue.story_arc_id == arco_id)
+        .order_by(StoryArcIssue.reading_order, StoryArcIssue.issue_id)
+    )).all()
+    if not filas:
+        return ResultadoPedidoArco(False, {"general": "La saga no tiene números."})
+    # Cualquier deseo previo cuenta: un `retirado` no debe resucitar en un
+    # pedido masivo; el coleccionista lo quitó a propósito. Los deseos de
+    # política se guardan por (serie, número) con issue_id nulo (D8), así que
+    # también hay que mirar esa clave para no duplicarlos.
+    pedidos_issue = set()
+    pedidos_politica = set()
+    for issue_id, series_id, numero in (await db.execute(
+            select(Wishlist.issue_id, Wishlist.series_id, Wishlist.numero)
+            .where(Wishlist.issue_id.is_not(None) | Wishlist.series_id.is_not(None)))).all():
+        if issue_id is not None:
+            pedidos_issue.add(issue_id)
+        if series_id is not None and numero is not None:
+            pedidos_politica.add((series_id, int(numero)))
+    en_biblioteca = set((await db.execute(
+        select(File.issue_id).where(
+            File.issue_id.in_([f.issue_id for f in filas]),
+            File.is_missing.is_(False),
+        ))).scalars().all())
+    anadidos = ya = biblioteca = 0
+    for fila in filas:
+        numero = None
+        if fila.issue_number is not None and str(fila.issue_number).strip().isdigit():
+            numero = int(str(fila.issue_number).strip())
+        if fila.issue_id in en_biblioteca:
+            biblioteca += 1
+        elif (fila.issue_id in pedidos_issue
+              or (fila.series_id, numero) in pedidos_politica):
+            ya += 1
+        else:
+            db.add(Wishlist(
+                issue_id=fila.issue_id, origen=WishlistOrigin.MANUAL,
+                priority=int(fila.reading_order) or 1,
+                notes=f"Saga: {arco.title}"))
+            anadidos += 1
+    await db.flush()
+    return ResultadoPedidoArco(True, anadidos=anadidos, ya_pedidos=ya,
+                               en_biblioteca=biblioteca, total=len(filas))
+
+
+async def sagas_de_serie(db: AsyncSession, series_id: UUID) -> list[SagaDeSerie]:
+    """Sagas en las que participa una serie, con su primera/última posición.
+
+    Solo lee: no crea arcos ni modifica `reading_order`. Si la serie tiene varios
+    números en una saga, ``desde``/``hasta`` acotan su tramo dentro del orden.
+    """
+    total_sq = (
+        select(func.count(StoryArcIssue.issue_id))
+        .where(StoryArcIssue.story_arc_id == StoryArc.id)
+        .correlate(StoryArc)
+        .scalar_subquery()
+    )
+    filas = (await db.execute(
+        select(
+            StoryArc.id, StoryArc.title, StoryArc.is_crossover,
+            func.min(StoryArcIssue.reading_order).label("desde"),
+            func.max(StoryArcIssue.reading_order).label("hasta"),
+            total_sq.label("total"),
+        )
+        .join(StoryArcIssue, StoryArcIssue.story_arc_id == StoryArc.id)
+        .join(Issue, Issue.id == StoryArcIssue.issue_id)
+        .where(Issue.series_id == series_id)
+        .group_by(StoryArc.id, StoryArc.title, StoryArc.is_crossover)
+        .order_by(func.lower(StoryArc.title), StoryArc.id)
+    )).all()
+    return [
+        SagaDeSerie(
+            id=str(f.id), title=f.title, is_crossover=bool(f.is_crossover),
+            desde=int(f.desde), hasta=int(f.hasta), total=int(f.total))
+        for f in filas
+    ]
 
 
 @dataclass

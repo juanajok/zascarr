@@ -457,10 +457,28 @@ class SeriesMatcher:
         if volume is None:
             volume = volumen_carpeta
 
-        if not title or not number:
+        if not title:
             return MatchResult(
                 MatchStatus.UNSORTED,
                 notes=["sin título/número tras capas 0-1"],
+            )
+        if not number:
+            # Hay título pero no número (tomos, especiales, aniversarios): no se
+            # adivina el número, pero SÍ se guarda la serie reconocida para que
+            # «Por revisar» la ofrezca y el coleccionista solo tenga que poner el
+            # número (UX 2026-11-16: Sector Lejano sin sugerencia).
+            alias_hit = await self.find_alias(title)
+            hits = await self.find_series(title, year, volume)
+            candidatos: list[SeriesHit] = []
+            vistos: set[UUID] = set()
+            for hit in ([alias_hit] if alias_hit else []) + list(hits):
+                if hit.series_id not in vistos:
+                    vistos.add(hit.series_id)
+                    candidatos.append(hit)
+            return MatchResult(
+                MatchStatus.UNSORTED,
+                candidates=candidatos,
+                notes=["sin número en el nombre: la serie se reconoce, elige el número"],
             )
 
         # B13: alias local (corrección manual previa en Pendientes) manda

@@ -3,12 +3,12 @@
     en cuanto termina (el fragmento final ya no lleva `hx-trigger`). -#}
 {% import "_componentes.html" as ui %}
 {%- macro boton(texto) -%}
-<button type="button" class="btn-primary" hx-post="/ui/auditoria/adoptar"
+<button type="button" class="btn primary" hx-post="/ui/auditoria/adoptar"
         hx-target="#registro" hx-swap="outerHTML" hx-disable="this">{{ texto }}</button>
 {%- endmacro -%}
 
 {%- macro buscar(texto) -%}
-<button type="button" class="btn-secondary" hx-get="/ui/auditoria/nuevos"
+<button type="button" class="btn ghost" hx-get="/ui/auditoria/nuevos"
         hx-target="#registro" hx-swap="outerHTML" hx-disable="this">{{ texto }}</button>
 {%- endmacro -%}
 
@@ -96,10 +96,10 @@
     fuente de internet y no se vincula nada solo por el nombre de su carpeta.</p>
   <form hx-post="/ui/auditoria/registrar-nuevos" hx-target="#registro" hx-swap="outerHTML" hx-disable="find button">
     <input type="hidden" name="huella" value="{{ inc.huella }}">
-    <button type="submit" class="btn-primary">Registrar los {{ inc.nuevos }} archivos sin registrar</button>
+    <button type="submit" class="btn primary">Registrar los {{ inc.nuevos }} archivos sin registrar</button>
   </form>
   {% elif inc.recorrido_completo and inc.en_disco %}
-  <p class="audit-ok">No hay archivos sin registrar: todo lo que hay en la carpeta ya está registrado.</p>
+  {{ ui.aviso("ok", "No hay archivos sin registrar: todo lo que hay en la carpeta ya está registrado.") }}
   {% endif %}
   {% endif %}
 </section>
@@ -192,7 +192,7 @@
   <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
   {% if conflicto %}
   {% call ui.aviso("amber", rol="", foco=true) %}<strong>El informe ha cambiado.</strong>
-    No se ha aceptado nada. Este es el estado de ahora: revísalo y decide de nuevo.{% endcall %}
+    No se ha aceptado nada.{% if motivo_conflicto %} {{ motivo_conflicto }}{% endif %} Este es el estado de ahora: revísalo y decide de nuevo.{% endcall %}
   {% endif %}
   {% if adopcion and adopcion.aviso %}
   {% call ui.aviso("amber") %}{{ adopcion.aviso }}{% endcall %}
@@ -268,12 +268,24 @@
   <p class="audit-why">No hemos encontrado tebeos (.cbz, .cbr) en la carpeta de tu biblioteca.</p>
 </section>
 
+{% elif estado.value in ("marcador_invalido", "aceptacion_huerfana") %}
+<section id="registro" class="audit-block">
+  <h2 class="titulo-frase">No se puede verificar el registro</h2>
+  {% if adopcion and adopcion.aviso %}
+  {% call ui.aviso("amber") %}{{ adopcion.aviso }}{% endcall %}
+  {% else %}
+  {% call ui.aviso("amber") %}El marcador de adopción guardado no es válido. No se muestra
+    la biblioteca como registrada ni se ofrece el registro incremental; no se ha borrado nada.{% endcall %}
+  {% endif %}
+  <p class="audit-why">Revisa el estado antes de continuar. No se ha cambiado ni borrado nada.</p>
+</section>
+
 {% elif estado.value == "hecha" %}
 <section id="registro" class="audit-block">
   <h2 class="titulo-frase">Tu biblioteca ya está registrada</h2>
   {% if conflicto %}
   {% call ui.aviso("amber", rol="", foco=true) %}<strong>El informe ha cambiado.</strong>
-    No se ha aceptado nada. Este es el estado de ahora: revísalo y decide de nuevo.{% endcall %}
+    No se ha aceptado nada.{% if motivo_conflicto %} {{ motivo_conflicto }}{% endif %} Este es el estado de ahora: revísalo y decide de nuevo.{% endcall %}
   {% endif %}
   {% if adopcion and adopcion.aviso %}
   {% call ui.aviso("amber") %}{{ adopcion.aviso }}{% endcall %}
@@ -288,7 +300,7 @@
 <section id="registro" class="audit-block audit-adoptar">
   {% if conflicto %}
   {% call ui.aviso("amber", rol="", foco=true) %}<strong>El informe ha cambiado.</strong>
-    No se ha aceptado nada. Este es el estado de ahora: revísalo y decide de nuevo.{% endcall %}
+    No se ha aceptado nada.{% if motivo_conflicto %} {{ motivo_conflicto }}{% endif %} Este es el estado de ahora: revísalo y decide de nuevo.{% endcall %}
   {% endif %}
   {% if adopcion and adopcion.aviso %}
   {% call ui.aviso("amber") %}{{ adopcion.aviso }}{% endcall %}
@@ -315,7 +327,7 @@
     <a href="/ui/pendientes">Por revisar</a>. En una colección grande puede tardar varios minutos.</p>
   {{ boton("Registrar los " ~ inv.nuevos ~ " tebeos nuevos") }}
   {% else %}
-  <p class="audit-ok">Todo lo que hay en la carpeta ya está registrado.</p>
+  {{ ui.aviso("ok", "Todo lo que hay en la carpeta ya está registrado.") }}
   {% endif %}
 </section>
 {% endif %}

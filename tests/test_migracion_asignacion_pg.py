@@ -111,6 +111,8 @@ class TestEsquema:
             "sha256": ("varchar", "NO"), "issue_number": ("varchar", "NO"), "formato": ("issue_format", "NO"),
             "aprender_alias": ("bool", "NO"), "epoca": ("int4", "NO"), "creada": ("timestamptz", "NO"),
             "actualizada": ("timestamptz", "NO"),
+            # #156/0041: raíz de biblioteca nullable (la migración la añade; las filas antiguas quedan NULL).
+            "root_id": ("uuid", "YES"),
         }
         assert {f[0]: (f[1], f[2]) for f in filas} == esperado
 

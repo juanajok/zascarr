@@ -88,8 +88,10 @@ a la anterior ([`_learn_alias` L207](https://github.com/juanajok/zascarr/blob/a5
 
 > **Estado: evidencia del estado actual, leída del código. No decide nada y no cambia comportamiento.** Esta sección **amplía**
 > las secciones 1–5 (SHA `a53465ac`, #137), que **se conservan tal cual**, con sus conclusiones y su anclaje histórico: lo que
-> allí se comprobó **no se ha repetido aquí** (ver «Qué se reutiliza»). Los criterios de #112 son tres; este documento aporta
-> el primero y el tercero y **deja trazado el segundo**: **#112 no queda aceptada con este inventario.**
+> allí se comprobó **no se ha repetido aquí** (ver «Qué se reutiliza»). Los criterios de #112 son tres; este documento
+> aporta el primero y el tercero, y el segundo queda **implementado y acreditado** por [#114](https://github.com/juanajok/zascarr/issues/114)
+> (I8, PR #171) y por los tests de copy de la ruta que mueve. **#112 queda aceptada** con esta ampliación. La vigencia de las
+> rutas y cifras de las secciones 1–6 sigue anclada a sus SHA; no se reescriben.
 
 - **SHA de esta ampliación:** [`ef805ec9`](https://github.com/juanajok/zascarr/tree/ef805ec9f623507628de763ad464f9d19b67b650)
   (`main` tras la fusión de #147). Las rutas de archivo de esta sección se refieren a ese SHA.
@@ -245,9 +247,12 @@ Se lanzan **solo si la base de datos está disponible**; en arranque degradado n
 
 No se ha ejecutado etiquetado ni ensayo alguno sobre archivos.
 
-## 6.7 Pendiente trazado a otras tarjetas
+## 6.7 Criterio 2 de #112: implementado
 
-- **Criterio 2 de #112** (*un camino que mueve archivos se denomina «Organizar»*): **pendiente y trazado a [#114](https://github.com/juanajok/zascarr/issues/114)**. Este inventario solo acredita **qué caminos mueven** (§6.1): `POST /ui/pendientes/{id}/asignar`, la tarea de importación, la reconciliación al arrancar y `ReviewService.assign_to_series` (sin llamadores). **No cambia ningún rótulo ni texto de la interfaz.**
+- **Criterio 2** (*un camino que mueve archivos se denomina «Organizar»*): **implementado por [#114](https://github.com/juanajok/zascarr/issues/114) (I8, PR #171)**. La ruta `POST /ui/pendientes/{id}/asignar` sigue existiendo por compatibilidad, pero sus botones visibles dicen «Ver antes de organizar» / «Confirmar y organizar» y la tarjeta explica que mueve y renombra. `POST /ui/pendientes/{id}/vincular` sigue siendo «Vincular en su sitio» y no mueve.
+- El copy de **resultado y error** de la ruta que mueve también dice «organizar»: `_TEXTO_ERROR_GENERICO`, colisión, operación en curso y estados pendientes. Lo comprueba `tests/test_pendientes.py::test_los_mensajes_visibles_de_la_ruta_que_mueve_dicen_organizar`.
+- Los otros caminos que mueven (§6.1) no son entradas de usuario: la tarea de importación, la reconciliación al arrancar y `ReviewService.assign_to_series` (sin llamadores). Se documentan como «Organizar» de material entrante, no se renombran.
+- **Criterio 1** (inventario) y **criterio 3** (enlazar trabajo existente, sin duplicar) ya estaban cubiertos por las secciones 1–6.
 - **Centralizar decisiones** (alta y creación de series por tres caminos distintos: C1, C3, C4) → [#113](https://github.com/juanajok/zascarr/issues/113).
 - **Sin prueba localizada para la ruta** (por cruce textual; puede haber pruebas de servicio): `POST /api/wishlist/{id}/search`, `POST /ui/ajustes/guardar/{comic-vine, fuentes, transmission, amule}`, `POST /ui/ajustes/probar/{transmission, amule}` y `POST /ui/auditoria/analizar`. Cuatro de ellos son de configuración y descargas (fuera del recorrido MVP); **`/ui/auditoria/analizar` está en el recorrido MVP** y su servicio sí tiene pruebas (`test_library_audit`).
 

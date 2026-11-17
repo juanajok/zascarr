@@ -115,3 +115,19 @@ def test_copiar_deshace_un_hardlink_previo(tmp_path):
                                     "mode": "hardlink"}})
     assert destino.stat().st_ino != source.stat().st_ino
     assert destino.read_bytes() == source.read_bytes()
+
+
+def test_exportacion_no_solapa_ninguna_raiz_de_biblioteca(tmp_path):
+    """Corte C: con N raíces, el destino tampoco puede caer dentro de otra."""
+    import pytest
+
+    from zascarr.services.exportacion_kavita import ExportacionError, _resolver_raiz
+
+    lib2 = tmp_path / "lib2"
+    lib2.mkdir()
+    ajustes = __import__("types").SimpleNamespace(
+        export_path=lib2 / "export", library_path=tmp_path / "lib",
+        downloads_path=tmp_path / "dl", amule_incoming_dir=tmp_path / "in",
+        carpetas_compartidas=[])
+    with pytest.raises(ExportacionError):
+        _resolver_raiz(ajustes, (str(lib2),))

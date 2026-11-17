@@ -19,6 +19,31 @@
   <input type="hidden" name="pagina_hasta" value="{{ r.pagina.hasta }}">
   <input type="hidden" name="borradores" value="{{ borradores_json }}">
 
+  <div class="vinc-borrador-acciones" role="group" aria-label="Guardar la revisión">
+    <button type="button" class="btn ghost sm"
+            hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/guardar') }}"
+            hx-vals='{"salir": "0"}'
+            hx-include="closest form" hx-target="#revision" hx-swap="outerHTML">Guardar borrador</button>
+    <button type="button" class="btn ghost sm"
+            hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/guardar') }}"
+            hx-vals='{"salir": "1"}'
+            hx-include="closest form">Guardar y salir</button>
+  </div>
+
+  {% if borrador_guardado %}
+  <div class="vinc-borrador-guardado" role="status">
+    <p><strong>Hay una revisión guardada.</strong> {{ borrador_guardado.total_marcados }} archivo{{ "s" if borrador_guardado.total_marcados != 1 }} marcado{{ "s" if borrador_guardado.total_marcados != 1 }}. No se ha aplicado nada.</p>
+    <button type="button" class="btn ghost sm"
+            hx-get="/ui/pendientes/carpetas/asistente/vinculacion/reabrir?clave={{ r.clave | urlencode }}&amp;series_id={{ s.series_id }}"
+            hx-target="#revision" hx-swap="outerHTML">Reanudar revisión</button>
+    <button type="button" class="btn ghost sm"
+            hx-post="/ui/pendientes/carpetas/asistente/vinculacion/descartar"
+            hx-vals='{"clave": {{ r.clave | tojson }}, "series_id": {{ s.series_id | tojson }}}'
+            hx-target="#revision" hx-swap="outerHTML"
+            hx-confirm="¿Descartar el borrador guardado? No se vincula nada.">Descartar borrador</button>
+  </div>
+  {% endif %}
+
   <section class="card" aria-labelledby="vinc-contexto">
     <h2 id="vinc-contexto" class="titulo-frase">{{ r.clave }}</h2>
     <dl class="carpeta-datos">
@@ -32,6 +57,13 @@
     {% for a in avisos %}{{ ui.aviso("amber", a, foco=loop.first) }}{% endfor %}
     {% for av in r.avisos_de_grupo %}{{ ui.aviso("amber", av.texto) }}{% endfor %}
   </section>
+
+  <div class="vinc-barra" role="status" aria-live="polite" aria-atomic="true" aria-label="Progreso de la revisión">
+    <span class="vinc-barra-contexto">{{ r.clave }}</span>
+    <span>Página {{ r.pagina.desde }}–{{ r.pagina.hasta }} de {{ r.pagina.en_el_grupo }}</span>
+    <span><strong>{{ n_marcados }}</strong> marcado{{ "s" if n_marcados != 1 }} · <strong>{{ n_incluidos }}</strong> listo{{ "s" if n_incluidos != 1 }}{% if n_bloqueados %} · {{ n_bloqueados }} bloqueado{{ "s" if n_bloqueados != 1 }}{% endif %}</span>
+    {% if n_incluidos %}<a class="btn primary sm" href="#vinc-lote">Revisar y vincular</a>{% endif %}
+  </div>
 
   {% if pendientes %}
   <section class="card" aria-labelledby="vinc-borradores">
@@ -49,7 +81,7 @@
 
   <p class="vinculacion-pendiente" role="status">Actualizando la revisión… Hasta que termine, no se puede vincular.</p>
 
-  {% if accion %}<div class="vinc-accion-resultado" role="status" data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto) }}</div>{% endif %}
+  {% if accion %}<div class="vinc-accion-resultado" tabindex="-1" autofocus data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto, viva=false) }}</div>{% endif %}
 
   {% if r.archivos %}
   <div class="vinc-masivo" role="group" aria-label="Marcar varios a la vez">
@@ -67,7 +99,7 @@
       <div class="vinc-cab">
         {% if editable %}
         <label class="vinc-marca">
-          <input type="checkbox" name="marcar" value="{{ a.id }}"{% if a.marcado %} checked{% endif %}{% if not a.marcable and not a.marcado %} disabled{% endif %}>
+          <input id="marca-{{ a.id }}" type="checkbox" name="marcar" value="{{ a.id }}"{% if a.marcado %} checked{% endif %}{% if not a.marcable and not a.marcado %} disabled{% endif %}>
           <span class="nombre-archivo">{{ a.nombre }}</span>
         </label>
         {% else %}
@@ -145,7 +177,25 @@
       {% if otros_motivos %}<p class="caption vinc-motivos">Otros motivos: {{ otros_motivos | join(", ") }}.</p>{% endif %}
       {% endif %}
       {% if a.repetido_con %}
-      <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
+      <div class="vinc-conflicto">
+        <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
+        <ul class="vinc-conflicto-lista">
+          {% for otro in a.repetido_con %}
+          {% set o = archivos_por_id.get(otro) %}
+          <li><strong>{{ nombres_de([otro]) | join(", ") }}</strong>{% if o %} · número {{ o.numero or "sin número" }}{% if o.ruta_actual %} · {{ o.ruta_actual }}{% endif %}{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% if a.marcado %}
+        <div class="vinc-acciones">
+          <button type="submit" name="quitar" value="{{ a.id }}" class="btn ghost sm"
+                  id="quitar-{{ a.id }}">Quitar este del lote</button>
+          {% for otro in a.repetido_con %}
+          <button type="submit" name="quitar" value="{{ otro }}" class="btn ghost sm"
+                  id="dejar-{{ a.id }}-{{ otro }}">Dejar este y quitar «{{ nombres_de([otro]) | join(", ") }}»</button>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
       {% endif %}
       {% if a.issue_existente %}
       <p class="caption vinc-existente">La serie ya tiene esta publicación sin archivos: se reutilizaría, no se crea una nueva.</p>

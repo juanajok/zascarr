@@ -29,6 +29,7 @@ from zascarr.services.importer import (
     ImportReport,
     _existe,
 )
+from zascarr.services.raices import FotoDeRaices
 from zascarr.web.routes import crear_templates
 
 R = ResultadoComprobacion
@@ -128,7 +129,7 @@ class TestResultadoDeLaComprobacion:
 
         assert c.como_dict() == {
             "ambito": "biblioteca", "resultado": "raiz_vacia", "archivos_registrados": 12, "ausentes": None,
-            "bajas_omitidas": True, "fecha": "2026-10-28T03:00:00+00:00"}
+            "bajas_omitidas": True, "fecha": "2026-10-28T03:00:00+00:00", "raices": []}
 
     def test_la_clave_no_colisiona_con_las_del_informe(self):
         assert CLAVE_COMPROBACION not in {"kind", "imported", "duplicates", "unsorted", "errors",
@@ -425,3 +426,74 @@ class TestRutas:
         for s in sesion.sentencias:
             texto = str(s).upper()
             assert texto.startswith("SELECT"), texto[:60]
+
+
+def _raiz(path: Path, *, rid=None, enabled=True):
+    from types import SimpleNamespace
+    return SimpleNamespace(id=rid or uuid4(), name=path.name, path=str(path),
+                           host_path=None, enabled=enabled, is_default=False)
+
+
+@pytest.mark.asyncio
+async def test_raiz_caida_no_marca_ausentes_suyos_ni_de_otra_raiz(tmp_path):
+    raiz_a, raiz_b = tmp_path / "A", tmp_path / "B"
+    raiz_a.mkdir()
+    (raiz_a / "presente.cbz").write_bytes(b"x")
+    a = _raiz(raiz_a)
+    b = _raiz(raiz_b)
+    f_a = _file(raiz_a / "presente.cbz", root_id=a.id)
+    f_b = _file(raiz_b / "ausente.cbz", root_id=b.id)
+    f_fuera = _file(tmp_path / "fuera.cbz")
+    importer, _ = _importer(raiz_a, [f_a, f_b, f_fuera])
+    importer._foto_raices = FotoDeRaices([a, b], validar=False)
+
+    c = await importer._comprobar_biblioteca()
+
+    assert c.resultado is R.RAIZ_INACCESIBLE
+    assert f_a.is_missing is False and f_b.is_missing is False and f_fuera.is_missing is False
+    assert c.ausentes is None
+    assert {e["resultado"] for e in c.raices if e["id"] == str(b.id)} == {"raiz_inaccesible"}
+
+
+@pytest.mark.asyncio
+async def test_una_raiz_sana_marca_solo_sus_ausentes_y_no_la_ajena(tmp_path):
+    raiz_a, raiz_b = tmp_path / "A", tmp_path / "B"
+    raiz_a.mkdir()
+    raiz_b.mkdir()
+    (raiz_a / "otro.cbz").write_bytes(b"x")
+    (raiz_b / "presente.cbz").write_bytes(b"x")
+    a, b = _raiz(raiz_a), _raiz(raiz_b)
+    f_a = _file(raiz_a / "ausente.cbz", root_id=a.id)
+    f_b = _file(raiz_b / "presente.cbz", root_id=b.id)
+    f_fuera = _file(tmp_path / "fuera.cbz")
+    importer, _ = _importer(raiz_a, [f_a, f_b, f_fuera])
+    importer._foto_raices = FotoDeRaices([a, b], validar=False)
+
+    c = await importer._comprobar_biblioteca()
+
+    assert c.resultado is R.COMPROBADA
+    assert f_a.is_missing is True and f_b.is_missing is False and f_fuera.is_missing is False
+    assert c.ausentes == 1
+    assert {e["id"]: e["resultado"] for e in c.raices}[str(a.id)] == "comprobada"
+
+
+@pytest.mark.asyncio
+async def test_desaparicion_masiva_es_por_raiz_y_no_contamina_la_otra(tmp_path):
+    raiz_a, raiz_b = tmp_path / "A", tmp_path / "B"
+    raiz_a.mkdir()
+    raiz_b.mkdir()
+    (raiz_a / "unico.cbz").write_bytes(b"x")
+    (raiz_b / "presente.cbz").write_bytes(b"x")
+    a, b = _raiz(raiz_a), _raiz(raiz_b)
+    files = [_file(raiz_a / f"Falta {i}.cbz", root_id=a.id) for i in range(10)]
+    f_b = _file(raiz_b / "presente.cbz", root_id=b.id)
+    importer, _ = _importer(raiz_a, [*files, f_b])
+    importer._foto_raices = FotoDeRaices([a, b], validar=False)
+
+    c = await importer._comprobar_biblioteca()
+
+    assert c.resultado is R.DESAPARICION_MASIVA
+    assert all(not f.is_missing for f in files) and f_b.is_missing is False
+    assert c.ausentes == 10
+    assert {e["id"]: e["resultado"] for e in c.raices}[str(a.id)] == "desaparicion_masiva"
+    assert {e["id"]: e["resultado"] for e in c.raices}[str(b.id)] == "comprobada"

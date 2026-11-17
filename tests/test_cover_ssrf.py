@@ -224,6 +224,9 @@ class TestDescarga:
         assert peticion.url.host == PUBLICA                                        # no el nombre: sin 2.ª resolución
         assert peticion.headers["host"] == "comicvine.gamespot.com"
         assert peticion.extensions.get("sni_hostname") == "comicvine.gamespot.com"  # TLS verifica el NOMBRE
+        # Cortesía/CDN: UA identificado y Referer del propio origen (Cloudflare devuelve 403 sin ellos).
+        assert peticion.headers["user-agent"].startswith("ZascArr/")
+        assert peticion.headers["referer"] == "https://comicvine.gamespot.com/"
         assert red.resoluciones == ["comicvine.gamespot.com"]                       # una sola resolución
 
     async def test_un_cambio_de_dns_entre_la_comprobacion_y_la_conexion_no_influye(self):

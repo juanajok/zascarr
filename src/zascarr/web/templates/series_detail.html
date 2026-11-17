@@ -2,7 +2,22 @@
 {% block title %}{{ series.title }} — ZascArr{% endblock %}
 {% block content %}
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
-{% if volver %}<a href="{{ volver }}" class="back-link">← Volver a la biblioteca</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
+{% from "_atribucion_fandom.html" import aviso_de_atribucion %}
+
+{% macro numero_presente(n) -%}
+{% set enlace = ficha.enlace_para_numero(n) if ficha else none %}
+{% if enlace %}
+<span class="chip-previa">
+  {% set lectura = lecturas.get(enlace.id) if lecturas else none %}
+  <a class="chip-enlace"
+     href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}"
+     hx-get="/ui/series/{{ series.id }}/numero/{{ enlace.id }}/previa"
+     hx-trigger="mouseenter delay:150ms, focusin delay:150ms" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">{% if lectura and lectura.estado == "completed" %}{{ ui.chip("neutro", "#" ~ n) }}<span class="sr"> leído</span>{% elif lectura and lectura.estado == "reading" %}{{ ui.chip("info", "#" ~ n) }}<span class="sr"> leyendo</span>{% else %}{{ ui.chip("ok", "#" ~ n) }}{% endif %}<span class="sr"> ver información del número {{ n }}</span></a>
+  <span class="previa-numero" id="previa-{{ enlace.id }}" aria-hidden="true"></span>
+</span>
+{% else %}{{ ui.chip("ok", "#" ~ n) }}<span class="sr"> ver información del número {{ n }}</span>{% endif %}
+{%- endmacro %}
+{% if volver %}<a href="{{ volver }}" class="back-link">← Volver{% if volver.startswith('/ui/colecciones/') %} a la colección{% else %} a la biblioteca{% endif %}</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
 
 <div class="series-header">
   {#- BL-INF6: el envoltorio lleva id para que el panel pueda refrescar la portada nueva por OOB
@@ -34,21 +49,102 @@
       {% endif %}
     </p>
     {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
+    <form method="post" action="/ui/series/{{ series.id }}/favorito" class="favorito-form">
+      <input type="hidden" name="volver" value="{{ volver or '' }}">
+      <button class="btn ghost sm" type="submit" aria-pressed="{{ 'true' if series.favorite else 'false' }}">
+        {{ "Quitar de favoritas" if series.favorite else "Marcar como favorita" }}
+      </button>
+    </form>
     <p class="series-acciones">
       <a class="btn ghost" href="/ui/series/{{ series.id }}/editar">Editar la ficha</a>
       <a class="btn primary" href="/ui/pendientes/carpetas?serie={{ series.id }}">Añadir números del disco</a>
       <span class="muted">Abre las carpetas pendientes con esta serie ya fijada. Vincular no mueve ni renombra el archivo.</span>
     </p>
-    <p class="series-acciones">
-      <a class="btn ghost" href="/ui/series/{{ series.id }}/retirar">Retirar de mi biblioteca</a>
-      <span class="muted">Quita la serie de ZascArr, pero no borra, mueve ni renombra los archivos del disco.</span>
-    </p>
+    <details class="series-retirar">
+      <summary>Retirar de mi biblioteca</summary>
+      <p class="caption">Quita la serie de ZascArr, pero no borra, mueve ni renombra los archivos del disco.</p>
+      <p class="series-acciones">
+        <a class="btn ghost" href="/ui/series/{{ series.id }}/retirar">Retirar de mi biblioteca</a>
+      </p>
+    </details>
     <details class="series-fuentes">
-      <summary>Fuentes y atribución</summary>
+      <summary>Aviso legal</summary>
       {{ legal_disclaimer("metadata") }}
     </details>
+    {#- SCR2/SCR7: una sola caja de atribución (Fandom y relleno), visible sin desplegar. #}
+    {% if atribucion_fandom or atribucion_relleno %}
+    <div class="atribucion-fuentes">
+      <p class="caption">Parte de los datos de esta ficha viene de:</p>
+      <ul class="atribucion-lista">
+        {% if atribucion_fandom %}
+        <li>«{{ atribucion_fandom.titulo }}» en
+          <a href="{{ atribucion_fandom.url_articulo }}" target="_blank" rel="noopener noreferrer">{{ atribucion_fandom.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>,
+          bajo la <a href="{{ atribucion_fandom.url_licencia }}" target="_blank" rel="noopener noreferrer">licencia Creative Commons BY-SA 3.0<span class="sr"> (se abre en otra pestaña)</span></a>.</li>
+        {% endif %}
+        {% for datos in atribucion_relleno %}
+        <li>{% if datos.url_ficha %}<a href="{{ datos.url_ficha }}" target="_blank" rel="noopener noreferrer">{{ datos.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>{% else %}{{ datos.nombre }}{% endif %},
+          bajo <a href="{{ datos.url_licencia }}" target="_blank" rel="noopener noreferrer">{{ datos.licencia }}<span class="sr"> (se abre en otra pestaña)</span></a>.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
   </div>
 </div>
+
+<nav class="ficha-nav" aria-label="Secciones de la ficha">
+  <a class="btn ghost sm" href="#numeros-serie">Números</a>
+  <a class="btn ghost sm" href="#sagas-serie">Sagas</a>
+  <a class="btn ghost sm" href="#politica-serie">Búsqueda</a>
+  <a class="btn ghost sm" href="#etiquetas-serie">Etiquetas</a>
+  <a class="btn ghost sm" href="#colecciones-serie">Colecciones</a>
+  <a class="btn ghost sm" href="#coleccion-serie">Completitud</a>
+  <a class="btn ghost sm" href="#datos-serie">Datos</a>
+  {% if archivos_por_numero %}<a class="btn ghost sm" href="#archivos-por-numero">Archivos</a>{% endif %}
+</nav>
+
+<p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
+
+<section id="numeros-serie" class="ficha-numeros" aria-label="Números de la serie">
+{% set limite = 30 %}
+{% if estado_coleccion.tipo != "no_completar" and missing %}
+<h2>Te faltan</h2>
+<div class="issue-grid">
+  {% for n in missing[:limite] %}
+  {{ ui.chip("neutro", "#" ~ n, clase="chip-falta") }}
+  {% endfor %}
+</div>
+{% if missing|length > limite %}
+<details class="ficha-mas">
+  <summary>Ver los {{ missing|length - limite }} números que faltan</summary>
+  <div class="issue-grid">
+    {% for n in missing[limite:] %}
+    {{ ui.chip("neutro", "#" ~ n, clase="chip-falta") }}
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
+{% elif huecos.computable and estado_coleccion.tipo != "no_completar" %}
+<p class="empty">Ningún hueco — la tienes completa.</p>
+{% endif %}
+
+{% if present %}
+<h2>En tu biblioteca</h2>
+<div class="issue-grid">
+  {% for n in present[:limite] %}{{ numero_presente(n) }}{% endfor %}
+</div>
+{% if present|length > limite %}
+<details class="ficha-mas">
+  <summary>Ver los {{ present|length - limite }} números que tienes</summary>
+  <div class="issue-grid">
+    {% for n in present[limite:] %}{{ numero_presente(n) }}{% endfor %}
+  </div>
+</details>
+{% endif %}
+{% endif %}
+</section>
+
+<section id="sagas-serie" class="series-sagas" aria-label="Sagas de la serie"
+         hx-get="/ui/series/{{ series.id }}/sagas" hx-trigger="load" hx-swap="outerHTML"></section>
 
 {#- BL-INF6 (#592): «Elegir portada». El panel NO se pide hasta desplegarlo (cero miniaturas y
     cero consultas en la carga de la ficha): el `toggle` nativo del <details> dispara el `hx-get`.
@@ -60,7 +156,7 @@
   <p class="muted">Cargando las portadas disponibles…</p>
 </details>
 
-<section class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
+<section id="datos-serie" class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
   <h2 id="ficha-serie-datos-titulo" class="titulo-frase">{{ textos_ficha.serie_bloque }}</h2>
   {% if serie_vacia %}
   <p class="ficha-sinopsis">{{ textos_ficha.sin_datos }}</p>
@@ -73,6 +169,18 @@
     <div><dt>{{ textos_ficha.editorial }}</dt><dd>{% if series.publisher %}{{ series.publisher.name }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos_ficha.inicio }}</dt><dd>{% if series.start_year %}{{ series.start_year }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
     <div><dt>Referencia</dt><dd>{% if series.reference_name %}{{ series.reference_name }}{% else %}{{ series.title }}{% endif %}</dd></div>
+    {% if series.language %}
+    {% set idiomas = {"es": "Español", "en": "Inglés", "fr": "Francés", "ja": "Japonés", "it": "Italiano", "pt": "Portugués", "de": "Alemán"} %}
+    <div><dt>Idioma</dt><dd>{{ idiomas.get(series.language, series.language) }}</dd></div>
+    {% endif %}
+    {% if series.edition_kind %}
+    <div><dt>Edición</dt><dd>
+      {% if series.edition_kind.value == "oficial" %}Oficial
+      {% elif series.edition_kind.value == "tradumaqueta" %}Tradumaqueta
+      {% elif series.edition_kind.value == "escaneo_propio" %}Escaneo propio
+      {% else %}Otro{% endif %}
+    </dd></div>
+    {% endif %}
     {% if series.end_year %}<div><dt>{{ textos_ficha.fin }}</dt><dd>{{ series.end_year }}</dd></div>{% endif %}
   </dl>
   <h3>{{ textos_ficha.autores }}</h3>
@@ -81,7 +189,7 @@
   <dl class="ficha-autores">
     {% for clave, etiqueta in roles_ficha %}
     {% if clave in ("writer", "penciler") and ficha.autores.get(clave) %}
-    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{{ a.nombre }} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
+    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{% if a.id %}<a href="/ui/biblioteca?author_id={{ a.id }}">{{ a.nombre }}</a>{% else %}{{ a.nombre }}{% endif %} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
     {% endif %}
     {% endfor %}
   </dl>
@@ -141,15 +249,16 @@
   {% endif %}
 </section>
 
-<p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
 <section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
          hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
+<section id="colecciones-serie" class="series-colecciones" aria-label="Colecciones"
+         hx-get="/ui/series/{{ series.id }}/colecciones" hx-trigger="load" hx-swap="outerHTML"></section>
 {% include "_politica_serie.html" %}
 {% include "_nota_serie.html" %}
 
     <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo"
              {% if aviso_coleccion %}tabindex="-1" autofocus{% endif %}>
-      <h2 id="coleccion-serie-titulo" class="titulo-frase">Estado de la colección</h2>
+      <h2 id="coleccion-serie-titulo" class="titulo-frase">Completitud</h2>
       <p>
         {% if estado_coleccion.tipo == "no_completar" %}
           {{ ui.chip("neutro", "No la vas a completar") }}
@@ -191,17 +300,13 @@
 
 
 
+{% if series.comic_vine_id or series.anilist_id or series.tebeosfera_slug or series.gcd_id %}
 <section class="series-otras-fuentes" aria-labelledby="otras-fuentes-titulo">
   <h2 id="otras-fuentes-titulo">Otras fuentes</h2>
-  <p class="muted">Todavía no hay otra fuente asociada.</p>
-  {% if series.comic_vine_id or series.anilist_id or series.tebeosfera_slug or series.gcd_id %}
   <a class="btn ghost sm" href="/ui/series/{{ series.id }}/asociar">Buscar en otra fuente</a>
   <p class="caption">Solo compara fichas: no se guarda nada hasta que lo confirmes.</p>
-  {% else %}
-  <button class="btn ghost sm" type="button" disabled>Buscar en otra fuente</button>
-  <p class="caption">Esta serie no tiene ninguna fuente asociada todavía. Añádela primero desde Descubrir o desde la ficha; después podrás buscar en otra web.</p>
-  {% endif %}
 </section>
+{% endif %}
 
 <details class="series-enriquecimiento">
   <summary>Revisar cambios de datos</summary>
@@ -210,36 +315,6 @@
     <button class="btn ghost" type="submit">Ver propuesta de la fuente</button>
   </form>
 </details>
-
-{% if estado_coleccion.tipo != "no_completar" and missing %}
-<h2>Te faltan</h2>
-<div class="issue-grid">
-  {% for n in missing %}
-  <span class="issue-chip issue-missing">#{{ n }}</span>
-  {% endfor %}
-</div>
-{% elif huecos.computable and estado_coleccion.tipo != "no_completar" %}
-<p class="empty">Ningún hueco — la tienes completa.</p>
-{% endif %}
-
-{% if present %}
-<h2>En tu biblioteca</h2>
-<div class="issue-grid">
-  {% for n in present %}
-  {% set enlace = ficha.enlace_para_numero(n) if ficha else none %}
-  {% if enlace %}
-  <span class="chip-previa">
-    {% set lectura = lecturas.get(enlace.id) if lecturas else none %}
-    <a class="issue-chip issue-present{% if lectura and lectura.estado == "completed" %} issue-leido{% elif lectura and lectura.estado == "reading" %} issue-leyendo{% endif %}"
-       href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}"
-       hx-get="/ui/series/{{ series.id }}/numero/{{ enlace.id }}/previa"
-       hx-trigger="mouseenter delay:150ms, focusin delay:150ms" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">#{{ n }}{% if lectura and lectura.estado == "completed" %}<span class="sr"> leído</span>{% elif lectura and lectura.estado == "reading" %}<span class="sr"> leyendo</span>{% endif %}<span class="sr"> ver información del número {{ n }}</span></a>
-    <span class="previa-numero" id="previa-{{ enlace.id }}" aria-hidden="true"></span>
-  </span>
-  {% else %}<span class="issue-chip issue-present">#{{ n }}</span>{% endif %}
-  {% endfor %}
-</div>
-{% endif %}
 
 {% if archivos_por_numero %}
 {#- BL-R1b (#254, D10): los archivos de cada número y, cuando el servicio lo permite (D9), «Deshacer esta vinculación». -#}
@@ -257,7 +332,19 @@
     {% for n in archivos_por_numero %}
     <li class="archivos-numero" data-numero="{{ n.numero }}">
       {% set sin_numero = n.numero == "(sin número)" %}
-      <h3 class="archivos-numero-titulo"><a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}">{% if sin_numero %}Sin número{% if n.titulo %} · {{ n.titulo }}{% endif %}{% else %}#{{ n.numero }}{% if n.titulo %} · {{ n.titulo }}{% endif %}{% endif %}<span class="sr">{% if sin_numero %} ver información del especial{% else %} ver información del número {{ n.numero }}{% endif %}</span></a></h3>
+      <h3 class="archivos-numero-titulo">
+        <span class="chip-previa chip-previa-lista">
+          <a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}"
+             hx-get="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/previa"
+             hx-target="#previa-archivo-{{ n.issue_id }}" hx-swap="innerHTML"
+             hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{% if sin_numero %}Sin número{% if n.titulo %} · {{ n.titulo }}{% endif %}{% else %}#{{ n.numero }}{% if n.titulo %} · {{ n.titulo }}{% endif %}{% endif %}<span class="sr">{% if sin_numero %} ver información del especial{% else %} ver información del número {{ n.numero }}{% endif %}</span></a>
+          <button type="button" class="btn ghost sm chip-previa-boton"
+                  hx-get="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/previa"
+                  hx-target="next .previa-numero" hx-swap="innerHTML"
+                  hx-trigger="click">Ver portada<span class="sr"> del número {{ n.numero }}</span></button>
+          <span class="previa-numero" id="previa-archivo-{{ n.issue_id }}" aria-hidden="true"></span>
+        </span>
+      </h3>
       {% if n.mezcla %}{{ ui.aviso("amber", "Este número tiene archivos de títulos distintos. Si son tebeos diferentes, desvincúlalos y asígnalos a su serie o número.") }}{% endif %}
       <ul class="archivos-lista">
         {% for a in n.archivos %}

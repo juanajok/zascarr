@@ -610,3 +610,28 @@ class TestDiscoNoMedible:
             body = client.get("/api/health").json()
         assert body["checks"]["disk"] == "warning" and body["status"] == "degraded"
         assert "disk" in body["warnings"]
+
+
+def test_fuentes_de_metadatos_incluyen_las_fuentes_nuevas(monkeypatch):
+    """AC-17 (SCR2): las fuentes de enriquecimiento nuevas aparecen en /api/health.
+
+    Fandom se consulta en el ciclo del enricher, así que su estado debe verse aquí; con
+    los valores por defecto (ADR 0013) sale «disabled» y no como fallo.
+    """
+    s = get_settings()
+    monkeypatch.setattr(s, "fandom_dc_enabled", False)
+    monkeypatch.setattr(s, "fandom_marvel_enabled", False)
+    with _fake_db_client() as client:
+        r = client.get("/api/health")
+    assert r.status_code == 200
+    fuentes = r.json()["fuentes"]
+    assert fuentes["fandom_dc"] == "disabled"
+    assert fuentes["fandom_marvel"] == "disabled"
+    # SCR3: las guías de lectura también son fuentes y se ven aquí apagadas por defecto.
+    assert fuentes["reading_orders"] == "disabled"
+    assert fuentes["continuity_guide"] == "disabled"
+    # SCR5: el feed de Comic Book Herald también es una fuente apagada por defecto.
+    assert fuentes["comic_book_herald"] == "disabled"
+    # SCR7: Metron y Open Library ahora también rellenan huecos y se ven aquí.
+    assert fuentes["metron"] == "disabled"
+    assert fuentes["open_library"] == "disabled"

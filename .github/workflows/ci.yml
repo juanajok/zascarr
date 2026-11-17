@@ -71,6 +71,10 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -e ".[dev]"
+      # #344: las pruebas de RAR REAL (extracción de paquetes) necesitan unar/lsar; sin ellas se saltan
+      # y `ci_postgres.py` falla porque el job no acredita haber ejecutado todas las de Postgres.
+      - name: unar para las pruebas de RAR real
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends unar
       # #334: las pruebas de restauración vuelcan y restauran con los clientes del RUNNER contra el servidor de arriba
       # (PostgreSQL 15, como docker-compose.yml). Con `ubuntu-latest` en 26.04 el cliente era de la serie 18 y su
       # `pg_dump` escribe `SET transaction_timeout`, que un servidor 15 rechaza. Se instala el cliente 15 (PGDG) y se
@@ -117,6 +121,8 @@ jobs:
       # comprobaciones se ejecuten aunque la primera falle y se vea el detalle.
       - run: ruff check --select S src/
         if: always()
+      # V14 (#750): ninguna clase usada puede quedarse sin regla y no debe quedar CSS muerto.
+      - run: python scripts/auditar_css.py --strict
 
   pip-audit:
     name: pip-audit (informativo, no bloquea)

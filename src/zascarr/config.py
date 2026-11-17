@@ -43,6 +43,24 @@ class Settings(BaseSettings):
     comicvine_base_url: str = "https://comicvine.gamespot.com/api"
     comicvine_rate_limit: float = 1.0
 
+    # ── Red: tope real de transferencia (RES-3, #812) ─────────────
+    # Toda petición de `utils/peticiones.py` (y por tanto `cache_http`) lee el cuerpo en
+    # streaming y corta al superar este tope de bytes YA DECODIFICADOS. 4 MiB por defecto,
+    # acotado a 1–16 MiB; el `.env` puede subirlo/bajarlo. No se expone en Ajustes.
+    # NFR-03 (#363): tope del cuerpo de una petición de escritura (formularios y API),
+    # comprobado en `middleware_cuerpo.py` antes de que FastAPI lo parsee. El cuerpo
+    # válido máximo de #115 mide ~73,5 KiB (token de hasta 73.229 caracteres más
+    # campos); 256 KiB deja margen >3×. Es un contrato distinto del límite del campo
+    # `token` de #115. Solo por `.env`; no se expone en Ajustes.
+    max_cuerpo_peticion_bytes: int = Field(
+        default=262_144, ge=131_072, le=8_388_608)
+    max_cuerpo_transfer_bytes: int = Field(
+        default=4_194_304, ge=1_048_576, le=16_777_216)
+    #: Tope al `Crawl-delay` que declare un `robots.txt` (M-4, #813). Un sitio puede pedir
+    #: 86400 s y dejar la fuente inutilizable; se recorta a 60 s por defecto (5–300), solo
+    #: por `.env` (no Ajustes). El valor se aplica en cada evaluación, sin recargar robots.
+    crawl_delay_max_s: int = Field(default=60, ge=5, le=300)
+
     # ── Fuentes de enriquecimiento (on/off en caliente, B8) ─────────
     # APAGADAS por defecto (decisión del PO, 2026-10-19, #239 · ADR 0013): ninguna fuente de
     # metadatos consulta Internet hasta que el coleccionista la enciende en /ui/ajustes. Las
@@ -102,6 +120,25 @@ class Settings(BaseSettings):
     fandom_marvel_enabled: bool = Field(default=False)
     fandom_marvel_rate_limit: float = 1.5
 
+    # ── Guías y órdenes de lectura (SCR3) ───────────────────────────
+    # Comic Book Reading Orders y Continuity Guide: HTML público con `sitemap.xml`, leído
+    # solo para referencias fácticas (serie, número, orden), nunca su prosa. Apagadas por
+    # defecto (ADR 0013); ritmo conservador propio (2,5 s y 3,5 s) porque son sitios
+    # editoriales pequeños. Lo que se cachea es la guía/sitemap en `http_cache` (SCR1).
+    reading_orders_enabled: bool = Field(default=False)
+    reading_orders_rate_limit: float = 2.5
+    continuity_guide_enabled: bool = Field(default=False)
+    continuity_guide_rate_limit: float = 3.5
+
+    # Comic Book Herald (SCR5): SOLO el feed RSS público de WordPress (título, enlace, fecha y
+    # categorías; nunca el HTML del artículo ni imágenes). Apagada por defecto (ADR 0013); el
+    # feed de categoría de guías de lectura es el default y se puede cambiar por otro del mismo
+    # host. Ritmo 3,5 s; caché de 6 h en `http_cache` (SCR1).
+    comic_book_herald_enabled: bool = Field(default=False)
+    comic_book_herald_rate_limit: float = 3.5
+    comic_book_herald_feed_url: str = Field(
+        default="https://www.comicbookherald.com/category/reading-orders/feed/")
+
     # ── GCD / Grand Comics Database (descubrimiento, C0) ─────────────
     # API pública real en /api/ (verificado en vivo 2026-09-25, ver
     # docs/adr/0002-enricher-scope.md), sin clave, anónima. Su propia
@@ -138,18 +175,38 @@ class Settings(BaseSettings):
     # real concreto de fábrica, lo más cercano a "facilitación
     # organizada" que tenía el proyecto. Es un plugin IPB genérico: la
     # URL la aporta el usuario, el proyecto no incluye ni recomienda
-    # ningún foro concreto.
+    # ningún foro concreto. Se configura en Ajustes › Descargas › Foro
+    # (tarjeta completa, D-1 de SCR4); el `.env` solo aporta los valores
+    # iniciales. `http://` sigue siendo válido con aviso: el foro puede
+    # no ofrecer TLS y decide el operador (D-2).
     forum_url: str = Field(default="")
     forum_username: str = Field(default="")
     forum_password: str = Field(default="")
+    #: Login y lectura de temas (2 s). La búsqueda tiene su propio ritmo, más lento,
+    #: porque IPB bloquea por saturación (Search Flood Control).
     forum_rate_limit: float = Field(default=2.0)
+    forum_search_rate_limit: float = Field(default=25.0)
     forum_enabled: bool = Field(default=False)
+
+    # ── Blog o RSS genérico (BLOG1) ────────────────────────────────
+    # El usuario aporta la URL; no hay ninguna por defecto. Solo se aceptan
+    # enlaces de descarga directa que vengan en el feed (sin scrapear posts).
+    blog_feed_url: str = Field(default="")
+    blog_feed_name: str = Field(default="Blog o RSS")
+    blog_feed_enabled: bool = Field(default=False)
+    blog_feed_rate_limit: float = Field(default=2.0)
 
     # ── Filesystem (rutas DENTRO del contenedor — genéricas y estables) ──
     # El contenedor monta los discos reales del usuario en estas rutas
     # (ver docker-compose.yml); los discos en sí se configuran en .env con
     # HOST_LIBRARY_DIR / HOST_DOWNLOADS_DIR / HOST_AMULE_INCOMING_DIR.
     library_path: Path = Field(default=Path("/media/library"))
+    #: Allowlist de montajes donde se pueden declarar raíces de biblioteca (#156).
+    #: Lista separada por comas de rutas del CONTENEDOR; vacío = solo `library_path`.
+    #: No es la configuración de las raíces: la BD guarda nombre/ruta/estado/tradiciones.
+    library_roots: str = Field(default="")
+    #: Rutas del host correspondientes a `library_roots`, en el mismo orden (solo para mostrar).
+    host_library_roots: str = Field(default="")
     # B20: raíz de exportación a Kavita. Siempre la ruta del contenedor; la
     # ruta del host se monta ahí con HOST_EXPORT_DIR (docker-compose/.env).
     export_path: Path = Field(default=Path("/media/export"))
@@ -249,6 +306,20 @@ class Settings(BaseSettings):
     #: 0 desactiva el escaneo de mejoras. El primer pase espera un intervalo.
     upgrade_scan_interval_minutes: int = Field(default=360, ge=0)
     upgrade_scan_batch: int = Field(default=3, ge=0, le=20)
+    # BL-B9 (#158): nombres de archivo de los destinos NUEVOS. Apagado por
+    # defecto para conservar exactamente el formato histórico; solo cambia
+    # cómo se llama un archivo al importarlo/asignarlo, nunca renombra la
+    # biblioteca existente.
+    naming_enabled: bool = Field(default=False)
+    naming_preset: str = Field(default="clasico")
+    #: 0 = usar el padding del preset; > 0 lo sobrescribe.
+    naming_padding: int = Field(default=0, ge=0, le=12)
+    # B23: al importar, crear el número si la serie está vacía y el nombre lo
+    # identifica. Desactivado por defecto: no cambia bibliotecas existentes.
+    import_create_missing_issue: bool = Field(default=False)
+    # B23: convertir CBR→CBZ al importar. Desactivado por defecto; la conversión
+    # manual de la ficha sigue disponible sin encender esto.
+    import_convert_cbr: bool = Field(default=False)
 
     # ── Enricher (Comic Vine) ────────────────────────────────────────
     # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el

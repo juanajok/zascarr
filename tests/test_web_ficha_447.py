@@ -59,6 +59,22 @@ def test_ficha_de_numero_muestra_texto_plano_autores_y_archivos():
     assert "None" not in r.text
 
 
+def test_ficha_de_numero_muestra_colecciones_de_su_serie():
+    from types import SimpleNamespace as NS
+    from unittest.mock import patch
+
+    serie = _serie()
+    issue = _issue(series_id=serie.id)
+    with patch("zascarr.web.series.colecciones_de_serie",
+               AsyncMock(return_value=[NS(id=uuid4(), name="Grapas")])):
+        with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie]),
+                                           FakeExecResult([])])) as client:
+            r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
+    assert r.status_code == 200
+    assert "Colecciones" in r.text and "Grapas" in r.text
+    assert "Este número está en las colecciones de su serie." in r.text
+
+
 def test_ficha_de_numero_sin_datos_dice_que_falta():
     serie = _serie(publisher=None, start_year=None, end_year=None)
     issue = _issue(series_id=serie.id, synopsis=None, release_date=None, page_count=None,
@@ -96,6 +112,21 @@ def test_ficha_de_numero_404_y_no_store():
     assert ok.status_code == 200 and ok.headers["cache-control"] == "no-store"
 
 
+def test_ficha_de_numero_atribuye_a_fandom_con_articulo_y_licencia():
+    """SCR2 (AC-03/AC-16): un número traído de una wiki enlaza su página y la licencia."""
+    serie = _serie()
+    issue = _issue(series_id=serie.id, metadata_source="fandom_dc",
+                   fandom_dc_slug="Thorgal Vol 1 3")
+    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie]),
+                                      FakeExecResult([])])) as client:
+        r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
+    assert r.status_code == 200
+    assert 'href="https://dc.fandom.com/wiki/Thorgal_Vol_1_3"' in r.text
+    assert 'href="https://creativecommons.org/licenses/by-sa/3.0/"' in r.text
+    assert "DC Database" in r.text and "Creative Commons BY-SA 3.0" in r.text
+    assert "La portada no está incluida en esa licencia." in r.text
+
+
 def test_ficha_de_numero_parcial_sin_autores_ni_archivos():
     serie = _serie()
     issue = _issue(series_id=serie.id, credits=[], files=[])
@@ -113,7 +144,7 @@ def test_series_fuentes_sigue_dentro_de_la_cabecera_y_chip_con_sr():
                                       + [FakeExecResult([])] * 12)) as client:
         r = client.get(f"/ui/series/{serie.id}")
     html = r.text
-    assert html.index("Fuentes y atribución") < html.index("Sobre esta serie")
+    assert html.index("Aviso legal") < html.index("Sobre esta serie")
     assert 'class="caption">Los que más números firman' in html
     # La altura de 40 px se comprueba por selector en test_web_css_contraste.
 
@@ -158,6 +189,10 @@ def test_hrefs_de_chip_y_archivo_por_numero(monkeypatch):
     assert f'hx-get="/ui/series/{serie.id}/numero/issue-1/previa"' in r.text
     assert 'class="previa-numero"' in r.text
     assert 'id="previa-issue-1"' in r.text
+    assert 'id="previa-archivo-issue-1"' in r.text
+    assert 'hx-target="#previa-archivo-issue-1"' in r.text
+    assert "Ver portada" in r.text
+    assert 'hx-target="next .previa-numero"' in r.text
     assert 'aria-hidden="true"' in r.text
     assert 'hx-trigger="mouseenter delay:150ms, focusin delay:150ms"' in r.text
 

@@ -89,7 +89,10 @@ class CVIssueResult:
     issue_number: str | None = None
     description: str | None = None
     image_url: str | None = None
+    #: Fecha de PORTADA tal como la da Comic Vine (YYYY-MM-DD); no es `Issue.release_date`.
     cover_date: str | None = None
+    #: Fecha de VENTA (la que significa `Issue.release_date`, decisión PO 2026-11-13).
+    store_date: str | None = None
     credits: list[CVCredit] = field(default_factory=list)
     #: Nombres de personaje tal como los declara Comic Vine (no inventados).
     characters: list[str] = field(default_factory=list)
@@ -202,7 +205,7 @@ class ComicVineClient:
         try:
             data = await self._get(
                 f"/issue/4000-{int(issue_id)}/",
-                {"field_list": "id,issue_number,cover_date,volume"},
+                {"field_list": "id,issue_number,cover_date,store_date,volume"},
             )
         except RespuestaNoTransitoria as exc:
             if exc.codigo == 404:
@@ -213,12 +216,41 @@ class ComicVineClient:
             return None
         return _parse_issue(item)
 
+    async def issues_by_cover_date(self, desde: str, hasta: str,
+                                   limit: int = 100) -> list[dict[str, Any]]:
+        """Números con fecha de portada en el rango ISO, para Novedades (D5).
+
+        `cover_date` es la fecha que Comic Vine publica para el número; no es
+        `store_date` (fecha de venta, a menudo aún vacía para futuros). Pagina
+        con `offset` hasta agotar `number_of_total_results`: una semana USA
+        normal supera los 100 números y una sola página perdería novedades.
+        """
+        limite = min(max(1, int(limit)), 100)
+        resultados: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            data = await self._get("/issues/", {
+                "filter": f"cover_date:{desde}|{hasta}",
+                "sort": "cover_date:asc",
+                "limit": limite,
+                "offset": offset,
+                "field_list": ("id,issue_number,cover_date,store_date,volume,"
+                               "site_detail_url"),
+            })
+            pagina = data.get("results", []) or []
+            resultados.extend(pagina)
+            total = _safe_int(data.get("number_of_total_results")) or 0
+            offset += len(pagina)
+            if not pagina or offset >= total:
+                break
+        return resultados
+
     async def get_issue_detail(self, issue_id: int) -> dict[str, Any]:
         data = await self._get(
             f"/issue/4000-{issue_id}/",
             {
                 "field_list": (
-                    "id,name,issue_number,volume,description,cover_date,image,"
+                    "id,name,issue_number,volume,description,cover_date,store_date,image,"
                     "person_credits,character_credits,story_arc_credits"
                 ),
             },
@@ -234,7 +266,7 @@ class ComicVineClient:
         """
         data = await self._get("/issues/", {
             "filter": f"volume:{volume_id},issue_number:{issue_number}",
-            "field_list": ("id,issue_number,description,image,cover_date,person_credits,"
+            "field_list": ("id,issue_number,description,image,cover_date,store_date,person_credits,"
                            "character_credits,story_arc_credits"),
             "limit": 1,
         })
@@ -256,6 +288,7 @@ def _parse_issue(item: dict) -> CVIssueResult:
         description=item.get("description"),
         image_url=_portada(item),
         cover_date=item.get("cover_date"),
+        store_date=item.get("store_date"),
         credits=credits,
         characters=_nombres(item.get("character_credits")),
         story_arcs=_nombres(item.get("story_arc_credits")),

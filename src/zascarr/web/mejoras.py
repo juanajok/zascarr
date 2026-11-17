@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Form, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -17,10 +17,14 @@ from zascarr.services.orchestrator import (
 )
 from zascarr.services.upgrades import (
     descartar_mejora,
+    devolver_mejora,
     escanear_mejoras,
+    historial_mejoras,
     listar_mejoras,
     marcar_descargada,
+    motivo_sin_escaneo,
     obtener_mejora,
+    reclamar_mejora,
 )
 from zascarr.web.routes import crear_templates
 
@@ -34,57 +38,85 @@ def _respuesta(request: Request, contexto: dict) -> HTMLResponse:
     return resp
 
 
-@router.get("", response_class=HTMLResponse)
-async def mejoras(request: Request, guardado: str = Query(default=""),
-                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    filas = await listar_mejoras(db)
+async def _contexto(db: AsyncSession, *, pagina: int = 1,
+                    aviso: str = "", error: str = "") -> dict:
+    datos = await listar_mejoras(db, pagina)
+    historial = await historial_mejoras(db)
     secret = get_settings().secret_key
-    return _respuesta(request, {
+    return {
+        "pagina": datos,
+        "historial": historial,
         "mejoras": [
             {"m": m, "token": crear_token_candidato(m.issue.id, m.candidato, secret)}
-            for m in filas
+            for m in datos.filas
         ],
-        "aviso": {
-            "escaneado": "Búsqueda de mejoras terminada.",
-            "descargada": "Descarga enviada. No se ha borrado ni sustituido nada.",
-            "descartada": "Propuesta descartada.",
-        }.get(guardado, ""),
-        "error": "No se pudo enviar la descarga. Revisa el cliente en Ajustes."
-        if guardado == "fallo" else "",
-    })
+        "aviso": aviso,
+        "error": error,
+    }
+
+
+@router.get("", response_class=HTMLResponse)
+async def mejoras(request: Request, guardado: str = Query(default=""),
+                  pagina: int = Query(default=1, ge=1),
+                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    aviso = {
+        "escaneado": "Búsqueda de mejoras terminada.",
+        "descargada": "Descarga enviada. No se ha borrado ni sustituido nada.",
+        "descartada": "Propuesta descartada.",
+    }.get(guardado, "")
+    error = ""
+    if guardado == "fallo":
+        error = "No se pudo enviar la descarga. Revisa el cliente en Ajustes."
+    return _respuesta(request, await _contexto(
+        db, pagina=pagina, aviso=aviso, error=error))
 
 
 @router.post("/escanear", response_class=HTMLResponse,
              dependencies=[Depends(require_legal_acknowledgment)])
-async def escanear(request: Request, db: AsyncSession = Depends(get_db)) -> RedirectResponse:
-    await escanear_mejoras(db)
-    return RedirectResponse("/ui/mejoras?guardado=escaneado", status_code=303)
+async def escanear(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
+    motivo = motivo_sin_escaneo()
+    if motivo:
+        return _respuesta(request, await _contexto(db, error=motivo))
+    informe = await escanear_mejoras(db)
+    aviso = (f"Revisados {informe.revisados} números; "
+             f"{informe.creadas} propuestas nuevas.")
+    if informe.fallidos:
+        aviso += f" {informe.fallidos} no se pudieron consultar y se reintentarán."
+    return _respuesta(request, await _contexto(db, aviso=aviso))
 
 
 @router.post("/{propuesta_id}/descargar", response_class=HTMLResponse,
              dependencies=[Depends(require_legal_acknowledgment)])
 async def descargar(propuesta_id: UUID, request: Request, token: str = Form(...),
-                    db: AsyncSession = Depends(get_db)) -> RedirectResponse:
+                    db: AsyncSession = Depends(get_db)) -> Response:
     mejora = await obtener_mejora(db, propuesta_id)
     if mejora is None:
-        raise HTTPException(status_code=404, detail="Propuesta no encontrada")
+        return _respuesta(request, await _contexto(
+            db, error="Esa propuesta ya no está disponible. Vuelve a la lista."))
     candidato = verificar_token_candidato(
         token, mejora.issue.id, get_settings().secret_key)
     if candidato is None:
-        raise HTTPException(status_code=400,
-                            detail="Candidato no válido o caducado — vuelve a cargar la lista")
+        return _respuesta(request, await _contexto(
+            db, error="La oferta ha caducado. Vuelve a cargar la lista y elige de nuevo."))
+    reclamada = await reclamar_mejora(db, propuesta_id)
+    if reclamada is None:
+        return _respuesta(request, await _contexto(
+            db, error="Esa propuesta ya se está enviando o ya no está pendiente."))
     ok, _mensaje = await Orchestrator(db).enviar_candidato_de_mejora(candidato)
     if ok:
         await marcar_descargada(db, propuesta_id)
         await db.commit()
         return RedirectResponse("/ui/mejoras?guardado=descargada", status_code=303)
-    await db.rollback()
+    await devolver_mejora(db, propuesta_id)
+    await db.commit()
     return RedirectResponse("/ui/mejoras?guardado=fallo", status_code=303)
 
 
 @router.post("/{propuesta_id}/descartar", response_class=HTMLResponse)
-async def descartar(propuesta_id: UUID, db: AsyncSession = Depends(get_db)) -> RedirectResponse:
+async def descartar(propuesta_id: UUID, request: Request,
+                    db: AsyncSession = Depends(get_db)) -> Response:
     if not await descartar_mejora(db, propuesta_id):
-        raise HTTPException(status_code=404, detail="Propuesta no encontrada")
+        return _respuesta(request, await _contexto(
+            db, error="Esa propuesta ya no está pendiente. Vuelve a la lista."))
     await db.commit()
     return RedirectResponse("/ui/mejoras?guardado=descartada", status_code=303)
