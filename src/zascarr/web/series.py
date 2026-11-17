@@ -115,6 +115,7 @@ from zascarr.services.ficha_numero import (
 from zascarr.services.ficha_numero import (
     TEXTOS as TEXTOS_FICHA,
 )
+from zascarr.services.lector import archivo_por_defecto
 from zascarr.services.lectura import (
     TEXTOS_LECTURA,
     EstadoInvalidoError,
@@ -1785,13 +1786,17 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
         for rol, _ in ROLES_ES if ficha.autores.get(rol)
     ]
     sinopsis_visible, sinopsis_resto = partir_sinopsis(ficha.sinopsis)
+    lectura = await lectura_de(db, issue_id)
+    lector_archivo = await archivo_por_defecto(db, issue_id)
     respuesta = templates.TemplateResponse(request, "issue_detail.html", {
         "series": ficha.serie, "issue": ficha.issue, "ficha": ficha,
         # SCR2: doble enlace visible (artículo + CC-BY-SA 3.0) si el número lo trajo Fandom.
         "atribucion_fandom": atribucion_fandom(ficha.issue),
         "autores": autores, "textos": TEXTOS_FICHA,
         "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
-        "lectura": await lectura_de(db, issue_id), "textos_lectura": TEXTOS_LECTURA,
+        "lectura": lectura, "textos_lectura": TEXTOS_LECTURA,
+        "lector_archivo": lector_archivo,
+        "lector_pagina": lectura.current_page if lectura else 0,
         "estados_lectura": ((ReadingStatus.UNREAD, "Sin leer"),
                             (ReadingStatus.READING, "Leyendo"),
                             (ReadingStatus.COMPLETED, "Leído")),

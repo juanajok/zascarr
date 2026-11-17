@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Leer — {{ serie.title if serie else "ZascArr" }}{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ serie.id }}/numero/{{ numero.id }}">← Volver al número</a>
+<h1>Leer{% if numero.issue_number %} · número {{ numero.issue_number }}{% endif %}</h1>
+{% if serie %}<p class="subtitle">{{ serie.title }}</p>{% endif %}
+
+<div class="lector" data-lector
+     data-total="{{ total }}" data-pagina="{{ pagina_actual }}"
+     data-pagina-url="/ui/leer/{{ archivo.id }}/pagina/"
+     data-progreso-url="/ui/leer/{{ archivo.id }}/progreso">
+  <div class="lector-lienzo">
+    <img id="lector-pagina" class="lector-pagina"
+         src="/ui/leer/{{ archivo.id }}/pagina/{{ pagina_actual }}"
+         alt="Página {{ pagina_actual }} de {{ total }}">
+  </div>
+  <div class="lector-controles" role="group" aria-label="Pasar páginas">
+    <button type="button" class="btn ghost" id="lector-anterior">← Anterior</button>
+    <p class="lector-contador" id="lector-contador" aria-live="polite">Página {{ pagina_actual }} de {{ total }}</p>
+    <button type="button" class="btn" id="lector-siguiente">Siguiente →</button>
+  </div>
+  <p class="caption lector-ayuda">Usa las flechas del teclado. ZascArr guarda la página por la que vas.</p>
+</div>
+<noscript><p class="aviso">Para pasar páginas hace falta JavaScript. La primera página sí se ve.</p></noscript>
+<script src="/static/lector.js" defer></script>
+{% endblock %}

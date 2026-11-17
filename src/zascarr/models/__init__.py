@@ -1278,6 +1278,9 @@ class ReadingProgress(Base):
         default=ReadingStatus.UNREAD,
     )
     current_page: Mapped[int]           = mapped_column(Integer, default=0)
+    #: BL-LEC1 (#824): archivo concreto que se estaba leyendo. NULL en progresos antiguos.
+    file_id:      Mapped[str|None]      = mapped_column(
+        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), index=True)
     rating:       Mapped[int|None]      = mapped_column(SmallInteger)
     started_at:   Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))

@@ -2717,3 +2717,20 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
 }
+
+/* ── Lector BL-LEC1 (#824) ─────────────────────────────────────────────── */
+.lector { display: grid; gap: var(--space-3); justify-items: center; }
+.lector-lienzo {
+  width: 100%; min-height: 50vh; display: flex; align-items: center; justify-content: center;
+  background: var(--paper-2); border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-panel); overflow: hidden;
+}
+.lector-pagina { max-width: 100%; max-height: 78vh; width: auto; height: auto; display: block; }
+.lector-controles { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2); }
+.lector-contador { margin: 0; font-variant-numeric: tabular-nums; }
+.lector-ayuda { text-align: center; }
+@media (max-width: 480px) {
+  .lector-pagina { max-height: 68vh; }
+  .lector-controles { width: 100%; }
+  .lector-controles .btn { flex: 1 1 8rem; min-height: 44px; }
+}
