@@ -157,6 +157,11 @@ services:
       - COPIAS_FILE=/run/backup-status/copias.json
       - OMITIDA_FILE=/run/backup-status/omitida.json
       - COVERS_CACHE_PATH=/config/covers
+      # Logs persistidos/rotados para consultar incidencias anteriores desde la UI.
+      - LOG_DIR=/config/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-5242880}
+      - LOG_BACKUPS=${LOG_BACKUPS:-3}
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-30}
       # #418 (ADR 0015): interruptor del lector de .cbr con `unar` (por defecto, encendido)
       - LECTOR_RAR_ENABLED=${LECTOR_RAR_ENABLED:-true}
       - TZ=${TZ:-Europe/Madrid}
@@ -191,6 +196,7 @@ services:
       # BL-OPS1 (FR-28): el único volumen nuevo, de solo lectura (socket y clave del auxiliar). Nada de docker.sock.
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/ops:/run/zascarr-ops:ro
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/covers:/config/covers
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/logs:/config/logs
     # #418 (ADR 0015): esta app abre con `unar` archivos de terceros que llegan por P2P. Sin
     # `no-new-privileges` ningún proceso del contenedor puede ganar privilegios (setuid); el tope de
     # procesos (`deploy.resources.limits.pids`, abajo) acota una bifurcación descontrolada. El arranque
