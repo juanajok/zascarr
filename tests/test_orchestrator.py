@@ -32,9 +32,11 @@ from zascarr.services.orchestrator import (
     MOTIVO_CLIENTE_INACCESIBLE,
     MOTIVO_ERROR_INESPERADO,
     MOTIVO_FUENTE_INACCESIBLE,
+    MOTIVO_AMULE_INACCESIBLE,
     MOTIVO_NUMERO_DISTINTO,
     MOTIVO_SIN_FUENTE,
     MOTIVO_SIN_RESULTADOS,
+    MOTIVO_TRANSMISSION_INACCESIBLE,
     DownloadBackend,
     MOTIVO_PROWlARR_CONFIGURACION,
     Orchestrator,
@@ -397,7 +399,8 @@ class TestMotivoNoAvanza:
         await orch._process_item(item)
 
         assert item.status == WishlistStatus.FAILED
-        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+        assert "Transmission no respondió" in item.last_error
 
     @pytest.mark.asyncio
     async def test_exito_limpia_el_motivo_anterior(self):
@@ -524,7 +527,25 @@ class TestBusquedaManual:
 
         assert result is False
         assert item.status == WishlistStatus.FAILED
-        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_amule_sin_sesion_dice_a_mule_y_no_un_generico(self):
+        """UX 2026-11-17: el mensaje debe nombrar el cliente que falló."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
+        orch._amule = AsyncMock()
+        orch._amule.login.return_value = False
+        candidato = make_result(
+            title="DC K.O. #1.cbr",
+            url="ed2k://|file|DC%20K.O.%20%231.cbr|1|HASH|/")
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is False
+        assert item.status == WishlistStatus.FAILED
+        assert item.last_error == MOTIVO_AMULE_INACCESIBLE
+        assert "aMule no respondió" in item.last_error
 
     @pytest.mark.asyncio
     async def test_transmission_inalcanzable_no_revienta_da_motivo_claro(self):
@@ -544,7 +565,8 @@ class TestBusquedaManual:
 
         assert result is False
         assert item.status == WishlistStatus.FAILED
-        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+        assert "Transmission no respondió" in item.last_error
 
     @pytest.mark.asyncio
     async def test_no_reenvia_si_el_item_ya_no_esta_en_estado_accionable(self):
