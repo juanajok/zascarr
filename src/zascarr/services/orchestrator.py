@@ -715,9 +715,10 @@ class Orchestrator:
                 ref = await self._send(backend, candidate)
                 if ref is None:
                     item.last_error = motivo_de_cliente(backend)
-                    # T-62: un envío extra fallido también programa el backoff,
-                    # para que el ciclo automático no insista antes de tiempo.
-                    self._programar_reintento(item)
+                    # T-62: el envío extra es auxiliar. Un fallo NO cambia el estado
+                    # del deseo (la descarga principal sigue en DOWNLOADING) ni
+                    # programa el backoff del ciclo (que solo mira WANTED/FAILED):
+                    # se informa en ese candidato y el coleccionista decide.
                     await self.db.flush()
                     return False
                 self._limpiar_reintento(item)
