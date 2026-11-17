@@ -573,7 +573,7 @@ def test_los_candidatos_muestran_cabecera_y_el_boton_dice_que_descarga(monkeypat
     with use_fake_session(session) as client:
         r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
     assert r.status_code == 200
-    assert "1 resultado" in r.text
+    assert "1 resultado" in " ".join(r.text.split())
     assert "Cerrar lista" in r.text
     assert 'hx-disable="this"' in r.text
     assert 'aria-label="Descargar Batman #1.cbz"' in r.text

@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 tests/test_runtime_settings.py
 
@@ -213,3 +214,12 @@ class TestBaseUrlRecuperacion:
 
         apply_overrides({"base_url": ""})
         assert get_settings().base_url == "https://env.example"
+
+
+@pytest.mark.asyncio
+async def test_get_valor_sin_crear_distingue_ausente_de_corrupto():
+    ausente = RuntimeSettingsService(db=FakeSession(existing_values={}))
+    assert await ausente.get_valor_sin_crear("_library_adoption_done") == (False, None)
+    corrupto = RuntimeSettingsService(db=FakeSession(existing_values={
+        "_library_adoption_done": "false"}))
+    assert await corrupto.get_valor_sin_crear("_library_adoption_done") == (True, "false")

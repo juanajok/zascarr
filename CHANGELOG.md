@@ -40,6 +40,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   porcentaje para los torrents, estado para aMule (su web no expone progreso). Cierra
   el hueco declarado en el benchmark de Deseados (§13) sin depender de abrir el cliente.
 
+
+
+- **Consistencia del registro de adopción (2026-11-17).** El marcador solo cuenta si es
+  exactamente `true`: un valor corrupto ya no se presenta como «biblioteca registrada» ni
+  habilita el registro incremental. Un registro de aceptación huérfano (sin marcador) se
+  rechaza con aviso y no se sobrescribe por un POST directo. Sin migración.
+
 - **Pasada de UI/UX en Deseados (2026-11-16).** Introducción más corta y «¿Cómo funciona?»
   plegado (menos ruido antes de la acción), indicador «Buscando series…» al buscar,
   resumen «N deseos · M en descarga», estado vacío con siguiente paso, nombres

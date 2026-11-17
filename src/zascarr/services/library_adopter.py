@@ -106,6 +106,8 @@ class EstadoAdopcion(StrEnum):
     HECHA = "hecha"                      # ya se ejecutó (marcador): aunque registrara 0
     CATALOGO_PREVIO = "catalogo_previo"  # ya hay series sin haber adoptado: no se ofrece
     SIN_TEBEOS = "sin_tebeos"            # la carpeta no existe o no contiene ningún cómic
+    MARCADOR_INVALIDO = "marcador_invalido"  # hay marcador pero no es exactamente `true`: no se autoriza nada
+    ACEPTACION_HUERFANA = "aceptacion_huerfana"  # registro de aceptación sin marcador: no se sobrescribe
 
 
 @dataclass
@@ -317,8 +319,12 @@ class LibraryAdopter:
         consultas baratas y listar la biblioteca no lo es."""
         from zascarr.services.runtime_settings import RuntimeSettingsService
 
-        if await RuntimeSettingsService(self._db).get_flag(_MARCADOR_HECHO):
-            return EstadoAdopcion.HECHA
+        presente, marcador = await RuntimeSettingsService(
+            self._db).get_valor_sin_crear(_MARCADOR_HECHO)
+        if presente:
+            if marcador is True:
+                return EstadoAdopcion.HECHA
+            return EstadoAdopcion.MARCADOR_INVALIDO
         total_series = (await self._db.execute(select(func.count(Series.id)))).scalar() or 0
         # E/S de disco (en red, cada llamada es una ida y vuelta): a un hilo. Se mira ANTES de decidir
         # CATALOGO_PREVIO: con catálogo previo solo se ofrece el registro si hay tebeos que registrar.
