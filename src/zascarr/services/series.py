@@ -464,10 +464,14 @@ def condicion_estado_coleccion(tipo: str):
         # SQL explícito y correlado: la subconsulta automática de SQLAlchemy se
         # corrompía al combinarse con la subconsulta de grapas de `faltan`
         # (incluía `series` dentro del EXISTS y daba falsos completos).
-        return text("EXISTS (SELECT 1 FROM issues i WHERE i.series_id = series.id)")
+        return text(
+            "EXISTS (SELECT 1 FROM issues i JOIN files f ON f.issue_id = i.id "
+            "WHERE i.series_id = series.id AND f.is_missing = false)")
 
     def _sin_publicacion():
-        return text("NOT EXISTS (SELECT 1 FROM issues i WHERE i.series_id = series.id)")
+        return text(
+            "NOT EXISTS (SELECT 1 FROM issues i JOIN files f ON f.issue_id = i.id "
+            "WHERE i.series_id = series.id AND f.is_missing = false)")
 
     es_obra_unica = Series.kind == SeriesKind.ONE_SHOT
     regular_computable = and_(
@@ -660,10 +664,15 @@ async def huecos_de_serie(db: AsyncSession, series: Series,
     """
     if series.kind == SeriesKind.ONE_SHOT:
         publicacion = (await db.execute(
-            select(Issue.id).where(Issue.series_id == series.id).limit(1)
+            select(Issue.id)
+            .join(File, File.issue_id == Issue.id)
+            .where(Issue.series_id == series.id, File.is_missing.is_(False))
+            .limit(1)
         )).scalar_one_or_none()
         if publicacion is None:
-            return Huecos([], False, "sin publicación: todavía no tiene ningún tomo enlazado")
+            return Huecos([], False,
+                          "sin publicación con archivo disponible: todavía no tiene "
+                          "ningún tomo enlazado o el archivo está ausente")
         return Huecos([], True, None)
     no_calculable = razon_de_no_calculable(series)
     if no_calculable is not None:

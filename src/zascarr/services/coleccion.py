@@ -14,7 +14,7 @@ from uuid import UUID
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.models import Issue, Series, SeriesKind, WishlistPolicy
+from zascarr.models import File, Issue, Series, SeriesKind, WishlistPolicy
 from zascarr.services.series import (
     UNIDAD_DE_GRAPA,
     compute_missing_issues,
@@ -137,11 +137,21 @@ async def cambiar_decision(
     return nueva_version
 
 
-def estado_puro(series: Series, poseidos: set[int]) -> EstadoColeccion:
-    """Estado sin BD, para tests y para reutilizar la misma regla en la ficha."""
+def estado_puro(series: Series, poseidos: set[int], *,
+                tiene_publicacion: bool = True) -> EstadoColeccion:
+    """Estado sin BD, para tests y para reutilizar la misma regla en la ficha.
+
+    `tiene_publicacion` solo importa para ONE_SHOT: la ruta async lo comprueba
+    contra `issues`+`files`; este helper no consulta la BD.
+    """
     if decision_no_completar(series):
         return EstadoColeccion(NO_COMPLETAR)
     if series.kind == SeriesKind.ONE_SHOT:
+        if not tiene_publicacion:
+            return EstadoColeccion(
+                NO_CALCULABLE,
+                motivo="sin publicación con archivo disponible: todavía no tiene "
+                       "ningún tomo enlazado o el archivo está ausente")
         return EstadoColeccion(COMPLETA)
     no_calculable = razon_de_no_calculable(series)
     if no_calculable is not None:
@@ -197,7 +207,10 @@ async def ids_por_estado(db: AsyncSession, tipo: str) -> set[UUID]:
         if len(fila) > 4 and fila[4] == SeriesKind.ONE_SHOT}
     if con_publicacion:
         con_publicacion = set((await db.execute(
-            select(Issue.series_id).where(Issue.series_id.in_(con_publicacion)).distinct()
+            select(Issue.series_id)
+            .join(File, File.issue_id == Issue.id)
+            .where(Issue.series_id.in_(con_publicacion), File.is_missing.is_(False))
+            .distinct()
         )).scalars().all())
     salida: set[UUID] = set()
     for fila in filas:
