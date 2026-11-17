@@ -191,6 +191,12 @@
           <input type="text" name="transmission_url" value="{{ transmission_url }}" placeholder="http://host.docker.internal:9091">
         </label>
         <p class="ajustes-hint">Si Transmission está en esta misma Raspberry Pi, la dirección es <code>http://host.docker.internal:9091</code>.</p>
+        <label>Carpeta de descargas (en la Pi)
+          <input type="text" name="transmission_download_dir" value="{{ transmission_download_dir }}"
+                 placeholder="/media/Descargas/torrents/completos">
+        </label>
+        <p class="ajustes-hint">La ruta tal como la ve Transmission en la Pi (no la del contenedor). ZascArr se la
+          pasa al enviar cada torrent; si no existe, el envío falla (lo avisamos al probar la conexión).</p>
         <details class="ajustes-mas">
           <summary>¿Por qué no <code>127.0.0.1</code>?</summary>
           <p class="ajustes-hint">ZascArr funciona dentro de un contenedor de Docker, y para él <code>127.0.0.1</code> es el propio contenedor, no tu Pi. <code>host.docker.internal</code> es su forma de decir «la máquina que me aloja».</p>
