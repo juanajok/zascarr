@@ -10,6 +10,7 @@ from zascarr.models import ComicTradition, Series, SeguimientoVisto
 from zascarr.services.seguimiento import (
     InformeSeguimiento,
     TemaForo,
+    _fecha_de_actividad,
     _procesar_foro,
 )
 
@@ -97,3 +98,12 @@ async def test_un_tema_actualizado_si_se_procesa():
         max_temas=10, limite_deseos=10, desde_cache=0)
 
     assert [(h.serie_id, h.numero) for h in hallazgos] == [(serie.id, 12)]
+
+
+def test_fecha_de_actividad_entiende_el_formato_ingles_del_foro():
+    ahora = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
+    assert _fecha_de_actividad("5th August 2026 - 18:24", ahora) == datetime(
+        2026, 8, 5, 18, 24, tzinfo=UTC)
+    assert _fecha_de_actividad("Nov 14 2019, 14:38", ahora) == datetime(
+        2019, 11, 14, 14, 38, tzinfo=UTC)
+    assert _fecha_de_actividad("Today, 10:32", ahora).day == 17

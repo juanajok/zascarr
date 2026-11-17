@@ -81,9 +81,18 @@ _FILA_DE_FORO = re.compile(
 _ENLACE_DE_TEMA = re.compile(
     r'<a[^>]+href=["\']([^"\']*showtopic=(\d+)[^"\']*)["\'][^>]*>(.*?)</a>',
     re.IGNORECASE | re.DOTALL)
+#: IPB marca el ancla del título con `id="tid-link-<id>"`; es la que tiene texto
+#: (el primer `showtopic` de la fila suele ser la imagen «nuevo mensaje»).
+_TID_LINK = re.compile(r'id=["\']tid-link-(\d+)', re.IGNORECASE)
+_MESES_INGLES = ("january", "february", "march", "april", "may", "june", "july",
+                 "august", "september", "october", "november", "december")
+_MESES_ESPANOL = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                  "agosto", "septiembre", "octubre", "noviembre", "diciembre")
 _ACTIVIDAD_DE_FORO = re.compile(
-    r"\b(?:Hoy|Ayer)\b(?:\s*,?\s*\d{1,2}:\d{2})?"
-    r"|\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}(?:\s+\d{1,2}:\d{2})?",
+    r"\b(?:Hoy|Ayer|Today|Yesterday)\b(?:\s*,?\s*\d{1,2}:\d{2})?"
+    r"|\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}(?:\s+\d{1,2}:\d{2})?"
+    r"|\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4}(?:\s*[-–,]\s*\d{1,2}:\d{2})?"
+    r"|\b[A-Za-z]+\s+\d{1,2},?\s+\d{4}(?:,?\s*\d{1,2}:\d{2})?",
     re.IGNORECASE)
 
 
@@ -100,8 +109,25 @@ def temas_de_foro(html: str) -> list[tuple[str, int, str, str | None]]:
     salida: list[tuple[str, int, str, str | None]] = []
     vistos: set[int] = set()
     for fila in _FILA_DE_FORO.findall(html):
-        enlace = _ENLACE_DE_TEMA.search(fila)
-        if not enlace:
+        # El primer `showtopic` de la fila suele ser la imagen «nuevo mensaje»
+        # (sin texto). El título está en el ancla `id="tid-link-..."`; si no
+        # aparece, se acepta el primer enlace con texto que no sea paginación.
+        enlace = None
+        alternativa = None
+        for candidato in _ENLACE_DE_TEMA.finditer(fila):
+            href_candidato = unescape(candidato.group(1))
+            texto_candidato = re.sub(
+                r"\s+", " ", _texto_plano(candidato.group(3))).strip()
+            if (not texto_candidato or texto_candidato.isdigit()
+                    or texto_candidato.lower().startswith("último mensaje")):
+                continue
+            if _TID_LINK.search(candidato.group(0)):
+                enlace = candidato
+                break
+            if alternativa is None and "view=" not in href_candidato:
+                alternativa = candidato
+        enlace = enlace or alternativa
+        if enlace is None:
             continue
         href = unescape(enlace.group(1))
         tema_id, contenido = int(enlace.group(2)), enlace.group(3)
