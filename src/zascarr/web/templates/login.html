@@ -12,7 +12,7 @@
 <body>
   <main class="content login-content">
     <h1>ZascArr</h1>
-    {% if aviso %}<p class="aviso" role="status">{{ aviso }}</p>{% endif %}
+    {% if aviso %}{{ ui.aviso("ok", aviso, rol="status") }}{% endif %}
     <p class="subtitle">
       {% if pide_usuario %}Introduce tu usuario y tu contraseña para continuar.
       {% else %}Introduce tu contraseña para continuar.{% endif %}
