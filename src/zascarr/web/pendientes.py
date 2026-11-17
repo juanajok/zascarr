@@ -102,6 +102,8 @@ def _card(f: File) -> dict:
     return {
         "file": f,
         "detected": _detected_label(f.file_name),
+        "formato": (f.file_format.value.upper() if f.file_format is not None else
+                    Path(f.file_name).suffix.lstrip(".").upper() or "?"),
         "suggestion": _suggestion(f),
         "puede_vincular": _puede_vincular(f),
         # U12: ausencia CONOCIDA (por la extensión, sin I/O): ni `<img>` ni petición ni bloque.
