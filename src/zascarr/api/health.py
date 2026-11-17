@@ -82,6 +82,8 @@ _BACKUP_ERRORES = {
     "status_write_failed": "no se pudo escribir el registro de estado",
     "disk_full": "no hay espacio suficiente en el disco",
     "unexpected": "error inesperado",
+    # BL-OPS1 (FR-14, FR-34): `backup.sh` falló al preparar la copia (requisitos, .env, carpetas)
+    "precondition_failed": "no se pudo preparar la copia",
 }
 
 # #334 B2: la restauración de comprobación es mensual. 35 días da margen sobre
@@ -160,7 +162,12 @@ def _backup_status() -> tuple[str, str]:
 
     status = state.get("status")
     error = state.get("error")
-    causa = _BACKUP_ERRORES.get(error, error or "causa desconocida")
+    # FR-34 (SecOps B-3): nunca se pinta una cadena libre del fichero por un endpoint público; un
+    # código que no está en el mapa sale como «causa desconocida».
+    # `error` puede ser una lista o un dict (no hashable): solo una cadena se busca en el mapa.
+    causa = "causa desconocida"
+    if isinstance(error, str):
+        causa = _BACKUP_ERRORES.get(error, causa)
 
     if status == "failed":
         return "error", f"La última copia falló: {causa}."

@@ -13,3 +13,5 @@ Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 TimeoutStartSec=30min
+# 75 = había otra operación de ZascArr en marcha: no es un fallo de la unidad (BL-OPS1, FR-12.4)
+SuccessExitStatus=75
