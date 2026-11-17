@@ -131,6 +131,7 @@ la especificación recoge su decisión.
 | Ciclo de búsqueda, estados, importación, operación | Sonarr / Radarr |
 | Ediciones, ficheros, metadatos de cómic | Kapowarr / Mylar3 |
 | Capítulos, fuentes de manga, lectura, interoperabilidad | Suwayomi; Kaizoku (`oae/kaizoku`, **archivado**: patrón histórico de descarga y de aviso a Komga/Kavita, no referencia viva) |
+| Lectura propia, visor, UX de lector y clientes OPDS/OPDS-PSE | YACReader y OpenComic (gestión y trato de imágenes); Panels, Chunky y KOReader (UX de lector y clientes OPDS-PSE); Komga y Kavita (servidor, OPDS/OPDS-PSE y API). Ficha: `docs/design/benchmark-BL-LEC-mercado-lectores-2026.md` |
 
 ## Qué nos habría ahorrado
 
