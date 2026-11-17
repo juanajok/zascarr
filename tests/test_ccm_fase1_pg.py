@@ -9,8 +9,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from zascarr.core.consolidacion.tipos import FichaRecolectada
 from tests._pg import url_asyncpg
+from zascarr.core.consolidacion.tipos import FichaRecolectada
 from zascarr.services.consolidacion.recolector import Recolector
 
 URL = os.environ.get("TEST_DATABASE_URL")
