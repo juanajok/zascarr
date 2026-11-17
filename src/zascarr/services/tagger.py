@@ -255,11 +255,14 @@ class _Contexto:
     #: Procedencia de los datos del NÚMERO (`Issue.metadata_source`). No es el
     #: `File.metadata_source`: este último describe el archivo, no la sinopsis.
     metadata_source: str | None = None
+    #: La sinopsis fue editada a mano (marca `metadata_["manual"]["synopsis"]`).
+    resumen_manual: bool = False
 
     def huella(self) -> dict:
         """Lo que se guarda en la marca: con qué se comparó esta revisión."""
         return {"deseados": self.deseados, "bloqueados": sorted(self.bloqueados),
-                "metadata_source": self.metadata_source}
+                "metadata_source": self.metadata_source,
+                "resumen_manual": self.resumen_manual}
 
 
 _ROLE_A_TAG = {
@@ -298,14 +301,15 @@ _RESUMEN_PERMITIDO = frozenset({MetadataSource.MANUAL.value, MetadataSource.COMI
 #: `File.metadata_source` es la procedencia del archivo y NO autoriza el texto.
 def _resumen_autorizado(ctx: _Contexto, file: File) -> bool:
     propio = (file.metadata_ or {}).get("comicinfo_propio") or {}
-    return ctx.metadata_source in _RESUMEN_PERMITIDO or "Summary" in propio
+    return (ctx.resumen_manual or ctx.metadata_source in _RESUMEN_PERMITIDO
+            or "Summary" in propio)
 
 
 def _filtrar_resumen(ctx: _Contexto, file: File) -> _Contexto:
     if _resumen_autorizado(ctx, file):
         return ctx
     return _Contexto({**ctx.deseados, "Summary": None}, set(ctx.bloqueados),
-                     ctx.metadata_source)
+                     ctx.metadata_source, ctx.resumen_manual)
 
 
 def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _Contexto:
@@ -350,7 +354,10 @@ def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _
         tag for tag, (entidad, campo) in _LOCK_DE.items()
         if campo in (entidades[entidad].locked_fields or [])
     }
-    return _Contexto(deseados, bloqueados, getattr(issue, "metadata_source", None))
+    metadata = getattr(issue, "metadata_", None)
+    manual = metadata.get("manual") if isinstance(metadata, dict) else None
+    return _Contexto(deseados, bloqueados, getattr(issue, "metadata_source", None),
+                     isinstance(manual, dict) and "synopsis" in manual)
 
 
 class TaggerService:

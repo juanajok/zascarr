@@ -79,3 +79,4 @@ async def test_pantalla_numero_y_aplicar_huecos(banco):
         await db.refresh(issue)
         assert issue.page_count == 32 and issue.release_date is not None
         assert issue.synopsis == "Una historia."
+        assert issue.metadata_["comicinfo_sync_pendiente"] is True
