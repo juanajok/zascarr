@@ -12,7 +12,7 @@ Kit mínimo de la medición de #477. **No es código de producción**. Todo lo q
    sed 's#^/media/library/##' ~/eval-cnv/cbr-registrados.txt > ~/eval-cnv/list.txt
    ```
 2. `censo-cabeceras.tsv`: cabeceras RAR4/RAR5/sólido/cifrado/ZIP (se apoya en
-   `evaluacion_rar/censo_cabeceras_rar.py`).
+   el censo RAR histórico se retiró en OCTA-A6; su modo de uso queda en `docs/design/mediciones/evaluacion-rar-archivada.md`).
 3. `censo_lsar.py`: contenedor desechable con la biblioteca en solo lectura y `list.txt`;
    cuenta listables, no listables, anidados y volúmenes. Sin red, root read-only, 512 MiB.
 4. `seleccionar_muestra.py`: regla fija; copia 26 muestras, comprueba SHA-256 original=copia.

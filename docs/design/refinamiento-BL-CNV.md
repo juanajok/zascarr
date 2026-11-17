@@ -180,7 +180,7 @@ son técnicas, no un compromiso de sprint.
   verifica su `sha256` contra el original; la biblioteca solo se **lee** para el censo y los recuentos.
 - Contenedor desechable: `--network none --read-only --memory=512m --memory-swap=512m --cpus=2
   --pids-limit 128 --cap-drop ALL`, usuario no root, trabajo en un volumen/tmpfs acotado; sin socket
-  Docker, sin `--privileged`. Mismo patrón que `scripts/medicion/evaluacion_rar/LEEME.md`.
+  Docker, sin `--privileged`. Mismo patrón que el kit histórico de RAR; ver `docs/design/mediciones/evaluacion-rar-archivada.md`.
 - Ninguna medición escribe en la BD ni en la biblioteca; las consultas de censo son **solo lectura**
   (transacción `READ ONLY`).
 
@@ -537,7 +537,7 @@ de #480. XL; probable partición al refinar; depende de #480/#481/#109/#449.
 
 | Criterio | Prueba |
 |---|---|
-| #477 censo/muestra/métricas | `scripts/medicion/evaluacion_rar/` adaptado (banco de conversión) + evidencia en `docs/design/benchmark-BL-CNV-datos.md`; sin CI (requiere Pi y copias) |
+| #477 censo/muestra/métricas | kit RAR histórico (archivado; ver `docs/design/mediciones/evaluacion-rar-archivada.md`) adaptado (banco de conversión) + evidencia en `docs/design/benchmark-BL-CNV-datos.md`; sin CI (requiere Pi y copias) |
 | #488 guardián | `tests/test_compartidos.py` con dobles de Transmission/aMule y carpetas; `tests/test_tagger_compartido.py` (regresión B6) |
 | #478 conversión | `tests/test_conversion_cbr.py` (puro: manifiesto, nombres), `tests/test_conversion_pg.py` (Postgres real: misma fila, deshacer, reconciliación) y fixtures RAR4/RAR5/sólido de `tests/fixtures/rar/`; `unar` falso para fallos; disco real o simulado |
 | #478 UI | `tests/test_web_conversion.py` (vista previa, token, resultado, bloqueos) + composición HTMX como en `test_web_nombre_y_foco.py` |
