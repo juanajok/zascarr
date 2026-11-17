@@ -206,6 +206,12 @@ def test_restaurar_tiene_entorno_y_cerrojo_escribible():
     assert "f /run/zascarr-ops.lock 0600 root root -" in (
         REPO / "deploy/systemd/zascarr-ops.tmpfiles.conf").read_text()
     assert '=~ ^[0-9]{8}_[0-9]{6}$' in envoltorio
+    # QA en la VM: con ProtectHome=true el cliente docker necesita un DOCKER_CONFIG de root dentro de /run, y
+    # la app real escucha en el 8000 (el 18000 solo era del arnés).
+    assert "export DOCKER_CONFIG=" in envoltorio and "/run/zascarr-ops/docker" in envoltorio
+    assert "HEALTH_URL" in envoltorio and "127.0.0.1:8000" in envoltorio
+    assert "DOCKER_CONFIG=/run/zascarr-ops/docker" in unidad
+    assert "HEALTH_URL=http://127.0.0.1:8000/api/health" in unidad
 
 
 def test_la_unidad_de_restauracion_no_deja_marcadores_y_escribe_en_la_carpeta_de_copias(entorno):

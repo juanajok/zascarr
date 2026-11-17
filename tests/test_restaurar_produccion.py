@@ -77,6 +77,12 @@ def test_restaura_en_base_nueva_y_cambia_por_renombrado(tmp_path):
 
     # La seguridad vigente se conserva y lo de integraciones viene de la copia (FR-34).
     reaplicado = ctx["restore"].read_text(encoding="utf-8")
+    # QA/#F-18: la etiqueta de dólar debe abrir y cerrar: `$tag$ … $tag$::jsonb` (no `$tag` … `$tag::jsonb`).
+    import re as _re
+
+    m = _re.search(r"VALUES \(1, \$(?P<tag>[A-Za-z0-9_]+)\$(?P<json>\{.*?\})\s*\$\1\$::jsonb", reaplicado, _re.S)
+    assert m is not None, reaplicado[-800:]
+    assert m.group("tag") not in m.group("json")
     assert '"auth_mode":"password"' in reaplicado
     assert '"auth_password_hash":"hash-nuevo"' in reaplicado
     assert '"prowlarr_api_key":"clave-copia"' in reaplicado
