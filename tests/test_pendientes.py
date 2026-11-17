@@ -102,6 +102,25 @@ def use_fake_session(session):
 
 class TestPendientesIndex:
 
+    def test_el_filtro_falso_no_envia_solo_sugerencia_vacia(self):
+        """Regresión del JSON 422 al guardar un especial: `#pend-clave` enviaba
+        `solo_sugerencia=` vacío y FastAPI no lo parsea como bool."""
+        file = File(id=uuid4(), file_path="/lib/_Unsorted/x.cbz",
+                    file_name="x.cbz", file_format=FileFormat.CBZ)
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
+            r = client.get("/ui/pendientes")
+        assert r.status_code == 200
+        assert 'name="solo_sugerencia" value=""' not in r.text
+        assert 'name="solo_sugerencia" value="1"' not in r.text
+
+    def test_el_filtro_verdadero_envia_solo_sugerencia_uno(self):
+        file = File(id=uuid4(), file_path="/lib/_Unsorted/x.cbz",
+                    file_name="x.cbz", file_format=FileFormat.CBZ)
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
+            r = client.get("/ui/pendientes?solo_sugerencia=1")
+        assert r.status_code == 200
+        assert 'name="solo_sugerencia" value="1"' in r.text
+
     def test_pagina_lista_archivos_pendientes(self):
         file = File(id=uuid4(), file_path="/lib/_Unsorted/batman misterioso 12.cbz",
                     file_name="batman misterioso 12.cbz", file_format=FileFormat.CBZ)

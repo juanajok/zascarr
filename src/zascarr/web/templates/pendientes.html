@@ -42,7 +42,7 @@
 <div id="pend-clave" hidden>
   <input type="hidden" name="primero" value="{{ primero }}">
   <input type="hidden" name="ultimo" value="{{ ultimo }}">
-  <input type="hidden" name="solo_sugerencia" value="{{ '1' if solo_sugerencia else '' }}">
+  {% if solo_sugerencia %}<input type="hidden" name="solo_sugerencia" value="1">{% endif %}
 </div>
 {#- Destino fuera de la fila para el recuento tras ignorar: el OOB que retira
     el <li> no puede llevarse también los disparadores del menú/rango. -#}
