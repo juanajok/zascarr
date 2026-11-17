@@ -53,7 +53,7 @@ CLAVES_PETICION = ("v", "id", "accion", "creada", "firma")
 CLAVES_PETICION_RESTAURAR = ("v", "id", "accion", "copia", "prueba", "creada", "firma")
 MAX_BYTES = 512
 MAX_BYTES_V1 = 512
-MAX_BYTES_RESTAURAR = 1024
+MAX_BYTES_RESTAURAR = 4096
 LEER_MAX = MAX_BYTES_RESTAURAR + 1
 RESTAURACION_ESPERA_S = 30 * 60
 LIMITE_RESTAURACIONES = 3
@@ -92,7 +92,7 @@ class Respuesta:
     """`resultado` es `aceptada` o `rechazada`; `codigo` es de la lista cerrada. Nunca lleva texto libre ni rutas."""
 
     def __init__(self, resultado: str, codigo: str, id_: str | None = None, accion: str | None = None,
-                 diario: str | None = None, v: int = 1) -> None:
+                 diario: str | None = None, v: int = 1, copia: str | None = None) -> None:
         self.resultado = resultado
         self.codigo = codigo
         self.id = id_
@@ -100,6 +100,7 @@ class Respuesta:
         #: Código EXTRA solo para el diario (`clave_ausente`, `contador_ilegible`…): no sale por el socket.
         self.diario = diario
         self.v = v
+        self.copia = copia
 
     def linea(self) -> bytes:
         cuerpo = {"v": self.v, "id": self.id, "resultado": self.resultado, "codigo": self.codigo}
@@ -541,11 +542,13 @@ def procesar(linea: bytes, ahora: int, clave: bytes | None, estado: EstadoOps, l
         return _rechazo("no_disponible", id_, diario="vistos_ilegible")
 
     if peticion["v"] == VERSION_RESTAURAR:
-        return _procesar_restaurar(peticion, ahora, estado, lanzador,
-                                   verificador or VerificadorPrueba(),
-                                   copias if copias is not None else listar_copias(
-                                       dir_backup or os.environ.get("BACKUP_DIR")
-                                       or os.environ.get("ZASCARR_BACKUP_DIR", RUTA_COPIAS)))
+        respuesta = _procesar_restaurar(peticion, ahora, estado, lanzador,
+                                         verificador or VerificadorPrueba(),
+                                         copias if copias is not None else listar_copias(
+                                             dir_backup or os.environ.get("BACKUP_DIR")
+                                             or os.environ.get("ZASCARR_BACKUP_DIR", RUTA_COPIAS)))
+        respuesta.copia = peticion["copia"]
+        return respuesta
     if accion != ACCION_COPIA:
         return _rechazo("accion_no_disponible", id_)
     unidad = UNIDADES[accion]
@@ -565,6 +568,11 @@ def _procesar_restaurar(peticion: dict, ahora: int, estado: EstadoOps, lanzador,
     id_ = peticion["id"]
     copia = peticion["copia"]
     accion = ACCION_RESTAURAR
+
+    def _r(resp):
+        resp.copia = copia
+        return resp
+
     if copia not in copias:
         return _rechazo("copia_desconocida", id_, accion, v=VERSION_RESTAURAR)
     try:
@@ -587,7 +595,7 @@ def _procesar_restaurar(peticion: dict, ahora: int, estado: EstadoOps, lanzador,
             except ContadorIlegible:
                 return _rechazo("no_disponible", id_, accion, diario="contador_ilegible", v=VERSION_RESTAURAR)
             bloqueo = [t for t in fallos if ahora - t < VENTANA_FALLOS_S]
-            if len(bloqueo) >= UMBRAL_FALLOS:
+            if len(bloqueo) >= UMBRAL_FALLOS and ahora < max(bloqueo) + BLOQUEO_FALLOS_S:
                 return _rechazo("bloqueo_temporal", id_, accion, v=VERSION_RESTAURAR)
             leido = verificador.leer()
             if leido is None:
@@ -705,8 +713,9 @@ def linea_de_diario(respuesta: Respuesta, uid: int, ms: int) -> str:
     clave ni rutas; `accion` solo si es la única conocida (no se vuelca una cadena del atacante) y `codigo` incluye el
     código extra del diario si lo hay."""
     codigo = respuesta.diario or respuesta.codigo
-    return (f"accion={respuesta.accion if respuesta.accion == ACCION_COPIA else '-'} "
-            f"id={respuesta.id or '-'} uid={uid} resultado={respuesta.resultado} codigo={codigo} ms={ms}")
+    return (f"accion={respuesta.accion if respuesta.accion in (ACCION_COPIA, ACCION_RESTAURAR) else '-'} "
+            f"copia={respuesta.copia or '-'} id={respuesta.id or '-'} uid={uid} "
+            f"resultado={respuesta.resultado} codigo={codigo} ms={ms}")
 
 
 def main() -> int:

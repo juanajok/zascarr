@@ -40,7 +40,7 @@ VERSION = 1
 VERSION_RESTAURAR = 2
 MAX_BYTES = 1024
 MAX_BYTES_V1 = 512
-MAX_BYTES_RESTAURAR = 1024
+MAX_BYTES_RESTAURAR = 4096
 CADUCIDAD_S = 120
 PURGA_VISTOS_S = 300
 ENTRE_COPIAS_S = 300
@@ -340,6 +340,9 @@ def resolver_estado(settings: Settings, ahora: int | None = None, disponible: bo
 
     estado = _leer_json(settings.backup_status_file) or {}
     ops = _leer_json(settings.ops_status_file) or {}
+    # ops-status.json también lo escribe la restauración (BL-OPS2); aquí solo cuenta `copia`.
+    if ops.get("accion") not in (None, "copia"):
+        ops = {}
     omitida = _leer_json(settings.omitida_file) or {}
     pedida = _epoch(ops.get("pedida_epoch"))
     if pedida is not None and pedida > ahora + TOLERANCIA_RELOJ_S:

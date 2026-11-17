@@ -76,7 +76,14 @@ done
 # Cerrojo único de operaciones (BL-OPS1). Este script no usa `_comun.sh`: carga solo el cerrojo.
 # shellcheck source=scripts/_cerrojo.sh
 source "${SCRIPT_DIR}/_cerrojo.sh"
-tomar_cerrojo_operaciones || exit $?
+if ! tomar_cerrojo_operaciones; then
+    rc=$?
+    if [[ $rc -eq 75 ]]; then
+        printf '{"schema":1,"accion":"restaurar","resultado":"fallida","error":"operacion_en_curso","base_en_su_sitio":true}\n' \
+            >"${BACKUP_STATUS_DIR:-/var/lib/zascarr/backup-status}/omitida.json" 2>/dev/null || true
+    fi
+    exit $rc
+fi
 
 for cmd in docker git jq gzip gunzip sha256sum stat curl awk; do
     command -v "$cmd" >/dev/null 2>&1 || die "No encuentro $cmd."
@@ -353,7 +360,12 @@ if (( PRODUCCION )); then
     fi
     if ! jq -e '(.auth_mode == "password" or .auth_mode == "user_password")
                 and (.auth_password_hash | type == "string" and length > 0)
-                and (.secret_key | type == "string" and length > 0)' \
+                and (.secret_key | type == "string" and length > 0)
+                and ((.auth_session_version // 0) | type == "number")
+                and (.base_url == null or (.base_url | type == "string"))
+                and (.auth_username == null or (.auth_username | type == "string"))
+                and ([(to_entries[] | select(.key | endswith("_enabled")) | .value | type)] | all(. == "boolean"))
+                and (.fuentes_heredadas == null or (.fuentes_heredadas | type == "array"))' \
             "$FILA_SEGURIDAD" >/dev/null 2>&1; then
         rm -f "$FILA_SEGURIDAD"
         die "La seguridad vigente no está activada o está incompleta. No se ha tocado la BD."
@@ -435,7 +447,7 @@ if (( PRODUCCION )); then
         ($c[0] // {}) as $cur | ($r[0] // {}) as $rest |
         (($rest | with_entries(select(segura(.key) | not)))
          + ($cur | with_entries(select(segura(.key)))))
-        | .auth_session_version = ((($cur.auth_session_version // 0) | tonumber) + 1)
+        | .auth_session_version = (([($cur.auth_session_version // 0), ($rest.auth_session_version // 0)] | max) + 1)
     ' >"$FILA_FINAL" 2>/dev/null || {
         rm -f "$FILA_SEGURIDAD" "$FILA_RESTAURADA" "$FILA_FINAL"
         recuperar "no pude combinar la configuración vigente"

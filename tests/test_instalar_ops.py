@@ -148,7 +148,8 @@ def test_las_unidades_cumplen_fr29_y_fr01():
     for linea in ("Accept=yes", "SocketUser=root", "SocketGroup=@GRUPO@", "SocketMode=0660", "MaxConnections=4"):
         assert linea in sock, linea
     assert ((REPO / "deploy/systemd/zascarr-ops.tmpfiles.conf").read_text().strip()
-            == "d /run/zascarr-ops 0700 root root -\nd /run/zascarr-ops/docker 0700 root root -")
+            == "d /run/zascarr-ops 0700 root root -\nd /run/zascarr-ops/docker 0700 root root -"
+               "\nf /run/zascarr-ops.lock 0600 root root -")
     assert os.access(SCRIPT, os.R_OK)
 
 
@@ -192,3 +193,16 @@ def test_una_clave_que_aparece_durante_la_instalacion_no_se_pisa(entorno):
     """`mv -n`: si otra ejecución creó la clave entre la comprobación y el `mv`, no se sobrescribe."""
     texto = SCRIPT.read_text()
     assert "mv -n" in texto and "mv -f" not in texto
+
+
+def test_restaurar_tiene_entorno_y_cerrojo_escribible():
+    """B-1/B-2 de SecOps: el wrapper exporta lo que exige el script y la unidad puede crear el cerrojo."""
+    unidad = (REPO / "deploy/systemd/zascarr-restaurar@.service").read_text()
+    envoltorio = (REPO / "deploy/ops/restaurar-produccion.sh").read_text()
+    for var in ("REPO_DIR", "ENV_FILE", "COMPOSE_FILE", "DB_NAME", "DB_USER"):
+        assert f"export {var}=" in envoltorio
+    assert "Environment=ZASCARR_REPO=" not in unidad
+    assert "ReadWritePaths=/run/zascarr-ops.lock" in unidad
+    assert "f /run/zascarr-ops.lock 0600 root root -" in (
+        REPO / "deploy/systemd/zascarr-ops.tmpfiles.conf").read_text()
+    assert '=~ ^[0-9]{8}_[0-9]{6}$' in envoltorio
