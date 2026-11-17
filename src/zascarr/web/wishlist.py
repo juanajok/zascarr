@@ -289,7 +289,10 @@ async def buscar_ahora(
     ]
     return templates.TemplateResponse(request, "_candidatos_wishlist.html", {
         "item_id": item_id,
-        "item_titulo": _row(item)["titulo"] if item else "",
+        # No usar `_row()` aquí: `item` viene de `db.get` SIN las relaciones
+        # precargadas y acceder a `item.series` en async lanza MissingGreenlet
+        # (500 real 2026-11-17). Para la etiqueta basta la consulta guardada.
+        "item_titulo": (item.search_query or "").strip() if item else "",
         "candidatos": filas,
         "no_se_pudo_buscar": no_se_pudo_buscar,
         "sin_candidatos": sin_candidatos,
