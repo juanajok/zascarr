@@ -49,6 +49,9 @@ class _Servicio:
     async def nombres_de_filtros(self, **_kwargs):
         return {}
 
+    async def numeros_para_tarjetas(self, _ids, **_kwargs):
+        return {}
+
 
 def _contexto(monkeypatch):
     monkeypatch.setattr(library, "SeriesService", _Servicio)
