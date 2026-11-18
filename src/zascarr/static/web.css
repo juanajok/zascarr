@@ -343,7 +343,8 @@ h1, h2, h3 {
 
 /* Dentro de la rejilla, `margin: 0 auto` hace que el elemento deje de estirarse y se encoja a su
    contenido (cada página con un ancho distinto). Con `width: 100%` ocupa la columna hasta el máximo. */
-.app > .content { width: 100%; min-width: 0; }
+.app > .contenido { width: 100%; min-width: 0; display: flex; flex-direction: column; }
+.contenido > .content { width: 100%; min-width: 0; }
 
 .side-foot {
   margin-top: auto; padding-top: 14px; border-top: var(--border-chip) dashed var(--ink-faint);
@@ -365,7 +366,7 @@ html { scroll-padding-bottom: 96px; }
 @media (max-width: 860px) {
   /* El lector es inmersivo: sin barra inferior, que tapaba los controles. Se vuelve con «Volver al número». */
   body:has(.lector) .nav { display: none; }
-  body:has(.lector) .app > main.content { padding-bottom: 1rem; }
+  body:has(.lector) .contenido > main.content { padding-bottom: 1rem; }
   .app { display: block; }
   .side {
     height: auto; overflow: visible; z-index: 30;
@@ -422,7 +423,7 @@ html { scroll-padding-bottom: 96px; }
   /* Hueco para la barra inferior fija. Con `.content` a secas no se aplicaba nunca: la regla base de
      `.content` va DESPUÉS y la de ≤ 768 px fija 48 px, así que el pie quedaba bajo la barra.
      `main` en el selector: `.app > .content` ya existe (anchura) y así cada regla tiene el suyo. */
-  .app > main.content { padding-bottom: 112px; }
+  .contenido > main.content { padding-bottom: 112px; }
 }
 
 /* ── 4. CONTENIDO ────────────────────────────────────────────────────────── */
@@ -2810,7 +2811,7 @@ body:has(.lector-escena) .side,
 body:has(.lector-escena) .tareas-fuera,
 body:has(.lector-escena) .site-footer { display: none; }
 body:has(.lector-escena) .app { display: block; }
-body:has(.lector-escena) .app > .content { max-width: none; width: 100%; padding: 0; }
+body:has(.lector-escena) .contenido > .content { max-width: none; width: 100%; padding: 0; }
 body:has(.lector-escena) .skip { z-index: 20; }
 
 .lector-escena {

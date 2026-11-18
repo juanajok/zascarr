@@ -24,10 +24,10 @@
       </div>
       {% endif %}
     </div>
+    <div class="contenido">
     <div id="tareas-anuncio" class="tareas-anuncio sr" role="status" aria-live="polite"></div>
     <div id="tareas-cadencia" hx-get="/ui/_tareas" hx-trigger="load, every 10s"
          hx-swap="none"></div>
-    <main class="content" id="main" tabindex="-1" hx-history-elt>
     <div class="tareas-fuera">
       <div id="tareas-global">
         <div id="tareas-hay" hidden></div>
@@ -39,12 +39,14 @@
         </details>
       </div>
     </div>
+    <main class="content" id="main" tabindex="-1" hx-history-elt>
       {% block content %}{% endblock %}
       <footer class="site-footer">
         {% from "_legal_disclaimer.html" import legal_disclaimer %}
         {{ legal_disclaimer("footer") }}
       </footer>
     </main>
+    </div>
   </div>
 </body>
 </html>

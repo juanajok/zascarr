@@ -295,7 +295,7 @@ def test_indicador_en_flujo_y_carrusel_estable():
     """#991/#1021: el chip no se superpone al título y las tarjetas miden igual."""
     base = Path("src/zascarr/web/templates/base.html").read_text()
     css = Path("src/zascarr/static/web.css").read_text()
-    assert base.index('<main class="content"') < base.index('class="tareas-fuera"')
+    assert base.index('class="tareas-fuera"') < base.index('<main class="content"')
     assert base.index('id="tareas-anuncio"') < base.index('<main class="content"')
     assert base.index('id="tareas-cadencia"') < base.index('<main class="content"')
     assert "left: 252px" not in css
