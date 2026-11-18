@@ -50,6 +50,7 @@ class RecienIncorporado:
     series_title: str
     issue_id: str | None
     numero: str | None
+    titulo: str | None
     imported_at: datetime
     tipo: str  # "serie_nueva" | "numero_nuevo"
 
@@ -59,24 +60,40 @@ def _es_secuencial(numero: str | None) -> bool:
 
 
 async def continuar_leyendo(db: AsyncSession, limite: int = 6) -> list[ContinuarLeyendo]:
-    """Números en curso o el siguiente tras el último leído, con archivo local."""
+    """Números en curso o el siguiente tras el último leído, con archivo local.
+
+    Primero acota las series con actividad por `MAX(last_read_at)` (CTE) y solo
+    carga los números de esas series; el anual/especial se acepta como
+    candidato cuando no hay siguiente regular, sin romper el orden canónico.
+    """
+    series_act = (select(Issue.series_id.label("series_id"),
+                         func.max(ReadingProgress.last_read_at).label("actividad"))
+                  .join(ReadingProgress, ReadingProgress.issue_id == Issue.id)
+                  .where(ReadingProgress.status.in_(
+                      [ReadingStatus.READING, ReadingStatus.COMPLETED]))
+                  .group_by(Issue.series_id)
+                  .order_by(func.max(ReadingProgress.last_read_at).desc())
+                  .limit(max(limite * 4, limite)).subquery())
     filas = (await db.execute(
         select(Issue.series_id, Series.title, Issue.id, Issue.issue_number,
                Issue.title.label("issue_title"), Issue.sort_order, Issue.page_count,
-               ReadingProgress.status, ReadingProgress.current_page)
+               ReadingProgress.status, ReadingProgress.current_page,
+               series_act.c.actividad)
         .join(Series, Series.id == Issue.series_id)
+        .join(series_act, series_act.c.series_id == Issue.series_id)
         .outerjoin(ReadingProgress, ReadingProgress.issue_id == Issue.id)
         .where(Issue.id.in_(select(File.issue_id).where(
             File.issue_id.is_not(None), File.is_missing.is_(False))))
-        .where(Issue.series_id.in_(select(Issue.series_id).join(
-            ReadingProgress, ReadingProgress.issue_id == Issue.id).where(
-                ReadingProgress.status.in_([ReadingStatus.READING, ReadingStatus.COMPLETED]))))
     )).all()
     por_serie: dict[str, list] = {}
+    actividad: dict[str, object] = {}
     for fila in filas:
-        por_serie.setdefault(str(fila.series_id), []).append(fila)
+        sid = str(fila.series_id)
+        por_serie.setdefault(sid, []).append(fila)
+        actividad[sid] = fila.actividad
     resultado: list[ContinuarLeyendo] = []
-    for serie_id, issues in por_serie.items():
+    for serie_id in sorted(por_serie, key=lambda x: actividad[x], reverse=True):
+        issues = por_serie[serie_id]
         issues.sort(key=lambda f: (f.sort_order is None, f.sort_order or 0.0,
                                    natural_key(f.issue_number or "")))
         elegido = next((f for f in issues if f.status is ReadingStatus.READING), None)
@@ -84,11 +101,11 @@ async def continuar_leyendo(db: AsyncSession, limite: int = 6) -> list[Continuar
             leidos = [i for i, f in enumerate(issues) if f.status is ReadingStatus.COMPLETED]
             if not leidos:
                 continue
-            for f in issues[leidos[-1] + 1:]:
-                if _es_secuencial(f.issue_number):
-                    elegido = f
-                    break
-        if elegido is None or not _es_secuencial(elegido.issue_number):
+            candidatos = issues[leidos[-1] + 1:]
+            elegido = next((f for f in candidatos if _es_secuencial(f.issue_number)), None)
+            if elegido is None and candidatos:
+                elegido = candidatos[0]
+        if elegido is None:
             continue
         resultado.append(ContinuarLeyendo(
             serie_id, elegido.title, str(elegido.id), elegido.issue_number or "",
@@ -139,28 +156,40 @@ async def recien_incorporados(db: AsyncSession, limite: int = 6) -> list[RecienI
     primera_serie = (select(File.issue_id, func.min(File.imported_at).label("imported_at"))
                      .where(File.issue_id.is_not(None), File.is_missing.is_(False))
                      .group_by(File.issue_id).subquery())
-    min_serie = (select(Issue.series_id, func.min(File.imported_at).label("primera"))
+    min_serie = (select(Issue.series_id, func.min(File.imported_at).label("primera"),
+                        func.count(func.distinct(Issue.id)).label("numeros"))
                  .join(File, File.issue_id == Issue.id)
                  .where(File.is_missing.is_(False))
                  .group_by(Issue.series_id).subquery())
     filas = (await db.execute(
         select(Issue.series_id, Series.title, Issue.id, Issue.issue_number,
-               primera_serie.c.imported_at, min_serie.c.primera)
+               Issue.title, primera_serie.c.imported_at, min_serie.c.primera,
+               min_serie.c.numeros, Issue.created_at)
         .join(primera_serie, primera_serie.c.issue_id == Issue.id)
         .join(Series, Series.id == Issue.series_id)
         .join(min_serie, min_serie.c.series_id == Issue.series_id)
-        .order_by(primera_serie.c.imported_at.desc(), Issue.issue_number)
+        .order_by(primera_serie.c.imported_at.desc(), Series.title, Issue.issue_number)
         .limit(limite * 8)
     )).all()
     vistas: set[str] = set()
     resultado: list[RecienIncorporado] = []
-    for sid, title, iid, numero, importado, primera in filas:
+    for sid, title, iid, numero, issue_title, importado, primera, numeros, creado in filas:
         sid = str(sid)
         if sid in vistas:
             continue
+        # Sustitución: el Issue ya existía antes de que llegara este archivo y
+        # la serie ya tenía material. No es una incorporación nueva.
+        if (creado is not None and importado is not None and primera is not None
+                and creado < importado and primera < importado):
+            continue
+        if importado == primera and numeros > 1:
+            # La primera incorporación de una serie ya establecida es su base,
+            # no una novedad; solo cuenta como nueva si es su único número.
+            continue
         vistas.add(sid)
         tipo = "serie_nueva" if importado == primera else "numero_nuevo"
-        resultado.append(RecienIncorporado(sid, title, str(iid), numero, importado, tipo))
+        resultado.append(RecienIncorporado(
+            sid, title, str(iid), numero, issue_title, importado, tipo))
         if len(resultado) >= limite:
             break
     return resultado
