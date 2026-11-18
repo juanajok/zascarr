@@ -72,6 +72,9 @@ RUN for paquete in gnutls-bin make patch binutils "binutils-$(dpkg-architecture 
 RUN groupadd -g 1000 zascarr && \
     useradd -u 1000 -g zascarr -m -s /bin/bash zascarr
 
+# Actualizar las herramientas incluidas en la base: también forman parte del
+# inventario que se audita en la imagen de producción.
+RUN python -m pip install --no-cache-dir "pip==26.3" "setuptools==84.1.0"
 COPY --from=builder /install /usr/local
 
 WORKDIR /app
