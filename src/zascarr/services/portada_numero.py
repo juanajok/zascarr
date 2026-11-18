@@ -56,7 +56,9 @@ MAX_ARCHIVOS_NUMERO = 3
 #: Tope de tiempo para no bloquear un hover con una serie de CBR lentos.
 PRESUPUESTO_PREVIA_S = 6.0
 #: Presupuesto de memoria por miniatura: una página de 40 Mpx no se decodifica para 240 px.
-MAX_PIXELES_PREVIA = 6_000_000
+#: 12 Mpx cubre los escaneos 4K habituales (2619×4106 ≈ 10,75 Mpx) sin abrir la puerta a
+#: páginas desmedidas; antes 6 Mpx los rechazaba y los marcaba como «sin portada» para siempre.
+MAX_PIXELES_PREVIA = 12_000_000
 MAX_PIXELES_FICHA = 12_000_000
 MAX_PIXELES_HD = 20_000_000
 #: Generaciones simultáneas como máximo en todo el proceso.

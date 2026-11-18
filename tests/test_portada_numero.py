@@ -94,6 +94,20 @@ async def test_archivo_que_no_es_zip_no_tiene_previa(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_la_previa_admite_una_pagina_4k(tmp_path):
+    """Regresión: 2619×4106 (10,75 Mpx) superaba el límite de 6 Mpx y no daba miniatura."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (2619, 4106), (10, 90, 160)).save(buffer, "JPEG", quality=60)
+    cbz = tmp_path / "Tebeo 4K.cbz"
+    with zipfile.ZipFile(cbz, "w") as z:
+        z.writestr("001.jpg", buffer.getvalue())
+    fid = uuid4()
+    ruta = await portada_numero.ruta_previa(
+        _Sesion([(fid, str(cbz), None)]), uuid4(), uuid4(), settings=_settings(tmp_path))
+    assert ruta is not None and ruta.is_file()
+
+
+@pytest.mark.asyncio
 async def test_la_ficha_usa_su_propia_cache_a_600(tmp_path):
     cbz = _cbz(tmp_path / "Tebeo 01.cbz")
     fid = uuid4()
