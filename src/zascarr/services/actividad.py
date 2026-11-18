@@ -84,6 +84,7 @@ async def continuar_leyendo(db: AsyncSession, limite: int = 6) -> list[Continuar
         .outerjoin(ReadingProgress, ReadingProgress.issue_id == Issue.id)
         .where(Issue.id.in_(select(File.issue_id).where(
             File.issue_id.is_not(None), File.is_missing.is_(False))))
+        .limit(max(limite * 120, 240))
     )).all()
     por_serie: dict[str, list] = {}
     actividad: dict[str, object] = {}
@@ -173,7 +174,7 @@ async def recien_incorporados(db: AsyncSession, limite: int = 6) -> list[RecienI
     )).all()
     vistas: set[str] = set()
     resultado: list[RecienIncorporado] = []
-    for sid, title, iid, numero, issue_title, importado, primera, numeros, creado in filas:
+    for sid, title, iid, numero, issue_title, importado, primera, _numeros, creado in filas:
         sid = str(sid)
         if sid in vistas:
             continue
@@ -181,10 +182,6 @@ async def recien_incorporados(db: AsyncSession, limite: int = 6) -> list[RecienI
         # la serie ya tenía material. No es una incorporación nueva.
         if (creado is not None and importado is not None and primera is not None
                 and creado < importado and primera < importado):
-            continue
-        if importado == primera and numeros > 1:
-            # La primera incorporación de una serie ya establecida es su base,
-            # no una novedad; solo cuenta como nueva si es su único número.
             continue
         vistas.add(sid)
         tipo = "serie_nueva" if importado == primera else "numero_nuevo"
