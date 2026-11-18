@@ -1285,6 +1285,8 @@ class ReadingProgress(Base):
     started_at:   Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     notes:        Mapped[str|None]      = mapped_column(Text)
+    #: #1088: última lectura real (no se toca al marcar visto).
+    last_read_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     issue: Mapped["Issue"] = relationship(back_populates="reading_progress")
 
 
@@ -1709,3 +1711,13 @@ class PaqueteOperacion(Base):
             postgresql_where=text(
                 "estado IN ('listando','extrayendo','verificando','publicando','importando')")),
     )
+
+
+class SeriesRecentView(Base):
+    """#1088: última visita a la ficha de una serie (una fila por serie)."""
+
+    __tablename__ = "series_recent_views"
+    series_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), primary_key=True)
+    last_viewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now())

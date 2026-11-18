@@ -152,11 +152,10 @@ async def marcar(
         progreso.rating = None
     if nueva_nota is not _SIN_VALOR:
         progreso.notes = nueva_nota
-    if (
-        nuevo_estado in (ReadingStatus.READING, ReadingStatus.COMPLETED)
-        and progreso.started_at is None
-    ):
-        progreso.started_at = ahora
+    if nuevo_estado in (ReadingStatus.READING, ReadingStatus.COMPLETED):
+        progreso.last_read_at = ahora
+        if progreso.started_at is None:
+            progreso.started_at = ahora
     if nuevo_estado is ReadingStatus.COMPLETED:
         if progreso.completed_at is None:
             progreso.completed_at = ahora
