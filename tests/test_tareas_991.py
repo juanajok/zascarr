@@ -227,7 +227,7 @@ def test_oob_no_reemplaza_details_y_conserva_foco():
 def test_css_chip_en_flujo_y_panel_bajo_el_chip():
     css = Path("src/zascarr/static/web.css").read_text()
     assert ".tareas-fuera { position: relative; display: flex;" in css
-    assert ".tareas-panel { position: absolute; right: 0; left: auto; top: 44px;" in css
+    assert ".tareas-panel { position: relative; right: auto; left: auto; top: auto;" in css
     assert ".side .tareas-panel" not in css
     # Sin hoja inferior fija: el chip no flota sobre tarjetas/contenido.
     assert "bottom: 72px" not in css
@@ -298,6 +298,6 @@ def test_indicador_en_flujo_y_carrusel_estable():
     assert base.index('<main class="content"') < base.index('class="tareas-fuera"')
     assert "left: 252px" not in css
     assert ".tareas-fuera { position: relative; display: flex; justify-content: flex-end;" in css
-    assert ".tareas-panel { position: absolute; right: 0; left: auto; top: 44px;" in css
+    assert ".tareas-panel { position: relative; right: auto; left: auto; top: auto;" in css
     assert ".tareas-fuera .tareas-panel { position: fixed;" not in css
     assert ".escaparate-lista > li { flex: 0 0 160px; width: 160px; max-width: 160px; }" in css
