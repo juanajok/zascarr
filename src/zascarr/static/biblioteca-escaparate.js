@@ -32,11 +32,11 @@
       der.addEventListener("click", () => mover(1));
       lista.addEventListener("scroll", () => actualizar(izq, der, lista), { passive: true });
       caja.append(izq, der);
-      bloque.insertBefore(caja, lista);
+      lista.before(caja);
       actualizar(izq, der, lista);
     });
   }
 
-  init();
   document.body.addEventListener("htmx:afterSwap", () => init(document));
+  init();
 })();
