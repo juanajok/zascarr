@@ -4,20 +4,68 @@
   const espera = document.querySelector("[data-estado-url]");
   if (espera) {
     const aviso = document.getElementById("lector-preparando");
-    let intentos = 0;
-    const volverAProbar = () => {
-      intentos += 1;
-      if (intentos >= 5) window.location.reload();
-      else setTimeout(consultar, 1500);
+    const nota = document.getElementById("lector-espera-nota");
+    const error = document.getElementById("lector-error");
+    const reintentar = document.getElementById("lector-reintentar");
+    const MAX_CONSULTAS = 10;
+    let consultas = 0;
+    let temporizador = null;
+    let consultando = false;
+    let detenido = false;
+    const parar = () => {
+      detenido = true;
+      if (temporizador !== null && typeof clearTimeout === "function") {
+        clearTimeout(temporizador);
+      }
+      temporizador = null;
     };
-    const consultar = () => fetch(espera.dataset.estadoUrl, { credentials: "same-origin" })
-      .then((r) => r.json())
-      .then((datos) => {
-        if (datos.estado === "listo") window.location.reload();
-        else if (datos.estado === "error") {
-          aviso.textContent = datos.motivo || "No se ha podido preparar el tebeo.";
-        } else { volverAProbar(); }
-      }).catch(volverAProbar);
+    const mostrarError = (motivo) => {
+      parar();
+      if (aviso) aviso.hidden = true;
+      if (nota) nota.hidden = true;
+      if (error) {
+        error.hidden = false;
+        error.textContent = motivo || "No se ha podido preparar el tebeo.";
+      }
+    };
+    const volverAProbar = () => {
+      if (consultas >= MAX_CONSULTAS) {
+        parar();
+        if (aviso) aviso.textContent = "El tebeo sigue preparándose; puedes reintentar cuando quieras.";
+        return;
+      }
+      consultas += 1;
+      if (typeof setTimeout === "function") {
+        temporizador = setTimeout(consultar, 1500);
+      }
+    };
+    const consultar = () => {
+      if (detenido || consultando) return;
+      consultando = true;
+      fetch(espera.dataset.estadoUrl, { credentials: "same-origin" })
+        .then((r) => r.json())
+        .then((datos) => {
+          if (datos.estado === "listo") {
+            parar();
+            window.location.reload();
+          } else if (datos.estado === "error") {
+            mostrarError(datos.motivo);
+          } else {
+            volverAProbar();
+          }
+        })
+        .catch(() => mostrarError("No se ha podido consultar el estado del tebeo. Reintenta."))
+        .finally(() => { consultando = false; });
+    };
+    const reintentarAhora = () => {
+      detenido = false;
+      consultas = 0;
+      if (error) { error.hidden = true; error.textContent = ""; }
+      if (aviso) { aviso.hidden = false; aviso.textContent = "Preparando el tebeo…"; }
+      if (nota) nota.hidden = false;
+      consultar();
+    };
+    if (reintentar) reintentar.addEventListener("click", reintentarAhora);
     consultar();
     return;
   }
