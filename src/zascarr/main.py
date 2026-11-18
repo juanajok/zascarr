@@ -378,17 +378,24 @@ async def lifespan(app: FastAPI):
 
     from zascarr.database import async_session_factory, engine
 
-    # E6: arranque degradado. Si Postgres no conecta o el esquema no está, la
-    # app arranca igual pero SOLO sirve diagnóstico (lo aplica AuthMiddleware
-    # vía app.state.db_degraded). No se carga la configuración persistida
-    # (p. ej. auth_mode guardado en runtime_settings): con credenciales o
-    # configuración desconocidas se falla cerrado, no se abre una instalación
-    # cuya autenticación estaba activada en BD.
-    app.state.db_degraded = False
-    try:
+    # El acceso queda cerrado hasta que se hayan cargado los ajustes de
+    # autenticación y se haya confirmado la transacción de arranque.
+    app.state.db_degraded = True
+    problema = problema_de_credenciales(engine.url) if hasattr(engine, "url") else None
+    from zascarr.services.runtime_settings import (
+        RuntimeSettingsService,
+        capturar_valores_base,
+        load_overrides_at_startup,
+    )
+
+    # Guardar el BASE_URL original antes del primer intento, incluso si falla
+    # después de aplicar parte de los ajustes persistidos.
+    capturar_valores_base()
+    background_tasks: list[asyncio.Task] = []
+
+    async def inicializar_bd() -> None:
         # Credenciales por defecto: ni se intenta conectar (ADR 0012). El motivo no lleva el valor.
         # Se mira la URL del MOTOR (con la que de verdad se conectaría), no la de los ajustes.
-        problema = problema_de_credenciales(engine.url) if hasattr(engine, "url") else None
         if problema:
             raise CredencialesNoSegurasError(f"{problema}; la aplicación no arranca con ella")
         async with engine.begin() as conn:
@@ -398,15 +405,6 @@ async def lifespan(app: FastAPI):
         # anterior — sin esto, tras un reinicio real (deploy, reboot de la Pi)
         # los ajustes seguirían en la BD pero no se verían hasta el primer
         # guardado nuevo desde la UI.
-        from zascarr.services.runtime_settings import (
-            RuntimeSettingsService,
-            capturar_valores_base,
-            load_overrides_at_startup,
-        )
-        # Seguridad: guarda el `BASE_URL` del `.env` antes de que los overrides
-        # de la BD lo puedan pisar, para poder restaurarlo si Ajustes lo deja
-        # vacío (vía de recuperación si el middleware da 403).
-        capturar_valores_base()
         async with async_session_factory() as session:
             await load_overrides_at_startup(session)
             # A6: la cookie de sesión necesita una clave de firma estable —
@@ -417,11 +415,8 @@ async def lifespan(app: FastAPI):
             await session.commit()
         logger.info("zascarr.db_connected")
         await refrescar_raices_db(async_session_factory)
-    except Exception:
-        logger.exception("zascarr.db_unavailable_at_startup")
-        app.state.db_degraded = True
 
-    if not app.state.db_degraded:
+    async def arrancar_tareas() -> None:
         # #344: operaciones de paquetes que quedaron vivas en un arranque anterior y sus
         # temporales; se marcan error para que se puedan reintentar. Nunca impide arrancar.
         try:
@@ -446,15 +441,6 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("conversion.diario_reconciliacion_fallida")
 
-    if app.state.db_degraded:
-        # E6: «solo diagnóstico» también para el fondo. Sin BD, los cuatro ciclos
-        # (auditoría, importación, enriquecimiento, orquestación) fallarían cada
-        # intervalo sin poder hacer nada útil, y llenarían el log. No se arrancan.
-        # Al reiniciar con la BD arreglada arrancan solos: no hay nada persistido
-        # que desbloquear (la bandera es de este proceso).
-        logger.warning("background_tasks_skipped_db_degraded", db_degraded=True)
-        background_tasks = []
-    else:
         # V6a (ADR 0006): continúa o cierra las asignaciones que quedaron vivas en una ejecución
         # anterior. Tarea de fondo (no retrasa el healthcheck) que nunca propaga una excepción.
         from zascarr.services.asignacion import comprobar_pool, reconciliar_al_arrancar
@@ -462,7 +448,7 @@ async def lifespan(app: FastAPI):
             logger.warning("asignacion.pool_insuficiente",
                            simultaneas=settings.asignacion_simultaneas,
                            pool=settings.db_pool_size + settings.db_max_overflow)
-        background_tasks = [
+        background_tasks.extend([
             asyncio.create_task(reconciliar_al_arrancar()),
             asyncio.create_task(_library_audit_task()),
             asyncio.create_task(_import_loop(settings.import_interval_minutes)),
@@ -475,7 +461,7 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(
                 _seguimiento_loop(settings.seguimiento_interval_minutes)),
             asyncio.create_task(_ccm_comicinfo_loop()),
-        ]
+        ])
         # BL-R9: rescan periódico de la biblioteca; 0 lo desactiva.
         if settings.rescan_interval_minutes > 0:
             background_tasks.append(
@@ -484,26 +470,57 @@ async def lifespan(app: FastAPI):
         # activar o desactivar en Ajustes no exija reiniciar.
         background_tasks.append(asyncio.create_task(_upgrades_loop()))
 
-    yield
+        app.state.db_degraded = False
 
-    # E6: al apagar (o al terminar un test que levantó la app degradada), se
-    # restablece la bandera para no contaminar el siguiente arranque.
-    app.state.db_degraded = False
-    from zascarr.services.comprobacion_disco import detener as detener_comprobacion
-    await detener_comprobacion()
-    from zascarr.services.rescan_biblioteca import detener as detener_rescan
-    await detener_rescan()
-    for task in background_tasks:
-        task.cancel()
-    for task in background_tasks:
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
-    # Seguridad: apaga el ejecutor propio de PBKDF2 (no deja hilos ni tareas
-    # encoladas colgando al parar la app).
-    from zascarr.services.auth import apagar_ejecutor_pbkdf2
-    apagar_ejecutor_pbkdf2()
-    logger.info("zascarr.shutting_down")
-    await engine.dispose()
+    async def recuperar_bd() -> None:
+        demora = 2
+        while True:
+            await asyncio.sleep(demora)
+            try:
+                async with asyncio.timeout(10):
+                    await inicializar_bd()
+            except Exception:
+                logger.warning("zascarr.db_reintento_fallido", exc_info=True)
+                demora = min(demora * 2, 60)
+                continue
+            await arrancar_tareas()
+            logger.info("zascarr.db_recuperada")
+            return
+
+    recuperacion = None
+    try:
+        async with asyncio.timeout(10):
+            await inicializar_bd()
+    except Exception:
+        logger.exception("zascarr.db_unavailable_at_startup")
+        logger.warning("background_tasks_skipped_db_degraded", db_degraded=True)
+        if not problema:
+            recuperacion = asyncio.create_task(recuperar_bd())
+    else:
+        await arrancar_tareas()
+
+    try:
+        yield
+    finally:
+        if recuperacion is not None:
+            recuperacion.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await recuperacion
+        for task in background_tasks:
+            task.cancel()
+        await asyncio.gather(*background_tasks, return_exceptions=True)
+        app.state.db_degraded = False
+        from zascarr.services.comprobacion_disco import detener as detener_comprobacion
+        from zascarr.services.rescan_biblioteca import detener as detener_rescan
+
+        await detener_comprobacion()
+        await detener_rescan()
+        # Seguridad: apaga el ejecutor propio de PBKDF2 (no deja hilos ni tareas
+        # encoladas colgando al parar la app).
+        from zascarr.services.auth import apagar_ejecutor_pbkdf2
+        apagar_ejecutor_pbkdf2()
+        logger.info("zascarr.shutting_down")
+        await engine.dispose()
 
 
 def create_app() -> FastAPI:
