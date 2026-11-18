@@ -24,6 +24,7 @@
       </div>
       {% endif %}
     </div>
+    <main class="content" id="main" tabindex="-1" hx-history-elt>
     <div class="tareas-fuera">
       <div id="tareas-global">
         <div id="tareas-hay" hidden></div>
@@ -38,7 +39,6 @@
              hx-swap="none"></div>
       </div>
     </div>
-    <main class="content" id="main" tabindex="-1" hx-history-elt>
       {% block content %}{% endblock %}
       <footer class="site-footer">
         {% from "_legal_disclaimer.html" import legal_disclaimer %}

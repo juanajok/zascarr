@@ -287,3 +287,13 @@ def test_copia_exito_y_fallo(monkeypatch):
     estados["v"] = type("V", (), {"en_marcha": False, "estado": "fallo"})()
     cliente.get("/ui/copias/estado")
     assert any(x["estado"] == "error" for x in tareas.snapshot(incluir_recientes=True)["tareas"])
+
+
+def test_indicador_en_flujo_y_carrusel_estable():
+    """#991/#1021: el chip no se superpone al título y las tarjetas miden igual."""
+    base = Path("src/zascarr/web/templates/base.html").read_text()
+    css = Path("src/zascarr/static/web.css").read_text()
+    assert base.index('<main class="content"') < base.index('class="tareas-fuera"')
+    assert "left: 252px" not in css
+    assert ".tareas-fuera { display: flex; justify-content: flex-end;" in css
+    assert ".escaparate-lista > li { flex: 0 0 160px; width: 160px; max-width: 160px; }" in css

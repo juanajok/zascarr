@@ -2669,9 +2669,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 /* #991: indicador global de tareas */
 #tareas-hay[hidden] + #tareas-detalles { display: none; }
 .app { position: relative; }
-.tareas-fuera { position: absolute; left: 252px; top: var(--space-3); z-index: 50; }
-.tareas-panel { position: absolute; left: calc(100% + var(--space-2)); top: 0; z-index: 50; width: 360px; max-height: min(70vh, 520px); overflow: auto; box-shadow: var(--shadow-ink-sm); margin: 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
-.tareas-panel:not([open]) { left: 0; right: auto; top: 0; width: auto; max-height: none; overflow: visible; border: 0; background: transparent; box-shadow: none; }
+.tareas-fuera { display: flex; justify-content: flex-end; min-height: 0; margin: 0 0 var(--space-2); }
+.tareas-fuera:empty { display: none; }
+.tareas-panel { position: absolute; right: 0; left: auto; top: calc(100% + var(--space-1)); z-index: 50; width: 360px; max-height: min(70vh, 520px); overflow: auto; box-shadow: var(--shadow-ink-sm); margin: 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
+.tareas-panel:not([open]) { position: relative; left: auto; right: auto; top: auto; width: auto; max-height: none; overflow: visible; border: 0; background: transparent; box-shadow: none; }
 .tareas-panel > summary { min-height: 44px; padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none; display: inline-flex; gap: var(--space-2); align-items: center; border-radius: var(--radius-pill); }
 .tareas-panel:not([open]) > summary { padding: 0; border: var(--border-chip) solid var(--ink); box-shadow: var(--shadow-ink-sm); height: 44px; }
 .tareas-panel:not([open]) .tareas-nombre { display: none; }
@@ -2689,7 +2690,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .tarea.error { border-left: var(--border-panel) solid var(--ink); padding-left: var(--space-2); }
 .tareas-anuncio { font-size: var(--text-secundario); color: var(--ink-soft); }
 @media (max-width: 480px) {
-  .tareas-fuera { position: static; }
   .tareas-fuera .tareas-nombre { display: none; }
   .tareas-fuera .tareas-panel { position: fixed; left: var(--space-2); right: var(--space-2); top: auto; bottom: 72px; width: auto; max-width: none; max-height: 70vh; }
   .tareas-panel:not([open]) { bottom: 72px; right: var(--space-2); left: auto; }
@@ -2924,7 +2924,7 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .escaparate-nav button[data-dir="next"] svg { transform: rotate(-90deg); }
 .escaparate-nav button[disabled] { opacity: .45; }
 .escaparate-lista:focus-visible { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
-.escaparate-lista > li { flex: 0 0 auto; max-width: 220px; }
+.escaparate-lista > li { flex: 0 0 160px; width: 160px; max-width: 160px; }
 .escaparate-tarjeta { display: grid; gap: var(--space-1); min-width: 0; width: 100%; min-height: 44px; padding: var(--space-2); border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); color: var(--ink); text-decoration: none; }
 .escaparate-tarjeta:hover, .escaparate-tarjeta:focus-visible { box-shadow: var(--shadow-ink-sm); }
 .escaparate-titulo { font-weight: 700; }
@@ -2949,7 +2949,7 @@ body:has(.lector-escena) .skip { z-index: 20; }
 
 .escaparate-portada { width: 100%; height: auto; aspect-ratio: 2 / 3; object-fit: cover; }
 .sugerencias-rotar { min-height: 44px; margin-top: var(--space-2); }
-@media (max-width: 390px) { .escaparate-lista > li { max-width: 70vw; } }
+@media (max-width: 390px) { .escaparate-lista > li { flex-basis: 58vw; width: 58vw; max-width: 58vw; } }
 
 /* ── Lector BL-LECUX4 (#1071): preparación con salida ─────────────────── */
 .lector-espera-error { margin: 0; max-width: 38rem; }
