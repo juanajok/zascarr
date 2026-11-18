@@ -2,15 +2,15 @@
 {% if leido %}
 <p><strong>Guardado: Leído.</strong></p>
 <form method="post" action="/ui/leer/{{ archivo.id }}/leido"
-      hx-post="/ui/leer/{{ archivo.id }}/leido" hx-target="#fin" hx-swap="innerHTML">
+      hx-post="/ui/leer/{{ archivo.id }}/leido" hx-target="#fin-acciones" hx-swap="innerHTML">
   <input type="hidden" name="operacion" value="deshacer">
-  <button type="submit" class="btn ghost sm">Deshacer</button>
+  <button type="submit" class="btn ghost sm" data-lector-leido="true">Deshacer</button>
 </form>
 {% else %}
 <form method="post" action="/ui/leer/{{ archivo.id }}/leido"
-      hx-post="/ui/leer/{{ archivo.id }}/leido" hx-target="#fin" hx-swap="innerHTML">
+      hx-post="/ui/leer/{{ archivo.id }}/leido" hx-target="#fin-acciones" hx-swap="innerHTML">
   <input type="hidden" name="operacion" value="marcar">
-  <button type="submit" class="btn primary">Marcar como leído</button>
+  <button type="submit" class="btn primary" data-lector-leido="false">Marcar como leído</button>
 </form>
 {% endif %}
 {% if siguiente.estado == "leer" %}
@@ -19,7 +19,7 @@
 {% elif siguiente.estado == "falta" %}
 <p>Te falta el <strong>#{{ siguiente.numero }}</strong> de <em>{{ serie.title }}</em>.</p>
 {% if legal_aceptado %}
-<form hx-post="/ui/leer/{{ archivo.id }}/deseo" hx-target="#fin" hx-swap="innerHTML">
+<form hx-post="/ui/leer/{{ archivo.id }}/deseo" hx-target="#fin-acciones" hx-swap="innerHTML">
   <button type="submit" class="btn">Añadir a Deseados</button>
 </form>
 {% else %}

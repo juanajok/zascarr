@@ -18,9 +18,14 @@ const js = fs.readFileSync(process.argv[2], "utf8");
 function E(id) {
   this.id = id; this.dataset = {}; this.attrs = {}; this.listeners = {};
   this.hidden = false; this.disabled = false; this.complete = true;
-  this.naturalWidth = 800; this.naturalHeight = 1200; this.textContent = "";
+  this.naturalWidth = 800; this.naturalHeight = 1200; this.writes = 0; this._text = "";
   this._src = null;
 }
+Object.defineProperty(E.prototype, "textContent", {
+  get() { return this._text; }, set(value) { this._text = value; this.writes += 1; },
+});
+E.prototype.contains = function (other) { return other === this || other?.parent === this; };
+E.prototype.querySelector = function () { return this.control; };
 E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push(f); };
 E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
 E.prototype.getAttribute = function (k) {
@@ -47,6 +52,13 @@ function run(conPantalla) {
     addEventListener: (t, f) => { (doc.listeners[t] ||= []).push(f); },
     listeners: {}, documentElement: new E("html"), fullscreenElement: null,
   };
+  const get = doc.getElementById;
+  const menu = get("lector-menu");
+  const menuButton = get("lector-menu-boton");
+  menu.hidden = true;
+  menu.parent = get("lector-barra");
+  menuButton.parent = get("lector-barra");
+  menuButton.focus = () => { doc.activeElement = menuButton; };
   if (conPantalla) {
     doc.documentElement.requestFullscreen = () => {
       doc.fullscreenElement = doc.documentElement; return Promise.resolve();
@@ -77,25 +89,63 @@ const salida = {
     return con.root.dataset.modo === "doble" && con.els["lector-pagina-b"].hidden === false;
   })(),
   avanzaConFlecha: (() => {
-    const tecla = { key: "ArrowRight", target: {}, preventDefault: () => {} };
+    const tecla = { key: "ArrowRight", target: con.els["lector-lienzo"], preventDefault: () => {} };
     con.doc.listeners.keydown.forEach((f) => f(tecla));
     return con.root.dataset.pagina !== "1";
   })(),
   fSinApiNoRompe: (() => {
     try {
-      const tecla = { key: "f", target: {}, preventDefault: () => {} };
+      const tecla = { key: "f", target: sin.els["lector-lienzo"], preventDefault: () => {} };
       sin.doc.listeners.keydown.forEach((f) => f(tecla));
       return true;
     } catch (_) { return false; }
   })(),
   hAlternaChrome: (() => {
-    const tecla = { key: "h", target: {}, preventDefault: () => {} };
+    const tecla = { key: "h", target: con.els["lector-lienzo"], preventDefault: () => {} };
     con.doc.listeners.keydown.forEach((f) => f(tecla));
     const oculto = con.root.dataset.chrome === "oculto";
     con.doc.listeners.keydown.forEach((f) => f(tecla));
     return oculto && con.root.dataset.chrome === "";
   })(),
 };
+const teclado = run(true);
+const get = teclado.doc.getElementById;
+let interceptada = false;
+const tecla = (key, target) => {
+  interceptada = false;
+  teclado.fire(teclado.doc, "keydown", {
+    key, target, preventDefault: () => { interceptada = true; },
+  });
+  return interceptada;
+};
+salida.espacioNativo = !tecla(" ", get("lector-menu-boton")) && teclado.root.dataset.pagina === "1";
+salida.atajoFuera = !tecla("f", get("lector-menu-boton")) && !teclado.doc.fullscreenElement;
+salida.limiteConFoco = get("lector-anterior").getAttribute("aria-disabled") === "true"
+  && !get("lector-anterior").disabled;
+teclado.fire(get("lector-menu-boton"), "click");
+const input = {parent: get("lector-menu"), tagName: "INPUT"};
+teclado.doc.activeElement = input;
+salida.escapeDesdeOpciones = tecla("Escape", input) && get("lector-menu").hidden
+  && teclado.doc.activeElement === get("lector-menu-boton");
+teclado.fire(get("lector-menu-boton"), "click");
+teclado.fire(teclado.doc, "focusout", {target: input, relatedTarget: get("lector-lienzo")});
+salida.tabFueraCierra = get("lector-menu").hidden;
+const contador = get("lector-contador");
+const escrituras = contador.writes;
+teclado.fire(get("lector-pagina"), "load");
+teclado.fire(teclado.modos[1], "click");
+salida.contadorSinDuplicados = escrituras === 1 && contador.writes === escrituras;
+const acciones = get("fin-acciones");
+get("fin").hidden = false;
+teclado.doc.activeElement = {parent: acciones};
+teclado.fire(teclado.doc, "htmx:before:swap", {detail: {tasks: [{target: acciones}]}});
+teclado.doc.activeElement = teclado.doc.body;
+acciones.control = new E("deshacer");
+acciones.control.dataset.lectorLeido = "true";
+acciones.control.focus = () => { teclado.doc.activeElement = acciones.control; };
+teclado.fire(acciones, "htmx:after:swap", {target: acciones});
+salida.focoYAnuncioTrasGuardar = teclado.doc.activeElement === acciones.control &&
+  get("lector-resultado").textContent === "Guardado: Leído.";
 process.stdout.write(JSON.stringify(salida));
 '''
 
@@ -110,7 +160,9 @@ def test_lector_js_fullscreen_doble_y_teclado(tmp_path):
     assert datos == {
         "fullscreenConApi": True, "fullscreenSinApi": True,
         "dobleActiva": True, "avanzaConFlecha": True, "fSinApiNoRompe": True,
-        "hAlternaChrome": True,
+        "hAlternaChrome": True, "espacioNativo": True, "atajoFuera": True,
+        "limiteConFoco": True, "escapeDesdeOpciones": True, "tabFueraCierra": True,
+        "contadorSinDuplicados": True, "focoYAnuncioTrasGuardar": True,
     }
 
 
@@ -126,10 +178,12 @@ E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push
 E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
 const elementos = {};
 const espera = { dataset: { estadoUrl: "/estado" } };
+if (process.env.ERROR_INICIAL) espera.dataset.errorInicial = "";
 let recargas = 0;
 let consultas = 0;
 const respuestas = JSON.parse(process.env.RESPUESTAS || '["preparando"]');
-const timers = [];
+const timers = new Map();
+let timerId = 0;
 const sandbox = {
   document: {
     querySelector: (sel) => (sel === "[data-estado-url]" ? espera : null),
@@ -144,8 +198,8 @@ const sandbox = {
     consultas += 1;
     return Promise.resolve({ json: () => Promise.resolve({ estado, motivo: "RAR cifrado" }) });
   },
-  setTimeout: (fn) => { timers.push(fn); return timers.length - 1; },
-  clearTimeout: () => {},
+  setTimeout: (fn) => { timers.set(++timerId, fn); return timerId; },
+  clearTimeout: (id) => timers.delete(id),
   HTMLInputElement: function () {}, HTMLTextAreaElement: function () {}, console,
 };
 vm.createContext(sandbox);
@@ -153,10 +207,21 @@ vm.runInContext(js, sandbox);
 const flush = () => new Promise((r) => setTimeout(r, 20));
 (async () => {
   await flush();
-  const inicial = { recargas, consultas, timers: timers.length };
-  if (timers.length) { const siguiente = timers.shift(); siguiente(); await flush(); }
+  const inicial = { recargas, consultas, timers: timers.size };
+  if (process.env.REINTENTO_TEMPRANO || process.env.ERROR_INICIAL) {
+    elementos["lector-reintentar"].listeners.click.forEach((f) => f({}));
+    await flush();
+    process.stdout.write(JSON.stringify({ inicial, pendientes: timers.size, consultas }));
+    return;
+  }
+  if (timers.size) {
+    const [id, siguiente] = timers.entries().next().value;
+    timers.delete(id);
+    siguiente();
+    await flush();
+  }
   const trasError = {
-    recargas, consultas, timers: timers.length,
+    recargas, consultas, timers: timers.size,
     error: (elementos["lector-error"] || {}).textContent || "",
     errorVisible: !(elementos["lector-error"] || {}).hidden,
   };
@@ -199,6 +264,20 @@ def test_el_preparando_carga_una_vez_cuando_esta_listo(tmp_path):
     assert datos["inicial"]["timers"] == 0
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="requiere Node para ejecutar el JS")
+@pytest.mark.parametrize(("opcion", "previas"), [("REINTENTO_TEMPRANO", 1), ("ERROR_INICIAL", 0)])
+def test_reintentar_reinicia_un_solo_sondeo(tmp_path, monkeypatch, opcion, previas):
+    harness = tmp_path / "estado-reintento.js"
+    harness.write_text(HARNESS_ESTADO, encoding="utf-8")
+    monkeypatch.setenv(opcion, "1")
+    r = subprocess.run(["node", str(harness), str(JS)], capture_output=True, text=True,
+                       timeout=30, check=True)
+    datos = json.loads(r.stdout)
+    assert datos["inicial"]["consultas"] == previas
+    assert datos["consultas"] == previas + 1
+    assert datos["pendientes"] == 1
+
+
 HARNESS_IMAGEN = r'''
 const fs = require("fs");
 const vm = require("vm");
@@ -209,6 +288,7 @@ function E(id) {
   this.naturalWidth = 800; this.naturalHeight = 1200; this.textContent = "";
   this.value = "0"; this.checked = false; this.style = {}; this._src = null;
 }
+E.prototype.contains = function (other) { return other === this || other?.parent === this; };
 E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push(f); };
 E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
 E.prototype.getAttribute = function (k) { return k === "src" ? this._src : (this.attrs[k] ?? null); };
@@ -283,6 +363,7 @@ function E(id) {
   this.naturalWidth = 800; this.naturalHeight = 1200; this.textContent = "";
   this.value = "0"; this.checked = false; this.style = {}; this._src = null;
 }
+E.prototype.contains = function (other) { return other === this || other?.parent === this; };
 E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push(f); };
 E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
 E.prototype.getAttribute = function (k) { return k === "src" ? this._src : (this.attrs[k] ?? null); };
@@ -312,7 +393,7 @@ const sandbox = {
 };
 vm.createContext(sandbox); vm.runInContext(js, sandbox);
 const antes = pedidas.slice();
-const tecla = (key) => ({ key, target: {}, preventDefault: () => {} });
+const tecla = (key) => ({ key, target: els["lector-lienzo"], preventDefault: () => {} });
 doc.listeners.keydown.forEach((f) => f(tecla("ArrowRight")));
 const trasAvance = pedidas.slice();
 doc.listeners.keydown.forEach((f) => f(tecla("End")));

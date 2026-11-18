@@ -21,12 +21,9 @@
     };
     const mostrarError = (motivo) => {
       parar();
-      if (aviso) aviso.hidden = true;
+      if (aviso) aviso.textContent = "";
       if (nota) nota.hidden = true;
-      if (error) {
-        error.hidden = false;
-        error.textContent = motivo || "No se ha podido preparar el tebeo.";
-      }
+      if (error) error.textContent = motivo || "No se ha podido preparar el tebeo.";
     };
     const volverAProbar = () => {
       if (consultas >= MAX_CONSULTAS) {
@@ -40,6 +37,7 @@
       }
     };
     const consultar = () => {
+      temporizador = null;
       if (detenido || consultando) return;
       consultando = true;
       fetch(espera.dataset.estadoUrl, { credentials: "same-origin" })
@@ -58,15 +56,17 @@
         .finally(() => { consultando = false; });
     };
     const reintentarAhora = () => {
+      if (consultando) return;
+      parar();
       detenido = false;
       consultas = 0;
-      if (error) { error.hidden = true; error.textContent = ""; }
-      if (aviso) { aviso.hidden = false; aviso.textContent = "Preparando el tebeo…"; }
+      if (error) error.textContent = "";
+      if (aviso) aviso.textContent = "Preparando el tebeo…";
       if (nota) nota.hidden = false;
       consultar();
     };
     if (reintentar) reintentar.addEventListener("click", reintentarAhora);
-    consultar();
+    if (!("errorInicial" in espera.dataset)) consultar();
     return;
   }
   const raiz = document.querySelector("[data-lector]");
@@ -85,6 +85,9 @@
   const menuBoton = document.getElementById("lector-menu-boton");
   const menu = document.getElementById("lector-menu");
   const barra = document.getElementById("lector-barra");
+  const resultado = document.getElementById("lector-resultado");
+  const fin = document.getElementById("fin");
+  const accionesFin = document.getElementById("fin-acciones");
   const paginas = document.getElementById("lector-paginas");
   const brilloControl = document.getElementById("lector-brillo");
   const contrasteControl = document.getElementById("lector-contraste");
@@ -208,27 +211,28 @@
       imagenB.removeAttribute("src");
       imagenB.alt = "";
     }
-    contador.textContent = visibles.length > 1
+    const paginasLeidas = visibles.length > 1
       ? `Páginas ${visibles[0]}–${visibles[1]} de ${total}`
       : `Página ${visibles[0]} de ${total}`;
+    if (contador.textContent !== paginasLeidas) contador.textContent = paginasLeidas;
     const enInicio = visibles[0] <= 1;
     const enFin = visibles[visibles.length - 1] >= total;
     // Las flechas izquierda/derecha cambian de significado en RTL: el botón
     // izquierdo avanza cuando se lee de derecha a izquierda.
-    anterior.disabled = sentido === "rtl" ? enFin : enInicio;
-    siguiente.disabled = sentido === "rtl" ? enInicio : enFin;
+    anterior.setAttribute("aria-disabled", String(sentido === "rtl" ? enFin : enInicio));
+    siguiente.setAttribute("aria-disabled", String(sentido === "rtl" ? enInicio : enFin));
     anterior.setAttribute("aria-label",
       sentido === "rtl" ? "Página siguiente" : "Página anterior");
     siguiente.setAttribute("aria-label",
       sentido === "rtl" ? "Página anterior" : "Página siguiente");
-    anterior.textContent = "‹";
-    siguiente.textContent = "›";
     raiz.dataset.modo = modo;
     raiz.dataset.sentido = sentido;
     raiz.dataset.desplazamiento = String(desplazamiento);
     raiz.dataset.pagina = String(pagina);
-    const fin = document.getElementById("fin");
-    if (fin) fin.hidden = visibles[visibles.length - 1] < total;
+    if (fin && fin.hidden !== !enFin) {
+      if (!enFin && fin.contains(document.activeElement)) lienzo.focus();
+      fin.hidden = !enFin;
+    }
     menuBoton.setAttribute("aria-expanded", String(!menu.hidden));
     desplazar.hidden = modo !== "doble";
     for (const boton of document.querySelectorAll("[data-modo]")) {
@@ -285,12 +289,15 @@
     raiz.dataset.chrome = "";
     programaOculto();
   };
-  const alternarMenu = () => {
-    menu.hidden = !menu.hidden;
-    menuBoton.setAttribute("aria-expanded", String(!menu.hidden));
+  const cambiarMenu = (abierto, devolverFoco = false) => {
+    menu.hidden = !abierto;
+    menuBoton.setAttribute("aria-expanded", String(abierto));
+    if (devolverFoco) menuBoton.focus();
     despertarChrome();
   };
+  const alternarMenu = () => cambiarMenu(menu.hidden, menu.contains(document.activeElement));
   const alternarChrome = () => {
+    if (!menu.hidden || focoEnChrome()) return;
     raiz.dataset.chrome = raiz.dataset.chrome === "oculto" ? "" : "oculto";
     if (raiz.dataset.chrome === "oculto") {
       if (temporizadorChrome !== null && typeof clearTimeout === "function") {
@@ -309,7 +316,13 @@
     try { window.localStorage.setItem("zascarr.lector.modo", modo); } catch (_) { /* igual */ }
     pinta();
   };
+  const anunciar = (mensaje) => {
+    if (resultado && resultado.textContent !== mensaje) resultado.textContent = mensaje;
+  };
+  let guardandoSentido = false;
   const cambiarSentido = () => {
+    if (guardandoSentido) return;
+    guardandoSentido = true;
     const anteriorSentido = sentido;
     sentido = sentido === "rtl" ? "ltr" : "rtl";
     const aviso = document.getElementById("lector-origen-sentido");
@@ -320,11 +333,20 @@
       credentials: "same-origin",
     }).then((respuesta) => {
       if (!respuesta.ok) throw new Error("no guardado");
-      if (aviso) aviso.textContent = "Sentido guardado para esta serie.";
+      const mensaje = "Sentido guardado para esta serie.";
+      if (aviso) aviso.textContent = mensaje;
+      anunciar(sentido === "rtl"
+        ? "Sentido guardado: de derecha a izquierda."
+        : "Sentido guardado: de izquierda a derecha.");
     }).catch(() => {
       sentido = anteriorSentido;
-      if (aviso) aviso.textContent = "No se pudo guardar el sentido; sigue valiendo el anterior.";
-    }).finally(pinta);
+      const mensaje = "No se pudo guardar el sentido; sigue valiendo el anterior.";
+      if (aviso) aviso.textContent = mensaje;
+      anunciar(mensaje);
+    }).finally(() => {
+      guardandoSentido = false;
+      pinta();
+    });
     pinta();
   };
 
@@ -342,8 +364,16 @@
       pinta();
     }
   });
-  anterior.addEventListener("click", () => (sentido === "rtl" ? avanzar() : retroceder()));
-  siguiente.addEventListener("click", () => (sentido === "rtl" ? retroceder() : avanzar()));
+  anterior.addEventListener("click", () => {
+    if (anterior.getAttribute("aria-disabled") !== "true") {
+      sentido === "rtl" ? avanzar() : retroceder();
+    }
+  });
+  siguiente.addEventListener("click", () => {
+    if (siguiente.getAttribute("aria-disabled") !== "true") {
+      sentido === "rtl" ? retroceder() : avanzar();
+    }
+  });
   menuBoton.addEventListener("click", alternarMenu);
   for (const boton of document.querySelectorAll("[data-modo]")) {
     boton.addEventListener("click", () => cambiarModo(boton.dataset.modo));
@@ -386,30 +416,65 @@
   document.addEventListener("mousemove", despertarPorEvento, { passive: true });
   document.addEventListener("pointerdown", despertarPorEvento, { passive: true });
   document.addEventListener("focusin", despertarPorEvento);
-  document.addEventListener("focusout", despertarPorEvento);
+  document.addEventListener("focusout", (evento) => {
+    despertarChrome();
+    if (menu.hidden || !evento.relatedTarget) return;
+    const estabaEnOpciones = evento.target === menuBoton || menu.contains(evento.target);
+    const sigueEnOpciones = evento.relatedTarget === menuBoton || menu.contains(evento.relatedTarget);
+    if (estabaEnOpciones && !sigueEnOpciones) cambiarMenu(false);
+  });
   document.addEventListener("fullscreenchange", despertarPorEvento);
   if (typeof setTimeout === "function") programaOculto();
 
   document.addEventListener("keydown", (evento) => {
-    if (evento.target instanceof HTMLInputElement || evento.target instanceof HTMLTextAreaElement) return;
-    if (evento.key !== "h") despertarChrome();
+    if (evento.defaultPrevented || evento.ctrlKey || evento.altKey || evento.metaKey || evento.isComposing) return;
+    const { key, target } = evento;
+    if (key === "Escape") {
+      if (document.fullscreenElement) return;
+      evento.preventDefault();
+      if (!menu.hidden) cambiarMenu(false, menu.contains(target));
+      else if (raiz.dataset.chrome === "oculto") despertarChrome();
+      else window.location.assign(volver);
+      return;
+    }
+    if (key !== "h") despertarChrome();
+    const enLienzo = target === lienzo;
+    if (enLienzo && (key === "f" || key === "h" || key === "m")) {
+      evento.preventDefault();
+      if (key === "f") alternarPantalla();
+      else if (key === "h") alternarChrome();
+      else cambiarModo(modo === "ancho" ? "pantalla" : modo === "pantalla" ? "doble" : "ancho");
+      return;
+    }
+    const enFlecha = target === anterior || target === siguiente;
+    if (!enLienzo && !enFlecha && target !== document.body) return;
     const siguienteTecla = sentido === "rtl" ? "ArrowLeft" : "ArrowRight";
     const anteriorTecla = sentido === "rtl" ? "ArrowRight" : "ArrowLeft";
-    if (evento.key === siguienteTecla || evento.key === "PageDown") { evento.preventDefault(); avanzar(); }
-    else if (evento.key === anteriorTecla || evento.key === "PageUp") { evento.preventDefault(); retroceder(); }
-    else if (evento.key === " ") { evento.preventDefault(); evento.shiftKey ? retroceder() : avanzar(); }
-    else if (evento.key === "f") { evento.preventDefault(); alternarPantalla(); }
-    else if (evento.key === "h") { evento.preventDefault(); alternarChrome(); }
-    else if (evento.key === "m") { evento.preventDefault(); cambiarModo(modo === "ancho" ? "pantalla" : modo === "pantalla" ? "doble" : "ancho"); }
-    else if (evento.key === "Escape") {
-      if (document.fullscreenElement) return;       // el navegador sale del fullscreen
-      if (!menu.hidden) { alternarMenu(); return; }
-      if (raiz.dataset.chrome === "oculto") { despertarChrome(); return; }
-      window.location.assign(volver);
-    }
-    else if (evento.key === "Home") { evento.preventDefault(); ir(1); }
-    else if (evento.key === "End") { evento.preventDefault(); ir(total); }
+    if (key === siguienteTecla || key === "PageDown") { evento.preventDefault(); avanzar(); }
+    else if (key === anteriorTecla || key === "PageUp") { evento.preventDefault(); retroceder(); }
+    else if (key === " " && !enFlecha) { evento.preventDefault(); evento.shiftKey ? retroceder() : avanzar(); }
+    else if (key === "Home") { evento.preventDefault(); ir(1); }
+    else if (key === "End") { evento.preventDefault(); ir(total); }
   });
+
+  if (accionesFin) {
+    let restaurarFoco = false;
+    document.addEventListener("htmx:before:swap", (evento) => {
+      if (evento.detail.tasks.some((tarea) => tarea.target === accionesFin)) {
+        restaurarFoco = accionesFin.contains(document.activeElement);
+      }
+    });
+    accionesFin.addEventListener("htmx:after:swap", (evento) => {
+      // HTMX emite el evento desde la diana cuando el formulario se ha sustituido.
+      if (evento.target !== accionesFin) return;
+      const control = accionesFin.querySelector("[data-lector-leido]");
+      if (restaurarFoco && document.activeElement === document.body && !fin.hidden) {
+        (control || document.getElementById("fin-titulo")).focus();
+      }
+      restaurarFoco = false;
+      if (control) anunciar(control.dataset.lectorLeido === "true" ? "Guardado: Leído." : "Guardado: En lectura.");
+    });
+  }
 
   let toqueInicio = null;
   lienzo.addEventListener("touchstart", (evento) => {
@@ -437,7 +502,6 @@
     else alternarMenu();
   }, { passive: true });
 
-  pinta();
   if (imagen.complete && imagen.naturalWidth) decidirPareja();
   pinta();
 })();
