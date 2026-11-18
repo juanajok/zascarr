@@ -148,3 +148,76 @@ def test_el_sondeo_de_preparando_reintenta_y_recarga(tmp_path):
     r = subprocess.run(["node", str(harness), str(JS)], capture_output=True, text=True,
                        timeout=30, check=True)
     assert json.loads(r.stdout) == {"recargas": 1, "consultas": 5}
+
+
+HARNESS_IMAGEN = r'''
+const fs = require("fs");
+const vm = require("vm");
+const js = fs.readFileSync(process.argv[2], "utf8");
+function E(id) {
+  this.id = id; this.dataset = {}; this.attrs = {}; this.listeners = {};
+  this.hidden = false; this.disabled = false; this.complete = true;
+  this.naturalWidth = 800; this.naturalHeight = 1200; this.textContent = "";
+  this.value = "0"; this.checked = false; this.style = {}; this._src = null;
+}
+E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push(f); };
+E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
+E.prototype.getAttribute = function (k) { return k === "src" ? this._src : (this.attrs[k] ?? null); };
+E.prototype.removeAttribute = function (k) { if (k === "src") this._src = null; else delete this.attrs[k]; };
+function run(conStorage) {
+  const els = {};
+  const root = new E("root");
+  root.dataset = { total: "8", pagina: "1", sentido: "ltr", paginaUrl: "/p/",
+    progresoUrl: "/prog", sentidoUrl: "/sent", volver: "/volver" };
+  const store = new Map();
+  const doc = {
+    querySelector: (sel) => (sel === "[data-lector]" ? root : null),
+    querySelectorAll: () => [],
+    getElementById: (id) => (els[id] ||= new E(id)),
+    addEventListener: () => {},
+    documentElement: new E("html"),
+    fullscreenElement: null,
+  };
+  const storage = {
+    getItem: (k) => { if (!conStorage) throw new Error("sin storage"); return store.get(k) || null; },
+    setItem: (k, v) => { if (!conStorage) throw new Error("sin storage"); store.set(k, String(v)); },
+    removeItem: (k) => { if (!conStorage) throw new Error("sin storage"); store.delete(k); },
+  };
+  const sandbox = {
+    document: doc,
+    window: { localStorage: storage, location: { assign: () => {} } },
+    URLSearchParams, fetch: () => Promise.resolve({ ok: true }),
+    HTMLInputElement: function () {}, HTMLTextAreaElement: function () {}, console,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(js, sandbox);
+  const fire = (el, tipo) => (el.listeners[tipo] || []).forEach((f) => f({ target: el }));
+  return { els, root, store, fire };
+}
+const con = run(true);
+con.els["lector-brillo"].value = "20";
+con.fire(con.els["lector-brillo"], "input");
+const conBrillo = con.els["lector-paginas"].style.filter;
+con.els["lector-sepia"].checked = true;
+con.fire(con.els["lector-sepia"], "change");
+const conSepia = con.els["lector-paginas"].style.filter;
+const guardado = JSON.parse(con.store.get("zascarr.lector.imagen"));
+con.fire(con.els["lector-imagen-reset"], "click");
+const trasReset = con.els["lector-paginas"].style.filter;
+const sin = run(false);
+const sinStorage = sin.els["lector-paginas"].style.filter;
+process.stdout.write(JSON.stringify({conBrillo, conSepia, guardado, trasReset, sinStorage}));
+'''
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="requiere Node para ejecutar el JS")
+def test_lector_ajustes_de_imagen_dom(tmp_path):
+    harness = tmp_path / "imagen.js"
+    harness.write_text(HARNESS_IMAGEN, encoding="utf-8")
+    r = subprocess.run(["node", str(harness), str(JS)], capture_output=True, text=True,
+                       timeout=30, check=True)
+    datos = json.loads(r.stdout)
+    assert datos["conBrillo"] == "brightness(1.2)"
+    assert datos["conSepia"] == "brightness(1.2) sepia(1)"
+    assert datos["guardado"] == {"brillo": 20, "contraste": 0, "sepia": True, "invertir": False}
+    assert datos["trasReset"] == "none"
+    assert datos["sinStorage"] == "none"
