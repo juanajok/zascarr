@@ -333,9 +333,17 @@ async def redescubre_completo(
                    .join(con_archivos, con_archivos.c.series_id == Series.id)
                    .where(~Series.id.in_(actividad)))
     consulta = favoritas.union_all(casi, antiguas, por_empezar).subquery()
+    # Una serie puede encajar en varias heurísticas: se queda una sola vez,
+    # con el primer motivo por orden estable.
+    numeradas = (select(consulta.c.series_id, consulta.c.title, consulta.c.motivo,
+                        func.row_number().over(
+                            partition_by=consulta.c.series_id,
+                            order_by=(consulta.c.motivo, consulta.c.title)).label("rn"))
+                 .subquery())
     filas = (await db.execute(
-        select(consulta.c.series_id, consulta.c.title, consulta.c.motivo)
-        .order_by(consulta.c.motivo, consulta.c.title, consulta.c.series_id)
+        select(numeradas.c.series_id, numeradas.c.title, numeradas.c.motivo)
+        .where(numeradas.c.rn == 1)
+        .order_by(numeradas.c.motivo, numeradas.c.title, numeradas.c.series_id)
         .offset(max(0, offset)).limit(limite)
     )).all()
     return [Sugerencia(str(sid), title, str(motivo)) for sid, title, motivo in filas]

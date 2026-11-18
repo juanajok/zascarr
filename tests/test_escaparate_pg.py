@@ -129,3 +129,32 @@ async def test_sugerencias_offset_vacio_y_solo_select(entorno):
     escrituras = [x for x in entorno.banco.sentencias[antes:]
                   if re.search(r"\b(INSERT|UPDATE|DELETE)\b", x, re.I)]
     assert not escrituras
+
+
+@pytest.mark.asyncio
+async def test_sugerencias_propaga_offset_siguiente(entorno):
+    from tests.test_vinculacion_previa_pg import cliente
+    async with cliente() as c:
+        r0 = await c.get("/ui/biblioteca/sugerencias?offset=0")
+        r4 = await c.get("/ui/biblioteca/sugerencias?offset=4")
+    assert "offset=4" in r0.text and "offset=8" in r4.text
+
+
+@pytest.mark.asyncio
+async def test_redescubre_no_duplica_series(entorno):
+    from uuid import uuid4
+
+    from zascarr.models import File, FileFormat, Issue, Series
+    from zascarr.services.actividad import redescubre_completo
+    async with entorno.banco.fabrica() as s:
+        sid = uuid4()
+        s.add(Series(id=sid, title="Repetida", favorite=True, total_issues=2))
+        iid = uuid4()
+        s.add(Issue(id=iid, series_id=sid, issue_number="1", volume=1))
+        s.add(File(id=uuid4(), issue_id=iid, file_path=f"/tmp/{uuid4()}.cbz",
+                   file_name="1.cbz", file_format=FileFormat.CBZ, metadata_={},
+                   is_missing=False))
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        sug = await redescubre_completo(s, 10, 0)
+    assert [x.series_title for x in sug].count("Repetida") == 1

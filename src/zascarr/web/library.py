@@ -787,7 +787,8 @@ async def sugerencias_escaparate(request: Request, offset: int = 0,
     """#1101: rota sugerencias sin escribir (determinista por offset)."""
     datos = await escaparate.sugerencias(db, offset=max(0, offset))
     respuesta = templates.TemplateResponse(
-        request, "_sugerencias_escaparate.html", {"sugerencias": datos})
+        request, "_sugerencias_escaparate.html",
+        {"sugerencias": datos, "offset_siguiente": max(0, offset) + 4})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 
