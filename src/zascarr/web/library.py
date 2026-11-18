@@ -788,7 +788,7 @@ async def sugerencias_escaparate(request: Request, offset: int = 0,
     datos = await escaparate.sugerencias(db, offset=max(0, offset))
     respuesta = templates.TemplateResponse(
         request, "_sugerencias_escaparate.html",
-        {"sugerencias": datos, "offset_siguiente": max(0, offset) + 4})
+        {"sugerencias": datos, "offset_siguiente": max(0, offset) + 4, "actualizado": True})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 

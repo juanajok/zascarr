@@ -13,4 +13,4 @@
 <button type="button" class="btn sugerencias-rotar"
         hx-get="/ui/biblioteca/sugerencias?offset={{ offset_siguiente }}"
         hx-target="#sugerencias" hx-swap="innerHTML">Cambiar sugerencias</button>
-<div id="sugerencias-estado" class="sr" role="status" aria-live="polite"></div>
+<div id="sugerencias-estado" class="sr" role="status" aria-live="polite">{% if actualizado %}Sugerencias actualizadas.{% endif %}</div>

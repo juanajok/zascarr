@@ -2909,6 +2909,9 @@ body:has(.lector-escena) .skip { z-index: 20; }
 #sugerencias, .mas-serie { min-width: 0; width: 100%; max-width: 100%; }
 .escaparate-nav { display: flex; gap: var(--space-2); justify-content: flex-end; margin: 0 0 var(--space-1); }
 .escaparate-nav button { min-width: 44px; min-height: 44px; }
+.escaparate-nav button[data-dir="prev"] svg { transform: rotate(90deg); }
+.escaparate-nav button[data-dir="next"] svg { transform: rotate(-90deg); }
+.escaparate-nav button[disabled] { opacity: .45; }
 .escaparate-lista:focus-visible { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
 .escaparate-lista > li { flex: 0 0 auto; max-width: 220px; }
 .escaparate-tarjeta { display: grid; gap: var(--space-1); min-width: 0; width: 100%; min-height: 44px; padding: var(--space-2); border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); color: var(--ink); text-decoration: none; }
