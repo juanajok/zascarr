@@ -540,6 +540,7 @@ docker-compose.yml
 - [`docs/adr/`](docs/adr/) — decisiones de arquitectura registradas.
 - [Capturas actuales de la interfaz](docs/design/ui-actual/README.md) — foto de la UI al cerrar la migración V0–V14 (claro/oscuro, escritorio/móvil).
 - [Sistema de diseño](docs/design/sistema-de-diseno-zascarr.md) ([PDF con las muestras](docs/design/sistema-de-diseno-zascarr.pdf)) — guía de marca, componentes, accesibilidad y revisión de la UI (versión 2026-11-13, `main@76e7812`).
+- [`docs/TESTING_MASTER_PLAN.md`](docs/TESTING_MASTER_PLAN.md) — plan maestro de pruebas, riesgos y gates.
 - [`docs/TESTING_E2E.md`](docs/TESTING_E2E.md) / [`docs/TESTING_NFR_Zascarr.md`](docs/TESTING_NFR_Zascarr.md) — planes de testing end-to-end y no funcional.
 - [`src/zascarr/LEGAL.md`](src/zascarr/LEGAL.md) — aviso legal y marco de uso.
 - Docstrings de cada módulo — explican el *por qué* de las decisiones.
