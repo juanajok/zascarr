@@ -24,6 +24,9 @@
       </div>
       {% endif %}
     </div>
+    <div id="tareas-anuncio" class="tareas-anuncio sr" role="status" aria-live="polite"></div>
+    <div id="tareas-cadencia" hx-get="/ui/_tareas" hx-trigger="load, every 10s"
+         hx-swap="none"></div>
     <main class="content" id="main" tabindex="-1" hx-history-elt>
     <div class="tareas-fuera">
       <div id="tareas-global">
@@ -34,9 +37,6 @@
             <span id="tareas-nombre" class="tareas-nombre"></span></summary>
           <div id="tareas-lista" class="tareas-lista"></div>
         </details>
-        <div id="tareas-anuncio" class="tareas-anuncio sr" role="status" aria-live="polite"></div>
-        <div id="tareas-cadencia" hx-get="/ui/_tareas" hx-trigger="load, every 10s"
-             hx-swap="none"></div>
       </div>
     </div>
       {% block content %}{% endblock %}
