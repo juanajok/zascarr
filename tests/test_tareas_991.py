@@ -224,11 +224,13 @@ def test_oob_no_reemplaza_details_y_conserva_foco():
     assert "every 2s" in frag and "every 10s" in frag
 
 
-def test_css_movil_usa_contenedor_externo():
+def test_css_chip_en_flujo_y_panel_bajo_el_chip():
     css = Path("src/zascarr/static/web.css").read_text()
-    assert ".tareas-fuera .tareas-panel" in css
+    assert ".tareas-fuera { position: relative; display: flex;" in css
+    assert ".tareas-panel { position: absolute; right: 0; left: auto; top: 44px;" in css
     assert ".side .tareas-panel" not in css
-    assert "position: fixed" in css and "bottom: 72px" in css
+    # Sin hoja inferior fija: el chip no flota sobre tarjetas/contenido.
+    assert "bottom: 72px" not in css
 
 
 def test_visto_form_y_panel():
