@@ -22,6 +22,7 @@ import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -39,6 +40,7 @@ from zascarr.models import (
     ReadingStatus,
     Series,
     SeriesKind,
+    SeriesRecentView,
     Wishlist,
     WishlistOrigin,
     WishlistPolicy,
@@ -1294,6 +1296,19 @@ async def panel_sagas(series_id: UUID, request: Request,
         request, "_sagas_serie.html", {"series": series, "sagas": sagas})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
+
+
+@router.post("/{series_id}/vista", status_code=204)
+async def registrar_vista(series_id: UUID, db: AsyncSession = Depends(get_db)) -> Response:
+    """#1088: visita a la ficha, idempotente (upsert por PK). No hay GET que escriba."""
+    if await db.get(Series, series_id) is None:
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    await db.execute(
+        pg_insert(SeriesRecentView).values(series_id=series_id, last_viewed_at=func.now())
+        .on_conflict_do_update(index_elements=["series_id"],
+                               set_={"last_viewed_at": func.now()}))
+    await db.commit()
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/{series_id}/favorito")

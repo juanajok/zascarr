@@ -254,8 +254,9 @@ async def guardar_progreso(db: AsyncSession, file_id: UUID, n: int) -> None:
     progreso.current_page = n
     if progreso.status is ReadingStatus.UNREAD:
         progreso.status = ReadingStatus.READING
+    progreso.last_read_at = datetime.now(UTC)
     if progreso.started_at is None:
-        progreso.started_at = datetime.now(UTC)
+        progreso.started_at = progreso.last_read_at
     await db.flush()
     await db.commit()
 

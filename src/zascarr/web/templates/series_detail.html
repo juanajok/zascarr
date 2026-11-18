@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ series.title }} — ZascArr{% endblock %}
 {% block content %}
+<span hx-post="/ui/series/{{ series.id }}/vista" hx-trigger="load delay:1s" hx-swap="none" hidden></span>
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
 {% from "_atribucion_fandom.html" import aviso_de_atribucion %}
 
