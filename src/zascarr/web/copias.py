@@ -43,6 +43,8 @@ def _contexto(vista: VistaCopias, copias: list[dict] | None, mensaje_pedir: str 
         vista = VistaCopias(vista.estado, MSG_RESTAURACION_EN_MARCHA, vista.detalle, boton=True,
                             habilitado=False, en_marcha=vista.en_marcha, nivel="amber",
                             nocturna_omitida=vista.nocturna_omitida, extra=vista.extra)
+    if copias is not None:
+        copias = [c for c in copias if c.get("restaurable") is True]
     return {"v": vista, "copias": copias, "mensaje_pedir": mensaje_pedir, "con_lista": con_lista,
             "oob_accion": oob_accion, "foco": foco, "oob": False, "vr": vr, "restaurando": restaurando}
 
@@ -84,6 +86,14 @@ async def _fragmento_actual(request: Request, mensaje_pedir: str = "", boton_cam
     # El listado solo se vuelve a pintar cuando no hay copia en marcha: la última respuesta de un sondeo, o tras pedir.
     con_lista = not vista.en_marcha and vista.estado != EstadoCopia.NO_ACTIVADO
     copias = await asyncio.to_thread(ops_host.leer_copias, settings) if con_lista else None
+    if copias is not None and settings.auth_mode != "none":
+        from zascarr.database import async_session_factory
+        from zascarr.services.restauracion import revision_actual
+        async with async_session_factory() as db:
+            revision = await revision_actual(db)
+        copias = restauracion.ofrecer(
+            copias, revision, settings.auth_mode,
+            permitir=not (vista.en_marcha or restaurando))
     # Sondeo: el botón ya está deshabilitado mientras hay copia en marcha; solo cambia al terminar. Con una
     # restauración en marcha también se sondea (para volver a ofrecer las acciones al terminar).
     cambia = (not vista.en_marcha and not restaurando) if boton_cambia is None else boton_cambia

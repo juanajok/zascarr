@@ -36,6 +36,7 @@
   const siguiente = document.getElementById("lector-siguiente");
   const menuBoton = document.getElementById("lector-menu-boton");
   const menu = document.getElementById("lector-menu");
+  const barra = document.getElementById("lector-barra");
   const desplazar = document.getElementById("lector-desplazar");
   const botonSentido = document.getElementById("lector-sentido");
   const botonPantalla = document.getElementById("lector-pantalla-completa");
@@ -83,20 +84,30 @@
     contador.textContent = visibles.length > 1
       ? `Páginas ${visibles[0]}–${visibles[1]} de ${total}`
       : `Página ${visibles[0]} de ${total}`;
-    anterior.disabled = visibles[0] <= 1;
-    siguiente.disabled = visibles[visibles.length - 1] >= total;
+    const enInicio = visibles[0] <= 1;
+    const enFin = visibles[visibles.length - 1] >= total;
+    // Las flechas izquierda/derecha cambian de significado en RTL: el botón
+    // izquierdo avanza cuando se lee de derecha a izquierda.
+    anterior.disabled = sentido === "rtl" ? enFin : enInicio;
+    siguiente.disabled = sentido === "rtl" ? enInicio : enFin;
+    anterior.setAttribute("aria-label",
+      sentido === "rtl" ? "Página siguiente" : "Página anterior");
+    siguiente.setAttribute("aria-label",
+      sentido === "rtl" ? "Página anterior" : "Página siguiente");
+    anterior.textContent = "‹";
+    siguiente.textContent = "›";
     raiz.dataset.modo = modo;
     raiz.dataset.sentido = sentido;
     raiz.dataset.desplazamiento = String(desplazamiento);
     raiz.dataset.pagina = String(pagina);
+    const fin = document.getElementById("fin");
+    if (fin) fin.hidden = visibles[visibles.length - 1] < total;
     menuBoton.setAttribute("aria-expanded", String(!menu.hidden));
     desplazar.hidden = modo !== "doble";
     for (const boton of document.querySelectorAll("[data-modo]")) {
       boton.setAttribute("aria-pressed", String(boton.dataset.modo === modo));
     }
     botonSentido.textContent = `Sentido: ${sentido === "rtl" ? "derecha a izquierda" : "izquierda a derecha"}`;
-    anterior.textContent = sentido === "rtl" ? "Anterior →" : "← Anterior";
-    siguiente.textContent = sentido === "rtl" ? "← Siguiente" : "Siguiente →";
   };
 
   const guarda = () => {
@@ -124,9 +135,37 @@
     if (modo === "doble" && paginaBVisible) ir(pagina - 2);
     else ir(pagina - 1);
   };
+  let temporizadorChrome = null;
+  const programaOculto = () => {
+    if (typeof setTimeout !== "function") return;
+    if (temporizadorChrome !== null && typeof clearTimeout === "function") {
+      clearTimeout(temporizadorChrome);
+    }
+    temporizadorChrome = null;
+    if (!menu.hidden) return;               // con Opciones abiertas no se oculta
+    temporizadorChrome = setTimeout(() => {
+      raiz.dataset.chrome = "oculto";
+    }, 3000);
+  };
+  const despertarChrome = () => {
+    raiz.dataset.chrome = "";
+    programaOculto();
+  };
   const alternarMenu = () => {
     menu.hidden = !menu.hidden;
     menuBoton.setAttribute("aria-expanded", String(!menu.hidden));
+    despertarChrome();
+  };
+  const alternarChrome = () => {
+    raiz.dataset.chrome = raiz.dataset.chrome === "oculto" ? "" : "oculto";
+    if (raiz.dataset.chrome === "oculto") {
+      if (temporizadorChrome !== null && typeof clearTimeout === "function") {
+        clearTimeout(temporizadorChrome);
+      }
+      temporizadorChrome = null;
+    } else {
+      programaOculto();
+    }
   };
   const cambiarModo = (nuevo) => {
     if (nuevo !== "ancho" && nuevo !== "pantalla" && nuevo !== "doble") return;
@@ -169,8 +208,8 @@
       pinta();
     }
   });
-  anterior.addEventListener("click", retroceder);
-  siguiente.addEventListener("click", avanzar);
+  anterior.addEventListener("click", () => (sentido === "rtl" ? avanzar() : retroceder()));
+  siguiente.addEventListener("click", () => (sentido === "rtl" ? retroceder() : avanzar()));
   menuBoton.addEventListener("click", alternarMenu);
   for (const boton of document.querySelectorAll("[data-modo]")) {
     boton.addEventListener("click", () => cambiarModo(boton.dataset.modo));
@@ -194,22 +233,38 @@
     botonPantalla.addEventListener("click", alternarPantalla);
   }
 
+  // Chrome auto-oculto. Sin JS la barra se queda visible (degradación honesta).
+  const despertarPorEvento = () => despertarChrome();
+  document.addEventListener("mousemove", despertarPorEvento, { passive: true });
+  document.addEventListener("pointerdown", despertarPorEvento, { passive: true });
+  document.addEventListener("focusin", despertarPorEvento);
+  document.addEventListener("fullscreenchange", despertarPorEvento);
+  if (typeof setTimeout === "function") programaOculto();
+
   document.addEventListener("keydown", (evento) => {
     if (evento.target instanceof HTMLInputElement || evento.target instanceof HTMLTextAreaElement) return;
+    if (evento.key !== "h") despertarChrome();
     const siguienteTecla = sentido === "rtl" ? "ArrowLeft" : "ArrowRight";
     const anteriorTecla = sentido === "rtl" ? "ArrowRight" : "ArrowLeft";
     if (evento.key === siguienteTecla || evento.key === "PageDown") { evento.preventDefault(); avanzar(); }
     else if (evento.key === anteriorTecla || evento.key === "PageUp") { evento.preventDefault(); retroceder(); }
     else if (evento.key === " ") { evento.preventDefault(); evento.shiftKey ? retroceder() : avanzar(); }
     else if (evento.key === "f") { evento.preventDefault(); alternarPantalla(); }
+    else if (evento.key === "h") { evento.preventDefault(); alternarChrome(); }
     else if (evento.key === "m") { evento.preventDefault(); cambiarModo(modo === "ancho" ? "pantalla" : modo === "pantalla" ? "doble" : "ancho"); }
-    else if (evento.key === "Escape") { if (menu.hidden) window.location.assign(volver); else alternarMenu(); }
+    else if (evento.key === "Escape") {
+      if (document.fullscreenElement) return;       // el navegador sale del fullscreen
+      if (!menu.hidden) { alternarMenu(); return; }
+      if (raiz.dataset.chrome === "oculto") { despertarChrome(); return; }
+      window.location.assign(volver);
+    }
     else if (evento.key === "Home") { evento.preventDefault(); ir(1); }
     else if (evento.key === "End") { evento.preventDefault(); ir(total); }
   });
 
   let toqueInicio = null;
   lienzo.addEventListener("touchstart", (evento) => {
+    despertarChrome();
     if (evento.touches.length !== 1) return;
     const t = evento.touches[0];
     toqueInicio = { x: t.clientX, y: t.clientY, ancho: lienzo.clientWidth };

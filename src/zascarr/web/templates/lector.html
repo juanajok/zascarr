@@ -1,38 +1,48 @@
 {% extends "base.html" %}
 {% block title %}Leer — {{ serie.title if serie else "ZascArr" }}{% endblock %}
 {% block content %}
-<a class="back-link" href="/ui/series/{{ serie.id }}/numero/{{ numero.id }}">← Volver al número</a>
-<h1>Leer{% if numero.issue_number %} · número {{ numero.issue_number }}{% endif %}</h1>
-{% if serie %}<p class="subtitle">{{ serie.title }}</p>{% endif %}
-
-{% if preparando %}
-<div class="lector lector-preparando" data-estado-url="/ui/leer/{{ archivo.id }}/estado">
-  <p class="lector-contador" id="lector-preparando" aria-live="polite">Preparando el tebeo…</p>
-  <p class="caption">La primera vez tarda un poco; luego se abre al momento.</p>
-</div>
-{% else %}
-<div class="lector" data-lector
-     data-total="{{ total }}" data-pagina="{{ pagina_actual }}"
+<div class="lector lector-escena{% if preparando %} lector-escena-preparando{% endif %}"
+     {% if preparando %}data-estado-url="/ui/leer/{{ archivo.id }}/estado"{% else %}
+     data-lector data-total="{{ total }}" data-pagina="{{ pagina_actual }}"
      data-sentido="{{ sentido }}" data-origen-sentido="{{ origen_sentido }}"
      data-pagina-url="/ui/leer/{{ archivo.id }}/pagina/"
      data-progreso-url="/ui/leer/{{ archivo.id }}/progreso"
      data-sentido-url="/ui/leer/{{ archivo.id }}/sentido"
-     data-volver="/ui/series/{{ serie.id }}/numero/{{ numero.id }}">
+     data-volver="/ui/series/{{ serie.id }}/numero/{{ numero.id }}"{% endif %}>
+  <header class="lector-barra" id="lector-barra" role="group" aria-label="Controles del lector">
+    <a class="back-link lector-volver" href="/ui/series/{{ serie.id }}/numero/{{ numero.id }}">← Volver al número</a>
+    <p class="lector-identidad">
+      <strong>{{ serie.title }}</strong>
+      {% if numero.issue_number %}<span>número {{ numero.issue_number }}</span>{% endif %}
+    </p>
+    {% if not preparando %}
+    <p class="lector-contador" id="lector-contador" aria-live="polite">Página {{ pagina_actual }} de {{ total }}</p>
+    <button type="button" class="btn ghost sm" id="lector-menu-boton"
+            aria-expanded="false" aria-controls="lector-menu">Opciones</button>
+    {% else %}
+    <p class="lector-contador" role="status">Preparando…</p>
+    {% endif %}
+  </header>
+
+  {% if preparando %}
+  <main class="lector-espera" id="lector-preparando" role="status" aria-live="polite">
+    <p class="lector-espera-titulo">Preparando el tebeo…</p>
+    <p class="caption">La primera vez tarda un poco; luego se abre al momento.</p>
+  </main>
+  {% else %}
   <div class="lector-lienzo" id="lector-lienzo">
+    <button type="button" class="lector-flecha lector-flecha-anterior" id="lector-anterior"
+            aria-label="Página anterior"{% if pagina_actual <= 1 %} disabled{% endif %}>‹</button>
     <div class="lector-paginas" id="lector-paginas">
       <img id="lector-pagina" class="lector-pagina"
            src="/ui/leer/{{ archivo.id }}/pagina/{{ pagina_actual }}"
            alt="Página {{ pagina_actual }} de {{ total }}">
       <img id="lector-pagina-b" class="lector-pagina" alt="" hidden>
     </div>
+    <button type="button" class="lector-flecha lector-flecha-siguiente" id="lector-siguiente"
+            aria-label="Página siguiente"{% if pagina_actual >= total %} disabled{% endif %}>›</button>
   </div>
-  <div class="lector-controles" role="group" aria-label="Pasar páginas">
-    <button type="button" class="btn ghost" id="lector-anterior">← Anterior</button>
-    <p class="lector-contador" id="lector-contador" aria-live="polite">Página {{ pagina_actual }} de {{ total }}</p>
-    <button type="button" class="btn" id="lector-siguiente">Siguiente →</button>
-    <button type="button" class="btn ghost" id="lector-menu-boton"
-            aria-expanded="false" aria-controls="lector-menu">Opciones</button>
-  </div>
+
   <div class="lector-menu" id="lector-menu" hidden>
     <p class="lector-menu-titulo">Cómo quieres leer</p>
     <div class="lector-modos" role="group" aria-label="Modo de lectura">
@@ -43,15 +53,41 @@
     <button type="button" class="btn ghost" id="lector-desplazar" hidden>Desplazar la pareja una página</button>
     <button type="button" class="btn ghost" id="lector-sentido">Sentido: {{ "derecha a izquierda" if sentido == "rtl" else "izquierda a derecha" }}</button>
     <button type="button" class="btn ghost" id="lector-pantalla-completa" hidden>Pantalla completa</button>
-    <p class="caption" id="lector-origen-sentido">
+    <details class="lector-ayuda">
+      <summary>Cómo leer</summary>
+      <p class="caption">Flechas del teclado, espacio o deslizar para pasar página. <kbd>f</kbd> pantalla completa; <kbd>h</kbd> muestra u oculta los controles; <kbd>m</kbd> cambia el modo.</p>
+    </details>
+    <p id="lector-origen-sentido" class="caption">
       {% if origen_sentido == "serie" %}Sentido guardado para esta serie.
       {% elif origen_sentido == "comicinfo" %}Sentido tomado del ComicInfo del archivo.
       {% else %}Sentido por la tradición de la serie.{% endif %}
     </p>
+    <p class="caption"><a href="/legal">Aviso legal</a></p>
   </div>
-  <p class="caption lector-ayuda">Usa las flechas del teclado. ZascArr guarda la página por la que vas.</p>
+  {% if siguiente %}
+  <section id="fin" class="lector-fin" hidden aria-labelledby="fin-titulo">
+    <h2 id="fin-titulo" class="titulo-frase">Has llegado al final</h2>
+    {% if siguiente.estado == "leer" %}
+    <p>Has terminado el #{{ numero.issue_number or "?" }}. Siguiente: <strong>#{{ siguiente.numero }}</strong>.</p>
+    <p><a class="btn primary" href="/ui/leer/{{ siguiente.archivo.id }}">Leer el #{{ siguiente.numero }}</a></p>
+    {% elif siguiente.estado == "falta" %}
+    <p>Te falta el <strong>#{{ siguiente.numero }}</strong> de <em>{{ serie.title }}</em>.</p>
+    {% if legal_aceptado %}
+    <form hx-post="/ui/leer/{{ archivo.id }}/deseo" hx-target="#fin" hx-swap="innerHTML">
+      <button type="submit" class="btn">Añadir a Deseados</button>
+    </form>
+    {% else %}
+    <p><a class="btn" href="/ui/legal">Añadir a Deseados</a></p>
+    <p class="caption">Antes tienes que leer y aceptar el aviso legal; después podrás pedirlo.</p>
+    {% endif %}
+    {% else %}
+    <p>No hay un número siguiente en tu biblioteca.</p>
+    {% endif %}
+    <p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+  </section>
+  {% endif %}
+  {% endif %}
 </div>
-{% endif %}
 <noscript>{{ ui.aviso("amber", "Para pasar páginas hace falta JavaScript. La primera página sí se ve.") }}</noscript>
 <script src="/static/lector.js" defer></script>
 {% endblock %}

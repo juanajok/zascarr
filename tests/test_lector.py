@@ -69,7 +69,18 @@ async def test_archivos_legibles_por_db(tmp_path):
     assert [a.id for a in filas] == [str(f.id), str(cbr.id)]
 
 
-def test_pantalla_y_pagina(tmp_path):
+def test_pantalla_y_pagina(tmp_path, monkeypatch):
+    from zascarr.services.lector import SIN_SIGUIENTE, Siguiente
+    from zascarr.web import lector as wlector
+
+    async def _sin(*_a, **_k):
+        return Siguiente(SIN_SIGUIENTE)
+
+    async def _ack(*_a, **_k):
+        return True
+
+    monkeypatch.setattr(wlector, "siguiente_numero", _sin)
+    monkeypatch.setattr(wlector, "is_acknowledged", _ack)
     f = _file(tmp_path)
     issue = SimpleNamespace(id=f.issue_id, issue_number="1", series_id=uuid4())
     serie = SimpleNamespace(id=issue.series_id, title="Serie", metadata_={},
@@ -165,6 +176,35 @@ async def test_guardar_sentido_por_serie(tmp_path):
     assert serie.metadata_ == {"otro": 1, "lector_sentido": "rtl"}
     assert db.commit.await_count == 1
 
+
+def test_el_lector_usa_el_cascaron_inmersivo():
+    from pathlib import Path
+    plantilla = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "web"
+                 / "templates" / "lector.html").read_text(encoding="utf-8")
+    for pieza in (
+        'class="lector lector-escena',
+        'id="lector-barra"',
+        'class="lector-flecha lector-flecha-anterior"',
+        'class="lector-flecha lector-flecha-siguiente"',
+        'aria-label="Página anterior"',
+        'id="lector-menu-boton"',
+        'href="/legal"',
+        '<kbd>h</kbd>',
+    ):
+        assert pieza in plantilla, pieza
+
+def test_el_css_del_lector_oculta_el_marco_y_las_flechas_en_tactil():
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
+           / "web.css").read_text(encoding="utf-8")
+    for pieza in (
+        "body:has(.lector-escena) .side",
+        'data-chrome="oculto"',
+        "@media (hover: none)",
+        "lector-flecha",
+        "100dvh",
+    ):
+        assert pieza in css, pieza
 
 def test_js_lector_tiene_los_contratos_de_lec2():
     from pathlib import Path
@@ -268,3 +308,74 @@ def test_estado_rar_listo(tmp_path, monkeypatch):
     with use_fake_session(db) as client:
         r = client.get(f"/ui/leer/{f.id}/estado")
     assert r.status_code == 200 and r.json() == {"estado": "listo", "motivo": ""}
+
+
+def _pantalla_con_siguiente(tmp_path, monkeypatch, estado, legal=True):
+    from zascarr.services.lector import FALTA, LEER, ArchivoDeLectura, Siguiente
+    from zascarr.web import lector as wlector
+
+    f = _file(tmp_path)
+    issue = SimpleNamespace(id=f.issue_id, issue_number="1", series_id=uuid4())
+    serie = SimpleNamespace(id=issue.series_id, title="Serie", metadata_={},
+                            tradition=SimpleNamespace(value="american"))
+    siguiente = (Siguiente(LEER, serie, 2, SimpleNamespace(id=uuid4()),
+                           ArchivoDeLectura(str(uuid4()), "2.cbz", "CBZ"))
+                 if estado == LEER else Siguiente(FALTA, serie, 2))
+
+    async def _siguiente(*_a, **_k):
+        return siguiente
+
+    async def _ack(*_a, **_k):
+        return legal
+
+    monkeypatch.setattr(wlector, "siguiente_numero", _siguiente)
+    monkeypatch.setattr(wlector, "is_acknowledged", _ack)
+    db = FakeSession(get_map={(File, f.id): f, (Issue, issue.id): issue,
+                              (Series, serie.id): serie},
+                     exec_queue=[FakeExecResult([None])])
+    return f, db
+
+
+def test_tarjeta_final_leer_se_pinta_en_servidor(tmp_path, monkeypatch):
+    f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "leer")
+    with use_fake_session(db) as client:
+        r = client.get(f"/ui/leer/{f.id}")
+    assert r.status_code == 200
+    assert 'id="fin"' in r.text and "hidden" in r.text
+    assert "Siguiente: <strong>#2</strong>" in r.text
+    assert "Leer el #2" in r.text
+
+
+def test_tarjeta_final_falta_sin_legal_lleva_al_aviso(tmp_path, monkeypatch):
+    f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "falta", legal=False)
+    with use_fake_session(db) as client:
+        r = client.get(f"/ui/leer/{f.id}")
+    assert "Te falta el" in r.text and "#2" in r.text
+    assert 'href="/ui/legal"' in r.text
+    assert 'hx-post="/ui/leer/"' not in r.text
+
+
+def test_anadir_a_deseos_reutiliza_wishlist(tmp_path):
+    from zascarr.services.legal import require_legal_acknowledgment
+
+    f = _file(tmp_path)
+    issue = SimpleNamespace(id=f.issue_id, issue_number="1", series_id=uuid4())
+    db = FakeSession(get_map={(File, f.id): f, (Issue, issue.id): issue})
+    app.dependency_overrides[require_legal_acknowledgment] = lambda: None
+    try:
+        with use_fake_session(db) as client:
+            r = client.post(f"/ui/leer/{f.id}/deseo")
+        assert r.status_code == 200 and "Añadido a Deseados" in r.text
+        assert db.commit.await_count == 1
+    finally:
+        app.dependency_overrides.pop(require_legal_acknowledgment, None)
+
+
+def test_deseo_sin_aviso_legal_da_403_y_no_escribe(tmp_path):
+    f = _file(tmp_path)
+    db = FakeSession(exec_queue=[FakeExecResult([])])
+    with use_fake_session(db) as client:
+        r = client.post(f"/ui/leer/{f.id}/deseo")
+    assert r.status_code == 403
+    assert r.headers["hx-redirect"] == "/ui/legal"
+    assert db.commit.await_count == 0

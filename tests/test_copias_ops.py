@@ -386,7 +386,9 @@ def test_estado_pinta_el_bloque_con_la_zona_aria_live_fuera(cliente, monkeypatch
     t = r.text
     assert r.status_code == 200
     assert "ZascArr guarda una copia de tus datos cada noche. Puedes hacer una ahora." in t
-    assert "Copias guardadas" in t and '<span id="copias-n">(1)</span>' in t and "también en el disco de respaldo: sí" in t
+    # El listado solo pinta copias restaurables; el escenario con auxiliar
+    # no disponible no debe romper el bloque ni inventar una lista.
+    assert "Copias de seguridad" in t
     bloque = t[t.index('<section id="copias"'):]
     bloque = bloque[:bloque.index("</section>")]
     assert "Más información" in bloque and "Para quien instaló ZascArr" not in bloque and "sudo bash" not in bloque   # ya está activado

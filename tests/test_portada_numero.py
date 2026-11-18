@@ -94,6 +94,20 @@ async def test_archivo_que_no_es_zip_no_tiene_previa(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_la_previa_admite_una_pagina_4k(tmp_path):
+    """Regresión: 2619×4106 (10,75 Mpx) superaba el límite de 6 Mpx y no daba miniatura."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (2619, 4106), (10, 90, 160)).save(buffer, "JPEG", quality=60)
+    cbz = tmp_path / "Tebeo 4K.cbz"
+    with zipfile.ZipFile(cbz, "w") as z:
+        z.writestr("001.jpg", buffer.getvalue())
+    fid = uuid4()
+    ruta = await portada_numero.ruta_previa(
+        _Sesion([(fid, str(cbz), None)]), uuid4(), uuid4(), settings=_settings(tmp_path))
+    assert ruta is not None and ruta.is_file()
+
+
+@pytest.mark.asyncio
 async def test_la_ficha_usa_su_propia_cache_a_600(tmp_path):
     cbz = _cbz(tmp_path / "Tebeo 01.cbz")
     fid = uuid4()
@@ -183,6 +197,31 @@ async def test_sin_portada_no_repite_la_extraccion(tmp_path, monkeypatch):
     monkeypatch.setattr(portada_numero, "_generar", _no_debe_llamarse)
     segunda = await portada_numero.ruta_previa(sesion, uuid4(), uuid4(), settings=ajustes)
     assert segunda is None
+
+
+@pytest.mark.asyncio
+async def test_tiempo_agotado_no_deja_cache_negativa(tmp_path, monkeypatch):
+    """Un fallo por presupuesto no significa «este archivo no tiene portada».
+
+    Regresión real: 8 miniaturas de CBZ grandes agotaron los 6 s, se marcaron como negativas y
+    la ficha no volvió a intentarlo aunque el archivo sí tenía portada.
+    """
+    cbz = _cbz(tmp_path / "Tebeo 01.cbz")
+    fid = uuid4()
+    sesion = _Sesion([(fid, str(cbz), None)])
+    ajustes = _settings(tmp_path)
+
+    def _agotado(*args, **kwargs):
+        estado = args[4] if len(args) > 4 else kwargs.get("estado")
+        if estado is not None:
+            estado["agotado"] = True
+        return None
+
+    monkeypatch.setattr(portada_numero, "_generar", _agotado)
+    assert await portada_numero.ruta_previa(sesion, uuid4(), uuid4(), settings=ajustes) is None
+    carpeta = portada_numero.carpeta_de_previas(ajustes)
+    marca = portada_numero._camino(carpeta, fid, portada_numero.ANCHO_PREVIA)
+    assert not marca.with_name(marca.name + ".sin-portada.json").exists()
 
 
 @pytest.mark.asyncio

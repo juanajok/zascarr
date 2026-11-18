@@ -88,6 +88,13 @@ const salida = {
       return true;
     } catch (_) { return false; }
   })(),
+  hAlternaChrome: (() => {
+    const tecla = { key: "h", target: {}, preventDefault: () => {} };
+    con.doc.listeners.keydown.forEach((f) => f(tecla));
+    const oculto = con.root.dataset.chrome === "oculto";
+    con.doc.listeners.keydown.forEach((f) => f(tecla));
+    return oculto && con.root.dataset.chrome === "";
+  })(),
 };
 process.stdout.write(JSON.stringify(salida));
 '''
@@ -103,6 +110,7 @@ def test_lector_js_fullscreen_doble_y_teclado(tmp_path):
     assert datos == {
         "fullscreenConApi": True, "fullscreenSinApi": True,
         "dobleActiva": True, "avanzaConFlecha": True, "fSinApiNoRompe": True,
+        "hAlternaChrome": True,
     }
 
 

@@ -314,3 +314,13 @@ def test_config_declara_el_fichero_y_el_compose_lo_inyecta():
     assert "ops_restaurar_status_file" in type(get_settings()).model_fields
     compose = (raiz / "docker-compose.yml").read_text(encoding="utf-8")
     assert "OPS_RESTAURAR_STATUS_FILE=/run/backup-status/ops-restaurar.json" in compose
+
+
+def test_el_contexto_solo_conserva_las_copias_restaurables():
+    from zascarr.web import copias as modulo
+
+    contexto = modulo._contexto(
+        modulo.VistaCopias("ok", "Copia hecha"),
+        [{"id": "backup-1", "restaurable": True}, {"id": "backup-2", "restaurable": False}],
+    )
+    assert [c["id"] for c in contexto["copias"]] == ["backup-1"]
