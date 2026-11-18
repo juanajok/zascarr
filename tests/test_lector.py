@@ -297,6 +297,9 @@ def test_pantalla_rar_muestra_preparando(tmp_path, monkeypatch):
     assert r.status_code == 200
     assert "Preparando el tebeo" in r.text
     assert f"/ui/leer/{f.id}/estado" in r.text
+    assert 'id="lector-reintentar"' in r.text
+    assert 'id="lector-error" role="alert"' in r.text
+    assert f'href="/ui/series/{serie.id}/numero/{issue.id}"' in r.text
 
 
 def test_estado_rar_listo(tmp_path, monkeypatch):

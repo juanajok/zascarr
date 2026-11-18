@@ -2913,6 +2913,12 @@ body:has(.lector-escena) .skip { z-index: 20; }
   .lector-imagen label { grid-template-columns: 5.5rem 1fr 2rem; }
 }
 
+
+/* ── Lector BL-LECUX4 (#1071): preparación con salida ─────────────────── */
+.lector-espera-error { margin: 0; max-width: 38rem; }
+.lector-espera-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: center; }
+.lector-espera-acciones .btn { min-height: 44px; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
