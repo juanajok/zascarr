@@ -264,14 +264,20 @@
     else ir(pagina - 1);
   };
   let temporizadorChrome = null;
+  const focoEnChrome = () => {
+    const activo = document.activeElement;
+    if (!activo) return false;
+    return (barra && barra.contains(activo)) || (menu && menu.contains(activo));
+  };
   const programaOculto = () => {
     if (typeof setTimeout !== "function") return;
     if (temporizadorChrome !== null && typeof clearTimeout === "function") {
       clearTimeout(temporizadorChrome);
     }
     temporizadorChrome = null;
-    if (!menu.hidden) return;               // con Opciones abiertas no se oculta
+    if (!menu.hidden || focoEnChrome()) return;  // Opciones abiertas o foco dentro: no ocultar
     temporizadorChrome = setTimeout(() => {
+      if (focoEnChrome()) return;                // el foco sigue dentro; no ocultar
       raiz.dataset.chrome = "oculto";
     }, 3000);
   };
@@ -380,6 +386,7 @@
   document.addEventListener("mousemove", despertarPorEvento, { passive: true });
   document.addEventListener("pointerdown", despertarPorEvento, { passive: true });
   document.addEventListener("focusin", despertarPorEvento);
+  document.addEventListener("focusout", despertarPorEvento);
   document.addEventListener("fullscreenchange", despertarPorEvento);
   if (typeof setTimeout === "function") programaOculto();
 

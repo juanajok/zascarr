@@ -2926,4 +2926,8 @@ body:has(.lector-escena) .skip { z-index: 20; }
   .pagina-error::after { display: none; }
   .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
+  .lector-barra .btn:focus-visible,
+  .lector-menu .btn:focus-visible,
+  .lector-flecha:focus-visible,
+  .lector-imagen input:focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
 }
