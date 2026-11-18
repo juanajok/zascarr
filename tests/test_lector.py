@@ -190,6 +190,11 @@ def test_el_lector_usa_el_cascaron_inmersivo():
         'id="lector-menu-boton"',
         'href="/legal"',
         '<kbd>h</kbd>',
+        'id="lector-brillo"',
+        'id="lector-contraste"',
+        'id="lector-sepia"',
+        'id="lector-invertir"',
+        'id="lector-imagen-reset"',
     ):
         assert pieza in plantilla, pieza
 

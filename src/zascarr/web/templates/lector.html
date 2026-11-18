@@ -53,6 +53,23 @@
     <button type="button" class="btn ghost" id="lector-desplazar" hidden>Desplazar la pareja una página</button>
     <button type="button" class="btn ghost" id="lector-sentido">Sentido: {{ "derecha a izquierda" if sentido == "rtl" else "izquierda a derecha" }}</button>
     <button type="button" class="btn ghost" id="lector-pantalla-completa" hidden>Pantalla completa</button>
+    <fieldset class="lector-imagen">
+      <legend>Imagen</legend>
+      <label>Brillo
+        <input type="range" id="lector-brillo" min="-40" max="40" step="5" value="0"
+               aria-describedby="lector-brillo-valor">
+        <output id="lector-brillo-valor" for="lector-brillo">0</output>
+      </label>
+      <label>Contraste
+        <input type="range" id="lector-contraste" min="-40" max="40" step="5" value="0"
+               aria-describedby="lector-contraste-valor">
+        <output id="lector-contraste-valor" for="lector-contraste">0</output>
+      </label>
+      <label class="lector-imagen-check"><input type="checkbox" id="lector-sepia"> Sepia</label>
+      <label class="lector-imagen-check"><input type="checkbox" id="lector-invertir"> Invertir</label>
+      <button type="button" class="btn ghost sm" id="lector-imagen-reset">Restablecer imagen</button>
+      <p class="caption">Solo afecta a la imagen y se guarda en este dispositivo.</p>
+    </fieldset>
     <details class="lector-ayuda">
       <summary>Cómo leer</summary>
       <p class="caption">Flechas del teclado, espacio o deslizar para pasar página. <kbd>f</kbd> pantalla completa; <kbd>h</kbd> muestra u oculta los controles; <kbd>m</kbd> cambia el modo.</p>

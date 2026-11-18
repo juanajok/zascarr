@@ -37,6 +37,14 @@
   const menuBoton = document.getElementById("lector-menu-boton");
   const menu = document.getElementById("lector-menu");
   const barra = document.getElementById("lector-barra");
+  const paginas = document.getElementById("lector-paginas");
+  const brilloControl = document.getElementById("lector-brillo");
+  const contrasteControl = document.getElementById("lector-contraste");
+  const sepiaControl = document.getElementById("lector-sepia");
+  const invertirControl = document.getElementById("lector-invertir");
+  const brilloValor = document.getElementById("lector-brillo-valor");
+  const contrasteValor = document.getElementById("lector-contraste-valor");
+  const resetImagen = document.getElementById("lector-imagen-reset");
   const desplazar = document.getElementById("lector-desplazar");
   const botonSentido = document.getElementById("lector-sentido");
   const botonPantalla = document.getElementById("lector-pantalla-completa");
@@ -50,10 +58,54 @@
   let desplazamiento = 0;
   let paginaBVisible = false;
 
+  const IMAGEN_KEY = "zascarr.lector.imagen";
+  const ajustesImagen = { brillo: 0, contraste: 0, sepia: false, invertir: false };
+  const numeroAcotado = (valor) => {
+    const n = Number.parseInt(valor, 10);
+    return Number.isFinite(n) ? Math.max(-40, Math.min(40, n)) : 0;
+  };
+  const cargarImagen = () => {
+    try {
+      const guardado = JSON.parse(window.localStorage.getItem(IMAGEN_KEY) || "null");
+      if (guardado && typeof guardado === "object") {
+        ajustesImagen.brillo = numeroAcotado(guardado.brillo);
+        ajustesImagen.contraste = numeroAcotado(guardado.contraste);
+        ajustesImagen.sepia = guardado.sepia === true;
+        ajustesImagen.invertir = guardado.invertir === true;
+      }
+    } catch (_) { /* sin localStorage o JSON roto: valores neutros */ }
+  };
+  const filtroImagen = () => {
+    const partes = [];
+    if (ajustesImagen.brillo) partes.push(`brightness(${(100 + ajustesImagen.brillo) / 100})`);
+    if (ajustesImagen.contraste) partes.push(`contrast(${(100 + ajustesImagen.contraste) / 100})`);
+    if (ajustesImagen.sepia) partes.push("sepia(1)");
+    if (ajustesImagen.invertir) partes.push("invert(1)");
+    return partes.length ? partes.join(" ") : "none";
+  };
+  const aplicarImagen = () => {
+    if (paginas && paginas.style) paginas.style.filter = filtroImagen();
+    if (brilloControl) brilloControl.value = String(ajustesImagen.brillo);
+    if (contrasteControl) contrasteControl.value = String(ajustesImagen.contraste);
+    if (sepiaControl) sepiaControl.checked = ajustesImagen.sepia;
+    if (invertirControl) invertirControl.checked = ajustesImagen.invertir;
+    if (brilloValor) brilloValor.textContent = String(ajustesImagen.brillo);
+    if (contrasteValor) contrasteValor.textContent = String(ajustesImagen.contraste);
+  };
+  const guardarImagen = () => {
+    try { window.localStorage.setItem(IMAGEN_KEY, JSON.stringify(ajustesImagen)); } catch (_) { /* igual */ }
+  };
+  const cambiarImagen = (cambio) => {
+    Object.assign(ajustesImagen, cambio);
+    aplicarImagen();
+    guardarImagen();
+  };
+
   try {
     const guardado = window.localStorage.getItem("zascarr.lector.modo");
     if (guardado === "ancho" || guardado === "pantalla" || guardado === "doble") modo = guardado;
   } catch (_) { /* sin localStorage el lector funciona igual */ }
+  cargarImagen();
 
   const esApaisada = (img) => img.naturalWidth > img.naturalHeight;
   const pareja = () => {
@@ -219,6 +271,20 @@
     pinta();
   });
   botonSentido.addEventListener("click", cambiarSentido);
+  if (brilloControl) brilloControl.addEventListener("input", () =>
+    cambiarImagen({ brillo: numeroAcotado(brilloControl.value) }));
+  if (contrasteControl) contrasteControl.addEventListener("input", () =>
+    cambiarImagen({ contraste: numeroAcotado(contrasteControl.value) }));
+  if (sepiaControl) sepiaControl.addEventListener("change", () =>
+    cambiarImagen({ sepia: !!sepiaControl.checked }));
+  if (invertirControl) invertirControl.addEventListener("change", () =>
+    cambiarImagen({ invertir: !!invertirControl.checked }));
+  if (resetImagen) resetImagen.addEventListener("click", () => {
+    ajustesImagen.brillo = 0; ajustesImagen.contraste = 0; ajustesImagen.sepia = false; ajustesImagen.invertir = false;
+    aplicarImagen();
+    try { window.localStorage.removeItem(IMAGEN_KEY); } catch (_) { /* igual */ }
+  });
+  aplicarImagen();
   const pantallaDisponible = typeof document.documentElement.requestFullscreen === "function";
   const alternarPantalla = () => {
     if (!pantallaDisponible) return;
