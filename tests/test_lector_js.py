@@ -221,3 +221,66 @@ def test_lector_ajustes_de_imagen_dom(tmp_path):
     assert datos["guardado"] == {"brillo": 20, "contraste": 0, "sepia": True, "invertir": False}
     assert datos["trasReset"] == "none"
     assert datos["sinStorage"] == "none"
+
+
+HARNESS_PRECARGA = r'''
+const fs = require("fs");
+const vm = require("vm");
+const js = fs.readFileSync(process.argv[2], "utf8");
+const pedidas = [];
+function E(id) {
+  this.id = id; this.dataset = {}; this.attrs = {}; this.listeners = {};
+  this.hidden = false; this.disabled = false; this.complete = true;
+  this.naturalWidth = 800; this.naturalHeight = 1200; this.textContent = "";
+  this.value = "0"; this.checked = false; this.style = {}; this._src = null;
+}
+E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push(f); };
+E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
+E.prototype.getAttribute = function (k) { return k === "src" ? this._src : (this.attrs[k] ?? null); };
+E.prototype.removeAttribute = function (k) { if (k === "src") this._src = null; else delete this.attrs[k]; };
+function Img() { this._src = null; }
+Object.defineProperty(Img.prototype, "src", {
+  set(v) { this._src = v; pedidas.push(v); },
+  get() { return this._src; },
+});
+const els = {};
+const root = new E("root");
+root.dataset = { total: "8", pagina: "1", sentido: "ltr", paginaUrl: "/p/",
+  progresoUrl: "/prog", sentidoUrl: "/sent", volver: "/volver" };
+const doc = {
+  querySelector: (sel) => (sel === "[data-lector]" ? root : null),
+  querySelectorAll: () => [],
+  getElementById: (id) => (els[id] ||= new E(id)),
+  addEventListener: (t, f) => { (doc.listeners[t] ||= []).push(f); },
+  listeners: {}, documentElement: new E("html"), fullscreenElement: null,
+};
+const sandbox = {
+  document: doc, Image: Img,
+  window: { localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+            location: { assign: () => {} } },
+  URLSearchParams, fetch: () => Promise.resolve({ ok: true }),
+  HTMLInputElement: function () {}, HTMLTextAreaElement: function () {}, console,
+};
+vm.createContext(sandbox); vm.runInContext(js, sandbox);
+const antes = pedidas.slice();
+const tecla = (key) => ({ key, target: {}, preventDefault: () => {} });
+doc.listeners.keydown.forEach((f) => f(tecla("ArrowRight")));
+const trasAvance = pedidas.slice();
+doc.listeners.keydown.forEach((f) => f(tecla("End")));
+const trasFinal = pedidas.slice();
+const fueraDeRango = pedidas.filter((u) => Number.parseInt(u.split("/").pop(), 10) > 8);
+const duplicados = pedidas.filter((u, i) => pedidas.indexOf(u) !== i);
+process.stdout.write(JSON.stringify({ antes, trasAvance, trasFinal, fueraDeRango, duplicados }));
+'''
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="requiere Node para ejecutar el JS")
+def test_lector_precarga_la_siguiente_sin_salirse_de_rango(tmp_path):
+    harness = tmp_path / "precarga.js"
+    harness.write_text(HARNESS_PRECARGA, encoding="utf-8")
+    r = subprocess.run(["node", str(harness), str(JS)], capture_output=True, text=True,
+                       timeout=30, check=True)
+    datos = json.loads(r.stdout)
+    assert datos["antes"] == ["/p/2"]
+    assert datos["trasAvance"] == ["/p/2", "/p/3"]
+    assert datos["fueraDeRango"] == []
+    assert datos["duplicados"] == []
