@@ -212,6 +212,23 @@ def test_el_css_del_lector_oculta_el_marco_y_las_flechas_en_tactil():
     ):
         assert pieza in css, pieza
 
+def test_el_chrome_no_se_oculta_con_el_foco_dentro():
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
+          / "lector.js").read_text(encoding="utf-8")
+    assert "focoEnChrome" in js
+    assert "barra.contains(activo)" in js and "menu.contains(activo)" in js
+    assert 'addEventListener("focusout"' in js
+
+
+def test_los_controles_del_lector_tienen_foco_en_colores_forzados():
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
+           / "web.css").read_text(encoding="utf-8")
+    assert "CanvasText" in css
+    assert ".lector-flecha:focus-visible" in css
+
+
 def test_js_lector_tiene_los_contratos_de_lec2():
     from pathlib import Path
     js = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
