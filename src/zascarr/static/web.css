@@ -343,7 +343,8 @@ h1, h2, h3 {
 
 /* Dentro de la rejilla, `margin: 0 auto` hace que el elemento deje de estirarse y se encoja a su
    contenido (cada página con un ancho distinto). Con `width: 100%` ocupa la columna hasta el máximo. */
-.app > .content { width: 100%; min-width: 0; }
+.app > .contenido { width: 100%; min-width: 0; display: flex; flex-direction: column; }
+.contenido > .content { width: 100%; min-width: 0; }
 
 .side-foot {
   margin-top: auto; padding-top: 14px; border-top: var(--border-chip) dashed var(--ink-faint);
@@ -365,7 +366,7 @@ html { scroll-padding-bottom: 96px; }
 @media (max-width: 860px) {
   /* El lector es inmersivo: sin barra inferior, que tapaba los controles. Se vuelve con «Volver al número». */
   body:has(.lector) .nav { display: none; }
-  body:has(.lector) .app > main.content { padding-bottom: 1rem; }
+  body:has(.lector) .contenido > main.content { padding-bottom: 1rem; }
   .app { display: block; }
   .side {
     height: auto; overflow: visible; z-index: 30;
@@ -422,7 +423,7 @@ html { scroll-padding-bottom: 96px; }
   /* Hueco para la barra inferior fija. Con `.content` a secas no se aplicaba nunca: la regla base de
      `.content` va DESPUÉS y la de ≤ 768 px fija 48 px, así que el pie quedaba bajo la barra.
      `main` en el selector: `.app > .content` ya existe (anchura) y así cada regla tiene el suyo. */
-  .app > main.content { padding-bottom: 112px; }
+  .contenido > main.content { padding-bottom: 112px; }
 }
 
 /* ── 4. CONTENIDO ────────────────────────────────────────────────────────── */
@@ -2669,9 +2670,11 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 /* #991: indicador global de tareas */
 #tareas-hay[hidden] + #tareas-detalles { display: none; }
 .app { position: relative; }
-.tareas-fuera { position: absolute; left: 252px; top: var(--space-3); z-index: 50; }
-.tareas-panel { position: absolute; left: calc(100% + var(--space-2)); top: 0; z-index: 50; width: 360px; max-height: min(70vh, 520px); overflow: auto; box-shadow: var(--shadow-ink-sm); margin: 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
-.tareas-panel:not([open]) { left: 0; right: auto; top: 0; width: auto; max-height: none; overflow: visible; border: 0; background: transparent; box-shadow: none; }
+.tareas-fuera { position: relative; display: flex; justify-content: flex-end; min-height: 0; width: 100%; max-width: 1240px; margin: 0 auto var(--space-2); padding-inline: 16px; }
+.tareas-fuera:empty { display: none; }
+
+.tareas-panel { position: relative; right: auto; left: auto; top: auto; z-index: 50; width: min(360px, calc(100vw - 32px)); max-height: min(70vh, 520px); overflow: auto; box-shadow: var(--shadow-ink-sm); margin: 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
+.tareas-panel:not([open]) { position: relative; left: auto; right: auto; top: auto; width: auto; max-height: none; overflow: visible; border: 0; background: transparent; box-shadow: none; }
 .tareas-panel > summary { min-height: 44px; padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none; display: inline-flex; gap: var(--space-2); align-items: center; border-radius: var(--radius-pill); }
 .tareas-panel:not([open]) > summary { padding: 0; border: var(--border-chip) solid var(--ink); box-shadow: var(--shadow-ink-sm); height: 44px; }
 .tareas-panel:not([open]) .tareas-nombre { display: none; }
@@ -2689,10 +2692,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .tarea.error { border-left: var(--border-panel) solid var(--ink); padding-left: var(--space-2); }
 .tareas-anuncio { font-size: var(--text-secundario); color: var(--ink-soft); }
 @media (max-width: 480px) {
-  .tareas-fuera { position: static; }
   .tareas-fuera .tareas-nombre { display: none; }
-  .tareas-fuera .tareas-panel { position: fixed; left: var(--space-2); right: var(--space-2); top: auto; bottom: 72px; width: auto; max-width: none; max-height: 70vh; }
-  .tareas-panel:not([open]) { bottom: 72px; right: var(--space-2); left: auto; }
   .tareas-fuera .tareas-panel > summary { padding: var(--space-1) var(--space-2); }
   .tareas-fuera .tareas-chip { min-height: 44px; font-size: var(--text-secundario); }
 }
@@ -2811,7 +2811,7 @@ body:has(.lector-escena) .side,
 body:has(.lector-escena) .tareas-fuera,
 body:has(.lector-escena) .site-footer { display: none; }
 body:has(.lector-escena) .app { display: block; }
-body:has(.lector-escena) .app > .content { max-width: none; width: 100%; padding: 0; }
+body:has(.lector-escena) .contenido > .content { max-width: none; width: 100%; padding: 0; }
 body:has(.lector-escena) .skip { z-index: 20; }
 
 .lector-escena {
@@ -2924,7 +2924,7 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .escaparate-nav button[data-dir="next"] svg { transform: rotate(-90deg); }
 .escaparate-nav button[disabled] { opacity: .45; }
 .escaparate-lista:focus-visible { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
-.escaparate-lista > li { flex: 0 0 auto; max-width: 220px; }
+.escaparate-lista > li { flex: 0 0 160px; width: 160px; max-width: 160px; }
 .escaparate-tarjeta { display: grid; gap: var(--space-1); min-width: 0; width: 100%; min-height: 44px; padding: var(--space-2); border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); color: var(--ink); text-decoration: none; }
 .escaparate-tarjeta:hover, .escaparate-tarjeta:focus-visible { box-shadow: var(--shadow-ink-sm); }
 .escaparate-titulo { font-weight: 700; }
@@ -2949,7 +2949,7 @@ body:has(.lector-escena) .skip { z-index: 20; }
 
 .escaparate-portada { width: 100%; height: auto; aspect-ratio: 2 / 3; object-fit: cover; }
 .sugerencias-rotar { min-height: 44px; margin-top: var(--space-2); }
-@media (max-width: 390px) { .escaparate-lista > li { max-width: 70vw; } }
+@media (max-width: 390px) { .escaparate-lista > li { flex-basis: 58vw; width: 58vw; max-width: 58vw; } }
 
 /* ── Lector BL-LECUX4 (#1071): preparación con salida ─────────────────── */
 .lector-espera-error { margin: 0; max-width: 38rem; }

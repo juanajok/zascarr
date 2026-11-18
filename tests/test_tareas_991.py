@@ -224,11 +224,14 @@ def test_oob_no_reemplaza_details_y_conserva_foco():
     assert "every 2s" in frag and "every 10s" in frag
 
 
-def test_css_movil_usa_contenedor_externo():
+def test_css_chip_en_flujo_y_panel_bajo_el_chip():
     css = Path("src/zascarr/static/web.css").read_text()
-    assert ".tareas-fuera .tareas-panel" in css
+    assert ".tareas-fuera { position: relative; display: flex;" in css
+    assert "max-width: 1240px" in css and "padding-inline: 16px" in css
+    assert ".tareas-panel { position: relative; right: auto; left: auto; top: auto;" in css
     assert ".side .tareas-panel" not in css
-    assert "position: fixed" in css and "bottom: 72px" in css
+    # Sin hoja inferior fija: el chip no flota sobre tarjetas/contenido.
+    assert "bottom: 72px" not in css
 
 
 def test_visto_form_y_panel():
@@ -287,3 +290,17 @@ def test_copia_exito_y_fallo(monkeypatch):
     estados["v"] = type("V", (), {"en_marcha": False, "estado": "fallo"})()
     cliente.get("/ui/copias/estado")
     assert any(x["estado"] == "error" for x in tareas.snapshot(incluir_recientes=True)["tareas"])
+
+
+def test_indicador_en_flujo_y_carrusel_estable():
+    """#991/#1021: el chip no se superpone al título y las tarjetas miden igual."""
+    base = Path("src/zascarr/web/templates/base.html").read_text()
+    css = Path("src/zascarr/static/web.css").read_text()
+    assert base.index('class="tareas-fuera"') < base.index('<main class="content"')
+    assert base.index('id="tareas-anuncio"') < base.index('<main class="content"')
+    assert base.index('id="tareas-cadencia"') < base.index('<main class="content"')
+    assert "left: 252px" not in css
+    assert ".tareas-fuera { position: relative; display: flex; justify-content: flex-end;" in css
+    assert ".tareas-panel { position: relative; right: auto; left: auto; top: auto;" in css
+    assert ".tareas-fuera .tareas-panel { position: fixed;" not in css
+    assert ".escaparate-lista > li { flex: 0 0 160px; width: 160px; max-width: 160px; }" in css
