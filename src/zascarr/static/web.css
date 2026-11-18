@@ -2896,6 +2896,23 @@ body:has(.lector-escena) .skip { z-index: 20; }
   .lector-barra, .lector-flecha { transition: none; }
 }
 
+
+/* ── Lector BL-LECUX1 (#1068): ajustes de imagen ───────────────────────── */
+.lector-imagen { display: grid; gap: var(--space-1); margin: 0; padding: var(--space-2) 0 0;
+  border: 0; border-top: var(--border-chip) solid var(--ink-soft); }
+.lector-imagen legend { font-weight: 700; padding: 0; }
+.lector-imagen label { display: grid; grid-template-columns: 6.5rem 1fr 2.2rem; align-items: center;
+  gap: var(--space-1); min-height: 44px; }
+.lector-imagen input[type="range"] { width: 100%; min-height: 44px; accent-color: var(--ink); }
+.lector-imagen output { text-align: right; font-variant-numeric: tabular-nums; }
+.lector-imagen .lector-imagen-check { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; }
+.lector-imagen .lector-imagen-check input { width: 20px; height: 20px; accent-color: var(--ink); }
+.lector-imagen .caption { margin: 0; }
+.lector-imagen .btn { justify-self: start; }
+@media (max-width: 480px) {
+  .lector-imagen label { grid-template-columns: 5.5rem 1fr 2rem; }
+}
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
