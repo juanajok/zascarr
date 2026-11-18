@@ -18,8 +18,11 @@ from zascarr.services.lector import (
     guardar_sentido,
     pagina,
     sentido_de_lectura,
+    siguiente_numero,
     total_paginas,
 )
+from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
+from zascarr.services.wishlist import WishlistService
 from zascarr.utils.cover import cached_image_response
 from zascarr.web.routes import crear_templates
 
@@ -67,14 +70,32 @@ async def leer(request: Request, file_id: UUID,
         actual = 1
     serie = await db.get(Series, numero.series_id)
     sentido, origen_sentido = await sentido_de_lectura(db, file_id)
+    siguiente = await siguiente_numero(db, file_id)
+    legal_aceptado = await is_acknowledged(db)
     respuesta = templates.TemplateResponse(request, "lector.html", {
         "archivo": f, "numero": numero, "serie": serie, "total": total,
         "pagina_actual": actual, "sentido": sentido,
-        "origen_sentido": origen_sentido,
+        "origen_sentido": origen_sentido, "siguiente": siguiente,
+        "legal_aceptado": legal_aceptado,
     })
     respuesta.headers["Cache-Control"] = "no-store"
     respuesta.headers["X-Content-Type-Options"] = "nosniff"
     return respuesta
+
+
+@router.post("/{file_id}/deseo", response_class=HTMLResponse,
+             dependencies=[Depends(require_legal_acknowledgment)])
+async def anadir_a_deseos(file_id: UUID, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    f = await db.get(File, file_id)
+    if f is None or f.issue_id is None:
+        return HTMLResponse("No se ha podido añadir el número.", status_code=404)
+    issue = await db.get(Issue, f.issue_id)
+    if issue is None:
+        return HTMLResponse("No se ha podido añadir el número.", status_code=404)
+    await WishlistService(db).add(series_id=issue.series_id)
+    await db.commit()
+    return HTMLResponse('<p class="aviso">Añadido a Deseados.</p>',
+                        headers={"Cache-Control": "no-store"})
 
 
 @router.get("/{file_id}/estado", response_class=JSONResponse)

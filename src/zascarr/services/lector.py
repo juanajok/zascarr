@@ -30,8 +30,9 @@ from zascarr.core.formato_contenedor import (
     se_lee_como_zip,
 )
 from zascarr.core.importer_triage import parse_comic_info
-from zascarr.models import File, Firma, Issue, ReadingProgress, ReadingStatus, Series
+from zascarr.models import File, Firma, Issue, IssueFormat, ReadingProgress, ReadingStatus, Series
 from zascarr.services.cache_lectura import CacheError, CacheLectura
+from zascarr.services.series import huecos_de_serie, numero_de_grapa, numeros_poseidos
 from zascarr.utils.cover import puede_dar_portada
 
 
@@ -310,3 +311,71 @@ async def numero_de(db: AsyncSession, file_id: UUID) -> Issue | None:
     if f is None or f.issue_id is None:
         return None
     return await db.get(Issue, f.issue_id)
+
+
+LEER = "leer"
+FALTA = "falta"
+SIN_SIGUIENTE = "sin_siguiente"
+
+
+@dataclass(frozen=True)
+class Siguiente:
+    estado: str
+    serie: Series | None = None
+    numero: int | None = None
+    issue: Issue | None = None
+    archivo: ArchivoDeLectura | None = None
+
+
+def _max_grapa(issues: list[Issue]) -> int | None:
+    valores = [numero_de_grapa(getattr(i, "issue_number", None), getattr(i, "format", None))
+               for i in issues]
+    enteros = [v for v in valores if v is not None]
+    return max(enteros) if enteros else None
+
+
+async def siguiente_numero(db: AsyncSession, file_id: UUID) -> Siguiente:
+    """Siguiente grapa de la serie de `file_id`, sin usar `sort_order`.
+
+    Prioriza la grapa del número (o la mayor cubierta por un pack), comprueba
+    posesión real y solo dice «te falta» cuando el total y los huecos son
+    fiables. Requiere que el archivo exista y esté vinculado.
+    """
+    f = await db.get(File, file_id)
+    if f is None or f.issue_id is None:
+        return Siguiente(SIN_SIGUIENTE)
+    actual = await db.get(Issue, f.issue_id)
+    if actual is None:
+        return Siguiente(SIN_SIGUIENTE)
+    serie = await db.get(Series, actual.series_id)
+    if serie is None:
+        return Siguiente(SIN_SIGUIENTE)
+    ids = list(f.covered_issue_ids or [])
+    cubiertos = [actual]
+    if ids:
+        cubiertos = list((await db.execute(
+            select(Issue).where(Issue.id.in_(ids))
+        )).scalars().all()) or [actual]
+    g = _max_grapa(cubiertos)
+    if g is None:
+        return Siguiente(SIN_SIGUIENTE, serie=serie)
+    k = g + 1
+    poseidos = await numeros_poseidos(db, serie.id)
+    if k in poseidos:
+        # `numeros_poseidos` normaliza «006» a 6: no se compara el texto crudo.
+        candidatos = (await db.execute(
+            select(Issue).where(
+                Issue.series_id == serie.id,
+                Issue.format == IssueFormat.SINGLE_ISSUE,
+            ).order_by(Issue.id)
+        )).scalars().all()
+        issue = next((i for i in candidatos
+                      if numero_de_grapa(i.issue_number, i.format) == k), None)
+        archivo = await archivo_por_defecto(db, issue.id) if issue is not None else None
+        if issue is not None and archivo is not None:
+            return Siguiente(LEER, serie, k, issue, archivo)
+        return Siguiente(SIN_SIGUIENTE, serie=serie)
+    huecos = await huecos_de_serie(db, serie, poseidos=poseidos)
+    if huecos.computable and k in huecos.faltantes:
+        return Siguiente(FALTA, serie, k)
+    return Siguiente(SIN_SIGUIENTE, serie=serie)
