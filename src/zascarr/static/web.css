@@ -2901,11 +2901,14 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .modo-biblioteca { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; }
 .selector-modo { min-height: 44px; text-decoration: none; }
 .selector-modo[aria-current="page"] { text-decoration: none; }
-.escaparate { display: grid; gap: var(--space-4); }
-.escaparate-bloque { border-top: var(--border-panel) solid var(--ink); padding-top: var(--space-2); }
+.escaparate { display: grid; gap: var(--space-4); min-width: 0; width: 100%; max-width: 100%; }
+.escaparate-bloque { border-top: var(--border-panel) solid var(--ink); padding-top: var(--space-2); min-width: 0; width: 100%; max-width: 100%; }
 .escaparate-bloque h2 { margin: 0 0 var(--space-2); }
-.escaparate-lista { display: flex; gap: var(--space-2); min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 0 0 var(--space-2); margin: 0; list-style: none; }
+.escaparate-lista { display: flex; gap: var(--space-2); min-width: 0; width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 0 0 var(--space-2); margin: 0; list-style: none; }
 .escaparate-lista::-webkit-scrollbar { display: none; }
+#sugerencias, .mas-serie { min-width: 0; width: 100%; max-width: 100%; }
+.escaparate-nav { display: flex; gap: var(--space-2); justify-content: flex-end; margin: 0 0 var(--space-1); }
+.escaparate-nav button { min-width: 44px; min-height: 44px; }
 .escaparate-lista:focus-visible { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
 .escaparate-lista > li { flex: 0 0 auto; max-width: 220px; }
 .escaparate-tarjeta { display: grid; gap: var(--space-1); min-width: 0; width: 100%; min-height: 44px; padding: var(--space-2); border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); color: var(--ink); text-decoration: none; }

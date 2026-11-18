@@ -49,6 +49,7 @@
   <section class="escaparate-bloque" id="redescubre" aria-labelledby="escaparate-redescubre">
     <h2 id="escaparate-redescubre">Redescubre tu estantería</h2>
     <div id="sugerencias">
+      {% set sugerencias = redescubre %}
       {% set offset_siguiente = offset_sugerencias + 4 %}
       {% include "_sugerencias_escaparate.html" %}
     </div>
@@ -62,7 +63,7 @@
       <li><a class="chip" href="/ui/biblioteca?modo=gestion&orden=reciente">Añadidas recientemente</a></li>
       <li><a class="chip" href="/ui/biblioteca?modo=gestion&favoritos=1">Solo favoritas</a></li>
       {% for t in tradiciones %}
-      <li><a class="chip" href="/ui/biblioteca?modo=gestion&tradition={{ t.tradition }}">{{ t.tradition }} <span class="muted">· {{ t.total }}</span></a></li>
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&tradition={{ t.tradition }}">{{ t.tradition|tradicion }} <span class="muted">· {{ t.total }}</span></a></li>
       {% endfor %}
     </ul>
     {#- Naturaleza (SeriesKind) queda fuera hasta #1027. -#}

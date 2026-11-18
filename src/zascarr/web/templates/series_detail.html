@@ -253,7 +253,7 @@
 {% if mas_serie %}
 <section class="mas-serie" aria-labelledby="mas-serie-titulo">
   <h2 id="mas-serie-titulo" class="titulo-frase">Más en tu biblioteca</h2>
-  <ul class="escaparate-lista">
+  <ul class="escaparate-lista" tabindex="0" aria-label="Más en tu biblioteca">
     {% for x in mas_serie %}
     <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}"><span class="escaparate-titulo">{{ x.title }}</span><span class="muted">{{ x.motivo }}</span></a></li>
     {% endfor %}
