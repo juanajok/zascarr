@@ -38,5 +38,5 @@
   }
 
   init();
-  document.body.addEventListener("htmx:afterSwap", (evento) => init(evento.target));
+  document.body.addEventListener("htmx:afterSwap", () => init(document));
 })();
