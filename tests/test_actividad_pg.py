@@ -295,3 +295,34 @@ async def test_cada_carrusel_es_una_sola_consulta(entorno):
             antes = len(entorno.banco.sentencias)
             await funcion(s)
             assert len(entorno.banco.sentencias) - antes == 1, funcion.__name__
+
+
+@pytest.mark.asyncio
+async def test_serie_nueva_con_varios_numeros_es_novedad(entorno):
+    ahora = datetime(2024, 6, 1, tzinfo=UTC)
+    async with entorno.banco.fabrica() as s:
+        sid = await _serie(s, "Pack Nuevo")
+        for n in ("1", "2"):
+            iid = await _issue(s, sid, n)
+            await _archivo(s, iid, f"{n}.cbz", imported=ahora)
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        recientes = await actividad.recien_incorporados(s)
+    assert any(x.series_title == "Pack Nuevo" and x.tipo == "serie_nueva"
+               for x in recientes)
+
+
+@pytest.mark.asyncio
+async def test_continuar_decimal_y_anual_en_curso(entorno):
+    async with entorno.banco.fabrica() as s:
+        sid = await _serie(s, "Decimales")
+        for n in ("1", "1.5"):
+            iid = await _issue(s, sid, n)
+            await _archivo(s, iid, f"{n}.cbz")
+        s.add(ReadingProgress(id=uuid4(), issue_id=iid, status=ReadingStatus.READING,
+                              current_page=3,
+                              last_read_at=datetime(2024, 7, 1, tzinfo=UTC)))
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        r = await actividad.continuar_leyendo(s)
+    assert any(x.numero == "1.5" for x in r)
