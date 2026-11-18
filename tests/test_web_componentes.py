@@ -484,7 +484,8 @@ class TestAliasRetirados:
                 encontrados = nuevos & set(valor.split())
                 # Los chips de filtros activos son la excepción: son texto plano con
                 # el mismo aspecto de píldora, sin el icono de flecha de `ui.chip`.
-                if f.name in ("_rejilla_biblioteca.html", "series_detail.html"):
+                if f.name in ("_rejilla_biblioteca.html", "series_detail.html",
+                              "_escaparate.html", "_sugerencias_escaparate.html"):
                     encontrados -= {"chip"}
                 usadas |= encontrados
         assert not usadas, f"V2 no migra pantallas; las usa alguna ya: {usadas}"

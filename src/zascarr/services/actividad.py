@@ -14,7 +14,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.core.importer_triage import natural_key
-from zascarr.models import File, Issue, ReadingProgress, ReadingStatus, Series
+from zascarr.models import (
+    Creator,
+    File,
+    Issue,
+    IssueCreator,
+    ReadingProgress,
+    ReadingStatus,
+    Series,
+    SeriesRecentView,
+)
 
 _NUMERO_SECUENCIAL = re.compile(r"^\d+(?:[.,]\d+)?$")
 
@@ -199,3 +208,72 @@ async def recien_incorporados(db: AsyncSession, limite: int = 6) -> list[RecienI
         if len(resultado) >= limite:
             break
     return resultado
+
+
+@dataclass(frozen=True)
+class VistaReciente:
+    series_id: str
+    series_title: str
+    last_viewed_at: datetime
+
+
+@dataclass(frozen=True)
+class AutorDestacado:
+    creator_id: str
+    nombre: str
+    total: int
+
+
+@dataclass(frozen=True)
+class Sugerencia:
+    series_id: str
+    series_title: str
+    motivo: str
+
+
+async def vistos_recientemente(db: AsyncSession, limite: int = 6) -> list[VistaReciente]:
+    """Series visitadas, solo con archivos locales, por última visita."""
+    filas = (await db.execute(
+        select(Series.id, Series.title, SeriesRecentView.last_viewed_at)
+        .join(SeriesRecentView, SeriesRecentView.series_id == Series.id)
+        .where(Series.id.in_(select(Issue.series_id).join(
+            File, File.issue_id == Issue.id).where(File.is_missing.is_(False))))
+        .order_by(SeriesRecentView.last_viewed_at.desc())
+        .limit(limite)
+    )).all()
+    return [VistaReciente(str(sid), title, visto) for sid, title, visto in filas]
+
+
+async def autores_destacados(db: AsyncSession, limite: int = 6) -> list[AutorDestacado]:
+    """Autores con más números con archivo local."""
+    filas = (await db.execute(
+        select(Creator.id, Creator.name, func.count(func.distinct(Issue.id)))
+        .join(IssueCreator, IssueCreator.creator_id == Creator.id)
+        .join(Issue, Issue.id == IssueCreator.issue_id)
+        .where(Issue.id.in_(select(File.issue_id).where(File.is_missing.is_(False))))
+        .group_by(Creator.id, Creator.name)
+        .order_by(func.count(func.distinct(Issue.id)).desc(), Creator.name)
+        .limit(limite)
+    )).all()
+    return [AutorDestacado(str(cid), nombre, int(total)) for cid, nombre, total in filas]
+
+
+async def redescubre(db: AsyncSession, limite: int = 4, offset: int = 0) -> list[Sugerencia]:
+    """Heurística local determinista: series sin actividad, por título.
+
+    `offset` rota la lista sin escribir nada; el mismo offset da el mismo
+    resultado (no hay aleatoriedad).
+    """
+    con_archivos = select(File.issue_id).where(File.is_missing.is_(False))
+    sin_actividad = ~Issue.series_id.in_(select(Issue.series_id).join(
+        ReadingProgress, ReadingProgress.issue_id == Issue.id).where(
+            ReadingProgress.status.in_([ReadingStatus.READING, ReadingStatus.COMPLETED])))
+    filas = (await db.execute(
+        select(Series.id, Series.title)
+        .join(Issue, Issue.series_id == Series.id)
+        .where(Issue.id.in_(con_archivos), sin_actividad)
+        .group_by(Series.id, Series.title)
+        .order_by(Series.title, Series.id)
+        .offset(max(0, offset)).limit(limite)
+    )).all()
+    return [Sugerencia(str(sid), title, "Por empezar") for sid, title in filas]

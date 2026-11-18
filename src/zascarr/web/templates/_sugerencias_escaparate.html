@@ -1,0 +1,5 @@
+<ul class="escaparate-lista">
+  {% for x in sugerencias %}
+  <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}"><span class="escaparate-titulo">{{ x.series_title }}</span><span class="muted">{{ x.motivo }}</span></a></li>
+  {% endfor %}
+</ul>

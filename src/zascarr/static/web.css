@@ -2896,6 +2896,19 @@ body:has(.lector-escena) .skip { z-index: 20; }
   .lector-barra, .lector-flecha { transition: none; }
 }
 
+
+/* #1101: modo Escaparate */
+.modo-biblioteca { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; }
+.escaparate { display: grid; gap: var(--space-4); }
+.escaparate-bloque { border-top: var(--border-panel) solid var(--ink); padding-top: var(--space-2); }
+.escaparate-bloque h2 { margin: 0 0 var(--space-2); }
+.escaparate-lista { display: flex; gap: var(--space-2); overflow-x: auto; padding: 0 0 var(--space-2); margin: 0; list-style: none; scrollbar-width: thin; }
+.escaparate-lista > li { flex: 0 0 auto; max-width: 220px; }
+.escaparate-tarjeta { display: grid; gap: var(--space-1); min-height: 44px; padding: var(--space-2); border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); background: var(--paper-2); color: var(--ink); text-decoration: none; }
+.escaparate-tarjeta:hover, .escaparate-tarjeta:focus-visible { box-shadow: var(--shadow-ink-sm); }
+.escaparate-titulo { font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .escaparate-tarjeta { transition: none !important; } }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

@@ -12,6 +12,13 @@
   </div>
 </header>
 
+<div class="modo-biblioteca">
+  <a class="btn ghost sm{% if modo != 'escaparate' %} primary{% endif %}" href="/ui/biblioteca?modo=gestion">Gestión</a>
+  <a class="btn ghost sm{% if modo == 'escaparate' %} primary{% endif %}" href="/ui/biblioteca?modo=escaparate">Escaparate</a>
+</div>
+{% if modo == "escaparate" %}
+{% include "_escaparate.html" %}
+{% else %}
 <form id="filtros" class="barra-biblioteca" action="/ui/biblioteca" method="get"
       hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML"
       hx-trigger="change, submit">
@@ -52,6 +59,7 @@
   {% include "_rejilla_biblioteca.html" %}
 </div>
 {% include "_visor_portada.html" %}
+{% endif %}
   <script src="/static/visor-portada.js" defer></script>
   <script src="/static/biblioteca-atajo.js" defer></script>
 {% endblock %}

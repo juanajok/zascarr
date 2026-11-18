@@ -28,6 +28,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import zascarr.web.escaparate as escaparate
 from zascarr.database import get_db
 from zascarr.models import ComicTradition
 from zascarr.services.coleccion import TIPOS as COLECCION_TIPOS
@@ -227,9 +228,12 @@ def _leer_filtros(
         avisos.append("El modo pedido no existe; se usa la gestión.")
         modo_limpio = ""
     modo_final = modo_limpio or "gestion"
-    if modo_final == "escaparate":
-        # UX-BIB-5 aún no existe: nunca se pinta un escaparate a medias.
-        avisos.append("El modo escaparate aún no está disponible; se muestra la gestión.")
+    if modo_final == "escaparate" and (
+            any((texto, tradicion, publisher_id, character_id, story_arc_id,
+                 author_id, favorito, (idioma or ""), (edicion or ""), etiquetas,
+                 leido, coleccion, (anio_desde or ""), (anio_hasta or "")))
+            or vista_limpia == "lista"):
+        # Un escaparate nunca se pinta con filtros: se fuerza gestión.
         modo_final = "gestion"
 
     expresion = parse_expresion(etiquetas)
@@ -777,6 +781,17 @@ async def comicinfo_ejecutar(request: Request, offset: int = Form(default=0),
     return respuesta
 
 
+@router.get("/sugerencias", response_class=HTMLResponse)
+async def sugerencias_escaparate(request: Request, offset: int = 0,
+                                 db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """#1101: rota sugerencias sin escribir (determinista por offset)."""
+    datos = await escaparate.sugerencias(db, offset=max(0, offset))
+    respuesta = templates.TemplateResponse(
+        request, "_sugerencias_escaparate.html", {"sugerencias": datos})
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
 @router.get("", response_class=HTMLResponse)
 async def index(
     request: Request, page: str = "1", tradition: str = "", publisher_id: str = "",
@@ -804,6 +819,12 @@ async def index(
             (p.name for p in publishers if str(p.id) == filtros.publisher_id), ""
         )
     ctx = await _contexto(db, filtros, publisher_conocido)
+    if filtros.modo == "escaparate":
+        try:
+            ctx.update(await escaparate.contexto(db))
+        except SQLAlchemyError as exc:
+            logger.warning("biblioteca.escaparate_fallido", error=type(exc).__name__)
+            ctx["modo"] = "gestion"
     if editoriales_error and not ctx["error"]:
         ctx["avisos"].append("No se pudieron cargar las editoriales; puedes seguir filtrando.")
     ctx.update({

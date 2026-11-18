@@ -1,0 +1,77 @@
+{# #1101: escaparate de la biblioteca; solo bloques con datos. #}
+<section class="escaparate" aria-label="Escaparate de tu biblioteca">
+  {% if continuar %}
+  <section class="escaparate-bloque" aria-labelledby="escaparate-continuar">
+    <h2 id="escaparate-continuar">Continuar leyendo</h2>
+    <ul class="escaparate-lista">
+      {% for x in continuar %}
+      <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}">
+        <span class="escaparate-titulo">{{ x.series_title }}</span>
+        <span class="muted">#{{ x.numero }}{% if x.total_paginas %} · {{ x.pagina }} de {{ x.total_paginas }}{% endif %}</span>
+      </a></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if vistos %}
+  <section class="escaparate-bloque" aria-labelledby="escaparate-vistos">
+    <h2 id="escaparate-vistos">Vistos recientemente</h2>
+    <ul class="escaparate-lista">
+      {% for x in vistos %}
+      <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}"><span class="escaparate-titulo">{{ x.series_title }}</span></a></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if recien %}
+  <section class="escaparate-bloque" aria-labelledby="escaparate-recien">
+    <h2 id="escaparate-recien">Recién incorporados</h2>
+    <ul class="escaparate-lista">
+      {% for x in recien %}
+      <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}">
+        <span class="escaparate-titulo">{{ x.series_title }}</span>
+        <span class="muted">{{ "Serie nueva" if x.tipo == "serie_nueva" else "Número nuevo" }}{% if x.numero %} · #{{ x.numero }}{% endif %}</span>
+      </a></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if redescubre %}
+  <section class="escaparate-bloque" id="redescubre" aria-labelledby="escaparate-redescubre">
+    <h2 id="escaparate-redescubre">Redescubre tu estantería</h2>
+    <div id="sugerencias" hx-get="/ui/biblioteca/sugerencias?offset={{ offset_sugerencias }}"
+         hx-trigger="load" hx-swap="innerHTML">
+      <ul class="escaparate-lista">
+        {% for x in redescubre %}
+        <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}"><span class="escaparate-titulo">{{ x.series_title }}</span><span class="muted">{{ x.motivo }}</span></a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    <button type="button" class="btn ghost sm" hx-get="/ui/biblioteca/sugerencias?offset={{ offset_sugerencias + 4 }}"
+            hx-target="#sugerencias" hx-swap="innerHTML">Cambiar sugerencias</button>
+  </section>
+  {% endif %}
+
+  <section class="escaparate-bloque" aria-labelledby="escaparate-accesos">
+    <h2 id="escaparate-accesos">Accesos rápidos</h2>
+    <ul class="escaparate-lista">
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&vista=lista">Toda la biblioteca</a></li>
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&orden=reciente">Añadidas recientemente</a></li>
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&favoritos=1">Solo favoritas</a></li>
+    </ul>
+  </section>
+
+  {% if autores %}
+  <section class="escaparate-bloque" aria-labelledby="escaparate-autores">
+    <h2 id="escaparate-autores">Autores destacados</h2>
+    <ul class="escaparate-lista">
+      {% for a in autores %}
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&author_id={{ a.creator_id }}">{{ a.nombre }} <span class="muted">· {{ a.total }}</span></a></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</section>
