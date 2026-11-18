@@ -2669,7 +2669,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 /* #991: indicador global de tareas */
 #tareas-hay[hidden] + #tareas-detalles { display: none; }
 .app { position: relative; }
-.tareas-fuera { display: flex; justify-content: flex-end; min-height: 0; margin: 0 0 var(--space-2); }
+.tareas-fuera { position: relative; display: flex; justify-content: flex-end; min-height: 0; margin: 0 0 var(--space-2); }
 .tareas-fuera:empty { display: none; }
 .tareas-panel { position: absolute; right: 0; left: auto; top: calc(100% + var(--space-1)); z-index: 50; width: 360px; max-height: min(70vh, 520px); overflow: auto; box-shadow: var(--shadow-ink-sm); margin: 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
 .tareas-panel:not([open]) { position: relative; left: auto; right: auto; top: auto; width: auto; max-height: none; overflow: visible; border: 0; background: transparent; box-shadow: none; }
