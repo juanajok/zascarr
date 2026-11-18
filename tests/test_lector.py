@@ -177,6 +177,35 @@ async def test_guardar_sentido_por_serie(tmp_path):
     assert db.commit.await_count == 1
 
 
+def test_el_lector_usa_el_cascaron_inmersivo():
+    from pathlib import Path
+    plantilla = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "web"
+                 / "templates" / "lector.html").read_text(encoding="utf-8")
+    for pieza in (
+        'class="lector lector-escena',
+        'id="lector-barra"',
+        'class="lector-flecha lector-flecha-anterior"',
+        'class="lector-flecha lector-flecha-siguiente"',
+        'aria-label="Página anterior"',
+        'id="lector-menu-boton"',
+        'href="/legal"',
+        '<kbd>h</kbd>',
+    ):
+        assert pieza in plantilla, pieza
+
+def test_el_css_del_lector_oculta_el_marco_y_las_flechas_en_tactil():
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
+           / "web.css").read_text(encoding="utf-8")
+    for pieza in (
+        "body:has(.lector-escena) .side",
+        'data-chrome="oculto"',
+        "@media (hover: none)",
+        "lector-flecha",
+        "100dvh",
+    ):
+        assert pieza in css, pieza
+
 def test_js_lector_tiene_los_contratos_de_lec2():
     from pathlib import Path
     js = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
