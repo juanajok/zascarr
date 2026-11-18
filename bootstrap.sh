@@ -602,7 +602,7 @@ docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build zascarr || di
     "No pude construir la imagen de ZascArr. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
 
 info "Corriendo migraciones Alembic (dentro del contenedor)..."
-# DATABASE_URL ya lo resuelve el propio docker-compose.yml desde .env
+# Compose pasa la contraseña de .env al contenedor mediante ZASCARR_DB_PASSWORD.
 # (mismo mecanismo que usa el servicio "zascarr" al arrancar) — apuntando
 # a "postgres:5432" por nombre de servicio en la red interna de Docker, no
 # a "127.0.0.1:5432"; no hace falta reconstruirlo a mano leyendo el .env.

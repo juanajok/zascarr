@@ -46,7 +46,13 @@ def _variables_del_servicio_zascarr() -> set[str]:
 def test_la_prueba_ve_algo():
     """Guarda contra que una regex rota deje pasar todo en silencio."""
     assert "DB_PASSWORD" in _claves_de_env_example()
-    assert "DATABASE_URL" in _variables_del_servicio_zascarr()
+    assert "BASE_URL" in _variables_del_servicio_zascarr()
+
+
+def test_compose_pasa_la_contrasena_fuera_de_la_url():
+    llegan = _variables_del_servicio_zascarr()
+    assert "ZASCARR_DB_PASSWORD" in llegan
+    assert "DATABASE_URL" not in llegan
 
 
 def test_toda_clave_de_settings_documentada_en_env_example_llega_al_contenedor():

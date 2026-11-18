@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     )
 
     # ── Base de datos ──────────────────────────────────────────────
-    # Fallback deliberadamente inválido: en producción el compose inyecta
-    # DATABASE_URL y en local el .env. Si se llega a usar este valor, la
+    # Fallback deliberadamente inválido: Compose pasa la contraseña por separado.
+    # DATABASE_URL permite configurar una conexión explícita. Con este fallback, la
     # conexión falla de forma obvia en vez de usar una credencial "de ejemplo".
     database_url: str = Field(
         default="postgresql+asyncpg://INVALID:INVALID@127.0.0.1:5432/INVALID"
