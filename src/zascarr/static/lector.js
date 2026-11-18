@@ -118,6 +118,33 @@
     return a + 1 <= total ? [a, a + 1] : [a];
   };
 
+  const precargadas = new Map();
+  const precargar = () => {
+    // La precarga es una mejora: si el navegador no permite Image o no hay
+    // siguiente, no cambia nada. Las imágenes viven fuera del DOM y usan la
+    // misma URL/caché privada que la página actual.
+    if (typeof Image !== "function") return;
+    const visibles = paginasVisibles();
+    const ultima = visibles[visibles.length - 1];
+    const candidatas = [];
+    if (modo === "doble" && paginaBVisible) {
+      if (ultima + 1 <= total) candidatas.push(ultima + 1);
+      if (ultima + 2 <= total) candidatas.push(ultima + 2);
+    } else if (ultima + 1 <= total) {
+      candidatas.push(ultima + 1);
+    }
+    const queridas = new Set(candidatas);
+    for (const [numero, img] of precargadas) {
+      if (!queridas.has(numero)) precargadas.delete(numero);
+    }
+    for (const numero of candidatas.slice(0, 2)) {
+      if (precargadas.has(numero)) continue;
+      const img = new Image();
+      img.src = urlPagina + numero;
+      precargadas.set(numero, img);
+    }
+  };
+
   const pinta = () => {
     const visibles = paginasVisibles();
     const fuenteA = urlPagina + visibles[0];
@@ -160,6 +187,7 @@
       boton.setAttribute("aria-pressed", String(boton.dataset.modo === modo));
     }
     botonSentido.textContent = `Sentido: ${sentido === "rtl" ? "derecha a izquierda" : "izquierda a derecha"}`;
+    precargar();
   };
 
   const guarda = () => {
