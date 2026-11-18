@@ -114,40 +114,89 @@ def test_lector_js_fullscreen_doble_y_teclado(tmp_path):
     }
 
 
-HARNESS_ESTADO = r'''
+HARNESS_ESTADO = r"""
 const fs = require("fs");
 const vm = require("vm");
 const js = fs.readFileSync(process.argv[2], "utf8");
+function E(id) {
+  this.id = id; this.dataset = {}; this.attrs = {}; this.listeners = {};
+  this.hidden = false; this.textContent = ""; this.value = "";
+}
+E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push(f); };
+E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
+const elementos = {};
+const espera = { dataset: { estadoUrl: "/estado" } };
 let recargas = 0;
 let consultas = 0;
-const espera = { dataset: { estadoUrl: "/estado" } };
-const aviso = { textContent: "" };
+const respuestas = JSON.parse(process.env.RESPUESTAS || '["preparando"]');
+const timers = [];
 const sandbox = {
   document: {
     querySelector: (sel) => (sel === "[data-estado-url]" ? espera : null),
-    getElementById: () => aviso,
+    getElementById: (id) => (elementos[id] ||= new E(id)),
+    addEventListener: () => {},
   },
   window: { location: { reload: () => { recargas += 1; } },
             localStorage: { getItem: () => null, setItem: () => {} } },
   URLSearchParams,
-  fetch: () => { consultas += 1; return Promise.resolve({
-    json: () => Promise.resolve({ estado: "preparando" }) }); },
-  setTimeout: (fn) => { fn(); },
+  fetch: () => {
+    const estado = respuestas[Math.min(consultas, respuestas.length - 1)];
+    consultas += 1;
+    return Promise.resolve({ json: () => Promise.resolve({ estado, motivo: "RAR cifrado" }) });
+  },
+  setTimeout: (fn) => { timers.push(fn); return timers.length - 1; },
+  clearTimeout: () => {},
   HTMLInputElement: function () {}, HTMLTextAreaElement: function () {}, console,
 };
 vm.createContext(sandbox);
 vm.runInContext(js, sandbox);
-setTimeout(() => process.stdout.write(JSON.stringify({ recargas, consultas })), 50);
-'''
+const flush = () => new Promise((r) => setTimeout(r, 20));
+(async () => {
+  await flush();
+  const inicial = { recargas, consultas, timers: timers.length };
+  if (timers.length) { const siguiente = timers.shift(); siguiente(); await flush(); }
+  const trasError = {
+    recargas, consultas, timers: timers.length,
+    error: (elementos["lector-error"] || {}).textContent || "",
+    errorVisible: !(elementos["lector-error"] || {}).hidden,
+  };
+  const boton = elementos["lector-reintentar"];
+  if (boton && boton.listeners.click) boton.listeners.click.forEach((f) => f({}));
+  await flush();
+  const trasReintentar = { recargas, consultas, errorVisible: !(elementos["lector-error"] || {}).hidden };
+  process.stdout.write(JSON.stringify({ inicial, trasError, trasReintentar }));
+})();
+"""
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="requiere Node para ejecutar el JS")
-def test_el_sondeo_de_preparando_reintenta_y_recarga(tmp_path):
+def test_el_sondeo_de_preparando_se_detiene_y_reintenta(tmp_path):
     harness = tmp_path / "estado.js"
     harness.write_text(HARNESS_ESTADO, encoding="utf-8")
+    entorno = {**__import__("os").environ, "RESPUESTAS": '["preparando", "error", "error"]'}
     r = subprocess.run(["node", str(harness), str(JS)], capture_output=True, text=True,
-                       timeout=30, check=True)
-    assert json.loads(r.stdout) == {"recargas": 1, "consultas": 5}
+                       timeout=30, check=True, env=entorno)
+    datos = json.loads(r.stdout)
+    assert datos["inicial"]["consultas"] == 1
+    assert datos["inicial"]["timers"] == 1
+    assert datos["trasError"]["recargas"] == 0
+    assert datos["trasError"]["error"] == "RAR cifrado"
+    assert datos["trasError"]["errorVisible"] is True
+    assert datos["trasError"]["timers"] == 0
+    assert datos["trasReintentar"]["consultas"] == 3
+    assert datos["trasReintentar"]["recargas"] == 0
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="requiere Node para ejecutar el JS")
+def test_el_preparando_carga_una_vez_cuando_esta_listo(tmp_path):
+    harness = tmp_path / "estado-listo.js"
+    harness.write_text(HARNESS_ESTADO, encoding="utf-8")
+    entorno = {**__import__("os").environ, "RESPUESTAS": '["listo"]'}
+    r = subprocess.run(["node", str(harness), str(JS)], capture_output=True, text=True,
+                       timeout=30, check=True, env=entorno)
+    datos = json.loads(r.stdout)
+    assert datos["inicial"]["recargas"] == 1
+    assert datos["inicial"]["timers"] == 0
 
 
 HARNESS_IMAGEN = r'''

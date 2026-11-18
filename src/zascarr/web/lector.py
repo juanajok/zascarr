@@ -4,12 +4,12 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
-from zascarr.models import File, Issue, ReadingProgress, Series
+from zascarr.models import File, Issue, ReadingProgress, ReadingStatus, Series
 from zascarr.services.lector import (
     CACHE,
     LectorError,
@@ -22,6 +22,7 @@ from zascarr.services.lector import (
     total_paginas,
 )
 from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
+from zascarr.services.lectura import marcar
 from zascarr.services.wishlist import WishlistService
 from zascarr.utils.cover import cached_image_response
 from zascarr.web.routes import crear_templates
@@ -72,15 +73,52 @@ async def leer(request: Request, file_id: UUID,
     sentido, origen_sentido = await sentido_de_lectura(db, file_id)
     siguiente = await siguiente_numero(db, file_id)
     legal_aceptado = await is_acknowledged(db)
+    leido = progreso is not None and progreso.status is ReadingStatus.COMPLETED
     respuesta = templates.TemplateResponse(request, "lector.html", {
         "archivo": f, "numero": numero, "serie": serie, "total": total,
         "pagina_actual": actual, "sentido": sentido,
         "origen_sentido": origen_sentido, "siguiente": siguiente,
-        "legal_aceptado": legal_aceptado,
+        "legal_aceptado": legal_aceptado, "leido": leido,
     })
     respuesta.headers["Cache-Control"] = "no-store"
     respuesta.headers["X-Content-Type-Options"] = "nosniff"
     return respuesta
+
+
+def _es_htmx(request: Request) -> bool:
+    return request.headers.get("HX-Request", "").lower() == "true"
+
+
+@router.post("/{file_id}/leido", response_class=HTMLResponse)
+async def marcar_leido_lector(
+    request: Request, file_id: UUID,
+    operacion: str = Form("marcar"),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Marca o desmarca el número desde la tarjeta de fin (LECUX2).
+
+    La escritura pasa por `services.lectura.marcar`; repetir no duplica el
+    estado y deshacer conserva nota y puntuación.
+    """
+    f = await db.get(File, file_id)
+    if f is None or f.issue_id is None:
+        return HTMLResponse("Ese archivo no está disponible para leer.", status_code=404)
+    numero = await db.get(Issue, f.issue_id)
+    if numero is None:
+        return HTMLResponse("Ese archivo no está vinculado a un número.", status_code=404)
+    if operacion not in ("marcar", "deshacer"):
+        return HTMLResponse("Operación no válida.", status_code=400)
+    estado = ReadingStatus.COMPLETED if operacion == "marcar" else ReadingStatus.READING
+    await marcar(db, numero.id, estado, series_id=numero.series_id)
+    if not _es_htmx(request):
+        return RedirectResponse(f"/ui/leer/{f.id}", status_code=303)
+    siguiente = await siguiente_numero(db, file_id)
+    legal_aceptado = await is_acknowledged(db)
+    return templates.TemplateResponse(request, "_lector_fin.html", {
+        "archivo": f, "numero": numero, "serie": await db.get(Series, numero.series_id),
+        "siguiente": siguiente, "legal_aceptado": legal_aceptado,
+        "leido": operacion == "marcar",
+    }, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/{file_id}/deseo", response_class=HTMLResponse,

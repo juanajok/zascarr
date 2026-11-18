@@ -2940,6 +2940,11 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .sugerencias-rotar { min-height: 44px; margin-top: var(--space-2); }
 @media (max-width: 390px) { .escaparate-lista > li { max-width: 70vw; } }
 
+/* ── Lector BL-LECUX4 (#1071): preparación con salida ─────────────────── */
+.lector-espera-error { margin: 0; max-width: 38rem; }
+.lector-espera-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: center; }
+.lector-espera-acciones .btn { min-height: 44px; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
@@ -2947,4 +2952,8 @@ body:has(.lector-escena) .skip { z-index: 20; }
   .pagina-error::after { display: none; }
   .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
+  .lector-barra .btn:focus-visible,
+  .lector-menu .btn:focus-visible,
+  .lector-flecha:focus-visible,
+  .lector-imagen input:focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
 }

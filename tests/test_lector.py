@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import zipfile
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -211,6 +212,23 @@ def test_el_css_del_lector_oculta_el_marco_y_las_flechas_en_tactil():
     ):
         assert pieza in css, pieza
 
+def test_el_chrome_no_se_oculta_con_el_foco_dentro():
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
+          / "lector.js").read_text(encoding="utf-8")
+    assert "focoEnChrome" in js
+    assert "barra.contains(activo)" in js and "menu.contains(activo)" in js
+    assert 'addEventListener("focusout"' in js
+
+
+def test_los_controles_del_lector_tienen_foco_en_colores_forzados():
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
+           / "web.css").read_text(encoding="utf-8")
+    assert "CanvasText" in css
+    assert ".lector-flecha:focus-visible" in css
+
+
 def test_js_lector_tiene_los_contratos_de_lec2():
     from pathlib import Path
     js = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
@@ -296,6 +314,9 @@ def test_pantalla_rar_muestra_preparando(tmp_path, monkeypatch):
     assert r.status_code == 200
     assert "Preparando el tebeo" in r.text
     assert f"/ui/leer/{f.id}/estado" in r.text
+    assert 'id="lector-reintentar"' in r.text
+    assert 'id="lector-error" role="alert"' in r.text
+    assert f'href="/ui/series/{serie.id}/numero/{issue.id}"' in r.text
 
 
 def test_estado_rar_listo(tmp_path, monkeypatch):
@@ -351,13 +372,67 @@ def test_tarjeta_final_leer_se_pinta_en_servidor(tmp_path, monkeypatch):
     assert "Leer el #2" in r.text
 
 
+def test_tarjeta_final_ofrece_marcar_leido(tmp_path, monkeypatch):
+    f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "leer")
+    with use_fake_session(db) as client:
+        r = client.get(f"/ui/leer/{f.id}")
+    assert "Marcar como leído" in r.text
+    assert f'hx-post="/ui/leer/{f.id}/leido"' in r.text
+    assert "Guardado: Leído" not in r.text
+
+
+def test_marcar_leido_desde_la_tarjeta_usa_el_servicio_y_pinta_deshacer(tmp_path, monkeypatch):
+    from zascarr.models import ReadingStatus
+    from zascarr.web import lector as wlector
+
+    f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "leer")
+    marcar = AsyncMock(return_value=None)
+    monkeypatch.setattr(wlector, "marcar", marcar)
+    with use_fake_session(db) as client:
+        r = client.post(f"/ui/leer/{f.id}/leido", data={"operacion": "marcar"},
+                        headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert "Guardado: Leído" in r.text and "Deshacer" in r.text
+    assert marcar.await_count == 1
+    args = marcar.await_args.args
+    assert args[2].value == "completed"
+    assert marcar.await_args.kwargs["series_id"] is not None
+
+
+def test_deshacer_leido_vuelve_a_leyendo(tmp_path, monkeypatch):
+    from zascarr.models import ReadingStatus
+    from zascarr.web import lector as wlector
+
+    f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "leer")
+    marcar = AsyncMock(return_value=None)
+    monkeypatch.setattr(wlector, "marcar", marcar)
+    with use_fake_session(db) as client:
+        r = client.post(f"/ui/leer/{f.id}/leido", data={"operacion": "deshacer"},
+                        headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert "Marcar como leído" in r.text and "Guardado: Leído" not in r.text
+    assert marcar.await_args.args[2] is ReadingStatus.READING
+
+
+def test_marcar_leido_sin_htmx_redirige_a_la_lectura(tmp_path, monkeypatch):
+    from zascarr.web import lector as wlector
+
+    f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "leer")
+    monkeypatch.setattr(wlector, "marcar", AsyncMock(return_value=None))
+    with use_fake_session(db) as client:
+        r = client.post(f"/ui/leer/{f.id}/leido", data={"operacion": "marcar"},
+                        follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/ui/leer/{f.id}"
+
+
 def test_tarjeta_final_falta_sin_legal_lleva_al_aviso(tmp_path, monkeypatch):
     f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "falta", legal=False)
     with use_fake_session(db) as client:
         r = client.get(f"/ui/leer/{f.id}")
     assert "Te falta el" in r.text and "#2" in r.text
     assert 'href="/ui/legal"' in r.text
-    assert 'hx-post="/ui/leer/"' not in r.text
+    assert f'hx-post="/ui/leer/{f.id}/deseo"' not in r.text
 
 
 def test_anadir_a_deseos_reutiliza_wishlist(tmp_path):

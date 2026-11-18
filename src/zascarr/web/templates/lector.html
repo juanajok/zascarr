@@ -2,7 +2,8 @@
 {% block title %}Leer — {{ serie.title if serie else "ZascArr" }}{% endblock %}
 {% block content %}
 <div class="lector lector-escena{% if preparando %} lector-escena-preparando{% endif %}"
-     {% if preparando %}data-estado-url="/ui/leer/{{ archivo.id }}/estado"{% else %}
+     {% if preparando %}data-estado-url="/ui/leer/{{ archivo.id }}/estado"
+     data-volver="/ui/series/{{ serie.id }}/numero/{{ numero.id }}"{% else %}
      data-lector data-total="{{ total }}" data-pagina="{{ pagina_actual }}"
      data-sentido="{{ sentido }}" data-origen-sentido="{{ origen_sentido }}"
      data-pagina-url="/ui/leer/{{ archivo.id }}/pagina/"
@@ -25,9 +26,14 @@
   </header>
 
   {% if preparando %}
-  <main class="lector-espera" id="lector-preparando" role="status" aria-live="polite">
-    <p class="lector-espera-titulo">Preparando el tebeo…</p>
-    <p class="caption">La primera vez tarda un poco; luego se abre al momento.</p>
+  <main class="lector-espera">
+    <p class="lector-espera-titulo" id="lector-preparando" role="status" aria-live="polite">Preparando el tebeo…</p>
+    <p class="caption" id="lector-espera-nota">La primera vez tarda un poco; luego se abre al momento.</p>
+    <p class="lector-espera-error" id="lector-error" role="alert" aria-live="assertive" hidden></p>
+    <div class="lector-espera-acciones">
+      <button type="button" class="btn" id="lector-reintentar">Reintentar</button>
+      <a class="btn ghost" href="/ui/series/{{ serie.id }}/numero/{{ numero.id }}">Volver al número</a>
+    </div>
   </main>
   {% else %}
   <div class="lector-lienzo" id="lector-lienzo">
@@ -84,23 +90,7 @@
   {% if siguiente %}
   <section id="fin" class="lector-fin" hidden aria-labelledby="fin-titulo">
     <h2 id="fin-titulo" class="titulo-frase">Has llegado al final</h2>
-    {% if siguiente.estado == "leer" %}
-    <p>Has terminado el #{{ numero.issue_number or "?" }}. Siguiente: <strong>#{{ siguiente.numero }}</strong>.</p>
-    <p><a class="btn primary" href="/ui/leer/{{ siguiente.archivo.id }}">Leer el #{{ siguiente.numero }}</a></p>
-    {% elif siguiente.estado == "falta" %}
-    <p>Te falta el <strong>#{{ siguiente.numero }}</strong> de <em>{{ serie.title }}</em>.</p>
-    {% if legal_aceptado %}
-    <form hx-post="/ui/leer/{{ archivo.id }}/deseo" hx-target="#fin" hx-swap="innerHTML">
-      <button type="submit" class="btn">Añadir a Deseados</button>
-    </form>
-    {% else %}
-    <p><a class="btn" href="/ui/legal">Añadir a Deseados</a></p>
-    <p class="caption">Antes tienes que leer y aceptar el aviso legal; después podrás pedirlo.</p>
-    {% endif %}
-    {% else %}
-    <p>No hay un número siguiente en tu biblioteca.</p>
-    {% endif %}
-    <p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+    {% include "_lector_fin.html" %}
   </section>
   {% endif %}
   {% endif %}
