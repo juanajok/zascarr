@@ -15,6 +15,17 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
+      # Un `.tmp-*` o un log versionado no debe llegar a una release: son artefactos de
+      # ejecución locales, no documentación ni fixtures. El `.gitignore` evita el descuido;
+      # este gate se asegura de que no se fuerza con `git add -f`.
+      - name: Higiene del repositorio (sin artefactos locales)
+        run: |
+          sobrantes="$(git ls-files -- '.tmp-*' '*.log' '*.dump' '*.prof')"
+          if [ -n "$sobrantes" ]; then
+            echo "::error::artefactos locales versionados:"
+            echo "$sobrantes"
+            exit 1
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

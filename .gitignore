@@ -16,3 +16,10 @@ venv/
 
 # Artefactos de revisión headless (perfiles de Chrome, capturas)
 .review*/
+
+# Artefactos locales de ejecución y diagnóstico (no se versionan; CI lo comprueba).
+.tmp-*
+.tmp/
+*.log
+*.dump
+*.prof
