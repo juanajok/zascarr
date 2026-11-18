@@ -52,3 +52,11 @@ def test_selector_aria_css_y_vacio():
 def test_ficha_mas_de_la_serie_plantilla():
     ficha = Path("src/zascarr/web/templates/series_detail.html").read_text()
     assert "mas-serie" in ficha and "mas_serie" in ficha and "escaparate-tarjeta" in ficha
+
+
+def test_flechas_funcionan_con_lista_anidada_y_tras_swap():
+    from pathlib import Path as _P
+    js = _P("src/zascarr/static/biblioteca-escaparate.js").read_text()
+    assert "lista.before(caja)" in js
+    assert 'addEventListener("htmx:afterSwap"' in js
+    assert js.index('addEventListener("htmx:afterSwap"') < js.index("  init();")
