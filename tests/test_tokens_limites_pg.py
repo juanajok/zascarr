@@ -145,7 +145,9 @@ class TestRecorridoConElMayorContenidoPosible:
         clave = await sembrar_carpeta_larga(entorno.banco)
         assert clave == carpeta_mas_larga() and set(clave) == {"\x01"} and len(clave) < MAX_CLAVE_GRUPO
         titulo, ident = LETRA_4_BYTES * MAX_TITULO, LETRA_4_BYTES * MAX_ID_EXTERNO
-        cover = "https://www.tebeosfera.com/img/" + LETRA_4_BYTES * (MAX_COVER_URL - len("https://www.tebeosfera.com/img/"))
+        # La prueba mide el token con portada; el host de Tebeosfera ya no sirve imágenes.
+        prefijo_portada = "https://covers.openlibrary.org/img/"
+        cover = prefijo_portada + LETRA_4_BYTES * (MAX_COVER_URL - len(prefijo_portada))
         assert len(cover) == MAX_COVER_URL
         await sembrar_parecidas_de(entorno.banco, MAX_PARECIDAS_FIRMADAS, titulo, ComicTradition.TEBEO, 1987)
         fuentes.resultados = [res(MetadataSource.TEBEOSFERA, ident, titulo, 1987,
@@ -174,7 +176,7 @@ class TestRecorridoConElMayorContenidoPosible:
         # prefijo de una ruta de 1000) y la de la portada (empieza por un host ASCII, que pesa un byte y no cuatro),
         # más algún dígito de la caducidad y del año.
         # La fuente usada aquí es Tebeosfera; el máximo global lo fija la más larga.
-        holgura = (holgura_de(clave, "https://www.tebeosfera.com/img/") + 4)  # 3 bytes de fuente = 4 en base64
+        holgura = holgura_de(clave, prefijo_portada) + 4  # 3 bytes de fuente = 4 en base64
         assert 0 <= MAX_TOKEN_CANDIDATA - len(token_candidata) <= holgura
         assert 0 <= MAX_TOKEN_ALTA - len(token_alta) <= holgura
 

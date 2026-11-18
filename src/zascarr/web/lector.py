@@ -21,8 +21,8 @@ from zascarr.services.lector import (
     siguiente_numero,
     total_paginas,
 )
-from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
 from zascarr.services.lectura import marcar
+from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
 from zascarr.services.wishlist import WishlistService
 from zascarr.utils.cover import cached_image_response
 from zascarr.web.routes import crear_templates
@@ -49,14 +49,15 @@ async def leer(request: Request, file_id: UUID,
         return _error(request, "Ese archivo no está vinculado a un número.")
     if es_rar_real(f):
         estado = await CACHE.preparar(f)
-        if estado.estado == "error":
-            return _error(request, estado.motivo)
         if estado.estado != "listo":
+            failed = estado.estado == "error"
             respuesta = templates.TemplateResponse(request, "lector.html", {
                 "archivo": f, "numero": numero, "serie": await db.get(Series, numero.series_id),
                 "total": 0, "pagina_actual": 1, "sentido": "ltr",
                 "origen_sentido": "tradicion", "preparando": True,
-            })
+                "error_inicial": estado.motivo or "No se ha podido preparar el tebeo."
+                if failed else "",
+            }, status_code=404 if failed else 200)
             respuesta.headers["Cache-Control"] = "no-store"
             return respuesta
     try:

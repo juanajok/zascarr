@@ -293,7 +293,22 @@ def test_un_cbr_rar_es_legible_para_el_lector(tmp_path):
     assert lector._es_legible(f) is True
 
 
-def test_pantalla_rar_muestra_preparando(tmp_path, monkeypatch):
+@pytest.mark.parametrize(("estado", "motivo", "status"), [
+    pytest.param("preparando", "", 200, id="preparando"),
+    pytest.param("error", "El archivo está protegido con contraseña; no se puede preparar.",
+                 404, id="cifrado"),
+    pytest.param("error", "El archivo necesita las demás partes del volumen; no se puede preparar.",
+                 404, id="multivolumen"),
+    pytest.param("error", "El archivo está dañado o no se puede leer.", 404, id="ilegible"),
+    pytest.param("error", "El archivo no tiene páginas de imagen.", 404, id="sin-imagenes"),
+    pytest.param("error", "Este tebeo es demasiado grande para prepararlo para leer.",
+                 404, id="demasiado-grande"),
+    pytest.param("error", "No hay espacio en la caché de lectura para preparar este tebeo.",
+                 404, id="sin-espacio"),
+    pytest.param("error", "El lector de CBR no está disponible en este equipo.",
+                 404, id="sin-herramienta"),
+])
+def test_pantalla_rar_muestra_preparando(tmp_path, monkeypatch, estado, motivo, status):
     from zascarr.services.cache_lectura import Estado
     from zascarr.web import lector as wlector
 
@@ -304,15 +319,20 @@ def test_pantalla_rar_muestra_preparando(tmp_path, monkeypatch):
 
     class Cache:
         async def preparar(self, _f):
-            return Estado("preparando")
+            return Estado(estado, motivo)
 
     monkeypatch.setattr(wlector, "CACHE", Cache())
     db = FakeSession(get_map={(File, f.id): f, (Issue, issue.id): issue,
                               (Series, serie.id): serie})
     with use_fake_session(db) as client:
         r = client.get(f"/ui/leer/{f.id}")
-    assert r.status_code == 200
-    assert "Preparando el tebeo" in r.text
+    assert r.status_code == status
+    assert r.headers["Cache-Control"] == "no-store"
+    if motivo:
+        assert motivo in r.text
+        assert 'data-error-inicial' in r.text
+    else:
+        assert "Preparando el tebeo" in r.text
     assert f"/ui/leer/{f.id}/estado" in r.text
     assert 'id="lector-reintentar"' in r.text
     assert 'id="lector-error" role="alert"' in r.text
