@@ -119,7 +119,7 @@ services:
       # parametrizan: nunca deben ser alcanzables desde la red.
       - "${ZASCARR_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-}@postgres:5432/zascarr
+      - ZASCARR_DB_PASSWORD=${DB_PASSWORD:-}
       - COMICVINE_API_KEY=${COMICVINE_API_KEY:-}
       - MAX_CUERPO_TRANSFER_BYTES=${MAX_CUERPO_TRANSFER_BYTES:-4194304}
       - CRAWL_DELAY_MAX_S=${CRAWL_DELAY_MAX_S:-60}

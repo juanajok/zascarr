@@ -76,3 +76,11 @@ def problema_de_credenciales(database_url: str | URL) -> str | None:
 
 class CredencialesNoSegurasError(RuntimeError):
     """El arranque se detiene antes de abrir ninguna conexión."""
+
+
+def url_bd_compose(password: str) -> URL:
+    """Construye la conexión de Compose sin interpolar la contraseña."""
+    return URL.create(
+        "postgresql+asyncpg", username="comics_admin", password=password,
+        host="postgres", port=5432, database="zascarr",
+    )

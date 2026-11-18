@@ -90,8 +90,8 @@ credencial_invalida() {
 }
 
 # generar_credencial
-#   48 caracteres hexadecimales (24 bytes del sistema operativo = 192 bits). Hexadecimal a propósito: va dentro de
-#   la URL de conexión (DATABASE_URL) y de un .env sin comillas, y no necesita escapes en ninguno de los dos.
+#   48 caracteres hexadecimales (24 bytes del sistema operativo = 192 bits).
+#   El formato se puede escribir en .env sin comillas ni escapes.
 #   No depende de openssl. Sale por la salida estándar: quien llama la guarda, no la muestra.
 generar_credencial() {
     local v
