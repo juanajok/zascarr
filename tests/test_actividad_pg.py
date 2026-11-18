@@ -313,16 +313,23 @@ async def test_serie_nueva_con_varios_numeros_es_novedad(entorno):
 
 
 @pytest.mark.asyncio
-async def test_continuar_decimal_y_anual_en_curso(entorno):
+async def test_continuar_decimal_siguiente_y_anual_en_curso(entorno):
     async with entorno.banco.fabrica() as s:
         sid = await _serie(s, "Decimales")
-        for n in ("1", "1.5"):
-            iid = await _issue(s, sid, n)
-            await _archivo(s, iid, f"{n}.cbz")
-        s.add(ReadingProgress(id=uuid4(), issue_id=iid, status=ReadingStatus.READING,
-                              current_page=3,
+        i1 = await _issue(s, sid, "1")
+        i15 = await _issue(s, sid, "1.5")
+        await _archivo(s, i1, "1.cbz")
+        await _archivo(s, i15, "1.5.cbz")
+        s.add(ReadingProgress(id=uuid4(), issue_id=i1, status=ReadingStatus.COMPLETED,
                               last_read_at=datetime(2024, 7, 1, tzinfo=UTC)))
+        sid2 = await _serie(s, "Anuales")
+        ia = await _issue(s, sid2, "Anual 1")
+        await _archivo(s, ia, "anual.cbz")
+        s.add(ReadingProgress(id=uuid4(), issue_id=ia, status=ReadingStatus.READING,
+                              last_read_at=datetime(2024, 8, 1, tzinfo=UTC)))
         await s.commit()
     async with entorno.banco.fabrica() as s:
         r = await actividad.continuar_leyendo(s)
-    assert any(x.numero == "1.5" for x in r)
+    assert ("Decimales" in [x.series_title for x in r] and
+            any(x.series_title == "Decimales" and x.numero == "1.5" for x in r))
+    assert any(x.series_title == "Anuales" and x.numero == "Anual 1" for x in r)

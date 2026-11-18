@@ -84,6 +84,8 @@ async def continuar_leyendo(db: AsyncSession, limite: int = 6) -> list[Continuar
         .outerjoin(ReadingProgress, ReadingProgress.issue_id == Issue.id)
         .where(Issue.id.in_(select(File.issue_id).where(
             File.issue_id.is_not(None), File.is_missing.is_(False))))
+        .order_by(series_act.c.actividad.desc(), Issue.sort_order.asc().nulls_last(),
+                  Issue.issue_number)
         .limit(max(limite * 120, 240))
     )).all()
     por_serie: dict[str, list] = {}
@@ -158,6 +160,7 @@ async def recien_incorporados(db: AsyncSession, limite: int = 6) -> list[RecienI
                      .where(File.issue_id.is_not(None), File.is_missing.is_(False))
                      .group_by(File.issue_id).subquery())
     min_serie = (select(Issue.series_id, func.min(File.imported_at).label("primera"),
+                        func.max(File.imported_at).label("ultima"),
                         func.count(func.distinct(Issue.id)).label("numeros"))
                  .join(File, File.issue_id == Issue.id)
                  .where(File.is_missing.is_(False))
@@ -165,16 +168,17 @@ async def recien_incorporados(db: AsyncSession, limite: int = 6) -> list[RecienI
     filas = (await db.execute(
         select(Issue.series_id, Series.title, Issue.id, Issue.issue_number,
                Issue.title, primera_serie.c.imported_at, min_serie.c.primera,
-               min_serie.c.numeros, Issue.created_at)
+               min_serie.c.numeros, min_serie.c.ultima, Issue.created_at)
         .join(primera_serie, primera_serie.c.issue_id == Issue.id)
         .join(Series, Series.id == Issue.series_id)
         .join(min_serie, min_serie.c.series_id == Issue.series_id)
-        .order_by(primera_serie.c.imported_at.desc(), Series.title, Issue.issue_number)
+        .order_by(primera_serie.c.imported_at.desc(), Series.title,
+                  Issue.sort_order.asc().nulls_last(), Issue.issue_number)
         .limit(limite * 8)
     )).all()
     vistas: set[str] = set()
     resultado: list[RecienIncorporado] = []
-    for sid, title, iid, numero, issue_title, importado, primera, _numeros, creado in filas:
+    for sid, title, iid, numero, issue_title, importado, primera, numeros, ultima, creado in filas:
         sid = str(sid)
         if sid in vistas:
             continue
@@ -182,6 +186,11 @@ async def recien_incorporados(db: AsyncSession, limite: int = 6) -> list[RecienI
         # la serie ya tenía material. No es una incorporación nueva.
         if (creado is not None and importado is not None and primera is not None
                 and creado < importado and primera < importado):
+            continue
+        # Una serie con varios números importados en momentos distintos ya existía:
+        # su primera incorporación es la base, no una novedad. Un pack nuevo entra
+        # con todos los números en el mismo instante y sí es «serie_nueva».
+        if importado == primera and numeros > 1 and ultima != primera:
             continue
         vistas.add(sid)
         tipo = "serie_nueva" if importado == primera else "numero_nuevo"
