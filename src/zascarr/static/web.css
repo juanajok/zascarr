@@ -2671,7 +2671,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .app { position: relative; }
 .tareas-fuera { position: relative; display: flex; justify-content: flex-end; min-height: 0; margin: 0 0 var(--space-2); }
 .tareas-fuera:empty { display: none; }
-.tareas-panel { position: absolute; right: 0; left: auto; top: calc(100% + var(--space-1)); z-index: 50; width: 360px; max-height: min(70vh, 520px); overflow: auto; box-shadow: var(--shadow-ink-sm); margin: 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
+.tareas-panel { position: absolute; right: 0; left: auto; top: 44px; z-index: 50; width: min(360px, calc(100vw - 32px)); max-height: min(70vh, 520px); overflow: auto; box-shadow: var(--shadow-ink-sm); margin: 0; border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); background: var(--paper-2); }
 .tareas-panel:not([open]) { position: relative; left: auto; right: auto; top: auto; width: auto; max-height: none; overflow: visible; border: 0; background: transparent; box-shadow: none; }
 .tareas-panel > summary { min-height: 44px; padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none; display: inline-flex; gap: var(--space-2); align-items: center; border-radius: var(--radius-pill); }
 .tareas-panel:not([open]) > summary { padding: 0; border: var(--border-chip) solid var(--ink); box-shadow: var(--shadow-ink-sm); height: 44px; }
@@ -2691,8 +2691,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .tareas-anuncio { font-size: var(--text-secundario); color: var(--ink-soft); }
 @media (max-width: 480px) {
   .tareas-fuera .tareas-nombre { display: none; }
-  .tareas-fuera .tareas-panel { position: fixed; left: var(--space-2); right: var(--space-2); top: auto; bottom: 72px; width: auto; max-width: none; max-height: 70vh; }
-  .tareas-panel:not([open]) { bottom: 72px; right: var(--space-2); left: auto; }
   .tareas-fuera .tareas-panel > summary { padding: var(--space-1) var(--space-2); }
   .tareas-fuera .tareas-chip { min-height: 44px; font-size: var(--text-secundario); }
 }

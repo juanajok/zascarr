@@ -296,5 +296,6 @@ def test_indicador_en_flujo_y_carrusel_estable():
     assert base.index('<main class="content"') < base.index('class="tareas-fuera"')
     assert "left: 252px" not in css
     assert ".tareas-fuera { position: relative; display: flex; justify-content: flex-end;" in css
-    assert ".tareas-panel { position: absolute; right: 0;" in css
+    assert ".tareas-panel { position: absolute; right: 0; left: auto; top: 44px;" in css
+    assert ".tareas-fuera .tareas-panel { position: fixed;" not in css
     assert ".escaparate-lista > li { flex: 0 0 160px; width: 160px; max-width: 160px; }" in css
