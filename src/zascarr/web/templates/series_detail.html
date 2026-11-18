@@ -250,6 +250,16 @@
   {% endif %}
 </section>
 
+{% if mas_serie %}
+<section class="mas-serie" aria-labelledby="mas-serie-titulo">
+  <h2 id="mas-serie-titulo" class="titulo-frase">Más en tu biblioteca</h2>
+  <ul class="escaparate-lista">
+    {% for x in mas_serie %}
+    <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}"><span class="escaparate-titulo">{{ x.title }}</span><span class="muted">{{ x.motivo }}</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 <section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
          hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
 <section id="colecciones-serie" class="series-colecciones" aria-label="Colecciones"

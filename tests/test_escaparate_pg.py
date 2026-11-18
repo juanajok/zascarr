@@ -76,3 +76,56 @@ async def test_pagina_escaparate_y_sugerencias_http(entorno):
     assert r.status_code == 200
     assert "Escaparate" in r.text and "Gestión" in r.text
     assert s.status_code == 200 and "escaparate-lista" in s.text
+
+
+@pytest.mark.asyncio
+async def test_redescubre_completo_y_tradiciones_y_mas_de_la_serie(entorno):
+    from zascarr.models import ComicTradition, Genre, series_genres
+    from zascarr.services.actividad import (
+        mas_de_la_serie,
+        redescubre_completo,
+        tradiciones_con_conteo,
+    )
+
+    async with entorno.banco.fabrica() as s:
+        sid, iid = await _serie_con_archivo(s, "Favorita")
+        serie = (await s.execute(select(Series).where(Series.id == sid))).scalar_one()
+        serie.favorite = True
+        serie.tradition = ComicTradition.TEBEO
+        serie.total_issues = 2
+        genero = Genre(id=uuid4(), name="Aventura")
+        s.add(genero)
+        await s.flush()
+        await s.execute(series_genres.insert().values(series_id=sid, genre_id=genero.id))
+        autor = Creator(id=uuid4(), name="Autora")
+        s.add(autor)
+        s.add(IssueCreator(issue_id=iid, creator_id=autor.id, role="writer"))
+        sid2, _ = await _serie_con_archivo(s, "Otra del autor")
+        iid2 = (await s.execute(select(Issue.id).where(Issue.series_id == sid2))).scalar_one()
+        s.add(IssueCreator(issue_id=iid2, creator_id=autor.id, role="writer"))
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        sug = await redescubre_completo(s, 10, 0)
+        trad = await tradiciones_con_conteo(s)
+        mas = await mas_de_la_serie(s, sid)
+        vacio = await redescubre_completo(s, 10, 9999)
+    motivos = {x.motivo for x in sug}
+    assert "Favorita" in motivos or "Casi completa" in motivos or "Por empezar" in motivos
+    assert any(t.tradition == "tebeo" and t.total == 1 for t in trad)
+    assert any(x["series_id"] == str(sid2) for x in mas)
+    assert vacio == []
+
+
+@pytest.mark.asyncio
+async def test_sugerencias_offset_vacio_y_solo_select(entorno):
+    async with entorno.banco.fabrica() as s:
+        await _serie_con_archivo(s, "Única")
+        await s.commit()
+    antes = len(entorno.banco.sentencias)
+    async with cliente() as c:
+        r = await c.get("/ui/biblioteca/sugerencias?offset=9999")
+    assert r.status_code == 200 and "No hay más sugerencias" in r.text
+    import re
+    escrituras = [x for x in entorno.banco.sentencias[antes:]
+                  if re.search(r"\b(INSERT|UPDATE|DELETE)\b", x, re.I)]
+    assert not escrituras

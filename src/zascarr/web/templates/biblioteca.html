@@ -13,8 +13,8 @@
 </header>
 
 <div class="modo-biblioteca">
-  <a class="btn ghost sm{% if modo != 'escaparate' %} primary{% endif %}" href="/ui/biblioteca?modo=gestion">Gestión</a>
-  <a class="btn ghost sm{% if modo == 'escaparate' %} primary{% endif %}" href="/ui/biblioteca?modo=escaparate">Escaparate</a>
+  <a class="btn sm selector-modo{% if modo != 'escaparate' %} primary{% endif %}" href="/ui/biblioteca?modo=gestion"{% if modo != 'escaparate' %} aria-current="page"{% endif %}>Gestión</a>
+  <a class="btn sm selector-modo{% if modo == 'escaparate' %} primary{% endif %}" href="/ui/biblioteca?modo=escaparate"{% if modo == 'escaparate' %} aria-current="page"{% endif %}>Escaparate</a>
 </div>
 {% if modo == "escaparate" %}
 {% include "_escaparate.html" %}

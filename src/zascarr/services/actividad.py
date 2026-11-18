@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
+import sqlalchemy as sa
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +24,7 @@ from zascarr.models import (
     ReadingStatus,
     Series,
     SeriesRecentView,
+    series_genres,
 )
 
 _NUMERO_SECUENCIAL = re.compile(r"^\d+(?:[.,]\d+)?$")
@@ -277,3 +279,86 @@ async def redescubre(db: AsyncSession, limite: int = 4, offset: int = 0) -> list
         .offset(max(0, offset)).limit(limite)
     )).all()
     return [Sugerencia(str(sid), title, "Por empezar") for sid, title in filas]
+
+
+@dataclass(frozen=True)
+class TradicionConConteo:
+    tradition: str
+    total: int
+
+
+async def tradiciones_con_conteo(db: AsyncSession) -> list[TradicionConConteo]:
+    """Conteo de series con archivos por tradición (una consulta)."""
+    filas = (await db.execute(
+        select(Series.tradition, func.count(func.distinct(Series.id)))
+        .join(Issue, Issue.series_id == Series.id)
+        .where(Issue.id.in_(select(File.issue_id).where(File.is_missing.is_(False))))
+        .where(Series.tradition.is_not(None))
+        .group_by(Series.tradition)
+        .order_by(func.count(func.distinct(Series.id)).desc(), Series.tradition)
+    )).all()
+    return [TradicionConConteo(str(t.value if hasattr(t, "value") else t), int(n))
+            for t, n in filas]
+
+
+async def redescubre_completo(
+        db: AsyncSession, limite: int = 4, offset: int = 0) -> list[Sugerencia]:
+    """Sugerencias explicables en una sola CTE: favoritas, casi completas,
+    antiguas nunca abiertas y, como relleno, series por empezar."""
+    con_archivos = (select(
+        Issue.series_id, func.count(func.distinct(Issue.id)).label("con_archivo"))
+                    .join(File, File.issue_id == Issue.id)
+                    .where(File.is_missing.is_(False))
+                    .group_by(Issue.series_id).subquery())
+    actividad = (select(Issue.series_id).join(ReadingProgress, ReadingProgress.issue_id == Issue.id)
+                 .where(ReadingProgress.status.in_(
+                     [ReadingStatus.READING, ReadingStatus.COMPLETED])))
+    favoritas = (select(Series.id.label("series_id"), Series.title.label("title"),
+                        sa.literal("Favorita").label("motivo"))
+                 .join(con_archivos, con_archivos.c.series_id == Series.id)
+                 .where(Series.favorite.is_(True), ~Series.id.in_(actividad)))
+    casi = (select(Series.id, Series.title, sa.literal("Casi completa"))
+            .join(con_archivos, con_archivos.c.series_id == Series.id)
+            .where(Series.total_issues.is_not(None))
+            .where(con_archivos.c.con_archivo >= Series.total_issues - 2)
+            .where(con_archivos.c.con_archivo < Series.total_issues))
+    antiguas = (select(Series.id, Series.title, sa.literal("Antigua sin abrir"))
+                .join(con_archivos, con_archivos.c.series_id == Series.id)
+                .join(Issue, Issue.series_id == Series.id)
+                .join(File, File.issue_id == Issue.id)
+                .where(~Series.id.in_(actividad))
+                .group_by(Series.id, Series.title)
+                .having(func.min(File.imported_at) < func.now() - sa.text("interval '365 days'")))
+    por_empezar = (select(Series.id, Series.title, sa.literal("Por empezar"))
+                   .join(con_archivos, con_archivos.c.series_id == Series.id)
+                   .where(~Series.id.in_(actividad)))
+    consulta = favoritas.union_all(casi, antiguas, por_empezar).subquery()
+    filas = (await db.execute(
+        select(consulta.c.series_id, consulta.c.title, consulta.c.motivo)
+        .order_by(consulta.c.motivo, consulta.c.title, consulta.c.series_id)
+        .offset(max(0, offset)).limit(limite)
+    )).all()
+    return [Sugerencia(str(sid), title, str(motivo)) for sid, title, motivo in filas]
+
+
+async def mas_de_la_serie(db: AsyncSession, series_id, limite: int = 4) -> list[dict]:
+    """Otras series del mismo autor o género, con archivos (una consulta)."""
+    autores = (select(IssueCreator.creator_id).join(Issue, Issue.id == IssueCreator.issue_id)
+               .where(Issue.series_id == series_id))
+    generos = (select(series_genres.c.genre_id).where(series_genres.c.series_id == series_id))
+    por_autor = (select(Series.id, Series.title, sa.literal("Mismo autor"))
+                 .where(Series.id.in_(select(Issue.series_id).join(
+                     IssueCreator, IssueCreator.issue_id == Issue.id)
+                     .where(IssueCreator.creator_id.in_(autores)))))
+    por_genero = (select(Series.id, Series.title, sa.literal("Mismo género"))
+                  .where(Series.id.in_(select(series_genres.c.series_id)
+                                       .where(series_genres.c.genre_id.in_(generos)))))
+    union = por_autor.union_all(por_genero).subquery()
+    filas = (await db.execute(
+        select(union.c.id, union.c.title, union.c[2])
+        .where(union.c.id != series_id)
+        .where(union.c.id.in_(select(Issue.series_id).join(
+            File, File.issue_id == Issue.id).where(File.is_missing.is_(False))))
+        .distinct().limit(limite)
+    )).all()
+    return [{"series_id": str(i), "title": t, "motivo": str(m)} for i, t, m in filas]

@@ -13,12 +13,13 @@ async def contexto(db: AsyncSession, *, offset: int = 0) -> dict:
         "continuar": await actividad.continuar_leyendo(db, LIMITE),
         "vistos": await actividad.vistos_recientemente(db, LIMITE),
         "recien": await actividad.recien_incorporados(db, LIMITE),
-        "redescubre": await actividad.redescubre(db, 4, offset),
+        "redescubre": await actividad.redescubre_completo(db, 4, offset),
         "autores": await actividad.autores_destacados(db, LIMITE),
+        "tradiciones": await actividad.tradiciones_con_conteo(db),
         "huecos": [],
         "offset_sugerencias": offset,
     }
 
 
 async def sugerencias(db: AsyncSession, *, offset: int = 0) -> list[actividad.Sugerencia]:
-    return await actividad.redescubre(db, 4, offset)
+    return await actividad.redescubre_completo(db, 4, offset)
