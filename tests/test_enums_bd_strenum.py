@@ -41,6 +41,7 @@ MIEMBROS = {
         "FUMETTI": "fumetti",
         "MANHWA": "manhwa",
         "MANHUA": "manhua",
+        "HISPANOAMERICANO": "hispanoamericano",
         "BRITISH": "british",
         "OTHER": "other",
     },

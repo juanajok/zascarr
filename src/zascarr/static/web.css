@@ -2302,6 +2302,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   overflow: auto;
 }
 .barra-panel-campos .filtro-campo { min-width: 0; }
+@media (min-width: 861px) {
+  .barra-panel-campos { position: fixed; left: 50%; right: auto; top: var(--panel-filtros-top, 6.5rem); transform: translateX(-50%); }
+}
 .barra-panel-campos label { display: block; font-size: var(--text-secundario); font-weight: 800; margin-bottom: var(--space-1); }
 .barra-panel-campos input[type="search"], .barra-panel-campos select { width: 100%; max-width: none; min-height: 44px; }
 .barra-biblioteca .barra-panel-campos select, .barra-biblioteca .barra-panel-campos input[type="search"] { max-width: none; width: 100%; }

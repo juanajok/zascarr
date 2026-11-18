@@ -91,6 +91,8 @@ class SeriesService:
         orden: str = "titulo",
         coleccion: str | None = None,
         coleccion_ids: set[UUID] | None = None,
+        kind: str | None = None,
+        format: str | None = None,
         *,
         corregir_pagina: bool = True,
     ) -> tuple[list[Series], int, int]:
@@ -105,6 +107,12 @@ class SeriesService:
 
         if tradition:
             query = query.where(Series.tradition == tradition)
+        if kind:
+            query = query.where(Series.kind == kind)
+        if format:
+            # EXISTS por id: una serie con varios formatos aparece UNA vez.
+            query = query.where(Series.id.in_(
+                select(Issue.series_id).where(Issue.format == format)))
         if status:
             query = query.where(Series.status == status)
         if coleccion:
@@ -268,6 +276,8 @@ class SeriesService:
         orden: str = "titulo",
         coleccion: str | None = None,
         coleccion_ids: set[UUID] | None = None,
+        kind: str | None = None,
+        format: str | None = None,
     ) -> tuple[list[Series], int]:
         """Contrato histórico `(items, total)` para API y tests."""
         items, total, _ = await self._list_series(
@@ -283,7 +293,7 @@ class SeriesService:
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
-            corregir_pagina=False,
+            kind=kind, format=format, corregir_pagina=False,
         )
         return items, total
 
@@ -310,6 +320,8 @@ class SeriesService:
         orden: str = "titulo",
         coleccion: str | None = None,
         coleccion_ids: set[UUID] | None = None,
+        kind: str | None = None,
+        format: str | None = None,
     ) -> tuple[list[Series], int, int]:
         """Como `list_series`, pero devuelve también la página efectiva.
 
@@ -329,6 +341,7 @@ class SeriesService:
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
+            kind=kind, format=format,
         )
 
     async def list_publishers_with_series(self) -> list[Publisher]:

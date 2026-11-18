@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import zascarr.web.escaparate as escaparate
 from zascarr.database import get_db
-from zascarr.models import ComicTradition
+from zascarr.models import ComicTradition, IssueFormat, SeriesKind
 from zascarr.services.coleccion import TIPOS as COLECCION_TIPOS
 from zascarr.services.comicinfo import (
     TEXTOS_COMICINFO,
@@ -65,10 +65,23 @@ _TRADICION_LABEL = {
     ComicTradition.FUMETTI: "Fumetti",
     ComicTradition.MANHWA: "Manhwa",
     ComicTradition.MANHUA: "Manhua",
+    ComicTradition.HISPANOAMERICANO: "Hispanoamericano",
     ComicTradition.BRITISH: "Británico",
     ComicTradition.OTHER: "Otra",
 }
 _TRADICIONES_VALIDAS = {t.value for t in ComicTradition}
+_NATURALEZA_LABEL = {
+    SeriesKind.REGULAR.value: "Serie regular", SeriesKind.ANNUAL.value: "Anual",
+    SeriesKind.SPECIAL.value: "Especial", SeriesKind.ONE_SHOT.value: "Tomo único",
+}
+_FORMATO_LABEL = {
+    IssueFormat.SINGLE_ISSUE.value: "Grapa", IssueFormat.TRADE_PAPERBACK.value: "Tomo",
+    IssueFormat.HARDCOVER.value: "Tapa dura", IssueFormat.OMNIBUS.value: "Ómnibus",
+    IssueFormat.GRAPHIC_NOVEL.value: "Novela gráfica", IssueFormat.ALBUM.value: "Álbum",
+    IssueFormat.MANGA_TANKOBON.value: "Tankobon", IssueFormat.DIGITAL.value: "Digital",
+}
+_NATURALEZAS_VALIDAS = set(_NATURALEZA_LABEL)
+_FORMATOS_VALIDOS = set(_FORMATO_LABEL)
 
 
 def _texto_buscador(valor: str) -> str:
@@ -129,6 +142,8 @@ class Filtros:
     vista: str = "tarjetas"
     densidad: str = "intermedia"
     modo: str = "gestion"
+    naturaleza: str = ""
+    formato: str = ""
     avisos: tuple[str, ...] = ()
 
     def uuid(self, nombre: str) -> UUID | None:
@@ -168,6 +183,8 @@ def _leer_filtros(
     anio_hasta: str = "",
     densidad: str = "",
     modo: str = "",
+    naturaleza: str = "",
+    formato: str = "",
 ) -> Filtros:
     """Normaliza y valida la entrada de la URL; nunca lanza por un valor inválido.
 
@@ -231,11 +248,20 @@ def _leer_filtros(
     if modo_final == "escaparate" and (
             any((texto, tradicion, publisher_id, character_id, story_arc_id,
                  author_id, favorito, (idioma or ""), (edicion or ""), etiquetas,
-                 leido, coleccion, (anio_desde or ""), (anio_hasta or "")))
+                 leido, coleccion, (anio_desde or ""), (anio_hasta or ""),
+                 (naturaleza or ""), (formato or "")))
             or vista_limpia == "lista"):
         # Un escaparate nunca se pinta con filtros: se fuerza gestión.
         modo_final = "gestion"
 
+    naturaleza_limpia = (naturaleza or "").strip().lower()
+    if naturaleza_limpia and naturaleza_limpia not in _NATURALEZAS_VALIDAS:
+        avisos.append("La naturaleza pedida no existe; se ha quitado.")
+        naturaleza_limpia = ""
+    formato_limpio = (formato or "").strip().lower()
+    if formato_limpio and formato_limpio not in _FORMATOS_VALIDOS:
+        avisos.append("El formato pedido no existe; se ha quitado.")
+        formato_limpio = ""
     expresion = parse_expresion(etiquetas)
     avisos.extend(expresion.avisos)
     texto_etiquetas = " ".join(
@@ -288,6 +314,8 @@ def _leer_filtros(
         vista="lista" if vista_limpia == "lista" else "tarjetas",
         densidad=densidad_final,
         modo=modo_final,
+        naturaleza=naturaleza_limpia,
+        formato=formato_limpio,
         avisos=tuple(avisos),
     )
 
@@ -315,6 +343,8 @@ def _qs(filtros: Filtros, *, page: int, omitir: str | None = None) -> str:
         "orden": "" if filtros.orden == "titulo" else filtros.orden,
         "coleccion": filtros.coleccion,
         "vista": "lista" if filtros.vista == "lista" else "",
+        "naturaleza": filtros.naturaleza,
+        "formato": filtros.formato,
         "densidad": "" if filtros.densidad == "intermedia" else filtros.densidad,
         "modo": "" if filtros.modo == "gestion" else filtros.modo,
     }
@@ -366,6 +396,10 @@ def _filtros_activos(filtros: Filtros, nombres: dict[str, str | None]) -> list[F
         _anadir("favoritos", "Solo favoritas")
     if filtros.language:
         _anadir("idioma", f"Idioma: {filtros.language}")
+    if filtros.naturaleza:
+        _anadir("naturaleza", f"Naturaleza: {_NATURALEZA_LABEL[filtros.naturaleza]}")
+    if filtros.formato:
+        _anadir("formato", f"Formato: {_FORMATO_LABEL[filtros.formato]}")
     if filtros.edition_kind:
         _anadir("edicion", f"Edición: {filtros.edition_kind}")
     if filtros.year_from:
@@ -440,7 +474,7 @@ def url_chip(filtros: Filtros, clave: str, valor: str) -> str:
     campos = {"tradition": "tradition", "publisher_id": "publisher_id",
               "author_id": "author_id", "character_id": "character_id",
               "story_arc_id": "story_arc_id", "anio_desde": "year_from",
-              "anio_hasta": "year_to"}
+              "anio_hasta": "year_to", "naturaleza": "naturaleza", "formato": "formato"}
     campo = campos.get(clave)
     if campo is None or not valor:
         return _url_pagina(filtros, page=1)
@@ -499,6 +533,8 @@ async def _contexto(
             page=pagina,
             page_size=_PAGE_SIZE,
             tradition=filtros.tradition or None,
+            kind=filtros.naturaleza or None,
+            format=filtros.formato or None,
             search=filtros.q or None,
             publisher_id=filtros.uuid("publisher_id"),
             character_id=filtros.uuid("character_id"),
@@ -599,6 +635,8 @@ async def _contexto(
         coleccion=filtros.coleccion,
         page=pagina,
         vista=filtros.vista,
+        naturaleza=filtros.naturaleza,
+        formato=filtros.formato,
         densidad=filtros.densidad,
         modo=filtros.modo,
         avisos=tuple(avisos),
@@ -610,7 +648,8 @@ async def _contexto(
         filtros_finales.author_id, filtros_finales.favorito,
         filtros_finales.language, filtros_finales.edition_kind,
         filtros_finales.year_from, filtros_finales.year_to,
-        filtros_finales.leido, filtros_finales.coleccion)) + len(etiquetas_activas)
+        filtros_finales.leido, filtros_finales.coleccion,
+        filtros_finales.naturaleza, filtros_finales.formato)) + len(etiquetas_activas)
     recuento = (_texto_recuento_etiquetas(total, etiquetas_activas)
                 or _texto_recuento(total, bool(activos) or bool(etiquetas_activas)))
     if error:
@@ -637,6 +676,10 @@ async def _contexto(
             ("reciente", "Añadidas"),
         ),
         "vista": filtros_finales.vista,
+        "naturaleza": filtros_finales.naturaleza,
+        "formato": filtros_finales.formato,
+        "naturalezas": [(v, _NATURALEZA_LABEL[v]) for v in _NATURALEZA_LABEL],
+        "formatos": [(v, _FORMATO_LABEL[v]) for v in _FORMATO_LABEL],
         "densidad": filtros_finales.densidad,
         "modo": filtros_finales.modo,
         "url_densidad_grande": _url_pagina(
@@ -727,13 +770,13 @@ async def sugerir_etiquetas(
     vista: str = "", coleccion: str = "", author_id: str = "",
     favoritos: str = "", anio_desde: str = "", anio_hasta: str = "",
     idioma: str = "", edicion: str = "", densidad: str = "", modo: str = "",
-    db: AsyncSession = Depends(get_db),
+    naturaleza: str = "", formato: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         coleccion=coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
     tokens = etiquetas.strip().split()
     prefijo = tokens[-1].lstrip("-") if tokens else ""
     sin_prefijo = replace(filtros, etiquetas=" ".join(tokens[:-1]))
@@ -800,13 +843,14 @@ async def index(
     vista: str = "", etiquetas: str = "", leido: str = "", orden: str = "",
     coleccion: str = "", author_id: str = "", favoritos: str = "",
     anio_desde: str = "", anio_hasta: str = "", idioma: str = "", edicion: str = "",
-    densidad: str = "", modo: str = "", db: AsyncSession = Depends(get_db),
+    densidad: str = "", modo: str = "", naturaleza: str = "", formato: str = "",
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         leido, orden, coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
     publishers: list = []
     editoriales_error = False
     try:
@@ -844,13 +888,14 @@ async def resultados(
     vista: str = "", etiquetas: str = "", leido: str = "", orden: str = "",
     coleccion: str = "", author_id: str = "", favoritos: str = "",
     anio_desde: str = "", anio_hasta: str = "", idioma: str = "", edicion: str = "",
-    densidad: str = "", modo: str = "", db: AsyncSession = Depends(get_db),
+    densidad: str = "", modo: str = "", naturaleza: str = "", formato: str = "",
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         leido, orden, coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
     return await _respuesta_fragmento(request, await _contexto(db, filtros), db)
 
 
@@ -873,6 +918,8 @@ def _enlace_con_filtro(filtros: Filtros, clave: str, valor: str) -> str:
         "orden": "" if filtros.orden == "titulo" else filtros.orden,
         "coleccion": filtros.coleccion,
         "vista": "lista" if filtros.vista == "lista" else "",
+        "naturaleza": filtros.naturaleza,
+        "formato": filtros.formato,
         clave: valor,
         "page": "1",
     }
@@ -894,7 +941,7 @@ async def buscar_personaje(
     vista: str = "", etiquetas: str = "", coleccion: str = "",
     author_id: str = "", favoritos: str = "", anio_desde: str = "", anio_hasta: str = "",
     idioma: str = "", edicion: str = "", densidad: str = "", modo: str = "",
-    db: AsyncSession = Depends(get_db),
+    naturaleza: str = "", formato: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(personaje)
     if not texto and q:
@@ -904,7 +951,7 @@ async def buscar_personaje(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         coleccion=coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
     service = SeriesService(db)
     encontrados: list = []
     try:
@@ -926,7 +973,7 @@ async def buscar_saga(
     vista: str = "", etiquetas: str = "", coleccion: str = "",
     author_id: str = "", favoritos: str = "", anio_desde: str = "", anio_hasta: str = "",
     idioma: str = "", edicion: str = "", densidad: str = "", modo: str = "",
-    db: AsyncSession = Depends(get_db),
+    naturaleza: str = "", formato: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(saga)
     if not texto and q:
@@ -935,7 +982,7 @@ async def buscar_saga(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         coleccion=coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
     service = SeriesService(db)
     encontrados: list = []
     try:
@@ -957,7 +1004,7 @@ async def buscar_autor(
     vista: str = "", etiquetas: str = "", coleccion: str = "",
     author_id: str = "", favoritos: str = "", anio_desde: str = "", anio_hasta: str = "",
     idioma: str = "", edicion: str = "", densidad: str = "", modo: str = "",
-    db: AsyncSession = Depends(get_db),
+    naturaleza: str = "", formato: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(autor)
     if not texto and q:
@@ -966,7 +1013,7 @@ async def buscar_autor(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         coleccion=coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
     service = SeriesService(db)
     encontrados: list = []
     try:
