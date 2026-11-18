@@ -13,3 +13,6 @@ venv/
 .claude/
 # Perfiles de Chrome sin cabeza que dejan las capturas de pantalla (no se versionan).
 .chrome*/
+
+# Artefactos de revisión headless (perfiles de Chrome, capturas)
+.review*/

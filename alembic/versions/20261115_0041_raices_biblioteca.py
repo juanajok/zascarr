@@ -17,16 +17,20 @@ from sqlalchemy.dialects.postgresql import ENUM, UUID
 
 from alembic import op
 from zascarr.config import get_settings
-from zascarr.models import ComicTradition
 
 revision = "0041"
 down_revision = "0040"
 branch_labels = None
 depends_on = None
 
-TRADICION = ENUM(
-    *[t.value for t in ComicTradition], name="comic_tradition", create_type=False,
+# Valores históricos del enum en 0041. No se importa el enum vivo: una
+# tradición añadida después (p. ej. `hispanoamericano` en 0052) no existía
+# todavía y hacer INSERT con ella rompería esta migración.
+TRADICIONES_0041 = (
+    "american", "franco_belgian", "manga", "tebeo", "fumetti", "manhwa",
+    "manhua", "british", "other",
 )
+TRADICION = ENUM(*TRADICIONES_0041, name="comic_tradition", create_type=False)
 
 
 def _fila_raiz(conn) -> str | None:
@@ -86,13 +90,13 @@ def upgrade() -> None:
         ),
         {"name": "Biblioteca", "path": path, "host_path": settings.host_library_dir or None},
     ).scalar_one()
-    for tradicion in ComicTradition:
+    for tradicion in TRADICIONES_0041:
         conn.execute(
             sa.text(
                 "INSERT INTO library_root_traditions (root_id, tradition) "
                 "VALUES (:root_id, :tradition)"
             ),
-            {"root_id": root_id, "tradition": tradicion.value},
+            {"root_id": root_id, "tradition": tradicion},
         )
 
     op.add_column("files", sa.Column("root_id", UUID(as_uuid=True), nullable=True))

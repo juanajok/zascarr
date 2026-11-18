@@ -8,6 +8,24 @@
     {% endfor %}
   </select>
 </div>
+<div class="filtro-campo">
+  <label for="f-naturaleza">Naturaleza</label>
+  <select name="naturaleza" id="f-naturaleza">
+    <option value="">Toda naturaleza</option>
+    {% for value, label in naturalezas %}
+    <option value="{{ value }}" {% if value == filtros.naturaleza %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</div>
+<div class="filtro-campo">
+  <label for="f-formato">Formato</label>
+  <select name="formato" id="f-formato">
+    <option value="">Todo formato</option>
+    {% for value, label in formatos %}
+    <option value="{{ value }}" {% if value == filtros.formato %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</div>
 {% if publishers or filtros.publisher_id %}
 <div class="filtro-campo">
   <label for="f-publisher">Editorial</label>

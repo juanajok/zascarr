@@ -62,6 +62,10 @@
       <li><a class="chip" href="/ui/biblioteca?modo=gestion&vista=lista">Toda la biblioteca</a></li>
       <li><a class="chip" href="/ui/biblioteca?modo=gestion&orden=reciente">Añadidas recientemente</a></li>
       <li><a class="chip" href="/ui/biblioteca?modo=gestion&favoritos=1">Solo favoritas</a></li>
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&naturaleza=regular">Series regulares</a></li>
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&naturaleza=annual">Anuales</a></li>
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&naturaleza=special">Especiales</a></li>
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&naturaleza=one_shot">Tomos únicos</a></li>
       {% for t in tradiciones %}
       <li><a class="chip" href="/ui/biblioteca?modo=gestion&tradition={{ t.tradition }}">{{ t.tradition|tradicion }} <span class="muted">· {{ t.total }}</span></a></li>
       {% endfor %}
