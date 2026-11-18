@@ -227,6 +227,7 @@ def test_oob_no_reemplaza_details_y_conserva_foco():
 def test_css_chip_en_flujo_y_panel_bajo_el_chip():
     css = Path("src/zascarr/static/web.css").read_text()
     assert ".tareas-fuera { position: relative; display: flex;" in css
+    assert "max-width: 1240px" in css and "padding-inline: 16px" in css
     assert ".tareas-panel { position: relative; right: auto; left: auto; top: auto;" in css
     assert ".side .tareas-panel" not in css
     # Sin hoja inferior fija: el chip no flota sobre tarjetas/contenido.
