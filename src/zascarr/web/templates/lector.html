@@ -84,23 +84,7 @@
   {% if siguiente %}
   <section id="fin" class="lector-fin" hidden aria-labelledby="fin-titulo">
     <h2 id="fin-titulo" class="titulo-frase">Has llegado al final</h2>
-    {% if siguiente.estado == "leer" %}
-    <p>Has terminado el #{{ numero.issue_number or "?" }}. Siguiente: <strong>#{{ siguiente.numero }}</strong>.</p>
-    <p><a class="btn primary" href="/ui/leer/{{ siguiente.archivo.id }}">Leer el #{{ siguiente.numero }}</a></p>
-    {% elif siguiente.estado == "falta" %}
-    <p>Te falta el <strong>#{{ siguiente.numero }}</strong> de <em>{{ serie.title }}</em>.</p>
-    {% if legal_aceptado %}
-    <form hx-post="/ui/leer/{{ archivo.id }}/deseo" hx-target="#fin" hx-swap="innerHTML">
-      <button type="submit" class="btn">Añadir a Deseados</button>
-    </form>
-    {% else %}
-    <p><a class="btn" href="/ui/legal">Añadir a Deseados</a></p>
-    <p class="caption">Antes tienes que leer y aceptar el aviso legal; después podrás pedirlo.</p>
-    {% endif %}
-    {% else %}
-    <p>No hay un número siguiente en tu biblioteca.</p>
-    {% endif %}
-    <p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+    {% include "_lector_fin.html" %}
   </section>
   {% endif %}
   {% endif %}
