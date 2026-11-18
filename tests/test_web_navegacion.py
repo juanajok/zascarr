@@ -482,7 +482,8 @@ class TestPaginas:
         # aria-current="page"; la entrada del menú es la que se comprueba aquí.
         activos = {
             at["href"] for t, at, _ in a.elementos
-            if at.get("aria-current") == "page" and "barra-vista-opcion" not in clases(at)
+            if at.get("aria-current") == "page"
+            and "barra-vista-opcion" not in clases(at) and "selector-modo" not in clases(at)
         }
         assert activos == {url}
 

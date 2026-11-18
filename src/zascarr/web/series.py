@@ -47,7 +47,7 @@ from zascarr.models import (
     WishlistStatus,
     collection_series,
 )
-from zascarr.services import tareas
+from zascarr.services import actividad, tareas
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.arcos import sagas_de_serie
 from zascarr.services.calidad import buscar_mejoras
@@ -733,6 +733,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "serie_vacia": serie_vacia,
         "missing": huecos.faltantes, "huecos": huecos,
         "nota_serie": nota_serie,
+        "mas_serie": await actividad.mas_de_la_serie(db, series_id),
         "notas_numeros": notas_numeros,
         "nota_aviso": {
             "vacia": "La nota no puede estar vacía.",
