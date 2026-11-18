@@ -124,15 +124,24 @@ async def _archivos_del_numero(db: AsyncSession, serie_id: UUID,
 
 
 def _generar(archivos: list[tuple[UUID, str, dict | None]],
-             settings, ancho: int, max_pixeles: int) -> tuple[bytes, UUID] | None:
+             settings, ancho: int, max_pixeles: int,
+             estado: dict | None = None) -> tuple[bytes, UUID] | None:
     """Extrae la primera página del primer archivo que pueda darla. Sin BD y sin locks: se llama
-    desde un hilo. El interruptor del lector de RAR se respeta igual que en `_primera_portada`."""
+    desde un hilo. El interruptor del lector de RAR se respeta igual que en `_primera_portada`.
+
+    `estado["agotado"]` distingue un fallo de contenido de haberse quedado sin presupuesto:
+    solo el segundo no debe dejar caché negativa, porque mañana el mismo archivo puede caber.
+    """
+    if estado is not None:
+        estado["agotado"] = False
     covers = Path(settings.covers_cache_path)
     marcas = covers / CACHE_VERSION
     limite = time.monotonic() + PRESUPUESTO_PREVIA_S
     herramienta = None if getattr(settings, "lector_rar_enabled", True) else False
     for file_id, ruta, formato in archivos:
         if time.monotonic() >= limite:
+            if estado is not None:
+                estado["agotado"] = True
             break
         path = Path(ruta)
         es_rar = es_rar_candidato(path, formato)
@@ -194,13 +203,20 @@ async def ruta_previa(db: AsyncSession, serie_id: UUID, issue_id: UUID, *,
             return None
         max_pixeles = (MAX_PIXELES_PREVIA if ancho == ANCHO_PREVIA
                        else MAX_PIXELES_HD if ancho == ANCHO_HD else MAX_PIXELES_FICHA)
+        estado_generacion: dict = {}
         try:
             async with _GENERACIONES:
                 generado = await asyncio.wait_for(
-                    asyncio.to_thread(_generar, archivos, settings, ancho, max_pixeles),
+                    asyncio.to_thread(_generar, archivos, settings, ancho, max_pixeles,
+                                      estado_generacion),
                     timeout=PRESUPUESTO_PREVIA_S)
         except TimeoutError:
             logger.warning("previa.tiempo_agotado", ancho=ancho)
+            return None
+        if generado is None and estado_generacion.get("agotado"):
+            # No es «este archivo no tiene portada»: es que no ha cabido en el presupuesto.
+            # No se cachea en negativo para que un reintento posterior sí lo intente.
+            logger.info("previa.presupuesto_generacion_agotado", ancho=ancho)
             return None
         if generado is None:
             # Si el lector RAR está apagado, la ausencia es de CONFIGURACIÓN, no del archivo:
