@@ -7,7 +7,8 @@ from zascarr.web.library import Filtros, _leer_filtros, _qs
 
 
 def _leer(**kw):
-    return _leer_filtros("1", "", "", "", "", "", "", "", "", "", **kw)
+    return _leer_filtros("1", kw.pop("q", ""), kw.pop("tradition", ""),
+                         "", "", "", kw.pop("vista", ""), "", "", "", **kw)
 
 
 def test_densidad_valida_y_canonica():
@@ -24,8 +25,8 @@ def test_densidad_valida_y_canonica():
 def test_modo_precedencia_y_aviso():
     assert _leer().modo == "gestion"
     esc = _leer(modo="escaparate")
-    assert esc.modo == "gestion"
-    assert any("escaparate" in aviso for aviso in esc.avisos)
+    assert esc.modo == "escaparate"
+    assert _leer(modo="escaparate", q="x").modo == "gestion"
     assert _leer(modo="otro").modo == "gestion"
 
 
@@ -84,14 +85,19 @@ def test_ssr_y_fragmento_con_densidad():
     assert "densidad=compacta" in fragmento.headers["HX-Push-Url"]
 
 
-def test_modo_escaparate_avisa_en_pagina_y_fragmento():
+def test_modo_escaparate_pagina_y_fragmento(monkeypatch):
+    from zascarr.web import library
+
+    async def _vacio(_db):
+        return {}
+    monkeypatch.setattr(library.escaparate, "contexto", _vacio)
     with _cliente_pagina() as client:
         pagina = client.get("/ui/biblioteca?modo=escaparate")
     with _cliente_fragmento() as client:
         fragmento = client.get("/ui/biblioteca/resultados?modo=escaparate",
                                headers={"HX-Request": "true"})
-    assert "escaparate" in pagina.text.lower()
-    assert "escaparate" in fragmento.text.lower()
+    assert pagina.status_code == 200 and "Escaparate" in pagina.text
+    assert fragmento.status_code == 200
 
 
 def test_densidad_tactil_44_y_js_atajo():
@@ -128,7 +134,7 @@ def test_modo_gestion_se_conserva_y_escaparate_avisa():
     gestion = _leer(modo="gestion")
     assert gestion.modo == "gestion"
     esc = _leer(modo="escaparate")
-    assert esc.modo == "gestion" and any("escaparate" in a for a in esc.avisos)
+    assert esc.modo == "escaparate"
 
 
 def test_cambio_de_q_conserva_densidad_compacta():

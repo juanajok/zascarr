@@ -1,0 +1,90 @@
+{# #1101: escaparate de la biblioteca; solo bloques con datos.
+   Los carruseles no llevan flechas propias: el contenedor es focusable y se
+   desplaza con teclado/gesto; la barra nativa se oculta con CSS. -#}
+<section class="escaparate" aria-label="Escaparate de tu biblioteca">
+  {% if continuar %}
+  <section class="escaparate-bloque" aria-labelledby="escaparate-continuar">
+    <h2 id="escaparate-continuar">Continuar leyendo</h2>
+    <ul class="escaparate-lista" tabindex="0" aria-label="Continuar leyendo">
+      {% for x in continuar %}
+      <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}">
+        {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada") }}
+        <span class="escaparate-titulo">{{ x.series_title }}</span>
+        <span class="muted">#{{ x.numero }}{% if x.total_paginas %} · {{ x.pagina }} de {{ x.total_paginas }}{% endif %}</span>
+      </a></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if vistos %}
+  <section class="escaparate-bloque" aria-labelledby="escaparate-vistos">
+    <h2 id="escaparate-vistos">Vistos recientemente</h2>
+    <ul class="escaparate-lista" tabindex="0" aria-label="Vistos recientemente">
+      {% for x in vistos %}
+      <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}">
+        {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada") }}
+        <span class="escaparate-titulo">{{ x.series_title }}</span></a></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if recien %}
+  <section class="escaparate-bloque" aria-labelledby="escaparate-recien">
+    <h2 id="escaparate-recien">Recién incorporados</h2>
+    <ul class="escaparate-lista" tabindex="0" aria-label="Recién incorporados">
+      {% for x in recien %}
+      <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}">
+        {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada") }}
+        <span class="escaparate-titulo">{{ x.series_title }}</span>
+        {{ ui.chip("info", "Serie nueva" if x.tipo == "serie_nueva" else "Número nuevo") }}
+      </a></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if redescubre %}
+  <section class="escaparate-bloque" id="redescubre" aria-labelledby="escaparate-redescubre">
+    <h2 id="escaparate-redescubre">Redescubre tu estantería</h2>
+    <div id="sugerencias">
+      {% set sugerencias = redescubre %}
+      {% set offset_siguiente = offset_sugerencias + 4 %}
+      {% include "_sugerencias_escaparate.html" %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="escaparate-bloque" aria-labelledby="escaparate-accesos">
+    <h2 id="escaparate-accesos">Accesos rápidos</h2>
+    <ul class="escaparate-lista" tabindex="0" aria-label="Accesos rápidos">
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&vista=lista">Toda la biblioteca</a></li>
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&orden=reciente">Añadidas recientemente</a></li>
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&favoritos=1">Solo favoritas</a></li>
+      {% for t in tradiciones %}
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&tradition={{ t.tradition }}">{{ t.tradition|tradicion }} <span class="muted">· {{ t.total }}</span></a></li>
+      {% endfor %}
+    </ul>
+    {#- Naturaleza (SeriesKind) queda fuera hasta #1027. -#}
+  </section>
+
+  {% if autores %}
+  <section class="escaparate-bloque" aria-labelledby="escaparate-autores">
+    <h2 id="escaparate-autores">Autores destacados</h2>
+    <ul class="escaparate-lista" tabindex="0" aria-label="Autores destacados">
+      {% for a in autores %}
+      <li><a class="chip" href="/ui/biblioteca?modo=gestion&author_id={{ a.creator_id }}">{{ a.nombre }} <span class="muted">· {{ a.total }}</span></a></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if not (continuar or vistos or recien or redescubre or autores) %}
+  <p class="muted" role="status">Todavía no hay actividad en tu biblioteca. Añade series para empezar.</p>
+  {% endif %}
+</section>
+
+{#- Plantillas para el JS de flechas (clase y SVG del sistema). -#}
+<template id="tpl-escaparate-nav"><div class="escaparate-nav"></div></template>
+<template id="tpl-escaparate-flecha">{{ "chevron_down"|icono }}</template>
