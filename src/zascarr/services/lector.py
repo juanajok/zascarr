@@ -123,6 +123,21 @@ async def archivos_legibles(db: AsyncSession, issue_id: UUID) -> list[ArchivoDeL
             for f in filas if _es_legible(f)]
 
 
+def _por_defecto(candidatos: list, file_id_progreso: object):
+    """Regla única del archivo por defecto de un número (LEC1 y OPDS-PSE la comparten).
+
+    El archivo con el que se leyó por última vez; si no hay o ya no existe, el primero
+    por nombre. `candidatos` ya viene ordenado y solo con archivos legibles.
+    """
+    if not candidatos:
+        return None
+    if file_id_progreso:
+        for c in candidatos:
+            if str(c.id) == str(file_id_progreso):
+                return c
+    return candidatos[0]
+
+
 async def archivo_por_defecto(db: AsyncSession, issue_id: UUID) -> ArchivoDeLectura | None:
     legibles = await archivos_legibles(db, issue_id)
     if not legibles:
@@ -130,11 +145,7 @@ async def archivo_por_defecto(db: AsyncSession, issue_id: UUID) -> ArchivoDeLect
     progreso = (await db.execute(
         select(ReadingProgress).where(ReadingProgress.issue_id == issue_id)
     )).scalar_one_or_none()
-    if progreso is not None and progreso.file_id:
-        for a in legibles:
-            if a.id == str(progreso.file_id):
-                return a
-    return legibles[0]
+    return _por_defecto(legibles, progreso.file_id if progreso is not None else None)
 
 
 async def _abrir(db: AsyncSession, file_id: UUID) -> File:
@@ -380,3 +391,102 @@ async def siguiente_numero(db: AsyncSession, file_id: UUID) -> Siguiente:
     if huecos.computable and k in huecos.faltantes:
         return Siguiente(FALTA, serie, k)
     return Siguiente(SIN_SIGUIENTE, serie=serie)
+
+
+# ── OPDS-PSE (BL-LEC5, #828) ─────────────────────────────────────────────────────────────
+#: Solo se anuncian páginas que un cliente OPDS lee tal cual: no se recodifica nada.
+_PSE_CT = {"image/jpeg", "image/png", "image/gif"}
+_PSE_EXTS = {ext for ext, ct in _CT.items() if ct in _PSE_CT}
+
+
+@dataclass(frozen=True)
+class Streaming:
+    file_id: str
+    count: int
+    content_type: str
+    ultima_leida: int | None
+
+
+def pagina_pse_a_lector(numero_pse: int) -> int:
+    """Página de OPDS-PSE (0 a N-1, especificación 1.0) → página del lector (1 a N)."""
+    return numero_pse + 1
+
+
+def ultima_leida_pse(current_page: int | None) -> int | None:
+    """`pse:lastRead` a partir de `ReadingProgress.current_page`.
+
+    Se envía la página en la que estás, 1-basada, tal cual (como hace Komga con su
+    `readProgress.page`); `0` o ausente = sin empezar, y el atributo se omite. La
+    especificación 1.0 no define `lastRead`: la base está sin probar con una app real.
+    """
+    if current_page is None or current_page < 1:
+        return None
+    return current_page
+
+
+def _medir_streaming(f: File) -> tuple[int, str] | None:
+    """`(páginas, tipo)` si el archivo se puede servir YA y sin recodificar; si no, `None`."""
+    try:
+        if es_rar_real(f):
+            nombres = [p.name for p in CACHE._paginas(f)]
+        else:
+            nombres = [i.filename for i in _listado(Path(f.file_path))]
+    except (LectorError, OSError):
+        return None
+    if not nombres:
+        return None
+    exts = {Path(n).suffix.lower() for n in nombres}
+    if not exts <= _PSE_EXTS:
+        return None
+    return len(nombres), _CT[Path(nombres[0]).suffix.lower()]
+
+
+def _medir_todos(archivos: dict[UUID, File]) -> dict[UUID, tuple[int, str]]:
+    medidos = {}
+    for issue_id, f in archivos.items():
+        medida = _medir_streaming(f)
+        if medida is not None:
+            medidos[issue_id] = medida
+    return medidos
+
+
+async def streaming_de_numeros(db: AsyncSession, issue_ids: list[UUID]) -> dict[UUID, Streaming]:
+    """Qué números de una lista anuncian OPDS-PSE: uno por número, con el archivo por defecto.
+
+    Un RAR solo cuenta si su caché de BL-LEC4 ya está lista (nunca se prepara desde aquí).
+    """
+    if not issue_ids:
+        return {}
+    filas = (await db.execute(
+        select(File).where(File.issue_id.in_(issue_ids), File.is_missing.is_(False))
+        .order_by(File.file_name)
+    )).scalars().all()
+    progresos = {p.issue_id: p for p in (await db.execute(
+        select(ReadingProgress).where(ReadingProgress.issue_id.in_(issue_ids))
+    )).scalars().all()}
+    legibles: dict[UUID, list[File]] = {}
+    for f in filas:
+        if _es_legible(f):
+            legibles.setdefault(f.issue_id, []).append(f)
+    elegidos = {
+        iid: _por_defecto(fs, getattr(progresos.get(iid), "file_id", None))
+        for iid, fs in legibles.items()
+    }
+    medidos = await asyncio.to_thread(_medir_todos, elegidos)
+    salida: dict[UUID, Streaming] = {}
+    for iid, (cuenta, tipo) in medidos.items():
+        progreso = progresos.get(iid)
+        salida[iid] = Streaming(
+            str(elegidos[iid].id), cuenta, tipo,
+            ultima_leida_pse(progreso.current_page if progreso is not None else None))
+    return salida
+
+
+async def pagina_pse(db: AsyncSession, file_id: UUID, numero_pse: int) -> RecursoPagina:
+    """Una página para un cliente OPDS-PSE: mismo servicio y mismos bytes que `/ui/leer`."""
+    if numero_pse < 0:
+        raise PaginaFueraDeRangoError("Esa página no existe.")
+    recurso = await pagina(db, file_id, pagina_pse_a_lector(numero_pse))
+    if recurso.content_type not in _PSE_CT:
+        raise ArchivoNoLegibleError("Esa página no se puede servir sin recodificarla.")
+    return recurso
