@@ -18,6 +18,12 @@
 </span>
 {% else %}{{ ui.chip("ok", "#" ~ n) }}<span class="sr"> ver información del número {{ n }}</span>{% endif %}
 {%- endmacro %}
+{% macro publicacion_sin_numero(n) -%}
+<li>
+  <span>Sin número{% if n.titulo %} · {{ n.titulo }}{% endif %}</span>
+  <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}">Ver tebeo<span class="sr">{% if n.titulo %}: {{ n.titulo }}{% else %} sin número{% endif %}</span></a>
+</li>
+{%- endmacro %}
 {% if volver %}<a href="{{ volver }}" class="back-link">← Volver{% if volver.startswith('/ui/colecciones/') %} a la colección{% else %} a la biblioteca{% endif %}</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
 
 <div class="series-header">
@@ -107,6 +113,7 @@
 
 <section id="numeros-serie" class="ficha-numeros" aria-label="Números de la serie">
 {% set limite = 30 %}
+{% set sin_numero = archivos_por_numero|selectattr("numero", "equalto", "(sin número)")|list %}
 {% if estado_coleccion.tipo != "no_completar" and missing %}
 <h2>Te faltan</h2>
 <div class="issue-grid">
@@ -128,8 +135,10 @@
 <p class="empty">Ningún hueco — la tienes completa.</p>
 {% endif %}
 
-{% if present %}
+{% if present or sin_numero %}
 <h2>En tu biblioteca</h2>
+{% endif %}
+{% if present %}
 <div class="issue-grid">
   {% for n in present[:limite] %}{{ numero_presente(n) }}{% endfor %}
 </div>
@@ -139,6 +148,20 @@
   <div class="issue-grid">
     {% for n in present[limite:] %}{{ numero_presente(n) }}{% endfor %}
   </div>
+</details>
+{% endif %}
+{% endif %}
+{% if sin_numero %}
+<ul class="archivos-lista">
+  {% for n in sin_numero[:limite] %}{{ publicacion_sin_numero(n) }}{% endfor %}
+</ul>
+{% if sin_numero|length > limite %}
+{% set restantes = sin_numero|length - limite %}
+<details class="ficha-mas">
+  <summary>Ver {{ restantes }} {{ "publicación sin número" if restantes == 1 else "publicaciones sin número" }} más</summary>
+  <ul class="archivos-lista">
+    {% for n in sin_numero[limite:] %}{{ publicacion_sin_numero(n) }}{% endfor %}
+  </ul>
 </details>
 {% endif %}
 {% endif %}
