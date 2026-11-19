@@ -2791,6 +2791,22 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .library-grid-compacta { grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr)); }
 .library-grid-compacta .library-card-body { padding: var(--space-1) var(--space-2); }
 .library-card-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-1) var(--space-2); }
+/* Revisión 2026-11-19: las píldoras de filtro (#1058) van fuera del enlace de la tarjeta (un enlace no
+   puede llevar otro dentro) y quedaban sueltas bajo su borde. El marco pasa al envoltorio para que
+   tarjeta y atajos sean una sola viñeta (región común); el gesto al pasar sube la viñeta entera. */
+.library-grid .library-card-wrap {
+  display: flex; flex-direction: column;
+  background: var(--paper-2); border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-panel); transition: transform .15s, box-shadow .15s;
+}
+.library-grid .library-card-wrap > .library-card { border: 0; border-radius: 0; background: transparent; }
+.library-grid .library-card-wrap > .library-card:hover { transform: none; box-shadow: none; }
+.library-grid .library-card-wrap:hover { transform: translateY(-3px); box-shadow: var(--shadow-ink); }
+.library-grid .library-card-wrap > .library-card-chips { margin-top: auto; padding: 0 11px var(--space-2); }
+/* A 375 px, «Intermedia» daba una tarjeta por fila de ~500 px de alto: una serie y media por pantalla. */
+@media (max-width: 480px) {
+  .library-grid-intermedia { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .barra-densidad-opcion { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--space-2); border: var(--border-chip) solid transparent; border-radius: var(--radius-pill); color: var(--ink); font-size: var(--text-secundario); text-decoration: none; }
 .barra-densidad-opcion:hover, .barra-densidad-opcion:focus-visible { border-color: var(--ink); }
 .barra-densidad-opcion.barra-vista-opcion-actual { background: var(--ink); color: var(--paper); }
