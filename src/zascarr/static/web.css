@@ -649,8 +649,12 @@ button.primary,
 .pending-item { min-width: 0; }
 .pending-card {
   overflow: hidden;
-  display: flex; flex-direction: row; align-items: stretch;
+  display: flex; flex-direction: column;
 }
+/* La fila horizontal es SOLO de la cola. `.pending-card` también es el panel de Estado (comprobaciones,
+   cortesía), de las fichas de datos y de Sueltos: con la fila general, la tabla de comprobaciones de
+   /estado salía en una línea apretada («Base / de / datos») y las secciones de datos, de lado. */
+.pending-grid .pending-card { flex-direction: row; align-items: stretch; }
 .pending-media { flex: 0 0 80px; padding: var(--space-2); }
 .pending-card .portada-pendiente {
   width: 64px; margin: 0;
@@ -1295,7 +1299,7 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
    nunca una paleta propia (bug real reportado: la página vivía fuera de
    base.html con su CSS inline, look distinto al resto) ────────────────── */
 .estado-summary {
-  display: flex; align-items: center; gap: 14px;
+  display: flex; flex-direction: row; align-items: center; gap: 14px;
   padding: 18px 20px; margin-bottom: 18px;
 }
 .estado-checks { padding: 0; margin-bottom: 18px; overflow: hidden; }
