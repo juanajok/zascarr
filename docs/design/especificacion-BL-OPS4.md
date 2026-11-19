@@ -4,7 +4,7 @@
 
 ## 1. Base y alcance
 
-Fuentes leídas en este árbol: `scripts/update.sh` (en especial líneas 36–59, 84–90, 100–169, 189–219), `scripts/_cerrojo.sh`, `scripts/instalar_ops.sh`, `deploy/ops/zascarr_ops.py`, `deploy/systemd/zascarr-ops@.service`, ADR [0012](../adr/0012-credenciales-del-env.md), [0021](../adr/0021-auxiliar-del-host-para-operaciones.md) y [0023](../adr/0023-restaurar-copia-desde-interfaz.md), y especificaciones [OPS1](especificacion-BL-OPS1.md) y [OPS2](especificacion-BL-OPS2.md). Las descripciones históricas de OPS2 no prueban el estado actual: aquí el auxiliar v1/v2 y el cerrojo existen, pero **no** existe la acción actualizar. Las pruebas de esta propuesta están **NOT RUN**.
+Fuentes leídas en este árbol (`main` = `61f4d53`): `scripts/update.sh` (rama, cerrojo, árbol limpio, backup, `fetch`+`merge --ff-only`, `ZASCARR_BUILD_SHA` y `instalar_ops.sh --refrescar`), `scripts/_cerrojo.sh`, `scripts/instalar_ops.sh`, `deploy/ops/zascarr_ops.py`, `deploy/systemd/zascarr-ops@.service`, ADR [0012](../adr/0012-credenciales-del-env.md), [0021](../adr/0021-auxiliar-del-host-para-operaciones.md) y [0023](../adr/0023-restaurar-copia-desde-interfaz.md), y especificaciones [OPS1](especificacion-BL-OPS1.md) y [OPS2](especificacion-BL-OPS2.md). Las descripciones históricas de OPS2 no prueban el estado actual: aquí el auxiliar v1/v2 y el cerrojo existen, pero **no** existe la acción actualizar. El aviso de versión fusionado en #1147 muestra solo un estado grueso; **no** expone el SHA candidato ni `superficie_no_permitida`/`migracion_nueva`, así que FR-02 exige una superficie de UI nueva que esta SPEC no implementa. Las pruebas de esta propuesta están **NOT RUN**.
 
 Hoy `update.sh` exige `--rama` o `BRANCH`, crea un ancla y backup, ejecuta `git fetch origin "$BRANCH"` y `git merge --ff-only "origin/$BRANCH"`, construye, migra y arranca; después ejecuta `probar_restauracion.sh` y `instalar_ops.sh --refrescar` del árbol actualizado. El árbol limpio se comprueba solo mediante `git diff` y `git diff --cached` (no cubre todos los no rastreados); el aviso de protección del `.env` no detiene el script. `git` puede usar configuración, hooks, filtros y helpers externos; Compose evalúa ficheros y puede montar recursos/ejecutar programas privilegiados. **No se puede invocar sin más este script desde una unidad root, ni convertir su `--rama main` en un parámetro enviado por la app.** Su ruta manual actual queda fuera de este contrato y no se presume segura para automatizarla.
 
@@ -111,8 +111,9 @@ que recibe, rechaza rutas ambiguas, tipos inseguros, altas/bajas, cambios de
 modo y alteraciones de Compose, Dockerfile, scripts, unidades y migraciones.
 El nombre de la ruta y su hash no convierten un inventario en P: **no existe
 todavía mecanismo de obtención, sellado, validación de completitud ni anclaje
-de estos mapas al host o a un SHA**. Incluso dos mapas vacíos iguales producen
-«conforme»: este resultado aislado nunca es autorización para ejecutar.
+de estos mapas al host o a un SHA**. Un inventario vacío se rechaza, pero dos
+mapas truncados no vacíos e iguales no se detectan sin ancla externa: este
+resultado aislado nunca es autorización para ejecutar.
 
 El prototipo previo de registro de «aprobación» se retiró: admitía SHA
 aportado sin comprobar remoto/operador, verificaba solo un padre de la ruta
@@ -127,3 +128,63 @@ enlace a `update.sh` para actualizar.
 Las pruebas nuevas de la utilidad son aisladas (sin fixtures de app); no
 son AC-01…AC-13 completos. No se ejecutaron pruebas root, Git remoto,
 Docker, Postgres, systemd ni suite global. **Historia B NOT IMPLEMENTED.**
+
+## 10. Verificabilidad: arnés, contradicciones y casos ausentes
+
+La tabla de §5 describe el comportamiento esperado, **no** una suite que el CI
+actual pueda ejecutar entera. Clasificación explícita:
+
+- **Contrato/unitario en CI (pytest, dobles):** núcleos de AC-02, AC-03, AC-04,
+  AC-05, AC-08, AC-11 y AC-12, más la utilidad pura de §9.
+- **Arnés de host (repo bare local con barreras de sincronización, shim de
+  `systemctl` que registre llamadas, Docker/Postgres desechables, usuario sin
+  privilegios):** AC-01, AC-06, AC-07, AC-09, AC-10 y AC-13. Requiere evidencia
+  firmada y una puerta separada; **NOT RUN no cuenta como PASS**.
+- **Pi/smoke:** cualquier prueba sobre hardware o instalación real, con
+  autorización aparte.
+
+Mientras no exista ese arnés, la puerta de §7.3 no puede cumplirse y la función
+permanece deshabilitada. Un AC compuesto debe poder fallar por una sola causa;
+se exige una matriz de trazabilidad FR↔AC y un observable binario por AC
+(archivo, BD, HTTP, log o código de salida).
+
+### 10.1 Contradicciones a resolver en el mismo cambio
+
+1. **OPS1 AC-06** rechaza `actualizar`; OPS4 introduce v3. Hay que declarar qué
+   FR/AC de OPS1 queda superado.
+2. **OPS1 FR-27/AC-28** exige `--refrescar` en `update.sh`; OPS4 FR-09 lo
+   prohíbe en la vía UI. Acotar OPS1 a la vía manual.
+3. **OPS2 FR-06/AC-39** fija 1024 B; el código usa 4096 B
+   (`MAX_BYTES_RESTAURAR`). El contrato v3 debe fijar un único límite y corregir
+   OPS2 o el código, no ambos.
+4. **OPS1 FR-10/FR-35** reembolsa un inicio fallido; OPS4 FR-05 reserva/consume
+   antes de iniciar. `_aceptar` actual inicia primero y anota después: v3
+   necesita camino propio o cambio explícito.
+5. **Unidad instalada:** `ReadWritePaths` no incluye la ruta de `A`; si v3
+   reutiliza la unidad, la reserva falla. Hay que extender la unidad o ubicar
+   `A` en una ruta permitida.
+6. **Árbol limpio:** `update.sh` no cubre no rastreados; AC-07/FR-08 sí. La
+   prueba no puede reutilizar `update.sh` sin reescribir esa guarda.
+
+### 10.2 Casos que faltan en AC-01…AC-15
+
+Misma `A` con dos ids distintos; N>2 peticiones concurrentes; orden y cruce de
+las capas de cerrojo (`/run/zascarr-ops.lock`, aceptación y `A`); `git` manual o
+`docker compose` externo durante la operación; reloj retrocedido y frontera
+exacta de 24 h; `A` que queda «libre» tras reinicio; transiciones
+`consumida`/`incierta` y reconciliación; `fsync` fallido **después** del
+renombrado; `systemctl start` distinto de cero pero unidad arrancada, y respuesta
+perdida tras efecto; Alembic con múltiples cabezas, revisión ausente o BD no
+disponible; `P` vacío/truncado y activos no `.py`; force-push, ABA o
+no-fast-forward del remoto; cambio de digest de imagen base o build no
+reproducible; UI (origen/sesión, doble envío, candidato visible, estados sin
+botón); límites de intentos y fuerza bruta de contraseña; disco lleno o backup
+que no verifica; instalación de la unidad nueva; y no-op `S == HEAD0` (¿éxito,
+rechazo o código esperado?).
+
+### 10.3 Estado del comparador aislado
+
+`validar_inventario_ops4.py` rechaza inventarios vacíos y tipos o modos
+inseguros, pero **no** demuestra que un inventario no vacío sea completo ni
+esté anclado al host. Un `P` truncado e idéntico en ambos lados sigue pudiendo
+dar «conforme»: por eso el resultado nunca es autorización de despliegue.

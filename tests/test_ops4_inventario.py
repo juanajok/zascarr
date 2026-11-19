@@ -89,9 +89,11 @@ def test_allowlist_falta_o_es_autoautorizada_no_pasa() -> None:
     ) == "politica_invalida"
 
 
-def test_mapa_incompleto_no_se_detecta_sin_ancla_externa() -> None:
-    """Límite explícito: dos mapas truncados iguales NO prueban P."""
-    assert politica.validar_superficie({}, {}, frozenset()) == "conforme"
+def test_mapa_vacio_se_rechaza_y_truncado_igual_sigue_siendo_limite() -> None:
+    """Un mapa vacío no es un P válido; uno truncado no vacío no se detecta sin ancla."""
+    assert politica.validar_superficie({}, {}, frozenset()) == "arbol_inseguro"
+    assert politica.validar_superficie(BASE, {}, frozenset()) == "arbol_inseguro"
+    assert politica.validar_superficie({}, BASE, frozenset()) == "arbol_inseguro"
 
 
 def test_gate_v3_sigue_cerrado() -> None:

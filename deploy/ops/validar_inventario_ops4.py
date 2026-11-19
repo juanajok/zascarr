@@ -59,10 +59,11 @@ def validar_superficie(
 
     ``permitidos`` es una lista positiva ENTREGADA POR EL HOST, no derivada del
     candidato; solo puede incluir .py ya presentes en el inventario instalado.
+    Un inventario vacío se rechaza; aun así, uno no vacío puede estar truncado.
     Incluso con resultado «conforme», el llamador NO ha demostrado que sus
     inventarios sean completos, sellados, ni que el código sea seguro.
     """
-    if not _valido(instalado) or not _valido(candidato):
+    if not _valido(instalado) or not _valido(candidato) or not instalado or not candidato:
         return "arbol_inseguro"
     if (not isinstance(permitidos, frozenset)
             or not all(
