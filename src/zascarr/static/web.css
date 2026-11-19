@@ -795,6 +795,12 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
   font-size: var(--text-secundario);
   color: var(--ink-soft);
 }
+/* Revisión 2026-11-19: `.htmx-indicator` se oculta con opacity/visibility, que CONSERVAN su sitio; con
+   `flex: 1 1 100%` cada fila reservaba el alto de este aviso invisible (dos líneas y un botón) y «Quitar»
+   caía solo abajo; el de «Buscar seleccionados» abría otro hueco de ~60 px sobre la lista. Fuera de una
+   petición no ocupan nada; durante ella, htmx les pone `.htmx-request`. */
+.wishlist-buscando.htmx-indicator:not(.htmx-request),
+#buscando-lote.htmx-indicator:not(.htmx-request) { display: none; }
 /* Cola/progreso de Deseados (benchmark 2026-11-16): una fila por descarga,
    con barra nativa y texto; refresco htmx desde la propia página. */
 .wishlist-progreso { margin-top: var(--space-3); }
