@@ -395,6 +395,16 @@ async def _procesar_foro(
             desde_cache += 1
             continue
         actividad = _fecha_de_actividad(tema.ultima_actividad, ahora)
+        # #1017 (O-2): en un tema ya visto, la referencia de frontera es la
+        # actividad que tenía cuando se procesó (la huella guardada), no la
+        # nueva. Así, la actualización de un tema viejo no crea deseos
+        # históricos de una serie activada después. La huella se capturó en
+        # `visto_en`: una fecha relativa («Hoy/Ayer») se resuelve contra ese
+        # momento, no contra la pasada actual. Si no es fechable, `visto_en`
+        # (cuándo lo vimos) es una cota superior conservadora.
+        referencia = actividad
+        if fila is not None:
+            referencia = _fecha_de_actividad(fila.huella, fila.visto_en) or fila.visto_en
         if fila is None:
             # Primera pasada: solo se abre un tema si ALGUNA serie seguida ya
             # existía en la fecha del tema. El filtro definitivo es por serie
@@ -420,12 +430,13 @@ async def _procesar_foro(
             if elegido is None:
                 continue
             serie, numero = elegido
-            # #993: cada serie tiene su propia frontera. Un tema anterior a la
-            # activación de ESTA serie no puede generar su deseo, aunque otra
-            # serie más antigua permita abrir el tema.
-            if (fila is None and serie.follow_new_issues_since is not None
-                    and actividad is not None
-                    and actividad < serie.follow_new_issues_since):
+            # #993/#1017: cada serie tiene su propia frontera. Un tema anterior
+            # a la activación de ESTA serie no puede generar su deseo, aunque
+            # otra serie más antigua permita abrir el tema. En un tema ya visto,
+            # la referencia es su actividad anterior (no la nueva).
+            if (serie.follow_new_issues_since is not None
+                    and referencia is not None
+                    and referencia < serie.follow_new_issues_since):
                 continue
             hallazgos.append(Hallazgo(
                 fuente="foro", clave=f"tema:{tema.id}:{numero}", serie_id=serie.id,

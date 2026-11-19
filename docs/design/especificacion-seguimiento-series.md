@@ -138,6 +138,8 @@ registra el motivo; un fallo se registra y no tumba el bucle.
    - `clave=tema:<id>`; si no está en `seguimiento_vistos`, o si `huella` cambió: abrir con `leer_tema`, extraer enlaces, casar cada nombre de fichero
      contra las series seguidas; los temas con actividad anterior a `follow_new_issues_since` en la primera pasada se marcan vistos **sin** abrir ni crear
      deseo; los demás se procesan (tope), y se marca `huella/procesado_en` solo si la lectura terminó bien. Un flood/cortesía aborta el foro en esta pasada.
+     En un tema **ya visto** que se actualiza, la frontera de cada serie se compara con la actividad que tenía al procesarlo (huella guardada; si no es
+     una fecha, `visto_en`), nunca con la nueva: una actualización no puede crear el histórico de una serie activada después (#1017/O-2).
 4. **Prowlarr** (si `prowlarr_enabled` y clave): rotación de series; `search`; filtrar por fecha ≥ since y nombre de fichero; descartar ya vistos en
    `seguimiento_vistos` (`release:<hash>`); actualizar la fila de rotación de la serie.
 5. Unir hallazgos y deduplicar por `(serie_id, numero)`; crear como máximo `seguimiento_max_deseos` (el resto queda para la siguiente pasada y no se
@@ -182,7 +184,7 @@ registra el motivo; un fallo se registra y no tumba el bucle.
 - **AC-13** Límites: `max_temas`, `max_series_prowlarr`, `max_deseos`, `max_avisos` y una sola lista de foro por pasada; no se usa `Search` de IPB (25 s); sin series
   seguidas o sin fuentes no hay red; el job no bloquea el arranque ni los demás bucles.
 - **AC-14** Logs: `seguimiento.pass_start/done`, contadores, login/flood/legal; sin URL con `s=`, cookies, credenciales, magnet/ed2k ni cuerpos.
-- **AC-15** Pruebas sin red: fixtures sintéticos de `showforum`/tema (sustituidos por captura real autenticada antes de cerrar), `MockTransport` de
+- **AC-15** Pruebas sin red: fixtures de `showforum`/tema (incluido un fragmento anonimizado de captura real, #1017), `MockTransport` de
   Prowlarr, `FakeSession`/PG efímera para índice y enum; `test_migracion` PG skip sin URL; suite completa verde.
 - **AC-16** Interacción con la política: con un deseo vivo `SEGUIMIENTO` del número N, la política no crea otro `POLICY` para N; la retirada de política
   no toca `SEGUIMIENTO`; los deseos de seguimiento no consumen el cupo por hora de la política (prueba con `FakeSession`/PG).
@@ -224,7 +226,8 @@ URLs, query, cookies ni cuerpos—. La tabla de vistos no guarda enlaces ni tít
 
 ## 11. NOT RUN (a validar antes de cerrar)
 
-- HTML real autenticado de `index.php?showforum=5`: selectores de tema/última actividad y paginación; hoy solo hay fixture sintético.
+- HTML real autenticado de `index.php?showforum=5`: **validado en la Pi** al cerrar #993 (temas diarios y `ed2k`); el humo del parser queda fijado con
+  un fragmento anonimizado de esa captura (`tests/fixtures/foro/showforum_real_anonimizado.html`, #1017).
 - Comportamiento real de IPB ante temas actualizados (si publica «tema actualizado» o solo cambia la fecha) y ante `Search Flood Control` en lectura
   repetida del subforo.
 - Prowlarr: si expone RSS reciente por indexer; v1 usa búsqueda por serie. Formato de `publishDate` y resultados duplicados reales.
@@ -247,3 +250,15 @@ siguiente? (recomendado: no, para no descargar el histórico); (b) ¿exponer int
 automáticamente los deseos `SEGUIMIENTO` pendientes al desactivar? (v1: no, quedan y se retiran a mano); (d) ¿añadir un aviso específico de importación
 para seguimiento o basta el `notify_imported` actual? (v1: el actual); (e) ¿crear deseos de seguimiento cuando ya hay un deseo manual de serie vivo?
 (recomendado: no, para no duplicar búsquedas; alternativa: sí y deduplicar por número).
+
+## 13. Cierre de la deuda #1017 (2026-11-17)
+
+- **O-2 — cerrado.** `_procesar_foro` aplica la frontera de cada serie también a las filas ya vistas: la referencia es la actividad previa del tema
+  (huella guardada; si no se puede fechar, `visto_en`). La nueva actividad solo decide si hay que reabrir. Regresión multi-serie en
+  `tests/test_seguimiento_foro_pasada.py` (serie vieja + serie nueva + tema actualizado; control positivo; fallback `visto_en`).
+- **O-1 — ratificado por el PO.** Se mantiene la postura actual: el foro **no** consulta `robots.txt` (M4, `FUENTES_CON_ROBOTS` sin `foro`); la
+  integración es **opt-in**, con URL/credenciales del operador, aviso legal y acuse, y el job solo hace red con esa configuración. No se añade una
+  consulta de robots ni cambia el comportamiento; esta ratificación cubre también el scraping periódico (no solo la búsqueda manual).
+- **O-3 — cobertura cerrada.** `tests/test_seguimiento_prowlarr.py` (rotación/cupo, corte por `publish_date`, cupo de deseos, una consulta por serie),
+  aviso único y máximo 5 en `tests/test_seguimiento_pasada.py`, AC-16 explícito y humo del parser con el fixture real anonimizado.
+- **O-4 — sigue abierta como deuda menor.** `crear_deseos` no usa `ON CONFLICT`; el job es secuencial y de un solo worker, sin cambio en esta deuda.

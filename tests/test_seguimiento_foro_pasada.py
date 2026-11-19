@@ -107,3 +107,92 @@ def test_fecha_de_actividad_entiende_el_formato_ingles_del_foro():
     assert _fecha_de_actividad("Nov 14 2019, 14:38", ahora) == datetime(
         2019, 11, 14, 14, 38, tzinfo=UTC)
     assert _fecha_de_actividad("Today, 10:32", ahora).day == 17
+
+
+# ── #1017 (O-2): frontera por serie también en temas ya vistos ──────────────
+
+
+def _enlaces(*nombres: str):
+    return type("R", (), {
+        "ed2k_links": [f"ed2k://|file|{nombre.replace(' ', '%20')}|1|H|/" for nombre in nombres],
+        "magnet_links": [],
+    })()
+
+
+@pytest.mark.asyncio
+async def test_tema_actualizado_no_crea_historico_de_una_serie_nueva():
+    """O-2: un tema viejo que se actualiza no puede crear el deseo histórico de
+    una serie activada después; la serie vieja sí lo recibe."""
+    ahora = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
+    vieja = _serie("Sandman", datetime(2026, 1, 1, tzinfo=UTC))
+    nueva = _serie("Batman", datetime(2026, 11, 17, tzinfo=UTC))
+    visto = SeguimientoVisto(fuente="foro", clave="tema:1", huella="01/06/2026",
+                             visto_en=datetime(2026, 6, 2, tzinfo=UTC))
+    tema = TemaForo(id=1, titulo="E-links del día", url="https://foro.example/1",
+                    ultima_actividad="17/11/2026")
+    db = _Db(queue=[_Res([visto]), _Res([visto])])
+
+    hallazgos, _, _ = await _procesar_foro(
+        db, _Foro(tema, _enlaces("Sandman 5.cbz", "Batman 12.cbz")),
+        [vieja, nueva], {}, ahora, InformeSeguimiento(),
+        max_temas=10, limite_deseos=10, desde_cache=0)
+
+    assert [(h.serie_id, h.numero) for h in hallazgos] == [(vieja.id, 5)]
+
+
+@pytest.mark.asyncio
+async def test_tema_actualizado_despues_de_la_frontera_si_crea_para_la_nueva():
+    """Control: si el tema ya tenía actividad posterior a la activación de la
+    serie nueva, la actualización sí cuenta para ella."""
+    ahora = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
+    nueva = _serie("Batman", datetime(2026, 11, 1, tzinfo=UTC))
+    visto = SeguimientoVisto(fuente="foro", clave="tema:1", huella="10/11/2026",
+                             visto_en=datetime(2026, 11, 10, tzinfo=UTC))
+    tema = TemaForo(id=1, titulo="E-links del día", url="https://foro.example/1",
+                    ultima_actividad="17/11/2026")
+    db = _Db(queue=[_Res([visto]), _Res([visto])])
+
+    hallazgos, _, _ = await _procesar_foro(
+        db, _Foro(tema, _enlaces("Batman 12.cbz")), [nueva], {}, ahora,
+        InformeSeguimiento(), max_temas=10, limite_deseos=10, desde_cache=0)
+
+    assert [(h.serie_id, h.numero) for h in hallazgos] == [(nueva.id, 12)]
+
+
+@pytest.mark.asyncio
+async def test_huella_relativa_se_resuelve_contra_visto_en_no_contra_hoy():
+    """«Hoy/Ayer» se guardó en una pasada anterior: la referencia es ese día,
+    no la fecha de la pasada actual (si no, un tema viejo parecería nuevo)."""
+    ahora = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
+    nueva = _serie("Batman", datetime(2026, 11, 15, tzinfo=UTC))
+    visto = SeguimientoVisto(fuente="foro", clave="tema:1", huella="Hoy, 10:32",
+                             visto_en=datetime(2026, 11, 10, 9, 0, tzinfo=UTC))
+    tema = TemaForo(id=1, titulo="E-links del día", url="https://foro.example/1",
+                    ultima_actividad="17/11/2026")
+    db = _Db(queue=[_Res([visto]), _Res([visto])])
+
+    hallazgos, _, _ = await _procesar_foro(
+        db, _Foro(tema, _enlaces("Batman 12.cbz")), [nueva], {}, ahora,
+        InformeSeguimiento(), max_temas=10, limite_deseos=10, desde_cache=0)
+
+    assert hallazgos == []
+
+
+@pytest.mark.asyncio
+async def test_sin_actividad_previa_fechable_usa_visto_en_y_falla_cerrado():
+    """Si la huella guardada no es una fecha, `visto_en` decide; un tema visto
+    antes de activar la serie no crea su histórico."""
+    ahora = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
+    nueva = _serie("Batman", datetime(2026, 11, 17, tzinfo=UTC))
+    visto = SeguimientoVisto(fuente="foro", clave="tema:1", huella="sin-fecha",
+                             visto_en=datetime(2026, 6, 2, tzinfo=UTC))
+    tema = TemaForo(id=1, titulo="E-links del día", url="https://foro.example/1",
+                    ultima_actividad="17/11/2026")
+    db = _Db(queue=[_Res([visto]), _Res([visto])])
+
+    hallazgos, _, _ = await _procesar_foro(
+        db, _Foro(tema, _enlaces("Batman 12.cbz")), [nueva], {}, ahora,
+        InformeSeguimiento(), max_temas=10, limite_deseos=10, desde_cache=0)
+
+    assert hallazgos == []
+

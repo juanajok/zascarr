@@ -1,9 +1,13 @@
 """#993: listado de showforum y extracción de enlaces (fixtures sintéticos, sin red)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 
 from zascarr.services.forum_scraper import ForumScraper, temas_de_foro
+
+FIXTURES = Path(__file__).parent / "fixtures" / "foro"
 
 HTML_FORO = """
 <table>
@@ -73,3 +77,48 @@ async def test_leer_tema_extrae_ed2k_y_magnet():
                                                              headers={"content-type": "text/html"}))))
     resultado = await scraper.leer_tema("https://foro.example/index.php?showtopic=10")
     assert resultado.magnet_links and resultado.ed2k_links
+
+
+# ── #1017: humo del parser contra un showforum real anonimizado ─────────────
+
+
+def test_humo_parser_showforum_real_anonimizado():
+    """Una captura real de IPB, sin red: el parser saca los temas, prefiere el
+    `tid-link` (no la imagen «nuevo mensaje») y lee las tres formas de actividad."""
+    html = (FIXTURES / "showforum_real_anonimizado.html").read_text(encoding="utf-8")
+
+    temas = temas_de_foro(html)
+
+    assert [tema[1] for tema in temas] == [90001, 90002, 90003]
+    assert [tema[2] for tema in temas] == [
+        "E-links diarios — 17/11/2026",
+        "Cómics & novelas gráficas",
+        "Tema con sesión en el enlace",
+    ]
+    assert [tema[3] for tema in temas] == [
+        "Hoy, 10:32",
+        "Ayer, 20:01",
+        "5th August 2026 - 18:24",
+    ]
+    assert all("view=" not in tema[0] for tema in temas)
+
+
+async def test_humo_listar_temas_del_showforum_real_anonimizado():
+    """El mismo fixture a través de `listar_temas`: una GET de lectura y el
+    límite aplicado sobre las filas reales."""
+    html = (FIXTURES / "showforum_real_anonimizado.html").read_text(encoding="utf-8")
+    vistas: list[str] = []
+
+    def _transporte(request):
+        vistas.append(str(request.url))
+        return httpx.Response(200, text=html, headers={"content-type": "text/html"})
+
+    scraper = ForumScraper("https://foro.example", rate_limit=0,
+                           permitir_apagada=True,
+                           crear_cliente=lambda: httpx.AsyncClient(
+                               transport=httpx.MockTransport(_transporte)))
+    temas = await scraper.listar_temas(foro_id=5, limite=2)
+
+    assert [tema.id for tema in temas] == [90001, 90002]
+    assert vistas == ["https://foro.example/index.php?showforum=5"]
+    assert "Search" not in vistas[0]

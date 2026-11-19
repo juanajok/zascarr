@@ -1690,8 +1690,14 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
   independiente de la política de huecos; disparador por **fuentes** (foro E-links diarios
   autenticado + Prowlarr), no por la fecha de papel de Novedades; deseos
   `origen=seguimiento` y ciclo/backoff existentes; aviso webhook; migraciones 0047/0048;
-  spec `docs/design/especificacion-seguimiento-series.md`, QA APTO y NOT RUN del HTML real
-  de `showforum=5` hasta validarlo en la Pi.
+  spec `docs/design/especificacion-seguimiento-series.md`, QA APTO; HTML real de
+  `showforum=5` validado en la Pi.
+- **Seguir serie: deuda #1017 cerrada (2026-11-17):** O-2 corregido (la frontera por serie usa la
+  actividad previa del tema —huella guardada o `visto_en`—, no la nueva, también en temas ya
+  vistos), O-1 ratificado por el PO (el foro sigue **opt-in**, con acuse y **sin** consultar
+  `robots.txt`, postura M4), cobertura de Prowlarr/rotación, aviso único/máx. 5 y AC-16, y humo del
+  parser con un `showforum` real anonimizado. O-4 (`crear_deseos` sin `ON CONFLICT`) sigue como
+  deuda menor.
 - **Huecos del benchmark de Deseados cerrados (2026-11-17):** #973 (panel de cola/progreso),
   #983 (cancelar la espera + buscar en lote, máx. 8), #984 (carpeta de Transmission
   editable y aviso al probar; §5.8 con SecOps favorable sobre `9b91a826`) y #985
