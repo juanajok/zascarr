@@ -17,7 +17,7 @@
   <li class="mejora-fila">
     <div>
       <a href="/ui/series/{{ fila.m.serie.id }}/numero/{{ fila.m.issue.id }}">{{ fila.m.serie.title }} #{{ fila.m.issue.issue_number or "(sin número)" }}</a>
-      <p class="caption">Tu edición: {{ fila.m.current_label }} · propuesta: {{ fila.m.candidate_label }}</p>
+      <p class="muted">Tu edición: {{ fila.m.current_label }} · propuesta: {{ fila.m.candidate_label }}</p>
       <strong>{{ fila.m.propuesta.candidate_title }}</strong>
       <p class="muted">{{ fila.m.propuesta.candidate_indexer }} · {{ (fila.m.propuesta.candidate_size_bytes / 1048576) | round(1) }} MB · {{ fila.m.propuesta.candidate_seeders }} semillas</p>
     </div>

@@ -164,11 +164,11 @@
   <div class="library-card-chips">
     {% if series.start_year %}
     {% set u = url_chip("anio_desde", series.start_year|string) %}
-    <a class="chip chip-filtro" href="{{ u }}" hx-get="/ui/biblioteca/resultados?{{ u.split('?', 1)[1] }}" hx-target="#rejilla" hx-swap="innerHTML">{{ series.start_year }}</a>
+    <a class="chip chip-filtro" href="{{ u }}" hx-get="/ui/biblioteca/resultados?{{ u.split('?', 1)[1] }}" hx-target="#rejilla" hx-swap="innerHTML" aria-label="Filtrar por año: desde {{ series.start_year }}">{{ series.start_year }}</a>
     {% endif %}
     {% if series.tradition %}
     {% set u = url_chip("tradition", series.tradition) %}
-    <a class="chip chip-filtro" href="{{ u }}" hx-get="/ui/biblioteca/resultados?{{ u.split('?', 1)[1] }}" hx-target="#rejilla" hx-swap="innerHTML">{{ series.tradition|tradicion }}</a>
+    <a class="chip chip-filtro" href="{{ u }}" hx-get="/ui/biblioteca/resultados?{{ u.split('?', 1)[1] }}" hx-target="#rejilla" hx-swap="innerHTML" aria-label="Filtrar por tradición: {{ series.tradition|tradicion }}">{{ series.tradition|tradicion }}</a>
     {% endif %}
   </div>
   {% set compacto = true %}{% include "_favorito_boton.html" %}

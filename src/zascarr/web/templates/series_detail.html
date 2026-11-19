@@ -158,7 +158,7 @@
 </details>
 
 <section id="datos-serie" class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
-  <h2 id="ficha-serie-datos-titulo" class="titulo-frase">{{ textos_ficha.serie_bloque }}</h2>
+  <h2 id="ficha-serie-datos-titulo">{{ textos_ficha.serie_bloque }}</h2>
   {% if serie_vacia %}
   <p class="ficha-sinopsis">{{ textos_ficha.sin_datos }}</p>
   {% else %}
@@ -270,7 +270,7 @@
 
     <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo"
              {% if aviso_coleccion %}tabindex="-1" autofocus{% endif %}>
-      <h2 id="coleccion-serie-titulo" class="titulo-frase">Completitud</h2>
+      <h2 id="coleccion-serie-titulo">Completitud</h2>
       <p>
         {% if estado_coleccion.tipo == "no_completar" %}
           {{ ui.chip("neutro", "No la vas a completar") }}

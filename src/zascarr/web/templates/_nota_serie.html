@@ -1,7 +1,7 @@
 {#- BL-WK4 (#342): notas de la serie y de sus números. Sin JS; autoescape. -#}
 {% if nota_serie or notas_numeros %}
 <section id="notas-serie" class="notas-serie" aria-labelledby="notas-serie-titulo">
-  <h2 id="notas-serie-titulo" class="titulo-frase">Notas</h2>
+  <h2 id="notas-serie-titulo">Notas</h2>
   {% if nota_aviso %}{{ ui.aviso("ok" if nota_aviso in ("Nota guardada.", "Nota borrada.") else "amber", nota_aviso) }}{% endif %}
   <form method="post" action="/ui/series/{{ series.id }}/nota" class="nota-form">
     <label for="nota-serie-texto">Nota de la serie</label>

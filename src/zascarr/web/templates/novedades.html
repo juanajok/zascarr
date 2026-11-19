@@ -41,7 +41,7 @@
 </div>
 
 {% if semana and semana.total %}
-<p class="caption">{{ semana.total }} novedad{{ "es" if semana.total != 1 }} · {{ semana.interesantes }} de series que sigues.</p>
+<p class="muted">{{ semana.total }} novedad{{ "es" if semana.total != 1 }} · {{ semana.interesantes }} de series que sigues.</p>
 {% for dia, novedades in semana.dias %}
 <section aria-labelledby="dia-{{ dia.isoformat() }}">
   <h2 id="dia-{{ dia.isoformat() }}" class="seccion titulo-frase">{{ etiqueta_dia(dia) }}</h2>
@@ -50,7 +50,7 @@
     <li class="novedad-card">
       <div class="novedad-portada">
         {% if n.series_id %}
-        <a href="/ui/series/{{ n.series_id }}" aria-label="Abrir la serie {{ n.serie }}">
+        <a href="/ui/series/{{ n.series_id }}" tabindex="-1" aria-hidden="true">
           {{ ui.portada(n.serie, n.series_id, "/ui/series/%s/portada?v=2" % n.series_id if n.tiene_portada else none, carga="lazy") }}
         </a>
         {% else %}

@@ -795,6 +795,12 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
   font-size: var(--text-secundario);
   color: var(--ink-soft);
 }
+/* Revisión 2026-11-19: `.htmx-indicator` se oculta con opacity/visibility, que CONSERVAN su sitio; con
+   `flex: 1 1 100%` cada fila reservaba el alto de este aviso invisible (dos líneas y un botón) y «Quitar»
+   caía solo abajo; el de «Buscar seleccionados» abría otro hueco de ~60 px sobre la lista. Fuera de una
+   petición no ocupan nada; durante ella, htmx les pone `.htmx-request`. */
+.wishlist-buscando.htmx-indicator:not(.htmx-request),
+#buscando-lote.htmx-indicator:not(.htmx-request) { display: none; }
 /* Cola/progreso de Deseados (benchmark 2026-11-16): una fila por descarga,
    con barra nativa y texto; refresco htmx desde la propia página. */
 .wishlist-progreso { margin-top: var(--space-3); }
@@ -1980,6 +1986,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .issue-header { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .issue-cover { width: 120px; max-width: 100%; }
 .issue-portada { min-width: 0; }
+/* Revisión 2026-11-19: el pie de la portada es un dato, no una caja de lectura amarilla. */
+.issue-portada-pie { margin: var(--space-1) 0 0; font-size: var(--text-secundario); }
 .subtitulo-numero { margin: 2px 0 var(--space-2); font-weight: 700; overflow-wrap: anywhere; }
 .issue-archivos { margin: var(--space-2) 0 var(--space-2) 1.1rem; padding: 0; }
 .issue-archivos li { margin: 6px 0; overflow-wrap: anywhere; }
@@ -2648,7 +2656,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   border-radius: var(--radius-panel); overflow: hidden;
 }
 .novedad-portada { display: block; flex: 0 0 74px; color: inherit; text-decoration: none; }
-.novedad-portada a { display: block; }
+.novedad-portada a { display: block; text-decoration: none; }
 .novedad-portada a:focus-visible { outline: 3px solid var(--ink); outline-offset: -3px; }
 .novedad-portada .portada {
   width: 74px; border-right: var(--border-panel) solid var(--ink);
@@ -2785,6 +2793,22 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .library-grid-compacta { grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr)); }
 .library-grid-compacta .library-card-body { padding: var(--space-1) var(--space-2); }
 .library-card-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-1) var(--space-2); }
+/* Revisión 2026-11-19: las píldoras de filtro (#1058) van fuera del enlace de la tarjeta (un enlace no
+   puede llevar otro dentro) y quedaban sueltas bajo su borde. El marco pasa al envoltorio para que
+   tarjeta y atajos sean una sola viñeta (región común); el gesto al pasar sube la viñeta entera. */
+.library-grid .library-card-wrap {
+  display: flex; flex-direction: column;
+  background: var(--paper-2); border: var(--border-panel) solid var(--ink);
+  border-radius: var(--radius-panel); transition: transform .15s, box-shadow .15s;
+}
+.library-grid .library-card-wrap > .library-card { border: 0; border-radius: 0; background: transparent; }
+.library-grid .library-card-wrap > .library-card:hover { transform: none; box-shadow: none; }
+.library-grid .library-card-wrap:hover { transform: translateY(-3px); box-shadow: var(--shadow-ink); }
+.library-grid .library-card-wrap > .library-card-chips { margin-top: auto; padding: 0 11px var(--space-2); }
+/* A 375 px, «Intermedia» daba una tarjeta por fila de ~500 px de alto: una serie y media por pantalla. */
+@media (max-width: 480px) {
+  .library-grid-intermedia { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .barra-densidad-opcion { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--space-2); border: var(--border-chip) solid transparent; border-radius: var(--radius-pill); color: var(--ink); font-size: var(--text-secundario); text-decoration: none; }
 .barra-densidad-opcion:hover, .barra-densidad-opcion:focus-visible { border-color: var(--ink); }
 .barra-densidad-opcion.barra-vista-opcion-actual { background: var(--ink); color: var(--paper); }
