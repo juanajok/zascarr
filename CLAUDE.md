@@ -87,6 +87,10 @@ Sigue las guías oficiales con estas precisiones locales:
   (migración 0020 las conserva y Ajustes avisa).
 - Healthcheck es **observacional, no bloqueante**: una VPN caída es
   WARNING, no ERROR; no congela ni el arranque ni el ciclo de descargas.
+- El aviso de versión de `/estado` (#443 A, ADR 0025) es solo lectura:
+  SHA completo de la imagen y comparación de ascendencia con `main` en caché;
+  sin identidad o sin verificación dice «No se puede comprobar». Nunca
+  actualiza, ejecuta Git en la app ni bloquea la página por la red.
 
 ## 4. Rendimiento en Pi
 

@@ -18,12 +18,13 @@ import contextlib
 
 import structlog
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.services import cobertura, disponibilidad
+from zascarr.services.aviso_version import aviso_version
 from zascarr.services.cortesia_estado import filas_cortesia, snapshot_publico
 from zascarr.web.copias import contexto_bloque as contexto_copias
 from zascarr.web.disponibilidad import registrar_filtros
@@ -36,12 +37,21 @@ registrar_filtros(templates)
 router = APIRouter(tags=["ui"])
 
 
+@router.get("/ui/version/estado")
+async def estado_version() -> JSONResponse:
+    """Solo el estado conocido; el navegador usa textos locales, nunca HTML remoto."""
+    response = JSONResponse({"estado": aviso_version.estado()})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @router.get("/estado", response_class=HTMLResponse)
 async def estado(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     contexto: dict = {"disponibilidad_error": False, "d": None, "no_disponibles": 0,
                       "cobertura": None, "cobertura_error": False}
     # §6.3: el mismo snapshot que el endpoint, pintado en servidor (sin JS nuevo).
     contexto["cortesia"] = filas_cortesia(snapshot_publico(get_settings()), get_settings())
+    contexto["aviso_version"] = aviso_version.estado()
     try:
         contexto["d"] = await disponibilidad.ultima_comprobacion(db)
         contexto["no_disponibles"] = await disponibilidad.contar_no_disponibles(db)

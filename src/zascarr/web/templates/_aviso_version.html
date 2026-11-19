@@ -1,0 +1,9 @@
+{% if aviso_version == "disponible" %}
+  <p id="version-aviso-texto" data-version-aviso>Hay una versión nueva de ZascArr. Esta página solo informa; no instala nada.</p>
+{% elif aviso_version == "actualizada" %}
+  <p id="version-aviso-texto" data-version-aviso>Tienes la versión más reciente de ZascArr.</p>
+{% elif aviso_version == "comprobando" %}
+  <p id="version-aviso-texto" data-version-aviso>Comprobando si hay una versión nueva… Puedes seguir usando ZascArr.</p>
+{% else %}
+  <p id="version-aviso-texto" data-version-aviso>No se puede comprobar si hay una versión nueva. Puedes seguir usando ZascArr; consulta con quien lo instaló si necesitas saber qué versión tienes.</p>
+{% endif %}

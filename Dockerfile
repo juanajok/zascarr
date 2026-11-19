@@ -28,6 +28,10 @@ RUN pip install --no-cache-dir --prefix=/install --no-deps .
 
 FROM python:3.11-slim-trixie AS runtime
 
+# Valor explícito del checkout construido; nunca se deduce de app_version ni del .git.
+ARG ZASCARR_BUILD_SHA=""
+ENV BUILD_SHA=${ZASCARR_BUILD_SHA}
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 libxml2 libxslt1.1 tini unar \
     && rm -rf /var/lib/apt/lists/*

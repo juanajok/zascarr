@@ -105,6 +105,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Los scripts pasan un SHA de árbol limpio; builds manuales quedan sin identidad.
+        ZASCARR_BUILD_SHA: ${ZASCARR_BUILD_SHA:-}
     container_name: zascarr-orquestador
     restart: unless-stopped
     logging: *logging

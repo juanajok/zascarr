@@ -125,7 +125,7 @@ _PREFIJOS_EXENTOS = ("/static/",)
 
 # E6: en arranque degradado (BD inaccesible o sin migrar) solo se sirve
 # diagnóstico — estas rutas y los estáticos. Todo lo demás falla cerrado.
-_RUTAS_DIAGNOSTICO = {"/api/health", "/estado", "/login", "/legal"}
+_RUTAS_DIAGNOSTICO = {"/api/health", "/estado", "/ui/version/estado", "/login", "/legal"}
 
 # V3: fragmentos que una página pide SOLA, en segundo plano (los contadores del menú), y cuyo fallo
 # no debe verse nunca. htmx intercambia por defecto TODO estado distinto de 204/304, así que una
