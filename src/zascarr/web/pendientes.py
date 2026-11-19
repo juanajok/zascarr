@@ -93,6 +93,68 @@ def _suggestion(file: File) -> dict | None:
     }
 
 
+async def _sugerencias_vigentes(
+        db: AsyncSession, archivos: list[File]) -> dict[str, dict | None]:
+    """La sugerencia de cada archivo, comprobada contra las series que existen AHORA.
+
+    `metadata.candidates` se guarda al importar y no se actualiza: si la serie se borró y se volvió
+    a crear (otro id), la tarjeta ofrecía «¿Es esta serie?» con un id que ya no existe y el botón
+    fallaba. Aquí, una candidata cuyo id sigue existiendo se deja tal cual; si no, se busca UNA
+    serie actual con el mismo título normalizado (y el mismo año, si la candidata lo traía) y se
+    usa su id.
+    Sin una serie clara no se ofrece sugerencia: es mejor ninguna que una que no funciona."""
+    sugerencias = {str(f.id): _suggestion(f) for f in archivos}
+    ids: set[UUID] = set()
+    for sug in sugerencias.values():
+        if sug is None:
+            continue
+        try:
+            ids.add(UUID(str(sug["series_id"])))
+        except ValueError:
+            continue
+    if not ids:
+        return {k: (v if _id_valido(v) else None) for k, v in sugerencias.items()}
+    existentes = {str(i) for i in (await db.execute(
+        select(Series.id).where(Series.id.in_(ids)))).scalars().all()}
+    obsoletas = [v for v in sugerencias.values()
+                 if v is not None and v["series_id"] not in existentes]
+    if not obsoletas:
+        return sugerencias
+    normas = {normalize_title(v["title"]) for v in obsoletas}
+    vigentes = (await db.execute(
+        select(Series.id, Series.title, Series.title_norm, Series.start_year)
+        .where(Series.title_norm.in_(normas)))).all()
+    for clave, sug in sugerencias.items():
+        if sug is None or sug["series_id"] in existentes:
+            continue
+        norma = normalize_title(sug["title"])
+        coinciden = [r for r in vigentes if r.title_norm == norma
+                     and (sug["start_year"] is None or r.start_year == sug["start_year"])]
+        if len(coinciden) == 1:
+            r = coinciden[0]
+            sugerencias[clave] = {**sug, "series_id": str(r.id), "title": r.title,
+                                  "start_year": r.start_year}
+        else:
+            sugerencias[clave] = None
+    return sugerencias
+
+
+def _id_valido(sug: dict | None) -> bool:
+    """Una sugerencia sin un `series_id` que sea un UUID no sirve para nada."""
+    if sug is None:
+        return False
+    try:
+        UUID(str(sug["series_id"]))
+    except ValueError:
+        return False
+    return True
+
+
+async def _card_vigente(db: AsyncSession, f: File) -> dict:
+    """`_card` con la sugerencia comprobada contra las series actuales."""
+    return _card(f, (await _sugerencias_vigentes(db, [f]))[str(f.id)])
+
+
 def _puede_vincular(f: File) -> bool:
     """Vincular solo donde puede funcionar: en la biblioteca, sin _Unsorted y sin pack."""
     try:
@@ -102,14 +164,19 @@ def _puede_vincular(f: File) -> bool:
         return False
 
 
-def _card(f: File) -> dict:
+_SIN_COMPROBAR = object()
+
+
+def _card(f: File, sugerencia: dict | None | object = _SIN_COMPROBAR) -> dict:
+    """`sugerencia` ya comprobada contra las series (`_sugerencias_vigentes`, puede ser None);
+    sin ella se usa la guardada tal cual."""
     return {
         "file": f,
         "detected": _detected_label(f.file_name),
         "formato": ((f.file_format.value.upper()
                      if getattr(f, "file_format", None) is not None else
                      Path(f.file_name).suffix.lstrip(".").upper()) or "?"),
-        "suggestion": _suggestion(f),
+        "suggestion": _suggestion(f) if sugerencia is _SIN_COMPROBAR else sugerencia,
         "puede_vincular": _puede_vincular(f),
         # U12: ausencia CONOCIDA (por la extensión, sin I/O): ni `<img>` ni petición ni bloque.
         "con_portada": puede_tener_portada(f.file_path,
@@ -188,8 +255,9 @@ async def index(
     pagina = await ReviewService(db).pagina_de_pendientes(
         despues=k_despues, antes=k_antes, limite=limite,
         solo_sugerencia=solo_sugerencia)
+    vigentes = await _sugerencias_vigentes(db, pagina.archivos)
     contexto: dict = {
-        "cards": [_card(f) for f in pagina.archivos],
+        "cards": [_card(f, vigentes[str(f.id)]) for f in pagina.archivos],
         "rango": _rango(pagina.desde, pagina.hasta, pagina.total),
         "solo_sugerencia": solo_sugerencia,
         "tamano": limite,
@@ -750,7 +818,7 @@ async def asignar(request: Request, file_id: UUID, series_id: UUID = Form(...),
         return templates.TemplateResponse(
             request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=resp.status)
     return templates.TemplateResponse(
-        request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
+        request, "_tarjeta_pendiente.html", {"c": await _card_vigente(db, file), "aviso": aviso},
         status_code=resp.status)
 
 
@@ -777,7 +845,8 @@ async def vincular(
         return templates.TemplateResponse(
             request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=409)
     return templates.TemplateResponse(
-        request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso}, status_code=409)
+        request, "_tarjeta_pendiente.html",
+        {"c": await _card_vigente(db, file), "aviso": aviso}, status_code=409)
 
 
 @router.post("/{file_id}/especial", response_class=HTMLResponse)
@@ -808,8 +877,8 @@ async def vincular_especial(
             return templates.TemplateResponse(
                 request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=400)
         return templates.TemplateResponse(
-            request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
-            status_code=400)
+            request, "_tarjeta_pendiente.html",
+            {"c": await _card_vigente(db, file), "aviso": aviso}, status_code=400)
     return templates.TemplateResponse(request, "_accion_ok.html", {
         "titulo": "Guardado como especial.",
         "texto": "Se ha movido a la carpeta «Especiales» de la serie.",
@@ -846,8 +915,8 @@ async def crear_one_shot(
             return templates.TemplateResponse(
                 request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=400)
         return templates.TemplateResponse(
-            request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
-            status_code=400)
+            request, "_tarjeta_pendiente.html",
+            {"c": await _card_vigente(db, file), "aviso": aviso}, status_code=400)
     return templates.TemplateResponse(request, "_accion_ok.html", {
         "titulo": "Creado como tomo único.",
         "texto": ("La serie y su publicación ya existen; el archivo se ha enlazado "
