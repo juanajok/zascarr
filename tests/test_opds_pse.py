@@ -210,3 +210,49 @@ def test_pagina_opds_sin_credenciales_da_401(tmp_path, monkeypatch):
     assert r.status_code == 401
     assert r.headers["www-authenticate"] == 'Basic realm="ZascArr"'
     assert "location" not in r.headers
+
+
+def test_pagina_opds_solo_acepta_la_forma_canonica_de_la_url(tmp_path):
+    """N-1 de SecOps: una página, una URL (sin espacios, signos, ceros ni dígitos Unicode)."""
+    f = _file(_cbz(tmp_path / "c.cbz", {"1.jpg": _imagen("JPEG")}))
+    db = FakeSession(get_map={(File, f.id): f})
+    with use_fake_session(db) as c:
+        assert c.get(f"/opds/paginas/{f.id}/0").status_code == 200
+        for malo in ("00", "+0", "%200", "٠", "0%20"):
+            assert c.get(f"/opds/paginas/{f.id}/{malo}").status_code == 404, malo
+        assert c.get(f"/opds/paginas/{str(f.id).upper()}/0").status_code == 404
+        assert c.get(f"/opds/paginas/{str(f.id).replace('-', '')}/0").status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_la_medida_de_un_zip_se_reutiliza_y_se_invalida_al_cambiar(tmp_path, monkeypatch):
+    """N-3: el segundo feed no vuelve a abrir el ZIP; si el archivo cambia, se mide de nuevo."""
+    lector._MEDIDAS.clear()
+    ruta = _cbz(tmp_path / "k.cbz", {"1.jpg": _imagen("JPEG")})
+    f = _file(ruta)
+    llamadas = []
+    original = lector._listado
+    monkeypatch.setattr(lector, "_listado", lambda p: llamadas.append(p) or original(p))
+    for _ in range(2):
+        db = FakeSession(exec_queue=[FakeExecResult([f]), FakeExecResult([])])
+        assert (await lector.streaming_de_numeros(db, [f.issue_id]))[f.issue_id].count == 1
+    assert len(llamadas) == 1
+    _cbz(ruta, {"1.jpg": _imagen("JPEG"), "2.jpg": _imagen("JPEG")})
+    db = FakeSession(exec_queue=[FakeExecResult([f]), FakeExecResult([])])
+    assert (await lector.streaming_de_numeros(db, [f.issue_id]))[f.issue_id].count == 2
+    assert len(llamadas) == 2
+
+
+@pytest.mark.asyncio
+async def test_el_feed_mide_un_tope_de_archivos_nuevos_por_peticion(tmp_path, monkeypatch):
+    lector._MEDIDAS.clear()
+    monkeypatch.setattr(lector, "MAX_MEDIDAS_NUEVAS", 2)
+    archivos = [_file(_cbz(tmp_path / f"{i}.cbz", {"1.jpg": _imagen("JPEG")})) for i in range(5)]
+    ids = [f.issue_id for f in archivos]
+    total: dict = {}
+    for ronda in range(3):
+        db = FakeSession(exec_queue=[FakeExecResult(archivos), FakeExecResult([])])
+        res = await lector.streaming_de_numeros(db, ids)
+        assert len(res) == min(5, 2 * (ronda + 1))   # 2, 4, 5: se completa con las peticiones
+        total = res
+    assert len(total) == 5

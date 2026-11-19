@@ -170,6 +170,11 @@ modo que títulos con `& < > " '` quedan escapados por el serializador.
   bytes y mismo `ETag`. `file_id` se valida contra la BD (archivo vinculado a un número, no
   perdido, legible); en cualquier fallo, `404` sin detalle. `Cache-Control: private`,
   `Vary: Authorization`, `nosniff`. La Basic es la de `/opds` (el middleware cubre `/opds/*`).
+- **URL canónica y coste (dictamen de SecOps, notas N-1 y N-3).** Una página, una URL: `file_id` en
+  su forma canónica y `n` sin espacios, signos, ceros ni dígitos Unicode; lo demás, `404`. El feed
+  memoriza la medida de cada ZIP por ruta + fecha + tamaño (acotada a 4096) y mide como mucho 150
+  archivos nuevos por petición: en una serie grande el resto se anuncia en las siguientes
+  peticiones. Sin medir en la Pi con disco USB frío.
 - **Seguridad.** Abre contenido por Basic: en una LAN sin TLS las credenciales y las páginas
   viajan en claro (§10). El exterior exige proxy inverso con TLS (ADR 0004). Pasada de SecOps
   antes de fusionar.

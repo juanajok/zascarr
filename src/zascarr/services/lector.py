@@ -424,6 +424,16 @@ def ultima_leida_pse(current_page: int | None) -> int | None:
     return current_page
 
 
+#: Medidas de ZIP ya hechas, por (ruta, mtime_ns, tamaño): un cambio del archivo la invalida.
+#: Acotada para no crecer sin límite en una Pi de 512 MiB.
+_MEDIDAS: dict[tuple[str, int, int], tuple[int, str] | None] = {}
+_MEDIDAS_MAX = 4096
+#: Medidas nuevas por petición del feed: abrir un ZIP en un disco USB frío cuesta, y una
+#: serie de cientos de números no debe bloquear el feed. El resto se completa en las
+#: siguientes peticiones (lo ya medido no cuenta).
+MAX_MEDIDAS_NUEVAS = 150
+
+
 def _medir_streaming(f: File) -> tuple[int, str] | None:
     """`(páginas, tipo)` si el archivo se puede servir YA y sin recodificar; si no, `None`."""
     try:
@@ -443,8 +453,29 @@ def _medir_streaming(f: File) -> tuple[int, str] | None:
 
 def _medir_todos(archivos: dict[UUID, File]) -> dict[UUID, tuple[int, str]]:
     medidos = {}
+    nuevas = 0
     for issue_id, f in archivos.items():
+        # Un RAR depende del estado de su caché de lectura (listar un directorio, barato):
+        # no se memoriza. El ZIP sí, por ruta + fecha + tamaño.
+        clave = None
+        if not es_rar_real(f):
+            try:
+                st = Path(f.file_path).stat()
+            except OSError:
+                continue
+            clave = (f.file_path, st.st_mtime_ns, st.st_size)
+            if clave in _MEDIDAS:
+                if _MEDIDAS[clave] is not None:
+                    medidos[issue_id] = _MEDIDAS[clave]
+                continue
+            if nuevas >= MAX_MEDIDAS_NUEVAS:
+                continue
+            nuevas += 1
         medida = _medir_streaming(f)
+        if clave is not None:
+            if len(_MEDIDAS) >= _MEDIDAS_MAX:
+                _MEDIDAS.clear()
+            _MEDIDAS[clave] = medida
         if medida is not None:
             medidos[issue_id] = medida
     return medidos

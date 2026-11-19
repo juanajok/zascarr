@@ -358,6 +358,9 @@ async def pagina(file_id: str, numero: str, request: Request,
         archivo, n = UUID(file_id), int(numero)
     except (ValueError, TypeError):
         return sin_pagina
+    # Una sola URL por página: nada de " 1", "+1", "00", dígitos Unicode ni UUID con otra forma.
+    if str(archivo) != file_id or str(n) != numero or not numero.isascii():
+        return sin_pagina
     try:
         recurso = await pagina_pse(db, archivo, n)
     except LectorError:
