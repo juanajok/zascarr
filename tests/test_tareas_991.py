@@ -49,6 +49,17 @@ def test_retencion_y_error_hasta_visto():
     assert tareas.snapshot(incluir_recientes=True)["errores"] == 0
 
 
+def test_terminada_se_retira_a_los_8_s_sin_marcarse_vista():
+    """Regresión: `_podar` exigía `visto` también a las terminadas; nada las marca, así que se
+    quedaban para siempre y el chip decía «Listo» en todas las páginas (spec §1.3: 8 s)."""
+    t = tareas.iniciar("importar")
+    time.sleep(0.41)
+    tareas.terminar(t.id)
+    assert len(tareas.snapshot(incluir_recientes=True)["tareas"]) == 1
+    t._fin -= 9
+    assert tareas.snapshot(incluir_recientes=True)["tareas"] == []
+
+
 def test_concurrencia():
     creadas = []
 

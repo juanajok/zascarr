@@ -83,8 +83,12 @@ def _ahora(ahora: float | None = None) -> float:
 
 def _podar(ahora: float) -> None:
     for tid, t in list(_tareas.items()):
-        if (t.estado in (EstadoTarea.TERMINADA, EstadoTarea.ERROR) and t.visto
-                and t._fin is not None and ahora - t._fin >= RETENCION_S):
+        # Especificación §1.3: una terminada se ve 8 s y se retira; un error, solo cuando ya se ha
+        # visto. Exigir `visto` también a las terminadas las dejaba para siempre (nada las marca) y
+        # el chip decía «Listo» en todas las páginas.
+        retirable = (t.estado is EstadoTarea.TERMINADA
+                     or (t.estado is EstadoTarea.ERROR and t.visto))
+        if retirable and t._fin is not None and ahora - t._fin >= RETENCION_S:
             _tareas.pop(tid, None)
             _por_origen.pop(t._origen, None)
     recientes = [t for t in _tareas.values()
