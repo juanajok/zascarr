@@ -2656,7 +2656,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   border-radius: var(--radius-panel); overflow: hidden;
 }
 .novedad-portada { display: block; flex: 0 0 74px; color: inherit; text-decoration: none; }
-.novedad-portada a { display: block; }
+.novedad-portada a { display: block; text-decoration: none; }
 .novedad-portada a:focus-visible { outline: 3px solid var(--ink); outline-offset: -3px; }
 .novedad-portada .portada {
   width: 74px; border-right: var(--border-panel) solid var(--ink);
