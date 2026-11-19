@@ -1137,14 +1137,16 @@ class ConversionDeArchivo:
                               tuple(compartidas), len(filas), escaneados, limite)
 
     async def convertir_lote(self, serie_id: UUID, *,
-                             limite: int = LOTE_MAX) -> ResultadoLote:
+                             limite: int = LOTE_MAX, progreso=None) -> ResultadoLote:
         """Convierte una tanda reutilizando #478 (vista previa + token + confirmación por archivo).
 
         Para y no intenta el resto si una conversión acaba con resultado incierto."""
         lote = await self.previsualizar_lote(serie_id, limite=limite)
         convertidas = omitidas = 0
         detalles: list[tuple[str, str]] = []
-        for vista in lote.vistas:
+        for indice, vista in enumerate(lote.vistas, 1):
+            if progreso is not None:
+                progreso(indice, len(lote.vistas))
             try:
                 resultado = await self.confirmar(
                     vista.token or "", forzar_compartido=False,

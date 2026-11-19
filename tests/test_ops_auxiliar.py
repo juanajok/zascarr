@@ -1,0 +1,595 @@
+"""BL-OPS1 (#443), paso 2: el auxiliar del host `deploy/ops/zascarr_ops.py` (T-01…T-09, T-19, T-23; AC-01…AC-12, 34, 39, 43).
+
+Se prueba la función pura `procesar` con el reloj, el estado y el lanzador inyectados: sin systemd, sin socket y sin tocar
+nada del equipo. La lectura acotada se prueba con un `socketpair` real.
+"""
+from __future__ import annotations
+
+import contextlib
+import importlib.util
+import json
+import os
+import socket
+import subprocess
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+RAIZ = Path(__file__).resolve().parents[1]
+_spec = importlib.util.spec_from_file_location("zascarr_ops", RAIZ / "deploy" / "ops" / "zascarr_ops.py")
+ops = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(ops)
+
+CLAVE = bytes(range(32))
+AHORA = 1_800_000_000
+
+
+class Lanzador:
+    """Cuenta los `start` y deja decidir si el cerrojo está tomado o la unidad activa."""
+
+    def __init__(self, ocupado=False, activa=False, inicia=True):
+        self.ocupado, self.activa, self.inicia = ocupado, activa, inicia
+        self.iniciadas: list[str] = []
+
+    def cerrojo_ocupado(self):
+        return self.ocupado
+
+    def estado_unidad(self, unidad):
+        return "active" if self.activa else "inactive"
+
+    def iniciar(self, unidad):
+        self.iniciadas.append(unidad)
+        return self.inicia
+
+
+@pytest.fixture
+def estado(tmp_path):
+    (tmp_path / "run").mkdir()
+    (tmp_path / "status").mkdir()
+    return ops.EstadoOps(str(tmp_path / "run"), str(tmp_path / "status"))
+
+
+def _id(n: int = 1) -> str:
+    return f"{n:032x}"
+
+
+def peticion(*, id_=None, accion="copia", creada=AHORA, clave=CLAVE, v=1, firma=None, **extra) -> bytes:
+    id_ = id_ or _id()
+    cuerpo = {"v": v, "id": id_, "accion": accion, "creada": creada,
+              "firma": firma if firma is not None else ops.firma_de(clave, v, id_, accion, creada)}
+    cuerpo.update(extra)
+    return json.dumps(cuerpo, separators=(",", ":")).encode() + b"\n"
+
+
+def correr(linea, estado, lanzador=None, ahora=AHORA, clave=CLAVE):
+    lanzador = lanzador or Lanzador()
+    return ops.procesar(linea, ahora, clave, estado, lanzador), lanzador
+
+
+# ── T-01…T-04: lo que el auxiliar rechaza ───────────────────────────────────────────────────────────────────────
+class TestRechazos:
+    def test_peticion_valida_se_acepta_inicia_la_unidad_y_deja_ops_status(self, estado):
+        r, lanz = correr(peticion(id_=_id(7)), estado)
+        assert (r.resultado, r.codigo, r.id) == ("aceptada", "aceptada", _id(7))
+        assert lanz.iniciadas == ["zascarr-backup.service"]
+        escrito = json.loads(Path(estado.ruta_ops_status).read_text())
+        assert escrito == {"schema": 1, "accion": "copia", "id": _id(7), "pedida_epoch": AHORA, "resultado": "aceptada"}
+        assert Path(estado.ruta_ops_status).stat().st_mode & 0o777 == 0o644
+        assert json.loads(r.linea()) == {"v": 1, "id": _id(7), "resultado": "aceptada", "codigo": "aceptada"}
+
+    @pytest.mark.parametrize("firma_mal", ["0" * 64, "f" * 64, ""])
+    def test_firma_erronea_o_ausente(self, estado, firma_mal):
+        """AC-02: no se inicia nada y `ops-status.json` no cambia."""
+        previo = json.dumps({"schema": 1, "id": "previo"})
+        Path(estado.ruta_ops_status).write_text(previo)
+        linea = json.dumps({"v": 1, "id": _id(), "accion": "copia", "creada": AHORA, "firma": firma_mal}).encode() + b"\n"
+        r, lanz = correr(linea, estado)
+        assert r.codigo in ("firma_invalida", "esquema_invalido")
+        assert lanz.iniciadas == [] and Path(estado.ruta_ops_status).read_text() == previo
+
+    def test_firma_de_otra_clave(self, estado):
+        r, lanz = correr(peticion(clave=bytes(32)), estado)
+        assert r.codigo == "firma_invalida" and lanz.iniciadas == []
+
+    @pytest.mark.parametrize("desfase,esperado", [(-600, "caducada"), (-121, "caducada"), (121, "caducada"),
+                                                  (-120, "aceptada"), (120, "aceptada"), (0, "aceptada")])
+    def test_caducidad(self, estado, desfase, esperado):
+        """AC-03: ±120 s exactos se aceptan; más, `caducada`."""
+        r, _ = correr(peticion(creada=AHORA + desfase), estado)
+        assert r.codigo == esperado
+
+    def test_un_id_repetido_no_inicia_otra_vez(self, estado):
+        """AC-04."""
+        linea = peticion()
+        correr(linea, estado)
+        r, lanz = correr(linea, estado, ahora=AHORA + 1)
+        assert r.codigo == "repetida" and lanz.iniciadas == []
+
+    def test_el_id_vive_hasta_los_300_segundos(self, estado):
+        """AC-39: con `creada = T+120` el `id` sigue visto en T+240 (la caducidad deja un margen de 60 s)."""
+        linea = peticion(creada=AHORA + 120)
+        correr(linea, estado)
+        r, _ = correr(linea, estado, ahora=AHORA + 240)
+        assert r.codigo == "repetida"
+        # pasados los 300 s se purga: el `id` ya no está en el registro (la petición, eso sí, ha caducado)
+        estado.purgar_vistos(AHORA + 301)
+        assert estado.marcar_visto(_id(), AHORA + 301) is True
+
+    @pytest.mark.parametrize("accion", ["restaurar", "actualizar", "copia ", "COPIA", "../x", "", "Copia"])
+    def test_accion_fuera_de_la_lista(self, estado, accion):
+        """AC-06 (T-03): solo `copia`, exacta."""
+        r, lanz = correr(peticion(accion=accion), estado)
+        assert r.codigo == "accion_no_disponible" and lanz.iniciadas == []
+
+    @pytest.mark.parametrize("linea", [
+        peticion(extra="x"),                                                           # clave de más
+        json.dumps({"v": 1, "id": _id(), "accion": "copia", "creada": AHORA}).encode() + b"\n",     # falta `firma`
+        b'{"v":1,"v":1,"id":"' + _id().encode() + b'","accion":"copia","creada":1,"firma":"' + b"0" * 64 + b'"}\n',
+        b"[]\n", b"{}\n", b"no es json\n", b"\xff\xfe\xfd\n", b"", b"\n",
+        peticion().rstrip(b"\n"),                                                      # sin salto de línea
+        peticion() + b"{}\n",                                                          # dos líneas
+        b"x" * 513 + b"\n", b"x" * 1_000_000,
+        peticion(v=2),                                                                 # versión distinta
+        peticion(id_="A" * 32), peticion(id_="a" * 31), peticion(id_="g" * 32),       # id mal formado
+        json.dumps({"v": True, "id": _id(), "accion": "copia", "creada": AHORA, "firma": "0" * 64}).encode() + b"\n",
+        json.dumps({"v": 1, "id": _id(), "accion": "copia", "creada": float(AHORA), "firma": "0" * 64}).encode() + b"\n",
+        json.dumps({"v": 1, "id": _id(), "accion": 7, "creada": AHORA, "firma": "0" * 64}).encode() + b"\n",
+    ])
+    def test_esquema_invalido(self, estado, linea):
+        """AC-05 (T-04)."""
+        r, lanz = correr(linea, estado)
+        assert r.codigo == "esquema_invalido" and r.id is None and lanz.iniciadas == []
+        assert json.loads(r.linea())["id"] is None
+
+    def test_el_orden_de_comprobacion_no_revela_estado_a_quien_no_sabe_firmar(self, estado):
+        """FR-04: con la firma mala, ni la frecuencia ni el cerrojo ni la repetición se evalúan."""
+        correr(peticion(id_=_id(1)), estado)                              # deja `aceptadas` y un `id` visto
+        r, _ = correr(peticion(id_=_id(1), clave=bytes(32)), estado, Lanzador(ocupado=True), ahora=AHORA + 1)
+        assert r.codigo == "firma_invalida"
+
+    def test_sin_clave_responde_no_disponible_a_todo(self, estado):
+        """AC-12."""
+        r, lanz = correr(peticion(), estado, clave=None)
+        assert r.codigo == "no_disponible" and r.diario == "clave_ausente" and lanz.iniciadas == []
+        r, _ = correr(b"basura\n", estado, clave=None)
+        assert r.codigo == "no_disponible" and r.diario == "clave_ausente"
+
+
+# ── frecuencia (T-19, T-23; AC-09, 34, 43) ───────────────────────────────────────────────────────────────────────
+class TestFrecuencia:
+    def _aceptar(self, estado, n, ahora):
+        r, _ = correr(peticion(id_=_id(n), creada=ahora), estado, ahora=ahora)
+        return r.codigo
+
+    def test_299_segundos_es_demasiado_pronto_y_300_se_acepta(self, estado):
+        assert self._aceptar(estado, 1, AHORA) == "aceptada"
+        assert self._aceptar(estado, 2, AHORA + 299) == "demasiado_pronto"
+        assert self._aceptar(estado, 3, AHORA + 300) == "aceptada"
+
+    def test_tope_de_seis_en_24_horas_y_poda_de_la_ventana(self, estado):
+        for i in range(6):
+            assert self._aceptar(estado, i, AHORA + i * 301) == "aceptada"
+        assert self._aceptar(estado, 90, AHORA + 6 * 301) == "limite_diario"
+        # al salir la más antigua de la ventana móvil de 24 h, se acepta
+        assert self._aceptar(estado, 91, AHORA + 24 * 3600 + 1) == "aceptada"
+
+    def test_tras_un_reinicio_el_contador_vuelve_a_cero(self, estado):
+        for i in range(6):
+            self._aceptar(estado, i, AHORA + i * 301)
+        os.unlink(estado.ruta_aceptadas)                                  # /run es tmpfs: un reinicio lo vacía
+        assert self._aceptar(estado, 50, AHORA + 6 * 301) == "aceptada"
+
+    def test_contador_ausente_es_vacio(self, estado):
+        assert estado.leer_aceptadas(AHORA) == []
+
+    @pytest.mark.parametrize("contenido", ["{no es json", '{"a": 1}', '["x"]', "[1.5]", "[true]", "\xff"])
+    def test_contador_ilegible_falla_cerrado_y_no_se_reescribe(self, estado, contenido):
+        """AC-43: `no_disponible`, `contador_ilegible` en el diario, el fichero igual y nada iniciado."""
+        Path(estado.ruta_aceptadas).write_bytes(contenido.encode("latin-1"))
+        antes = Path(estado.ruta_aceptadas).read_bytes()
+        r, lanz = correr(peticion(), estado)
+        assert r.codigo == "no_disponible" and r.diario == "contador_ilegible" and lanz.iniciadas == []
+        assert Path(estado.ruta_aceptadas).read_bytes() == antes
+
+    def test_epoca_en_el_futuro_mas_alla_de_300_s_es_ilegible_y_hasta_300_se_interpreta(self, estado):
+        Path(estado.ruta_aceptadas).write_text(json.dumps([AHORA + 301]))
+        assert correr(peticion(id_=_id(1)), estado)[0].diario == "contador_ilegible"
+        Path(estado.ruta_aceptadas).write_text(json.dumps([AHORA + 300]))
+        r, _ = correr(peticion(id_=_id(2)), estado)
+        assert r.codigo == "demasiado_pronto"                              # se interpreta con normalidad
+
+
+# ── cerrojo y concurrencia (T-05, T-06; AC-07, 08) ──────────────────────────────────────────────────────────────
+class TestCerrojo:
+    def test_cerrojo_tomado_o_unidad_activa_es_operacion_en_curso(self, estado):
+        for lanz in (Lanzador(ocupado=True), Lanzador(activa=True)):
+            r, _ = correr(peticion(id_=_id(len(lanz.iniciadas) + 100 + int(lanz.activa))), estado, lanz)
+            assert r.codigo == "operacion_en_curso" and lanz.iniciadas == []
+
+    def test_con_el_cerrojo_ocupado_no_se_gasta_el_contador_ni_se_escribe_ops_status(self, estado):
+        correr(peticion(), estado, Lanzador(ocupado=True))
+        assert not os.path.exists(estado.ruta_aceptadas) and not os.path.exists(estado.ruta_ops_status)
+
+    def test_cuatro_peticiones_validas_a_la_vez_aceptan_una_y_un_solo_start(self, estado, tmp_path):
+        """T-05 / AC-08 (F-5): con `Accept=yes` hay un PROCESO por conexión; el bloqueo abarca leer-decidir-anotar-iniciar.
+        Procesos reales (no hilos) y un lanzador lento que ensancha la ventana: exactamente una aceptada y un `start`."""
+        import multiprocessing
+
+        registro = tmp_path / "starts.log"
+
+        class Lento(Lanzador):
+            def estado_unidad(self, unidad):
+                time.sleep(0.05)
+                return "inactive"
+
+            def iniciar(self, unidad):
+                time.sleep(0.15)
+                with open(registro, "a") as fh:
+                    fh.write("start\n")
+                return True
+
+        def hijo(n, salida):
+            r = ops.procesar(peticion(id_=_id(n)), AHORA, CLAVE, estado, Lento())
+            salida.send(r.codigo)
+
+        ctx = multiprocessing.get_context("fork")
+        tubos = [ctx.Pipe(duplex=False) for _ in range(4)]
+        procesos = [ctx.Process(target=hijo, args=(n, tubo[1])) for n, tubo in zip(range(1, 5), tubos, strict=True)]
+        for p in procesos:
+            p.start()
+        for p in procesos:
+            p.join(30)
+        assert all(t[0].poll(5) for t in tubos), "un proceso hijo murió sin responder"
+        codigos = sorted(t[0].recv() for t in tubos)
+        assert codigos.count("aceptada") == 1 and codigos.count("demasiado_pronto") == 3, codigos
+        assert registro.read_text().count("start") == 1
+        assert len(json.loads(Path(estado.ruta_aceptadas).read_text())) == 1
+
+    def test_la_comprobacion_del_cerrojo_no_crea_ni_bloquea(self, tmp_path):
+        """FR-11: `ENOENT` = libre y no se crea el fichero; tomado por otro = ocupado; libre = se suelta al instante."""
+        import fcntl
+        ruta = tmp_path / "ops.lock"
+        lanz = ops.LanzadorSystemd(ruta_cerrojo=str(ruta))
+        assert lanz.cerrojo_ocupado() is False and not ruta.exists()      # no se crea
+        fd = os.open(ruta, os.O_CREAT | os.O_WRONLY)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            assert lanz.cerrojo_ocupado() is True
+        finally:
+            os.close(fd)
+        assert lanz.cerrojo_ocupado() is False                            # soltado: libre otra vez
+
+
+# ── el lanzador (T-07: entorno vacío) ───────────────────────────────────────────────────────────────────────────
+class TestLanzador:
+    def test_inicia_con_argumentos_fijos_sin_shell_y_entorno_vacio_salvo_path(self, monkeypatch):
+        monkeypatch.setenv("BRANCH", "envenenada")
+        monkeypatch.setenv("BACKUP_DIR", "/tmp/otra")
+        monkeypatch.setenv("ENV_FILE", "/tmp/otro.env")
+        monkeypatch.setenv("REPO_DIR", "/tmp/repo")
+        capturado = {}
+
+        def falso(args, **kw):
+            capturado["args"], capturado["kw"] = args, kw
+            return subprocess.CompletedProcess(args, 0, stdout="inactive\n")
+
+        lanz = ops.LanzadorSystemd(ejecutar=falso)
+        assert lanz.iniciar("zascarr-backup.service") is True
+        assert capturado["args"] == ["systemctl", "start", "--no-block", "zascarr-backup.service"]
+        assert capturado["kw"]["env"] == {"PATH": ops.PATH_FIJO}
+        assert not capturado["kw"].get("shell")
+        assert lanz.estado_unidad("zascarr-backup.service") == "inactive"
+        assert capturado["kw"]["env"] == {"PATH": ops.PATH_FIJO}
+
+    def test_si_systemctl_falla_no_se_acepta(self, estado):
+        r, _ = correr(peticion(), estado, Lanzador(inicia=False))
+        assert r.codigo == "no_disponible" and r.diario == "inicio_fallido"
+        assert not os.path.exists(estado.ruta_ops_status), "SOLO `aceptada` escribe ops-status.json"
+
+    def test_la_unidad_se_deduce_de_la_tabla_del_codigo_no_de_la_peticion(self, estado):
+        assert ops.UNIDADES == {"copia": "zascarr-backup.service",
+                              "restaurar": "zascarr-restaurar@.service"}
+        r, lanz = correr(peticion(), estado)
+        assert lanz.iniciadas == [ops.UNIDADES["copia"]]
+
+
+# ── ops-status.json (T-09) ───────────────────────────────────────────────────────────────────────────────────────
+class TestOpsStatus:
+    def test_una_rechazada_firmada_no_pisa_el_rastro_de_la_que_esta_en_marcha(self, estado):
+        correr(peticion(id_=_id(1)), estado)
+        antes = Path(estado.ruta_ops_status).read_bytes()
+        for r in (correr(peticion(id_=_id(2)), estado, ahora=AHORA + 1)[0],               # demasiado_pronto
+                  correr(peticion(id_=_id(4)), estado, Lanzador(ocupado=True), ahora=AHORA + 400)[0]):
+            assert r.resultado == "rechazada"
+        assert Path(estado.ruta_ops_status).read_bytes() == antes
+
+
+# ── lectura acotada y diario (AC-05, FR-30) ──────────────────────────────────────────────────────────────────────
+class TestEntradaSalida:
+    def test_no_lee_mas_de_4097_bytes_de_una_megabyte(self):
+        a, b = socket.socketpair()
+        try:
+            # el envío va en un hilo: el búfer del socket es menor que 1 MB y `sendall` bloquearía la prueba
+            def _enviar():
+                with contextlib.suppress(OSError):
+                    a.sendall(b"x" * 1_000_000)
+            hilo = threading.Thread(target=_enviar, daemon=True)
+            hilo.start()
+            assert len(ops.leer_linea(b.fileno(), tiempo_s=2)) == 4097
+        finally:
+            a.close()
+            b.close()
+
+    def test_para_en_el_salto_de_linea(self):
+        a, b = socket.socketpair()
+        try:
+            a.sendall(b"hola\nresto")
+            assert ops.leer_linea(b.fileno(), tiempo_s=2).startswith(b"hola\n")
+        finally:
+            a.close()
+            b.close()
+
+    def test_sin_salto_de_linea_se_rinde_a_los_5_segundos(self):
+        a, b = socket.socketpair()
+        try:
+            a.sendall(b"sin salto")
+            assert ops.leer_linea(b.fileno(), tiempo_s=0.3) == b"sin salto"      # no se bloquea esperando
+        finally:
+            a.close()
+            b.close()
+
+    def test_el_diario_no_lleva_cuerpo_firma_clave_ni_rutas(self, estado):
+        secreto = "FIRMA-SECRETA-" + "0" * 50
+        r, _ = correr(peticion(id_=_id(5)), estado)
+        texto = ops.linea_de_diario(r, uid=1000, ms=3)
+        assert texto.startswith("accion=copia copia=- id=") and "uid=1000" in texto and "ms=3" in texto
+        assert "0" * 64 not in texto and secreto not in texto and "/" not in texto
+        # una acción que no es la conocida no se vuelca (la cadena es del atacante)
+        otro, _ = correr(peticion(accion="X\nINYECTADA"), estado)
+        assert "INYECTADA" not in ops.linea_de_diario(otro, 1000, 1)
+
+    def test_leer_clave_exige_64_hexadecimales(self, tmp_path):
+        buena = tmp_path / "k1"
+        buena.write_text(CLAVE.hex() + "\n")
+        assert ops.leer_clave(str(buena)) == CLAVE
+        for contenido in ("", "xyz", "00" * 31, "00" * 33, "ZZ" * 32, "AB" * 32):
+            mala = tmp_path / "k2"
+            mala.write_text(contenido)
+            assert ops.leer_clave(str(mala)) is None, contenido
+        assert ops.leer_clave(str(tmp_path / "no-existe")) is None
+
+    def test_las_respuestas_son_de_la_lista_cerrada_y_nunca_llevan_texto_libre(self, estado):
+        for linea in (peticion(), b"basura\n", peticion(accion="otra"), peticion(clave=bytes(32))):
+            r, _ = correr(linea, estado)
+            cuerpo = json.loads(r.linea())
+            assert set(cuerpo) == {"v", "id", "resultado", "codigo"} and cuerpo["codigo"] in ops.CODIGOS
+
+
+# ── BL-OPS2: canal v2 (T-01…T-04) ─────────────────────────────────────────────────────────────────────────────────
+class LanzadorRestaurar(Lanzador):
+    def restauraciones_ocupadas(self):
+        return False
+
+
+class Verificador:
+    def __init__(self, modo="password", correcta=True):
+        self.modo, self.correcta = modo, correcta
+
+    def leer(self):
+        return self.modo, "pbkdf2_sha256$10000$00$" + "11" * 32
+
+    def comprobar(self, prueba, _hash):
+        return self.correcta and prueba == "secreta"
+
+
+def peticion_restaurar(*, id_=None, copia="backup-20260101_120000", prueba="secreta",
+                       creada=AHORA, v=2, firma=None, **extra):
+    id_ = id_ or _id()
+    cuerpo = {"v": v, "id": id_, "accion": "restaurar", "copia": copia,
+              "prueba": prueba, "creada": creada}
+    cuerpo["firma"] = firma if firma is not None else ops.firma_de(
+        CLAVE, v, id_, "restaurar", creada, copia, prueba)
+    cuerpo.update(extra)
+    return json.dumps(cuerpo, separators=(",", ":")).encode() + b"\n"
+
+
+def correr_restaurar(linea, estado, *, verificador=None, lanzador=None, copias=None, ahora=AHORA):
+    lanzador = lanzador or LanzadorRestaurar()
+    return ops.procesar(linea, ahora, CLAVE, estado, lanzador,
+                        verificador or Verificador(),
+                        copias if copias is not None else ["backup-20260101_120000"]), lanzador
+
+
+class TestRestaurarV2:
+    def test_acepta_y_arranca_la_unidad_con_ts(self, estado):
+        r, lanz = correr_restaurar(peticion_restaurar(), estado)
+        assert r.resultado == "aceptada" and r.v == 2
+        assert lanz.iniciadas == ["zascarr-restaurar@20260101_120000.service"]
+        escrito = json.loads(Path(estado.ruta_ops_status).read_text())
+        assert escrito["accion"] == "restaurar" and escrito["copia"] == "backup-20260101_120000"
+
+    def test_copia_desconocida_no_verifica(self, estado):
+        r, lanz = correr_restaurar(peticion_restaurar(copia="backup-20200101_000000"), estado,
+                                   copias=["backup-20260101_120000"])
+        assert r.codigo == "copia_desconocida" and lanz.iniciadas == []
+
+    def test_contrasena_incorrecta_no_arranca_y_cuenta(self, estado):
+        r, lanz = correr_restaurar(peticion_restaurar(), estado,
+                                   verificador=Verificador(correcta=False))
+        assert r.codigo == "prueba_invalida" and lanz.iniciadas == []
+        assert Path(estado.ruta_pruebas).exists()
+
+    def test_sin_contrasena_activada(self, estado):
+        r, lanz = correr_restaurar(peticion_restaurar(), estado,
+                                   verificador=Verificador(modo="none"))
+        assert r.codigo == "autenticacion_no_activada" and lanz.iniciadas == []
+
+    @pytest.mark.parametrize("cambio", [
+        {"prueba": ""},
+        {"copia": "../backup"},
+        {"copia": "backup-20260101_120000", "extra": "x"},
+    ])
+    def test_esquema_v2_cerrado(self, estado, cambio):
+        linea = peticion_restaurar(**cambio)
+        r, lanz = correr_restaurar(linea, estado)
+        assert r.codigo == "esquema_invalido" and lanz.iniciadas == []
+
+    def test_firma_v2_protege_la_prueba(self, estado):
+        linea = bytearray(peticion_restaurar())
+        linea = bytes(linea).replace(b'"prueba":"secreta"', b'"prueba":"otra"')
+        r, lanz = correr_restaurar(linea, estado)
+        assert r.codigo == "firma_invalida" and lanz.iniciadas == []
+
+
+def test_verificador_comprueba_hash_real_y_rechaza_alterado():
+    import hashlib
+    sal = b"sal-de-prueba"
+    digest = hashlib.pbkdf2_hmac("sha256", "contraseña-ñ".encode(), sal, 10_000)
+    almacenado = f"pbkdf2_sha256$10000${sal.hex()}${digest.hex()}"
+    assert ops.VerificadorPrueba.comprobar("contraseña-ñ", almacenado)
+    assert not ops.VerificadorPrueba.comprobar("otra", almacenado)
+    assert not ops.VerificadorPrueba.comprobar("contraseña-ñ", "roto")
+
+
+# ── F-18 (SecOps): límites v2 de la restauración con reloj inyectado (AC-08, AC-10, AC-11, AC-12) ──────────────
+class VerificadorContado(Verificador):
+    """Cuenta cuántas veces se verifica la contraseña (el bloqueo no debe gastar PBKDF2)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.llamadas = 0
+
+    def comprobar(self, prueba, hash_):
+        self.llamadas += 1
+        return super().comprobar(prueba, hash_)
+
+
+def _restaurar(estado, ahora, *, id_, verificador=None, lanzador=None):
+    return correr_restaurar(peticion_restaurar(id_=id_, creada=ahora), estado,
+                            verificador=verificador, lanzador=lanzador, ahora=ahora)
+
+
+class TestLimitesV2:
+    def test_una_cada_30_minutos_y_tres_por_24_horas(self, estado):
+        """AC-11: 29 min ⇒ demasiado_pronto; a los 30 se acepta; a la 4.ª de la ventana, limite_restauraciones."""
+        assert _restaurar(estado, AHORA, id_=_id(100))[0].codigo == "aceptada"
+        assert _restaurar(estado, AHORA + 29 * 60, id_=_id(101))[0].codigo == "demasiado_pronto"
+        assert _restaurar(estado, AHORA + 30 * 60, id_=_id(102))[0].codigo == "aceptada"
+        assert _restaurar(estado, AHORA + 60 * 60, id_=_id(103))[0].codigo == "aceptada"
+        r, lanz = _restaurar(estado, AHORA + 90 * 60, id_=_id(104))
+        assert r.codigo == "limite_restauraciones" and lanz.iniciadas == []
+
+    def test_el_tope_de_24_horas_es_una_ventana_movil(self, estado):
+        """AC-11: pasadas 24 h desde la primera, su hueco se libera sin tocar las demás."""
+        for i, ahora in enumerate((AHORA, AHORA + 30 * 60, AHORA + 60 * 60)):
+            assert _restaurar(estado, ahora, id_=_id(200 + i))[0].codigo == "aceptada"
+        # 24 h + 31 min: la primera (y solo ella) sale de la ventana; la 4.ª ya cabe.
+        r, _ = _restaurar(estado, AHORA + 24 * 3600 + 31 * 60, id_=_id(210))
+        assert r.codigo == "aceptada"
+        assert len(estado.leer_restauradas(AHORA + 24 * 3600 + 31 * 60)) <= 3
+
+    def test_cinco_fallos_bloquean_30_minutos_y_no_gastan_pbkdf2(self, estado):
+        """AC-08: 5 `prueba_invalida` en 15 min ⇒ bloqueo_temporal durante 30 min desde el último fallo."""
+        for i in range(ops.UMBRAL_FALLOS):
+            ahora = AHORA + i
+            r, _ = _restaurar(estado, ahora, id_=_id(300 + i), verificador=Verificador(correcta=False))
+            assert r.codigo == "prueba_invalida"
+        vigilado = VerificadorContado(correcta=True)
+        r, lanz = _restaurar(estado, AHORA + 10, id_=_id(310), verificador=vigilado)
+        assert r.codigo == "bloqueo_temporal" and lanz.iniciadas == [] and vigilado.llamadas == 0
+        # Justo antes de los 30 min desde el último fallo (AHORA+4) sigue bloqueado.
+        r, _ = _restaurar(estado, AHORA + 4 + ops.BLOQUEO_FALLOS_S - 1, id_=_id(311), verificador=vigilado)
+        assert r.codigo == "bloqueo_temporal"
+        # A los 30 min se libera (los fallos ya están fuera de la ventana de 15 min) y el acierto limpia el contador.
+        r, _ = _restaurar(estado, AHORA + 4 + ops.BLOQUEO_FALLOS_S, id_=_id(312), verificador=vigilado)
+        assert r.codigo == "aceptada"
+        assert not Path(estado.ruta_pruebas).exists()
+
+    def test_el_cerrojo_ocupado_no_gasta_restauracion_ni_verifica(self, estado):
+        """AC-10: con otra operación en curso ⇒ operacion_en_curso, sin PBKDF2 y sin escribir estado de restauración."""
+        previo = json.dumps({"schema": 1, "accion": "copia", "id": _id(1), "pedida_epoch": AHORA,
+                             "resultado": "aceptada"})
+        Path(estado.ruta_ops_status).write_text(previo)
+        vigilado = VerificadorContado()
+        r, lanz = _restaurar(estado, AHORA, id_=_id(400), verificador=vigilado,
+                             lanzador=LanzadorRestaurar(ocupado=True))
+        assert r.codigo == "operacion_en_curso" and vigilado.llamadas == 0 and lanz.iniciadas == []
+        assert not Path(estado.ruta_restauradas).exists()
+        assert Path(estado.ruta_ops_status).read_text() == previo
+
+    def test_una_unidad_de_restauracion_activa_es_operacion_en_curso(self, estado):
+        class LanzadorRestaurando(LanzadorRestaurar):
+            def restauraciones_ocupadas(self):
+                return True
+
+        r, lanz = _restaurar(estado, AHORA, id_=_id(401), lanzador=LanzadorRestaurando())
+        assert r.codigo == "operacion_en_curso" and lanz.iniciadas == []
+
+    def test_los_contadores_de_copias_y_restauraciones_son_independientes(self, estado):
+        """AC-11: pedir copias no gasta restauraciones ni al revés."""
+        # Una copia aceptada y una restauración aceptada conviven.
+        assert correr(peticion(id_=_id(500)), estado)[0].codigo == "aceptada"
+        assert _restaurar(estado, AHORA, id_=_id(501))[0].codigo == "aceptada"
+        # La restauración ya hecha no bloquea una copia (su intervalo es de 5 min, no 30).
+        assert correr(peticion(id_=_id(502), creada=AHORA + 300), estado, ahora=AHORA + 300)[0].codigo == "aceptada"
+        # Y una copia más tarde no gasta el cupo de restauraciones.
+        assert len(estado.leer_restauradas(AHORA)) == 1
+        assert len(estado.leer_aceptadas(AHORA + 300)) == 2
+
+    def test_el_diario_lleva_la_copia_pedida_sin_la_prueba(self, estado):
+        """F-12/FR-33: `copia=<id>` en el diario; nunca la prueba."""
+        r, _ = _restaurar(estado, AHORA, id_=_id(600))
+        texto = ops.linea_de_diario(r, uid=1000, ms=7)
+        assert texto.startswith("accion=restaurar copia=backup-20260101_120000 id=")
+        assert "secreta" not in texto
+
+
+# ── F-21: tipos estrictos de la lista propia del auxiliar ──────────────────────────────────────────────────────
+def _copia_de_prueba(tmp_path: Path, *, bytes_=1, sha="a" * 64, schema=1, nombre="20260101_120000"):
+    dump = tmp_path / f"backup_{nombre}.sql.gz"
+    dump.write_bytes(b"x")
+    (tmp_path / f"MANIFIESTO-backup_{nombre}.json").write_text(
+        json.dumps({"sha256": sha, "bytes": bytes_, **({} if schema is None else {"schema": schema})}),
+        encoding="utf-8")
+    return dump
+
+
+class TestListaPropia:
+    def test_un_manifiesto_valido_entra_y_los_tipos_laxos_no(self, tmp_path, monkeypatch):
+        """F-21/FR-10: `true` no es un entero válido para `bytes`/`schema`; un sha256 no-hex no vale."""
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda _r: True)
+        _copia_de_prueba(tmp_path, nombre="20260101_010101")
+        _copia_de_prueba(tmp_path, bytes_=True, nombre="20260101_020202")
+        _copia_de_prueba(tmp_path, bytes_=-1, nombre="20260101_030303")
+        _copia_de_prueba(tmp_path, sha="no-es-hex", nombre="20260101_040404")
+        _copia_de_prueba(tmp_path, sha="a" * 63, nombre="20260101_050505")
+        _copia_de_prueba(tmp_path, schema=True, nombre="20260101_060606")
+        _copia_de_prueba(tmp_path, schema=2, nombre="20260101_070707")
+        (tmp_path / "backup_20260101_080808.sql.gz").write_bytes(b"x")     # sin manifiesto
+        (tmp_path / "update_20260101_090909.sql.gz").write_bytes(b"x")     # no es backup_*
+        assert ops.listar_copias(str(tmp_path)) == ["backup-20260101_010101"]
+
+    def test_el_manifiesto_se_verifica_como_fichero_regular_de_root(self, tmp_path, monkeypatch):
+        """FR-10: si el dump o el manifiesto no son ficheros regulares de root sin escritura de grupo/otros, no entra."""
+        dump = _copia_de_prueba(tmp_path, nombre="20260101_111111")
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda ruta: ruta == str(dump))
+        assert ops.listar_copias(str(tmp_path)) == []                     # el manifiesto no pasó la comprobación
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda _r: True)
+        assert ops.listar_copias(str(tmp_path)) == ["backup-20260101_111111"]
+
+    def test_se_quedan_las_30_mas_recientes(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ops, "_verificar_regular_root", lambda _r: True)
+        for i in range(35):
+            _copia_de_prueba(tmp_path, nombre=f"20260101_{i:06d}")
+        lista = ops.listar_copias(str(tmp_path))
+        assert len(lista) == 30 and lista[0] == "backup-20260101_000034"
+
+
+def test_verificar_regular_root_rechaza_enlaces_y_permisos_abiertos(tmp_path, monkeypatch):
+    """FR-10/AC-06: solo fichero regular de root sin escritura para grupo u otros."""
+    ruta = tmp_path / "fichero"
+    ruta.write_bytes(b"x")
+    assert ops._verificar_regular_root(str(ruta)) is False          # no es de root (uid 1000)
+    assert ops._verificar_regular_root(str(tmp_path / "no-existe")) is False

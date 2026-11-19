@@ -9,7 +9,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import InterfaceError, OperationalError, ProgrammingError
 
 from zascarr.config import get_settings
 from zascarr.services.ciclo_importador import ejecutar_ciclo_y_avisar
@@ -17,6 +17,8 @@ from zascarr.utils import lector_rar
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
 from zascarr.utils.portada_rar import barrer_temporales
+from zascarr.utils.registro import configurar_logs
+from zascarr.utils.registro_archivo import instalar_archivo_logs
 from zascarr.utils.registro_reciente import instalar_captura
 from zascarr.utils.saneado_logs import (
     instalar_filtro_registros,
@@ -27,12 +29,26 @@ from zascarr.utils.saneado_logs import (
 
 # BL-E5 (#164): búfer acotado para que el dashboard pueda descargar los últimos
 # eventos sin depender de Docker ni de una shell. No cambia el formato de stdout.
+# Formato/nivel reales antes de instalar el saneador y el búfer.
+configurar_logs()
 # #369: el saneador va ANTES de la captura para que el búfer no guarde rutas.
 instalar_saneo_structlog()
 refrescar_raices()
+instalar_archivo_logs()
 instalar_captura()
 instalar_filtro_registros()
 logger = structlog.get_logger()
+
+
+def _duracion_ms(inicio, fin) -> int | None:
+    """Duración estable para el resumen, sin obligar a restar timestamps a mano."""
+    if inicio is None or fin is None:
+        return None
+    try:
+        return max(0, int((fin - inicio).total_seconds() * 1000))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
 
 # `httpx` registra cada petición a nivel INFO con la URL COMPLETA, y en Telegram
 # esa URL lleva el token del bot (en ntfy, el tema hace de contraseña). La app no
@@ -86,6 +102,7 @@ async def _import_loop(interval_minutes: int) -> None:
                     report.files_scanned or report.disappeared_count or report.reappeared):
                 logger.info(
                     "importer.cycle_done",
+                    run_id=str(report.run_id) if report.run_id else None,
                     escaneados=report.files_scanned,
                     importados=report.imported_count,
                     duplicados=report.duplicate_count,
@@ -93,6 +110,7 @@ async def _import_loop(interval_minutes: int) -> None:
                     errores=report.error_count,
                     desaparecidos=report.disappeared_count,
                     reaparecidos=len(report.reappeared),
+                    duracion_ms=_duracion_ms(report.started_at, report.finished_at),
                 )
         except Exception:
             logger.exception("importer.cycle_failed")
@@ -134,6 +152,31 @@ async def _rescan_loop(interval_minutes: int) -> None:
         except Exception:
             logger.exception("rescan.cycle_failed")
         await asyncio.sleep(interval_minutes * 60)
+
+
+async def _ccm_comicinfo_loop() -> None:
+    """CCM-5: sincroniza `ComicInfo.xml` de números consolidados, de uno en uno.
+
+    Un solo worker, pausa de I/O y commits por número. No corre en el GET ni
+    dentro de la petición de consolidación; si un archivo está compartido o
+    ausente queda pendiente para la siguiente vuelta.
+    """
+    from zascarr.database import async_session_factory
+    from zascarr.services.consolidacion.cola_comicinfo import SincronizadorComicInfo
+
+    logger.info("ccm.comicinfo_scheduler_started")
+    while True:
+        try:
+            async with async_session_factory() as db:
+                informe = await SincronizadorComicInfo(db).procesar_lote()
+            if informe.escritos or informe.aplazados or informe.errores:
+                logger.info("ccm.comicinfo_cycle_done",
+                            escritos=informe.escritos,
+                            aplazados=informe.aplazados,
+                            errores=informe.errores)
+        except Exception:
+            logger.exception("ccm.comicinfo_cycle_failed")
+        await asyncio.sleep(60)
 
 
 async def _upgrades_loop() -> None:
@@ -185,6 +228,7 @@ async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
     solo saltarse ese ciclo y reintentar en el siguiente.
     """
     from zascarr.database import async_session_factory
+    from zascarr.services.borradores_revision import BorradoresRevision
     from zascarr.services.enricher import EnrichmentService
     from zascarr.utils.cache_http import purgar_cache
 
@@ -197,6 +241,13 @@ async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
             # destruiría el ETag y el cuerpo que hacen posible el 304). `purgar_cache` ya
             # contiene el try/except: un fallo de purga no tumba el ciclo.
             await purgar_cache()
+            # OCTA-D3: los borradores de revisión caducan a los 7 días y nadie
+            # los purgaba. Se hace en el mantenimiento, no en la lectura.
+            async with async_session_factory() as session_borradores:
+                purgados = await BorradoresRevision(session_borradores).purgar_caducados()
+                await session_borradores.commit()
+            if purgados:
+                logger.info("borradores.purgados", total=purgados)
             if report.total_enriched or report.errors:
                 logger.info(
                     "enricher.cycle_done",
@@ -241,6 +292,24 @@ async def _orchestrator_loop(interval_minutes: int, limit: int) -> None:
                 )
         except Exception:
             logger.exception("orchestrator.cycle_failed")
+        await asyncio.sleep(interval_minutes * 60)
+
+
+async def _seguimiento_loop(interval_minutes: int) -> None:
+    """#993: job periódico del seguimiento de series (foro + Prowlarr).
+
+    No hace red si no hay series seguidas, fuentes o acuse legal: `ejecutar_pasada`
+    lo comprueba antes de abrir clientes. Un fallo se registra y no tumba el bucle.
+    """
+    from zascarr.database import async_session_factory
+    from zascarr.services.seguimiento import ejecutar_pasada
+
+    while True:
+        try:
+            async with async_session_factory() as session:
+                await ejecutar_pasada(session)
+        except Exception as exc:
+            logger.warning("seguimiento.loop_failed", error=type(exc).__name__)
         await asyncio.sleep(interval_minutes * 60)
 
 
@@ -299,21 +368,34 @@ async def lifespan(app: FastAPI):
     huerfanos = await asyncio.to_thread(barrer_temporales, settings.covers_cache_path)
     if huerfanos:
         logger.info("lector_rar.temporales_barridos", cantidad=huerfanos)
+    # BL-LEC4: temporales de extracciones de CBR que dejó un proceso muerto.
+    from zascarr.services.cache_lectura import barrer_temporales as barrer_cache_lectura
+    huerfanos_lectura = await asyncio.to_thread(
+        barrer_cache_lectura, settings.lector_cache_path)
+    if huerfanos_lectura:
+        logger.info("lector.cache_temporales_barridos", cantidad=huerfanos_lectura)
     from sqlalchemy import text
 
     from zascarr.database import async_session_factory, engine
 
-    # E6: arranque degradado. Si Postgres no conecta o el esquema no está, la
-    # app arranca igual pero SOLO sirve diagnóstico (lo aplica AuthMiddleware
-    # vía app.state.db_degraded). No se carga la configuración persistida
-    # (p. ej. auth_mode guardado en runtime_settings): con credenciales o
-    # configuración desconocidas se falla cerrado, no se abre una instalación
-    # cuya autenticación estaba activada en BD.
-    app.state.db_degraded = False
-    try:
+    # El acceso queda cerrado hasta que se hayan cargado los ajustes de
+    # autenticación y se haya confirmado la transacción de arranque.
+    app.state.db_degraded = True
+    problema = problema_de_credenciales(engine.url) if hasattr(engine, "url") else None
+    from zascarr.services.runtime_settings import (
+        RuntimeSettingsService,
+        capturar_valores_base,
+        load_overrides_at_startup,
+    )
+
+    # Guardar el BASE_URL original antes del primer intento, incluso si falla
+    # después de aplicar parte de los ajustes persistidos.
+    capturar_valores_base()
+    background_tasks: list[asyncio.Task] = []
+
+    async def inicializar_bd() -> None:
         # Credenciales por defecto: ni se intenta conectar (ADR 0012). El motivo no lleva el valor.
         # Se mira la URL del MOTOR (con la que de verdad se conectaría), no la de los ajustes.
-        problema = problema_de_credenciales(engine.url) if hasattr(engine, "url") else None
         if problema:
             raise CredencialesNoSegurasError(f"{problema}; la aplicación no arranca con ella")
         async with engine.begin() as conn:
@@ -323,15 +405,6 @@ async def lifespan(app: FastAPI):
         # anterior — sin esto, tras un reinicio real (deploy, reboot de la Pi)
         # los ajustes seguirían en la BD pero no se verían hasta el primer
         # guardado nuevo desde la UI.
-        from zascarr.services.runtime_settings import (
-            RuntimeSettingsService,
-            capturar_valores_base,
-            load_overrides_at_startup,
-        )
-        # Seguridad: guarda el `BASE_URL` del `.env` antes de que los overrides
-        # de la BD lo puedan pisar, para poder restaurarlo si Ajustes lo deja
-        # vacío (vía de recuperación si el middleware da 403).
-        capturar_valores_base()
         async with async_session_factory() as session:
             await load_overrides_at_startup(session)
             # A6: la cookie de sesión necesita una clave de firma estable —
@@ -342,11 +415,8 @@ async def lifespan(app: FastAPI):
             await session.commit()
         logger.info("zascarr.db_connected")
         await refrescar_raices_db(async_session_factory)
-    except Exception:
-        logger.exception("zascarr.db_unavailable_at_startup")
-        app.state.db_degraded = True
 
-    if not app.state.db_degraded:
+    async def arrancar_tareas() -> None:
         # #344: operaciones de paquetes que quedaron vivas en un arranque anterior y sus
         # temporales; se marcan error para que se puedan reintentar. Nunca impide arrancar.
         try:
@@ -371,15 +441,6 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("conversion.diario_reconciliacion_fallida")
 
-    if app.state.db_degraded:
-        # E6: «solo diagnóstico» también para el fondo. Sin BD, los cuatro ciclos
-        # (auditoría, importación, enriquecimiento, orquestación) fallarían cada
-        # intervalo sin poder hacer nada útil, y llenarían el log. No se arrancan.
-        # Al reiniciar con la BD arreglada arrancan solos: no hay nada persistido
-        # que desbloquear (la bandera es de este proceso).
-        logger.warning("background_tasks_skipped_db_degraded", db_degraded=True)
-        background_tasks = []
-    else:
         # V6a (ADR 0006): continúa o cierra las asignaciones que quedaron vivas en una ejecución
         # anterior. Tarea de fondo (no retrasa el healthcheck) que nunca propaga una excepción.
         from zascarr.services.asignacion import comprobar_pool, reconciliar_al_arrancar
@@ -387,7 +448,7 @@ async def lifespan(app: FastAPI):
             logger.warning("asignacion.pool_insuficiente",
                            simultaneas=settings.asignacion_simultaneas,
                            pool=settings.db_pool_size + settings.db_max_overflow)
-        background_tasks = [
+        background_tasks.extend([
             asyncio.create_task(reconciliar_al_arrancar()),
             asyncio.create_task(_library_audit_task()),
             asyncio.create_task(_import_loop(settings.import_interval_minutes)),
@@ -397,7 +458,10 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(_orchestrator_loop(
                 settings.scan_interval_minutes, settings.max_concurrent_downloads
             )),
-        ]
+            asyncio.create_task(
+                _seguimiento_loop(settings.seguimiento_interval_minutes)),
+            asyncio.create_task(_ccm_comicinfo_loop()),
+        ])
         # BL-R9: rescan periódico de la biblioteca; 0 lo desactiva.
         if settings.rescan_interval_minutes > 0:
             background_tasks.append(
@@ -406,32 +470,65 @@ async def lifespan(app: FastAPI):
         # activar o desactivar en Ajustes no exija reiniciar.
         background_tasks.append(asyncio.create_task(_upgrades_loop()))
 
-    yield
+        app.state.db_degraded = False
 
-    # E6: al apagar (o al terminar un test que levantó la app degradada), se
-    # restablece la bandera para no contaminar el siguiente arranque.
-    app.state.db_degraded = False
-    from zascarr.services.comprobacion_disco import detener as detener_comprobacion
-    await detener_comprobacion()
-    from zascarr.services.rescan_biblioteca import detener as detener_rescan
-    await detener_rescan()
-    for task in background_tasks:
-        task.cancel()
-    for task in background_tasks:
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
-    # Seguridad: apaga el ejecutor propio de PBKDF2 (no deja hilos ni tareas
-    # encoladas colgando al parar la app).
-    from zascarr.services.auth import apagar_ejecutor_pbkdf2
-    apagar_ejecutor_pbkdf2()
-    logger.info("zascarr.shutting_down")
-    await engine.dispose()
+    async def recuperar_bd() -> None:
+        demora = 2
+        while True:
+            await asyncio.sleep(demora)
+            try:
+                async with asyncio.timeout(10):
+                    await inicializar_bd()
+            except Exception:
+                logger.warning("zascarr.db_reintento_fallido", exc_info=True)
+                demora = min(demora * 2, 60)
+                continue
+            await arrancar_tareas()
+            logger.info("zascarr.db_recuperada")
+            return
+
+    recuperacion = None
+    try:
+        async with asyncio.timeout(10):
+            await inicializar_bd()
+    except Exception:
+        logger.exception("zascarr.db_unavailable_at_startup")
+        logger.warning("background_tasks_skipped_db_degraded", db_degraded=True)
+        if not problema:
+            recuperacion = asyncio.create_task(recuperar_bd())
+    else:
+        await arrancar_tareas()
+
+    try:
+        yield
+    finally:
+        if recuperacion is not None:
+            recuperacion.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await recuperacion
+        for task in background_tasks:
+            task.cancel()
+        await asyncio.gather(*background_tasks, return_exceptions=True)
+        app.state.db_degraded = False
+        from zascarr.services.comprobacion_disco import detener as detener_comprobacion
+        from zascarr.services.rescan_biblioteca import detener as detener_rescan
+
+        await detener_comprobacion()
+        await detener_rescan()
+        # Seguridad: apaga el ejecutor propio de PBKDF2 (no deja hilos ni tareas
+        # encoladas colgando al parar la app).
+        from zascarr.services.auth import apagar_ejecutor_pbkdf2
+        apagar_ejecutor_pbkdf2()
+        logger.info("zascarr.shutting_down")
+        await engine.dispose()
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     # #361: el registro de acceso de uvicorn no lleva la query (carpetas, cursores, tokens).
     instalar_filtro_de_acceso()
+    from zascarr.services import tareas as registro_tareas
+    registro_tareas.limpiar_al_arrancar()
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
@@ -467,15 +564,23 @@ def create_app() -> FastAPI:
     from zascarr.web.auth import router as auth_router
     from zascarr.web.colecciones import router as colecciones_ui_router
     from zascarr.web.contexto_declarado import router as contexto_declarado_router
+    from zascarr.web.copias import router as copias_ui_router
     from zascarr.web.correspondencias_contexto import router as correspondencias_contexto_router
     from zascarr.web.dashboard import router as dashboard_router
+    from zascarr.web.datos import router as datos_ui_router
     from zascarr.web.decisiones_reutilizables import router as decisiones_router
     from zascarr.web.desvinculacion import router as desvinculacion_ui_router
     from zascarr.web.discovery import router as discovery_router
     from zascarr.web.disponibilidad import router as disponibilidad_router
-    from zascarr.web.errores import manejar_http, manejar_inesperado, pagina_error
+    from zascarr.web.errores import (
+        manejar_bd_no_disponible,
+        manejar_http,
+        manejar_inesperado,
+        pagina_error,
+    )
     from zascarr.web.estado import router as estado_router
     from zascarr.web.exportar import router as exportar_router
+    from zascarr.web.lector import router as lector_router
     from zascarr.web.legal import router as legal_ui_router
     from zascarr.web.library import router as library_router
     from zascarr.web.mejoras import router as mejoras_ui_router
@@ -486,6 +591,8 @@ def create_app() -> FastAPI:
     from zascarr.web.retirada_serie import router as retirada_serie_ui_router
     from zascarr.web.routes import router as ui_router
     from zascarr.web.series import router as series_ui_router
+    from zascarr.web.tareas import api_router as tareas_api_router
+    from zascarr.web.tareas import ui_router as tareas_ui_router
     from zascarr.web.vistas_trabajo import router as vistas_router
     from zascarr.web.wishlist import router as wishlist_ui_router
 
@@ -494,6 +601,10 @@ def create_app() -> FastAPI:
     # el proceso con un middleware distinto.
     app.add_middleware(AuthMiddleware)
     app.add_middleware(LimiteCuerpoMiddleware, max_bytes=settings.max_cuerpo_peticion_bytes)
+    # El contexto se añade el último para envolver también auth y límite de cuerpo:
+    # cualquier log de una petición lleva su request_id.
+    from zascarr.middleware_contexto import ContextoPeticionMiddleware
+    app.add_middleware(ContextoPeticionMiddleware)
 
     app.include_router(health_router, prefix="/api")
     app.include_router(estado_cortesia_router, prefix="/api")
@@ -506,16 +617,20 @@ def create_app() -> FastAPI:
     app.include_router(wishlist_router, prefix="/api")
     app.include_router(auth_router)
     app.include_router(ui_router)
+    app.include_router(tareas_ui_router)
+    app.include_router(tareas_api_router)
     app.include_router(ajustes_router)
     app.include_router(auditoria_router)
     app.include_router(dashboard_router)
     app.include_router(discovery_router)
     app.include_router(estado_router)
+    app.include_router(copias_ui_router)
     app.include_router(exportar_router)
     app.include_router(disponibilidad_router)
     app.include_router(legal_ui_router)
     app.include_router(navegacion_router)
     app.include_router(library_router)
+    app.include_router(lector_router)
     app.include_router(mejoras_ui_router)
     app.include_router(arcos_ui_router)
     app.include_router(novedades_ui_router)
@@ -529,6 +644,7 @@ def create_app() -> FastAPI:
     app.include_router(vistas_router)
     app.include_router(retirada_serie_ui_router)
     app.include_router(series_ui_router)
+    app.include_router(datos_ui_router)
     app.include_router(asociar_fuente_ui_router)
     app.include_router(colecciones_ui_router)
     app.include_router(desvinculacion_ui_router)
@@ -571,6 +687,8 @@ def create_app() -> FastAPI:
     # Página de error propia para quien navega (404, otros HTTPException y 500): la API y HTMX
     # conservan su respuesta. Ver web/errores.py.
     app.add_exception_handler(StarletteHTTPException, manejar_http)
+    app.add_exception_handler(OperationalError, manejar_bd_no_disponible)
+    app.add_exception_handler(InterfaceError, manejar_bd_no_disponible)
     app.add_exception_handler(Exception, manejar_inesperado)
 
     return app

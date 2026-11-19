@@ -7,6 +7,17 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Restaurar una copia desde la interfaz (BL-OPS2, #443).** Estado ofrece «Restaurar…» para
+  copias verificadas de la misma versión; la confirmación pide la contraseña actual y una
+  casilla explícita, y la petición v2 firmada permite al auxiliar del host comprobar la
+  contraseña, elegir una copia propia de su lista y arrancar la unidad de restauración. La
+  contraseña no se guarda, no se registra y no vuelve a la pantalla. El script gana
+  `--produccion --copia`, conserva la configuración vigente (incluida la contraseña y la
+  versión de sesión) y deja `ops-restaurar.json`. Sin desplegar ni aplicar en la Pi.
+- **La descarga de registros pasa de Inicio a Estado (2026-11-17).** Inicio deja de
+  mostrar «Descargar logs» y su aviso, que competían con la tarea principal. El acceso vive
+  en **Estado → Registro de la aplicación**, con texto llano y la garantía de saneado de #369.
+  El endpoint `/ui/logs` no cambia.
 - **Ficha de serie: números primero y densidad (2026-11-14).** Los números pasan justo
   después de la cabecera; «Retirar de mi biblioteca» se pliega; «Otras fuentes» desaparece si
   no hay fuente; las rejillas de más de 30 números se colapsan con «Ver los N que faltan /
@@ -32,8 +43,54 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   combina las colecciones: `excluir` gana sobre `incluir`, y `incluir` sobre la política guardada.
   Portada y exportación leen la tabla puente.
 
+### Corregido
+
+- **Seguimiento: parser del listado real del foro.** El primer enlace de cada fila es la
+  imagen «nuevo mensaje» (sin título) y el foro sirve la última actividad en inglés
+  (`5th August 2026 - 18:24`). El parser usa el ancla `tid-link` para el título y entiende
+  fechas inglesas/españolas; sin esto `showforum=5` devolvía 0 temas.
+
 ### Añadido
 
+- **Obra autoconclusiva / one-shot sin `#1` inventado (2026-11-17).** La ficha permite
+  marcar una serie como **tomo único** (`SeriesKind.ONE_SHOT`) y Pendientes ofrece el alta
+  «Es un tomo único / novela gráfica / one-shot»: crea la serie y su publicación (número solo
+  si la fuente lo da; si no, sin número), enlaza el archivo sin moverlo y no inventa un `#1`.
+  Se muestra completa cuando tiene una publicación **con archivo disponible**, sin huecos ni
+  deseos de faltantes/futuros; los one-shot se ocultan del selector de series por defecto.
+  Migración 0049 (solo enum). Anuales, especiales ADR 0016 e integrales no cambian.
+
+- **Seguir una serie: números nuevos desde las fuentes (2026-11-17).** La ficha gana
+  «Seguir esta serie» (independiente de «Qué buscar»). Un job (45 min, configurable)
+  mira el subforo **E-links diarios** autenticado y Prowlarr; cuando aparece un número
+  nuevo de una serie seguida crea el deseo (`origen=seguimiento`) y el ciclo normal lo
+  busca/descarga con su cortesía y backoff. Avisa una vez por pasada por el webhook
+  existente. No descarga el histórico: empieza en lo posterior a la activación.
+
+- **Ajustes → Transmission: carpeta de descargas y aviso de incoherencia (2026-11-17).**
+  Se puede editar la carpeta que ZascArr pasa a Transmission (ruta del **host**). «Probar
+  conexión» compara esa carpeta con la que Transmission tiene configurada y, si difieren,
+  avisa con las dos rutas (si la de ZascArr no existe en la Pi, los envíos fallarán).
+  Se valida que la ruta sea absoluta y sin «..».
+- **Cancelar la espera de «Buscar ahora» y buscar en lote (2026-11-17).** Durante la
+  búsqueda manual aparece «Cancelar búsqueda», que aborta la petición del navegador
+  (htmx:abort); avisa de que lo ya enviado no se deshace. Además, cada deseo buscable
+  tiene checkbox y la barra «Buscar seleccionados» lanza hasta 8 búsquedas seguidas y
+  rellena cada panel de resultados (OOB) sin cambiar el estado ni enviar descargas; la
+  ruta conserva el aviso legal y el tope avisa antes de buscar.
+ (feat(deseos): cancelar búsqueda en curso y buscar en lote (hasta 8))
+
+- **Logs persistidos, rotados y consultables (2026-11-17).** `LOG_DIR` guarda un fichero
+  JSONL por día (5 MiB, 3 backups por día, retención 30 días) con los eventos ya saneados.
+  `GET /ui/logs/visor` permite filtrar por fecha/hora/evento y descargar el subconjunto;
+  `/ui/logs` conserva el búfer si no hay ficheros. Ver
+  `docs/design/logs-persistencia-rotacion.md`.
+- **Logs estructurados y correlacionables (2026-11-17).** `LOG_LEVEL` y `LOG_JSON` ya tienen
+  efecto: JSON por defecto (consola legible si `LOG_JSON=false`), `timestamp` ISO-8601 UTC,
+  `level` una sola vez y `request_id`/`method`/`path` en cada petición (cabecera
+  `X-Request-ID`). Los resúmenes de ciclo incluyen `run_id` y `duracion_ms`; los hits de caché
+  y duplicados por archivo bajan a DEBUG para que INFO sea señal. La descarga `/ui/logs` deja
+  de repetir `level=info`. Benchmark y matriz en `docs/design/benchmark-logs-zascarr.md`.
 - **Cola/progreso de Deseados en la propia pantalla (2026-11-17).** Cuando hay deseos
   en descarga, Deseados muestra un panel «Descargas en curso» que se refresca solo
   (cada 30 s) y lee **una vez** Transmission por refresco: barra de progreso y
@@ -192,6 +249,19 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   `story_arc_issues.reading_order`; sin migración, sin tocar números ni archivos.
 
 ### Corregido
+
+- **C6-O1: la ficha y el enriquecedor comparten la condición de Comic Vine (2026-11-17).**
+  La predicción de enlace exige ahora clave utilizable, no tener identidad externa (incluidas
+  Fandom) y respetar el plazo de reintento; usa las mismas condiciones SQL que el enriquecedor.
+  Una prueba PG de paridad falla si Python y SQL discrepan. Sin cambios en el flujo de enriquecimiento.
+- **Backoff propio tras un fallo de envío en Deseados (2026-11-17).** Un fallo del
+  cliente de descargas (`_send` sin referencia) ya no deja el deseo esperando el
+  cooldown global de 6 h junto con todos los demás: se reintenta a los 10 min, 30 min,
+  2 h y 6 h (tope), con dos columnas nuevas en `wishlist` (`retry_count` y
+  `next_retry_at`, migración 0046). Un envío correcto —automático, manual o extra—
+  limpia el backoff, y «Reintentar» lo salta; «sin resultados» y «candidato rechazado»
+  no lo activan porque no son fallos del cliente.
+ (feat(deseos): backoff persistente tras fallos de envío (10m/30m/2h/6h))
 
 - **«Buscar ahora» devolvía 500 (2026-11-17).** La etiqueta de resultados construía el
   título con `_row(item)` sobre un `item` cargado sin relaciones precargadas; en async

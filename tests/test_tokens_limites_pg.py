@@ -145,7 +145,9 @@ class TestRecorridoConElMayorContenidoPosible:
         clave = await sembrar_carpeta_larga(entorno.banco)
         assert clave == carpeta_mas_larga() and set(clave) == {"\x01"} and len(clave) < MAX_CLAVE_GRUPO
         titulo, ident = LETRA_4_BYTES * MAX_TITULO, LETRA_4_BYTES * MAX_ID_EXTERNO
-        cover = "https://www.tebeosfera.com/img/" + LETRA_4_BYTES * (MAX_COVER_URL - len("https://www.tebeosfera.com/img/"))
+        # La prueba mide el token con portada; el host de Tebeosfera ya no sirve imágenes.
+        prefijo_portada = "https://covers.openlibrary.org/img/"
+        cover = prefijo_portada + LETRA_4_BYTES * (MAX_COVER_URL - len(prefijo_portada))
         assert len(cover) == MAX_COVER_URL
         await sembrar_parecidas_de(entorno.banco, MAX_PARECIDAS_FIRMADAS, titulo, ComicTradition.TEBEO, 1987)
         fuentes.resultados = [res(MetadataSource.TEBEOSFERA, ident, titulo, 1987,
@@ -173,7 +175,8 @@ class TestRecorridoConElMayorContenidoPosible:
         # Qué distancia queda al máximo calculado: la holgura de la clave (la real tiene menos de 1000 caracteres: es un
         # prefijo de una ruta de 1000) y la de la portada (empieza por un host ASCII, que pesa un byte y no cuatro),
         # más algún dígito de la caducidad y del año.
-        holgura = holgura_de(clave, "https://www.tebeosfera.com/img/")
+        # La fuente usada aquí es Tebeosfera; el máximo global lo fija la más larga.
+        holgura = holgura_de(clave, prefijo_portada) + 4  # 3 bytes de fuente = 4 en base64
         assert 0 <= MAX_TOKEN_CANDIDATA - len(token_candidata) <= holgura
         assert 0 <= MAX_TOKEN_ALTA - len(token_alta) <= holgura
 
@@ -198,7 +201,7 @@ class TestRecorridoConElMayorContenidoPosible:
 # ── 2. Tokens firmados válidos en la frontera exacta ──────────────────────────────────────────────
 
 def alta_firmada_maxima(clave: str, vistas: tuple[str, ...]) -> AltaFirmada:
-    fuente = "tebeosfera"            # tan larga como la que más (10) y la única con identificador de texto
+    fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)  # la más larga, para la frontera exacta
     tradicion = max((t.value for t in ComicTradition), key=len)
     return AltaFirmada(
         clave=clave, modo="crear", origen="descubrir", fuente=fuente, id_externo=LETRA_4_BYTES * MAX_ID_EXTERNO,
@@ -224,14 +227,17 @@ class TestFronteraExacta:
         assert len(token) == MAX_TOKEN_ALTA, "ya no es la frontera: el máximo y esta prueba han dejado de coincidir"
         c = await post(ALTA, {"token": token})
         assert c.status_code == 200, c.text
-        creada = [x for x in await serie_en_bd(entorno.banco) if x.tebeosfera_slug == LETRA_4_BYTES * MAX_ID_EXTERNO]
+        fuente = MetadataSource(max((m.value for m in CAMPO_ID_EXTERNO), key=len))
+        campo = CAMPO_ID_EXTERNO[fuente]
+        creada = [x for x in await serie_en_bd(entorno.banco)
+                  if getattr(x, campo) == LETRA_4_BYTES * MAX_ID_EXTERNO]
         assert len(creada) == 1 and creada[0].title == LETRA_4_BYTES * MAX_TITULO
         assert creada[0].cover_url is None                       # la portada no cumple la política: se descartó, no se rechazó
         assert await numero_de_series(entorno.banco) == MAX_PARECIDAS_FIRMADAS + 1
 
     async def test_la_candidata_firmada_con_la_clave_real_mas_larga_se_procesa(self, entorno):
         clave = await sembrar_carpeta_larga(entorno.banco)
-        fuente = "tebeosfera"            # tan larga como la que más (10) y la única con identificador de texto
+        fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)  # la más larga
         tradicion = max((t.value for t in ComicTradition), key=len)
         procedencia = max((p.value for p in ProcedenciaTradicion), key=len)
         c = CandidataFirmada(fuente, LETRA_4_BYTES * MAX_ID_EXTERNO, LETRA_4_BYTES * MAX_TITULO, 2100, tradicion,

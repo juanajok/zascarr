@@ -196,3 +196,17 @@ def test_un_campo_editado_a_mano_se_muestra_manual_y_bloqueado():
     campo = por_clave(proc)["title"]
     assert campo.manual is True and campo.bloqueado is True
     assert campo.origen == "Editado a mano"
+
+
+def test_la_ccm_aporta_procedencia_por_campo_sin_inventar():
+    proc = procedencia_de_serie(
+        serie(start_year=1985, total_issues=12),
+        field_provenance={
+            "start_year": {"source": "gcd"},
+            "total_issues": {"source": "manual", "confianza": "manual"},
+        },
+    )
+    por_clave = {c.clave: c for c in proc.campos}
+    assert por_clave["start_year"].origen == "Enriquecido desde GCD"
+    assert por_clave["total_issues"].origen == "Editado a mano"
+    assert por_clave["total_issues"].manual is True

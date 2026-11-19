@@ -140,6 +140,8 @@ class ComicInfo:
     tags: list[str] = field(default_factory=list)
     genres: list[str] = field(default_factory=list)
     language_iso: str | None = None
+    #: BL-LEC2 (#825): `<Manga>` del ComicInfo (`YesAndRightToLeft` = sentido japonés).
+    manga: str | None = None
     page_count: int | None = None
     credits: dict[str, list[str]] = field(default_factory=dict)  # rol → nombres
     #: avisos de los topes de ETQ2 (§7.4); el importador los lleva al informe.
@@ -203,7 +205,7 @@ def parse_comic_info(data: bytes) -> ComicInfo:
 
     scalars = {
         "Series": "series", "Number": "number", "Publisher": "publisher",
-        "Summary": "summary", "LanguageISO": "language_iso",
+        "Summary": "summary", "LanguageISO": "language_iso", "Manga": "manga",
     }
     for tag, attr in scalars.items():
         if v := _text(root.find(tag)):

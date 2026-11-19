@@ -856,7 +856,9 @@ class TestContratoYSeguridad:
                 assert set(a) == {"id", "nombre", "estado"} and UUID(a["id"])
             assert g["etiqueta"] == revision_carpetas.ETIQUETAS[g["estado"]]
         con_serie = next(g for g in cuerpo["grupos"] if g["estado"] == "serie_sugerida")
-        assert set(con_serie["serie_sugerida"]) == {"series_id", "titulo", "anio", "puntuacion"}
+        assert set(con_serie["serie_sugerida"]) == {
+            "series_id", "titulo", "anio", "puntuacion",
+            "n_sugeridos", "n_de_la_serie", "n_series_distintas"}
         assert set(con_serie["carpeta_limpia"]) == {"titulo", "anio", "volumen", "calificadores"}
         # Etiquetas exactas: las dos del contrato, tal cual.
         assert revision_carpetas.ETIQUETAS["sin_serie"] == ETIQUETAS_FIJAS["sin_serie"]

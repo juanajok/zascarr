@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "_componentes.html" as ui %}
+{% block title %}Revisar datos — ZascArr{% endblock %}
+{% block content %}
+<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>
+<h1>Revisar datos</h1>
+<p class="subtitle">Qué series tienen fichas de fuentes recogidas y cuántos campos tienen procedencia. Esta pantalla no cambia nada.</p>
+{% if sin_fuentes %}{{ ui.aviso("amber", "No hay fuentes de metadatos activas. Enciéndelas en Ajustes para buscar fichas.") }}{% endif %}
+{% if recolectando %}{{ ui.aviso("ok", "Se ha lanzado la búsqueda de fichas de fuentes para hasta 20 series en segundo plano. Vuelve a cargar esta pantalla en unos minutos.") }}{% endif %}
+{% if lanzado %}{{ ui.aviso("ok", "Se ha lanzado el relleno de huecos seguros de hasta 20 series. Puedes seguir usando ZascArr; no se resuelven conflictos.") }}{% endif %}
+{% if barrida_aviso %}{{ ui.aviso("ok", "Barrida inicial lanzada para todas las series con ID. El progreso se actualiza aquí.") }}{% endif %}
+<section class="pending-card" aria-labelledby="barrida-inicial">
+  <h2 id="barrida-inicial" class="titulo-frase">Barrida inicial</h2>
+  {% include "_barrida_estado.html" %}
+</section>
+<div class="pending-card">
+  <p><strong>{{ total_con_ficha }}</strong> series con alguna ficha de fuente recogida · <strong>{{ total_con_procedencia }}</strong> series con procedencia por campo.</p>
+  {% if series %}
+  <table class="tabla-simple">
+    <thead><tr><th scope="col">Serie</th><th scope="col">Revisar</th></tr></thead>
+    <tbody>
+      {% for s in series %}
+      <tr><td>{{ s.title }}</td><td><a class="btn ghost sm" href="/ui/series/{{ s.id }}/datos">Completar datos</a></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Todavía no hay fichas de fuentes recogidas. Cuando la recolección se ejecute, aparecerán aquí.</p>
+  {% endif %}
+  <div class="audit-acciones">
+    <form method="post" action="/ui/datos/recolectar">
+      <button type="submit" class="btn ghost">Buscar fichas de fuentes (hasta 20 series)</button>
+    </form>
+    {% if series %}
+    <form method="post" action="/ui/datos/rellenar">
+      <button type="submit" class="btn ghost">Rellenar huecos seguros (hasta 20 series)</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

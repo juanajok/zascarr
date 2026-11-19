@@ -264,6 +264,179 @@ class TestProcessItemRetryPool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2b. T-62 — backoff persistente tras fallos de envío
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestBackoffEnvios:
+
+    def test_el_backoff_crece_y_se_queda_en_el_tope(self):
+        """10 min → 30 min → 2 h → 6 h y ahí se queda: no puede crecer sin
+        límite ni dejar el deseo fuera del ciclo para siempre."""
+        item = Wishlist(id=uuid4())
+        orch = Orchestrator(db=FakeSession())
+        ahora = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
+
+        esperas = []
+        for _ in range(5):
+            orch._programar_reintento(item, ahora=ahora)
+            esperas.append(item.next_retry_at - ahora)
+
+        assert esperas == [
+            timedelta(minutes=10),
+            timedelta(minutes=30),
+            timedelta(hours=2),
+            timedelta(hours=6),
+            timedelta(hours=6),
+        ]
+        assert item.retry_count == 5
+
+    @pytest.mark.asyncio
+    async def test_un_fallo_de_envio_programa_el_reintento_y_deja_failed(self):
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=10)]
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = None
+        antes = datetime.now(UTC)
+
+        result = await orch._process_item(item)
+
+        assert result is False
+        assert item.status == WishlistStatus.FAILED
+        assert item.retry_count == 1
+        assert item.next_retry_at is not None
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+        assert antes + timedelta(minutes=10) <= item.next_retry_at
+
+    @pytest.mark.asyncio
+    async def test_sin_resultados_no_programa_backoff(self):
+        """«Sin resultados» no es un fallo del cliente: no debe retrasar el
+        siguiente ciclo con una espera de backoff."""
+        item = Wishlist(id=uuid4(), search_query="Serie Rarísima", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = []
+
+        await orch._process_item(item)
+
+        assert not item.retry_count
+        assert item.next_retry_at is None
+
+    @pytest.mark.asyncio
+    async def test_candidato_rechazado_no_programa_backoff(self, monkeypatch):
+        """Un backend apagado en Ajustes no es un fallo de envío que el
+        backoff deba esperar: el motivo ya dice qué revisar."""
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "prowlarr_url": "http://prowlarr:9696",
+            "prowlarr_api_key": "clave", "transmission_enabled": False, "amule_enabled": False,
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=50)]
+
+        await orch._process_item(item)
+
+        assert item.last_error == MOTIVO_CANDIDATO_RECHAZADO
+        assert not item.retry_count
+        assert item.next_retry_at is None
+
+    @pytest.mark.asyncio
+    async def test_el_exito_limpia_retry_count_y_next_retry_at(self):
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.FAILED,
+                        retry_count=3,
+                        next_retry_at=datetime.now(UTC) + timedelta(hours=2))
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=10)]
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "abc"}
+
+        await orch._process_item(item)
+
+        assert item.status == WishlistStatus.DOWNLOADING
+        assert item.retry_count == 0
+        assert item.next_retry_at is None
+
+    @pytest.mark.asyncio
+    async def test_el_ciclo_no_elige_un_item_con_backoff_futuro(self):
+        """Sin BD real: se comprueba el WHERE que genera `process_wishlist`.
+        Un backoff futuro excluye el ítem; vencido, lo hace elegible sin
+        esperar el cooldown global (si no, las esperas de 10 min/30 min/2 h
+        serían decorativas); el cooldown sigue para quien no tiene backoff."""
+        session = CapturingSession(queue=[
+            FakeExecResult(["acknowledged"]),  # is_acknowledged
+            FakeExecResult([]),                # items manuales
+            FakeExecResult([]),                # items de política
+        ])
+        orch = Orchestrator(db=session)
+
+        assert await orch.process_wishlist() == 0
+
+        consultas = [s for s in session.statements if "FROM wishlist" in s]
+        assert consultas, "process_wishlist no consultó la wishlist"
+        assert all("next_retry_at IS NOT NULL" in s for s in consultas)
+        assert all("next_retry_at <=" in s for s in consultas)
+        # El cooldown global no desaparece: sigue para los intentos sin backoff.
+        assert all("last_searched_at IS NULL" in s for s in consultas)
+        assert all("last_searched_at <" in s for s in consultas)
+
+    @pytest.mark.asyncio
+    async def test_el_envio_manual_fallido_programa_el_backoff(self):
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = None
+
+        result = await orch.send_manual_candidate(item, make_result(seeders=10))
+
+        assert result is False
+        assert item.status == WishlistStatus.FAILED
+        assert item.retry_count == 1
+        assert item.next_retry_at is not None
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_el_envio_manual_con_exito_limpia_el_backoff_y_no_espera(self):
+        """El usuario manda: un deseo con `next_retry_at` futuro se envía
+        igual desde la UI, y el éxito limpia el backoff pendiente."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.FAILED, retry_count=2,
+                        next_retry_at=datetime.now(UTC) + timedelta(hours=5))
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "abc123"}
+
+        result = await orch.send_manual_candidate(item, make_result(seeders=10))
+
+        assert result is True
+        assert item.status == WishlistStatus.DOWNLOADING
+        assert item.retry_count == 0
+        assert item.next_retry_at is None
+
+    @pytest.mark.asyncio
+    async def test_el_envio_extra_fallido_no_toca_estado_ni_backoff(self):
+        """Envío EXTRA auxiliar sobre un deseo ya en descarga: si el cliente
+        falla, no degrada la descarga principal ni programa el backoff del ciclo
+        (decisión de producto tras QA B1, 2026-11-17)."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = None
+
+        result = await orch.send_manual_candidate(item, make_result(seeders=10))
+
+        assert result is False
+        # Decisión de producto (QA B1 2026-11-17): el envío extra es auxiliar;
+        # no degrada la descarga principal ni programa el backoff del ciclo.
+        assert item.status == WishlistStatus.DOWNLOADING
+        assert not item.retry_count
+        assert item.next_retry_at is None
+        assert item.last_error == MOTIVO_TRANSMISSION_INACCESIBLE
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 2a. Búsqueda conjunta: Prowlarr y foro, no una cascada
 # ═══════════════════════════════════════════════════════════════════════════
 

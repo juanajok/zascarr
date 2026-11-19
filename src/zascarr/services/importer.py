@@ -54,6 +54,7 @@ from zascarr.models import (
     ResultadoComprobacion,
     Series,
 )
+from zascarr.services import tareas
 from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.etiquetas_comicinfo import aplicar_comicinfo
 from zascarr.services.raices import (
@@ -526,64 +527,82 @@ class Importer:
         ]
 
     async def scan_and_import(self, *, disparador: str = "automatico") -> ImportReport:
-        # Foto nueva por ciclo: un cambio de mapeo a mitad no cambia el destino de este ciclo.
-        self._foto_raices = getattr(self, "_foto_inyectada", None)
-        report = ImportReport(started_at=datetime.now(UTC), disparador=disparador)
-
-        # Dedupe por (st_dev, st_ino), no por ruta: ver `listar_comics`. El
-        # recorrido va en un hilo — bloquea en E/S (CLAUDE.md §4).
-        files = await asyncio.to_thread(listar_comics, self._scan_dirs, COMIC_EXTS)
-        report.files_scanned = len(files)
-
-        # Evidencia de cohorte (core/cohort.py): calculada UNA VEZ sobre la
-        # foto fija de este ciclo, antes del bucle — contrato de
-        # determinismo (2026-09-26): un archivo que llega a mitad de ciclo
-        # no puede cambiar la cohorte ya calculada para los anteriores.
-        pistas = detectar_ordenes_de_lectura([f.name for f in files])
-
-        for path in sorted(files):
-            try:
-                await self._import_file(path, report, pistas.get(path.name))
-            except CerrojoDeContenidoOcupado:
-                # Otra operación (p. ej. un registro de la biblioteca) lleva mucho con el cerrojo:
-                # el archivo se queda donde está y se reintenta.
-                logger.warning("importer.cerrojo_de_contenido_ocupado")
-                report.errors.append(
-                    f"{path.name}: otra operación estaba registrando contenido; "
-                    "se reintentará en el próximo ciclo")
-                # Los demás esperarían lo mismo (60 s cada uno): se corta el recorrido. Siguen en
-                # descargas, intactos, y el próximo ciclo los retoma.
-                report.errors.append("El ciclo se detuvo antes de mirar el resto de las descargas")
-                break
-            except Exception as exc:
-                try:
-                    inodo = path.stat(follow_symlinks=False).st_ino
-                except OSError:
-                    inodo = None
-                logger.error(
-                    "importer.file_failed", inodo=inodo,
-                    formato=path.suffix.lstrip(".") or "sin_extension",
-                    error_tipo=type(exc).__name__)
-                report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
-
-        # B7: revisión de la biblioteca YA importada, no de lo nuevo que
-        # acaba de llegar — un paso independiente del bucle de arriba.
         try:
-            comprobacion = await self._comprobar_biblioteca()
-        except Exception as exc:
-            # Un fallo no marca ninguna baja, pero tampoco puede pasar por «no pasó nada»: queda
-            # escrito en el informe (#231, criterio 11), sin afirmar causa.
-            logger.error("importer.deteccion_desaparecidos_fallida",
-                         error=type(exc).__name__)
-            comprobacion = ComprobacionBiblioteca(
-                resultado=ResultadoComprobacion.FALLO_DETECCION, fecha=datetime.now(UTC))
-        report.comprobacion = comprobacion
-        report.disappeared = comprobacion.desaparecidos
-        report.reappeared = comprobacion.reaparecidos
+            # Foto nueva por ciclo: un cambio de mapeo a mitad no cambia el destino de este ciclo.
+            self._foto_raices = getattr(self, "_foto_inyectada", None)
+            report = ImportReport(started_at=datetime.now(UTC), disparador=disparador)
 
-        report.finished_at = datetime.now(UTC)
-        await self._persist_run(report)
-        return report
+            # Dedupe por (st_dev, st_ino), no por ruta: ver `listar_comics`. El
+            # recorrido va en un hilo — bloquea en E/S (CLAUDE.md §4).
+            tarea = tareas.iniciar("importar", enlace="/ui/no-disponibles#comprobar-disco",
+                                   origen=f"importar:{disparador}")
+            files = await asyncio.to_thread(listar_comics, self._scan_dirs, COMIC_EXTS)
+            report.files_scanned = len(files)
+            if tarea is not None:
+                tareas.actualizar(tarea.id, total=len(files), fase="Importando")
+
+            # Evidencia de cohorte (core/cohort.py): calculada UNA VEZ sobre la
+            # foto fija de este ciclo, antes del bucle — contrato de
+            # determinismo (2026-09-26): un archivo que llega a mitad de ciclo
+            # no puede cambiar la cohorte ya calculada para los anteriores.
+            pistas = detectar_ordenes_de_lectura([f.name for f in files])
+
+            for indice, path in enumerate(sorted(files), 1):
+                if tarea is not None:
+                    tareas.actualizar(tarea.id, hechos=indice)
+                try:
+                    await self._import_file(path, report, pistas.get(path.name))
+                except CerrojoDeContenidoOcupado:
+                    # Otra operación (p. ej. un registro de la biblioteca) lleva mucho
+                    # con el cerrojo: el archivo se queda donde está y se reintenta.
+                    logger.warning("importer.cerrojo_de_contenido_ocupado")
+                    report.errors.append(
+                        f"{path.name}: otra operación estaba registrando contenido; "
+                        "se reintentará en el próximo ciclo")
+                    # Los demás esperarían lo mismo (60 s cada uno): se corta el
+                    # recorrido. Siguen en descargas y el próximo ciclo los retoma.
+                    report.errors.append(
+                        "El ciclo se detuvo antes de mirar el resto de las descargas")
+                    break
+                except Exception as exc:
+                    try:
+                        inodo = path.stat(follow_symlinks=False).st_ino
+                    except OSError:
+                        inodo = None
+                    logger.error(
+                        "importer.file_failed", inodo=inodo,
+                        formato=path.suffix.lstrip(".") or "sin_extension",
+                        error_tipo=type(exc).__name__)
+                    report.errors.append(f"{path.name}: {_mensaje_sin_rutas(exc, path)}")
+
+            # B7: revisión de la biblioteca YA importada, no de lo nuevo que
+            # acaba de llegar — un paso independiente del bucle de arriba.
+            try:
+                comprobacion = await self._comprobar_biblioteca()
+            except Exception as exc:
+                # Un fallo no marca ninguna baja, pero tampoco puede pasar por «no pasó nada»: queda
+                # escrito en el informe (#231, criterio 11), sin afirmar causa.
+                logger.error("importer.deteccion_desaparecidos_fallida",
+                             error=type(exc).__name__)
+                comprobacion = ComprobacionBiblioteca(
+                    resultado=ResultadoComprobacion.FALLO_DETECCION, fecha=datetime.now(UTC))
+            report.comprobacion = comprobacion
+            report.disappeared = comprobacion.desaparecidos
+            report.reappeared = comprobacion.reaparecidos
+
+            report.finished_at = datetime.now(UTC)
+            if tarea is not None:
+                tareas.terminar(tarea.id, resumen="Descargas revisadas")
+            await self._persist_run(report)
+            return report
+
+        except BaseException as exc:
+            if tarea is not None:
+                tareas.error(tarea.id, tipo_error=type(exc).__name__)
+            raise
+        finally:
+            if tarea is not None and tarea.estado.value == "en_curso":
+                tareas.terminar(tarea.id, resumen="Descargas revisadas")
 
     async def rellenar_formato_contenido(
         self, limite: int = LOTE_FORMATO_CONTENIDO
@@ -833,7 +852,7 @@ class Importer:
             report.duplicates.append(
                 f"{path.name} — duplicado de {outcome.duplicate_of}, descartado"
             )
-            logger.info(
+            logger.debug(
                 "importer.duplicate",
                 inodo=path.stat(follow_symlinks=False).st_ino,
                 formato=path.suffix.lstrip(".") or "sin_extension",

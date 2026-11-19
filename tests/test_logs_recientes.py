@@ -1,4 +1,4 @@
-"""BL-E5 (#164): búfer de logs recientes y descarga desde el dashboard."""
+"""BL-E5 (#164): búfer de logs recientes y descarga desde Estado."""
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -42,10 +42,21 @@ def test_sin_eventos_el_fichero_lo_explica():
     assert "No hay registros recientes" in r.text
 
 
-def test_el_dashboard_ofrece_el_boton():
+def test_el_inicio_ya_no_ofrece_los_registros():
     from tests.test_web_dashboard import pagina, vista
     html = pagina(vista())
-    assert 'href="/ui/logs"' in html and "Descargar logs" in html
+    assert 'href="/ui/logs"' not in html
+    assert "Descargar logs" not in html and "últimos registros" not in html
+
+
+def test_estado_ofrece_el_acceso_en_diagnostico():
+    from pathlib import Path
+    plantilla = Path(__file__).resolve().parents[1] / "src/zascarr/web/templates/estado.html"
+    t = plantilla.read_text(encoding="utf-8")
+    assert 'id="diagnostico"' in t and 'href="/ui/logs"' in t
+    assert "Registro de la aplicación" in t
+    assert "Descargar los últimos registros" in t
+    assert "sin rutas, nombres, contraseñas ni tokens" in t
 
 
 def test_el_logger_real_pasa_por_el_buffer_y_redacta():

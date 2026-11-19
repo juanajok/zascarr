@@ -1,0 +1,7 @@
+<section class="audit-block" id="paquete-resultado"
+         hx-get="/ui/auditoria/paquetes/estado/{{ op_id }}"
+         hx-trigger="load delay:1s" hx-swap="outerHTML">
+  <p class="caption" role="status" aria-live="polite">{{ etiqueta }}</p>
+  <progress aria-label="Progreso del paquete"></progress>
+  <p class="caption">El paquete original no se mueve ni se borra.</p>
+</section>

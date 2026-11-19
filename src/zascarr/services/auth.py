@@ -125,7 +125,7 @@ _PREFIJOS_EXENTOS = ("/static/",)
 
 # E6: en arranque degradado (BD inaccesible o sin migrar) solo se sirve
 # diagnóstico — estas rutas y los estáticos. Todo lo demás falla cerrado.
-_RUTAS_DIAGNOSTICO = {"/api/health", "/estado", "/login", "/legal"}
+_RUTAS_DIAGNOSTICO = {"/api/health", "/estado", "/ui/version/estado", "/login", "/legal"}
 
 # V3: fragmentos que una página pide SOLA, en segundo plano (los contadores del menú), y cuyo fallo
 # no debe verse nunca. htmx intercambia por defecto TODO estado distinto de 204/304, así que una
@@ -133,7 +133,7 @@ _RUTAS_DIAGNOSTICO = {"/api/health", "/estado", "/login", "/legal"}
 # menú) o el 503 HTML del arranque degradado serían peores que no responder. Para estas rutas, en
 # lugar de redirigir o de servir el 503, el middleware responde `204 No Content` VACÍO: sin datos,
 # sin diagnóstico, sin página. NO son rutas de diagnóstico (esas se sirven sin comprobar la sesión).
-RUTAS_FRAGMENTO_SILENCIOSO = frozenset({"/ui/_nav/estado"})
+RUTAS_FRAGMENTO_SILENCIOSO = frozenset({"/ui/_nav/estado", "/ui/_tareas"})
 
 
 # ── CSRF / Origen / Host (ficha benchmark-seguridad-auth-origen-host) ─────────
@@ -708,4 +708,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         siguiente = f"{path}{query}"
         # `next` va como valor de query: sin codificar, un `&` de la query
         # original se parsea como parámetro aparte y trunca el destino.
+        if request.headers.get("HX-Request") == "true":
+            # htmx no debe pintar /login dentro del fragmento: se le pide una
+            # navegación completa a la página que la persona tiene abierta.
+            actual = request.headers.get("HX-Current-URL", "")
+            if (not actual.startswith("/") or actual.startswith("//")
+                    or any(ord(c) < 32 for c in actual)):
+                actual = "/"
+            return Response(status_code=200, headers={
+                "HX-Redirect": f"/login?next={quote(actual, safe='')}",
+                "Cache-Control": "no-store",
+            })
         return RedirectResponse(f"/login?next={quote(siguiente, safe='')}", status_code=303)

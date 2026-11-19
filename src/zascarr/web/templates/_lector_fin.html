@@ -1,0 +1,32 @@
+{#- Contenido de la tarjeta de fin (LEC3 + LECUX2). Se pinta en el servidor; el JS solo la muestra al llegar al final. -#}
+{% if leido %}
+<p><strong>Guardado: Leído.</strong></p>
+<form method="post" action="/ui/leer/{{ archivo.id }}/leido"
+      hx-post="/ui/leer/{{ archivo.id }}/leido" hx-target="#fin-acciones" hx-swap="innerHTML">
+  <input type="hidden" name="operacion" value="deshacer">
+  <button type="submit" class="btn ghost sm" data-lector-leido="true">Deshacer</button>
+</form>
+{% else %}
+<form method="post" action="/ui/leer/{{ archivo.id }}/leido"
+      hx-post="/ui/leer/{{ archivo.id }}/leido" hx-target="#fin-acciones" hx-swap="innerHTML">
+  <input type="hidden" name="operacion" value="marcar">
+  <button type="submit" class="btn primary" data-lector-leido="false">Marcar como leído</button>
+</form>
+{% endif %}
+{% if siguiente.estado == "leer" %}
+<p>Has terminado el #{{ numero.issue_number or "?" }}. Siguiente: <strong>#{{ siguiente.numero }}</strong>.</p>
+<p><a class="btn{% if not leido %} ghost{% endif %}" href="/ui/leer/{{ siguiente.archivo.id }}">Leer el #{{ siguiente.numero }}</a></p>
+{% elif siguiente.estado == "falta" %}
+<p>Te falta el <strong>#{{ siguiente.numero }}</strong> de <em>{{ serie.title }}</em>.</p>
+{% if legal_aceptado %}
+<form hx-post="/ui/leer/{{ archivo.id }}/deseo" hx-target="#fin-acciones" hx-swap="innerHTML">
+  <button type="submit" class="btn">Añadir a Deseados</button>
+</form>
+{% else %}
+<p><a class="btn" href="/ui/legal">Añadir a Deseados</a></p>
+<p class="caption">Antes tienes que leer y aceptar el aviso legal; después podrás pedirlo.</p>
+{% endif %}
+{% else %}
+<p>No hay un número siguiente en tu biblioteca.</p>
+{% endif %}
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>

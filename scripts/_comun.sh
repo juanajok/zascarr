@@ -58,6 +58,10 @@ die()     { echo -e "${R}✗${N} $*" >&2; exit 1; }
 
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
 
+# El cerrojo único de las operaciones (BL-OPS1): ofrece `tomar_cerrojo_operaciones`.
+# shellcheck source=scripts/_cerrojo.sh
+source "${SCRIPT_DIR}/_cerrojo.sh"
+
 # Helper de espacio: único umbral y una sola implementación (#123b).
 # shellcheck source=scripts/_espacio.sh
 source "${SCRIPT_DIR}/_espacio.sh"
@@ -262,20 +266,33 @@ verificar_dump() {
 
 # pg_dump -> .sql.gz atómico (temporal + mv). Un fallo a mitad nunca deja un .gz
 # parcial con pinta de válido, y el resultado se verifica antes de darlo por bueno.
+# Deja la causa en VOLCAR_ERROR_CODE para que backup.sh no la confunda con un
+# pg_dump caído: un .gz truncado es gzip_invalid, no pg_dump_failed.
+VOLCAR_ERROR_CODE=""
 volcar_postgres() {
     local destino="$1" tmp="${1}.tmp"
+    VOLCAR_ERROR_CODE=""
     rm -f "${tmp}"
     # El temporal nace 600 (umask 077): con la umask 022 de los scripts sería legible por todos durante TODO el pg_dump.
-    ( umask 077; : > "${tmp}" ) || return 1
+    ( umask 077; : > "${tmp}" ) || {
+        VOLCAR_ERROR_CODE="pg_dump_failed"
+        return 1
+    }
     if ! "${COMPOSE[@]}" exec -T postgres pg_dump -U "${DB_USER}" "${DB_NAME}" | gzip > "${tmp}"; then
         rm -f "${tmp}"
+        VOLCAR_ERROR_CODE="pg_dump_failed"
         return 1
     fi
     if ! gzip -t "${tmp}" 2>/dev/null; then
         rm -f "${tmp}"
+        VOLCAR_ERROR_CODE="gzip_invalid"
         return 1
     fi
-    mv "${tmp}" "${destino}"
+    if ! mv "${tmp}" "${destino}"; then
+        rm -f "${tmp}"
+        VOLCAR_ERROR_CODE="pg_dump_failed"
+        return 1
+    fi
     chmod 600 "${destino}" 2>/dev/null || true
     return 0
 }
@@ -340,4 +357,41 @@ aplicar_retencion() {
         -name 'update_*.sql.gz' -o \
         -name 'rollback-safety_*.sql.gz' \
     \) -mtime "+${RETENTION_DAYS}" "${args[@]}" -delete 2>/dev/null || true
+}
+
+# ── Listado de copias para la interfaz (BL-OPS1, FR-16) ───────────────────────────────────────────
+# `copias.json` lo lee la app (solo lectura): hasta 30 copias `backup_*` con manifiesto válido, las más
+# recientes. Sin rutas, sin nombres de fichero y sin hashes. Informativo y NO autoritativo. Nunca hace
+# fallar la copia: devuelve 0 aunque no pueda escribirlo.
+# Uso: escribir_copias_json <BACKUP_DIR> <BACKUP_OFFSITE_DIR> <BACKUP_STATUS_DIR>
+escribir_copias_json() {
+    local dir="$1" offsite="$2" estado="$3"
+    local volcado stem manifiesto creada epoch bytes fuera verificada lineas="" n=0 tmp
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS= read -r volcado; do
+        (( n < 30 )) || break
+        stem="$(basename "${volcado}" .sql.gz)"
+        manifiesto="${dir}/MANIFIESTO-${stem}.json"
+        [[ -f "${manifiesto}" ]] || continue
+        jq -e '.schema == 1 and (.bytes | type == "number") and (.created_at | type == "string")' \
+            "${manifiesto}" >/dev/null 2>&1 || continue
+        creada="$(jq -r '.created_at' "${manifiesto}")"
+        epoch="$(date -d "${creada}" +%s 2>/dev/null)" || continue
+        bytes="$(jq -r '.bytes' "${manifiesto}")"
+        fuera=false
+        [[ -n "${offsite}" && -f "${offsite}/$(basename "${volcado}")" ]] && fuera=true
+        verificada="$(jq -r '(.verificacion.sha256 // "") == "ok"' "${manifiesto}")"
+        lineas+="$(jq -cn --arg id "${stem/backup_/backup-}" --argjson epoch "${epoch}" --argjson bytes "${bytes}" \
+            --argjson fuera "${fuera}" --argjson ver "${verificada}" \
+            --arg rev "$(jq -r '.alembic // ""' "${manifiesto}")" \
+            '{id: $id, creada_epoch: $epoch, bytes: $bytes, fuera_del_disco: $fuera, verificada: $ver, revision: $rev}')"$'\n'
+        n=$(( n + 1 ))
+    done < <(find "${dir}" -maxdepth 1 -name 'backup_*.sql.gz' -type f 2>/dev/null | sort -r)
+    tmp="${estado}/copias.json.tmp.$$"
+    if printf '%s' "${lineas}" | jq -s '{schema: 1, copias: .}' >"${tmp}" 2>/dev/null \
+        && chmod 644 "${tmp}" 2>/dev/null && mv "${tmp}" "${estado}/copias.json" 2>/dev/null; then
+        return 0
+    fi
+    rm -f "${tmp}" 2>/dev/null
+    return 0
 }

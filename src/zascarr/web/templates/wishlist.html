@@ -46,6 +46,19 @@
   {% if en_descarga %}· {{ en_descarga }} en descarga{% endif %}</p>
 {% endif %}
 
+{% if rows %}
+<form class="wishlist-lote" hx-post="/ui/wishlist/buscar-lote"
+      hx-include="#wishlist-list input[name='item_id']:checked"
+      hx-target="#resultado-lote" hx-swap="innerHTML"
+      hx-indicator="#buscando-lote" hx-disable="find button">
+  <button type="submit" class="btn ghost">Buscar seleccionados</button>
+  <span id="buscando-lote" class="htmx-indicator caption" role="status" aria-live="polite">
+    Buscando seleccionados… puede tardar hasta 2 minutos por deseo; no cierres la página.
+  </span>
+</form>
+<div id="resultado-lote" aria-live="polite"></div>
+{% endif %}
+
 <div class="wishlist-list" id="wishlist-list">
   {% for row in rows %}
   {% include "_fila_wishlist.html" %}

@@ -341,6 +341,26 @@ class TestHealthBackup:
         assert body["status"] == "degraded"
         assert "el volcado falló" in body["warnings"]["backup"]
 
+    @pytest.mark.parametrize("error", [["x"], {"a": 1}, "inventado", 7])
+    def test_error_que_no_es_un_codigo_conocido_sale_como_causa_desconocida(
+        self, tmp_path, monkeypatch, error
+    ):
+        """F-2 (SecOps): una lista o un diccionario en `error` no tumba el endpoint (500) ni se pinta."""
+        self._estado(tmp_path, monkeypatch, status="failed", error=error, last_success_at_epoch=time.time())
+        body = self._pedir()
+        assert body["checks"]["backup"] == "error"
+        assert "causa desconocida" in body["warnings"]["backup"]
+        assert "inventado" not in body["warnings"]["backup"]
+
+    def test_precondition_failed_se_explica_en_llano(self, tmp_path, monkeypatch):
+        self._estado(
+            tmp_path, monkeypatch, status="failed", error="precondition_failed",
+            last_success_at_epoch=time.time(),
+        )
+        body = self._pedir()
+        assert body["checks"]["backup"] == "error"
+        assert "desconocida" not in body["warnings"]["backup"]
+
     def test_degraded_anclas_es_warning(self, tmp_path, monkeypatch):
         self._estado(
             tmp_path,
@@ -501,9 +521,9 @@ class TestHealthRestore:
         from zascarr.web.routes import TEMPLATES_DIR
 
         html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
-        assert 'restore: "Restauración"' in html
-        assert "Restauración reciente verificada" in html
-        assert "La última restauración falló" in html
+        assert 'restore: "Comprobación de restauración"' in html
+        assert "Comprobación de restauración reciente verificada" in html
+        assert "La última comprobación de restauración falló" in html
 
 
 class TestDiscoFueraDelBucle:

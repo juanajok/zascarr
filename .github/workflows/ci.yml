@@ -15,6 +15,17 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
+      # Un `.tmp-*` o un log versionado no debe llegar a una release: son artefactos de
+      # ejecución locales, no documentación ni fixtures. El `.gitignore` evita el descuido;
+      # este gate se asegura de que no se fuerza con `git add -f`.
+      - name: Higiene del repositorio (sin artefactos locales)
+        run: |
+          sobrantes="$(git ls-files -- '.tmp-*' '*.log' '*.dump' '*.prof')"
+          if [ -n "$sobrantes" ]; then
+            echo "::error::artefactos locales versionados:"
+            echo "$sobrantes"
+            exit 1
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -124,37 +135,33 @@ jobs:
       # V14 (#750): ninguna clase usada puede quedarse sin regla y no debe quedar CSS muerto.
       - run: python scripts/auditar_css.py --strict
 
-  pip-audit:
-    name: pip-audit (informativo, no bloquea)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-      - run: pip install -e ".[dev]"
-      # El setuptools del runner (79.0.1) arrastra PYSEC-2026-3447, que es solo de
-      # build (bypass de MANIFEST.in al construir un sdist en macOS/APFS) y no
-      # aplica a ZascArr; se sube para que la señal de pip-audit siga siendo útil.
-      - run: pip install --upgrade "setuptools>=83"
-      # Se instala SOLO en CI: no es dependencia de la aplicación (Ni RAM ni
-      # superficie en la Pi). Señal real de CVEs en dependencias; antes no había
-      # ningún análisis de este tipo (NFR-17).
-      - run: pip install pip-audit
-      - run: pip-audit
-
   docker-build:
-    name: Build de la imagen Docker
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            name: Build de la imagen Docker
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            name: Build de la imagen Docker ARM64
     steps:
       - uses: actions/checkout@v4
       # #530 R3: centinela de contexto. Si `.dockerignore` dejara de excluir `.env`, el build metería
       # este fichero en la imagen y el paso de verificación de abajo fallaría.
       - name: centinela .env para el contexto (#530 R3)
-        run: printf 'ZASCARR_CENTINELA=no-debe-entrar-en-la-imagen\n' > .env
-      - run: docker build -t zascarr:ci .
+        run: |
+          printf 'ZASCARR_CENTINELA=no-debe-entrar-en-la-imagen\n' > .env
+          mkdir -p artefactos-locales
+          touch artefactos-locales/centinela
+      - name: Construir la imagen de la plataforma
+        run: |
+          docker build --platform "${{ matrix.platform }}" -t zascarr:ci .
+          test "$(docker image inspect zascarr:ci --format '{{.Os}}/{{.Architecture}}')" = "${{ matrix.platform }}"
+      - run: docker run --rm --entrypoint python zascarr:ci -m pip check
       # #530 R3: el centinela NO puede estar en /app; `.env.example` sí (no tiene valores).
       - name: el centinela .env no entra en la imagen (#530 R3)
         run: |
@@ -162,7 +169,8 @@ jobs:
             { echo "::error::/app/.env entró en la imagen (¿se perdió el .dockerignore?)"; exit 1; }
           docker run --rm --entrypoint sh zascarr:ci -c 'test -e /app/.env.example' || \
             { echo "::error::/app/.env.example no está en la imagen"; exit 1; }
-          echo ".env ausente y .env.example presente en /app"
+          docker run --rm --entrypoint sh zascarr:ci -c 'test ! -e /app/artefactos-locales'
+          echo "Artefactos locales y .env ausentes. .env.example presente en /app"
       # #528: la base trixie trae `unar`/`lsar` 1.10.8 y el flag que evita que un sólido grande repita
       # ~29 KB por entrada y reviente el tope de salida. Se comprueba VERSIÓN y FLAG en la imagen final.
       - name: unar/lsar 1.10.8 y el flag del listado de sólidos
@@ -175,7 +183,7 @@ jobs:
       # #418 (ADR 0015): sin los demonios GNUstep que nadie usa, y `lsar` sigue leyendo un RAR de verdad.
       - name: sin gdomap/gdnc/gpbs ni sus ficheros de servicio y con lsar funcionando sobre RAR (incluido sólido)
         run: |
-          docker run --rm --entrypoint sh zascarr:ci -c '
+          docker run --rm -v "$PWD/tests:/app/tests:ro" --entrypoint sh zascarr:ci -c '
             for b in "gdomap*" gdnc "gpbs*"; do
               if [ -n "$(find / -xdev -type f -name "$b" 2>/dev/null)" ]; then echo "::error::$b sigue en la imagen"; exit 1; fi
             done
@@ -184,7 +192,7 @@ jobs:
             echo "setuid/setgid de la imagen:"; find / -xdev -perm /6000 -type f 2>/dev/null | head -20'
       # #418 (SecOps C-4): la suite y la imagen usan ya el mismo `unar` 1.10.8 (trixie desde #528).
       - name: lector RAR con el unar de la imagen de producción (ejecutables de GNUstep fuera, sin setuid nuevo, fixtures)
-        run: docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- python /app/scripts/comprobar_imagen_rar.py
+        run: docker run --rm -v "$PWD/tests:/app/tests:ro" --entrypoint runuser zascarr:ci -u zascarr -- python /app/scripts/comprobar_imagen_rar.py
       - name: presupuesto de tamaño de la imagen (#530 C2)
         run: |
           bytes=$(docker image inspect zascarr:ci --format '{{.Size}}')
@@ -194,11 +202,23 @@ jobs:
             echo "::error::la imagen mide ${mib} MiB y supera el presupuesto de 750 MiB"
             exit 1
           fi
-      - name: arranque con la imagen endurecida
+      - name: Arranque, migración y recuperación con PostgreSQL 15
+        run: bash scripts/ci_arranque_imagen.sh zascarr:ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Obtener las dependencias instaladas en la imagen
         run: |
-          docker run --rm --security-opt no-new-privileges:true --pids-limit 256 --entrypoint runuser zascarr:ci \
-            -u zascarr -- python -c "import zascarr.main"
+          id=$(docker create zascarr:ci)
+          trap 'docker rm "$id" >/dev/null' EXIT
+          mkdir -p "$RUNNER_TEMP/zascarr-site-packages"
+          docker cp "$id:/usr/local/lib/python3.11/site-packages/." "$RUNNER_TEMP/zascarr-site-packages"
+      - name: Auditar dependencias de la imagen (informativo)
+        continue-on-error: true
+        run: |
+          python -m pip install pip-audit
+          pip-audit --path "$RUNNER_TEMP/zascarr-site-packages" --skip-editable
       # #530 R3: limpiar el centinela aunque algo haya fallado antes.
       - name: limpiar el centinela .env (#530 R3)
         if: always()
-        run: rm -f .env
+        run: rm -f .env artefactos-locales/centinela

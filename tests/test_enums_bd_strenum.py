@@ -41,6 +41,7 @@ MIEMBROS = {
         "FUMETTI": "fumetti",
         "MANHWA": "manhwa",
         "MANHUA": "manhua",
+        "HISPANOAMERICANO": "hispanoamericano",
         "BRITISH": "british",
         "OTHER": "other",
     },
@@ -80,7 +81,8 @@ MIEMBROS = {
         "FUTURE": "futuros",
         "ALL": "todos",
     },
-    WishlistOrigin: {"MANUAL": "manual", "POLICY": "politica"},
+    WishlistOrigin: {"MANUAL": "manual", "POLICY": "politica",
+                     "SEGUIMIENTO": "seguimiento"},
     ReadingStatus: {
         "UNREAD": "unread",
         "READING": "reading",
@@ -110,6 +112,7 @@ MIEMBROS = {
         "REGULAR": "regular",
         "ANNUAL": "annual",
         "SPECIAL": "special",
+        "ONE_SHOT": "one_shot",
     },
     DownloadBackend: {"TRANSMISSION": "transmission", "AMULE": "amule"},
 }

@@ -45,7 +45,7 @@ def _tarjetas(*archivos: File) -> dict[str, str]:
     assert r.status_code == 200
     salida = {}
     for f in archivos:
-        m = re.search(rf'<div class="pending-card" id="card-{f.id}">(.*?)\n  </div>\n', r.text, re.S)
+        m = re.search(rf'<div class="pending-card" id="card-{f.id}">(.*?)</li>', r.text, re.S)
         assert m, f"no se encontró la tarjeta de {f.file_name}"
         salida[f.file_name] = m.group(1)
     return salida
@@ -59,10 +59,10 @@ class TestAusenciaConocida:
         ("Flash 03.pdf", FileFormat.PDF), ("Flash 04.epub", FileFormat.EPUB)])
     def test_sin_extractor_hay_marcador_pero_no_img_ni_peticion(self, nombre, formato):
         t = _tarjetas(_archivo(nombre, formato))[nombre]
-        assert 'class="portada ' in t and "portada-marca" in t     # marcador con su inicial
+        assert 'class="portada ' in t and "portada-marca" in t
         assert "<img" not in t and "/portada" not in t             # ni petición que dará 404
         assert "onerror" not in t
-        assert nombre in t                                         # el resto de la tarjeta sigue
+        assert nombre in t                                         # el resto de la fila sigue
 
     def test_el_predicado_es_el_mismo_que_el_del_extractor(self, tmp_path: Path):
         """Si el predicado dijera «puede» y el extractor «no» (o al revés), la pantalla mentiría. Se comprueba con
@@ -95,13 +95,13 @@ class TestDisponibilidadDesconocida:
         assert "portada-marca" in t                     # el marcador va debajo
         assert "onerror" not in t and "cover-missing" not in t
 
-    def test_la_portada_reserva_el_2_3_y_las_filas_se_alinean(self):
-        """El PO revirtió U12 (#689 deuda 6): `ui.portada` reserva el 2:3 y la tarjeta lo acota a 120 px.
-        Esta prueba fija el mecanismo; el resultado en navegador se comprueba a 1280 y 375 px."""
+    def test_la_portada_se_acota_a_64_px_y_las_filas_se_alinean(self):
+        """Rediseño 2026-11-17: en la lista horizontal la portada es contexto, no el
+        contenido principal; 64 px y el 2:3 de `ui.portada` como marcador."""
         portada = [d for s, d in _reglas() if s.strip() == ".portada"]
         assert portada and portada[0].get("aspect-ratio") == "2 / 3", portada
         tarjeta = [d for s, d in _reglas() if s.strip() == ".pending-card .portada-pendiente"]
-        assert tarjeta and "120px" in tarjeta[0].get("width", ""), tarjeta
+        assert tarjeta and "64px" in tarjeta[0].get("width", ""), tarjeta
         assert not any("cover-missing" in s and "pending-card" in s for s, _ in _reglas())
 
     def test_ninguna_plantilla_de_pendientes_usa_onerror(self):
@@ -113,9 +113,8 @@ class TestDisponibilidadDesconocida:
 # ── 11. Disponible: arriba del nombre y fila alineada ─────────────────────────────────────────
 class TestPortadaBajoElNombre:
 
-    def test_la_portada_va_primero_para_que_la_fila_empiece_a_la_misma_altura(self):
-        """El PO vio las portadas «descolocadas»: iban después de un nombre de 1 o 2 líneas. Arriba, todas
-        las tarjetas de una fila empiezan la portada a la misma altura; el nombre va debajo, entero."""
+    def test_la_portada_va_primero_en_la_fila(self):
+        """La miniatura abre la fila; el nombre va a su derecha, entero."""
         t = _tarjetas(_archivo("Flash 01.cbz", FileFormat.CBZ))["Flash 01.cbz"]
         assert t.index('class="portada ') < t.index('class="filename"')
 
@@ -123,7 +122,7 @@ class TestPortadaBajoElNombre:
         reglas = [d for s, d in _reglas() if s.strip() == ".pending-card .portada-pendiente"]
         assert reglas
         ancho = reglas[0].get("width", "") + reglas[0].get("max-width", "")
-        assert "120px" in ancho, ancho
+        assert "64px" in ancho, ancho
 
 
 # ── 12. Nombre íntegro ────────────────────────────────────────────────────────────────────────
@@ -139,7 +138,7 @@ class TestNombreIntegro:
     def test_el_nombre_largo_sin_espacios_llega_entero_al_html(self):
         largo = "Los_Guardianes_del_Alba_Omnigold_Edicion_Especial_Integral_Tomo_" + "x" * 80 + ".cbz"
         t = _tarjetas(_archivo(largo, FileFormat.CBZ))[largo]
-        assert f'<div class="filename" title="{largo}">{largo}</div>' in t
+        assert f'title="{largo}"' in t and f'>{largo}</div>' in t
 
 
 # ── 13. Inicio ────────────────────────────────────────────────────────────────────────────────
@@ -186,3 +185,39 @@ def test_la_tarjeta_ofrece_guardar_como_especial_sin_numero():
     assert "/especial" in tarjeta
     assert "Especiales" in tarjeta
     assert "Números que recopila" in tarjeta
+
+
+def test_un_solo_campo_de_numero_compartido_por_las_acciones():
+    """Rediseño 2026-11-17: antes había dos inputs (n- y nv-) con el mismo
+    valor; corregir uno y pulsar el otro mandaba el número viejo."""
+    archivo = _archivo("Flash 01.cbz", FileFormat.CBZ)
+    archivo.file_path = "/lib/Flash 01.cbz"
+    archivo.metadata_ = {"match_status": "unsorted", "candidates": [{
+        "series_id": str(uuid4()), "title": "Flash", "start_year": 1987,
+        "score": 0.95}]}
+    t = _tarjetas(archivo)["Flash 01.cbz"]
+    assert t.count('id="n-') == 1
+    assert 'id="nv-' not in t
+    assert 'hx-include="closest form"' in t
+
+
+def test_la_lista_es_una_lista_y_el_vacio_usa_el_componente_del_sistema(monkeypatch):
+    archivo = _archivo("Flash 01.cbz", FileFormat.CBZ)
+    with use_fake_session(FakeSession(exec_queue=cola_de([archivo]))) as client:
+        con_lista = client.get("/ui/pendientes")
+    assert con_lista.status_code == 200
+    assert 'role="list"' in con_lista.text and 'class="pending-item"' in con_lista.text
+    with use_fake_session(FakeSession(exec_queue=cola_de([]))) as client:
+        vacia = client.get("/ui/pendientes")
+    assert vacia.status_code == 200 and 'class="empty-state"' in vacia.text
+
+
+def test_ignorar_deja_el_recuento_fuera_de_la_fila_que_se_borra():
+    """El OOB delete retira el <li>; los disparadores del menú/rango no pueden
+    vivir dentro de él o se borrarían con la fila."""
+    plantilla = (Path(__file__).resolve().parents[1] / "src" / "zascarr" /
+                 "web" / "templates" / "_tarjeta_pendiente.html").read_text("utf-8")
+    assert 'hx-target="#pend-recontar" hx-swap="innerHTML"' in plantilla
+    pagina = (Path(__file__).resolve().parents[1] / "src" / "zascarr" /
+              "web" / "templates" / "pendientes.html").read_text("utf-8")
+    assert 'id="pend-recontar"' in pagina

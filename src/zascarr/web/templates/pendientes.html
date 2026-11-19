@@ -17,15 +17,36 @@
   {% endif %}
   <a class="btn ghost" href="/ui/vistas">Ver las vistas de trabajo</a>
 </div>
+{% if cards or solo_sugerencia %}
+<div class="pend-opciones" role="group" aria-label="Filtro y tamaño de la lista">
+  {% if solo_sugerencia %}
+  <a class="btn ghost sm" href="{{ url_todos }}">Ver todos los pendientes</a>
+  {% else %}
+  <a class="btn ghost sm" href="{{ url_solo }}">Solo con sugerencia</a>
+  {% endif %}
+  <span class="muted">Por página:</span>
+  {% for n in (25, 50) %}
+  <a class="btn ghost sm" href="{{ url_tamano[n] }}" {% if n == tamano %}aria-current="true"{% endif %}>{{ n }}</a>
+  {% endfor %}
+</div>
+{% endif %}
 {% if not cards %}
-<p class="empty">Nada pendiente — todo lo importado se ha podido clasificar.</p>
+{% if solo_sugerencia %}
+{{ ui.estado_vacio("No hay pendientes con sugerencia", "Puedes quitarlo desde «Ver todos los pendientes».") }}
+{% else %}
+{{ ui.estado_vacio("Nada pendiente", "Todo lo importado se ha podido clasificar.") }}
+{% endif %}
 {% else %}
 {% include "_pendientes_rango.html" %}
 {#- Las claves de los extremos de la página: el refresco tras resolver una tarjeta las envía para recalcular el rango. -#}
 <div id="pend-clave" hidden>
   <input type="hidden" name="primero" value="{{ primero }}">
   <input type="hidden" name="ultimo" value="{{ ultimo }}">
+  {% if solo_sugerencia %}<input type="hidden" name="solo_sugerencia" value="1">{% endif %}
 </div>
+{#- Destino fuera de la fila para el recuento tras ignorar: el OOB que retira
+    el <li> no puede llevarse también los disparadores del menú/rango. -#}
+<div id="pend-recontar" hidden></div>
 {% macro paginas(clase, nombre) %}
 <nav class="pend-paginas {{ clase }}" aria-label="{{ nombre }}">
   {% if inicio %}<a class="pend-inicio" href="{{ inicio }}">← Volver al principio</a>{% endif %}
@@ -36,10 +57,10 @@
 {% if inicio or anterior or siguiente %}{{ paginas("pend-paginas-arriba", "Páginas de pendientes, arriba") }}{% endif %}
 {% endif %}
 
-<div class="pending-grid">
+<ul class="pending-grid" role="list">
   {% for c in cards %}
-  {% include "_tarjeta_pendiente.html" %}
+  <li class="pending-item" id="item-{{ c.file.id }}">{% include "_tarjeta_pendiente.html" %}</li>
   {% endfor %}
-</div>
+</ul>
 {% if cards and (inicio or anterior or siguiente) %}{{ paginas("pend-paginas-abajo", "Páginas de pendientes, abajo") }}{% endif %}
 {% endblock %}

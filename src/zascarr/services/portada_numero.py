@@ -49,13 +49,18 @@ logger = structlog.get_logger()
 ANCHO_PREVIA = 240
 #: Ancho de la portada en la ficha del número (mismo tamaño que la portada de serie).
 ANCHO_FICHA = 600
+#: Portada ampliada del visor (HD).
+ANCHO_HD = 1200
 #: Archivos que se miran como mucho por número (hay números con varias ediciones/archivos).
 MAX_ARCHIVOS_NUMERO = 3
 #: Tope de tiempo para no bloquear un hover con una serie de CBR lentos.
 PRESUPUESTO_PREVIA_S = 6.0
 #: Presupuesto de memoria por miniatura: una página de 40 Mpx no se decodifica para 240 px.
-MAX_PIXELES_PREVIA = 6_000_000
+#: 12 Mpx cubre los escaneos 4K habituales (2619×4106 ≈ 10,75 Mpx) sin abrir la puerta a
+#: páginas desmedidas; antes 6 Mpx los rechazaba y los marcaba como «sin portada» para siempre.
+MAX_PIXELES_PREVIA = 12_000_000
 MAX_PIXELES_FICHA = 12_000_000
+MAX_PIXELES_HD = 20_000_000
 #: Generaciones simultáneas como máximo en todo el proceso.
 _GENERACIONES = asyncio.Semaphore(2)
 
@@ -121,15 +126,24 @@ async def _archivos_del_numero(db: AsyncSession, serie_id: UUID,
 
 
 def _generar(archivos: list[tuple[UUID, str, dict | None]],
-             settings, ancho: int, max_pixeles: int) -> tuple[bytes, UUID] | None:
+             settings, ancho: int, max_pixeles: int,
+             estado: dict | None = None) -> tuple[bytes, UUID] | None:
     """Extrae la primera página del primer archivo que pueda darla. Sin BD y sin locks: se llama
-    desde un hilo. El interruptor del lector de RAR se respeta igual que en `_primera_portada`."""
+    desde un hilo. El interruptor del lector de RAR se respeta igual que en `_primera_portada`.
+
+    `estado["agotado"]` distingue un fallo de contenido de haberse quedado sin presupuesto:
+    solo el segundo no debe dejar caché negativa, porque mañana el mismo archivo puede caber.
+    """
+    if estado is not None:
+        estado["agotado"] = False
     covers = Path(settings.covers_cache_path)
     marcas = covers / CACHE_VERSION
     limite = time.monotonic() + PRESUPUESTO_PREVIA_S
     herramienta = None if getattr(settings, "lector_rar_enabled", True) else False
     for file_id, ruta, formato in archivos:
         if time.monotonic() >= limite:
+            if estado is not None:
+                estado["agotado"] = True
             break
         path = Path(ruta)
         es_rar = es_rar_candidato(path, formato)
@@ -189,14 +203,22 @@ async def ruta_previa(db: AsyncSession, serie_id: UUID, issue_id: UUID, *,
         if all(_huella_vigente(_camino(carpeta, fid, ancho), Path(ruta), negativa=True)
                for fid, ruta, _formato in archivos):
             return None
-        max_pixeles = MAX_PIXELES_PREVIA if ancho == ANCHO_PREVIA else MAX_PIXELES_FICHA
+        max_pixeles = (MAX_PIXELES_PREVIA if ancho == ANCHO_PREVIA
+                       else MAX_PIXELES_HD if ancho == ANCHO_HD else MAX_PIXELES_FICHA)
+        estado_generacion: dict = {}
         try:
             async with _GENERACIONES:
                 generado = await asyncio.wait_for(
-                    asyncio.to_thread(_generar, archivos, settings, ancho, max_pixeles),
+                    asyncio.to_thread(_generar, archivos, settings, ancho, max_pixeles,
+                                      estado_generacion),
                     timeout=PRESUPUESTO_PREVIA_S)
         except TimeoutError:
             logger.warning("previa.tiempo_agotado", ancho=ancho)
+            return None
+        if generado is None and estado_generacion.get("agotado"):
+            # No es «este archivo no tiene portada»: es que no ha cabido en el presupuesto.
+            # No se cachea en negativo para que un reintento posterior sí lo intente.
+            logger.info("previa.presupuesto_generacion_agotado", ancho=ancho)
             return None
         if generado is None:
             # Si el lector RAR está apagado, la ausencia es de CONFIGURACIÓN, no del archivo:

@@ -1,0 +1,19 @@
+<div id="copias-items"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+  {% if copias is none %}
+    <p class="muted">Aún no hay lista de copias.</p>
+  {% elif not copias %}
+    <p class="muted">No hay copias restaurables para esta versión.</p>
+  {% else %}
+    <ul>
+      {% for c in copias %}
+      <li>{{ c.fecha }} · {{ c.tamano }} · también en el disco de respaldo: {{ "sí" if c.fuera_del_disco else "no" }}
+        {% if c.id %}
+          {% if c.restaurable and not restaurando %}<a class="btn ghost sm" href="/ui/copias/restaurar/{{ c.id }}">Restaurar…</a>
+          {% elif c.restaurable and restaurando %}<span class="muted">Hay una restauración en marcha.</span>
+          {% else %}<span class="muted">{{ c.motivo }}</span>{% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>

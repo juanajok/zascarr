@@ -11,6 +11,7 @@ botón de probar antes de guardar.
 """
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -153,6 +154,7 @@ def _contexto() -> dict:
         "prowlarr_indexer_ids": getattr(s, "prowlarr_indexer_ids", ""),
         "prowlarr_indexers_elegidos": _ids_prowlarr(s),
         "transmission_url": s.transmission_url,
+        "transmission_download_dir": getattr(s, "transmission_download_dir", ""),
         "transmission_username": s.transmission_username,
         "transmission_password_configurada": bool(s.transmission_password),
         "transmission_enabled": s.transmission_enabled,
@@ -319,6 +321,22 @@ async def habilitar_raiz(
             request, "_ajustes_guardado.html",
             {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
              else "No se pudo cambiar el disco.", "nombre": "Discos"})
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
+
+
+@router.post("/raices/{root_id}/predeterminada", response_class=HTMLResponse)
+async def predeterminada_raiz(
+    request: Request, root_id: UUID, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    try:
+        await servicio_raices.cambiar_por_defecto(db, root_id)
+        await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        await db.rollback()
+        return templates.TemplateResponse(
+            request, "_ajustes_guardado.html",
+            {"error": str(exc) if isinstance(exc, servicio_raices.RaizInvalidaError)
+             else "No se pudo elegir el disco por defecto.", "nombre": "Discos"})
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Discos"})
 
 
@@ -649,13 +667,23 @@ async def guardar_transmission(
     request: Request, transmission_url: str = Form(...),
     transmission_username: str = Form(default=""),
     transmission_password: str = Form(default=""),
+    transmission_download_dir: str = Form(default=""),
     transmission_enabled: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
+    carpeta = (transmission_download_dir or "").strip()
+    if carpeta and not _carpeta_de_descargas_valida(carpeta):
+        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+            "ok": False,
+            "mensaje": "La carpeta de descargas debe ser una ruta absoluta del host "
+                       "(empieza por / y sin «..») — por ejemplo "
+                       "/media/Descargas/torrents/completos.",
+        })
     await RuntimeSettingsService(db).save({
         "transmission_url": transmission_url.rstrip("/"),
         "transmission_username": transmission_username,
         "transmission_password": transmission_password,
+        "transmission_download_dir": carpeta,
         "transmission_enabled": transmission_enabled,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Transmission"})
@@ -950,13 +978,22 @@ async def probar_prowlarr(
 async def probar_transmission(
     request: Request, transmission_url: str = Form(...),
     transmission_username: str = Form(default=""), transmission_password: str = Form(default=""),
+    transmission_download_dir: str = Form(default=""),
 ) -> HTMLResponse:
     password = _secreto_o_guardado(transmission_password, "transmission_password")
-    ok, mensaje = await _test_transmission(
-        transmission_url.rstrip("/"), transmission_username, password
+    carpeta = (transmission_download_dir or "").strip() or getattr(
+        get_settings(), "transmission_download_dir", "")
+    if carpeta and not _carpeta_de_descargas_valida(carpeta):
+        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+            "ok": False,
+            "mensaje": "La carpeta de descargas debe ser una ruta absoluta del host "
+                       "(no la raíz «/», sin «..» ni caracteres de control).",
+        })
+    ok, mensaje, aviso = await _test_transmission(
+        transmission_url.rstrip("/"), transmission_username, password, carpeta
     )
     return templates.TemplateResponse(
-        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje}
+        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje, "aviso": aviso}
     )
 
 
@@ -1083,9 +1120,35 @@ async def _test_prowlarr(url: str, api_key: str) -> tuple[bool, str]:
         return False, _mensaje_conexion_fallida(exc)
 
 
-async def _test_transmission(url: str, username: str, password: str) -> tuple[bool, str]:
+def _carpeta_de_descargas_valida(ruta: str) -> bool:
+    """Ruta absoluta del host, sin «..» ni caracteres de control."""
+    if not ruta.startswith("/") or ".." in PurePosixPath(ruta).parts:
+        return False
+    if PurePosixPath(ruta) == PurePosixPath("/"):
+        return False          # la raíz del host no es una carpeta de descargas válida
+    return not any(ord(c) < 32 for c in ruta)
+
+
+def _aviso_de_carpeta_transmission(esperada: str, real: str | None) -> str | None:
+    """Aviso si ZascArr enviará a una carpeta distinta de la que usa Transmission.
+
+    No se puede comprobar desde el contenedor si la carpeta del host existe; el
+    aviso da las dos rutas para que el operador las compare antes de descargar.
+    """
+    if not esperada or not real:
+        return None
+    if PurePosixPath(esperada) == PurePosixPath(real):
+        return None
+    return ("Conexión correcta, pero la carpeta de descargas configurada en ZascArr "
+            f"(«{esperada}») no es la que usa Transmission («{real}»). ZascArr enviará "
+            "los torrents a la primera: si no existe en la Pi, el envío fallará.")
+
+
+async def _test_transmission(
+    url: str, username: str, password: str, download_dir: str = ""
+) -> tuple[bool, str, bool]:
     if not url:
-        return False, "Falta la URL de Transmission."
+        return False, "Falta la URL de Transmission.", False
     auth = (username, password) if username else None
     rpc_url = f"{url}/transmission/rpc"
     try:
@@ -1100,16 +1163,31 @@ async def _test_transmission(url: str, username: str, password: str) -> tuple[bo
                     headers={"X-Transmission-Session-Id": session_id},
                 )
         if r.status_code == 401:
-            return False, "Transmission respondió: usuario o contraseña rechazados."
+            return False, "Transmission respondió: usuario o contraseña rechazados.", False
         if r.status_code != 200:
-            return False, f"Transmission respondió HTTP {r.status_code}."
-        if r.json().get("result") == "success":
-            return True, "Conexión correcta."
-        return False, "Transmission no confirmó la sesión."
+            return False, f"Transmission respondió HTTP {r.status_code}.", False
+        try:
+            datos = r.json()
+        except ValueError:
+            return False, "Transmission devolvió una respuesta que no es JSON.", False
+        if not isinstance(datos, dict):
+            return False, "Transmission devolvió una respuesta inesperada.", False
+        if datos.get("result") == "success":
+            argumentos = datos.get("arguments")
+            if not isinstance(argumentos, dict):
+                return False, "Transmission devolvió una respuesta inesperada.", False
+            real = argumentos.get("download-dir")
+            if real is not None and not isinstance(real, str):
+                return False, "Transmission devolvió una respuesta inesperada.", False
+            aviso = _aviso_de_carpeta_transmission(download_dir, real)
+            if aviso:
+                return True, aviso, True
+            return True, "Conexión correcta.", False
+        return False, "Transmission no confirmó la sesión.", False
     except httpx.HTTPError as exc:
         logger.warning("ajustes.test_failed", integracion="transmission",
                        error_tipo=type(exc).__name__)
-        return False, _mensaje_conexion_fallida(exc)
+        return False, _mensaje_conexion_fallida(exc), False
 
 
 async def _test_amule(url: str, password: str) -> tuple[bool, str]:

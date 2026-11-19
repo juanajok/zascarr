@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.models import File, Issue, Series
+from zascarr.models import File, Issue, Series, SeriesKind
 from zascarr.services.series import (
     UNIDAD_DE_GRAPA,
     compute_missing_issues,
@@ -91,7 +91,8 @@ async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
     # de grapas (ver `UNIDAD_DE_GRAPA`): sumar capítulos de AniList o "números"
     # de Tebeosfera con grapas sería mezclar unidades.
     series_totales = (await db.execute(
-        select(Series.id, Series.total_issues, Series.metadata_source, Series.metadata_)
+        select(Series.id, Series.total_issues, Series.metadata_source, Series.metadata_,
+               Series.kind)
     )).all()
 
     poseidos_por_serie = await numeros_poseidos_por_serie(db)
@@ -104,6 +105,9 @@ async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
         # Los dobles de prueba antiguos devuelven 3 columnas (sin metadata).
         series_id, total, fuente = tuple(fila)[:3]
         metadata = tuple(fila)[3] if len(tuple(fila)) > 3 else None
+        kind = tuple(fila)[4] if len(tuple(fila)) > 4 else None
+        if kind == SeriesKind.ONE_SHOT:
+            continue                    # #1027: no suma números ni huecos de grapa
         if isinstance(metadata, dict) and (metadata.get("coleccion") or {}).get("no_completar"):
             series_no_completar += 1
             continue

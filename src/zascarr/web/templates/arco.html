@@ -71,7 +71,7 @@
     </div>
   </form>
 </section>
-<p class="caption">{{ arco.filas | length }} {{ "número" if arco.filas | length == 1 else "números" }} · {{ arco.series }} {{ "serie" if arco.series == 1 else "series" }}</p>
+<p class="muted">{{ arco.filas | length }} {{ "número" if arco.filas | length == 1 else "números" }} · {{ arco.series }} {{ "serie" if arco.series == 1 else "series" }}</p>
 {% if not arco.filas %}
 {{ ui.estado_vacio("Esta saga no tiene números enlazados", "No hay un orden de lectura que mostrar todavía.") }}
 {% else %}

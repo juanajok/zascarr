@@ -56,6 +56,16 @@ def _limpiar_estado_auth():
 
 
 @pytest.fixture(autouse=True)
+def _cerrojo_de_pruebas(monkeypatch, tmp_path_factory):
+    """El cerrojo único de operaciones (BL-OPS1) vive en /run en producción y solo admite otra ruta con
+    `ZASCARR_PRUEBAS=1` + `OPS_LOCK_FILE`. Sin esto, las pruebas que ejecutan los scripts reales (sin ser
+    root) no podrían tomarlo; cada prueba tiene el suyo, en una carpeta aparte (no ensucia `tmp_path`).
+    Las pruebas del propio cerrojo lo redefinen o lo quitan."""
+    monkeypatch.setenv("ZASCARR_PRUEBAS", "1")
+    monkeypatch.setenv("OPS_LOCK_FILE", str(tmp_path_factory.mktemp("cerrojo") / "ops.lock"))
+
+
+@pytest.fixture(autouse=True)
 def _testclient_en_localhost(monkeypatch, request):
     """Por defecto, `TestClient` usa `base_url="http://localhost"` y envía
     `Origin: http://localhost`: así `Host` y `Origin` pasan la comprobación de

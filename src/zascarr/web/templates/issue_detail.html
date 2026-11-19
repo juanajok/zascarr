@@ -6,7 +6,7 @@
 <div class="issue-header">
   <div class="issue-portada">
     {{ ui.portada(issue.issue_number or issue.title or series.title, issue.id, "/ui/series/%s/numero/%s/portada.jpg" % (series.id, issue.id), "issue-cover") }}
-    <p class="caption">{{ textos.portada_numero }}</p>
+    <p class="muted issue-portada-pie">{{ textos.portada_numero }}</p>
   </div>
   <div>
     <h1>{% if issue.issue_number %}Número {{ issue.issue_number }}{% else %}Número{% endif %}</h1>
@@ -14,7 +14,15 @@
     {% if not issue.issue_number %}<p class="subtitle">Sin número</p>{% endif %}
     <p class="series-intro">Todo lo que ZascArr sabe de este número.</p>
     {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
-    <p><a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar">Editar el número</a></p>
+    <p>
+      <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar">Editar el número</a>
+      <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/datos">Completar datos</a>
+      {% if lector_archivo %}
+      <a class="btn primary" href="/ui/leer/{{ lector_archivo.id }}">
+        {% if lector_pagina > 1 %}Continuar (pág. {{ lector_pagina }}){% else %}Leer{% endif %}
+      </a>
+      {% endif %}
+    </p>
     {% if ficha.archivos %}
     <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/mejorar" class="inline-desbloquear">
       <button type="submit" class="btn ghost sm">Buscar una edición mejor</button>
@@ -24,8 +32,8 @@
 </div>
 {% if colecciones %}
 <section id="colecciones-numero" class="series-colecciones" aria-label="Colecciones">
-  <h2 id="colecciones-numero-titulo" class="titulo-frase">Colecciones</h2>
-  <p class="caption">Este número está en las colecciones de su serie.</p>
+  <h2 id="colecciones-numero-titulo">Colecciones</h2>
+  <p class="muted">Este número está en las colecciones de su serie.</p>
   <p class="series-colecciones-lista">
     {% for c in colecciones %}
     <a class="chip-enlace" href="/ui/colecciones/{{ c.id }}">{{ ui.chip("neutro", c.name) }}</a>
@@ -34,7 +42,7 @@
 </section>
 {% else %}
 <section id="colecciones-numero" class="series-colecciones" aria-label="Colecciones">
-  <h2 id="colecciones-numero-titulo" class="titulo-frase">Colecciones</h2>
+  <h2 id="colecciones-numero-titulo">Colecciones</h2>
   <p class="muted">Este número no está en ninguna colección porque su serie tampoco.</p>
 </section>
 {% endif %}
@@ -47,7 +55,7 @@
 <p class="ficha-sinopsis">{{ textos.sin_datos_numero }}</p>
 {% else %}
 <section aria-labelledby="issue-datos-titulo">
-  <h2 id="issue-datos-titulo" class="titulo-frase">Datos del número</h2>
+  <h2 id="issue-datos-titulo">Datos del número</h2>
   <dl class="ficha-serie-meta">
     <div><dt>{{ textos.serie }}</dt><dd><a href="/ui/series/{{ series.id }}">{{ series.title }}</a></dd></div>
     <div><dt>Referencia</dt><dd>{% if series.reference_name %}{{ series.reference_name }}{% else %}{{ series.title }}{% endif %}{% if issue.number_key %} #{{ issue.number_key }}{% elif issue.title %} — {{ issue.title }}{% endif %}</dd></div>

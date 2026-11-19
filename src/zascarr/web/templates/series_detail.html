@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ series.title }} — ZascArr{% endblock %}
 {% block content %}
+<span hx-post="/ui/series/{{ series.id }}/vista" hx-trigger="load delay:1s" hx-swap="none" hidden></span>
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
 {% from "_atribucion_fandom.html" import aviso_de_atribucion %}
 
@@ -28,14 +29,16 @@
   </span>
   <div>
     <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle anio-titulo">({{ series.start_year }})</span>{% endif %}</h1>
-    {% if series.publisher %}<p class="series-meta">{{ series.publisher.name }}</p>{% endif %}
+    {% if series.publisher %}<p class="series-meta"><a class="chip chip-filtro" href="/ui/biblioteca?publisher_id={{ series.publisher.id }}">{{ series.publisher.name }}</a></p>{% endif %}
     {% if series.genres %}
     <p class="series-meta">{{ series.genres|map(attribute="name")|join(", ") }}</p>
     {% endif %}
     {#- «Completa» solo si los huecos se pudieron calcular: sin `computable` no hay con qué restar, y antes
         una serie de AniList con 8 de 30 decía «Ningún hueco — la tienes completa» (caso real, 2026-10-20). -#}
     <p class="subtitle">
-      {% if estado_coleccion.tipo == "no_completar" %}
+      {% if es_obra_unica %}
+        Tomo único · {{ "completo" if estado_coleccion.tipo == "completa" else "sin publicación" }}.
+      {% elif estado_coleccion.tipo == "no_completar" %}
         No la vas a completar. Sus huecos no cuentan como faltas en el Inicio ni en esta ficha.
       {% elif huecos.computable %}
         {{ series.total_issues }} números en total —
@@ -48,13 +51,9 @@
         Número total de la serie desconocido todavía: no se puede calcular huecos.
       {% endif %}
     </p>
+    {% include "_obra_unica_serie.html" %}
     {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
-    <form method="post" action="/ui/series/{{ series.id }}/favorito" class="favorito-form">
-      <input type="hidden" name="volver" value="{{ volver or '' }}">
-      <button class="btn ghost sm" type="submit" aria-pressed="{{ 'true' if series.favorite else 'false' }}">
-        {{ "Quitar de favoritas" if series.favorite else "Marcar como favorita" }}
-      </button>
-    </form>
+    {% set compacto = false %}{% include "_favorito_boton.html" %}
     <p class="series-acciones">
       <a class="btn ghost" href="/ui/series/{{ series.id }}/editar">Editar la ficha</a>
       <a class="btn primary" href="/ui/pendientes/carpetas?serie={{ series.id }}">Añadir números del disco</a>
@@ -95,10 +94,12 @@
   <a class="btn ghost sm" href="#numeros-serie">Números</a>
   <a class="btn ghost sm" href="#sagas-serie">Sagas</a>
   <a class="btn ghost sm" href="#politica-serie">Búsqueda</a>
+  <a class="btn ghost sm" href="#seguimiento-serie">Seguimiento</a>
   <a class="btn ghost sm" href="#etiquetas-serie">Etiquetas</a>
   <a class="btn ghost sm" href="#colecciones-serie">Colecciones</a>
   <a class="btn ghost sm" href="#coleccion-serie">Completitud</a>
   <a class="btn ghost sm" href="#datos-serie">Datos</a>
+  <a class="btn ghost sm" href="/ui/series/{{ series.id }}/datos">Completar datos</a>
   {% if archivos_por_numero %}<a class="btn ghost sm" href="#archivos-por-numero">Archivos</a>{% endif %}
 </nav>
 
@@ -157,7 +158,7 @@
 </details>
 
 <section id="datos-serie" class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
-  <h2 id="ficha-serie-datos-titulo" class="titulo-frase">{{ textos_ficha.serie_bloque }}</h2>
+  <h2 id="ficha-serie-datos-titulo">{{ textos_ficha.serie_bloque }}</h2>
   {% if serie_vacia %}
   <p class="ficha-sinopsis">{{ textos_ficha.sin_datos }}</p>
   {% else %}
@@ -166,7 +167,7 @@
     {% if sinopsis_resto %}<details><summary>{{ textos_ficha.sinopsis_completa }}</summary><p>{{ sinopsis_resto }}</p></details>{% endif %}
   </div>
   <dl class="ficha-serie-meta">
-    <div><dt>{{ textos_ficha.editorial }}</dt><dd>{% if series.publisher %}{{ series.publisher.name }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
+    <div><dt>{{ textos_ficha.editorial }}</dt><dd>{% if series.publisher %}<a class="chip chip-filtro" href="/ui/biblioteca?publisher_id={{ series.publisher.id }}">{{ series.publisher.name }}</a>{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos_ficha.inicio }}</dt><dd>{% if series.start_year %}{{ series.start_year }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
     <div><dt>Referencia</dt><dd>{% if series.reference_name %}{{ series.reference_name }}{% else %}{{ series.title }}{% endif %}</dd></div>
     {% if series.language %}
@@ -189,7 +190,7 @@
   <dl class="ficha-autores">
     {% for clave, etiqueta in roles_ficha %}
     {% if clave in ("writer", "penciler") and ficha.autores.get(clave) %}
-    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{% if a.id %}<a href="/ui/biblioteca?author_id={{ a.id }}">{{ a.nombre }}</a>{% else %}{{ a.nombre }}{% endif %} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
+    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{% if a.id %}<a class="chip chip-filtro" href="/ui/biblioteca?author_id={{ a.id }}">{{ a.nombre }}</a>{% else %}{{ a.nombre }}{% endif %} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
     {% endif %}
     {% endfor %}
   </dl>
@@ -249,16 +250,27 @@
   {% endif %}
 </section>
 
+{% if mas_serie %}
+<section class="mas-serie" aria-labelledby="mas-serie-titulo">
+  <h2 id="mas-serie-titulo" class="titulo-frase">Más en tu biblioteca</h2>
+  <ul class="escaparate-lista" tabindex="0" aria-label="Más en tu biblioteca">
+    {% for x in mas_serie %}
+    <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}"><span class="escaparate-titulo">{{ x.title }}</span><span class="muted">{{ x.motivo }}</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 <section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
          hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
 <section id="colecciones-serie" class="series-colecciones" aria-label="Colecciones"
          hx-get="/ui/series/{{ series.id }}/colecciones" hx-trigger="load" hx-swap="outerHTML"></section>
 {% include "_politica_serie.html" %}
+{% include "_seguimiento_serie.html" %}
 {% include "_nota_serie.html" %}
 
     <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo"
              {% if aviso_coleccion %}tabindex="-1" autofocus{% endif %}>
-      <h2 id="coleccion-serie-titulo" class="titulo-frase">Completitud</h2>
+      <h2 id="coleccion-serie-titulo">Completitud</h2>
       <p>
         {% if estado_coleccion.tipo == "no_completar" %}
           {{ ui.chip("neutro", "No la vas a completar") }}
@@ -342,6 +354,13 @@
                   hx-get="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/previa"
                   hx-target="next .previa-numero" hx-swap="innerHTML"
                   hx-trigger="click">Ver portada<span class="sr"> del número {{ n.numero }}</span></button>
+          <a class="btn ghost sm visor-portada-boton"
+             href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/portada-hd.jpg"
+             data-visor-src="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/portada-hd.jpg"
+             data-visor-titulo="Número {{ n.numero }}{% if n.titulo %} · {{ n.titulo }}{% endif %}"
+             {% if loop.previtem %}data-visor-prev="/ui/series/{{ series.id }}/numero/{{ loop.previtem.issue_id }}/portada-hd.jpg"{% endif %}
+             {% if loop.nextitem %}data-visor-next="/ui/series/{{ series.id }}/numero/{{ loop.nextitem.issue_id }}/portada-hd.jpg"{% endif %}
+             >Ver portada ampliada<span class="sr"> del número {{ n.numero }}</span></a>
           <span class="previa-numero" id="previa-archivo-{{ n.issue_id }}" aria-hidden="true"></span>
         </span>
       </h3>
@@ -378,4 +397,11 @@
   </ul>
 </section>
 {% endif %}
+
+
+
+
+
+{% include "_visor_portada.html" %}
+  <script src="/static/visor-portada.js" defer></script>
 {% endblock %}

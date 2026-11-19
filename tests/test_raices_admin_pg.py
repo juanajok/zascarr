@@ -63,3 +63,25 @@ async def test_crear_mapear_y_desactivar_sin_mover_archivos(monkeypatch, tmp_pat
                 assert len(await raices.listar_con_tradiciones(s)) == 2
         finally:
             await motor.dispose()
+
+
+@pytest.mark.asyncio
+async def test_la_raiz_por_defecto_se_cambia_sin_dejar_dos(monkeypatch, tmp_path):
+    a, b = await _entorno(monkeypatch, tmp_path)
+    async with bd_efimera(URL) as url:
+        alembic(url, "upgrade", "head")
+        motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
+        fab = async_sessionmaker(motor, expire_on_commit=False)
+        try:
+            async with fab() as s:
+                nueva = await raices.crear_raiz(s, path=str(b), name="Manga")
+                await s.commit()
+                await raices.cambiar_por_defecto(s, nueva.id)
+                await s.commit()
+                defectos = (await s.execute(
+                    select(LibraryRoot).where(LibraryRoot.is_default.is_(True)))).scalars().all()
+                assert len(defectos) == 1 and defectos[0].id == nueva.id
+                with pytest.raises(raices.RaizInvalidaError):
+                    await raices.cambiar_habilitada(s, nueva.id, False)
+        finally:
+            await motor.dispose()

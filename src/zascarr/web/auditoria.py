@@ -44,7 +44,7 @@ from zascarr.models import (
     PaqueteOperacion,
     Series,
 )
-from zascarr.services import registro_biblioteca, rescan_biblioteca
+from zascarr.services import registro_biblioteca, rescan_biblioteca, tareas
 from zascarr.services.aceptacion_adopcion import MAX_ILEGIBLES, aceptar, evaluar
 from zascarr.services.apartado_duplicados import (
     ApartadoDuplicadosService,
@@ -466,9 +466,26 @@ def _size_grupo(d) -> int:
     return int(d.get("size_bytes") or 0) if isinstance(d, dict) else int(getattr(d, "size_bytes", 0) or 0)
 
 
+def _raices_config() -> list[Path]:
+    s = get_settings()
+    crudas = [p.strip() for p in (getattr(s, "library_roots", "") or "").split(",") if p.strip()]
+    if not crudas:
+        crudas = [str(s.library_path)]
+    return [Path(p) for p in crudas]
+
+
+def _raiz_de_ruta(ruta: str | Path) -> Path:
+    candidatas = []
+    for raiz in _raices_config():
+        base = str(raiz).rstrip("/")
+        if str(ruta) == base or str(ruta).startswith(base + "/"):
+            candidatas.append(raiz)
+    return max(candidatas, key=lambda r: len(r.parts)) if candidatas else Path(get_settings().library_path)
+
+
 def _ruta_relativa(ruta: str) -> str:
     try:
-        raiz = get_settings().library_path.resolve()
+        raiz = _raiz_de_ruta(ruta).resolve()
         p = Path(ruta).resolve()
         return p.relative_to(raiz).as_posix()
     except (OSError, ValueError):
@@ -513,20 +530,27 @@ async def _contexto_duplicados(db: AsyncSession, informe: dict | None) -> dict:
 
 
 def _resumen_cuarentena() -> dict:
-    base = Path(get_settings().library_path) / ".zascarr" / "apartados"
+    por_raiz = []
     archivos = 0
     bytes_ = 0
-    try:
-        for raiz, _dirs, ficheros in os.walk(base, followlinks=False):
-            for nombre in ficheros:
-                try:
-                    archivos += 1
-                    bytes_ += (Path(raiz) / nombre).stat().st_size
-                except OSError:
-                    continue
-    except OSError:
-        pass
-    return {"ruta": str(base), "archivos": archivos, "bytes": bytes_}
+    for raiz in _raices_config():
+        base = raiz / ".zascarr" / "apartados"
+        n = b = 0
+        try:
+            for actual, _dirs, ficheros in os.walk(base, followlinks=False):
+                for nombre in ficheros:
+                    try:
+                        n += 1
+                        b += (Path(actual) / nombre).stat().st_size
+                    except OSError:
+                        continue
+        except OSError:
+            pass
+        archivos += n
+        bytes_ += b
+        por_raiz.append({"ruta": str(base), "archivos": n, "bytes": b})
+    return {"ruta": por_raiz[0]["ruta"] if por_raiz else "",
+            "archivos": archivos, "bytes": bytes_, "raices": por_raiz}
 
 
 async def _operaciones_apartadas(db: AsyncSession) -> list[dict]:
@@ -621,23 +645,128 @@ async def paquete_previa(request: Request, token: str = "") -> HTMLResponse:
         {"listado": listado, "error": None, "clave_accion": clave_accion}))
 
 
+_TAREAS_PAQUETES: dict[str, asyncio.Task] = {}
+_TAREAS_LOCK = asyncio.Lock()
+
+
+def _etiqueta_estado(estado: PaqueteEstado) -> str:
+    return {
+        PaqueteEstado.LISTANDO: "Leyendo el paquete…",
+        PaqueteEstado.EXTRAYENDO: "Extrayendo una copia temporal…",
+        PaqueteEstado.VERIFICANDO: "Comprobando lo extraído…",
+        PaqueteEstado.VERIFICADO: "Copia verificada; publicando…",
+        PaqueteEstado.PUBLICANDO: "Publicando en Descargas…",
+        PaqueteEstado.IMPORTANDO: "Importando como si fueran sueltos…",
+        PaqueteEstado.IMPORTADO: "Terminado.",
+        PaqueteEstado.ERROR: "No se pudo completar.",
+    }.get(estado, "Trabajando…")
+
+
+def _token_reintento(op: PaqueteOperacion) -> str | None:
+    """Token nuevo para reintentar un paquete que quedó en ERROR."""
+    try:
+        ruta = Path(op.paquete_path)
+        if not ruta.is_file():
+            return None
+        return crear_token_paquete(SimpleNamespace(
+            ruta=ruta, raiz=ruta.parent, dev=op.paquete_dev, ino=op.paquete_ino,
+            tamano=op.paquete_size, mtime_ns=op.paquete_mtime_ns, firma=op.firma))
+    except (OSError, ValueError):
+        return None
+
+
+async def _procesar_paquete(op_id: str) -> None:
+    """Trabajo en segundo plano; la UI sondea su estado por HTMX."""
+    tarea = tareas.iniciar("paquete", enlace="/ui/auditoria#paquetes-descargas",
+                           origen=f"paquete:{op_id}")
+    try:
+        async with database.async_session_factory() as s:
+            op = await s.get(PaqueteOperacion, UUID(op_id))
+            if op is None or op.estado is PaqueteEstado.IMPORTADO:
+                if tarea is not None:
+                    tareas.terminar(tarea.id, resumen="Paquete ya importado")
+                return
+            if tarea is not None:
+                tareas.actualizar(tarea.id, fase="Extrayendo", total=op.total_entradas or None)
+            if op.estado is not PaqueteEstado.VERIFICADO:
+                def _avance(hechos: int, total: int) -> None:
+                    if tarea is not None:
+                        tareas.actualizar(tarea.id, fase="Extrayendo",
+                                          hechos=hechos, total=total or None)
+                await extraer_y_verificar(s, op.id, conservar_temporal=True,
+                                          progreso=_avance)
+            op = await s.get(PaqueteOperacion, UUID(op_id))
+            if op is not None and op.estado is PaqueteEstado.VERIFICADO:
+                if tarea is not None:
+                    tareas.actualizar(tarea.id, fase="Comprobando",
+                                      total=op.total_entradas or None,
+                                      hechos=len(op.items or []))
+                    tareas.actualizar(tarea.id, fase="Importando",
+                                      total=op.total_entradas or None,
+                                      hechos=len(op.items or []))
+                await publicar_e_importar(s, op.id)
+            if tarea is not None:
+                tareas.terminar(tarea.id, resumen="Paquete preparado")
+    except (PaqueteExtraccionError, PaquetePublicacionError) as exc:
+        if tarea is not None:
+            tareas.error(tarea.id, tipo_error=getattr(exc, "codigo", type(exc).__name__))
+        logger.warning("paquetes.tarea_fallida", error=getattr(exc, "codigo", type(exc).__name__))
+    except Exception:  # noqa: BLE001 — el estado de la operación es el canal de la UI
+        if tarea is not None:
+            tareas.error(tarea.id, tipo_error="inesperado")
+        logger.exception("paquetes.tarea_inesperada")
+    finally:
+        _TAREAS_PAQUETES.pop(op_id, None)
+
+
+@router.get("/paquetes/estado/{operacion_id}", response_class=HTMLResponse)
+async def paquete_estado(operacion_id: UUID, request: Request,
+                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento de progreso; al terminar devuelve el resultado (sin bucle)."""
+    op = await db.get(PaqueteOperacion, operacion_id)
+    if op is None:
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html",
+            {"op": None, "error": "La operación ya no existe."}))
+    terminal = op.estado in (PaqueteEstado.IMPORTADO, PaqueteEstado.ERROR)
+    if terminal:
+        error = op.error_mensaje if op.estado is PaqueteEstado.ERROR else None
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html",
+            {"op": op, "error": error, "token_reintento": _token_reintento(op)}))
+    return _no_store(templates.TemplateResponse(
+        request, "_paquete_progreso.html",
+        {"op": op, "etiqueta": _etiqueta_estado(op.estado), "op_id": str(op.id)}))
+
+
 @router.post("/paquetes/extraer", response_class=HTMLResponse)
 async def paquete_extraer(request: Request, token: str = Form("", alias="clave"),
+                          confirmo: str = Form(""),
                           db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    """Extrae y publica el paquete con un token de un solo uso; no borra el original."""
+    """Arranca la extracción/publicación en segundo plano y devuelve progreso."""
+    if confirmo != "si":
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html",
+            {"op": None, "error": "Confirma primero que quieres extraer una copia."}))
     try:
         paquete = await asyncio.to_thread(verificar_token_paquete, token)
         op = await crear_operacion(db, paquete)
-        await extraer_y_verificar(db, op.id, conservar_temporal=True)
-        op = await publicar_e_importar(db, op.id)
-        return _no_store(templates.TemplateResponse(
-            request, "_paquete_resultado.html", {"op": op, "error": None}))
-    except (TokenPaqueteInvalido, PaqueteExtraccionError,
-            PaquetePublicacionError) as exc:
+    except (TokenPaqueteInvalido, PaqueteExtraccionError) as exc:
         return _no_store(templates.TemplateResponse(
             request, "_paquete_resultado.html",
             {"op": None, "error": getattr(exc, "mensaje", None)
-             or "No se pudo completar la operación."}))
+             or "No se pudo preparar la operación."}))
+    if op.estado is PaqueteEstado.IMPORTADO:
+        return _no_store(templates.TemplateResponse(
+            request, "_paquete_resultado.html", {"op": op, "error": None}))
+    clave = str(op.id)
+    async with _TAREAS_LOCK:
+        tarea = _TAREAS_PAQUETES.get(clave)
+        if tarea is None or tarea.done():
+            _TAREAS_PAQUETES[clave] = asyncio.create_task(_procesar_paquete(clave))
+    return _no_store(templates.TemplateResponse(
+        request, "_paquete_progreso.html",
+        {"op": op, "etiqueta": _etiqueta_estado(op.estado), "op_id": clave}))
 
 
 @router.post("/analizar", response_class=HTMLResponse)
@@ -784,7 +913,7 @@ async def revisar_carpetas(request: Request, ruta_a: str = Form(default=""),
         ruta_a = str(crudos[par].get("ruta_a") or "")
         ruta_b = str(crudos[par].get("ruta_b") or "")
     try:
-        detalle = await analizar_par(ruta_a, ruta_b, Path(get_settings().library_path))
+        detalle = await analizar_par(ruta_a, ruta_b, _raiz_de_ruta(ruta_a))
     except (ApartadoError, OSError) as exc:
         return _no_store(templates.TemplateResponse(
             request, "_carpetas_detalle.html",
@@ -802,7 +931,7 @@ async def previsualizar_carpetas_dup(request: Request, ruta_a: str = Form(...),
     try:
         vista = await previsualizar_carpetas(
             db, ruta_a, ruta_b, keep,
-            library=Path(get_settings().library_path),
+            library=_raiz_de_ruta(ruta_a),
             secret=get_settings().secret_key)
     except (ApartadoError, OSError, ValueError) as exc:
         return _no_store(templates.TemplateResponse(
@@ -834,7 +963,7 @@ async def confirmar_carpetas_dup(
     if apartar_vacia and ruta_apartar:
         try:
             operacion = await apartar_carpeta_vacia(
-                db, ruta_apartar, library=Path(get_settings().library_path),
+                db, ruta_apartar, library=_raiz_de_ruta(ruta_apartar),
                 secret=get_settings().secret_key)
             carpeta = {"operacion": operacion}
         except (ApartadoError, OSError, ValueError) as exc:

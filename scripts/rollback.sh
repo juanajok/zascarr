@@ -97,6 +97,9 @@ echo -e "\n${B}====================================${N}"
 echo -e "${B}  ZascArr — Rollback${N}"
 echo -e "${B}====================================${N}\n"
 
+# ── Cerrojo único de operaciones (BL-OPS1): una operación de mantenimiento a la vez ────────────────
+tomar_cerrojo_operaciones || exit $?
+
 # ── 1. Requisitos y argumentos ───────────────────────────────────────────────
 comprobar_requisitos
 comprobar_git_utilizable

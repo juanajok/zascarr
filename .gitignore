@@ -11,3 +11,15 @@ build/
 .venv/
 venv/
 .claude/
+# Perfiles de Chrome sin cabeza que dejan las capturas de pantalla (no se versionan).
+.chrome*/
+
+# Artefactos de revisión headless (perfiles de Chrome, capturas)
+.review*/
+
+# Artefactos locales de ejecución y diagnóstico (no se versionan; CI lo comprueba).
+.tmp-*
+.tmp/
+*.log
+*.dump
+*.prof

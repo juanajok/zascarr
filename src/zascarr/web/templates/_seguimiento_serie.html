@@ -1,0 +1,44 @@
+{# #993: seguir números nuevos. Independiente de «Qué buscar»; sin `.primary`. #}
+<div id="seguimiento-serie" class="seguimiento-serie">
+  <h2>Números nuevos</h2>
+  <p class="subtitle">ZascArr mirará el foro (E-links diarios) y Prowlarr. Si aparece un número
+    nuevo, lo buscará y te avisará.</p>
+  {% if seguimiento_bloqueado_por_obra %}
+  {{ ui.aviso("info", "Esta ficha es una obra autoconclusiva: no tiene números nuevos que seguir. Desmárcala en «Tomo único» si vuelve a ser una serie normal.") }}
+  {% endif %}
+  {% if not es_obra_unica %}
+  {% if not fuentes_descarga_activas %}
+  {{ ui.aviso("info", "No hay fuente de descarga activa: el seguimiento no podrá detectar nada hasta que configures el foro o Prowlarr en Ajustes.") }}
+  {% endif %}
+  {% if activacion_bloqueada_por_aviso %}
+  {{ ui.aviso("warn", "Falta aceptar el aviso legal: el seguimiento no se ha activado. Desactivar siempre se puede.") }}
+  <p><a href="/ui/legal">Aceptar el aviso legal</a></p>
+  {% endif %}
+  <form hx-post="/ui/series/{{ series.id }}/seguimiento"
+        hx-target="#seguimiento-serie" hx-swap="outerHTML">
+    <label class="legal-checkbox">
+      <input type="checkbox" name="follow_new_issues" value="true"
+             {% if series.follow_new_issues %}checked{% endif %}>
+      Seguir esta serie
+    </label>
+    <div class="series-acciones">
+      <button type="submit" class="btn ghost">Guardar seguimiento</button>
+      <span class="htmx-indicator">Guardando…</span>
+    </div>
+  </form>
+  {% endif %}
+  {% if not es_obra_unica %}
+  {% if series.follow_new_issues %}
+  <p class="muted" role="status">Seguimiento activo. Empieza en la próxima pasada: no descarga lo anterior.
+    Los números detectados se piden en Deseados.</p>
+  {% else %}
+  <p class="muted" role="status">Ahora mismo no sigues los números nuevos de esta serie.
+    Si lo activas, empieza en la próxima pasada y no descarga lo anterior.</p>
+  {% endif %}
+  <details class="politica-detalles">
+    <summary>Qué hace el seguimiento</summary>
+    <p class="caption">Solo mira lo que aparece a partir de ahora. No cambia «Qué buscar» y no borra
+      los deseos pendientes si lo desactivas: los ya pedidos siguen en Deseados.</p>
+  </details>
+  {% endif %}
+</div>

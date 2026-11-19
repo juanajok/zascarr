@@ -77,7 +77,12 @@ def test_fuera_de_root_no_queda_ningun_font_size_literal():
     # V14 (#750) retiró reglas muertas (`.topnav`, `.hero-state`, y en F3b la familia `.issue-chip`):
     # el inventario bajó de 140 a 130. +1 por el aviso «puede tardar» de «Buscar ahora» (2026-11-16).
     # +2 por la tarjeta de Novedades (título y meta) del rediseño D5 (2026-11-16).
-    assert len(tam) == 133, f"declaraciones font-size: {len(tam)}"
+    # +1 por el chip de formato de la lista de pendientes (2026-11-17).
+    # +6 por el chip/panel de tareas en curso (2026-11-17).
+    # +2 por el lector inmersivo LECUX6 (título de espera y símbolo de flecha).
+    # +2 por la tarjeta de fin de LEC3 (título y texto de la tarjeta).
+    # +1 por el pie de la portada del número, que deja de ser `.caption` (revisión 2026-11-19).
+    assert len(tam) == 145, f"declaraciones font-size: {len(tam)}"
     malas = [(sel, v) for sel, v in tam if not re.fullmatch(r"var\(--text-[\w-]+\)", v)]
     assert not malas, "font-size sin token:\n" + "\n".join(f"{s}: {v}" for s, v in malas)
 

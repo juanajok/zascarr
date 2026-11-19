@@ -1,5 +1,6 @@
 COMPOSE = docker compose
 SA      = $(COMPOSE) exec zascarr
+PYTHON  ?= python3
 
 .PHONY: help up down restart logs build migrate migrate-down migrate-status health shell db-shell test lint format backup uninstall uninstall-purge
 
@@ -56,13 +57,13 @@ db-shell:
 	$(COMPOSE) exec postgres psql -U comics_admin -d zascarr
 
 test:
-	$(SA) python -m pytest tests/ -v
+	$(PYTHON) -m pytest tests/ -v
 
 lint:
-	$(SA) python -m ruff check src/
+	$(PYTHON) -m ruff check src/
 
 format:
-	$(SA) python -m ruff format src/
+	$(PYTHON) -m ruff format src/
 
 # El backup se escribe en un disco distinto al de los datos (BACKUP_DIR,
 # configurable en scripts/backup.sh) y aplica retención automática.

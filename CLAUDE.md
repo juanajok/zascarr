@@ -87,6 +87,10 @@ Sigue las guías oficiales con estas precisiones locales:
   (migración 0020 las conserva y Ajustes avisa).
 - Healthcheck es **observacional, no bloqueante**: una VPN caída es
   WARNING, no ERROR; no congela ni el arranque ni el ciclo de descargas.
+- El aviso de versión de `/estado` (#443 A, ADR 0025) es solo lectura:
+  SHA completo de la imagen y comparación de ascendencia con `main` en caché;
+  sin identidad o sin verificación dice «No se puede comprobar». Nunca
+  actualiza, ejecuta Git en la app ni bloquea la página por la red.
 
 ## 4. Rendimiento en Pi
 
@@ -305,7 +309,7 @@ como marco permanente.
 
 ## 10. Lo que NO se hace (anti-patrones del proyecto)
 
-- ❌ SPA / Node build / Alpine/Vue/React: ADR-0001, definitivo.
+- ❌ SPA / Node build / Alpine/Vue/React: ADR-0001, definitivo. **Única excepción:** el lector propio puede usar un único `static/lector.js` sin dependencias ni build, solo en su pantalla (ADR 0021); nada de Alpine/Vue/React.
 - ❌ `create_type=False` esperando que funcione sin `postgresql.ENUM`.
 - ❌ `Wishlist(**data)` desde el body crudo (cerrado con esquemas
    Pydantic).
@@ -321,7 +325,7 @@ como marco permanente.
 | Doc | Rol |
 |---|---|
 | `docs/BACKLOG.md` | Prioridades P0-P2, historias, estimaciones y decisión de hecho/cierre con nota mecánica de cómo se logró cada historia |
-| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis, 0012 credenciales del `.env`, 0015 lector de RAR con `unar` y riesgo aceptado; 0006–0010 en el propio directorio) |
+| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis, 0012 credenciales del `.env`, 0015 lector de RAR con `unar` y riesgo aceptado, 0021 JavaScript propio solo en el lector; 0006–0010 y 0013–0020 en el propio directorio) |
 | `docs/design/ui-migracion.md` | Inventario de la UI (plantillas, rutas, contratos HTMX), maqueta frente a la realidad y estimaciones de la Épica V. **Consultar antes de tocar una plantilla o un contrato `hx-*`** |
 | `docs/design/sistema-de-diseno-zascarr.md` (+ `.pdf`) | **Sistema de diseño publicado** (2026-11-13): libro de marca, principios, color y tokens de los dos temas, tipografía, forma, trama, iconografía, maquetación, interacción/accesibilidad, cómo se usa y la revisión de UI/UX con su deuda abierta. El `.md` es la referencia diffeable; el `.pdf`, las muestras visuales. **Consultar antes de tocar plantillas o CSS.** |
 | `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
@@ -330,6 +334,7 @@ como marco permanente.
 | `docs/design/contrato-307-formato-por-contenido.md` | Contrato de **formato por contenido** (#307): un único punto de decisión (`core/formato_contenedor.py`); `file_format` es la extensión **declarada**, el formato real va en `files.metadata["formato_contenido"]`. **Consultar antes de tocar `triage`, la portada o la auditoría de formatos** |
 | `docs/design/registro-incremental-326.md` | **Registro incremental** (#326): buscar y registrar archivos nuevos de una biblioteca ya registrada, a mano y con confirmación; «nuevo» = ruta sin fila; sin automatismo. **Consultar antes de tocar `LibraryAdopter.adopt`, `registro_biblioteca` o el bloque «Registro» de la Auditoría** |
 | `docs/design/especificacion-BL-R9-rescan-biblioteca.md` | **Rescan de la biblioteca** (BL-R9): a demanda (Auditoría) y periódico (`rescan_interval_minutes`); registra lo nuevo, re-tría lo sustituido sobre la misma fila (`file_mtime_ns`, migración 0021), reenlaza movidos y marca/revierte desaparecidos, sin mover ni borrar. **Consultar antes de tocar `LibraryAdopter.rescanear`, `services/rescan_biblioteca.py`, el bloque «Reescanear la biblioteca» de Auditoría o el bucle `_rescan_loop` de `main`** |
+| `docs/design/especificacion-BL-OPS1.md` | **«Hacer una copia ahora»** (BL-OPS1, #443; ADR 0021): auxiliar del host activado por socket (`deploy/ops/zascarr_ops.py`, protocolo HMAC de lista cerrada), cerrojo único de operaciones (`scripts/_cerrojo.sh`), `scripts/instalar_ops.sh`, `services/ops_host.py` y `web/copias.py`. **Consultar antes de tocar cualquiera de ellos, `backup.sh` (`status.json`, `omitida.json`, `copias.json`) o el bloque «Copias de seguridad» de Estado** |
 | `docs/design/disponibilidad-231.md` | **Disponibilidad de archivos** (#231): qué anota el ciclo del importador (`import_runs.details["comprobacion_biblioteca"]`), cómo se lee y la lista `/ui/no-disponibles`; solo lectura, sin tocar el disco al mostrarse. **Consultar antes de tocar `Importer._comprobar_biblioteca`, `services/disponibilidad.py` o el bloque «Tu biblioteca en disco» de Estado** |
 
 ## 12. Principios de arquitectura del propio código (confirmados por

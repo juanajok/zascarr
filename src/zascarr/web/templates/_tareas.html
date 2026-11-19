@@ -1,0 +1,22 @@
+<div id="tareas-hay" hx-swap-oob="outerHTML"{% if not t.hay_tareas %} hidden{% endif %}></div>
+<div id="tareas-cadencia" hx-swap-oob="outerHTML"
+     hx-get="/ui/_tareas" hx-trigger="{% if t.hay_tareas %}every 2s{% else %}every 10s{% endif %}"
+     hx-swap="none"></div>
+<span id="tareas-contador" hx-swap-oob="innerHTML">{% if t.errores %}<span class="tareas-chip error">Revisar</span>{% elif t.activas %}<span class="tareas-chip">{{ t.activas }} tarea{% if t.activas != 1 %}s{% endif %}</span>{% else %}<span class="tareas-chip">Listo</span>{% endif %}</span>
+<span id="tareas-nombre" hx-swap-oob="innerHTML">{% if t.hay_tareas %}ZascArr está trabajando{% endif %}</span>
+<div id="tareas-lista" hx-swap-oob="innerHTML">
+<h2>Ahora</h2>
+{% if not t.hay_tareas %}<p>No hay tareas en curso.</p>{% endif %}
+{% for x in t.tareas %}
+  <article class="tarea {{ x.estado }}">
+    <h3>{{ x.titulo }}</h3>
+    <p class="tarea-estado">{% if x.estado == "error" %}Error · No se pudo terminar. Vuelve a intentarlo.{% elif x.estado == "terminada" %}Hecho{% elif x.estado == "atascada" %}Tarda más{% elif x.fase and x.total and x.hechos is not none %}{{ x.fase }} {{ x.hechos }} de {{ x.total }}{% elif x.fase %}{{ x.fase }}{% else %}Trabajando…{% endif %}</p>
+    {% if x.total and x.hechos is not none %}<progress value="{{ x.hechos }}" max="{{ x.total }}" aria-label="{{ x.titulo }}: {{ x.hechos }} de {{ x.total }}"></progress><p class="caption">{{ x.hechos }} de {{ x.total }}</p>{% elif x.estado == "en_curso" %}<progress aria-label="{{ x.titulo }}"></progress>{% endif %}
+    <p class="caption">{{ x.iniciada_texto }}</p>
+    {% if x.estado == "atascada" %}<p>Está tardando más de lo normal. Puedes seguir usando ZascArr.</p>{% endif %}
+    {% if x.estado == "error" %}<button type="button" hx-post="/ui/_tareas/visto/{{ x.id }}" hx-swap="none">Revisar</button>{% endif %}
+    {% if x.enlace %}<a href="{{ x.enlace }}">Ver la tarea</a>{% endif %}
+  </article>
+{% endfor %}
+</div>
+<div id="tareas-anuncio" class="sr" role="status" hx-swap-oob="innerHTML">{% if t.anuncio %}{{ t.anuncio }}{% endif %}</div>

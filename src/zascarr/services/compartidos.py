@@ -98,12 +98,23 @@ def _raices_declaradas(settings) -> tuple[list[str], str | None]:
 def _pares_host_a_contenedor(settings) -> list[tuple[str, str]]:
     """Pares conocidos para traducir rutas de cliente a rutas del contenedor."""
     pares: list[tuple[str, str]] = []
-    for origen, destino in (
-        (getattr(settings, "host_library_dir", ""), getattr(settings, "library_path", None)),
+    pares_host = [getattr(settings, "host_library_dir", "")]
+    pares_host += [
+        p.strip() for p in (getattr(settings, "host_library_roots", "") or "").split(",")
+        if p.strip()
+    ]
+    pares_destino = [getattr(settings, "library_path", None)]
+    pares_destino += [
+        p.strip() for p in (getattr(settings, "library_roots", "") or "").split(",")
+        if p.strip()
+    ]
+    pares_base = list(zip(pares_host, pares_destino, strict=False))
+    pares_base += [
         (getattr(settings, "host_downloads_dir", ""), getattr(settings, "downloads_path", None)),
         (getattr(settings, "host_amule_incoming_dir", ""),
          getattr(settings, "amule_incoming_dir", None)),
-    ):
+    ]
+    for origen, destino in pares_base:
         if not origen or destino is None:
             continue
         raiz_host = _real(str(origen))
@@ -127,8 +138,13 @@ def traducir_a_contenedor(ruta: str | Path, settings) -> str | None:
         if _bajo(real, origen):
             rel = os.path.relpath(real, origen)
             return os.path.normpath(os.path.join(destino, rel))
-    for campo in ("library_path", "downloads_path", "amule_incoming_dir"):
-        raiz = getattr(settings, campo, None)
+    campos = ("library_path", "downloads_path", "amule_incoming_dir")
+    raices = [getattr(settings, campo, None) for campo in campos]
+    raices += [
+        p.strip() for p in (getattr(settings, "library_roots", "") or "").split(",")
+        if p.strip()
+    ]
+    for raiz in raices:
         if raiz is not None and _bajo(real, _real(str(raiz)) or ""):
             return real
     return None

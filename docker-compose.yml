@@ -105,6 +105,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Los scripts pasan un SHA de árbol limpio; builds manuales quedan sin identidad.
+        ZASCARR_BUILD_SHA: ${ZASCARR_BUILD_SHA:-}
     container_name: zascarr-orquestador
     restart: unless-stopped
     logging: *logging
@@ -119,7 +122,7 @@ services:
       # parametrizan: nunca deben ser alcanzables desde la red.
       - "${ZASCARR_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-}@postgres:5432/zascarr
+      - ZASCARR_DB_PASSWORD=${DB_PASSWORD:-}
       - COMICVINE_API_KEY=${COMICVINE_API_KEY:-}
       - MAX_CUERPO_TRANSFER_BYTES=${MAX_CUERPO_TRANSFER_BYTES:-4194304}
       - CRAWL_DELAY_MAX_S=${CRAWL_DELAY_MAX_S:-60}
@@ -149,12 +152,37 @@ services:
       - VPN_STATE_FILE=/run/vpn-state/wg0.json
       - BACKUP_STATUS_FILE=/run/backup-status/status.json
       - RESTORE_STATUS_FILE=/run/backup-status/restore-status.json
+      # BL-OPS1 (FR-18): «Hacer una copia ahora». Si la carpeta `ops` no existe o está vacía, la app arranca igual
+      # y Estado dice «No activado en este equipo».
+      - OPS_SOCKET_FILE=/run/zascarr-ops/ops.sock
+      - OPS_KEY_FILE=/run/zascarr-ops/ops.key
+      - OPS_STATUS_FILE=/run/backup-status/ops-status.json
+      - COPIAS_FILE=/run/backup-status/copias.json
+      - OMITIDA_FILE=/run/backup-status/omitida.json
+      - OPS_RESTAURAR_STATUS_FILE=/run/backup-status/ops-restaurar.json
       - COVERS_CACHE_PATH=/config/covers
+      - LECTOR_CACHE_PATH=/config/lector
+      - LECTOR_CACHE_BYTES=${LECTOR_CACHE_BYTES:-1073741824}
+      # Logs persistidos/rotados para consultar incidencias anteriores desde la UI.
+      - LOG_DIR=/config/logs
+      - LOG_MAX_BYTES=${LOG_MAX_BYTES:-5242880}
+      - LOG_BACKUPS=${LOG_BACKUPS:-3}
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-30}
       # #418 (ADR 0015): interruptor del lector de .cbr con `unar` (por defecto, encendido)
       - LECTOR_RAR_ENABLED=${LECTOR_RAR_ENABLED:-true}
       - TZ=${TZ:-Europe/Madrid}
+      # Observabilidad: nivel real de structlog y formato JSON/consola.
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_JSON=${LOG_JSON:-true}
       # BL-R9: cadencia del rescan de la biblioteca (1440 = una vez al día; 0 lo apaga).
       - RESCAN_INTERVAL_MINUTES=${RESCAN_INTERVAL_MINUTES:-1440}
+      # #993: seguimiento de números nuevos (config por .env, sin UI en v1).
+      - SEGUIMIENTO_INTERVAL_MINUTES=${SEGUIMIENTO_INTERVAL_MINUTES:-45}
+      - SEGUIMIENTO_MAX_TEMAS=${SEGUIMIENTO_MAX_TEMAS:-10}
+      - SEGUIMIENTO_MAX_SERIES_PROWLARR=${SEGUIMIENTO_MAX_SERIES_PROWLARR:-10}
+      - SEGUIMIENTO_MAX_DESEOS=${SEGUIMIENTO_MAX_DESEOS:-10}
+      - SEGUIMIENTO_MAX_AVISOS=${SEGUIMIENTO_MAX_AVISOS:-5}
+      - SEGUIMIENTO_RETENCION_DIAS=${SEGUIMIENTO_RETENCION_DIAS:-90}
       # A6/E6: sin estas dos, lo que el operador pone en el .env NO llega al
       # contenedor (que no monta el .env). ALLOWED_HOSTS no tiene otra vía: no está
       # en Ajustes, y sin él quien entra por un nombre de equipo recibe 403 en todo.
@@ -178,7 +206,12 @@ services:
       - ${HOST_EXPORT_DIR:-/media/data/export}:/media/export
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/vpn-state:/run/vpn-state:ro
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/backup-status:/run/backup-status:ro
+      # BL-OPS1 (FR-28): el único volumen nuevo, de solo lectura (socket y clave del auxiliar). Nada de docker.sock.
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/ops:/run/zascarr-ops:ro
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/covers:/config/covers
+      # BL-LEC4: caché de extracción de CBR; disco de datos, nunca la SD ni la biblioteca.
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/lector:/config/lector
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/logs:/config/logs
     # #418 (ADR 0015): esta app abre con `unar` archivos de terceros que llegan por P2P. Sin
     # `no-new-privileges` ningún proceso del contenedor puede ganar privilegios (setuid); el tope de
     # procesos (`deploy.resources.limits.pids`, abajo) acota una bifurcación descontrolada. El arranque

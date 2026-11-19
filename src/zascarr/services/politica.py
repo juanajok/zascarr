@@ -27,6 +27,7 @@ from zascarr.models import (
     CollectionAutoSearch,
     Issue,
     Series,
+    SeriesKind,
     Wishlist,
     WishlistOrigin,
     WishlistPolicy,
@@ -51,6 +52,11 @@ MOTIVO_POLITICA_FUTUROS = (
 #: miente (D9): un item manual `FAILED` también cuenta como vivo —se reintenta
 #: cada pocas horas y no se cierra— y con esta redacción el coleccionista sabe
 #: que ahí está el freno y qué puede hacer.
+#: #1027: una obra autoconclusiva no tiene faltantes que buscar.
+MOTIVO_OBRA_AUTOCONCLUSIVA = (
+    "Es una obra autoconclusiva: no tiene números que completar ni buscar por su cuenta"
+)
+
 MOTIVO_DESEO_DE_SERIE = (
     "Hay un deseo de toda la serie (pendiente o sin resultados). Quítalo de la lista "
     "de deseos, o espera a que se cumpla, para que ZascArr genere los números que faltan"
@@ -130,6 +136,8 @@ async def querer_de_serie(
     # `None` solo puede aparecer en un objeto aún sin pasar por la BD (la
     # columna es NOT NULL con `default`/`server_default`). Se trata como el
     # valor por defecto para que el predicado sea total.
+    if series.kind == SeriesKind.ONE_SHOT:
+        return Querer(frozenset(), True, MOTIVO_OBRA_AUTOCONCLUSIVA)
     politica = politica or series.wishlist_policy or WishlistPolicy.NONE
     if politica == WishlistPolicy.NONE:
         return Querer(frozenset(), True)
@@ -141,7 +149,7 @@ async def querer_de_serie(
     manuales = (await db.execute(
         select(Wishlist.issue_id, Wishlist.numero)
         .where(Wishlist.series_id == series.id)
-        .where(Wishlist.origen == WishlistOrigin.MANUAL)
+        .where(Wishlist.origen.in_([WishlistOrigin.MANUAL, WishlistOrigin.SEGUIMIENTO]))
         .where(Wishlist.status.not_in(ESTADOS_TERMINADOS))
     )).all()
 

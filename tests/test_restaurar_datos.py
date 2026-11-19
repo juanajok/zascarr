@@ -50,6 +50,19 @@ if [[ "$cmd" == *"pg_database_size"* ]]; then
 fi
 if [[ "$cmd" == *" psql"* ]]; then
     if [[ "$cmd" == *" -c "* ]]; then
+        if [[ "$cmd" == *"select values::text"* ]]; then
+            if [[ -s "$RESTORE_LOG" ]]; then
+                if [[ -n "${FAKE_SEGURIDAD_FINAL:-}" && -s "${FAKE_SEGURIDAD_FINAL:-}" ]] \
+                        && grep -q 'INSERT INTO runtime_settings' "$RESTORE_LOG"; then
+                    cat "$FAKE_SEGURIDAD_FINAL"
+                else
+                    cat "$FAKE_SEGURIDAD_RESTAURADA"
+                fi
+            else
+                cat "$FAKE_SEGURIDAD"
+            fi
+            exit 0
+        fi
         if [[ "$cmd" == *"version_num"* ]]; then
             if [[ -s "$RESTORE_LOG" && -n "${FAKE_DB_ALEMBIC_POST:-}" ]]; then
                 echo "$FAKE_DB_ALEMBIC_POST"
@@ -840,3 +853,74 @@ class TestMasGuardasDeLaRestauracion:
         r = _ejecutar(ctx, args=["--dump", str(nuevo), "--sha", ctx["head"], "--yes"])
         assert r.returncode != 0 and "No encuentro el manifiesto" in r.stderr
         assert "[7m" not in r.stderr and "MANIFIESTO-update_20261029_210527" in r.stderr
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="requiere jq")
+def test_produccion_conserva_seguridad_vigente_y_claves_de_la_copia(tmp_path):
+    """FR-34: la fila resultante mezcla credenciales/interruptores vigentes con integraciones de la copia.
+
+    Adaptada a F-03/F-04: el flujo aprobado carga en `zascarr_restaurando`, reaplica con la app parada y cambia
+    por renombrado; el arnés vive en `tests/_restaurar_produccion.py`. Las aserciones sobre la mezcla no cambian.
+    """
+    from tests._restaurar_produccion import ejecutar as ejecutar_produccion
+    from tests._restaurar_produccion import estado_restaurar, preparar
+
+    ctx = preparar(
+        tmp_path,
+        seguridad_actual={
+            "auth_mode": "password", "auth_username": "ana", "auth_password_hash": "hash-nuevo",
+            "secret_key": "sk-nueva", "base_url": "https://nuevo", "auth_session_version": 7,
+            "comicvine_enabled": False, "webhook_url": "https://webhook-nuevo",
+            "prowlarr_api_key": "clave-vigente", "fuentes_heredadas": False,
+        },
+        seguridad_copia={
+            "auth_mode": "none", "auth_username": "viejo", "auth_password_hash": "hash-viejo",
+            "secret_key": "sk-vieja", "base_url": "https://viejo", "auth_session_version": 3,
+            "comicvine_enabled": True, "webhook_url": "https://webhook-viejo",
+            "prowlarr_api_key": "clave-copia", "fuentes_heredadas": True,
+        },
+    )
+    r = ejecutar_produccion(ctx, extra_env={"FAKE_ENFORCE_STOP": "1"})
+    assert r.returncode == 0, r.stdout + r.stderr
+    log = ctx["restore"].read_text(encoding="utf-8")
+    # La sentencia reaplicada contiene la mezcla esperada (JSON entre comillas de dólar).
+    assert '"auth_mode":"password"' in log and '"auth_password_hash":"hash-nuevo"' in log
+    assert '"prowlarr_api_key":"clave-copia"' in log
+    assert '"comicvine_enabled":false' in log and '"webhook_url":"https://webhook-nuevo"' in log
+    assert '"auth_session_version":8' in log
+    assert "sk-nueva" in log and "sk-vieja" not in log
+    assert estado_restaurar(ctx)["resultado"] == "hecha"
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="requiere jq")
+def test_produccion_rechaza_copia_si_la_seguridad_no_esta_activa(tmp_path):
+    ctx = _preparar(tmp_path)
+    ts = "20260101_120000"
+    dump = ctx["backup"] / f"backup_{ts}.sql.gz"
+    dump.write_bytes(gzip.compress(_sql().encode("utf-8")))
+    (ctx["backup"] / f"MANIFIESTO-backup_{ts}.json").write_text(
+        json.dumps(_manifest(dump, ctx["head"])), encoding="utf-8")
+    compose_json = tmp_path / "compose-prod.json"
+    compose_json.write_text(json.dumps({"name": "zascarr", "services": {
+        "postgres": {"container_name": "zascarr-db"},
+        "zascarr": {"container_name": "zascarr-orquestador"}}}), encoding="utf-8")
+    seguridad = tmp_path / "seguridad.json"
+    seguridad.write_text(json.dumps({"auth_mode": "none"}), encoding="utf-8")
+    r = _ejecutar(
+        ctx, args=["--produccion", "--copia", ts],
+        extra_env={"FAKE_COMPOSE_JSON": str(compose_json),
+                   "FAKE_SEGURIDAD": str(seguridad),
+                   "BACKUP_STATUS_DIR": str(ctx["status"])},
+    )
+    assert r.returncode != 0
+    assert "no está activada" in (r.stdout + r.stderr)
+    stub = _log(ctx, "stub")
+    for prohibido in ("dropdb", "createdb", " stop ", " up -d "):
+        assert prohibido not in stub, stub
+
+
+def test_produccion_rechaza_opciones_libres(tmp_path):
+    ctx = _preparar(tmp_path)
+    r = _ejecutar(ctx, args=["--produccion", "--copia", "20260101_120000", "--sha", ctx["head"]])
+    assert r.returncode != 0 and "no se aceptan" in (r.stdout + r.stderr)
+    _sin_destructivos(ctx)

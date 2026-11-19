@@ -102,6 +102,25 @@ def use_fake_session(session):
 
 class TestPendientesIndex:
 
+    def test_el_filtro_falso_no_envia_solo_sugerencia_vacia(self):
+        """Regresión del JSON 422 al guardar un especial: `#pend-clave` enviaba
+        `solo_sugerencia=` vacío y FastAPI no lo parsea como bool."""
+        file = File(id=uuid4(), file_path="/lib/_Unsorted/x.cbz",
+                    file_name="x.cbz", file_format=FileFormat.CBZ)
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
+            r = client.get("/ui/pendientes")
+        assert r.status_code == 200
+        assert 'name="solo_sugerencia" value=""' not in r.text
+        assert 'name="solo_sugerencia" value="1"' not in r.text
+
+    def test_el_filtro_verdadero_envia_solo_sugerencia_uno(self):
+        file = File(id=uuid4(), file_path="/lib/_Unsorted/x.cbz",
+                    file_name="x.cbz", file_format=FileFormat.CBZ)
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
+            r = client.get("/ui/pendientes?solo_sugerencia=1")
+        assert r.status_code == 200
+        assert 'name="solo_sugerencia" value="1"' in r.text
+
     def test_pagina_lista_archivos_pendientes(self):
         file = File(id=uuid4(), file_path="/lib/_Unsorted/batman misterioso 12.cbz",
                     file_name="batman misterioso 12.cbz", file_format=FileFormat.CBZ)
@@ -306,7 +325,8 @@ class TestIgnorar:
         with use_fake_session(FakeSession(get_map={(File, file.id): file})) as client:
             r = client.post(f"/ui/pendientes/{file.id}/ignorar")
         assert r.status_code == 200
-        assert r.text == RECONTAR_MENU          # la tarjeta desaparece; el menú recuenta
+        assert RECONTAR_MENU in r.text          # el menú recuenta
+        assert f'<li id="item-{file.id}" hx-swap-oob="delete"></li>' in r.text
         assert file.review_dismissed is True
 
     def test_ignorar_confirma_antes_de_responder(self, tmp_path):
@@ -437,3 +457,42 @@ class TestPreviaAsignacion:
                            params={"series_id": str(series.id), "issue_number": "  "})
         assert r.status_code == 200 and "Escribe el número" in r.text
         assert session.commit.await_count == 0
+
+
+def test_tamano_de_pagina_25_conserva_el_cursor_y_el_filtro():
+    from zascarr.services.review import ClavePendiente
+    archivos = [File(id=uuid4(), file_path=f"/lib/x{i}.cbz", file_name=f"x{i}.cbz",
+                     file_format=FileFormat.CBZ)
+                for i in range(2)]
+    from urllib.parse import quote_plus
+    clave = ClavePendiente.de(archivos[0]).a_texto()
+    with use_fake_session(FakeSession(exec_queue=cola_de(archivos))) as client:
+        r = client.get(
+            f"/ui/pendientes?tamano=25&solo_sugerencia=1&despues={quote_plus(clave)}")
+    assert r.status_code == 200
+    assert 'name="tamano"' not in r.text          # el tamaño se elige con enlaces, no con un campo libre
+    assert 'aria-current="true">25</a>' in r.text
+    assert "solo_sugerencia=1" in r.text
+    assert f"despues={quote_plus(clave)}" in r.text
+
+
+def test_si_el_filtro_queda_vacio_se_puede_quitar():
+    with use_fake_session(FakeSession(exec_queue=cola_de([]))) as client:
+        r = client.get("/ui/pendientes?solo_sugerencia=1")
+    assert r.status_code == 200
+    assert "No hay pendientes con sugerencia" in r.text
+    assert "Ver todos los pendientes" in r.text
+    assert "Nada pendiente" not in r.text
+
+
+def test_el_filtro_con_sugerencia_usa_metadata_candidates():
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+
+    from zascarr.services.review import ReviewService
+
+    stmt = select(File).where(*ReviewService._condiciones_pendientes(solo_sugerencia=True))
+    sql = str(stmt.compile(dialect=postgresql.dialect(),
+                           compile_kwargs={"literal_binds": True}))
+    assert "candidates" in sql
+    assert "unsorted" in sql

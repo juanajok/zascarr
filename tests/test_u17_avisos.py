@@ -187,11 +187,14 @@ class TestLaAceptacionProtegeLoMismo:
 
     def test_las_acciones_de_riesgo_protegidas_son_las_de_siempre(self):
         """Las acciones de red/descarga siguen protegidas; D3 añade la búsqueda de mejora
-        y su confirmación de descarga (ambas tocan Prowlarr/Transmission)."""
+        y su confirmación de descarga. El lote de Deseados (#983) busca en Prowlarr/foro,
+        así que también exige el aviso legal aceptado."""
         assert _acciones_protegidas() == {
+            ("lector", "POST", "/ui/leer/{file_id}/deseo"),
             ("wishlist", "POST", "/ui/wishlist/anadir"),
             ("wishlist", "POST", "/ui/wishlist/{item_id}/reintentar"),
             ("wishlist", "POST", "/ui/wishlist/{item_id}/buscar-ahora"),
+            ("wishlist", "POST", "/ui/wishlist/buscar-lote"),
             ("wishlist", "POST", "/ui/wishlist/{item_id}/enviar-candidato"),
             ("wishlist", "POST", "/wishlist"),
             ("wishlist", "POST", "/wishlist/{item_id}/search"),

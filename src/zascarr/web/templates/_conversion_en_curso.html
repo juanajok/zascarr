@@ -1,0 +1,6 @@
+<div class="conversion-en-curso" hx-get="/ui/series/{{ series.id }}/conversion/estado/{{ tid }}"
+     hx-trigger="every 2s" hx-swap="outerHTML" role="status" aria-live="polite">
+  <p>Conversión en curso…</p>
+  {% if t %}<p class="caption">{{ t.fase or "Trabajando" }} {{ t.hechos or 0 }} de {{ t.total or "?" }}</p>{% endif %}
+  <p><a href="/ui/series/{{ series.id }}">Ver la ficha</a></p>
+</div>

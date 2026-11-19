@@ -482,7 +482,8 @@ class TestPaginas:
         # aria-current="page"; la entrada del menú es la que se comprueba aquí.
         activos = {
             at["href"] for t, at, _ in a.elementos
-            if at.get("aria-current") == "page" and "barra-vista-opcion" not in clases(at)
+            if at.get("aria-current") == "page"
+            and "barra-vista-opcion" not in clases(at) and "selector-modo" not in clases(at)
         }
         assert activos == {url}
 
@@ -741,7 +742,7 @@ class TestAutenticacion:
         assert FRAGMENTO in RUTAS_FRAGMENTO_SILENCIOSO
         assert FRAGMENTO not in _RUTAS_DIAGNOSTICO
         assert FRAGMENTO not in servicio_auth._RUTAS_EXENTAS
-        assert frozenset({FRAGMENTO}) == RUTAS_FRAGMENTO_SILENCIOSO
+        assert frozenset({FRAGMENTO, "/ui/_tareas"}) == RUTAS_FRAGMENTO_SILENCIOSO
 
 
 class TestArranqueDegradado:
@@ -840,7 +841,7 @@ class TestCssDelShell:
     def test_el_contenido_ocupa_la_columna_entera_en_la_rejilla(self):
         """Medido en navegador: con `margin: 0 auto` un hijo de la rejilla deja de estirarse y se
         encoge a su contenido (el Inicio quedaba en 736 px y el resto en 1036, a 1280 de ancho)."""
-        regla = _reglas()[".app > .content"]
+        regla = _reglas()[".contenido > .content"]
         assert "width: 100%" in regla and "min-width: 0" in regla
 
     def test_el_foco_no_queda_tapado_por_la_barra_inferior(self):
@@ -1007,5 +1008,5 @@ class TestRevisionVisual:
         css = _css()
         movil = css[css.index("@media (max-width: 860px) {"):]
         movil = movil[:movil.index("\n}\n")]
-        assert ".app > main.content { padding-bottom: 112px; }" in movil
+        assert ".contenido > main.content { padding-bottom: 112px; }" in movil
 

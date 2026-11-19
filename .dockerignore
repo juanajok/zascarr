@@ -1,24 +1,22 @@
-# #530 C1 — contexto de la imagen: ni secretos ni cachés de desarrollo/CI.
-# El `.env` real NUNCA debe entrar en la imagen (solo `.env.example`, que no tiene valores).
-.git
-.gitignore
-.env
-.env.*
+# Solo archivos usados por las etapas de Dockerfile.
+**
+!Dockerfile
+!pyproject.toml
+!requirements-runtime.txt
+!src/
+!src/**
+!alembic.ini
+!alembic/
+!alembic/**
+!LICENSE
 !.env.example
-.worktrees
-.squad
-.tmp-*
-.*-scratch
-*.scratch
-.venv*
-node_modules
+!docker-entrypoint.sh
+!scripts/
+!scripts/comprobar_imagen_rar.py
+
+# No incluir cachés ni archivos de entorno dentro de los árboles permitidos.
 **/__pycache__
-*.py[cod]
-.pytest_cache
-.mypy_cache
-.ruff_cache
-*.log
-*.prof
-*.dump
-.coverage
-htmlcov
+**/*.py[cod]
+**/.env
+**/.env.*
+!.env.example

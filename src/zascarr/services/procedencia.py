@@ -204,8 +204,22 @@ def _tiene_valor(clave: str, series: Series, id_presente: bool) -> bool:
     return id_presente
 
 
-def _origen(clave: str, series: Series, alta: dict, id_presente: bool) -> tuple[str | None, bool]:
-    """(texto de origen, es manual). Solo atribuye lo que el registro permite afirmar."""
+def _origen(clave: str, series: Series, alta: dict, id_presente: bool,
+            field_provenance: dict | None = None) -> tuple[str | None, bool]:
+    """(texto de origen, es manual). Solo atribuye lo que el registro permite afirmar.
+
+    Si la CCM ya dejó una fila en `field_provenance`, esa es la fuente más
+    concreta; se usa antes del legado de `metadata_source`.
+    """
+    campo_ccm = {"publisher": "publisher_name"}.get(clave, clave)
+    if isinstance(field_provenance, dict):
+        entrada = field_provenance.get(campo_ccm)
+        if isinstance(entrada, dict) and entrada.get("source"):
+            fuente = str(entrada["source"])
+            if fuente == "manual":
+                return "Editado a mano", True
+            if fuente != "desconocido":
+                return f"Enriquecido desde {_fuente(fuente)}", False
     # BL-INF6: la portada elegida a mano se registra ella misma (en `metadata_["portada"]`), así
     # que consta como manual aunque `metadata_source` sea el de una fuente o la serie sea de alta
     # manual.
@@ -243,8 +257,13 @@ def _observaciones(clave: str, series: Series, alta: dict, bloqueado: bool) -> t
     return tuple(observaciones)
 
 
-def procedencia_de_serie(series: Series) -> ProcedenciaDeSerie:
-    """La procedencia visible de los campos gestionados de UNA serie."""
+def procedencia_de_serie(series: Series, *,
+                         field_provenance: dict | None = None) -> ProcedenciaDeSerie:
+    """La procedencia visible de los campos gestionados de UNA serie.
+
+    `field_provenance` es el mapa `campo -> value` que deja la CCM; si no se
+    pasa, se conserva el comportamiento legado de #127.
+    """
     alta = _alta(series)
     id_presente, id_bloqueado = _id_externo(series)
     bloqueados = set(series.locked_fields or [])
@@ -252,7 +271,7 @@ def procedencia_de_serie(series: Series) -> ProcedenciaDeSerie:
     hay_datos = False
     for clave, etiqueta in CAMPOS_GESTIONADOS:
         bloqueado = id_bloqueado if clave == "identidad" else clave in bloqueados
-        origen, manual = _origen(clave, series, alta, id_presente)
+        origen, manual = _origen(clave, series, alta, id_presente, field_provenance)
         if origen is not None or bloqueado:
             hay_datos = True
         campos.append(CampoProcedencia(

@@ -222,8 +222,9 @@ en una instalación manual desde cero, lo crea `scripts/credenciales.sh`:
 ```bash
 sudo bash scripts/credenciales.sh   # crea ../.env, genera una DB_PASSWORD propia (no la muestra) y lo protege
 sudo nano ../.env                   # ajusta HOST_*_DIR (la contraseña ya está puesta)
-sudo docker compose up -d
+sudo docker compose up -d --wait postgres
 sudo docker compose run --rm zascarr alembic upgrade head
+sudo docker compose up -d zascarr
 ```
 
 El `.env` es de `root` (modo 600): por eso los comandos de `docker compose` llevan `sudo`. Si te saltas
@@ -486,15 +487,30 @@ Las tres causas, por si prefieres comprobarlas a mano:
 ## Desarrollo
 
 ```bash
-pip install -e ".[dev]"
-pytest -x        # suite autosuficiente, sin Docker ni PostgreSQL
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+make test
 make lint
 make format
 ```
 
-La suite de tests es autosuficiente (`FakeSession` + `dependency_overrides`);
-no levanta Docker ni PostgreSQL. Solo `tests/test_title_norm.py` toca
-PostgreSQL real y se salta si no hay `TEST_DATABASE_URL`.
+Los objetivos de desarrollo usan el Python del entorno activo. También puedes
+indicarlo con `make test PYTHON=.venv/bin/python`. Las pruebas de integración
+con PostgreSQL real requieren `TEST_DATABASE_URL`. Consulta [la guía de
+pruebas](docs/TESTING_E2E.md) para configurar las integraciones.
+
+La imagen instala las versiones y hashes de `requirements-runtime.txt`. Para
+actualizarlos, ejecuta este comando y comprueba la compilación de la imagen.
+
+```bash
+uv pip compile --universal --python-version 3.11 --generate-hashes --no-annotate pyproject.toml --output-file requirements-runtime.txt
+```
+
+CI audita las dependencias de la imagen construida y verifica el arranque y
+la lectura de CBR en runners Linux x86-64 y ARM64. La validación en ARM64
+cubre la arquitectura de la Raspberry Pi. El comportamiento de discos y
+servicios del equipo se verifica en el dispositivo.
 
 ## Estructura del repositorio
 
@@ -524,6 +540,7 @@ docker-compose.yml
 - [`docs/adr/`](docs/adr/) — decisiones de arquitectura registradas.
 - [Capturas actuales de la interfaz](docs/design/ui-actual/README.md) — foto de la UI al cerrar la migración V0–V14 (claro/oscuro, escritorio/móvil).
 - [Sistema de diseño](docs/design/sistema-de-diseno-zascarr.md) ([PDF con las muestras](docs/design/sistema-de-diseno-zascarr.pdf)) — guía de marca, componentes, accesibilidad y revisión de la UI (versión 2026-11-13, `main@76e7812`).
+- [`docs/TESTING_MASTER_PLAN.md`](docs/TESTING_MASTER_PLAN.md) — plan maestro de pruebas, riesgos y gates.
 - [`docs/TESTING_E2E.md`](docs/TESTING_E2E.md) / [`docs/TESTING_NFR_Zascarr.md`](docs/TESTING_NFR_Zascarr.md) — planes de testing end-to-end y no funcional.
 - [`src/zascarr/LEGAL.md`](src/zascarr/LEGAL.md) — aviso legal y marco de uso.
 - Docstrings de cada módulo — explican el *por qué* de las decisiones.

@@ -348,6 +348,7 @@ class TestRotacionEfectivaConDockerCompose:
 #: persona y a seguir viéndolo fuera del registro de acceso. (El filtro quita la query entera, así que el inventario no decide qué
 #: se quita: sirve para que nadie dé por «sin datos» un parámetro nuevo sin haberlo mirado.)
 PARAMETROS_DE_QUERY = frozenset({
+    "densidad", "modo", "naturaleza", "formato",
     "anio", "antes", "candidata", "character_id", "clave", "consulta", "cursor", "decision", "desplazamiento", "despues",
     "cambio_vista", "limite", "limpiar", "next", "operacion", "page", "page_size", "personaje", "primero", "publisher_id", "q", "ref", "saga",
     "autor", "author_id", "favoritos", "idioma", "edicion", "anio_desde", "anio_hasta",
@@ -386,7 +387,7 @@ PARAMETROS_DE_QUERY = frozenset({
     # F1 (#636/#272): número en la vista previa de organizar (GET, solo lectura).
     "issue_number",
     # BL-INF5 (#591): aviso de guardado al volver de la edición manual.
-    "guardado",
+    "guardado", "elegido", "lanzado", "recolectado", "sin_fuentes", "recolectando", "barrida",
     # BL-PACK1 (#344): token firmado de la vista previa de un paquete de Descargas.
     "token",
     # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
@@ -395,12 +396,18 @@ PARAMETROS_DE_QUERY = frozenset({
     "anadidos", "ya_pedidos", "en_biblioteca",
     # #843: importación de una guía de lectura (fuente, aviso de resultado y recuentos).
     "fuente", "importada", "enlazados", "omitidos", "motivos",
+    # #1027: el selector de Pendientes puede incluir tomos únicos.
+    "mostrar_tomos",
     # #155: filtros del alta de series y selección de candidatas (estado de la vista).
     "serie_ids", "tradicion",
     # D5 (#162): semana y editorial de Novedades (estado de la vista).
     "semana", "editorial",
+    # Por revisar: filtro y tamaño de página (estado de la vista).
+    "solo_sugerencia", "tamano",
     # #797: abrir el desplegable de alta tras un error (estado de la vista).
     "abrir",
+    # Logs persistidos: filtros de fecha/hora/evento (solo lectura, saneados).
+    "fecha", "hora", "evento",
 })
 
 

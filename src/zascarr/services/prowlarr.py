@@ -8,6 +8,21 @@ from zascarr.config import get_settings
 
 logger = structlog.get_logger()
 
+#: Categorías de Prowlarr que interesan a ZascArr (cómic/libros). Viven aquí
+#: para que el job de seguimiento no tenga que importar el orquestador.
+COMIC_CATEGORIES = [7030, 7020]
+
+
+def prowlarr_indexers_seleccionados(settings) -> list[int]:
+    """IDs elegidos en Ajustes; lista vacía = todos los indexers de Prowlarr."""
+    crudo = getattr(settings, "prowlarr_indexer_ids", "") or ""
+    ids: list[int] = []
+    for trozo in crudo.replace(";", ",").split(","):
+        trozo = trozo.strip()
+        if trozo.isdigit() and int(trozo) > 0 and int(trozo) not in ids:
+            ids.append(int(trozo))
+    return ids
+
 
 @dataclass(frozen=True)
 class IndexerProwlarr:

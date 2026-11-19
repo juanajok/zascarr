@@ -571,3 +571,20 @@ async def borrar_raiz(db: AsyncSession, root_id: UUID) -> None:
         raise RaizInvalidaError("No se puede borrar la raíz por defecto.")
     await db.delete(raiz)
     await db.flush()
+
+
+async def cambiar_por_defecto(db: AsyncSession, root_id: UUID) -> LibraryRoot:
+    """Elige la raíz de `_Unsorted`; la anterior deja de serlo."""
+    raiz = await db.get(LibraryRoot, root_id)
+    if raiz is None:
+        raise RaizInvalidaError("La raíz no existe.")
+    if not raiz.enabled:
+        raise RaizInvalidaError("La raíz por defecto debe estar activa.")
+    actual = (await db.execute(
+        select(LibraryRoot).where(LibraryRoot.is_default.is_(True)))).scalar_one_or_none()
+    if actual is not None and actual.id != raiz.id:
+        actual.is_default = False
+        await db.flush()
+    raiz.is_default = True
+    await db.flush()
+    return raiz

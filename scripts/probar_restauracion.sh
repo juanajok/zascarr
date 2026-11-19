@@ -37,6 +37,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ── Cerrojo único de operaciones (BL-OPS1): una operación de mantenimiento a la vez ────────────────
+tomar_cerrojo_operaciones || exit $?
+
 comprobar_requisitos
 comprobar_env_legible "${ENV_FILE}"
 install -d -m 755 "${BACKUP_STATUS_DIR}" || die "No puedo crear ${BACKUP_STATUS_DIR}."

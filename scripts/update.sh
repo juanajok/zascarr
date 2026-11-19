@@ -55,6 +55,9 @@ echo -e "${B}====================================${N}\n"
 [[ "${BRANCH}" =~ ^[A-Za-z0-9._/-]+$ && "${BRANCH}" != -* && "${BRANCH}" != "HEAD" ]] || die \
     "El nombre de la rama no es válido. NO se ha actualizado nada."
 
+# ── Cerrojo único de operaciones (BL-OPS1): una operación de mantenimiento a la vez ────────────────
+tomar_cerrojo_operaciones || exit $?
+
 # ── 1. Requisitos ────────────────────────────────────────────────────────────
 comprobar_requisitos
 comprobar_git_utilizable
@@ -154,7 +157,12 @@ fi
 
 # ── 6. Rebuild de la imagen (las dependencias viven en la imagen) ────────────
 info "Reconstruyendo la imagen (puede tardar varios minutos en una Pi)..."
-"${COMPOSE[@]}" build zascarr || die \
+BUILD_SHA=""
+if GIT_STATUS="$(git -C "${REPO_DIR}" status --porcelain --untracked-files=all 2>/dev/null)" && \
+   [[ -z "${GIT_STATUS}" ]]; then
+    BUILD_SHA="${NEW_SHA}"
+fi
+ZASCARR_BUILD_SHA="${BUILD_SHA}" "${COMPOSE[@]}" build zascarr || die \
     "Falló la construcción de la imagen. El CÓDIGO ya está actualizado (${NEW_SHA:0:7}) pero
   la imagen no se ha reconstruido y la BD NO se ha migrado. Para volver atrás:
     sudo bash scripts/rollback.sh
@@ -169,6 +177,17 @@ info "Aplicando migraciones de base de datos..."
   (referencia de rescate: ${UPDATE_REF}; backup: ${DEST})"
 
 # ── 8. Recrear el servicio y verificar ───────────────────────────────────────
+# BL-LEC4 (#827): la caché de CBR vive en el volumen de datos, nunca en la SD ni en la
+# biblioteca. El bind se crea aquí con el usuario del servicio; si no, quedaría de root y la
+# app no podría escribir.
+DATA_DIR="$(sed -n 's/^ZASCARR_DATA_DIR=//p' "${ENV_FILE}" | tail -1 | tr -d '"'"'"'')"
+DATA_DIR="${DATA_DIR:-/var/lib/zascarr}"
+PUID="$(sed -n 's/^PUID=//p' "${ENV_FILE}" | tail -1 | tr -d '"'"'"'')"
+PGID="$(sed -n 's/^PGID=//p' "${ENV_FILE}" | tail -1 | tr -d '"'"'"'')"
+mkdir -p "${DATA_DIR}/lector" 2>/dev/null || \
+    warn "No pude crear ${DATA_DIR}/lector; la caché de CBR avisará al usarla."
+chown "${PUID:-1000}:${PGID:-1000}" "${DATA_DIR}/lector" 2>/dev/null || true
+chmod 750 "${DATA_DIR}/lector" 2>/dev/null || true
 info "Reiniciando ZascArr..."
 # `--remove-orphans`: una instalación anterior a ADR 0011 tiene un contenedor `zascarr-cache` (Redis) que ya no está en el
 # compose; sin esto seguiría vivo, gastando RAM, sin que nada lo use.
@@ -199,6 +218,10 @@ fi
 # fue bien pero la app va rara"). Se podan solas las que ya han perdido su dump
 # por la retención, que es lo que acota su número.
 podar_refs_huerfanas "${UPDATE_REF}"
+
+# ── 9. «Hacer una copia ahora» (BL-OPS1, FR-27): se refresca solo si ya estaba instalado ─────────────
+# Informativo: un fallo aquí nunca estropea una actualización ya hecha.
+bash "${SCRIPT_DIR}/instalar_ops.sh" --refrescar || warn "No se pudo refrescar «Hacer una copia ahora» (la actualización sigue válida)."
 
 echo -e "\n${B}====================================${N}"
 echo -e "${G}${B}  Actualización completada${N}"

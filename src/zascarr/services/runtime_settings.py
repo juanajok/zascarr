@@ -52,7 +52,7 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
     ),
     "transmission": (
         "transmission_url", "transmission_username",
-        "transmission_password", "transmission_enabled",
+        "transmission_password", "transmission_download_dir", "transmission_enabled",
     ),
     "amule": ("amule_url", "amule_password", "amule_enabled"),
     # SCR4/D-1: tarjeta completa del foro en Ajustes (la contraseña vacía = no cambiar).

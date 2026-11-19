@@ -61,6 +61,7 @@ from zascarr.models import (
     WishlistStatus,
     collection_series,
 )
+from zascarr.services import tareas
 from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import sign_token, verify_token
 from zascarr.services.blog_feed import buscar_en_feed, estado_feed, resultados_de_busqueda
@@ -72,26 +73,31 @@ from zascarr.services.politica import (
     querer_de_serie,
     retirar_de_serie,
 )
-from zascarr.services.prowlarr import ProwlarrClient, SearchResult
+from zascarr.services.prowlarr import (
+    COMIC_CATEGORIES,
+    ProwlarrClient,
+    SearchResult,
+    prowlarr_indexers_seleccionados,
+)
 from zascarr.services.series import numero_de_grapa
 from zascarr.services.transmission import TransmissionClient
 from zascarr.utils.naming import normalize_series_name, parse_comic_filename
 
 logger = structlog.get_logger()
+_tarea_descargas = None
 
-COMIC_CATEGORIES = [7030, 7020]
 MAX_SIZE_BYTES = 500 * 1024 * 1024
 
-
-def prowlarr_indexers_seleccionados(settings) -> list[int]:
-    """IDs elegidos en Ajustes; lista vacía = todos los indexers de Prowlarr."""
-    crudo = getattr(settings, "prowlarr_indexer_ids", "") or ""
-    ids: list[int] = []
-    for trozo in crudo.replace(";", ",").split(","):
-        trozo = trozo.strip()
-        if trozo.isdigit() and int(trozo) > 0 and int(trozo) not in ids:
-            ids.append(int(trozo))
-    return ids
+# T-62: espera entre fallos de envío consecutivos al cliente de descargas.
+# Crece con cada intento y se queda en el tope: un cliente caído no quema
+# Prowlarr/foro en cada ciclo, pero el deseo no queda fuera para siempre. El
+# usuario puede saltárselo con «Reintentar» (limpia `next_retry_at`).
+BACKOFF_ENVIOS = (
+    timedelta(minutes=10),
+    timedelta(minutes=30),
+    timedelta(hours=2),
+    timedelta(hours=6),
+)
 
 
 def prowlarr_configurado(settings) -> bool:
@@ -301,14 +307,29 @@ class Orchestrator:
             return 0
 
         settings = get_settings()
+        ahora = datetime.now(UTC)
         cooldown = timedelta(hours=settings.orchestrator_retry_cooldown_hours)
-        cutoff = datetime.now(UTC) - cooldown
+        cutoff = ahora - cooldown
         elegibles = (
             select(Wishlist)
             .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
+            # T-62: un fallo de ENVÍO se rige por su propio backoff (10 min,
+            # 30 min, 2 h, 6 h); vencido, entra aunque el cooldown global de 6 h
+            # aún no haya pasado — si no, las esperas cortas nunca servirían.
+            # El cooldown de `last_searched_at` sigue gobernando los intentos
+            # que no programaron reintento (sin resultados, candidato rechazado).
             .where(or_(
-                Wishlist.last_searched_at.is_(None),
-                Wishlist.last_searched_at < cutoff,
+                and_(
+                    Wishlist.next_retry_at.is_not(None),
+                    Wishlist.next_retry_at <= ahora,
+                ),
+                and_(
+                    Wishlist.next_retry_at.is_(None),
+                    or_(
+                        Wishlist.last_searched_at.is_(None),
+                        Wishlist.last_searched_at < cutoff,
+                    ),
+                ),
             ))
             .order_by(Wishlist.priority.asc(), Wishlist.added_at.asc())
         )
@@ -388,6 +409,27 @@ class Orchestrator:
             await self.db.commit()
         await self.db.flush()
 
+    def _programar_reintento(self, item: Wishlist,
+                             ahora: datetime | None = None) -> datetime:
+        """Programa el siguiente intento tras un fallo de ENVÍO al cliente.
+
+        T-62: el fallo de envío (cliente inaccesible) se reintenta con espera
+        creciente — 10 min, 30 min, 2 h, 6 h (tope) — en vez de depender del
+        cooldown global de 6 h, que además bloqueaba a todos los deseos a la
+        vez. Suma un fallo consecutivo y fija `next_retry_at`; lo limpia un
+        envío correcto o el reintento manual. No se llama por «sin resultados»
+        ni por «candidato rechazado»: eso no es un fallo del cliente.
+        """
+        item.retry_count = (item.retry_count or 0) + 1
+        espera = BACKOFF_ENVIOS[min(item.retry_count, len(BACKOFF_ENVIOS)) - 1]
+        item.next_retry_at = (ahora or datetime.now(UTC)) + espera
+        return item.next_retry_at
+
+    def _limpiar_reintento(self, item: Wishlist) -> None:
+        """Un envío correcto recupera el deseo: fuera el backoff pendiente."""
+        item.retry_count = 0
+        item.next_retry_at = None
+
     async def _process_item(self, item: Wishlist) -> bool:
         candidates = await self._search_and_rank(item)
         if not candidates:
@@ -403,6 +445,7 @@ class Orchestrator:
                 item.download_backend = backend.value
                 item.download_ref = ref
                 item.last_error = None  # D9: ya no aplica, se recuperó
+                self._limpiar_reintento(item)  # T-62: el cliente volvió a responder
                 await self.db.flush()
                 logger.info(
                     "orchestrator.download_started", title=candidate.title, backend=backend.value
@@ -413,6 +456,7 @@ class Orchestrator:
         # esto sí es un fallo real, distinto de "sin resultados todavía".
         item.status = WishlistStatus.FAILED
         item.last_error = motivo_de_cliente(backend)
+        self._programar_reintento(item)
         await self.db.flush()
         return False
 
@@ -666,9 +710,15 @@ class Orchestrator:
                 ref = await self._send(backend, candidate)
                 if ref is None:
                     item.last_error = motivo_de_cliente(backend)
+                    # T-62: el envío extra es auxiliar. Un fallo NO cambia el estado
+                    # del deseo (la descarga principal sigue en DOWNLOADING) ni
+                    # programa el backoff del ciclo (que solo mira WANTED/FAILED):
+                    # se informa en ese candidato y el coleccionista decide.
                     await self.db.flush()
                     return False
+                self._limpiar_reintento(item)
                 _marcar_enviado(item.id, candidate.download_url)
+                await self.db.flush()
                 logger.info("orchestrator.download_started", title=candidate.title,
                             backend=backend.value, manual=True, extra=True)
                 return True
@@ -713,6 +763,7 @@ class Orchestrator:
         if ref is None:
             item.status = WishlistStatus.FAILED
             item.last_error = motivo_de_cliente(backend)
+            self._programar_reintento(item)
             await self.db.flush()
             return False
 
@@ -720,6 +771,7 @@ class Orchestrator:
         item.download_backend = backend.value
         item.download_ref = ref
         item.last_error = None
+        self._limpiar_reintento(item)  # T-62: el envío manual recupera el deseo
         _marcar_enviado(item.id, candidate.download_url)
         # Hora de la BD (FR-23).
         item.last_searched_at = (await self.db.execute(select(func.now()))).scalar_one()
@@ -1209,6 +1261,10 @@ class Orchestrator:
                     "download_ref": None,
                     "download_backend": None,
                     "last_error": None,
+                    # T-62: una reactivación de política empieza de cero; un
+                    # backoff viejo no debe retrasar el deseo reactivado.
+                    "retry_count": 0,
+                    "next_retry_at": None,
                 },
                 # Defensa contra dos ciclos solapados: entre el SELECT de
                 # `_generar_lo_que_falta` y este INSERT, el otro ciclo puede
@@ -1229,21 +1285,37 @@ class Orchestrator:
         """Para cada item DOWNLOADING, ¿ya existe un File enlazado a lo que
         pedía? El import loop periódico ya existente es quien de verdad
         clasifica el archivo; esto solo refleja ese hecho en la wishlist."""
-        items = list((await self.db.execute(
-            select(Wishlist)
-            .where(Wishlist.status == WishlistStatus.DOWNLOADING)
-            .limit(limit)
-        )).scalars().all())
+        global _tarea_descargas
+        try:
+            items = list((await self.db.execute(
+                select(Wishlist)
+                .where(Wishlist.status == WishlistStatus.DOWNLOADING)
+                .limit(limit)
+            )).scalars().all())
 
-        completed = 0
-        for item in items:
-            if await self._is_fulfilled(item):
-                item.status = WishlistStatus.IMPORTED
-                item.downloaded_at = datetime.now(UTC)
-                await self.db.flush()
-                completed += 1
-                logger.info("orchestrator.item_imported", id=str(item.id))
-        return completed
+            if items and _tarea_descargas is None:
+                _tarea_descargas = tareas.iniciar_descargas(total=len(items))
+            completed = 0
+            for item in items:
+                if await self._is_fulfilled(item):
+                    item.status = WishlistStatus.IMPORTED
+                    item.downloaded_at = datetime.now(UTC)
+                    await self.db.flush()
+                    completed += 1
+                    logger.info("orchestrator.item_imported", id=str(item.id))
+            if not items and _tarea_descargas is not None:
+                tareas.terminar(_tarea_descargas.id, resumen="Descargas revisadas")
+                _tarea_descargas = None
+            elif _tarea_descargas is not None:
+                tareas.actualizar(_tarea_descargas.id, hechos=completed)
+            return completed
+        except BaseException as exc:
+            if _tarea_descargas is not None:
+                tareas.error(_tarea_descargas.id, tipo_error=type(exc).__name__)
+                _tarea_descargas = None
+            raise
+        finally:
+            pass
 
     async def _is_fulfilled(self, item: Wishlist) -> bool:
         # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya

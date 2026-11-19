@@ -34,6 +34,10 @@ from zascarr.services.asignacion import (
 )
 from zascarr.services.borradores_revision import BorradoresRevision
 from zascarr.services.especiales import EspecialesService, EspecialSinNumeroError
+from zascarr.services.obras_autoconclusivas import (
+    ObraAutoconclusivaError,
+    crear_obra_autoconclusiva,
+)
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ClavePendiente, ReviewService
 from zascarr.services.revision_carpetas import (
     LIMITE_MAXIMO,
@@ -102,6 +106,9 @@ def _card(f: File) -> dict:
     return {
         "file": f,
         "detected": _detected_label(f.file_name),
+        "formato": ((f.file_format.value.upper()
+                     if getattr(f, "file_format", None) is not None else
+                     Path(f.file_name).suffix.lstrip(".").upper()) or "?"),
         "suggestion": _suggestion(f),
         "puede_vincular": _puede_vincular(f),
         # U12: ausencia CONOCIDA (por la extensión, sin I/O): ni `<img>` ni petición ni bloque.
@@ -120,8 +127,32 @@ async def contar_carpetas(db: AsyncSession) -> int:
     return (await RevisionCarpetas(db).carpetas(limite=1)).totales.carpetas_utiles
 
 
-def _enlace(parametro: str, clave: ClavePendiente) -> str:
-    return f"/ui/pendientes?{urlencode({parametro: clave.a_texto()})}"
+#: Tamaños de página que la vista ofrece. El valor por defecto sigue siendo 50 de U12.
+TAMANOS_DE_PAGINA = (25, 50)
+
+
+def _enlace(parametro: str, clave: ClavePendiente, *, solo_sugerencia: bool = False,
+            tamano: int = 50) -> str:
+    parametros = {parametro: clave.a_texto()}
+    if solo_sugerencia:
+        parametros["solo_sugerencia"] = "1"
+    if tamano != 50:
+        parametros["tamano"] = str(tamano)
+    return f"/ui/pendientes?{urlencode(parametros)}"
+
+
+def _url_inicio(*, solo_sugerencia: bool, tamano: int,
+                despues: str = "", antes: str = "") -> str:
+    parametros = {}
+    if despues:
+        parametros["despues"] = despues
+    elif antes:
+        parametros["antes"] = antes
+    if solo_sugerencia:
+        parametros["solo_sugerencia"] = "1"
+    if tamano != 50:
+        parametros["tamano"] = str(tamano)
+    return "/ui/pendientes" + (f"?{urlencode(parametros)}" if parametros else "")
 
 
 def _enlace_sueltos(parametro: str, clave: ClavePendiente) -> str:
@@ -143,6 +174,8 @@ async def index(
     request: Request,
     despues: str = Query(default=""),
     antes: str = Query(default=""),
+    solo_sugerencia: bool = Query(default=False),
+    tamano: int = Query(default=50),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """La cola de pendientes, por cursor (U12). `despues` / `antes` son claves
@@ -151,19 +184,35 @@ async def index(
     k_despues, k_antes = ClavePendiente.desde_texto(despues), ClavePendiente.desde_texto(antes)
     if k_despues and k_antes:
         k_despues = k_antes = None
-    pagina = await ReviewService(db).pagina_de_pendientes(despues=k_despues, antes=k_antes)
+    limite = tamano if tamano in TAMANOS_DE_PAGINA else 50
+    pagina = await ReviewService(db).pagina_de_pendientes(
+        despues=k_despues, antes=k_antes, limite=limite,
+        solo_sugerencia=solo_sugerencia)
     contexto: dict = {
         "cards": [_card(f) for f in pagina.archivos],
         "rango": _rango(pagina.desde, pagina.hasta, pagina.total),
+        "solo_sugerencia": solo_sugerencia,
+        "tamano": limite,
+        "url_solo": _url_inicio(solo_sugerencia=True, tamano=limite),
+        "url_todos": _url_inicio(solo_sugerencia=False, tamano=limite),
+        "url_tamano": {
+            n: _url_inicio(
+                solo_sugerencia=solo_sugerencia, tamano=n,
+                despues=(k_despues.a_texto() if k_despues else ""),
+                antes=(k_antes.a_texto() if k_antes else ""))
+            for n in TAMANOS_DE_PAGINA},
         "siguiente": None, "anterior": None, "inicio": None, "primero": None, "ultimo": None}
     if pagina.archivos:
         primero = ClavePendiente.de(pagina.archivos[0])
         ultimo = ClavePendiente.de(pagina.archivos[-1])
         contexto.update(
             primero=primero.a_texto(), ultimo=ultimo.a_texto(),
-            siguiente=_enlace("despues", ultimo) if pagina.hay_siguiente else None,
-            anterior=_enlace("antes", primero) if pagina.hay_anterior else None,
-            inicio="/ui/pendientes" if pagina.hay_anterior else None)
+            siguiente=(_enlace("despues", ultimo, solo_sugerencia=solo_sugerencia, tamano=limite)
+                       if pagina.hay_siguiente else None),
+            anterior=(_enlace("antes", primero, solo_sugerencia=solo_sugerencia, tamano=limite)
+                      if pagina.hay_anterior else None),
+            inicio=(_url_inicio(solo_sugerencia=solo_sugerencia, tamano=limite)
+                    if pagina.hay_anterior else None))
     resp = templates.TemplateResponse(request, "pendientes.html", contexto)
     resp.headers["Cache-Control"] = "no-store"      # la cola cambia con cada tarjeta resuelta
     return resp
@@ -196,6 +245,7 @@ async def rango(
     request: Request,
     primero: str = Query(default=""),
     ultimo: str = Query(default=""),
+    solo_sugerencia: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """«Mostrando X–Y de N» recalculado sobre el conjunto ACTUAL, para refrescar tras
@@ -205,9 +255,9 @@ async def rango(
     if k1 is None or k2 is None:
         return HTMLResponse(status_code=204)        # htmx no intercambia un 204
     servicio = ReviewService(db)
-    total = await servicio.count_pending()
-    delante = await servicio.contar_antes_de(k1)
-    quedan = await servicio.contar_entre(k1, k2)
+    total = await servicio.count_pending(solo_sugerencia=solo_sugerencia)
+    delante = await servicio.contar_antes_de(k1, solo_sugerencia=solo_sugerencia)
+    quedan = await servicio.contar_entre(k1, k2, solo_sugerencia=solo_sugerencia)
     # Una página vaciada no tiene rango: ni «desde» ni «hasta» (no «0–50»).
     r = _rango(delante + 1, delante + quedan, total) if quedan else _rango(0, 0, total)
     resp = templates.TemplateResponse(request, "_pendientes_rango.html", {"rango": r})
@@ -310,6 +360,10 @@ def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
             "sugerida_para_serie": bool(
                 serie_actual and g.serie_sugerida is not None
                 and str(g.serie_sugerida.series_id) == str(serie_actual["id"])
+                # #382: el chip no afirma que la carpeta sea de la serie si solo la sugiere
+                # una minoría (o empata). Sin recuento (fixtures antiguos) se mantiene.
+                and (g.serie_sugerida.n_sugeridos == 0
+                     or g.serie_sugerida.n_de_la_serie * 2 > g.serie_sugerida.n_sugeridos)
             ),
         })
     p = r.pagina
@@ -536,8 +590,11 @@ async def portada(file_id: UUID, request: Request, db: AsyncSession = Depends(ge
 
 @router.get("/{file_id}/buscar-serie", response_class=HTMLResponse)
 async def buscar_serie(file_id: UUID, request: Request, q: str = "",
+                        mostrar_tomos: str = Query(default=""),
                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    series_list = await ReviewService(db).search_series(q)
+    incluir = (mostrar_tomos or "").strip().lower() in ("1", "true", "si", "sí", "on")
+    series_list = await ReviewService(db).search_series(
+        q, incluir_one_shot=incluir)
     file = await db.get(File, file_id)
     return templates.TemplateResponse(
         request, "_resultados_serie.html",
@@ -762,6 +819,45 @@ async def vincular_especial(
     })
 
 
+@router.post("/{file_id}/one-shot", response_class=HTMLResponse)
+async def crear_one_shot(
+    request: Request, file_id: UUID,
+    titulo: str = Form(default=""),
+    formato: str = Form("graphic_novel"),
+    tradicion: str = Form("american"),
+    numero: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#1027: alta explícita de una obra autoconclusiva desde Pendientes.
+
+    Crea la serie `ONE_SHOT` y su publicación, sin pedir número (solo se copia
+    si llega uno de una fuente), y enlaza el archivo sin moverlo.
+    """
+    try:
+        serie, _issue = await crear_obra_autoconclusiva(
+            db, file_id, titulo, formato, tradicion=tradicion, numero=numero)
+        await db.commit()
+    except ObraAutoconclusivaError as exc:
+        aviso = {"tipo": "warn", "texto": str(exc)}
+        if not _es_htmx(request):
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        file = await db.get(File, file_id)
+        if file is None:
+            return templates.TemplateResponse(
+                request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=400)
+        return templates.TemplateResponse(
+            request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
+            status_code=400)
+    return templates.TemplateResponse(request, "_accion_ok.html", {
+        "titulo": "Creado como tomo único.",
+        "texto": ("La serie y su publicación ya existen; el archivo se ha enlazado "
+                  "sin moverlo ni renombrarlo."),
+        "series_id": serie.id,
+        "deshacer_url": None,
+        "recontar_menu": RECONTAR_MENU,
+    })
+
+
 @router.post("/{file_id}/ignorar", response_class=HTMLResponse)
 async def ignorar(file_id: UUID, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     try:
@@ -771,4 +867,7 @@ async def ignorar(file_id: UUID, db: AsyncSession = Depends(get_db)) -> HTMLResp
     # Se confirma AQUÍ y no en `get_db` (que lo hace DESPUÉS de responder): el menú pide su contador
     # en cuanto llega la respuesta y, si el commit aún no ha ocurrido, contaría el archivo ignorado.
     await db.commit()
-    return HTMLResponse(RECONTAR_MENU)
+    # La fila es un <li>; quitar solo #card dejaría un <li> vacío en la lista.
+    # `delete` fuera de banda retira el contenedor completo.
+    return HTMLResponse(
+        RECONTAR_MENU + f'<li id="item-{file_id}" hx-swap-oob="delete"></li>')

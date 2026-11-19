@@ -39,9 +39,7 @@
 <div class="dashboard">
   <div class="dashboard-cabecera">
     <h1>Inicio</h1>
-    <a class="btn ghost sm dashboard-logs" href="/ui/logs">Descargar logs</a>
   </div>
-  <p class="caption">Si algo no funciona, descarga los últimos registros. Las rutas y nombres de tus archivos se ocultan; contraseñas y tokens también.</p>
 
   {#- Una sola cuenta que cuadra (caso real, 2026-10-20: «encontramos 1542 · registrados 1325», paso 1 «Hecho»
       y «Revisa 1322» sin decir cómo encajaban): lo registrado y en qué punto está, con partes que suman el
@@ -124,7 +122,7 @@
 
   {#- Sin nada registrado no hay «colección» que medir: el subtítulo ya dice lo que se encontró. -#}
   {% if r.total_series or d.total %}
-  <h2 class="seccion">Tu colección ahora</h2>
+  <h2 class="seccion">Tu tebeoteca ahora</h2>
   <div class="metrics-grid">
     <div class="metric-card">
       {#- La misma cifra que la frase de entrada: dos tarjetas no cuentan dos cosas con el mismo nombre. -#}

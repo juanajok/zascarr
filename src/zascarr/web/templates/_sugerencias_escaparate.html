@@ -1,0 +1,16 @@
+{% if sugerencias %}
+<ul class="escaparate-lista" tabindex="0" aria-label="Sugerencias para redescubrir">
+  {% for x in sugerencias %}
+  <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}">
+    {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada") }}
+    <span class="escaparate-titulo">{{ x.series_title }}</span><span class="muted">{{ x.motivo }}</span>
+  </a></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted" role="status">No hay más sugerencias por ahora.</p>
+{% endif %}
+<button type="button" class="btn sugerencias-rotar"
+        hx-get="/ui/biblioteca/sugerencias?offset={{ offset_siguiente }}"
+        hx-target="#sugerencias" hx-swap="innerHTML">Cambiar sugerencias</button>
+<div id="sugerencias-estado" class="sr" role="status" aria-live="polite">{% if actualizado %}Sugerencias actualizadas.{% endif %}</div>

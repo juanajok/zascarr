@@ -19,6 +19,7 @@ from zascarr.utils.ruta_visible import ruta_visible
 from zascarr.web.componentes import registrar as registrar_componentes
 from zascarr.web.contexto_carpetas import ContextoCarpetas
 from zascarr.web.descubrir_texto import etiqueta_procedencia, pista_de_tradicion
+from zascarr.web.iconos import icono
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -71,5 +72,6 @@ def crear_templates() -> Jinja2Templates:
     # que enseñe una ruta la tenga sin acordarse (y para que no vuelvan a convivir las dos formas).
     templates.env.filters["ruta_visible"] = ruta_visible
     # V2: macros de componentes (chip, aviso, grupo…) disponibles en TODAS las plantillas.
+    templates.env.filters["icono"] = icono
     registrar_componentes(templates.env)
     return templates

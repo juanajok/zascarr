@@ -20,11 +20,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
+COPY requirements-runtime.txt .
+RUN pip install --no-cache-dir --prefix=/install --require-hashes -r requirements-runtime.txt
 COPY pyproject.toml .
 COPY src ./src
-RUN pip install --no-cache-dir --prefix=/install .
+RUN pip install --no-cache-dir --prefix=/install --no-deps .
 
 FROM python:3.11-slim-trixie AS runtime
+
+# Valor explícito del checkout construido; nunca se deduce de app_version ni del .git.
+ARG ZASCARR_BUILD_SHA=""
+ENV BUILD_SHA=${ZASCARR_BUILD_SHA}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 libxml2 libxslt1.1 tini unar \
@@ -57,7 +63,7 @@ RUN dpkg -L gnustep-base-runtime \
 #     imagen lo detecta.)
 # Verificado con `lsar`/`unar`, los fixtures y los hostiles en `scripts/comprobar_imagen_rar.py`;
 # la CI tiene un presupuesto de 750 MiB.
-RUN for paquete in gnutls-bin make patch binutils binutils-x86-64-linux-gnu graphviz perl; do \
+RUN for paquete in gnutls-bin make patch binutils "binutils-$(dpkg-architecture -qDEB_HOST_GNU_TYPE)" graphviz perl; do \
         dpkg -L "$paquete" 2>/dev/null \
             | grep -E '^/(usr/bin|usr/sbin|etc/init\.d|etc/default|usr/libexec)/[^/]+$' \
             | xargs -r rm -f; \
@@ -70,10 +76,15 @@ RUN for paquete in gnutls-bin make patch binutils binutils-x86-64-linux-gnu grap
 RUN groupadd -g 1000 zascarr && \
     useradd -u 1000 -g zascarr -m -s /bin/bash zascarr
 
+# Actualizar las herramientas incluidas en la base: también forman parte del
+# inventario que se audita en la imagen de producción.
+RUN python -m pip install --no-cache-dir "pip==26.3" "setuptools==84.1.0"
 COPY --from=builder /install /usr/local
 
 WORKDIR /app
-COPY --chown=zascarr:zascarr . .
+COPY --chown=zascarr:zascarr alembic.ini .env.example LICENSE ./
+COPY --chown=zascarr:zascarr alembic ./alembic
+COPY --chown=zascarr:zascarr scripts/comprobar_imagen_rar.py ./scripts/
 COPY docker-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

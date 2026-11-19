@@ -299,6 +299,10 @@ SIN_TEXTO = ("dot", "progress-value", "progress-bar")
 # Pares que el resolvedor no debe tener que entender y que se excluyen A PROPÓSITO:
 # {(selector, fg, bg): motivo}. Vacío: cada entrada nueva exige su justificación.
 EXCLUSIONES: dict[tuple[str, str, str], str] = {
+    # Capa de atenuación del visor HD: no contiene texto; el color oscuro translúcido
+    # (fijo en ambos temas) no participa en el contraste del texto del diálogo.
+    (".visor-portada::backdrop", "var(--ink)", "rgb(12 12 12 / 72%)"):
+        "capa de atenuación sin texto; color fijo de backdrop, no texto sobre él",
     # La inicial de la portada que falta (ui.portada): una letra de ~46 % del ancho de la tarjeta (≥ 37 px
     # incluso en la más pequeña), decorativa y aria-hidden (el título va en texto debajo). Es texto
     # grande: le vale 3:1, y el caso peor, magenta en claro, mide 3,68:1
@@ -696,7 +700,8 @@ class TestColorMixSoloDondeSeDeclara:
     def test_los_estados_de_la_hoja_usan_su_token(self):
         """Los fondos que eran mezclas (`.suggestion`, `.aviso.ok`, `.legal-notice-info`)."""
         fondos = {sel: valor for sel, prop, valor in declaraciones() if prop == "background"}
-        assert fondos[".suggestion"] == "var(--ok-bg)"
+        # 2026-11-17: la sugerencia es un panel neutro; el estado va en un chip.
+        assert fondos[".suggestion"] == "var(--paper)"
         assert fondos[".aviso.ok"] == "var(--ok-bg)"
         assert fondos[".legal-notice-info"] == "var(--info-bg)"
 

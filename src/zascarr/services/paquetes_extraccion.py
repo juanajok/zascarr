@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import zipfile
 import zipfile as _zip
 from dataclasses import dataclass
@@ -155,7 +156,8 @@ def _comprobar_original(p: PaquetePendiente) -> None:
 
 
 def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
-                        modo: str, temp_fd: int) -> list[dict]:
+                        modo: str, temp_fd: int, progreso=None,
+                        total: int = 0) -> list[dict]:
     """Extrae ZIP en proceso hijo con timeout y kill de grupo; no bloquea el bucle."""
     datos = {"nombre": paquete.nombre, "tamano": paquete.tamano,
              "mtime_ns": paquete.mtime_ns, "firma": paquete.firma,
@@ -169,11 +171,44 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
     os.set_inheritable(temp_fd, True)
     salida_fichero = tempfile.TemporaryFile(dir=temp)  # noqa: SIM115
     error_fichero = tempfile.TemporaryFile(dir=temp)  # noqa: SIM115
+    limite_stdout, limite_stderr = 1024 * 1024, 64 * 1024
+    parar = threading.Event()
+
+    def _vigilar_salida() -> None:
+        while not parar.wait(0.1):
+            try:
+                if (os.fstat(salida_fichero.fileno()).st_size > limite_stdout
+                        or os.fstat(error_fichero.fileno()).st_size > limite_stderr):
+                    with __import__("contextlib").suppress(OSError):
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    return
+            except OSError:
+                return
+
     proc = subprocess.Popen(  # noqa: S603 — lista, sin shell, ruta absoluta
         [sys.executable, "-m", "zascarr.services.paquetes_worker", json.dumps(datos),
          modo, str(fd), str(temp), str(temp_fd)],
         stdin=subprocess.DEVNULL, stdout=salida_fichero, stderr=error_fichero,
         env=entorno, close_fds=True, pass_fds=(fd, temp_fd), start_new_session=True)
+    vigilante = threading.Thread(target=_vigilar_salida, daemon=True)
+    vigilante.start()
+    parar_progreso = threading.Event()
+
+    def _vigilar_progreso() -> None:
+        ruta = temp / ".progreso"
+        vistos = -1
+        while not parar_progreso.wait(0.2):
+            try:
+                valor = int(ruta.read_text(encoding="ascii").strip() or "0")
+            except (OSError, ValueError):
+                continue
+            if valor != vistos and progreso is not None:
+                vistos = valor
+                with __import__("contextlib").suppress(Exception):
+                    progreso(valor, total)
+
+    hilo_progreso = threading.Thread(target=_vigilar_progreso, daemon=True)
+    hilo_progreso.start()
     try:
         try:
             proc.communicate(timeout=_ZIP_TIMEOUT)
@@ -183,7 +218,9 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
             proc.communicate()
             raise PaqueteExtraccionError("tiempo", "La extracción tardó demasiado.") from None
         error_fichero.seek(0)
-        error_fichero.read(64 * 1024 + 1)
+        error = error_fichero.read(64 * 1024 + 1)
+        if len(error) > 64 * 1024:
+            raise PaqueteExtraccionError("salida", "La extracción escribió demasiados errores.")
         if proc.returncode != 0:
             raise PaqueteExtraccionError("extraccion", "La extracción falló.")
         salida_fichero.seek(0)
@@ -191,6 +228,10 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
         if len(salida) > 1024 * 1024:
             raise PaqueteExtraccionError("extraccion", "La extracción devolvió demasiados datos.")
     finally:
+        parar.set()
+        parar_progreso.set()
+        hilo_progreso.join(timeout=0.5)
+        vigilante.join(timeout=1)
         salida_fichero.close()
         error_fichero.close()
     try:
@@ -201,7 +242,7 @@ def _extraer_en_proceso(paquete: PaquetePendiente, temp: Path, fd: int,
 
 
 def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path,
-                  fd: int, temp_fd: int) -> list[dict]:
+                  fd: int, temp_fd: int, progreso=None) -> list[dict]:
     items: list[dict] = []
     try:
         z = zipfile.ZipFile(os.fdopen(os.dup(fd), "rb"))
@@ -255,11 +296,13 @@ def _escribir_zip(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
                     "estado": "verificado",
                 }
             )
+            if progreso is not None:
+                progreso(len(items))
     return items
 
 
 def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path,
-                  fd: int, temp_fd: int) -> list[dict]:
+                  fd: int, temp_fd: int, progreso=None) -> list[dict]:
     if not lector_rar.disponible():
         raise PaqueteExtraccionError("herramienta_ausente", "Falta la herramienta para leer RAR.")
     if len(listado.entradas) > lector_rar.RAR_MAX_ENTRADAS:
@@ -281,11 +324,16 @@ def _escribir_rar(paquete: PaquetePendiente, listado: ListadoPaquete, temp: Path
                 raise PaqueteExtraccionError(
                     "ilegible", "El paquete está dañado o cifrado.") from exc
             h = hashlib.sha256()
-            with open(destino, "rb") as f:
-                while bloque := f.read(_BLOQUE):
+            fd_out = os.open(nombre, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=temp_fd)
+            try:
+                while bloque := os.read(fd_out, _BLOQUE):
                     h.update(bloque)
+            finally:
+                os.close(fd_out)
             items.append({"nombre": nombre, "origen": entrada.nombre, "bytes": total,
                           "sha256": h.hexdigest(), "estado": "verificado"})
+            if progreso is not None:
+                progreso(len(items))
     return items
 
 
@@ -328,66 +376,84 @@ def _verificar_contenido_fd(items: list[dict], temp: Path, temp_fd: int) -> None
     if reales != esperados:
         raise PaqueteExtraccionError("verificacion", "El temporal tiene ficheros inesperados.")
     for item in items:
-        ruta = temp / item["nombre"]
+
         ext = Path(item["nombre"]).suffix.lower()
         fd_item = os.open(item["nombre"], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=temp_fd)
-        with os.fdopen(os.dup(fd_item), "rb") as fh:
-            firma = firma_de_bytes(fh.read(512))
-        if ext == ".cbz" and firma is not Firma.ZIP:
-            raise PaqueteExtraccionError("firma", "Un tebeo dice ZIP pero no lo es.")
-        if ext == ".cbr" and firma is not Firma.RAR:
-            raise PaqueteExtraccionError("firma", "Un tebeo dice RAR pero no lo es.")
-        if firma is Firma.ZIP:
-            try:
-                with _zip.ZipFile(os.fdopen(os.dup(fd_item), "rb")) as z:
-                    imagen = next((n for n in z.namelist()
-                                   if Path(n).suffix.lower() in _EXTS_IMAGEN), None)
-                    if imagen is None:
-                        raise PaqueteExtraccionError("sin_imagen", "Un tebeo no tiene páginas.")
-                    if z.getinfo(imagen).file_size > MAX_ENTRADA_LEIDA:
-                        raise PaqueteExtraccionError(
-                            "tamano", "La primera página es demasiado grande.")
-                    datos = z.read(imagen)
-                    _decodificar_imagen(datos)
-            except PaqueteExtraccionError:
-                raise
-            except Exception as exc:  # noqa: BLE001
-                raise PaqueteExtraccionError(
-                    "ilegible", "Un tebeo extraído no se puede abrir.") from exc
-        elif firma is Firma.RAR:
-            if not lector_rar.disponible():
-                raise PaqueteExtraccionError(
-                    "herramienta_ausente", "Falta la herramienta para leer RAR.")
-            with lector_rar.carpeta_temporal(temp) as casa:
+        try:
+            with os.fdopen(os.dup(fd_item), "rb") as fh:
+                firma = firma_de_bytes(fh.read(512))
+            if ext == ".cbz" and firma is not Firma.ZIP:
+                raise PaqueteExtraccionError("firma", "Un tebeo dice ZIP pero no lo es.")
+            if ext == ".cbr" and firma is not Firma.RAR:
+                raise PaqueteExtraccionError("firma", "Un tebeo dice RAR pero no lo es.")
+            if firma is Firma.ZIP:
                 try:
+                    with _zip.ZipFile(os.fdopen(os.dup(fd_item), "rb")) as z:
+                        imagen = next((n for n in z.namelist()
+                                       if Path(n).suffix.lower() in _EXTS_IMAGEN), None)
+                        if imagen is None:
+                            raise PaqueteExtraccionError("sin_imagen", "Un tebeo no tiene páginas.")
+                        if z.getinfo(imagen).file_size > MAX_ENTRADA_LEIDA:
+                            raise PaqueteExtraccionError(
+                                "tamano", "La primera página es demasiado grande.")
+                        datos = z.read(imagen)
+                        _decodificar_imagen(datos)
+                except PaqueteExtraccionError:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    raise PaqueteExtraccionError(
+                        "ilegible", "Un tebeo extraído no se puede abrir.") from exc
+            elif firma is Firma.RAR:
+                if not lector_rar.disponible():
+                    raise PaqueteExtraccionError(
+                        "herramienta_ausente", "Falta la herramienta para leer RAR.")
+                with lector_rar.carpeta_temporal(temp) as casa:
                     fd_rar = os.open(item["nombre"], os.O_RDONLY | os.O_NOFOLLOW,
-                                      dir_fd=temp_fd)
-                    listado = lector_rar.listar(
-                        Path(f"/proc/self/fd/{fd_rar}"), temporal=casa,
-                        pass_fds=(fd_rar,))
-                except lector_rar.ErrorRar as exc:
-                    raise PaqueteExtraccionError(
-                        "ilegible", "Un tebeo RAR extraído no se puede listar.") from exc
-                entrada = next((e for e in listado.entradas
-                                if not e.es_directorio and not e.cifrada
-                                and Path(e.nombre).suffix.lower() in _EXTS_IMAGEN), None)
-                if entrada is None:
-                    raise PaqueteExtraccionError("sin_imagen", "Un tebeo no tiene páginas.")
-                if entrada.tamano > MAX_ENTRADA_LEIDA:
-                    raise PaqueteExtraccionError(
-                            "tamano", "La primera página es demasiado grande.")
-                salida = casa / "imagen"
-                try:
-                    lector_rar.extraer_entrada_a(ruta, entrada, salida, MAX_ENTRADA_LEIDA,
-                                                temporal=casa)
-                except lector_rar.ErrorRar as exc:
-                    raise PaqueteExtraccionError(
-                        "ilegible", "La primera imagen RAR no se pudo extraer.") from exc
-                _decodificar_imagen(salida.read_bytes())
-                salida.unlink(missing_ok=True)
-            with __import__("contextlib").suppress(OSError):
-                os.close(fd_rar)
-        os.close(fd_item)
+                                     dir_fd=temp_fd)
+                    try:
+                        try:
+                            listado = lector_rar.listar(
+                                Path(f"/proc/self/fd/{fd_rar}"), temporal=casa,
+                                pass_fds=(fd_rar,))
+                        except lector_rar.ErrorRar as exc:
+                            raise PaqueteExtraccionError(
+                                "ilegible", "Un tebeo RAR extraído no se puede listar.") from exc
+                        entrada = next((e for e in listado.entradas
+                                        if not e.es_directorio and not e.cifrada
+                                        and Path(e.nombre).suffix.lower() in _EXTS_IMAGEN), None)
+                        if entrada is None:
+                            raise PaqueteExtraccionError(
+                                "sin_imagen", "Un tebeo no tiene páginas.")
+                        if entrada.tamano > MAX_ENTRADA_LEIDA:
+                            raise PaqueteExtraccionError(
+                                "tamano", "La primera página es demasiado grande.")
+                        salida = temp / f"imagen-{fd_rar}"
+                        try:
+                            lector_rar.extraer_entrada_a(
+                                Path(f"/proc/self/fd/{fd_rar}"), entrada, salida,
+                                MAX_ENTRADA_LEIDA, temporal=casa,
+                                pass_fds=(fd_rar,), destino_dir_fd=temp_fd)
+                        except lector_rar.ErrorRar as exc:
+                            raise PaqueteExtraccionError(
+                                "ilegible", "La primera imagen RAR no se pudo extraer.") from exc
+                        fd_img = os.open(salida.name, os.O_RDONLY | os.O_NOFOLLOW,
+                                         dir_fd=temp_fd)
+                        try:
+                            datos = b""
+                            while bloque := os.read(fd_img, 1024 * 1024):
+                                datos += bloque
+                                if len(datos) > MAX_ENTRADA_LEIDA:
+                                    raise PaqueteExtraccionError(
+                                        "tamano", "La primera página es demasiado grande.")
+                            _decodificar_imagen(datos)
+                        finally:
+                            os.close(fd_img)
+                            with __import__("contextlib").suppress(OSError):
+                                os.unlink(salida.name, dir_fd=temp_fd)
+                    finally:
+                        os.close(fd_rar)
+        finally:
+            os.close(fd_item)
 
 
 def _verificar_items(items: list[dict], temp: Path, temp_fd: int, total_listado: int) -> None:
@@ -416,14 +482,12 @@ async def crear_operacion(s: AsyncSession, paquete: PaquetePendiente) -> Paquete
                 PaqueteOperacion.paquete_clave == clave,
                 PaqueteOperacion.estado.in_(
                     [
-                        PaqueteEstado.LISTANDO,
-                        PaqueteEstado.EXTRAYENDO,
-                        PaqueteEstado.VERIFICANDO,
-                        PaqueteEstado.PUBLICANDO,
-                        PaqueteEstado.IMPORTANDO,
+                        PaqueteEstado.LISTANDO, PaqueteEstado.EXTRAYENDO,
+                        PaqueteEstado.VERIFICANDO, PaqueteEstado.PUBLICANDO,
+                        PaqueteEstado.IMPORTANDO, PaqueteEstado.IMPORTADO,
                     ]
                 ),
-            )
+            ).order_by(PaqueteOperacion.creada.desc()).limit(1)
         )
     ).scalar_one_or_none()
     if viva is not None:
@@ -454,12 +518,18 @@ async def crear_operacion(s: AsyncSession, paquete: PaquetePendiente) -> Paquete
 
 
 async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
-                             conservar_temporal: bool = False) -> ResultadoExtraccion:
+                             conservar_temporal: bool = False,
+                             progreso=None) -> ResultadoExtraccion:
     op = await s.get(PaqueteOperacion, operacion_id, with_for_update=True)
     if op is None:
         raise PaqueteExtraccionError("no_existe", "La operación no existe.")
-    if op.estado in (PaqueteEstado.VERIFICADO, PaqueteEstado.ERROR):
-        raise PaqueteExtraccionError("estado", "La operación ya terminó.")
+    if op.estado is PaqueteEstado.VERIFICADO and op.temp_dir:
+        # Un segundo POST reutiliza la extracción ya verificada; no reextrae.
+        return ResultadoExtraccion(
+            operacion_id=op.id, items=tuple(op.items or ()), total_bytes=op.total_bytes or 0)
+    if op.estado not in (PaqueteEstado.LISTANDO, PaqueteEstado.EXTRAYENDO,
+                         PaqueteEstado.VERIFICANDO):
+        raise PaqueteExtraccionError("estado", "La operación no es reanudable.")
     paquete = PaquetePendiente(
         ruta=Path(op.paquete_path),
         raiz=Path(op.paquete_path).parent,
@@ -502,9 +572,17 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
             raise PaqueteExtraccionError("listado", exc.causa) from exc
         comprobar_espacio(base, listado.bytes_estimados or 1,
                           "extraer el paquete")
+        total_items = sum(1 for e in listado.entradas if e.se_importa)
+
+        def _progreso(hechos: int, total: int) -> None:
+            if progreso is not None:
+                progreso(hechos, total or total_items)
+
         items = await asyncio.to_thread(
             _extraer_en_proceso, paquete, temp, paquete.fd,
-            "zip" if paquete.firma == "ZIP" else "rar", temp_fd)
+            "zip" if paquete.firma == "ZIP" else "rar", temp_fd,
+            _progreso, total_items)
+        _progreso(len(items), total_items)
         _verificar_contenido(items, temp, temp_fd)
         op.estado = PaqueteEstado.VERIFICANDO
         op.items = list(items)
@@ -557,11 +635,29 @@ async def extraer_y_verificar(s: AsyncSession, operacion_id: UUID, *,
 
 async def limpiar_huerfanos(s: AsyncSession) -> int:
     """Marca error las operaciones vivas de un arranque anterior y borra sus temporales."""
+    # Primero staging de publicaciones interrumpidas: el primer barrido las
+    # convierte a ERROR y, si se hiciera después, ya no se encontrarían.
+    atascadas = (await s.execute(select(PaqueteOperacion).where(
+        PaqueteOperacion.estado.in_(
+            [PaqueteEstado.PUBLICANDO, PaqueteEstado.IMPORTANDO])))).scalars().all()
+    for op in atascadas:
+        if op.staging_dir:
+            _borrar_temp(Path(op.staging_dir))
+        op.estado = PaqueteEstado.ERROR
+        op.error_codigo = "interrumpida"
+        op.error_mensaje = "La publicación se interrumpió; se puede reintentar."
+        op.staging_dir = None
+        s.add(op)
+    if atascadas:
+        await s.commit()
     vivas = (
         (
             await s.execute(
                 select(PaqueteOperacion).where(
-                    PaqueteOperacion.temp_dir.is_not(None))
+                    PaqueteOperacion.temp_dir.is_not(None),
+                    PaqueteOperacion.estado.in_(
+                        [PaqueteEstado.LISTANDO, PaqueteEstado.EXTRAYENDO,
+                         PaqueteEstado.VERIFICANDO, PaqueteEstado.ERROR]))
             )
         )
         .scalars()
@@ -578,19 +674,8 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
         s.add(op)
     if vivas:
         await s.commit()
-    # PUBLICANDO/IMPORTANDO interrumpidos: limpiar staging y marcar reintentable.
-    atascadas = (await s.execute(select(PaqueteOperacion).where(
-        PaqueteOperacion.estado.in_(
-            [PaqueteEstado.PUBLICANDO, PaqueteEstado.IMPORTANDO])))).scalars().all()
-    for op in atascadas:
-        if op.staging_dir:
-            _borrar_temp(Path(op.staging_dir))
-        op.estado = PaqueteEstado.ERROR
-        op.error_codigo = "interrumpida"
-        op.error_mensaje = "La publicación se interrumpió; se puede reintentar."
-        s.add(op)
-    if atascadas:
-        await s.commit()
+    # El recuento devuelto incluye ambas familias; se devuelve al final.
+    total_huerfanos = len(vivas) + len(atascadas)
     try:
         base = _base_temporal()
         referenciados = {Path(x) for x in (await s.execute(
@@ -601,4 +686,4 @@ async def limpiar_huerfanos(s: AsyncSession) -> int:
                 _borrar_temp(hijo)
     except OSError:
         logger.warning("paquetes.barrido_temporales_fallido")
-    return len(vivas)
+    return total_huerfanos

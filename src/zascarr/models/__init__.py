@@ -49,6 +49,7 @@ class ComicTradition(enum.StrEnum):
     FUMETTI       = "fumetti"
     MANHWA        = "manhwa"
     MANHUA        = "manhua"
+    HISPANOAMERICANO = "hispanoamericano"
     BRITISH       = "british"
     OTHER         = "other"
 
@@ -68,6 +69,9 @@ class SeriesKind(enum.StrEnum):
     REGULAR = "regular"
     ANNUAL = "annual"
     SPECIAL = "special"
+    #: #1027/ADR 0022: una obra autoconclusiva (un único tomo/publicación), no una
+    #: línea de numeración. La marca es explícita del coleccionista, nunca inferida.
+    ONE_SHOT = "one_shot"
 
 class CreatorRole(enum.StrEnum):
     WRITER      = "writer"
@@ -214,8 +218,10 @@ class WishlistOrigin(enum.StrEnum):
     `manual` = lo pidió el coleccionista (nunca se toca solo).
     `politica` = lo generó ZascArr a partir de `Series.wishlist_policy`.
     """
-    MANUAL  = "manual"
-    POLICY  = "politica"
+    MANUAL      = "manual"
+    POLICY      = "politica"
+    #: #993: número nuevo detectado por el seguimiento de series (foro/Prowlarr).
+    SEGUIMIENTO = "seguimiento"
 
 class ReadingStatus(enum.StrEnum):
     UNREAD    = "unread"
@@ -629,6 +635,14 @@ class Series(Base):
         Enum(WishlistPolicy, name="wishlist_policy",
              values_callable=lambda obj: [e.value for e in obj]),
         nullable=False, default=WishlistPolicy.NONE, server_default=WishlistPolicy.NONE.value)
+    # #993: seguir números NUEVOS de esta serie (foro/Prowlarr). Independiente de
+    # `wishlist_policy`: una serie puede completar huecos y seguir nuevos a la vez.
+    follow_new_issues: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"))
+    #: Frontera de la primera pasada. Se fija a `now()` al activar (solo en la
+    # transición false→true); desactivar NO la borra y reactivar la renueva.
+    follow_new_issues_since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -1142,6 +1156,8 @@ class Wishlist(Base):
         CheckConstraint(
             "series_id IS NOT NULL OR issue_id IS NOT NULL", name="wishlist_target_check"
         ),
+        Index("uq_wishlist_seguimiento_numero", "series_id", "numero", unique=True,
+              postgresql_where=text("origen <> 'manual' AND numero IS NOT NULL")),
     )
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     series_id: Mapped[str | None] = mapped_column(
@@ -1188,8 +1204,35 @@ class Wishlist(Base):
     # Sin timestamp propio: se correlaciona con last_searched_at, ya
     # marcado en el mismo punto donde se decide la causa.
     last_error:       Mapped[str|None]        = mapped_column(Text)
+    # T-62: backoff de envío. `retry_count` son los fallos consecutivos del
+    # cliente de descargas; `next_retry_at` es el momento antes del cual el
+    # ciclo automático no vuelve a intentarlo. Los limpia un envío correcto o
+    # el reintento manual del coleccionista (`WishlistService.retry`).
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0"))
+    next_retry_at:    Mapped[datetime|None]   = mapped_column(DateTime(timezone=True))
     series: Mapped["Series|None"] = relationship()
     issue:  Mapped["Issue|None"]  = relationship()
+
+
+class SeguimientoVisto(Base):
+    """#993: estado de las fuentes de seguimiento (sin guardar enlaces ni títulos).
+
+    Una fila por `(fuente, clave)`: temas del foro (`tema:<id>`) y releases de
+    Prowlarr (`release:<hash>`); la rotación de series usa `serie:<uuid>`.
+    """
+    __tablename__ = "seguimiento_vistos"
+    __table_args__ = (
+        UniqueConstraint("fuente", "clave", name="uq_seguimiento_vistos_fuente_clave"),
+        Index("ix_seguimiento_vistos_visto_en", "visto_en"),
+    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    fuente: Mapped[str] = mapped_column(String(20), nullable=False)
+    clave: Mapped[str] = mapped_column(String(255), nullable=False)
+    huella: Mapped[str | None] = mapped_column(String(255))
+    visto_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now())
+    procesado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Note(Base):
@@ -1236,10 +1279,15 @@ class ReadingProgress(Base):
         default=ReadingStatus.UNREAD,
     )
     current_page: Mapped[int]           = mapped_column(Integer, default=0)
+    #: BL-LEC1 (#824): archivo concreto que se estaba leyendo. NULL en progresos antiguos.
+    file_id:      Mapped[str|None]      = mapped_column(
+        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), index=True)
     rating:       Mapped[int|None]      = mapped_column(SmallInteger)
     started_at:   Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     notes:        Mapped[str|None]      = mapped_column(Text)
+    #: #1088: última lectura real (no se toca al marcar visto).
+    last_read_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     issue: Mapped["Issue"] = relationship(back_populates="reading_progress")
 
 
@@ -1529,6 +1577,33 @@ class AliasImportado(Base):
                                                 server_default=func.now())
 
 
+class OpsAccion(enum.StrEnum):
+    """Acciones que la app puede pedir al auxiliar del host (BL-OPS1, ADR 0021): lista cerrada."""
+
+    COPIA = "copia"
+    RESTAURAR = "restaurar"
+
+
+class CodigoOps(enum.StrEnum):
+    """Códigos de respuesta del auxiliar del host (lista cerrada, repetida en `deploy/ops`)."""
+
+    ACEPTADA = "aceptada"
+    ESQUEMA_INVALIDO = "esquema_invalido"
+    FIRMA_INVALIDA = "firma_invalida"
+    CADUCADA = "caducada"
+    REPETIDA = "repetida"
+    ACCION_NO_DISPONIBLE = "accion_no_disponible"
+    DEMASIADO_PRONTO = "demasiado_pronto"
+    LIMITE_DIARIO = "limite_diario"
+    OPERACION_EN_CURSO = "operacion_en_curso"
+    NO_DISPONIBLE = "no_disponible"
+    COPIA_DESCONOCIDA = "copia_desconocida"
+    AUTENTICACION_NO_ACTIVADA = "autenticacion_no_activada"
+    PRUEBA_INVALIDA = "prueba_invalida"
+    BLOQUEO_TEMPORAL = "bloqueo_temporal"
+    LIMITE_RESTAURACIONES = "limite_restauraciones"
+
+
 class EntitySourceRecord(Base):
     """Payload normalizado de una fuente y su procedencia (fase 2).
 
@@ -1637,3 +1712,13 @@ class PaqueteOperacion(Base):
             postgresql_where=text(
                 "estado IN ('listando','extrayendo','verificando','publicando','importando')")),
     )
+
+
+class SeriesRecentView(Base):
+    """#1088: última visita a la ficha de una serie (una fila por serie)."""
+
+    __tablename__ = "series_recent_views"
+    series_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), primary_key=True)
+    last_viewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now())

@@ -209,7 +209,7 @@
     {% endif %}
     {% if g.serie_sugerida %}
     <dt>Serie sugerida</dt>
-    <dd>{{ g.serie_sugerida.titulo }}{% if g.serie_sugerida.anio %} ({{ g.serie_sugerida.anio }}){% endif %}, coincidencia {{ (g.serie_sugerida.puntuacion * 100) | round | int }}&nbsp;%. <em>Es una sugerencia: no está elegida ni asignada.</em></dd>
+    <dd>{{ g.serie_sugerida.titulo }}{% if g.serie_sugerida.anio %} ({{ g.serie_sugerida.anio }}){% endif %}, coincidencia {{ (g.serie_sugerida.puntuacion * 100) | round | int }}&nbsp;%. <em>Es una sugerencia: no está elegida ni asignada.</em>{% if g.serie_sugerida.n_sugeridos == 1 %} La sugiere el único registro con sugerencia.{% elif g.serie_sugerida.n_sugeridos %}{% if g.serie_sugerida.n_de_la_serie == g.serie_sugerida.n_sugeridos %} La sugieren los {{ g.serie_sugerida.n_sugeridos }} registros con sugerencia.{% elif g.serie_sugerida.n_de_la_serie == 1 %} La sugiere 1 de {{ g.serie_sugerida.n_sugeridos }} registros con sugerencia; el resto apunta a {{ "otras series" if g.serie_sugerida.n_series_distintas > 2 else "otra serie" }}.{% else %} La sugieren {{ g.serie_sugerida.n_de_la_serie }} de {{ g.serie_sugerida.n_sugeridos }} registros con sugerencia; el resto apunta a {{ "otras series" if g.serie_sugerida.n_series_distintas > 2 else "otra serie" }}.{% endif %}{% endif %}</dd>
     {% endif %}
   </dl>
 

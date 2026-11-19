@@ -105,7 +105,8 @@ class TestChip:
         assert texto(render(env, '{{ ui.chip("neutro", 0) }}')) == "0"
 
     def test_la_clase_extra_anade_un_modificador_declarado(self, env):
-        """`clase` es solo el gancho del modificador (p. ej. `chip-falta`); el matiz lo pone el estado."""
+        """`clase` es solo el gancho del modificador (p. ej. `chip-falta`);
+        el matiz lo pone el estado."""
         html = render(env, '{{ ui.chip("neutro", "#1", clase="chip-falta") }}')
         assert clases(parsear(html).elementos[0]) == {"chip", "chip-falta"}
 
@@ -483,7 +484,8 @@ class TestAliasRetirados:
                 encontrados = nuevos & set(valor.split())
                 # Los chips de filtros activos son la excepción: son texto plano con
                 # el mismo aspecto de píldora, sin el icono de flecha de `ui.chip`.
-                if f.name == "_rejilla_biblioteca.html":
+                if f.name in ("_rejilla_biblioteca.html", "series_detail.html",
+                              "_escaparate.html", "_sugerencias_escaparate.html"):
                     encontrados -= {"chip"}
                 usadas |= encontrados
         assert not usadas, f"V2 no migra pantallas; las usa alguna ya: {usadas}"

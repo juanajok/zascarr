@@ -20,6 +20,8 @@
   {% include "_filtros_panel_campos.html" %}
 </div>
 <input type="hidden" id="f-vista" name="vista" value="{{ filtros.vista }}" hx-swap-oob="true">
+<input type="hidden" id="f-densidad" name="densidad" value="{{ densidad }}" hx-swap-oob="true">
+<input type="hidden" id="f-modo" name="modo" value="{{ modo }}" hx-swap-oob="true">
 {% include "_control_vista.html" %}
 {% endif %}
 <div id="resumen-biblioteca" class="resumen-biblioteca">
@@ -132,8 +134,9 @@
   </tbody>
 </table>
 {% else %}
-<div class="library-grid">
+<div class="library-grid library-grid-{{ densidad }}">
   {% for series in items %}
+  <div class="library-card-wrap">
   <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}">
     {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id) }}
     {% set leidos = series.lectura_leidos|default(0, true) %}
@@ -158,6 +161,23 @@
       </div>
     </div>
   </a>
+  <div class="library-card-chips">
+    {% if series.start_year %}
+    {% set u = url_chip("anio_desde", series.start_year|string) %}
+    <a class="chip chip-filtro" href="{{ u }}" hx-get="/ui/biblioteca/resultados?{{ u.split('?', 1)[1] }}" hx-target="#rejilla" hx-swap="innerHTML" aria-label="Filtrar por año: desde {{ series.start_year }}">{{ series.start_year }}</a>
+    {% endif %}
+    {% if series.tradition %}
+    {% set u = url_chip("tradition", series.tradition) %}
+    <a class="chip chip-filtro" href="{{ u }}" hx-get="/ui/biblioteca/resultados?{{ u.split('?', 1)[1] }}" hx-target="#rejilla" hx-swap="innerHTML" aria-label="Filtrar por tradición: {{ series.tradition|tradicion }}">{{ series.tradition|tradicion }}</a>
+    {% endif %}
+  </div>
+  {% set compacto = true %}{% include "_favorito_boton.html" %}
+  <a class="btn ghost sm visor-portada-boton visor-tarjeta"
+     href="/ui/series/{{ series.id }}/portada-hd.jpg"
+     data-visor-src="/ui/series/{{ series.id }}/portada-hd.jpg"
+     data-visor-titulo="{{ series.title }}"
+     aria-label="Ver portada ampliada de {{ series.title }}">{{ "descubrir"|icono }}<span class="sr">Ver portada ampliada</span></a>
+  </div>
   {% endfor %}
 </div>
 {% endif %}

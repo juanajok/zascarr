@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Leer — {{ serie.title if serie else "ZascArr" }}{% endblock %}
+{% block content %}
+<div class="lector lector-escena{% if preparando %} lector-escena-preparando{% endif %}"
+     {% if preparando %}data-estado-url="/ui/leer/{{ archivo.id }}/estado"
+     {% if error_inicial %}data-error-inicial{% endif %}{% else %}
+     data-lector data-total="{{ total }}" data-pagina="{{ pagina_actual }}"
+     data-sentido="{{ sentido }}" data-origen-sentido="{{ origen_sentido }}"
+     data-pagina-url="/ui/leer/{{ archivo.id }}/pagina/"
+     data-progreso-url="/ui/leer/{{ archivo.id }}/progreso"
+     data-sentido-url="/ui/leer/{{ archivo.id }}/sentido"
+     data-volver="/ui/series/{{ serie.id }}/numero/{{ numero.id }}"{% endif %}>
+  <header class="lector-barra" id="lector-barra" role="group" aria-label="Controles del lector">
+    <a class="back-link lector-volver" href="/ui/series/{{ serie.id }}/numero/{{ numero.id }}">← Volver al número</a>
+    <p class="lector-identidad">
+      <strong>{{ serie.title }}</strong>
+      {% if numero.issue_number %}<span>número {{ numero.issue_number }}</span>{% endif %}
+    </p>
+    {% if not preparando %}
+    <p class="lector-contador" id="lector-contador" aria-live="polite" aria-atomic="true">Página {{ pagina_actual }} de {{ total }}</p>
+    <button type="button" class="btn ghost sm" id="lector-menu-boton"
+            aria-expanded="false" aria-controls="lector-menu">Opciones</button>
+    <div class="lector-menu" id="lector-menu" hidden>
+      <p class="lector-menu-titulo">Cómo quieres leer</p>
+      <div class="lector-modos" role="group" aria-label="Modo de lectura">
+        <button type="button" class="btn ghost" data-modo="ancho" aria-pressed="false">Ajustar al ancho</button>
+        <button type="button" class="btn ghost" data-modo="pantalla" aria-pressed="false">Ajustar a la pantalla</button>
+        <button type="button" class="btn ghost" data-modo="doble" aria-pressed="false">Doble página</button>
+      </div>
+      <button type="button" class="btn ghost" id="lector-desplazar" hidden>Desplazar la pareja una página</button>
+      <button type="button" class="btn ghost" id="lector-sentido">Sentido: {{ "derecha a izquierda" if sentido == "rtl" else "izquierda a derecha" }}</button>
+      <button type="button" class="btn ghost" id="lector-pantalla-completa" hidden>Pantalla completa</button>
+      <fieldset class="lector-imagen">
+        <legend>Imagen</legend>
+        <label>Brillo
+          <input type="range" id="lector-brillo" min="-40" max="40" step="5" value="0">
+          <span id="lector-brillo-valor" aria-hidden="true">0</span>
+        </label>
+        <label>Contraste
+          <input type="range" id="lector-contraste" min="-40" max="40" step="5" value="0">
+          <span id="lector-contraste-valor" aria-hidden="true">0</span>
+        </label>
+        <label class="lector-imagen-check"><input type="checkbox" id="lector-sepia"> Sepia</label>
+        <label class="lector-imagen-check"><input type="checkbox" id="lector-invertir"> Invertir</label>
+        <button type="button" class="btn ghost sm" id="lector-imagen-reset">Restablecer imagen</button>
+        <p class="caption">Solo afecta a la imagen y se guarda en este dispositivo.</p>
+      </fieldset>
+      <details class="lector-ayuda">
+        <summary>Cómo leer</summary>
+        <p class="caption">Usa las flechas, el espacio o desliza para pasar página. Con el foco en la zona de lectura, <kbd>f</kbd> activa la pantalla completa, <kbd>h</kbd> muestra u oculta los controles y <kbd>m</kbd> cambia el modo.</p>
+      </details>
+      <p id="lector-origen-sentido" class="caption">
+        {% if origen_sentido == "serie" %}Sentido guardado para esta serie.
+        {% elif origen_sentido == "comicinfo" %}Sentido tomado del ComicInfo del archivo.
+        {% else %}Sentido por la tradición de la serie.{% endif %}
+      </p>
+      <p class="caption"><a href="/legal">Aviso legal</a></p>
+    </div>
+    {% endif %}
+  </header>
+
+  {% if preparando %}
+  <div class="lector-espera">
+    <p class="lector-espera-titulo" id="lector-preparando" role="status" aria-live="polite" aria-atomic="true">{{ "" if error_inicial else "Preparando el tebeo…" }}</p>
+    <p class="caption" id="lector-espera-nota"{% if error_inicial %} hidden{% endif %}>La primera vez tarda un poco; luego se abre al momento.</p>
+    <p class="lector-espera-error" id="lector-error" role="alert">{{ error_inicial or "" }}</p>
+    <div class="lector-espera-acciones">
+      <button type="button" class="btn" id="lector-reintentar">Reintentar</button>
+      <a class="btn ghost" href="/ui/series/{{ serie.id }}/numero/{{ numero.id }}">Volver al número</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="lector-lienzo" id="lector-lienzo" tabindex="0" role="group" aria-label="Zona de lectura">
+    <button type="button" class="lector-flecha lector-flecha-anterior" id="lector-anterior"
+            aria-label="Página anterior" aria-disabled="{{ 'true' if pagina_actual <= 1 else 'false' }}">‹</button>
+    <div class="lector-paginas" id="lector-paginas">
+      <img id="lector-pagina" class="lector-pagina"
+           src="/ui/leer/{{ archivo.id }}/pagina/{{ pagina_actual }}"
+           alt="Página {{ pagina_actual }} de {{ total }}">
+      <img id="lector-pagina-b" class="lector-pagina" alt="" hidden>
+    </div>
+    <button type="button" class="lector-flecha lector-flecha-siguiente" id="lector-siguiente"
+            aria-label="Página siguiente" aria-disabled="{{ 'true' if pagina_actual >= total else 'false' }}">›</button>
+  </div>
+
+  <p id="lector-resultado" class="sr" aria-live="polite" aria-atomic="true"></p>
+  {% if siguiente %}
+  <section id="fin" class="lector-fin" hidden aria-labelledby="fin-titulo">
+    <h2 id="fin-titulo" class="titulo-frase" tabindex="-1">Has llegado al final</h2>
+    <div id="fin-acciones" class="lector-fin-acciones">
+      {% include "_lector_fin.html" %}
+    </div>
+  </section>
+  {% endif %}
+  {% endif %}
+</div>
+<noscript>{{ ui.aviso("amber", "Para pasar páginas hace falta JavaScript. La primera página sí se ve.") }}</noscript>
+<script src="/static/lector.js" defer></script>
+{% endblock %}

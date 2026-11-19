@@ -3,6 +3,12 @@
 {% block content %}
 <h1>Estado</h1>
 <p class="subtitle">Cómo están las piezas de las que depende ZascArr. Se actualiza sola cada 10 segundos.</p>
+<section id="version" aria-labelledby="version-titulo">
+  <h2 id="version-titulo" class="seccion titulo-frase">Versión de ZascArr</h2>
+  <div id="version-aviso" aria-live="polite">
+    {% include "_aviso_version.html" %}
+  </div>
+</section>
 
 <div class="pending-card estado-summary">
   <div id="summary-dot" class="estado-dot estado-neutral"></div>
@@ -48,7 +54,7 @@
         </table>
       </div>
     </details>
-    <p class="caption">{{ cobertura.texto_fecha }}</p>
+    <p class="muted">{{ cobertura.texto_fecha }}</p>
   {% endif %}
 </section>
 
@@ -113,6 +119,8 @@
   {% endif %}
 </section>
 
+{% if v is defined %}{% include "_copias_bloque.html" %}{% endif %}
+
 <p class="caption"><a class="btn ghost sm" href="/ui/exportar">Descargar tebeoteca y deseados (CSV)</a>
   Esto no es una copia de seguridad.</p>
 
@@ -122,6 +130,14 @@
 </div>
 
 <div class="pending-card estado-checks" id="checks"></div>
+
+<section id="diagnostico" class="estado-diagnostico" aria-labelledby="h-diagnostico">
+  <h2 id="h-diagnostico" class="titulo-frase">Registro de la aplicación</h2>
+  <p class="muted">Si algo no funciona, descarga los últimos registros para compartirlos.
+    Están saneados: sin rutas, nombres, contraseñas ni tokens.</p>
+  <a class="btn ghost sm" href="/ui/logs/visor">Ver/descargar registros por fecha</a>
+  <a class="btn ghost sm" href="/ui/logs">Descargar los últimos registros</a>
+</section>
 
 <p class="empty" id="footer">—</p>
 
@@ -134,7 +150,7 @@
     amule: "aMule",
     vpn: "VPN",
     backup: "Copias de seguridad",
-    restore: "Restauración",
+    restore: "Comprobación de restauración",
     disk: "Disco",
   };
 
@@ -149,7 +165,7 @@
     amule:        { ok: "Conectado",  unreachable: "No responde", disabled: "Desactivado" },
     vpn:          { ok: "Activa", warning: "No protege", unknown: "Sin datos" },
     backup:       { ok: "Copia reciente verificada", warning: "Copia atrasada o incompleta", error: "La última copia falló" },
-    restore:      { ok: "Restauración reciente verificada", warning: "Restauración atrasada o con aviso", error: "La última restauración falló" },
+    restore:      { ok: "Comprobación de restauración reciente verificada", warning: "Comprobación de restauración atrasada o con aviso", error: "La última comprobación de restauración falló" },
     disk:         { ok: "Espacio suficiente", warning: "Queda poco espacio", error: "Sin espacio suficiente", disabled: "Sin dato" },
   };
 
@@ -159,6 +175,10 @@
       unreachable: "ZascArr no consigue hablar con su base de datos. Reinicia ZascArr; si sigue igual, vuelve a ejecutar la actualización (sudo bash scripts/update.sh --rama main).",
       migration_required: "Falta un paso de la última actualización. Vuelve a ejecutarla (sudo bash scripts/update.sh --rama main): lo completa sin tocar tus datos.",
       schema_incompatible: "A la base de datos le faltan partes, seguramente por una copia de seguridad restaurada a medias. Vuelve a restaurarla o a actualizar.",
+    },
+    restore: {
+      warning: "La comprobación de restauración tiene un problema: revisa el aviso técnico.",
+      error: "La comprobación de restauración tiene un problema: revisa el aviso técnico.",
     },
     disk: {
       warning: "Libera espacio o mueve la biblioteca a otro disco antes de que se llene. ZascArr no ha borrado nada.",
@@ -270,7 +290,38 @@
     }
   }
 
+  async function pollVersion() {
+    const target = document.getElementById("version-aviso-texto");
+    if (!target) return;
+    const error = "No se puede comprobar si hay una versión nueva. Vuelve a entrar si tu sesión ha caducado o inténtalo más tarde.";
+    const textos = {
+      comprobando: "Comprobando si hay una versión nueva… Puedes seguir usando ZascArr.",
+      disponible: "Hay una versión nueva de ZascArr. Esta página solo informa; no instala nada.",
+      actualizada: "Tienes la versión más reciente de ZascArr.",
+      desconocida: "No se puede comprobar si hay una versión nueva. Puedes seguir usando ZascArr; consulta con quien lo instaló si necesitas saber qué versión tienes.",
+    };
+    try {
+      const url = new URL("/ui/version/estado", window.location.origin);
+      const res = await fetch(url.href, { cache: "no-store", redirect: "manual" });
+      if (!res.ok || res.redirected || res.url !== url.href ||
+          res.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
+        throw new Error("No se recibió el aviso de versión");
+      }
+      const data = await res.json();
+      if (!data || !Object.prototype.hasOwnProperty.call(textos, data.estado))
+        throw new Error("La respuesta no es un estado de versión");
+      // Conservar el nodo vivo intacto si el aviso no cambia: no repetir anuncios cada 10 s.
+      if (textos[data.estado] !== target.textContent.trim())
+        target.textContent = textos[data.estado];
+    } catch (err) {
+      // No conservar indefinidamente una afirmación anterior tras fallar la comprobación.
+      if (target.textContent.trim() !== error) target.textContent = error;
+    }
+  }
+
   poll();
   setInterval(poll, POLL_INTERVAL_MS);
+  pollVersion();
+  setInterval(pollVersion, POLL_INTERVAL_MS);
 </script>
 {% endblock %}

@@ -191,6 +191,46 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   caracteres por valor**. Lo que excede se ignora con aviso en el informe de
   importación y nunca aborta el ciclo; no se escribe ni un byte del CBZ.
 
+## «Hacer una copia ahora» (BL-OPS1, ADR 0021)
+
+Es opcional y **no está activado por defecto**: lo instala quien opera el equipo con `sudo bash scripts/instalar_ops.sh`. Sin
+él, Estado dice «No activado en este equipo» y no hay botón.
+
+- **Qué puede hacer la app:** pedir **una** acción, `copia`, a un auxiliar del host que solo ordena a systemd iniciar
+  `zascarr-backup.service`. No recibe rutas, argumentos ni scripts; el contenedor **no** tiene `docker.sock`, privilegios ni más
+  que un volumen `ops` de solo lectura.
+- **Canal:** socket Unix `root:<grupo del usuario de servicio>` `0660`, un proceso por conexión, petición de una línea de ≤ 512 B
+  firmada con HMAC-SHA256 (clave de 32 bytes en `ops.key`, `0440`, creada por el instalador y nunca impresa). Caducidad de ±120 s,
+  `id` de un solo uso, 300 s entre copias y 6 al día, y un único cerrojo de operaciones compartido con `update.sh`, `rollback.sh` y
+  las restauraciones. La respuesta es un código de lista cerrada, nunca texto libre.
+- **Quién puede pedirla:** `POST /ui/copias/pedir` solo existe bajo `/ui` (nada en `/api/*`), con el mismo Origen/Sesión que el
+  resto. **Sin contraseña en ZascArr, cualquiera que pueda abrir ZascArr puede pedir una copia**; una copia solo ocupa disco.
+  Quien tenga el grupo del socket puede agotar el límite diario o saturar el socket: solo afecta a la disponibilidad de esta
+  función; la copia nocturna sigue.
+- **Límites conocidos:** root con acceso a systemd sigue siendo root. `CapabilityBoundingSet=` vacío y el endurecimiento de la
+  unidad no se han comprobado en una Pi (hay que pasar `systemd-analyze security zascarr-ops@.service`). Si el contador diario
+  queda ilegible, el auxiliar falla cerrado y nunca lo reinicia: el operador borra `/run/zascarr-ops/aceptadas` como root.
+- **Registro:** el auxiliar escribe una línea por conexión (`accion`, `id`, `uid`, `resultado`, `codigo`, `ms`); nunca la clave,
+  la firma, el cuerpo ni rutas.
+
+## Restaurar una copia (BL-OPS2, ADR 0023)
+
+Restaurar exige que la contraseña esté activada. La app muestra el botón solo para copias verificadas de la misma revisión,
+pide la contraseña actual (reautenticación compartida con Ajustes) y una confirmación explícita. La petición va firmada al
+auxiliar del host; la app **no** recibe Docker ni root y nunca sube un archivo.
+
+- **Qué se conserva:** credenciales, `secret_key`, `base_url`, `auth_session_version+1`, `*_enabled`, webhook y
+  `fuentes_heredadas` vigentes; las claves de integración vienen de la copia. Se relee y se compara antes de arrancar.
+- **Copias = secretos:** un `.sql.gz` contiene hashes, `secret_key` y claves; quien lo obtenga puede falsificar cookies de esa
+  versión. Restaurar conserva la `secret_key` vigente y cierra las sesiones anteriores.
+- **Límites:** una restauración cada 30 min, 3/24 h y bloqueo de prueba durante 30 min desde el quinto fallo (5 en 15 min). Durante
+  una operación no se ofrece otra. La recuperación usa la copia previa verificada; el diario no lleva rutas.
+- **Cambio por renombrado:** la copia se carga en `<DB>_restaurando` con la app sirviendo y solo se cambia por `ALTER DATABASE … RENAME`
+  cuando la base nueva, con la seguridad vigente reaplicada, ha pasado las comprobaciones; la vuelta atrás también es por renombrado y
+  `_previa` no se borra hasta que el arranque responde. El estado por fases (`ops-restaurar.json`) y el aviso de `/login` no llevan
+  secretos ni fechas. `_fallida`/`_previa` sobrantes no se borran solas (pueden ser la única copia) y bloquean la siguiente restauración.
+- **Pendiente:** systemd real, restauración de punta a punta en la Pi y prueba C-10 con PostgreSQL real. **No desplegado.**
+
 ## Registros de acceso (#361)
 
 El registro de acceso de uvicorn **no incluye la query** de las peticiones (`?clave=…&cursor=…&ref=…&q=…`): `zascarr.utils.log_acceso` deja método, ruta y estado, y sustituye lo demás por `?…`. En ZascArr la query puede llevar el nombre de una carpeta, un cursor que decodifica a un nombre de archivo, una referencia firmada al resultado (válida hasta 24 h desde que se firmó la vinculación) o lo que se busca. Tampoco se registra la query de una petición de `Upgrade` a WebSocket (la imagen arranca con `--ws none`, y la aplicación no tiene rutas WebSocket). Si una versión futura de uvicorn cambiara el formato del registro, el filtro **falla cerrado**: pierde esa línea en lugar de dejar pasar la query. Los registros de los contenedores rotan (`json-file`, 10 MB × 3 ficheros, 30 MB **nominales** por contenedor en disco; no es un límite global ni una medición); la rotación se aplica al recrear los contenedores (`update.sh` lo hace), y las líneas ya copiadas de `docker logs` antes siguen donde se copiaron.

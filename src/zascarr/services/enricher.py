@@ -211,20 +211,55 @@ async def _tags_por_norm(db: AsyncSession, normalizados: tuple[str, ...]) -> dic
     return {tag.name_norm: tag for tag in filas.scalars().all()}
 
 
-def puede_enlazarse_con_comic_vine(series: Series, comic_vine_activo: bool) -> bool:
-    """¿Puede el enriquecedor enlazar esta serie con Comic Vine? Es LA condición de `_enrich_series_batch` (sin
-    identidad externa elegida, `metadata_source` distinto de `manual`, tradición con Comic Vine como fuente y la fuente
-    activa) para que la ficha no repita una copia. No incluye el plazo de reintento (30 días): es «puede llegar a ser»."""
+def _condiciones_pendientes(ahora: datetime | None = None) -> list:
+    """Condiciones SQL compartidas con la ficha: identidad, fuente y reintento.
+
+    Es la parte común a todas las fuentes de `_enrich_series_batch`. La ficha
+    añade en Python la tradición y la disponibilidad de Comic Vine.
+    """
+    momento = ahora or datetime.now(UTC)
+    return [
+        Series.comic_vine_id.is_(None),
+        Series.anilist_id.is_(None),
+        Series.tebeosfera_slug.is_(None),
+        Series.gcd_id.is_(None),
+        Series.metron_id.is_(None),
+        Series.open_library_id.is_(None),
+        Series.fandom_dc_slug.is_(None),
+        Series.fandom_marvel_slug.is_(None),
+        Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value),
+        or_(Series.enrichment_attempted_at.is_(None),
+            Series.enrichment_attempted_at < momento - ENRICHMENT_RETRY_AFTER),
+    ]
+
+
+def puede_enlazarse_con_comic_vine(
+    series: Series, comic_vine_activo: bool, comic_vine_clave: str | None = None,
+    *, ahora: datetime | None = None,
+) -> bool:
+    """¿Puede el enriquecedor enlazar esta serie con Comic Vine?
+
+    Misma condición que `_condiciones_pendientes` + tradición CV + fuente activa
+    y clave utilizable. `comic_vine_clave=None` conserva el contrato histórico de
+    las llamadas que no disponen de la configuración; la ficha pasa la clave real.
+    """
+    if comic_vine_clave is not None and not str(comic_vine_clave).strip():
+        return False
+    momento = ahora or datetime.now(UTC)
+    intento = getattr(series, "enrichment_attempted_at", None)
     return bool(
         comic_vine_activo
-        and series.comic_vine_id is None
-        and series.anilist_id is None
-        and series.tebeosfera_slug is None
-        and series.gcd_id is None
-        and series.metron_id is None
-        and series.open_library_id is None
-        and series.metadata_source != MetadataSource.MANUAL.value
-        and series.tradition in _COMIC_VINE_TRADITIONS
+        and getattr(series, "comic_vine_id", None) is None
+        and getattr(series, "anilist_id", None) is None
+        and getattr(series, "tebeosfera_slug", None) is None
+        and getattr(series, "gcd_id", None) is None
+        and getattr(series, "metron_id", None) is None
+        and getattr(series, "open_library_id", None) is None
+        and getattr(series, "fandom_dc_slug", None) is None
+        and getattr(series, "fandom_marvel_slug", None) is None
+        and getattr(series, "metadata_source", None) != MetadataSource.MANUAL.value
+        and getattr(series, "tradition", None) in _COMIC_VINE_TRADITIONS
+        and (intento is None or intento < momento - ENRICHMENT_RETRY_AFTER)
     )
 
 
@@ -664,24 +699,7 @@ class EnrichmentService:
 
         stmt = (
             select(Series)
-            .where(Series.comic_vine_id.is_(None))
-            .where(Series.anilist_id.is_(None))
-            .where(Series.tebeosfera_slug.is_(None))
-            # Con identidad GCD elegida ya está identificada: que otra fuente coincida por
-            # TÍTULO no prueba que sea la misma edición. Asociarle otra fuente es una acción
-            # explícita y confirmada, no un emparejamiento automático.
-            .where(Series.gcd_id.is_(None))
-            # SCR7/AC-11: Metron y Open Library también identifican; el primario no debe
-            # reclamar una identidad CV/Fandom por título para una serie ya identificada.
-            .where(Series.metron_id.is_(None))
-            .where(Series.open_library_id.is_(None))
-            .where(Series.fandom_dc_slug.is_(None))
-            .where(Series.fandom_marvel_slug.is_(None))
-            .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
-            .where(or_(
-                Series.enrichment_attempted_at.is_(None),
-                Series.enrichment_attempted_at < datetime.now(UTC) - ENRICHMENT_RETRY_AFTER,
-            ))
+            .where(*_condiciones_pendientes())
         )
         if desactivadas:
             stmt = stmt.where(Series.tradition.not_in(desactivadas))

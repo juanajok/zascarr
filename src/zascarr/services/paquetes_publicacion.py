@@ -41,6 +41,49 @@ def _descargas() -> Path:
     raise PaquetePublicacionError("sin_descargas", "No hay una carpeta de Descargas disponible.")
 
 
+def _nombre_reporte(linea: str) -> str:
+    """El nombre real del fichero al inicio del informe formateado."""
+    for sep in (" → ", " — ", ": "):
+        if sep in linea:
+            return linea.split(sep, 1)[0].strip()
+    return linea.strip()
+
+
+def _validar_cadena_oculta(descargas: Path) -> Path:
+    oculta = descargas / ".zascarr"
+    paquetes = oculta / "paquetes"
+    for ruta in (oculta, paquetes):
+        if ruta.exists():
+            st = ruta.lstat()
+            if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
+                raise PaquetePublicacionError(
+                    "staging", "La carpeta oculta de publicación no es segura.")
+    return paquetes
+
+
+def _preparar_staging(descargas: Path, op_id: str) -> Path:
+    """Abre/crea .zascarr y paquetes por dirfd y crea <op> con mkdir(dir_fd)."""
+    fd = os.open(descargas, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for nombre in (".zascarr", "paquetes"):
+            try:
+                hijo = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                               dir_fd=fd)
+            except FileNotFoundError:
+                os.mkdir(nombre, 0o700, dir_fd=fd)
+                hijo = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                               dir_fd=fd)
+            os.close(fd)
+            fd = hijo
+        os.mkdir(str(op_id), 0o700, dir_fd=fd)
+        os.close(fd)
+    except BaseException:
+        with __import__("contextlib").suppress(OSError):
+            os.close(fd)
+        raise
+    return descargas / ".zascarr" / "paquetes" / str(op_id)
+
+
 def _nombre_libre(base: Path, nombre: str) -> Path:
     destino = base / f"{nombre} (extraído)"
     n = 1
@@ -62,12 +105,15 @@ async def publicar_e_importar(s: AsyncSession, operacion_id: UUID) -> PaqueteOpe
     if temp is None or not temp.is_dir():
         raise PaquetePublicacionError("sin_temporal", "No queda contenido extraído.")
     descargas = _descargas()
-    staging = descargas / ".zascarr" / "paquetes" / str(op.id)
+    paquetes = _validar_cadena_oculta(descargas)
+    # Un staging de un intento anterior no se reutiliza nunca.
+    previo = paquetes / str(op.id)
+    if previo.exists():
+        await asyncio.to_thread(shutil.rmtree, previo, True)
+    staging = await asyncio.to_thread(_preparar_staging, descargas, str(op.id))
     final = _nombre_libre(descargas, Path(op.paquete_path).stem)
     try:
-        staging.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(staging.parent, 0o700)  # noqa: S103 — carpeta propia
-        staging.mkdir(mode=0o700)
         st_staging = staging.lstat()
         if not stat.S_ISDIR(st_staging.st_mode) or staging.is_symlink():
             raise PaquetePublicacionError("staging", "La carpeta temporal no es segura.")
@@ -93,18 +139,28 @@ async def publicar_e_importar(s: AsyncSession, operacion_id: UUID) -> PaqueteOpe
         importador = Importer(s)
         importador._scan_dirs = [final]
         reporte = await importador.scan_and_import(disparador="paquete")
-        por_nombre = {Path(x).name: "importado" for x in reporte.imported}
-        por_nombre.update({Path(x).name: "duplicado" for x in reporte.duplicates})
-        por_nombre.update({Path(x).name: "revisar" for x in reporte.unsorted})
-        por_nombre.update({Path(x).name: "error" for x in reporte.errors})
+        por_nombre = {_nombre_reporte(x): "importado" for x in reporte.imported}
+        por_nombre.update({_nombre_reporte(x): "duplicado" for x in reporte.duplicates})
+        por_nombre.update({_nombre_reporte(x): "revisar" for x in reporte.unsorted})
+        por_nombre.update({_nombre_reporte(x): "error" for x in reporte.errors})
         items = []
         for item in op.items:
             nuevo = dict(item)
-            nuevo["resultado"] = por_nombre.get(item["nombre"], "revisar")
+            nuevo["resultado"] = por_nombre.get(item["nombre"], "pendiente")
             items.append(nuevo)
         op.items = items
-        if not reporte.errors and all(i["resultado"] != "error" for i in items):
+        op.temp_dir = None
+        op.staging_dir = None
+        if (all(i["resultado"] in {"importado", "duplicado", "revisar"} for i in items)
+                and not (items and all(i["resultado"] == "duplicado" for i in items))):
             op.estado = PaqueteEstado.IMPORTADO
+            op.finalizada = datetime.now(UTC)
+        elif all(i["resultado"] == "duplicado" for i in items):
+            # Ningún tebeo nuevo: no se presenta como importado (y no se
+            # reextrae; el original sigue intacto).
+            op.estado = PaqueteEstado.ERROR
+            op.error_codigo = "duplicado"
+            op.error_mensaje = "Todo el contenido ya estaba en la biblioteca; no se importó nada."
             op.finalizada = datetime.now(UTC)
         else:
             op.estado = PaqueteEstado.ERROR
@@ -122,6 +178,11 @@ async def publicar_e_importar(s: AsyncSession, operacion_id: UUID) -> PaqueteOpe
             op.estado = PaqueteEstado.ERROR
             op.error_codigo = getattr(exc, "codigo", "publicacion")
             op.error_mensaje = getattr(exc, "mensaje", "No se pudo publicar el paquete.")
+            if op.destino_dir:
+                with __import__("contextlib").suppress(OSError):
+                    shutil.rmtree(op.destino_dir)
+            op.temp_dir = None if not op.temp_dir else op.temp_dir
+            op.staging_dir = None
             s.add(op)
             await s.commit()
         if staging.exists():

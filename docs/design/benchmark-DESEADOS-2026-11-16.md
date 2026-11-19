@@ -134,11 +134,11 @@ ranking para copiar: las referencias tienen unidades y fuentes distintas.
    en «En tu biblioteca» sin volver a buscar.
 
 **Huecos declarados (no implementados, no se finge que sí):**
-- Vista única de **cola/progreso** de descargas (hoy se consulta en Transmission/aMule y en Estado).
-- Cancelar una búsqueda a mitad de petición.
-- Buscar en lote varios deseos seleccionados (Sonarr Search Selected / Mylar force queue).
-- Aviso proactivo de que la carpeta de descargas configurada no existe, al probar la conexión.
-- Reintento automático/backoff tras un fallo de envío con motivo persistente (hoy `last_error`).
+- Vista única de **cola/progreso** de descargas — **cerrado** en #973 (panel «Descargas en curso»).
+- Cancelar una búsqueda a mitad de petición — **cerrado** en #983 (aborta la espera del navegador; el servidor puede terminar la petición ya lanzada).
+- Buscar en lote varios deseos seleccionados — **cerrado** en #983 (máx. 8 por tanda).
+- Aviso de carpeta de descargas distinta al probar la conexión — **cerrado** en #984 (aviso con las dos rutas; queda pendiente comprobar la existencia real en el host, imposible desde el contenedor).
+- Reintento automático/backoff tras un fallo de envío — **cerrado** en #985 (10 min → 30 min → 2 h → 6 h; «Reintentar» lo salta; el envío extra auxiliar no programa backoff).
 
 ## 7. Coste en la Pi y licencias
 

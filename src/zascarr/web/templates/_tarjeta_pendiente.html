@@ -1,76 +1,129 @@
-{#- La tarjeta de UN archivo por revisar. La usa la lista y también el fallo de «asignar» (HTMX):
-    el formulario sustituye la tarjeta entera, así que un error DEBE devolver la tarjeta con su aviso,
-    no un cuerpo JSON (que se pintaba en crudo). `aviso` = {tipo, texto} opcional. -#}
-  <div class="pending-card" id="card-{{ c.file.id }}">
-    <div class="pending-body">
-      {% if aviso %}{{ ui.aviso(aviso.tipo, aviso.texto, foco=true) }}{% endif %}
-      {{ ui.portada(c.suggestion.title if c.suggestion else c.detected, c.file.id,
-                    ("/ui/pendientes/" ~ c.file.id ~ "/portada") if c.con_portada else none,
-                    clase="portada-pendiente", carga="lazy") }}
-      <div class="filename" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
-      <div class="detected">Detectado: {{ c.detected }}</div>
-      {% if c.motivo %}<div class="detected motivo">{{ c.motivo }}</div>{% endif %}
+{#- Una fila de «Por revisar». La usa la lista y el fallo de una acción HTMX:
+    el formulario sustituye la fila entera (`#card-<id>`), así que un error
+    DEBE devolver la fila con su aviso, no un cuerpo JSON.
+    `aviso` = {tipo, texto} opcional.
+    Rediseño 2026-11-17: fila horizontal, portada solo si el archivo puede
+    tenerla; si no, el formato en un chip. Una sola lectura del número y una
+    acción principal; el resto, en desplegables. Valores y rutas no cambian. -#}
+<div class="pending-card" id="card-{{ c.file.id }}">
+  <div class="pending-media">
+    {#- Diseño §PortadaSerie: el marcador va SIEMPRE; la <img> solo si el
+        archivo puede tener portada. Inicial del título, color estable por id. -#}
+    {{ ui.portada(c.suggestion.title if c.suggestion else c.detected, c.file.id,
+                  ("/ui/pendientes/" ~ c.file.id ~ "/portada") if c.con_portada else none,
+                  clase="portada-pendiente", carga="lazy") }}
+  </div>
+  <div class="pending-body">
+    {% if aviso %}{{ ui.aviso(aviso.tipo, aviso.texto, foco=true) }}{% endif %}
 
-      {% if c.suggestion %}
-      <div class="suggestion">
+    <div class="pending-cabecera">
+      <div class="filename" role="heading" aria-level="2" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
+      <div class="detected">Detectado: {{ c.detected }}<span class="pending-sep"> · </span>{{ c.formato }}</div>
+      {% if c.motivo %}<div class="detected motivo">{{ c.motivo }}</div>{% endif %}
+    </div>
+
+    {% if c.suggestion %}
+    {% set pct = c.suggestion.score_pct %}
+    {% set nivel = "ok" if pct >= 90 else ("amber" if pct >= 70 else "warn") %}
+    <div class="suggestion suggestion-{{ nivel }}">
+      <div class="suggestion-cabecera">
         <span class="suggestion-label">¿Es esta serie?</span>
         <span class="series-name">{{ c.suggestion.title }}{% if c.suggestion.start_year %} ({{ c.suggestion.start_year }}){% endif %}</span>
-        <span class="suggestion-score">{{ c.suggestion.score_pct }}% de coincidencia</span>
-
-        <form class="assign-form" method="post"
-              action="/ui/pendientes/{{ c.file.id }}/vincular"
-              hx-get="/ui/pendientes/{{ c.file.id }}/asignar/previa"
-              hx-target="#previa-{{ c.file.id }}" hx-swap="innerHTML">
-          <input type="hidden" name="series_id" value="{{ c.suggestion.series_id }}">
-          <label class="sr" for="n-{{ c.file.id }}">Número de «{{ c.file.file_name }}»</label>
-          <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4"
-                 id="n-{{ c.file.id }}" value="{{ c.suggestion.issue_number }}">
-          <div class="acciones-tarjeta">
-            {% if c.puede_vincular %}
-            <button type="submit" class="btn-sugerencia"
-                    hx-post="/ui/pendientes/{{ c.file.id }}/vincular"
-                    hx-include="closest form" hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">Vincular en su sitio</button>
-            {% endif %}
-            <button type="submit" class="{{ 'btn-sugerencia' if not c.puede_vincular else 'btn ghost sm' }}"
-                    title="Mueve el archivo a la carpeta de esta serie y le cambia el nombre.
-                           Antes verás la carpeta y el nombre final.">Ver antes de organizar</button>
-          </div>
-          <p class="efecto-asignacion">Vincular no mueve ni renombra. Organizar mueve y renombra el archivo; antes verás la carpeta y el nombre final.</p>
-        </form>
-        <div id="previa-{{ c.file.id }}" class="asignar-previa" aria-live="polite"></div>
-
-        <details class="guardar-especial">
-          <summary>Guardar como especial (sin número)</summary>
-          <form method="post" action="/ui/pendientes/{{ c.file.id }}/especial"
-                hx-post="/ui/pendientes/{{ c.file.id }}/especial"
-                hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">
-            <input type="hidden" name="series_id" value="{{ c.suggestion.series_id }}">
-            <label>Título del especial
-              <input type="text" name="titulo" required maxlength="500"
-                     value="{{ c.suggestion.title }}">
-            </label>
-            <label>Números que recopila (si es un tomo)
-              <input type="text" name="numeros" maxlength="300"
-                     placeholder="p. ej. 1-12" inputmode="numeric">
-            </label>
-            <label>Formato
-              <select name="formato">
-                <option value="graphic_novel">Novela gráfica</option>
-                <option value="trade_paperback">Tomos (TPB)</option>
-                <option value="hardcover">Tapa dura</option>
-                <option value="omnibus">Ómnibus</option>
-              </select>
-            </label>
-            <p class="efecto-asignacion">Se moverá a la carpeta «Especiales» de la serie
-              (se crea si no existe) y dejará de estar en _Unsorted.</p>
-            <button type="submit" class="btn ghost sm">Guardar especial</button>
-          </form>
-        </details>
+        {{ ui.chip(nivel, pct ~ "% de coincidencia") }}
       </div>
-      {% endif %}
 
+      <form class="assign-form" method="get"
+            action="/ui/pendientes/{{ c.file.id }}/asignar/previa"
+            hx-get="/ui/pendientes/{{ c.file.id }}/asignar/previa"
+            hx-target="#previa-{{ c.file.id }}" hx-swap="innerHTML"
+            hx-indicator="#previa-espera-{{ c.file.id }}" hx-disable="find button">
+        <input type="hidden" name="series_id" value="{{ c.suggestion.series_id }}">
+        <label class="sr" for="n-{{ c.file.id }}">Número de «{{ c.file.file_name }}»</label>
+        <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4"
+               id="n-{{ c.file.id }}" value="{{ c.suggestion.issue_number }}">
+        <div class="acciones-tarjeta">
+          <button type="submit" class="btn"
+                  title="Mueve el archivo a la carpeta de esta serie y le cambia el nombre. Antes verás la carpeta y el nombre final.">
+            Ver antes de organizar<span class="sr">: «{{ c.file.file_name }}»</span>
+          </button>
+          {% if c.puede_vincular %}
+          <button type="submit" class="btn ghost sm"
+                  title="No mueve ni renombra: solo enlaza si la publicación ya existe."
+                  hx-post="/ui/pendientes/{{ c.file.id }}/vincular"
+                  hx-include="closest form" hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">
+            Vincular en su sitio<span class="sr">: «{{ c.file.file_name }}»</span>
+          </button>
+          {% endif %}
+        </div>
+        <p class="efecto-asignacion">Vincular no mueve ni renombra. Organizar mueve y renombra el archivo; antes verás la carpeta y el nombre final.</p>
+      </form>
+      <div id="previa-{{ c.file.id }}" class="asignar-previa" aria-live="polite"></div>
+      <span id="previa-espera-{{ c.file.id }}" class="htmx-indicator caption">Preparando la previa…</span>
+
+      <details class="guardar-especial">
+        <summary>Guardar como especial (sin número)<span class="sr">: «{{ c.file.file_name }}»</span></summary>
+        <form method="post" action="/ui/pendientes/{{ c.file.id }}/especial"
+              hx-post="/ui/pendientes/{{ c.file.id }}/especial"
+              hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">
+          <input type="hidden" name="series_id" value="{{ c.suggestion.series_id }}">
+          <label>Título del especial
+            <input type="text" name="titulo" required maxlength="500"
+                   value="{{ c.suggestion.title }}">
+          </label>
+          <label>Números que recopila (si es un tomo)
+            <input type="text" name="numeros" maxlength="300"
+                   placeholder="p. ej. 1-12" inputmode="numeric">
+          </label>
+          <label>Formato
+            <select name="formato">
+              <option value="graphic_novel">Novela gráfica</option>
+              <option value="trade_paperback">Tomos (TPB)</option>
+              <option value="hardcover">Tapa dura</option>
+              <option value="omnibus">Ómnibus</option>
+            </select>
+          </label>
+          <p class="efecto-asignacion">Se moverá a la carpeta «Especiales» de la serie
+            (se crea si no existe) y dejará de estar en _Unsorted.</p>
+          <button type="submit" class="btn ghost sm">Guardar especial<span class="sr">: «{{ c.file.file_name }}»</span></button>
+        </form>
+      </details>
+    </div>
+    {% endif %}
+
+    <details class="guardar-one-shot">
+      <summary>Es un tomo único / novela gráfica / one-shot<span class="sr">: «{{ c.file.file_name }}»</span></summary>
+      <form method="post" action="/ui/pendientes/{{ c.file.id }}/one-shot"
+            hx-post="/ui/pendientes/{{ c.file.id }}/one-shot"
+            hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">
+        <label>Título de la obra
+          <input type="text" name="titulo" required maxlength="500"
+                 value="{{ c.suggestion.title if c.suggestion else c.detected }}">
+        </label>
+        <label>Tradición
+          <select name="tradicion">
+            <option value="american">Cómic americano</option>
+            <option value="franco_belgian">Cómic europeo / BD</option>
+            <option value="manga">Manga / manhwa / manhua</option>
+          </select>
+        </label>
+        <label>Formato de la publicación
+          <select name="formato">
+            <option value="graphic_novel">Novela gráfica</option>
+            <option value="trade_paperback">Tomo en rústica</option>
+            <option value="hardcover">Tapa dura</option>
+            <option value="album">Álbum</option>
+            <option value="manga_tankobon">Tomo de manga</option>
+          </select>
+        </label>
+        <p class="efecto-asignacion">No se pide número: si no consta, la publicación queda sin
+          número (nunca se inventa un #1). El archivo se enlaza sin moverlo.</p>
+        <button type="submit" class="btn ghost sm">Crear tomo único<span class="sr">: «{{ c.file.file_name }}»</span></button>
+      </form>
+    </details>
+
+    <div class="pending-pie">
       <details class="elegir-otra-serie">
-        <summary>Elegir otra serie</summary>
+        <summary>Elegir otra serie<span class="sr">: «{{ c.file.file_name }}»</span></summary>
         <label class="sr" for="q-{{ c.file.id }}">Serie de «{{ c.file.file_name }}»</label>
         <input type="search" class="series-search" placeholder="Buscar serie…"
                name="q" id="q-{{ c.file.id }}"
@@ -78,13 +131,20 @@
                hx-trigger="input changed delay:400ms, search"
                hx-target="#resultados-{{ c.file.id }}"
                hx-swap="innerHTML">
+        <label class="caption"><input type="checkbox" name="mostrar_tomos" value="1"
+                 hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
+                 hx-include="#q-{{ c.file.id }}, this"
+                 hx-target="#resultados-{{ c.file.id }}" hx-swap="innerHTML">
+          Mostrar también tomos únicos</label>
         <div id="resultados-{{ c.file.id }}" class="series-results"></div>
       </details>
       <button type="button" class="btn-ignorar"
               hx-post="/ui/pendientes/{{ c.file.id }}/ignorar"
-              hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML"
+              hx-target="#pend-recontar" hx-swap="innerHTML"
+              hx-disable="this"
               hx-confirm="¿Ignorar este archivo? No volverá a aparecer aquí.">
-        Ignorar
+        Ignorar<span class="sr">: «{{ c.file.file_name }}»</span>
       </button>
     </div>
   </div>
+</div>

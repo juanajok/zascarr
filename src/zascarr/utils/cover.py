@@ -67,6 +67,8 @@ SERIES_COVER_MAX_WIDTH = 600
 #: Un cambio de ancho objetivo o de algoritmo exige subir la versión, porque la ruta es lo que
 #: separa una caché vieja de una nueva (FR-03). `v3` (#418): solo portadas sacadas de un archivo.
 CACHE_VERSION = "v3"
+#: Caché anterior de BL-PORT1, conservada como respaldo de solo lectura (#506). No se borra.
+CACHE_VERSION_ANTERIOR = "v2"
 
 #: #418: carpeta (dentro de `covers/`) de las portadas EXTERNAS de `cover_url`. `v3` guarda
 #: solo portadas sacadas de un archivo: así una serie con externa pequeña cambia sola a la de su
@@ -284,11 +286,14 @@ def cached_image_response(request: Request, data: bytes, content_type: str, etag
     personal, no contenido público cacheable por un proxy intermedio."""
     if request.headers.get("if-none-match") == etag:
         return Response(
-            status_code=304, headers={"ETag": etag, "Cache-Control": "private, max-age=86400"}
+            status_code=304, headers={"ETag": etag,
+                                      "Cache-Control": "private, max-age=86400",
+                                      "X-Robots-Tag": "noindex"}
         )
     return Response(
         content=data, media_type=content_type,
-        headers={"ETag": etag, "Cache-Control": "private, max-age=86400"},
+        headers={"ETag": etag, "Cache-Control": "private, max-age=86400",
+                 "X-Robots-Tag": "noindex"},
     )
 
 

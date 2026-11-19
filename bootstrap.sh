@@ -458,7 +458,7 @@ info "Creando estructura de directorios..."
 # Datos de los contenedores (Postgres, estado de VPN, portadas),
 # separados del código (ZASCARR_ROOT) — mismo patrón que el resto de la
 # suite *arr: código en /opt, datos en /var/lib.
-mkdir -p "${ZASCARR_DATA_DIR}/"{postgres,covers,vpn-state} || die \
+mkdir -p "${ZASCARR_DATA_DIR}/"{postgres,covers,lector,vpn-state} || die \
     "No puedo crear ${ZASCARR_DATA_DIR}/. ¿Tienes permisos de escritura?"
 
 # Biblioteca (donde el coleccionista haya dicho que vive).
@@ -517,6 +517,9 @@ chown -R "${ZASCARR_USER}:${ZASCARR_GROUP}" "${ZASCARR_DATA_DIR}/vpn-state" 2>/d
 # que no hay nada que se pueda corromper.
 chown -R "${RESOLVED_UID}:${RESOLVED_GID}" "${ZASCARR_DATA_DIR}/covers" 2>/dev/null || \
     warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/covers"
+# BL-LEC4 (#827): caché de extracción de CBR, también en el volumen de datos.
+chown -R "${RESOLVED_UID}:${RESOLVED_GID}" "${ZASCARR_DATA_DIR}/lector" 2>/dev/null || \
+    warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/lector"
 success "Directorios creados en ${LIBRARY}"
 
 info "Validando .env..."
@@ -595,11 +598,18 @@ cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 # Ahora se construye la imagen explícitamente aquí, ANTES de migrar, y se
 # migra y se arranca con esa MISMA imagen — nunca se instala nada de
 # Python en el host, la única fuente de dependencias es la imagen Docker.
-docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build zascarr || die \
+# Solo se declara identidad cuando el contexto construido coincide con HEAD.
+# Un build de un checkout modificado sigue funcionando, pero no afirma estar en main.
+BUILD_SHA=""
+if GIT_STATUS="$(git -C "${SCRIPT_DIR}" status --porcelain --untracked-files=all 2>/dev/null)" && \
+   [[ -z "${GIT_STATUS}" ]]; then
+    BUILD_SHA="$(git -C "${SCRIPT_DIR}" rev-parse --verify HEAD 2>/dev/null || true)"
+fi
+ZASCARR_BUILD_SHA="${BUILD_SHA}" docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build zascarr || die \
     "No pude construir la imagen de ZascArr. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
 
 info "Corriendo migraciones Alembic (dentro del contenedor)..."
-# DATABASE_URL ya lo resuelve el propio docker-compose.yml desde .env
+# Compose pasa la contraseña de .env al contenedor mediante ZASCARR_DB_PASSWORD.
 # (mismo mecanismo que usa el servicio "zascarr" al arrancar) — apuntando
 # a "postgres:5432" por nombre de servicio en la red interna de Docker, no
 # a "127.0.0.1:5432"; no hace falta reconstruirlo a mano leyendo el .env.

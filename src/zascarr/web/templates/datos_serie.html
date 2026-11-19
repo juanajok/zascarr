@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Completar datos — {{ series.title }} — ZascArr{% endblock %}
+{% import "_componentes.html" as ui %}
+{% block content %}
+<a href="/ui/series/{{ series.id }}" class="back-link">← {{ series.title }}</a>
+<a href="/ui/datos" class="btn ghost sm">Revisar toda la biblioteca</a>
+<h1>Completar datos</h1>
+<p class="subtitle">Revisa lo que proponen las fuentes asociadas antes de aplicarlo. Nada se escribe en tus archivos desde esta pantalla.</p>
+
+{% if guardado %}{{ ui.aviso("ok", guardado) }}{% endif %}
+{% if elegido %}{{ ui.aviso("ok", elegido) }}{% endif %}
+{% if recolectado %}{{ ui.aviso("ok", recolectado) }}{% endif %}
+{% if sin_fuentes %}{{ ui.aviso("amber", sin_fuentes) }}{% endif %}
+{% if error %}{{ ui.aviso("amber", error) }}{% endif %}
+
+{% if not con_ficha %}
+<section class="pending-card">
+  <h2 class="titulo-frase">Buscar fichas de fuentes</h2>
+  <p class="muted">Todavía no hay fichas de las fuentes asociadas. Búscalas ahora: solo se consultan las fuentes encendidas en Ajustes y los identificadores ya asociados.</p>
+  <form method="post" action="/ui/series/{{ series.id }}/datos/recolectar">
+    <button type="submit" class="btn primary">Buscar fichas en las fuentes</button>
+  </form>
+</section>
+{% else %}
+<form method="post" action="/ui/series/{{ series.id }}/datos/recolectar" class="inline-accion">
+  <button type="submit" class="btn ghost sm">Buscar fichas de nuevo</button>
+</form>
+{% endif %}
+
+<section class="pending-card" aria-labelledby="roles-ccm">
+  <h2 id="roles-ccm" class="titulo-frase">De dónde vienen los datos</h2>
+  <p class="muted">Cada identificador puede ser la edición que tienes o una obra de referencia. Por defecto solo se usan como referencia; para rellenar años, editorial o total, marca la edición propia.</p>
+  {% if roles %}
+  <table class="tabla-simple">
+    <thead><tr><th scope="col">Fuente</th><th scope="col">Ficha</th><th scope="col">Rol</th><th scope="col"><span class="sr">Guardar</span></th></tr></thead>
+    <tbody>
+      {% for r in roles %}
+      <tr>
+        <td>{{ r.nombre }}</td>
+        <td>{{ "Recolectada" if r.tiene_ficha else "Sin recolectar" }}</td>
+        <td>
+          <form method="post" action="/ui/series/{{ series.id }}/datos/rol" class="inline-rol">
+            <input type="hidden" name="fuente" value="{{ r.fuente }}">
+            <select name="rol" aria-label="Rol de {{ r.nombre }}">
+              <option value="obra_referencia"{% if r.rol == "obra_referencia" %} selected{% endif %}>Obra de referencia</option>
+              <option value="edicion_propia"{% if r.rol == "edicion_propia" %} selected{% endif %}>Edición que tengo</option>
+            </select>
+            <button type="submit" class="btn ghost sm">Guardar rol</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Esta serie no tiene ningún identificador externo. <a href="/ui/series/{{ series.id }}/asociar">Asocia una fuente</a> para poder completar datos.</p>
+  {% endif %}
+</section>
+
+{% if not con_ficha %}
+<section class="pending-card">
+  <h2 class="titulo-frase">Todavía no hay fichas</h2>
+  <p class="muted">Hay identificadores, pero aún no se ha recolectado su ficha. Usa «Buscar fichas en las fuentes» y vuelve a cargar esta pantalla.</p>
+</section>
+{% else %}
+<section class="pending-card" aria-labelledby="huecos-ccm">
+  <h2 id="huecos-ccm" class="titulo-frase">Huecos listos para completar ({{ huecos|length }})</h2>
+  {% if huecos %}
+  <p class="muted">Solo se rellenan campos vacíos. Los campos protegidos y los que ya tienen un dato no se tocan.</p>
+  <ul class="audit-resumen">
+    {% for c in huecos %}
+    <li><strong>{{ etiquetas.get(c.campo, c.campo) }}</strong>: {{ c.seleccionado.valor if c.seleccionado else "—" }}
+      <span class="muted">· {{ nombres_fuente.get(c.seleccionado.fuente, c.seleccionado.fuente) if c.seleccionado else "" }}</span></li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="/ui/series/{{ series.id }}/datos/aplicar">
+    <button type="submit" class="btn primary">Completar {{ huecos|length }} {{ "dato" if huecos|length == 1 else "datos" }}</button>
+  </form>
+  {% else %}
+  <p class="muted">No hay huecos seguros que completar ahora mismo.</p>
+  {% endif %}
+</section>
+
+{% if conflictos %}
+<section class="pending-card" aria-labelledby="conflictos-ccm">
+  <h2 id="conflictos-ccm" class="titulo-frase">Datos con discrepancias ({{ conflictos|length }})</h2>
+  <p class="muted">No se elige por ti. Si mantienes el actual, no volverá a preguntarse mientras la fuente no cambie ese valor.</p>
+  {% for c in conflictos %}
+  <article class="audit-item">
+    <h3>{{ etiquetas.get(c.campo, c.campo) }}</h3>
+    <p><strong>Ahora:</strong> {{ c.valor_actual }} <span class="muted">{% if c.fuente_actual %}· {{ nombres_fuente.get(c.fuente_actual, c.fuente_actual) }}{% else %}· origen no registrado{% endif %}</span></p>
+    <ul class="audit-resumen">
+      {% for cand in c.candidatos %}
+      <li>
+        <strong>{{ cand.valor }}</strong> · {{ nombres_fuente.get(cand.fuente, cand.fuente) }}
+        <form method="post" action="/ui/series/{{ series.id }}/datos/elegir" class="inline-accion">
+          <input type="hidden" name="campo" value="{{ c.campo }}">
+          <input type="hidden" name="fuente" value="{{ cand.fuente }}">
+          <button type="submit" class="btn ghost sm">Usar este</button>
+        </form>
+        <form method="post" action="/ui/series/{{ series.id }}/datos/mantener" class="inline-accion">
+          <input type="hidden" name="campo" value="{{ c.campo }}">
+          <input type="hidden" name="fuente" value="{{ cand.fuente }}">
+          <button type="submit" class="btn ghost sm">Mantener el mío</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+{% endif %}
+
+{% if procedencia and procedencia.campos %}
+<section class="pending-card" aria-labelledby="procedencia-ccm">
+  <h2 id="procedencia-ccm" class="titulo-frase">De dónde sale cada dato</h2>
+  <p class="muted">{{ procedencia.resumen }}</p>
+  <dl class="procedencia-campos">
+    {% for c in procedencia.campos %}
+    <div class="procedencia-campo">
+      <dt>{{ c.etiqueta }}</dt>
+      <dd><span class="procedencia-valor">{{ c.valor }}</span>
+        <span class="procedencia-origen{% if c.manual %} manual{% endif %}">{{ c.origen or "Origen no registrado" }}</span>
+        {% if c.bloqueado %}{{ ui.chip("ok", "Protegido") }}{% endif %}
+      </dd>
+    </div>
+    {% endfor %}
+  </dl>
+</section>
+{% endif %}
+
+<p class="caption">Esta pantalla solo cambia la base de datos. La escritura de <code>ComicInfo.xml</code> se hace en una cola aparte y no toca tus archivos desde aquí.</p>
+{% endblock %}

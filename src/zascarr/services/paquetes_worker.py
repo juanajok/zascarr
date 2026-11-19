@@ -42,11 +42,23 @@ def main(argv: list[str] | None = None) -> int:
         firma=datos["firma"], estado="listo", causa="", dev=int(datos["dev"]),
         ino=int(datos["ino"]), fd=fd)
     listado = listar_paquete(paquete)
+
+    def _progreso(hechos: int) -> None:
+        with contextlib.suppress(OSError):
+            fd_p = os.open(".progreso", os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                           0o600, dir_fd=temp_fd)
+            try:
+                os.write(fd_p, str(hechos).encode("ascii"))
+            finally:
+                os.close(fd_p)
+
     try:
         if modo == "zip":
-            items = _escribir_zip(paquete, listado, temp, fd, temp_fd)
+            items = _escribir_zip(paquete, listado, temp, fd, temp_fd, _progreso)
         else:
-            items = _escribir_rar(paquete, listado, temp, fd, temp_fd)
+            items = _escribir_rar(paquete, listado, temp, fd, temp_fd, _progreso)
+        with contextlib.suppress(OSError):
+            os.unlink(".progreso", dir_fd=temp_fd)
         _verificar_contenido(items, temp, temp_fd)
     finally:
         os.close(temp_fd)

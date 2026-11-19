@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import Integer, and_, case, cast, exists, func, or_, select
+from sqlalchemy import Integer, and_, case, cast, exists, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.core.matcher import normalize_title
@@ -32,6 +32,7 @@ from zascarr.models import (
     ReadingProgress,
     ReadingStatus,
     Series,
+    SeriesKind,
     StoryArc,
     StoryArcIssue,
     Tag,
@@ -90,6 +91,8 @@ class SeriesService:
         orden: str = "titulo",
         coleccion: str | None = None,
         coleccion_ids: set[UUID] | None = None,
+        kind: str | None = None,
+        format: str | None = None,
         *,
         corregir_pagina: bool = True,
     ) -> tuple[list[Series], int, int]:
@@ -104,6 +107,12 @@ class SeriesService:
 
         if tradition:
             query = query.where(Series.tradition == tradition)
+        if kind:
+            query = query.where(Series.kind == kind)
+        if format:
+            # EXISTS por id: una serie con varios formatos aparece UNA vez.
+            query = query.where(Series.id.in_(
+                select(Issue.series_id).where(Issue.format == format)))
         if status:
             query = query.where(Series.status == status)
         if coleccion:
@@ -267,6 +276,8 @@ class SeriesService:
         orden: str = "titulo",
         coleccion: str | None = None,
         coleccion_ids: set[UUID] | None = None,
+        kind: str | None = None,
+        format: str | None = None,
     ) -> tuple[list[Series], int]:
         """Contrato histórico `(items, total)` para API y tests."""
         items, total, _ = await self._list_series(
@@ -282,7 +293,7 @@ class SeriesService:
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
-            corregir_pagina=False,
+            kind=kind, format=format, corregir_pagina=False,
         )
         return items, total
 
@@ -309,6 +320,8 @@ class SeriesService:
         orden: str = "titulo",
         coleccion: str | None = None,
         coleccion_ids: set[UUID] | None = None,
+        kind: str | None = None,
+        format: str | None = None,
     ) -> tuple[list[Series], int, int]:
         """Como `list_series`, pero devuelve también la página efectiva.
 
@@ -328,6 +341,7 @@ class SeriesService:
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
+            kind=kind, format=format,
         )
 
     async def list_publishers_with_series(self) -> list[Publisher]:
@@ -426,13 +440,31 @@ def condicion_estado_coleccion(tipo: str):
         Series.metadata_["coleccion"]["no_completar"].astext, "false") == "true")
     no_decidida = (func.coalesce(
         Series.metadata_["coleccion"]["no_completar"].astext, "false") != "true")
-    computable = and_(
+    def _tiene_publicacion():
+        # SQL explícito y correlado: la subconsulta automática de SQLAlchemy se
+        # corrompía al combinarse con la subconsulta de grapas de `faltan`
+        # (incluía `series` dentro del EXISTS y daba falsos completos).
+        return text(
+            "EXISTS (SELECT 1 FROM issues i JOIN files f ON f.issue_id = i.id "
+            "WHERE i.series_id = series.id AND f.is_missing = false)")
+
+    def _sin_publicacion():
+        return text(
+            "NOT EXISTS (SELECT 1 FROM issues i JOIN files f ON f.issue_id = i.id "
+            "WHERE i.series_id = series.id AND f.is_missing = false)")
+
+    es_obra_unica = Series.kind == SeriesKind.ONE_SHOT
+    regular_computable = and_(
         Series.total_issues.isnot(None), Series.total_issues > 0,
         Series.metadata_source.in_(UNIDAD_DE_GRAPA))
-    no_computable = or_(
+    regular_no_computable = or_(
         Series.total_issues.is_(None), Series.total_issues <= 0,
         Series.metadata_source.is_(None),
         Series.metadata_source.not_in(UNIDAD_DE_GRAPA))
+    computable = or_(and_(es_obra_unica, _tiene_publicacion()),
+                     and_(~es_obra_unica, regular_computable))
+    no_computable = or_(and_(es_obra_unica, _sin_publicacion()),
+                        and_(~es_obra_unica, regular_no_computable))
     numero = case((Issue.issue_number.op("~")("^[0-9]+$"), Issue.issue_number),
                   else_=None)
     numero_int = cast(numero, Integer)
@@ -454,9 +486,11 @@ def condicion_estado_coleccion(tipo: str):
     if tipo == "no_calculable":
         return and_(no_decidida, no_computable)
     if tipo == "completa":
-        return and_(no_decidida, computable, faltan <= 0)
+        # La obra única no resta grapas: con publicación está completa aunque
+        # `total_issues` sea 1 y no haya ninguna grapa numerada.
+        return and_(no_decidida, computable, or_(es_obra_unica, faltan <= 0))
     if tipo == "faltan":
-        return and_(no_decidida, computable, faltan > 0)
+        return and_(no_decidida, ~es_obra_unica, computable, faltan > 0)
     return None
 
 
@@ -578,6 +612,10 @@ def razon_de_no_calculable(series: Series) -> Huecos | None:
     """Puro (sin base de datos): `Huecos` no computable si la serie no se puede calcular por su total o por la unidad
     de su fuente; `None` si la comprobación previa no lo impide. La usa `huecos_de_serie` y la ficha, que necesita saber
     si es calculable también con política `ninguno` (donde el predicado sale antes de calcular huecos)."""
+    # #1027: una obra autoconclusiva no se mide por grapas. `huecos_de_serie`
+    # comprueba además que exista su publicación; aquí no hay BD para saberlo.
+    if series.kind == SeriesKind.ONE_SHOT:
+        return None
     if not series.total_issues:
         return Huecos([], False, MOTIVO_SIN_TOTAL)
     if series.metadata_source not in UNIDAD_DE_GRAPA:
@@ -604,6 +642,18 @@ async def huecos_de_serie(db: AsyncSession, series: Series,
     `poseidos` permite reutilizar una consulta ya hecha (la ficha de serie
     necesita el conjunto igualmente, para pintar los números presentes).
     """
+    if series.kind == SeriesKind.ONE_SHOT:
+        publicacion = (await db.execute(
+            select(Issue.id)
+            .join(File, File.issue_id == Issue.id)
+            .where(Issue.series_id == series.id, File.is_missing.is_(False))
+            .limit(1)
+        )).scalar_one_or_none()
+        if publicacion is None:
+            return Huecos([], False,
+                          "sin publicación con archivo disponible: todavía no tiene "
+                          "ningún tomo enlazado o el archivo está ausente")
+        return Huecos([], True, None)
     no_calculable = razon_de_no_calculable(series)
     if no_calculable is not None:
         return no_calculable

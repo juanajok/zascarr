@@ -1341,3 +1341,91 @@ class TestArticulosYPuntuacion:
             assert "El texto no contiene palabras que buscar; no se aplica el filtro de nombre." in visible(r.text)
             assert set(claves(r.text)) == {"Comics/Los Vengadores", "Comics/El Sandman",
                                            "Comics/S.H.I.E.L.D."}
+
+
+class TestMarcaCarpetaMixta382:
+    """#382: el recuento distingue «todos» de «una parte» en la marca de la carpeta."""
+
+    async def test_mayoria_de_la_serie_muestra_recuento(self, banco):
+        sid_a = await banco.serie("SERIE A", 2020)
+        sid_b = await banco.serie("SERIE B", 2021)
+        await banco.sembrar(
+            *[archivo(f"Comics/Mixta/A {n:02d}.cbz", estado="direct", cands=candidatas(sid_a, "SERIE A", 2020))
+              for n in range(1, 4)],
+            *[archivo(f"Comics/Mixta/B {n:02d}.cbz", estado="direct", cands=candidatas(sid_b, "SERIE B", 2021))
+              for n in range(1, 3)],
+        )
+        r = await pagina({"serie": str(sid_a)})
+        t = visible(r.text)
+        assert re.search(CHIP_SUGERIDA, r.text)
+        assert "La sugieren 3 de 5 registros con sugerencia; el resto apunta a otra serie." in t
+
+    async def test_minoria_no_lleva_marca_y_el_detalle_no_afirma_que_sea_de_la_serie(self, banco):
+        sid_a = await banco.serie("SERIE A", 2020)
+        sid_b = await banco.serie("SERIE B", 2021)
+        await banco.sembrar(
+            *[archivo(f"Comics/Minoria/A {n:02d}.cbz", estado="direct", cands=candidatas(sid_a, "SERIE A", 2020))
+              for n in range(1, 3)],
+            *[archivo(f"Comics/Minoria/B {n:02d}.cbz", estado="direct", cands=candidatas(sid_b, "SERIE B", 2021))
+              for n in range(1, 4)],
+        )
+        r = await pagina({"serie": str(sid_a)})
+        t = visible(r.text)
+        assert not re.search(CHIP_SUGERIDA, r.text)
+        # El detalle habla de la serie SUGERIDA (B, 3/5), no de la fijada (A, 2/5):
+        # no hay frase que presente 2/5 como si la carpeta fuera de A.
+        assert "La sugieren 3 de 5 registros con sugerencia; el resto apunta a otra serie." in t
+        assert "2 de 5" not in t
+
+    async def test_homogenea_dice_todos(self, banco):
+        sid = await banco.serie("SERIE UNICA", 2020)
+        await banco.sembrar(
+            *[archivo(f"Comics/Unica/U {n:02d}.cbz", estado="direct", cands=candidatas(sid, "SERIE UNICA", 2020))
+              for n in range(1, 4)],
+        )
+        r = await pagina({"serie": str(sid)})
+        t = visible(r.text)
+        assert re.search(CHIP_SUGERIDA, r.text)
+        assert "La sugieren los 3 registros con sugerencia." in t
+
+
+    async def test_empate_no_lleva_chip(self, banco):
+        sid_a = await banco.serie("SERIE A", 2020)
+        sid_b = await banco.serie("SERIE B", 2021)
+        await banco.sembrar(
+            archivo("Comics/Empate/A 01.cbz", estado="direct", cands=candidatas(sid_a, "SERIE A", 2020)),
+            archivo("Comics/Empate/B 01.cbz", estado="direct", cands=candidatas(sid_b, "SERIE B", 2021)),
+        )
+        r = await pagina({"serie": str(sid_a)})
+        assert not re.search(CHIP_SUGERIDA, r.text)
+
+    async def test_un_solo_registro_singular(self, banco):
+        sid = await banco.serie("SERIE UNICA", 2020)
+        await banco.sembrar(
+            archivo("Comics/Uno/U 01.cbz", estado="direct", cands=candidatas(sid, "SERIE UNICA", 2020)),
+        )
+        r = await pagina({"serie": str(sid)})
+        t = visible(r.text)
+        assert "La sugiere el único registro con sugerencia." in t
+
+
+    async def test_sin_sugerencia_no_lleva_chip_ni_recuento(self, banco):
+        sid = await banco.serie("SERIE A", 2020)
+        await banco.sembrar(archivo("Comics/SinSugerencia/X 01.cbz"))
+        r = await pagina({"serie": str(sid)})
+        assert not re.search(CHIP_SUGERIDA, r.text)
+        assert "La sugieren" not in visible(r.text)
+
+
+    async def test_varias_series_alternativas_dice_otras_series(self, banco):
+        sid_a = await banco.serie("SERIE A", 2020)
+        sid_b = await banco.serie("SERIE B", 2021)
+        sid_c = await banco.serie("SERIE C", 2022)
+        await banco.sembrar(
+            archivo("Comics/Varias/A 01.cbz", estado="direct", cands=candidatas(sid_a, "SERIE A", 2020)),
+            archivo("Comics/Varias/B 01.cbz", estado="direct", cands=candidatas(sid_b, "SERIE B", 2021)),
+            archivo("Comics/Varias/C 01.cbz", estado="direct", cands=candidatas(sid_c, "SERIE C", 2022)),
+        )
+        r = await pagina({"serie": str(sid_a)})
+        t = visible(r.text)
+        assert "La sugiere" in t and "otras series" in t

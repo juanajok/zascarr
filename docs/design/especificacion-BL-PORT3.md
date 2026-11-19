@@ -76,9 +76,9 @@ mano con permiso del PO (D-4) y la decisión de D-1..D-6.
 | V5 | Topes ya existentes que un RAR debe igualar: `MAX_PIXELES_PORTADA = 40 000 000`, `MAX_ENTRADA_LEIDA = 32 MiB`, `MAX_RATIO_LEIDA = 100`, `MIN_IMAGENES = 10`, `FRACCION_IMAGENES = 0,8` | `core/formato_contenedor.py:55-72` |
 | V6 | Un RAR se reconoce por firma (`Firma.RAR`) y `tratamiento()` lo deja en **solo hash**; `puede_dar_portada(ext, fc)` devuelve `False` para cualquier firma que no sea ZIP | `core/formato_contenedor.py:92-93, 161-180, 294-312` |
 | V7 | «Por revisar» llama a `puede_tener_portada` para decidir si pinta `<img>` y a `extract_cover_thumbnail(path, formato_contenido)` a 240 px, **sin caché en disco** (ETag por `mtime` del archivo) | `web/pendientes.py:92`, `:502-515` |
-| V8 | `unar` **no está** en `src`, `pyproject.toml`, `Dockerfile` ni CI; solo en `scripts/medicion/evaluacion_rar/`. El `Dockerfile` tiene dos etapas (`builder` con compilador y `runtime` con `libpq5 libxml2 libxslt1.1 tini`); CI usa `apt` solo para `postgresql-client-15` en el job de Postgres | `Dockerfile`; `.github/workflows/ci.yml` |
+| V8 | `unar` **no está** en `src`, `pyproject.toml`, `Dockerfile` ni CI; solo en el kit histórico archivado (código retirado en OCTA-A6; ver `docs/design/mediciones/evaluacion-rar-archivada.md`). El `Dockerfile` tiene dos etapas (`builder` con compilador y `runtime` con `libpq5 libxml2 libxslt1.1 tini`); CI usa `apt` solo para `postgresql-client-15` en el job de Postgres | `Dockerfile`; `.github/workflows/ci.yml` |
 | V9 | `File` guarda `file_size_bytes` y `sha256_hash` pero **no `mtime`**; `files.metadata` es JSONB (ahí vive `formato_contenido`) | `models/__init__.py` (clase `File`) |
-| V10 | Forma medida de invocar `unar`: `unar -q -D -f -i -o <dir> <fichero> <índice>` (**por índice**, no por nombre, porque los nombres llevan corchetes). **`-q` ocultó mensajes en la primera prueba corta** y se rehízo: la integración debe leer `stdout` y `stderr` y no asumir que `-q` los conserva | `scripts/medicion/evaluacion_rar/banco_rar.py:103`; evaluación §7 |
+| V10 | Forma medida de invocar `unar`: `unar -q -D -f -i -o <dir> <fichero> <índice>` (**por índice**, no por nombre, porque los nombres llevan corchetes). **`-q` ocultó mensajes en la primera prueba corta** y se rehízo: la integración debe leer `stdout` y `stderr` y no asumir que `-q` los conserva | kit histórico archivado en `docs/design/mediciones/evaluacion-rar-archivada.md`; evaluación §7 |
 | V11 | Medido en la Pi (#308, 35 muestras RAR): primera página ≤ 0,09 s en caliente y ≈ 0,33 s en frío (disco del sistema); pico ≤ 25,8 MiB; `lsar -j` en un RAR sólido tarda 2,5–4,7 s; `lsar` lista un fichero truncado con código 0 y `unar` devuelve 0 sin escribir si el índice no existe; `RLIMIT_AS` mata a `unar` (SIGSEGV con 96 MiB); `RLIMIT_FSIZE` y matar el grupo de procesos funcionan | evaluación §4.2–§4.4 |
 | V12 | Datos de la Pi (encargo, 2026-11-05/06, una instalación): 1094 `.cbr` = 1041 RAR + 53 ZIP; 7 series con 100×100 de Tebeosfera y 2 con Comic Vine a 320 px empiezan por un RAR | encargo |
 
@@ -161,7 +161,7 @@ Origen: I = issue #418, B = benchmark aceptado, E = evaluación de `unar` (§6),
 - FR-18 (estado) MIENTRAS dos peticiones pidan a la vez la portada de la misma serie, el sistema deberá hacer **una sola** generación y servir el resultado a ambas. *(evita doble coste cuando la ficha y la rejilla se solapan; Q-11)*
 
 **Sustituir lo ya guardado (D-2)**
-- FR-19 (ubicuo) `[D-2]` La caché de portadas **de serie sacadas de un archivo** pasará a `covers/v3/<serie>.jpg`; lo que haya en `covers/v2` **no se sirve** ni se borra automáticamente. *(CACHE_VERSION, BL-PORT1 FR-03)*
+- FR-19 (ubicuo) `[D-2]` La caché de portadas **de serie sacadas de un archivo** pasará a `covers/v3/<serie>.jpg`; lo que haya en `covers/v2` **no se sirve mientras haya un archivo que dé portada** ni se borra automáticamente. **Enmienda #506/#529 (cruce BL-PORT5/#435):** si no hay archivo disponible, `v2` se sirve como respaldo de solo lectura, sin copiarla y con `no-store` cuando el lector está ocupado; el literal de la versión vive en `CACHE_VERSION_ANTERIOR`. *(CACHE_VERSION, BL-PORT1 FR-03)*
 - FR-20 (ubicuo) `[D-2]` La portada **externa** (`cover_url`) se guardará **fuera de `v3`** (`covers/externa/<serie>.jpg`), de modo que una petición sin portada de archivo siga evaluando los candidatos (barato gracias a FR-11) y una serie cuyo primer archivo pase a ser legible **cambie sola** a la portada de archivo. Si el PO elige la opción A de D-2, este FR se sustituye por «la externa se guarda en `v3` como hoy» y se acepta que no cambia sola.
 - FR-21 (ubicuo) La caché antigua `covers/<serie>.jpg` sigue siendo un respaldo de solo lectura que no se copia. *(BL-PORT1 Q-1, sin cambios)*
 
@@ -278,7 +278,7 @@ Nada nuevo: el `<img>` de Biblioteca/Inicio/ficha muestra la portada de su archi
 - AC-28 *(BR-03)* `tratamiento()` de un RAR sigue siendo «solo hash» y ningún campo de `files.metadata` nuevo aparece tras generar una portada.
 
 **Sustitución (D-2)**
-- AC-29 *(FR-19)* Dada una serie con `covers/v2/<id>.jpg` (cualquiera), cuando se pide la portada, entonces `v2` no se sirve y se genera `v3`; `v2` no se borra.
+- AC-29 *(FR-19)* Dada una serie con `covers/v2/<id>.jpg` (cualquiera), cuando se pide la portada y hay un archivo que da portada, entonces `v2` no se sirve y se genera `v3`; `v2` no se borra. **Enmienda #506/#529 (BL-PORT5):** sin archivo disponible, `v2` se sirve como respaldo (con `no-store` si el lector está ocupado).
 - AC-30 *(FR-20)* Dada una serie sin portada de archivo y con `cover_url`, cuando se pide, entonces la externa se guarda en `covers/externa/` y **no** en `v3`; cuando después su primer archivo pasa a ser legible, entonces la petición siguiente genera `v3` del archivo y lo sirve.
 - AC-31 *(FR-21)* La caché antigua se sirve solo si no hay `v3` ni candidato utilizable, y no se copia.
 
@@ -321,7 +321,7 @@ Nada nuevo: el `<img>` de Biblioteca/Inicio/ficha muestra la portada de su archi
 - **CI:** el job «Suite unitaria» instala `unar` (`apt-get install -y --no-install-recommends unar`) para que las pruebas reales **no se salten** (el propio `ci.yml` ya recuerda que «una prueba saltada no es una pasada»); un paso final falla si alguna prueba marcada `rar_real` figura como saltada (mismo patrón que `scripts/ci_postgres.py`). El job de Docker construye la imagen y ejecuta `lsar --version` dentro. **No hay construcción ARM en CI**: la imagen ARM solo se verifica en la Pi (AC-24, NOT RUN).
 
 ### 9.3 Mediciones en la Pi (puertas)
-AC-22..24 más lo pendiente de #308 (§12). Se hacen con el banco existente (`scripts/medicion/evaluacion_rar/`), sobre copias o con la biblioteca montada solo lectura, **con autorización por tanda** (memoria `reference_acceso_a_la_pi`).
+AC-22..24 más lo pendiente de #308 (§12). Se hacían con el banco histórico, retirado en OCTA-A6 y documentado en `docs/design/mediciones/evaluacion-rar-archivada.md`, sobre copias o con la biblioteca montada solo lectura, **con autorización por tanda** (memoria `reference_acceso_a_la_pi`).
 
 ## 10. División en PR
 

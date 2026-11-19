@@ -141,7 +141,7 @@ def _linea(evento: dict[str, Any]) -> str:
     fecha = _texto(evento.get("timestamp") or datetime.now(UTC).isoformat())
     nivel = _texto(evento.get("log_level", "info")).upper()
     nombre = _texto(evento.get("event", "(sin evento)"))
-    omitidas = {"timestamp", "log_level", "event", "exc_info"}
+    omitidas = {"timestamp", "log_level", "level", "logger", "logger_name", "event", "exc_info"}
     extras = [
         f"{clave}={_texto(valor)}"
         for clave, valor in evento.items()

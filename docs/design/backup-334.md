@@ -102,6 +102,9 @@ biblioteca):
 - `error`: `offsite_mount_missing`, `pg_dump_failed`, `gzip_invalid`,
   `header_missing`, `tables_missing`, `manifest_failed`, `offsite_copy_failed`,
   `offsite_verify_failed`, `anchor_sync_failed`, `unexpected`.
+  `pg_dump_failed` es un fallo del proceso de volcado (pg_dump, tubería o
+  publicación); `gzip_invalid` es un `.gz` que no pasa `gzip -t`, tanto en
+  `volcar_postgres` (corte al escribir) como en `verificar_dump`.
 - `last_success_at_epoch`, `last_local_success_at_epoch`, `last_attempt_at_epoch`.
 
 `/api/health` añade `checks.backup` y `warnings.backup`:
