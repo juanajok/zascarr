@@ -3,6 +3,12 @@
 {% block content %}
 <h1>Estado</h1>
 <p class="subtitle">Cómo están las piezas de las que depende ZascArr. Se actualiza sola cada 10 segundos.</p>
+<section id="version" aria-labelledby="version-titulo">
+  <h2 id="version-titulo" class="seccion titulo-frase">Versión de ZascArr</h2>
+  <div id="version-aviso" aria-live="polite">
+    {% include "_aviso_version.html" %}
+  </div>
+</section>
 
 <div class="pending-card estado-summary">
   <div id="summary-dot" class="estado-dot estado-neutral"></div>
@@ -284,7 +290,38 @@
     }
   }
 
+  async function pollVersion() {
+    const target = document.getElementById("version-aviso-texto");
+    if (!target) return;
+    const error = "No se puede comprobar si hay una versión nueva. Vuelve a entrar si tu sesión ha caducado o inténtalo más tarde.";
+    const textos = {
+      comprobando: "Comprobando si hay una versión nueva… Puedes seguir usando ZascArr.",
+      disponible: "Hay una versión nueva de ZascArr. Esta página solo informa; no instala nada.",
+      actualizada: "Tienes la versión más reciente de ZascArr.",
+      desconocida: "No se puede comprobar si hay una versión nueva. Puedes seguir usando ZascArr; consulta con quien lo instaló si necesitas saber qué versión tienes.",
+    };
+    try {
+      const url = new URL("/ui/version/estado", window.location.origin);
+      const res = await fetch(url.href, { cache: "no-store", redirect: "manual" });
+      if (!res.ok || res.redirected || res.url !== url.href ||
+          res.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
+        throw new Error("No se recibió el aviso de versión");
+      }
+      const data = await res.json();
+      if (!data || !Object.prototype.hasOwnProperty.call(textos, data.estado))
+        throw new Error("La respuesta no es un estado de versión");
+      // Conservar el nodo vivo intacto si el aviso no cambia: no repetir anuncios cada 10 s.
+      if (textos[data.estado] !== target.textContent.trim())
+        target.textContent = textos[data.estado];
+    } catch (err) {
+      // No conservar indefinidamente una afirmación anterior tras fallar la comprobación.
+      if (target.textContent.trim() !== error) target.textContent = error;
+    }
+  }
+
   poll();
   setInterval(poll, POLL_INTERVAL_MS);
+  pollVersion();
+  setInterval(pollVersion, POLL_INTERVAL_MS);
 </script>
 {% endblock %}

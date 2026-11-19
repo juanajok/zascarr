@@ -406,6 +406,8 @@ class Settings(BaseSettings):
     # ── App ────────────────────────────────────────────────────────
     app_name: str = "ZascArr"
     app_version: str = "1.15.1"
+    # Identidad inmutable incluida en la imagen al construirla; vacío = sin comprobar.
+    build_sha: str = ""
     log_level: str = "INFO"
     log_json: bool = True
     # Persistencia/rotación propia para consultar logs anteriores desde la UI.

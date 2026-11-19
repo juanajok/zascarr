@@ -598,7 +598,14 @@ cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 # Ahora se construye la imagen explícitamente aquí, ANTES de migrar, y se
 # migra y se arranca con esa MISMA imagen — nunca se instala nada de
 # Python en el host, la única fuente de dependencias es la imagen Docker.
-docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build zascarr || die \
+# Solo se declara identidad cuando el contexto construido coincide con HEAD.
+# Un build de un checkout modificado sigue funcionando, pero no afirma estar en main.
+BUILD_SHA=""
+if GIT_STATUS="$(git -C "${SCRIPT_DIR}" status --porcelain --untracked-files=all 2>/dev/null)" && \
+   [[ -z "${GIT_STATUS}" ]]; then
+    BUILD_SHA="$(git -C "${SCRIPT_DIR}" rev-parse --verify HEAD 2>/dev/null || true)"
+fi
+ZASCARR_BUILD_SHA="${BUILD_SHA}" docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build zascarr || die \
     "No pude construir la imagen de ZascArr. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
 
 info "Corriendo migraciones Alembic (dentro del contenedor)..."

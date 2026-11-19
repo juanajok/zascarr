@@ -157,7 +157,12 @@ fi
 
 # ── 6. Rebuild de la imagen (las dependencias viven en la imagen) ────────────
 info "Reconstruyendo la imagen (puede tardar varios minutos en una Pi)..."
-"${COMPOSE[@]}" build zascarr || die \
+BUILD_SHA=""
+if GIT_STATUS="$(git -C "${REPO_DIR}" status --porcelain --untracked-files=all 2>/dev/null)" && \
+   [[ -z "${GIT_STATUS}" ]]; then
+    BUILD_SHA="${NEW_SHA}"
+fi
+ZASCARR_BUILD_SHA="${BUILD_SHA}" "${COMPOSE[@]}" build zascarr || die \
     "Falló la construcción de la imagen. El CÓDIGO ya está actualizado (${NEW_SHA:0:7}) pero
   la imagen no se ha reconstruido y la BD NO se ha migrado. Para volver atrás:
     sudo bash scripts/rollback.sh
