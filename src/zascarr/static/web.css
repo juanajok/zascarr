@@ -1986,6 +1986,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .issue-header { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .issue-cover { width: 120px; max-width: 100%; }
 .issue-portada { min-width: 0; }
+/* Revisión 2026-11-19: el pie de la portada es un dato, no una caja de lectura amarilla. */
+.issue-portada-pie { margin: var(--space-1) 0 0; font-size: var(--text-secundario); }
 .subtitulo-numero { margin: 2px 0 var(--space-2); font-weight: 700; overflow-wrap: anywhere; }
 .issue-archivos { margin: var(--space-2) 0 var(--space-2) 1.1rem; padding: 0; }
 .issue-archivos li { margin: 6px 0; overflow-wrap: anywhere; }

@@ -24,7 +24,7 @@
   {% else %}
   <a class="btn ghost sm" href="{{ url_solo }}">Solo con sugerencia</a>
   {% endif %}
-  <span class="rotulo">Por página:</span>
+  <span class="muted">Por página:</span>
   {% for n in (25, 50) %}
   <a class="btn ghost sm" href="{{ url_tamano[n] }}" {% if n == tamano %}aria-current="true"{% endif %}>{{ n }}</a>
   {% endfor %}

@@ -81,7 +81,8 @@ def test_fuera_de_root_no_queda_ningun_font_size_literal():
     # +6 por el chip/panel de tareas en curso (2026-11-17).
     # +2 por el lector inmersivo LECUX6 (título de espera y símbolo de flecha).
     # +2 por la tarjeta de fin de LEC3 (título y texto de la tarjeta).
-    assert len(tam) == 144, f"declaraciones font-size: {len(tam)}"
+    # +1 por el pie de la portada del número, que deja de ser `.caption` (revisión 2026-11-19).
+    assert len(tam) == 145, f"declaraciones font-size: {len(tam)}"
     malas = [(sel, v) for sel, v in tam if not re.fullmatch(r"var\(--text-[\w-]+\)", v)]
     assert not malas, "font-size sin token:\n" + "\n".join(f"{s}: {v}" for s, v in malas)
 

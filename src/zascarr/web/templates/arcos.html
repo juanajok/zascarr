@@ -14,7 +14,7 @@
 {{ ui.estado_vacio("Todavía no hay sagas registradas", "Cuando ZascArr tenga arcos con números enlazados, aparecerán aquí en su orden de lectura.", ("Nueva saga", "/ui/arcos/nueva")) }}
 <p class="arcos-acciones-secundarias"><a class="btn ghost" href="/ui/arcos/buscar">Buscar en fuentes</a> <a class="btn ghost" href="/ui/arcos/importar-guia">Importar una guía</a></p>
 {% else %}
-<p class="caption">{{ pagina.total }} {{ "saga" if pagina.total == 1 else "sagas" }} · mostrando {{ pagina.desde + 1 }}–{{ pagina.hasta }}</p>
+<p class="muted">{{ pagina.total }} {{ "saga" if pagina.total == 1 else "sagas" }} · mostrando {{ pagina.desde + 1 }}–{{ pagina.hasta }}</p>
 <ul class="arcos-lista">
   {% for a in pagina.filas %}
   <li class="arco-fila">
