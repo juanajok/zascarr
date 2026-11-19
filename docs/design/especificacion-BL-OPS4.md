@@ -134,12 +134,13 @@ Docker, Postgres, systemd ni suite global. **Historia B NOT IMPLEMENTED.**
 La tabla de §5 describe el comportamiento esperado, **no** una suite que el CI
 actual pueda ejecutar entera. Clasificación explícita:
 
-- **Contrato/unitario en CI (pytest, dobles):** núcleos de AC-02, AC-03, AC-04,
-  AC-05, AC-08, AC-11 y AC-12, más la utilidad pura de §9.
+- **Contrato/unitario en CI (pytest, dobles):** núcleos de AC-02, AC-04, AC-05,
+  AC-08, AC-11 y AC-12, la parte de auxiliar de AC-03 y la utilidad pura de §9.
 - **Arnés de host (repo bare local con barreras de sincronización, shim de
   `systemctl` que registre llamadas, Docker/Postgres desechables, usuario sin
-  privilegios):** AC-01, AC-06, AC-07, AC-09, AC-10 y AC-13. Requiere evidencia
-  firmada y una puerta separada; **NOT RUN no cuenta como PASS**.
+  privilegios):** AC-01, la parte de unidad de AC-03, AC-06, AC-07, AC-09,
+  AC-10 y AC-13. Requiere evidencia firmada y una puerta separada; **NOT RUN no
+  cuenta como PASS**.
 - **Pi/smoke:** cualquier prueba sobre hardware o instalación real, con
   autorización aparte.
 
