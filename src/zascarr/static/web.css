@@ -1235,6 +1235,8 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
    hace cada cosa y quien lo necesita lo abre (presupuesto de texto, CLAUDE.md §6). */
 .ajustes-mas { margin: 0; }
 .ajustes-mas summary { cursor: pointer; color: var(--ink-soft); font-size: var(--text-secundario); font-weight: 600; }
+/* #1121: en escritorio medían 22 px (WCAG 2.5.8 pide 24 y el contrato local 40; en táctil ya llegan a 44). */
+.ajustes-mas summary { min-height: 40px; padding: var(--space-2) 0; box-sizing: border-box; }
 .ajustes-mas[open] summary { margin-bottom: 6px; }
 .ajustes-donde { font-weight: 400; color: var(--ink-soft); }
 .ajustes-hint {
@@ -1244,6 +1246,7 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
 .ajustes-hint code {
   background: var(--paper); border: var(--border-line) solid var(--ink-faint);
   border-radius: 3px; padding: 0 var(--space-1); font-size: var(--text-code-inline);
+  overflow-wrap: anywhere;  /* #1121: una dirección larga no ensancha la tarjeta a 320 px */
 }
 .ajustes-card form { display: flex; flex-direction: column; gap: 10px; }
 .ajustes-card label {
@@ -1382,7 +1385,8 @@ button[disabled], .btn[disabled] {
   padding: 2px 10px;
   border: var(--border-chip) solid var(--ink); border-radius: var(--radius-pill);
   background: var(--paper); color: var(--ink);
-  white-space: nowrap;
+  /* #1121: un chip con un nombre largo (editorial, serie) se parte en vez de ensanchar la página a 320 px. */
+  max-width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere;
 }
 .chip.ok    { background: var(--ok-bg);    color: var(--ok-t); }
 .chip.warn  { background: var(--warn-bg);  color: var(--warn-t); }
