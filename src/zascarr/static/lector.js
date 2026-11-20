@@ -501,7 +501,21 @@
     botonPantalla.hidden = false;
     botonPantalla.addEventListener("click", alternarPantalla);
   }
-  document.addEventListener("fullscreenchange", aplicarZoom);
+  const alCambiarPantalla = () => {
+    if (document.fullscreenElement) {
+      // En pantalla completa la barra no debe comerse la parte de arriba de la página.
+      raiz.dataset.chrome = "oculto";
+      if (temporizadorChrome !== null && typeof clearTimeout === "function") {
+        clearTimeout(temporizadorChrome);
+      }
+      temporizadorChrome = null;
+    } else {
+      raiz.dataset.chrome = "";
+      programaOculto();
+    }
+    aplicarZoom();
+  };
+  document.addEventListener("fullscreenchange", alCambiarPantalla);
   if (typeof window.addEventListener === "function") window.addEventListener("resize", aplicarZoom);
 
   // Chrome auto-oculto. Sin JS la barra se queda visible (degradación honesta).
@@ -519,6 +533,10 @@
   });
   if (typeof setTimeout === "function") programaOculto();
 
+  document.addEventListener("pointermove", (evento) => {
+    // En pantalla completa la barra está oculta; acercarse arriba la muestra.
+    if (document.fullscreenElement && evento.clientY <= 90) despertarChrome();
+  }, { passive: true });
   document.addEventListener("keydown", (evento) => {
     if (evento.defaultPrevented || evento.ctrlKey || evento.altKey || evento.metaKey || evento.isComposing) return;
     const { key, target } = evento;
