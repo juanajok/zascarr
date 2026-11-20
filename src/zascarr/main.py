@@ -3,6 +3,7 @@ import asyncio
 import contextlib
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -117,27 +118,41 @@ async def _import_loop(interval_minutes: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
-async def _rescan_loop(interval_minutes: int) -> None:
-    """Job periódico del rescan de la biblioteca (BL-R9): registra lo nuevo
+async def _rescan_loop() -> None:
+    """Job periódico de «Actualizar la biblioteca» (BL-R9, #1160): registra lo nuevo
     (identificado → serie; si no → «Por revisar»), re-tría lo sustituido y
     marca/revierte lo desaparecido, sin consultar fuentes ni mover nada.
 
-    El PRIMER paseo espera un intervalo completo: el primer rescan tras una actualización
-    es el más caro (línea de base `file_mtime_ns` NULL: lee todos los CBZ una vez) y no debe
-    competir con el arranque de la Pi; el checklist de despliegue recomienda lanzarlo a mano
-    en un momento tranquilo. Comparte el cerrojo de ciclo con el importador: si coinciden,
-    uno de los dos se salta ese turno (el rescan consta en el log y reintenta el siguiente).
+    Cuenta desde el ÚLTIMO rescan (el persistido, que se lee una vez al arrancar), no desde el
+    arranque: con despliegues frecuentes un temporizador que se reinicia con cada arranque no
+    llegaba a disparar nunca. La cadencia se lee en cada vuelta de `get_settings()`, así que
+    cambiarla en Ajustes (o apagarla) no exige reiniciar. Si nunca hubo uno, el primero toca un
+    intervalo después del arranque: es el más caro (línea de base `file_mtime_ns` NULL: lee todos
+    los CBZ una vez) y no debe competir con el arranque de la Pi. Comparte el cerrojo de ciclo con
+    el importador: si coinciden, uno de los dos se salta ese turno y el rescan reintenta pasado
+    `REINTENTO_TRAS_SALTO`.
     """
     from zascarr.database import async_session_factory
     from zascarr.services import rescan_biblioteca
 
-    logger.info("rescan.first_delayed", minutos=interval_minutes)
-    await asyncio.sleep(interval_minutes * 60)
+    try:
+        await rescan_biblioteca.cargar_ultima_persistida(async_session_factory)
+    except Exception:
+        logger.exception("rescan.ultima_no_leida")
+    logger.info("rescan.scheduler_started")
+    bucle = asyncio.get_running_loop()
+    no_antes_de = 0.0
     while True:
+        await asyncio.sleep(60)
         try:
+            proxima = rescan_biblioteca.proxima_ejecucion(
+                max(0, int(get_settings().rescan_interval_minutes)))
+            if proxima is None or datetime.now(UTC) < proxima or bucle.time() < no_antes_de:
+                continue
             informe = await rescan_biblioteca.ejecutar_automatico(async_session_factory)
-            if informe is not None and (
-                    informe.nuevos_entregados or informe.re_triados
+            if informe is None:
+                no_antes_de = bucle.time() + rescan_biblioteca.REINTENTO_TRAS_SALTO
+            elif (informe.nuevos_entregados or informe.re_triados
                     or informe.desaparecidos or informe.reaparecidos):
                 logger.info(
                     "rescan.cycle_done",
@@ -151,7 +166,7 @@ async def _rescan_loop(interval_minutes: int) -> None:
                 )
         except Exception:
             logger.exception("rescan.cycle_failed")
-        await asyncio.sleep(interval_minutes * 60)
+            no_antes_de = bucle.time() + rescan_biblioteca.REINTENTO_TRAS_SALTO
 
 
 async def _ccm_comicinfo_loop() -> None:
@@ -462,10 +477,9 @@ async def lifespan(app: FastAPI):
                 _seguimiento_loop(settings.seguimiento_interval_minutes)),
             asyncio.create_task(_ccm_comicinfo_loop()),
         ])
-        # BL-R9: rescan periódico de la biblioteca; 0 lo desactiva.
-        if settings.rescan_interval_minutes > 0:
-            background_tasks.append(
-                asyncio.create_task(_rescan_loop(settings.rescan_interval_minutes)))
+        # BL-R9: rescan periódico de la biblioteca. Siempre arranca y lee la cadencia en cada vuelta
+        # (#1160), para que apagarlo o activarlo en Ajustes no exija reiniciar.
+        background_tasks.append(asyncio.create_task(_rescan_loop()))
         # BL-D3: siempre arranca; lee cadencia/perfil en cada vuelta para que
         # activar o desactivar en Ajustes no exija reiniciar.
         background_tasks.append(asyncio.create_task(_upgrades_loop()))

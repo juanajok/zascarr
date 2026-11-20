@@ -253,55 +253,8 @@ async def registrar_nuevos(request: Request, huella: str = Form(...), db: AsyncS
 
 # ── BL-R9: rescan de la biblioteca (a demanda; el periódico corre en main.py) ──
 
-_CAMPOS_RESUMEN = (
-    "files_scanned", "sin_cambios", "ya_registrados", "nuevos_entregados",
-    "nuevos_registrados", "nuevos_a_revisar", "repetidos", "reenlazados",
-    "re_triados", "re_triados_igual", "re_triados_cambiado",
-    "re_triados_a_revisar", "re_triados_descartado", "copias_de_otra",
-    "re_triados_protegidos", "discrepancias_registradas",
-    "desaparecidos", "reaparecidos", "errores", "omitidos", "ambiguos",
-    "no_revisado", "unreadable", "por_comprobar", "resultado_biblioteca",
-)
-
-
-def _resumen(informe) -> dict | None:
-    """Normaliza el informe —en memoria (`RescanReport`) o persistido (dict de `_ultimo_rescan`)—
-    a un dict para la plantilla. Un informe persistido debe pintarse igual que uno en memoria:
-    tras un reinicio del proceso el estado en memoria ya no existe y la pantalla lee el `ImportRun`."""
-    if informe is None:
-        return None
-    fuente = informe.get if isinstance(informe, dict) else (lambda c: getattr(informe, c, None))
-    out: dict = {}
-    for c in _CAMPOS_RESUMEN:
-        v = fuente(c)
-        if c in ("errores", "omitidos", "ambiguos") or isinstance(v, (list, tuple)):
-            out[c] = list(v) if v else []
-        elif isinstance(v, bool):
-            out[c] = v
-        elif isinstance(v, (int, float)):
-            out[c] = v or 0
-        else:
-            out[c] = v or ""
-    out["disparador"] = fuente("disparador") or "manual"
-    out["started_at"] = fuente("started_at")
-    return out
-
-
-async def _ultimo_rescan(db: AsyncSession) -> dict | None:
-    """El último rescan persistido (`kind="rescan"`), para una página recién cargada."""
-    run = (await db.execute(
-        select(ImportRun)
-        .where(ImportRun.details["kind"].astext == "rescan")
-        .order_by(ImportRun.started_at.desc())
-        .limit(1)
-    )).scalar_one_or_none()
-    if not run:
-        return None
-    detalles = dict(run.details or {})
-    detalles["started_at"] = run.started_at
-    detalles["files_scanned"] = run.files_scanned
-    detalles["errores"] = detalles.get("errores") or []
-    return detalles
+_resumen = rescan_biblioteca.resumen_de
+_ultimo_rescan = rescan_biblioteca.ultimo_persistido
 
 
 def _texto_cadencia() -> str:
