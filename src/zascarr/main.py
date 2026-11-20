@@ -583,6 +583,7 @@ def create_app() -> FastAPI:
     from zascarr.web.lector import router as lector_router
     from zascarr.web.legal import router as legal_ui_router
     from zascarr.web.library import router as library_router
+    from zascarr.web.listas_lectura import router as listas_ui_router
     from zascarr.web.mejoras import router as mejoras_ui_router
     from zascarr.web.navegacion import router as navegacion_router
     from zascarr.web.novedades import api_router as novedades_api_router
@@ -647,6 +648,7 @@ def create_app() -> FastAPI:
     app.include_router(datos_ui_router)
     app.include_router(asociar_fuente_ui_router)
     app.include_router(colecciones_ui_router)
+    app.include_router(listas_ui_router)
     app.include_router(desvinculacion_ui_router)
     app.include_router(wishlist_ui_router)
     # Bug real (reportado): "/" mandaba a Estado (E1) en vez de a la

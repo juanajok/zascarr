@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ lista.name if lista else "Lista" }} — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/listas">Volver a las listas</a>
+{% if not lista %}
+<h1>Lista</h1>
+{{ ui.aviso("amber", error or "La lista ya no existe.") }}
+{% else %}
+<header class="biblioteca-cabecera">
+  <h1>{{ lista.name }}</h1>
+  <p class="subtitle">{{ leidos }} de {{ total }} números leídos.</p>
+</header>
+{% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
+{% if error %}{{ ui.aviso("amber", error) }}{% endif %}
+<section aria-labelledby="lista-editar-titulo">
+  <h2 id="lista-editar-titulo">Nombre y descripción</h2>
+  <form method="post" action="/ui/listas/{{ lista.id }}/editar" class="tarjeta formulario">
+    <label for="lista-nombre">Nombre</label>
+    <input id="lista-nombre" name="name" maxlength="120" required
+           value="{{ (valores.name if valores else lista.name) }}">
+    <label for="lista-descripcion">Descripción</label>
+    <textarea id="lista-descripcion" name="description" maxlength="2000">{{ (valores.description if valores else lista.description) or "" }}</textarea>
+    <button type="submit" class="btn">Guardar</button>
+  </form>
+</section>
+<section aria-labelledby="lista-numeros-titulo">
+  <h2 id="lista-numeros-titulo">Números</h2>
+  {% if items %}
+  <ol class="lista-items">
+    {% for x in items %}
+    <li class="archivo-fila">
+      <span class="lista-item-orden">{{ x.position }}</span>
+      <a href="/ui/series/{{ x.serie_id }}/numero/{{ x.issue_id }}">{{ x.serie }}{% if x.numero %} #{{ x.numero }}{% endif %}</a>
+      {% if x.leido %}{{ ui.chip("ok", "Leído") }}{% endif %}
+      <form method="post" action="/ui/listas/{{ lista.id }}/mover/{{ x.issue_id }}/subir" class="inline">
+        <button type="submit" class="btn ghost sm" {% if loop.first %}disabled{% endif %} aria-label="Subir {{ x.serie }} {{ x.numero }}">Subir</button>
+      </form>
+      <form method="post" action="/ui/listas/{{ lista.id }}/mover/{{ x.issue_id }}/bajar" class="inline">
+        <button type="submit" class="btn ghost sm" {% if loop.last %}disabled{% endif %} aria-label="Bajar {{ x.serie }} {{ x.numero }}">Bajar</button>
+      </form>
+      <form method="post" action="/ui/listas/{{ lista.id }}/quitar/{{ x.issue_id }}" class="inline">
+        <button type="submit" class="btn ghost sm">Quitar<span class="sr"> {{ x.serie }} {{ x.numero }}</span></button>
+      </form>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="muted" role="status">Esta lista está vacía. Añade números desde la ficha de cada número.</p>
+  {% endif %}
+</section>
+<form method="post" action="/ui/listas/{{ lista.id }}/borrar" class="lista-borrar">
+  <button type="submit" class="btn ghost sm">Borrar lista</button>
+</form>
+{% endif %}
+{% endblock %}
