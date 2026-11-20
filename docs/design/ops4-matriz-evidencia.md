@@ -10,7 +10,7 @@ Fuente normativa: [SPEC BL-OPS4](especificacion-BL-OPS4.md), especialmente §§2
 
 | FR | Criterios relacionados de la SPEC | Alcance y evidencia parcial, no cumplimiento |
 |---|---|---|
-| FR-01 | AC-01 | Gate del auxiliar probado por aserciones aisladas; UI y unidad directa pendientes. |
+| FR-01 | AC-01 | Gate del auxiliar probado por aserciones aisladas y una pasada de host sin privilegios en la Pi (sin systemd ni producción); unidad directa y UI futura pendientes. |
 | FR-02 | AC-01, AC-07, AC-12 | Estados y ausencia de ejecución en UI pendientes. |
 | FR-03 | AC-04, AC-11, AC-14 | Confirmación, sesión/origen y POST pendientes; AC-14 distingue aprobación del administrador. |
 | FR-04 | AC-01, AC-05, AC-11 | Rechazo de versiones no implementadas en pruebas del gate; protocolo v3 y paridad completos pendientes. |
