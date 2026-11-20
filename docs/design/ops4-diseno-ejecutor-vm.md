@@ -291,12 +291,12 @@ marcadores de salida con comprobación del código de cada comando. Un primer
 intento quedó en el paginador; otro revirtió también el `CREATE TABLE` al
 agruparlo en el mismo `-c`. Ambos se corrigieron y no cuentan como PASS.
 
-La imagen local de BusyBox evita depender de Docker Hub; **PostgreSQL está
-instalado como servicio del invitado, no como contenedor `zascarr-db`**. Por
-tanto aún no se han probado la consulta fija `docker exec zascarr-db`, Compose,
-la aplicación ni las migraciones. La unidad y el ejecutor de actualización,
-las interrupciones y el flujo de extremo a extremo siguen **NOT RUN**. No se
-instaló la unidad de actualización ni se ejecutó `update.sh`.
+La imagen local de BusyBox evita depender de Docker Hub. En este primer
+ensayo PostgreSQL se ejecutó como servicio del invitado, no como contenedor;
+la validación posterior del lector contra el contenedor real se detalla abajo.
+Compose, la aplicación, las migraciones, la unidad y el ejecutor de
+actualización, las interrupciones y el flujo completo siguen **NOT RUN**. No
+se instaló la unidad de actualización ni se ejecutó `update.sh`.
 
 Para arrancar nuevamente desde la raíz de este worktree, **sin NIC**:
 
@@ -318,6 +318,67 @@ pruebas. Registros privados: `lab-debian-02/serial.log`, `aprovisionar.log`,
 `verificar-servicios.log` y `verificar-offline.log`, bajo el directorio de
 evidencia ignorado por Git. Estos ensayos no prueban durabilidad física de la
 Pi ni eliminan las limitaciones de cuota/cgroups indicadas arriba.
+
+### Lector real contra PostgreSQL en Docker (2026-11-20)
+
+Se añadió Python 3 al invitado mediante APT autenticado y se importó una
+imagen local `ops4-debian:lab` a partir de los binarios, bibliotecas y
+configuración **sintética** de ese invitado, sin descargar una imagen de
+Docker Hub. Su ID local fue
+`sha256:97f8bcee317d54f4f442ffae518ef04a5075d575eb25170ca401c58a6d24d1d6`;
+no es un digest de imagen publicada ni una certificación de procedencia.
+
+Se reinició QEMU con `-nic none`. Dentro de la VM se detuvo PostgreSQL nativo
+antes de montar su directorio de datos sintéticos en el contenedor (nunca dos
+servidores sobre el mismo directorio). Se ejecutó:
+
+```sh
+docker run -d --name zascarr-db --network none --read-only --cap-drop ALL \
+  --user postgres --tmpfs /tmp:rw,mode=1777 \
+  --tmpfs /var/run/postgresql:rw,mode=1777 \
+  -v /var/lib/postgresql/17/main:/var/lib/postgresql/17/main \
+  ops4-debian:lab /usr/lib/postgresql/17/bin/postgres \
+  -D /var/lib/postgresql/17/main \
+  -c config_file=/etc/postgresql/17/main/postgresql.conf \
+  -c ssl=off -c listen_addresses= \
+  -c unix_socket_directories=/var/run/postgresql
+```
+
+La carpeta montada pertenece al **invitado**, no al anfitrión ni a la Pi.
+PostgreSQL no escucha TCP: se usa el socket Unix dentro del contenedor.
+`docker inspect` confirmó `network=none readonly=true user=postgres`.
+
+Se transfirieron por consola serie los módulos de
+[lector](../../deploy/ops/lector_credenciales_ops4.py) y
+[verificación](../../deploy/ops/prueba_viva_ops4.py) del commit `2b507790`, sin
+modificarlos. Se creó una tabla mínima sintética `runtime_settings` (`id`,
+`values` JSONB) en `ops4_test`. El lector usó su ejecutor **por defecto**, no
+un doble: `/usr/bin/docker exec zascarr-db psql`, con usuario `postgres` y
+base `ops4_test` configurados en su constructor. Resultados comprobados con
+aserciones dentro de la VM:
+
+- **PASS:** lectura exacta del modo/hash sintéticos, contraseña correcta
+  aceptada y contraseña incorrecta denegada.
+- **PASS:** tras cambiar el hash en SQL, el lector ve el nuevo valor; la
+  contraseña anterior deja de valer y la nueva coincide, sin caché.
+- **PASS:** un hash de 5000 caracteres en la BD hace que el lector devuelva
+  `None` por exceso de salida.
+- **PASS:** tras detener el contenedor, el lector devuelve `None` y la prueba
+  viva deniega.
+
+El caso terminó con código 0; se comprobó la configuración del contenedor,
+se dejó detenido y se arrancó nuevamente PostgreSQL nativo. QEMU se apagó
+limpiamente (código 0). El registro privado `lector-verificar.log` tiene
+SHA-256 `29123ae0d788bf930fce631013bd0d09a818e5e1ff8e1727c7e3ba4cfa9c1cd5`.
+Los controladores y el caso sintético están en la evidencia privada, fuera de
+Git; no contienen credenciales de producción.
+
+**Límites:** esquema mínimo, sin migraciones Alembic ni app real, imagen
+local de laboratorio (no imagen oficial de PostgreSQL), credenciales y
+usuario distintos de producción. No demuestra identidad autorizada de host,
+contenedor o base, concordancia de `auth_mode` con la app, reclamación
+durable, cerrojo, unidad actualizadora ni cancelación de consultas remotas.
+La actualización sigue deshabilitada.
 
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 
