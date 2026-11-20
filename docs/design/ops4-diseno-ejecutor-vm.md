@@ -137,6 +137,19 @@ privada. Llegar al menú no instala Debian ni prueba el runtime de OPS4. Red de
 aprovisionamiento, snapshots y stack completo siguen sin probarse. Ninguna VM
 existente se ha iniciado o modificado.
 
+**Sondeo serial sin disco:** se extrajeron kernel e initrd desde la ISO y se
+creó una copia del initrd con preconfiguración mínima sin red ni credenciales.
+La comprobación del archivo adicional confirmó únicamente `preseed.cfg`; no se
+ha probado que todos sus valores se apliquen. Con QEMU sin NIC ni disco
+escribible, el kernel Debian 6.12 inició `/init` y la consola alcanzó el
+instalador. Con 768 MiB mostró un diálogo de memoria baja y la ejecución se
+cerró al cumplirse 150 s de pared. Con 1536 MiB llegó a examinar el CD y cargar
+componentes adicionales, pero terminó con código 152 al alcanzar el límite de
+100 s de CPU; **no terminó la instalación**. No se conectó el qcow2 en ninguno
+de los dos casos. Los registros quedan fuera de Git. Ajustar los límites y
+verificar la interacción del instalador siguen pendientes; no se acredita que
+el preseed sea suficiente o que el sistema instalado arranque.
+
 La [guía oficial de Debian](https://www.debian.org/CD/verify.es.html) describe
 sumas firmadas para imágenes de instalación. Para Debian 13.7.0 amd64 se ha
 verificado con `gpgv` la firma del manifiesto SHA-256 con la clave CD de huella
