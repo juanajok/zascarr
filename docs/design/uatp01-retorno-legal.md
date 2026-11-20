@@ -131,9 +131,11 @@ No se repara lo que no es canónico: **se rechaza**. Un candidato/`volver` es in
 - no coincide con ninguna ruta de §3.2.
 
 **Valores de parámetro:** no se reinterpretan; se conservan codificados. Para no producir
-destinos rotos, se exigen los límites que ya impone la ruta: `pagina` entero positivo; `q` ≤ 200
-caracteres (`web/discovery.py:100`); `identificador` ≤ 500 (`web/discovery.py:164`). El resto de
-valores son datos de la persona y la página de destino los valida como siempre.
+destinos rotos, se exigen los límites que ya impone la ruta: `pagina` entero positivo **en dígitos
+ASCII** (`[0-9]+`, no `str.isdigit()`: «²» lanza `ValueError` al convertir y «٣»/«１２» no son la
+URL canónica; se rechazan sin 500); `q` ≤ 200 caracteres (`web/discovery.py:100`);
+`identificador` ≤ 500 (`web/discovery.py:164`). El resto de valores son datos de la persona y la
+página de destino los valida como siempre.
 
 **Sin normalizar:** no se añade ni quita barra final, no se cambia la caja, no se decodifica la
 ruta, no se colapsan barras, no se ordenan parámetros. La comparación es exacta.
@@ -155,6 +157,11 @@ quiera admitir debe justificar que es **estado de la vista** y traer una prueba 
 - No se conserva: scroll, foco, texto tecleado en un buscador que no actualiza la URL, checkboxes
   marcados, pestañas ni el panel abierto. Nada de eso es una URL; no se inventa estado de sesión
   para simularlo (D-1).
+- **Re-render HTMX de la ficha (política y seguimiento):** los parciales `_politica_serie.html` y
+  `_seguimiento_serie.html` llevan el `volver` validado en un campo oculto; los POST
+  `/ui/series/{id}/politica` y `/ui/series/{id}/seguimiento` lo releen con
+  `web/retorno.py::volver_segura` y lo devuelven en el contexto del fragmento. Sin esto, el
+  enlace al aviso perdería el contexto BL-IT03 de la ficha al re-renderizar.
 
 ## 4. Comportamiento HTTP
 
@@ -175,6 +182,14 @@ El gate distingue el tipo de cliente de la petición gateada (no el destino):
   futuro sí, y habría que dejar pasar el 3xx con su `Location`).
 - `GET /ui/legal` responde 200 con el formulario (o el estado «aceptado») y `no-store`; si
   `volver` es inválido pinta el respaldo y no promete conservarlo.
+- **Aviso de aceptación incompleta:** va **debajo** de la frase de entrada (`.subtitle`) y antes
+  del formulario, con `ui.aviso("warn", …, foco=true)`: `role="alert"` (anunciable) y **un solo**
+  `tabindex="-1" autofocus` en la página. Copy exacto: «No has aceptado nada: marca las tres
+  casillas y vuelve a pulsar «Aceptar y continuar».»; si el destino se conservó, añade «Después
+  volverás <etiqueta>.» con `a Deseados`, `a Descubrir`, `a Mejoras`, `a la serie`, `al número`,
+  `al lector` o `a la biblioteca` (respaldo). El texto viejo «tu destino se conserva» no se usa.
+- **Rama «ya aceptado»:** el enlace es `← Volver <etiqueta>` con la misma etiqueta del destino
+  validado (o `a la biblioteca` si no lo hay), no siempre «Volver a la biblioteca».
 - `POST /ui/legal/accept`:
   - tres casillas → una fila de acuse y 303 al destino validado (o al respaldo), `no-store`;
   - incompleta → 303 a `/ui/legal?volver=<destino>&falta=1`, **sin** fila de acuse,
@@ -213,8 +228,10 @@ UATP-01 (texto literal) → AC-11 (parcial) y D-1.
   resultante es local y nunca empieza por `//`. El wizard pinta el respaldo, no el valor inválido.
 - **AC-05 · Aceptación incompleta.** Con una o dos casillas: no se registra nada; 303 a
   `/ui/legal?volver=<destino>&falta=1` (el `volver` del respaldo puede omitirse); el destino
-  válido se conserva; el aviso dice que falta marcar las tres y que no se ha guardado nada. Si
-  el destino era inválido, el aviso no promete conservarlo. El wizard responde 200 con `no-store`.
+  válido se conserva; el aviso, debajo de la frase de entrada y antes del formulario, dice con el
+  copy de §4 que no se ha aceptado nada y cómo continuar. Es `role="alert"` y toma el foco (un
+  solo `autofocus`); si el destino era inválido, no promete volver a él. El wizard responde 200
+  con `no-store`.
 - **AC-06 · Acceso directo.** `GET /ui/legal` sin `volver` ni historial → wizard con respaldo;
   aceptar → 303 `/ui/biblioteca`. Un POST gateado sin `HX-Current-URL` ni `Referer` usa el
   respaldo.
@@ -228,7 +245,8 @@ UATP-01 (texto literal) → AC-11 (parcial) y D-1.
   `detail: legal_acknowledgment_required` y `no-store`; no se redirige al wizard.
 - **AC-10 · Enlaces directos.** Los 4 enlaces de §1 llevan `volver` de su propia página
   (`/ui/wishlist`, `/ui/series/<uuid>` —con su `volver` anidado si lo hay— y
-  `/ui/leer/<uuid>`); aceptar desde ellos vuelve allí.
+  `/ui/leer/<uuid>`); aceptar desde ellos vuelve allí. El re-render HTMX de política/seguimiento
+  conserva ese `volver` anidado (campo oculto + `volver_segura` en el handler).
 - **AC-11 · Deseados (mínimo acreditable, parcial).** Con el acuse pendiente, una acción gateada
   desde `/ui/wishlist` vuelve a `/ui/wishlist` (200, «Deseados» y la fila sigue ahí), sin ejecutar
   la acción y sin sacar a la persona del flujo. **No se acredita** que se conserven el texto
@@ -239,6 +257,9 @@ UATP-01 (texto literal) → AC-11 (parcial) y D-1.
   destino (el respaldo es una constante, no una entrada); `falta` está en `PARAMETROS_DE_QUERY`
   (`tests/test_log_acceso.py:350`) y las pruebas de log pasan (los valores de query no se
   registran).
+- **AC-13 · Destino canónico sin 500.** Un `pagina` con dígitos Unicode (`²`, `٣`, `１２`) no
+  lanza 500 ni se acepta: el `accept` cae al respaldo con 303. La etiqueta de vuelta de cada
+  destino de §3.2 es la de §4 y la rama «ya aceptado» la usa.
 
 ## 6. Casos de prueba
 
@@ -262,6 +283,10 @@ Nombres orientativos; lo exigible es el caso. Todos con `FakeSession`/TestClient
 | T14 | `no-store` en 403, 303 (completa/incompleta) y 200 del wizard | ídem | AC-12 |
 | T15 | `falta` en el inventario y valores de query no logueados | `test_log_acceso.py` | AC-12 |
 | T16 | UAT: Deseados con acuse pendiente → aceptar → Deseados; acceso directo; retorno inválido; sesión nueva y estado persistido | Playwright/manual (`A1/resultado.md`, `replica-a1/A1/resultado.md`) | AC-02/05/06/11; marcar NOT RUN si no se ejecuta |
+| T17 | Re-render HTMX de política y seguimiento conserva el `volver` anidado | `test_web_series.py`, `test_web_serie_seguimiento.py` | AC-10 |
+| T18 | `pagina` con `²`/`٣`/`１２`/`¹²` → `None`/respaldo, nunca 500 | `test_legal.py::TestVolverLegal`, `TestUatp01RetornoDelAviso` | AC-13 |
+| T19 | `falta` debajo de `.subtitle`, antes del formulario, `role="alert"`, un `autofocus`, copy nuevo y etiqueta del destino | `test_legal.py::TestUatp01RetornoDelAviso` | AC-05 |
+| T20 | Etiqueta de la rama «ya aceptado» por destino (§3.2) y respaldo | `test_legal.py::TestEtiquetasDeRetorno` | AC-13 |
 
 Comandos mínimos:
 

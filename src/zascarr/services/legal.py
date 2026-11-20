@@ -115,7 +115,9 @@ _RETORNOS_LEGALES: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
 #: Límites que ya impone la ruta GET del destino. Un valor fuera de rango
 #: produciría un 422 al volver: se rechaza antes y se cae al respaldo.
 _LIMITES_DE_PARAMETRO = {
-    "pagina": lambda valor: valor.isdigit() and int(valor) >= 1,
+    # Solo dígitos ASCII: `str.isdigit()` acepta «²» (y `int` lanza ValueError),
+    # «٣» o «１２», que no son el entero canónico que lee la ruta.
+    "pagina": lambda valor: bool(re.fullmatch(r"[0-9]+", valor)) and int(valor) >= 1,
     "q": lambda valor: len(valor) <= 200,
     "identificador": lambda valor: len(valor) <= 500,
     "volver": lambda valor: len(valor) <= 2000,
@@ -139,8 +141,13 @@ def _query_valida(pares: list[tuple[str, str]], permitidos: frozenset[str]) -> b
         return False
     for nombre, valor in pares:
         validador = _LIMITES_DE_PARAMETRO.get(nombre)
-        if validador is not None and not validador(valor):
-            return False
+        if validador is not None:
+            try:
+                valido = validador(valor)
+            except (TypeError, ValueError):
+                return False
+            if not valido:
+                return False
     return True
 
 

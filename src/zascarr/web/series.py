@@ -593,18 +593,23 @@ def _fuentes_de_seguimiento_activas() -> bool:
 
 def _contexto_seguimiento(series: Series, *,
                           aviso_legal_pendiente: bool | None = None,
-                          activacion_bloqueada: bool = False) -> dict:
+                          activacion_bloqueada: bool = False,
+                          volver: str | None = None) -> dict:
     return {
         "aviso_legal_pendiente": aviso_legal_pendiente,
         "activacion_bloqueada_por_aviso": activacion_bloqueada,
         "fuentes_descarga_activas": _fuentes_de_seguimiento_activas(),
         "es_obra_unica": series.kind == SeriesKind.ONE_SHOT,
+        # Contexto BL-IT03 de la ficha: el fragmento re-renderizado debe
+        # conservarlo para que el enlace al aviso vuelva a la ficha correcta.
+        "volver": volver,
     }
 
 
 async def _contexto_politica(db: AsyncSession, series: Series,
                              querer=None, retirados_ahora: int | None = None,
-                             aviso_legal_pendiente: bool | None = None) -> dict:
+                             aviso_legal_pendiente: bool | None = None,
+                             volver: str | None = None) -> dict:
     """Lo que la ficha de serie enseña sobre D8.
 
     Usa el MISMO predicado que genera (`services/politica.querer_de_serie`) — si
@@ -641,6 +646,9 @@ async def _contexto_politica(db: AsyncSession, series: Series,
         "aviso_legal_pendiente": pendiente_de_aviso,
         "retirados": await _cuantos_retirados(db, series),
         "retirados_ahora": retirados_ahora,
+        # Contexto BL-IT03: el fragmento que devuelve htmx tiene que llevar el
+        # mismo `volver` que la página, o el enlace al aviso lo pierde.
+        "volver": volver,
     }
 
 
@@ -1498,6 +1506,7 @@ async def cambiar_coleccion(
 @router.post("/{series_id}/politica", response_class=HTMLResponse)
 async def cambiar_politica(series_id: UUID, request: Request,
                            wishlist_policy: str = Form(...),
+                           volver: str = Form(default=""),
                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """D8: el selector de la ficha de serie.
 
@@ -1516,6 +1525,7 @@ async def cambiar_politica(series_id: UUID, request: Request,
     series = (await db.execute(select(Series).where(Series.id == series_id))).scalar_one_or_none()
     if not series:
         raise HTTPException(status_code=404, detail="Serie no encontrada")
+    volver = volver_segura(volver, series_id)
     try:
         politica = WishlistPolicy(wishlist_policy)
     except ValueError as exc:
@@ -1532,7 +1542,8 @@ async def cambiar_politica(series_id: UUID, request: Request,
     if politica != WishlistPolicy.NONE:
         acuse = await is_acknowledged(db)
         if not acuse:
-            contexto = await _contexto_politica(db, series, aviso_legal_pendiente=True)
+            contexto = await _contexto_politica(
+                db, series, aviso_legal_pendiente=True, volver=volver)
             contexto["activacion_bloqueada_por_aviso"] = True
             return templates.TemplateResponse(
                 request, "_politica_serie.html", {"series": series, **contexto}
@@ -1545,7 +1556,8 @@ async def cambiar_politica(series_id: UUID, request: Request,
     retirados_ahora = await retirar_de_serie(db, series, querer)
     contexto = await _contexto_politica(
         db, series, querer=querer, retirados_ahora=retirados_ahora,
-        aviso_legal_pendiente=None if acuse is None else not acuse)
+        aviso_legal_pendiente=None if acuse is None else not acuse,
+        volver=volver)
     return templates.TemplateResponse(
         request, "_politica_serie.html", {"series": series, **contexto}
     )
@@ -1555,6 +1567,7 @@ async def cambiar_politica(series_id: UUID, request: Request,
 async def cambiar_seguimiento(
     series_id: UUID, request: Request,
     follow_new_issues: bool = Form(default=False),
+    volver: str = Form(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """#993: activa/desactiva el seguimiento de números nuevos de una serie.
@@ -1568,12 +1581,14 @@ async def cambiar_seguimiento(
         select(Series).where(Series.id == series_id))).scalar_one_or_none()
     if not series:
         raise HTTPException(status_code=404, detail="Serie no encontrada")
+    volver = volver_segura(volver, series_id)
     if follow_new_issues:
         if series.kind == SeriesKind.ONE_SHOT:
             return templates.TemplateResponse(
                 request, "_seguimiento_serie.html", {
                     "series": series,
-                    **_contexto_seguimiento(series, aviso_legal_pendiente=False),
+                    **_contexto_seguimiento(
+                        series, aviso_legal_pendiente=False, volver=volver),
                     "seguimiento_bloqueado_por_obra": True,
                 })
         if not await is_acknowledged(db):
@@ -1582,7 +1597,7 @@ async def cambiar_seguimiento(
                     "series": series,
                     **_contexto_seguimiento(
                         series, aviso_legal_pendiente=True,
-                        activacion_bloqueada=True),
+                        activacion_bloqueada=True, volver=volver),
                 })
         if not series.follow_new_issues:
             series.follow_new_issues_since = datetime.now(UTC)
@@ -1591,7 +1606,8 @@ async def cambiar_seguimiento(
     return templates.TemplateResponse(
         request, "_seguimiento_serie.html", {
             "series": series,
-            **_contexto_seguimiento(series, aviso_legal_pendiente=False),
+            **_contexto_seguimiento(
+                series, aviso_legal_pendiente=False, volver=volver),
         })
 
 

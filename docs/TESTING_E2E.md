@@ -234,16 +234,62 @@ for p in /ui/ /ui/biblioteca /ui/pendientes /ui/wishlist /ui/legal /legal; do
 done
 #  Criterio: todos 200 (la lectura no está detrás del gate).
 
-# 5.2 Acción de riesgo SIN aceptar: 403
-curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/api/wishlist" \
-  -H 'Content-Type: application/json' -d '{}'
-#  Criterio: 403 (legal_acknowledgment_required). Si se quiere, capturar el
-#  header HX-Redirect que apunta a /ui/legal.
+# 5.2 Acción de riesgo SIN aceptar por API: 403 JSON, no-store, HX-Redirect compatible
+curl -s -D - -o /dev/null -X POST "$APP_URL/api/wishlist" \
+  -H 'Content-Type: application/json' -d '{}' | grep -Ei '^(HTTP/|cache-control|hx-redirect)'
+#  Criterio: 403 legal_acknowledgment_required; Cache-Control: no-store; no Location.
 
-# 5.3 Aceptar (form-encoded, campos reales acepto_1/2/3)
-curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/ui/legal/accept" \
+# 5.2b Acción gateada por htmx: 403 + HX-Redirect con volver codificado y no-store
+curl -s -D - -o /dev/null -X POST "$APP_URL/ui/wishlist/anadir" \
+  -H 'HX-Request: true' -H 'HX-Current-URL: '"$APP_URL"'/ui/wishlist' \
   -H 'Content-Type: application/x-www-form-urlencoded' \
-  --data 'acepto_1=true&acepto_2=true&acepto_3=true'          # → 303 (redirect)
+  --data 'series_id=00000000-0000-0000-0000-000000000001' \
+  | grep -Ei '^(HTTP/|cache-control|hx-redirect)'
+#  Criterio: 403; HX-Redirect: /ui/legal?volver=%2Fui%2Fwishlist; no-store.
+
+# 5.2c Formulario normal bajo /ui/ (sin htmx, navegador): 303 al wizard, no JSON 403
+curl -s -D - -o /dev/null -X POST "$APP_URL/ui/wishlist/anadir" \
+  -H 'Accept: text/html' -H 'Referer: '"$APP_URL"'/ui/series/00000000-0000-0000-0000-000000000001' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'series_id=00000000-0000-0000-0000-000000000001' \
+  | grep -Ei '^(HTTP/|location|cache-control)'
+#  Criterio: 303; Location: /ui/legal?volver=...; no-store.
+
+# 5.3 Aceptar (form-encoded, campos reales acepto_1/2/3 + volver)
+curl -s -D - -o /dev/null -X POST "$APP_URL/ui/legal/accept" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'acepto_1=true&acepto_2=true&acepto_3=true&volver=%2Fui%2Fwishlist' \
+  | grep -Ei '^(HTTP/|location|cache-control)'
+#  Criterio: 303; Location: /ui/wishlist; no-store.
+
+# 5.3b Aceptación incompleta: no registra, conserva el destino y el aviso es honesto/foco
+curl -s -D - -o /dev/null -X POST "$APP_URL/ui/legal/accept" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'acepto_1=true&volver=%2Fui%2Fwishlist' \
+  | grep -Ei '^(HTTP/|location|cache-control)'
+#  Criterio: 303; Location: /ui/legal?volver=%2Fui%2Fwishlist&falta=1; no-store.
+curl -s "$APP_URL/ui/legal?volver=%2Fui%2Fwishlist&falta=1" \
+  | grep -E 'No has aceptado nada|role="alert"|tabindex="-1" autofocus|Después volverás a Deseados'
+#  Criterio: un aviso warn bajo .subtitle, role=alert, un solo autofocus y el destino nombrado.
+
+# 5.3c Destino hostil o no canónico: respaldo, nunca 500 ni salida externa
+for v in '%2F%2Fevil.example' '%2F%2F%2Fui%2Fwishlist' '%2Fui%2F%25%32%65%25%32%65%2Fapi' \
+         '%2Fui%2Fmejoras%3Fpagina%3D%C2%B2' '%2Fui%2Fmejoras%3Fpagina%3D%EF%BC%91%EF%BC%92'; do
+  curl -s -D - -o /dev/null -X POST "$APP_URL/ui/legal/accept" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    --data 'acepto_1=true&acepto_2=true&acepto_3=true&volver='"$v" \
+    | grep -Ei '^(HTTP/|location)'
+done
+#  Criterio: 303 a /ui/biblioteca; ningún Location empieza por //; «pagina=²» no da 500.
+
+# 5.3d Re-render htmx de política/seguimiento: conserva el volver anidado de la ficha
+sid=00000000-0000-0000-0000-000000000001
+curl -s -X POST "$APP_URL/ui/series/$sid/seguimiento" \
+  -H 'HX-Request: true' -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'follow_new_issues=true' \
+  --data-urlencode "volver=/ui/biblioteca#serie-$sid" \
+  | grep -o 'ui/legal?volver=[^"]*'
+#  Criterio: el enlace al aviso contiene /ui/series/$sid...volver=.../ui/biblioteca... (no se pierde).
 
 # 5.4 Tras aceptar, la acción de riesgo ya no es 403 por el gate
 #     (puede ser 4xx de validación de body; NO debe ser 403 legal)

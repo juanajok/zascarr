@@ -137,7 +137,8 @@ componentes). «JS» marca JavaScript propio dentro de la plantilla.
 | `_candidatos_wishlist.html` | 1272 | — | — | POST /ui/wishlist/{item_id}/buscar-ahora | `/ui/wishlist/{…}/cancelar-busqueda`<br>`/ui/wishlist/{…}/enviar-candidato` | 8 | — |
 | `_fila_wishlist.html` | 1342 | — | — | POST /ui/wishlist/anadir ; POST /ui/wishlist/{item_id}/reintentar ; POST /ui/wishlist/{item_id}/enviar-candidato | `/ui/wishlist/{…}/buscar-ahora`<br>`/ui/wishlist/{…}/quitar`<br>`/ui/wishlist/{…}/reintentar` | 9 | — |
 | `_legal_disclaimer.html` | 874 | — | — | (incluida) | — | 4 | — |
-| `_politica_serie.html` | 3867 | — | — | POST /ui/series/{series_id}/politica | `/ui/series/{…}/politica` | 11 | — |
+| `_politica_serie.html` | 6824 | — | — | POST /ui/series/{series_id}/politica (incluye `volver`) | `/ui/series/{…}/politica` | 11 | — |
+| `_seguimiento_serie.html` | 2617 | — | — | POST /ui/series/{series_id}/seguimiento (incluye `volver`) | — | 2 | — |
 | `_desvinculacion_panel.html` | — | — | — | GET/POST /ui/series/{series_id}/archivos/{file_id}/deshacer | `…/deshacer` (`#desvinculacion`) | — | — |
 | `_rejilla_biblioteca.html` | 1356 | — | — | GET /ui/biblioteca/resultados | `{…}` | 12 | `onerror` |
 | `_resultados_descubrir.html` | 2171 | — | — | GET /ui/descubrir/buscar | `/ui/descubrir/crear` | 10 | `onerror` |
@@ -154,10 +155,10 @@ componentes). «JS» marca JavaScript propio dentro de la plantilla.
 | `descubrir.html` | 656 | base.html | — | GET /ui/descubrir | `/ui/descubrir/buscar` | 3 | — |
 | `estado.html` | 4682 | base.html | — | GET /estado | — | 16 | JS inline |
 | `legal_full.html` | 181 | base.html | — | GET /legal | — | 1 | — |
-| `legal_wizard.html` | 1362 | base.html | — | GET /ui/legal | — | 3 | — |
+| `legal_wizard.html` | 1900 | base.html | — | GET /ui/legal (`volver`, `falta`) | POST /ui/legal/accept | 3 | — |
 | `login.html` | 1010 | — (autónoma) | — | GET /login ; POST /login | — | 5 | — |
 | `pendientes.html` | 2552 | base.html | — | GET /ui/pendientes | `/ui/pendientes/{…}/asignar`<br>`/ui/pendientes/{…}/buscar-serie`<br>`/ui/pendientes/{…}/ignorar` | 19 | `onerror` |
-| `series_detail.html` | 1671 | base.html | _legal_disclaimer.html, _politica_serie.html | GET /ui/series/{series_id} | — | 11 | `onerror` |
+| `series_detail.html` | 1671 | base.html | _legal_disclaimer.html, _politica_serie.html, _seguimiento_serie.html | GET /ui/series/{series_id} | — | 11 | `onerror` |
 | `wishlist.html` | 1156 | base.html | _fila_wishlist.html, _legal_disclaimer.html | GET /ui/wishlist | `/ui/wishlist/buscar-serie` | 7 | — |
 
 Observaciones del mapa:
@@ -185,7 +186,9 @@ Observaciones del mapa:
 
 Generada del AST de los routers. `*` = campo obligatorio de formulario. «Errores explícitos» son los
 códigos HTTP que el handler lanza o devuelve. «Gate legal» = lleva `Depends(require_legal_acknowledgment)`
-(responde `403` con cabecera `HX-Redirect: /ui/legal`, un mecanismo que htmx interpreta solo).
+(UATP-01: htmx responde `403` con `HX-Redirect: /ui/legal…` y `Cache-Control: no-store`; un
+formulario normal bajo `/ui/` con `Accept: text/html` recibe `303` + `Location` al wizard; la API/JSON
+conserva el `403` con `detail`. `volver` se valida contra una lista cerrada).
 
 | Fichero | Método | Ruta | Campos (`*` = obligatorio) | Responde | Errores explícitos | Gate legal |
 |---|---|---|---|---|---|---|
@@ -214,8 +217,8 @@ códigos HTTP que el handler lanza o devuelve. «Gate legal» = lleva `Depends(r
 | discovery | GET | `/ui/descubrir/portada` | — | (otra) | 400,404 | — |
 | discovery | POST | `/ui/descubrir/crear` | source*,external_id*,title*,tradition*,start_year,description,cover_url | _serie_creada.html | 400 | — |
 | estado | GET | `/estado` | — | estado.html | — | — |
-| legal | GET | `/ui/legal` | — | legal_wizard.html | — | — |
-| legal | POST | `/ui/legal/accept` | acepto_1,acepto_2,acepto_3 | (redirige) | 303 | — |
+| legal | GET | `/ui/legal` | volver,falta | legal_wizard.html | — | — |
+| legal | POST | `/ui/legal/accept` | acepto_1,acepto_2,acepto_3,volver | (redirige) | 303 | — |
 | legal | GET | `/legal` | — | legal_full.html | — | — |
 | library | GET | `/ui/biblioteca` | page,tradition,publisher_id,character_id,story_arc_id,q | biblioteca.html | — | — |
 | library | GET | `/ui/biblioteca/resultados` | page,tradition,publisher_id,character_id,story_arc_id,q | _rejilla_biblioteca.html | — | — |
@@ -227,7 +230,8 @@ códigos HTTP que el handler lanza o devuelve. «Gate legal» = lleva `Depends(r
 | pendientes | POST | `/ui/pendientes/{file_id}/asignar` | series_id*,issue_number* | (vacío) | 400,409 | — |
 | pendientes | POST | `/ui/pendientes/{file_id}/ignorar` | — | (vacío) | 404 | — |
 | series | GET | `/ui/series/{series_id}` | — | series_detail.html | 404 | — |
-| series | POST | `/ui/series/{series_id}/politica` | wishlist_policy* | _politica_serie.html | 404,422 | — |
+| series | POST | `/ui/series/{series_id}/politica` | wishlist_policy*,volver | _politica_serie.html | 404,422 | — |
+| series | POST | `/ui/series/{series_id}/seguimiento` | follow_new_issues,volver | _seguimiento_serie.html | 404 | — |
 | series | GET | `/ui/series/{series_id}/portada` | — | (otra) | 404 | — |
 | series | GET | `/ui/series/{series_id}/archivos/{file_id}/deshacer` | — | desvinculacion.html / _desvinculacion_panel.html | 404,503 | — |
 | series | POST | `/ui/series/{series_id}/archivos/{file_id}/deshacer` | token* | desvinculacion.html / _desvinculacion_panel.html | 422 | — |
@@ -250,7 +254,7 @@ campos y forma del fragmento hasta que otra los sustituya y esté escrito en su 
 | `POST /ui/pendientes/{id}/asignar` → `""` | tarjeta de `pendientes.html`, `hx-target="#card-{id}"` `hx-swap="outerHTML"` | 200 con cuerpo vacío = la tarjeta desaparece; 400/409 → ver §2.5 |
 | `POST /ui/pendientes/{id}/ignorar` → `""` | mismo patrón, con `hx-confirm` | idem |
 | `GET /ui/pendientes/{id}/buscar-serie?q=` → `_resultados_serie.html` | `keyup changed delay:400ms` | fragmento con un `assign-form` por serie, que a su vez hace `hx-post` a `asignar` |
-| `POST /ui/wishlist/anadir` (`series_id`) → `_fila_wishlist.html` | panel, Deseados, `_serie_creada.html`, `_resultados_series_wishlist.html` | una fila lista para insertar; `403`+`HX-Redirect` si falta el aviso legal |
+| `POST /ui/wishlist/anadir` (`series_id`) → `_fila_wishlist.html` | panel, Deseados, `_serie_creada.html`, `_resultados_series_wishlist.html` | una fila lista para insertar; `403`+`HX-Redirect` (o `303`+`Location` en formulario normal) si falta el aviso legal, con `volver` validado y `no-store` |
 | `POST /ui/wishlist/{id}/(quitar\|reintentar\|buscar-ahora\|cancelar-busqueda\|enviar-candidato)` | `_fila_wishlist.html`, `_candidatos_wishlist.html` | filas/candidatos como arriba; `enviar-candidato` exige `token` |
 | `POST /ui/ajustes/guardar/*` y `probar/*` (12 rutas) | `ajustes.html` | `_ajustes_guardado.html` / `_ajustes_prueba.html`; **D11: guardar aplica al instante y los secretos nunca vuelven en claro**; **A6: el guardarraíl de contraseña** (400) |
 | `GET /ui/biblioteca/resultados`, `buscar-personaje`, `buscar-saga` | `biblioteca.html`, paginación | rejilla / listas con enlaces `?character_id=`/`?story_arc_id=` |

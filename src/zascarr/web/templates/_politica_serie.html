@@ -14,6 +14,8 @@
     Qué busca ZascArr por su cuenta, hasta que lo cambies. Lo que añadas a mano se busca siempre.
   </p>
   <form class="politica-form">
+    {# El POST re-renderiza el parcial: sin `volver`, el enlace al aviso perdería la ficha. #}
+    <input type="hidden" name="volver" value="{{ volver or '' }}">
     <label for="wishlist_policy">Qué buscar</label>
     <select id="wishlist_policy" name="wishlist_policy"
             aria-describedby="politica-efecto politica-futuros"

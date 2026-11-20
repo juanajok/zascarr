@@ -464,6 +464,26 @@ class TestPoliticaBusquedaD8:
         assert f'href="/ui/legal?volver=/ui/series/{series.id}"' in r.text
         assert "dejado de buscar" not in r.text
 
+    def test_activar_sin_aviso_conserva_el_volver_anidado(self):
+        """El re-render HTMX de la política no puede perder el contexto de vuelta
+        de la ficha (BL-IT03)."""
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.NONE
+        volver = f"/ui/biblioteca#serie-{series.id}"
+        session = FakeSession([
+            FakeExecResult([series]),   # la serie
+            FakeExecResult([]),         # puerta legal: SIN acuse
+            retirados(),                # contexto del fragmento sin cambios
+        ])
+        with use_fake_session(session, ficha=False) as client:
+            r = client.post(
+                f"/ui/series/{series.id}/politica",
+                data={"wishlist_policy": "faltantes", "volver": volver},
+            )
+        assert r.status_code == 200
+        assert (f"/ui/series/{series.id}%3Fvolver%3D"
+                f"/ui/biblioteca%2523serie-{series.id}") in r.text
+
     def test_desactivar_politica_sin_aviso_si_funciona(self):
         """C6 / FR-21: desactivar nunca exige el aviso legal."""
         series = make_series(total_issues=3)

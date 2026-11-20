@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
+from urllib.parse import quote
 
 import pytest
 from fastapi import HTTPException, Request
@@ -335,6 +336,12 @@ class TestVolverLegal:
         "/ui/mejoras?guardado=escaneado",
         "/ui/mejoras?pagina=0",
         "/ui/mejoras?pagina=abc",
+        # Dígitos Unicode: no son el entero ASCII que lee la ruta (ni `isdigit` basta:
+        # «²» da `ValueError` al convertirlo y «٣»/«１２» no son la URL canónica).
+        "/ui/mejoras?pagina=²",
+        "/ui/mejoras?pagina=٣",
+        "/ui/mejoras?pagina=１２",
+        "/ui/mejoras?pagina=¹²",
         "/ui/mejoras?pagina=1&pagina=2",
         "/ui/mejoras?=x",
         f"/ui/series/{_SERIE}?guardado=guardado",
@@ -393,6 +400,34 @@ class TestResolucionDelDestino:
         assert resolver_destino_legal(request) is None
 
 
+class TestEtiquetasDeRetorno:
+    """UIUX: la rama «ya aceptado» y el aviso de `falta` nombran el destino."""
+
+    @pytest.mark.parametrize("destino,etiqueta", [
+        ("/ui/wishlist", "a Deseados"),
+        ("/ui/descubrir?q=flash", "a Descubrir"),
+        ("/ui/descubrir/identificador?identificador=urn%3Aisbn%3A9788467900000", "a Descubrir"),
+        ("/ui/mejoras", "a Mejoras"),
+        (f"/ui/series/{_SERIE}", "a la serie"),
+        (f"/ui/series/{_SERIE}/numero/{_NUMERO}", "al número"),
+        (f"/ui/leer/{_ARCHIVO}", "al lector"),
+    ])
+    def test_rama_aceptada_nombra_el_destino(self, destino, etiqueta):
+        ack = LegalAcknowledgment(legal_version=current_legal_version(),
+                                  accepted_at=datetime.now(UTC))
+        with use_fake_session(FakeSession(rows=[ack])) as client:
+            r = client.get(f"/ui/legal?volver={quote(destino, safe='')}")
+        assert r.status_code == 200
+        assert f"← Volver {etiqueta}" in r.text
+
+    def test_rama_aceptada_sin_contexto_dice_biblioteca(self):
+        ack = LegalAcknowledgment(legal_version=current_legal_version(),
+                                  accepted_at=datetime.now(UTC))
+        with use_fake_session(FakeSession(rows=[ack])) as client:
+            r = client.get("/ui/legal")
+        assert "← Volver a la biblioteca" in r.text
+
+
 class TestUatp01RetornoDelAviso:
     def test_aceptar_desde_deseados_vuelve_a_la_pagina_real(self):
         """La ruta real es `/ui/wishlist` (no `/ui/deseados`): se comprueba el
@@ -447,6 +482,22 @@ class TestUatp01RetornoDelAviso:
             )
         assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO
         assert r.headers["cache-control"] == "no-store"
+        assert len(session.added) == 1
+
+    @pytest.mark.parametrize("valor", ["²", "٣", "１２", "¹²"])
+    def test_volver_con_pagina_unicode_no_da_500_y_cae_al_respaldo(self, valor):
+        """Regresión SecOps: `int("²")` lanzaba ValueError → 500; los otros
+        dígitos Unicode no son la URL canónica y no deben aceptarse."""
+        session = FakeSession()
+        with use_fake_session(session) as client:
+            r = client.post(
+                "/ui/legal/accept",
+                data={"acepto_1": "true", "acepto_2": "true", "acepto_3": "true",
+                      "volver": f"/ui/mejoras?pagina={valor}"},
+                follow_redirects=False,
+            )
+        assert r.status_code == 303
+        assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO
         assert len(session.added) == 1
 
     def test_falta_conserva_el_destino_y_lo_explica(self):
@@ -563,13 +614,31 @@ class TestUatp01RetornoDelAviso:
             await require_legal_acknowledgment(request=request, db=session)
         assert exc.value.headers["HX-Redirect"] == "/ui/legal"
 
-    def test_falta_con_destino_invalido_no_promete_conservarlo(self):
-        """El aviso no puede decir «tu destino se conserva» si se cayó a Biblioteca."""
+    def test_falta_con_destino_invalido_no_promete_vuelta(self):
+        """El aviso no puede prometer un destino si se cayó al respaldo."""
         with use_fake_session(FakeSession(rows=[])) as client:
             r = client.get("/ui/legal?volver=//evil.example/x&falta=1")
         assert r.status_code == 200
+        assert "No has aceptado nada: marca las tres casillas" in r.text
+        assert "Después volverás" not in r.text
         assert "tu destino se conserva" not in r.text
-        assert "Falta marcar alguna de las tres casillas." in r.text
+
+    def test_falta_conserva_destino_lo_dice_y_es_anunciable(self):
+        with use_fake_session(FakeSession(rows=[])) as client:
+            r = client.get("/ui/legal?volver=%2Fui%2Fwishlist&falta=1")
+        assert r.status_code == 200
+        assert "Después volverás a Deseados." in r.text
+        # Anunciable y con foco: role alert + tabindex/autofocus del macro.
+        assert 'role="alert"' in r.text
+        assert 'tabindex="-1" autofocus' in r.text
+        # Debajo de la frase de entrada y antes del formulario.
+        assert r.text.index('class="subtitle"') < r.text.index("No has aceptado nada")
+        assert r.text.index("No has aceptado nada") < r.text.index("<form")
+
+    def test_solo_hay_un_autofocus_en_el_wizard(self):
+        with use_fake_session(FakeSession(rows=[])) as client:
+            r = client.get("/ui/legal?volver=%2Fui%2Fwishlist&falta=1")
+        assert r.text.count("autofocus") == 1
 
     def test_el_403_del_gate_no_se_cachea(self):
         with use_fake_session(FakeSession(rows=[])) as client:

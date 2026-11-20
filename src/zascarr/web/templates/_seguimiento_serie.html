@@ -18,6 +18,8 @@
   {% endif %}
   <form hx-post="/ui/series/{{ series.id }}/seguimiento"
         hx-target="#seguimiento-serie" hx-swap="outerHTML">
+    {# El POST re-renderiza el parcial: sin `volver`, el enlace al aviso perdería la ficha. #}
+    <input type="hidden" name="volver" value="{{ volver or '' }}">
     <label class="legal-checkbox">
       <input type="checkbox" name="follow_new_issues" value="true"
              {% if series.follow_new_issues %}checked{% endif %}>
