@@ -144,6 +144,7 @@ class Filtros:
     modo: str = "gestion"
     naturaleza: str = ""
     formato: str = ""
+    puntuacion: str = ""
     avisos: tuple[str, ...] = ()
 
     def uuid(self, nombre: str) -> UUID | None:
@@ -185,6 +186,7 @@ def _leer_filtros(
     modo: str = "",
     naturaleza: str = "",
     formato: str = "",
+    puntuacion: str = "",
 ) -> Filtros:
     """Normaliza y valida la entrada de la URL; nunca lanza por un valor inválido.
 
@@ -249,7 +251,7 @@ def _leer_filtros(
             any((texto, tradicion, publisher_id, character_id, story_arc_id,
                  author_id, favorito, (idioma or ""), (edicion or ""), etiquetas,
                  leido, coleccion, (anio_desde or ""), (anio_hasta or ""),
-                 (naturaleza or ""), (formato or "")))
+                 (naturaleza or ""), (formato or ""), (puntuacion or "")))
             or vista_limpia == "lista"):
         # Un escaparate nunca se pinta con filtros: se fuerza gestión.
         modo_final = "gestion"
@@ -262,6 +264,10 @@ def _leer_filtros(
     if formato_limpio and formato_limpio not in _FORMATOS_VALIDOS:
         avisos.append("El formato pedido no existe; se ha quitado.")
         formato_limpio = ""
+    puntuacion_limpia = (puntuacion or "").strip().lower()
+    if puntuacion_limpia and puntuacion_limpia not in ("con", "sin", "4-5"):
+        avisos.append("La puntuación pedida no existe; se ha quitado.")
+        puntuacion_limpia = ""
     expresion = parse_expresion(etiquetas)
     avisos.extend(expresion.avisos)
     texto_etiquetas = " ".join(
@@ -272,7 +278,8 @@ def _leer_filtros(
         avisos.append("El filtro de lectura no es válido; se ha quitado.")
         leido = ""
     orden = (orden or "").strip().lower()
-    if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente"):
+    if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente",
+                     "valoracion"):
         orden = "titulo"
     coleccion = (coleccion or "").strip().lower()
     if coleccion and coleccion not in COLECCION_TIPOS:
@@ -316,6 +323,7 @@ def _leer_filtros(
         modo=modo_final,
         naturaleza=naturaleza_limpia,
         formato=formato_limpio,
+        puntuacion=puntuacion_limpia,
         avisos=tuple(avisos),
     )
 
@@ -345,6 +353,7 @@ def _qs(filtros: Filtros, *, page: int, omitir: str | None = None) -> str:
         "vista": "lista" if filtros.vista == "lista" else "",
         "naturaleza": filtros.naturaleza,
         "formato": filtros.formato,
+        "puntuacion": filtros.puntuacion,
         "densidad": "" if filtros.densidad == "intermedia" else filtros.densidad,
         "modo": "" if filtros.modo == "gestion" else filtros.modo,
     }
@@ -396,6 +405,10 @@ def _filtros_activos(filtros: Filtros, nombres: dict[str, str | None]) -> list[F
         _anadir("favoritos", "Solo favoritas")
     if filtros.language:
         _anadir("idioma", f"Idioma: {filtros.language}")
+    if filtros.puntuacion:
+        _anadir("puntuacion", {
+            "con": "Con valoración", "sin": "Sin valorar", "4-5": "Puntuación 4–5",
+        }[filtros.puntuacion])
     if filtros.naturaleza:
         _anadir("naturaleza", f"Naturaleza: {_NATURALEZA_LABEL[filtros.naturaleza]}")
     if filtros.formato:
@@ -535,6 +548,7 @@ async def _contexto(
             tradition=filtros.tradition or None,
             kind=filtros.naturaleza or None,
             format=filtros.formato or None,
+            puntuacion=filtros.puntuacion or None,
             search=filtros.q or None,
             publisher_id=filtros.uuid("publisher_id"),
             character_id=filtros.uuid("character_id"),
@@ -637,6 +651,7 @@ async def _contexto(
         vista=filtros.vista,
         naturaleza=filtros.naturaleza,
         formato=filtros.formato,
+        puntuacion=filtros.puntuacion,
         densidad=filtros.densidad,
         modo=filtros.modo,
         avisos=tuple(avisos),
@@ -674,10 +689,12 @@ async def _contexto(
             ("titulo", "A-Z"), ("titulo_desc", "Z-A"),
             ("anio_desc", "Recientes"), ("anio_asc", "Antiguas"),
             ("reciente", "Añadidas"),
+            ("valoracion", "Mejor valoradas"),
         ),
         "vista": filtros_finales.vista,
         "naturaleza": filtros_finales.naturaleza,
         "formato": filtros_finales.formato,
+        "puntuacion": filtros_finales.puntuacion,
         "naturalezas": [(v, _NATURALEZA_LABEL[v]) for v in _NATURALEZA_LABEL],
         "formatos": [(v, _FORMATO_LABEL[v]) for v in _FORMATO_LABEL],
         "densidad": filtros_finales.densidad,
@@ -770,13 +787,14 @@ async def sugerir_etiquetas(
     vista: str = "", coleccion: str = "", author_id: str = "",
     favoritos: str = "", anio_desde: str = "", anio_hasta: str = "",
     idioma: str = "", edicion: str = "", densidad: str = "", modo: str = "",
-    naturaleza: str = "", formato: str = "", db: AsyncSession = Depends(get_db),
+    naturaleza: str = "", formato: str = "", puntuacion: str = "",
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         coleccion=coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     tokens = etiquetas.strip().split()
     prefijo = tokens[-1].lstrip("-") if tokens else ""
     sin_prefijo = replace(filtros, etiquetas=" ".join(tokens[:-1]))
@@ -844,13 +862,14 @@ async def index(
     coleccion: str = "", author_id: str = "", favoritos: str = "",
     anio_desde: str = "", anio_hasta: str = "", idioma: str = "", edicion: str = "",
     densidad: str = "", modo: str = "", naturaleza: str = "", formato: str = "",
+    puntuacion: str = "",
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         leido, orden, coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     publishers: list = []
     editoriales_error = False
     try:
@@ -889,13 +908,14 @@ async def resultados(
     coleccion: str = "", author_id: str = "", favoritos: str = "",
     anio_desde: str = "", anio_hasta: str = "", idioma: str = "", edicion: str = "",
     densidad: str = "", modo: str = "", naturaleza: str = "", formato: str = "",
+    puntuacion: str = "",
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         leido, orden, coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     return await _respuesta_fragmento(request, await _contexto(db, filtros), db)
 
 
@@ -941,7 +961,8 @@ async def buscar_personaje(
     vista: str = "", etiquetas: str = "", coleccion: str = "",
     author_id: str = "", favoritos: str = "", anio_desde: str = "", anio_hasta: str = "",
     idioma: str = "", edicion: str = "", densidad: str = "", modo: str = "",
-    naturaleza: str = "", formato: str = "", db: AsyncSession = Depends(get_db),
+    naturaleza: str = "", formato: str = "", puntuacion: str = "",
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(personaje)
     if not texto and q:
@@ -951,7 +972,7 @@ async def buscar_personaje(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         coleccion=coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     service = SeriesService(db)
     encontrados: list = []
     try:
@@ -973,7 +994,8 @@ async def buscar_saga(
     vista: str = "", etiquetas: str = "", coleccion: str = "",
     author_id: str = "", favoritos: str = "", anio_desde: str = "", anio_hasta: str = "",
     idioma: str = "", edicion: str = "", densidad: str = "", modo: str = "",
-    naturaleza: str = "", formato: str = "", db: AsyncSession = Depends(get_db),
+    naturaleza: str = "", formato: str = "", puntuacion: str = "",
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(saga)
     if not texto and q:
@@ -982,7 +1004,7 @@ async def buscar_saga(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         coleccion=coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     service = SeriesService(db)
     encontrados: list = []
     try:
@@ -1004,7 +1026,8 @@ async def buscar_autor(
     vista: str = "", etiquetas: str = "", coleccion: str = "",
     author_id: str = "", favoritos: str = "", anio_desde: str = "", anio_hasta: str = "",
     idioma: str = "", edicion: str = "", densidad: str = "", modo: str = "",
-    naturaleza: str = "", formato: str = "", db: AsyncSession = Depends(get_db),
+    naturaleza: str = "", formato: str = "", puntuacion: str = "",
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(autor)
     if not texto and q:
@@ -1013,7 +1036,7 @@ async def buscar_autor(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
         coleccion=coleccion, author_id=author_id, favorito=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
-        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato)
+        densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     service = SeriesService(db)
     encontrados: list = []
     try:

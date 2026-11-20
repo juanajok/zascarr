@@ -312,7 +312,8 @@ class TestTrasIntercambiosHtmx:
         assert "Paracuellos (integral)" in dom
         assert not controles_sin_nombre(dom)
         assert [n for _, _, n in _leer(pagina).nombres()] == [
-            "Buscar por título", "Tradición", "Naturaleza", "Formato", "Editorial",
+            "Buscar por título", "Tradición", "Puntuación", "Naturaleza", "Formato",
+            "Editorial",
             "Lectura", "Personaje", "Saga",
             "Idioma", "Edición", "Desde el año", "Hasta el año", "Autor",
             "Solo favoritas", "Etiquetas", "Estado de la serie", "Orden"]
