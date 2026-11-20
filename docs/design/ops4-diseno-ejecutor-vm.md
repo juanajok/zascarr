@@ -236,18 +236,88 @@ una prueba con `/bin/true`, no del futuro ejecutor; el conjunto de capacidades
 puede no servir para `update.sh`/Docker y deberá revisarse. La exposición 3.9
 no es una certificación de seguridad.
 
-Se probó también una NIC de usuario de QEMU para instalar Docker/PostgreSQL:
-la interfaz `enp0s1` subió, pero `dhclient` falló y no se obtuvo dirección IPv4;
-la resolución DNS falló. Una configuración estática de laboratorio
-(`10.0.2.15/24`, puerta `10.0.2.2`, DNS `10.0.2.3`) aceptó la dirección, pero
-la ruta por defecto y el ping a la puerta fallaron. Por tanto la instalación de
-Docker, PostgreSQL y las pruebas de extremo a extremo siguen **NOT RUN**. No se
-añadió red de producción ni se abrió ningún puerto.
+Los primeros intentos con una NIC de usuario de QEMU no obtuvieron IPv4:
+`dhclient` falló y la configuración estática posterior falló al añadir la ruta.
+**Diagnóstico corregido el 2026-11-20:** al reiniciar QEMU, la interfaz volvía a
+estar apagada. El intento estático no había ejecutado `ip link set enp0s1 up`
+en ese arranque; no era evidencia de que la red de QEMU estuviera inutilizable.
 
-No se instalaron Docker ni PostgreSQL, no se instaló la unidad de
-actualización, no se ejecutó `update.sh` y no se tocó la Pi ni datos reales.
-Los intentos previos con contraseña/usuario equivocados se descartaron; los
-registros y capturas quedan en evidencia privada fuera de Git.
+### Laboratorio regenerado y verificado (2026-11-20)
+
+Se creó `lab-debian-02/disco.qcow2`, un overlay qcow2 sobre el disco Debian
+anterior, sin modificar la base. Ambos están en la evidencia privada ignorada
+por Git. El overlay depende de la base: no moverla ni modificarla mientras se
+use el overlay. No hay carpetas compartidas, discos físicos, socket Docker del
+anfitrión ni red puente. El aprovisionamiento usó una NIC de usuario de QEMU,
+sin redirección de puertos; permite tráfico saliente y **no es aislamiento de
+red completo**. No se usó SSH a la Pi ni datos de producción.
+
+Dentro del invitado, como root, funcionó esta secuencia en el mismo arranque:
+
+```sh
+ip link set enp0s1 up
+ip addr replace 10.0.2.15/24 dev enp0s1
+ip route replace default via 10.0.2.2
+printf 'nameserver 10.0.2.3\n' > /etc/resolv.conf
+getent ahostsv4 deb.debian.org
+```
+
+El espejo HTTPS falló al verificar su certificado. No se desactivó TLS ni la
+verificación de paquetes: se usó el espejo HTTP de Debian con autenticación de
+APT por firmas del archivo, sin `trusted=yes` ni `--allow-unauthenticated`.
+`apt-get -o APT::Update::Error-Mode=any update` y la instalación terminaron con
+código 0. Paquetes: `docker.io`, **`docker-cli`** (el cliente es separado en
+esta versión), `postgresql`, `ca-certificates`, `dbus` y `busybox-static`.
+HTTP no aporta confidencialidad del transporte; la autenticidad del archivo
+se mantiene mediante las firmas que APT verifica. No se diagnosticó la causa
+exacta del error de certificado.
+
+Después se arrancó **sin NIC** (`-nic none`) y se verificó:
+
+| Comprobación real | Resultado |
+| --- | --- |
+| `docker version`, cliente y servidor | `26.1.5+dfsg1`, ambos responden |
+| `pg_lsclusters` | PostgreSQL `17/main`, `online` |
+| Consulta en base sintética `ops4_test` | PostgreSQL `17.11` |
+| Crear tabla, insertar dentro de transacción y `ROLLBACK` | Recuento final `0` |
+| Imagen local importada desde el BusyBox estático del invitado | Contenedor ejecutado; imprime `OPS4_CONTAINER_OK` |
+| Contenedor con `--network none --read-only --cap-drop ALL` | Código `0` |
+| `systemctl is-active docker postgresql` | `active`, `active` |
+| Escucha PostgreSQL (`ss -lnt`) | Solo `127.0.0.1:5432` y `[::1]:5432` |
+| Apagado por `poweroff` | QEMU terminó con código `0` |
+
+Para las consultas se usaron `psql -X -P pager=off -v ON_ERROR_STOP=1` y
+marcadores de salida con comprobación del código de cada comando. Un primer
+intento quedó en el paginador; otro revirtió también el `CREATE TABLE` al
+agruparlo en el mismo `-c`. Ambos se corrigieron y no cuentan como PASS.
+
+La imagen local de BusyBox evita depender de Docker Hub; **PostgreSQL está
+instalado como servicio del invitado, no como contenedor `zascarr-db`**. Por
+tanto aún no se han probado la consulta fija `docker exec zascarr-db`, Compose,
+la aplicación ni las migraciones. La unidad y el ejecutor de actualización,
+las interrupciones y el flujo de extremo a extremo siguen **NOT RUN**. No se
+instaló la unidad de actualización ni se ejecutó `update.sh`.
+
+Para arrancar nuevamente desde la raíz de este worktree, **sin NIC**:
+
+```sh
+qemu-system-x86_64 -machine q35,accel=tcg -m 2048 -smp 2 \
+  -nodefaults -no-user-config -nic none -display none \
+  -serial stdio -monitor none -no-reboot \
+  -drive file=fuera-de-zascarr/ops4-vm-evidencia/lab-debian-02/disco.qcow2,if=virtio,format=qcow2
+```
+
+No ejecutar dos instancias sobre el mismo disco. No conectar discos de
+producción ni el socket Docker del anfitrión. La cuenta `ops4` conserva una
+contraseña sintética de laboratorio en la evidencia privada: no sirve para
+producción y no se publica en Git. Para controlar servicios desde la consola
+root se conserva la receta `DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/systemd/private`.
+
+El laboratorio regenerado queda apagado, con disco persistente para nuevas
+pruebas. Registros privados: `lab-debian-02/serial.log`, `aprovisionar.log`,
+`verificar-servicios.log` y `verificar-offline.log`, bajo el directorio de
+evidencia ignorado por Git. Estos ensayos no prueban durabilidad física de la
+Pi ni eliminan las limitaciones de cuota/cgroups indicadas arriba.
 
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 
