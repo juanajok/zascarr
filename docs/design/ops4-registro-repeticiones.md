@@ -58,11 +58,58 @@ redirigir las operaciones a una ruta sustituta.
   decidirse y probarse antes de conectar el componente. Borrar marcas
   indiscriminadamente puede reabrir una ventana de repetición.
 - La reapertura en procesos nuevos demuestra persistencia observable, **no
-  supervivencia a corte eléctrico**. Faltan pruebas de cortes en la VM y de
-  garantías del filesystem/dispositivo. `fsync` exitoso no certifica hardware.
+  supervivencia a corte eléctrico**. Los tres cortes de VM descritos abajo
+  aportan evidencia adicional acotada; faltan garantías del dispositivo y
+  cortes físicos. `fsync` exitoso no certifica hardware.
 - La excepción impide iniciar efectos en esa admisión, pero una marca incierta
   por sí sola no informa de la fase de una actualización. No usarla como
   estado de UI ni como autorización para crear otro ID y reintentar.
+
+## Tres cortes abruptos de VM (2026-11-20)
+
+Se probó el módulo del commit `1d4b1ff9` dentro de QEMU sin NIC. Para cada
+frontera se creó un overlay qcow2 nuevo sobre la base sintética del laboratorio;
+ningún caso comparte sus escrituras con otro ni modifica la base. La base y
+sus ancestros deben conservarse **sin modificar** mientras existan los overlays.
+
+El [sondeo versionado](../../tests/fixtures/ops4-vm/replay-crash-probe.py)
+provisiona y sincroniza el directorio de ensayo, invoca el registro real con
+un callback que sí hace `fsync` salvo en la barrera elegida, anuncia la
+frontera y se detiene con SIGSTOP. El controlador mata el **proceso QEMU**
+mediante SIGKILL (código -9), no solo al proceso Python invitado. Luego arranca
+el mismo overlay, comprueba la recuperación y apaga limpiamente la VM.
+
+| Frontera del corte | Resultado observado al arrancar | Oráculo |
+| --- | --- | --- |
+| Después de crear, antes de `fsync` del fichero | Marca ausente | No se había confirmado; ausencia o presencia son admisibles |
+| Después de `fsync` del fichero, antes del del directorio | Marca presente, ID rechazado como repetido | No se había confirmado; ausencia o presencia son admisibles |
+| Después de ambos `fsync` y retorno `True` | Marca presente, ID rechazado como repetido | Debe conservar el consumo ya confirmado |
+
+Los tres verificadores terminaron con código 0, indicaron
+`automatic_retry=False` y no iniciaron operaciones. Cuando la marca estaba
+ausente, el verificador **no la recreó**. `qemu-img check` pasó en los tres
+overlays después de su recuperación/apagado. Evidencia privada en
+`replay-cuts-01/stage-{1,2,3}`, con registros de corte y recuperación.
+
+SHA-256 de los registros privados de recuperación:
+
+```text
+stage-1 81d39443ea463b3ec8dd8d36ae07a86417b6b9481f6329626369d9825b6338b6
+stage-2 a9148f918086ab94d7f0d5c9c104bdcb6e18d43bf98692c7950b9cda6d49e84a
+stage-3 604f0b0be6b23d3408ec672d674bc0210be1afd5f3d0bccc4750c602f5f38370
+```
+
+Los [tests de barreras](../../tests/test_ops4_cortes_registro.py) comprueban
+sin parar procesos que no se confirma nada antes de los dos `fsync`. Son
+simulaciones del contrato de inyección, separadas de los tres ensayos reales.
+No se presupone que las recuperaciones tempranas deban dar siempre el mismo
+resultado.
+
+**No equivale a pérdida eléctrica:** matar QEMU conserva las cachés y el
+sistema de almacenamiento del anfitrión. No se han probado pérdida de energía
+del host, fallos del disco, todos los intercalados ni la Pi. Tampoco se ha
+cortado el inicio de una unidad actualizadora: este ensayo es exclusivamente
+antirrepetición, no reserva/reconciliación del conjunto de la operación.
 
 La función sigue deshabilitada. No se ha instalado ni usado este registro en
 la Pi ni se ha ejecutado el actualizador.

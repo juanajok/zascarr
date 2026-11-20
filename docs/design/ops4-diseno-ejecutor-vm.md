@@ -298,13 +298,20 @@ Compose, la aplicación, las migraciones, la unidad y el ejecutor de
 actualización, las interrupciones y el flujo completo siguen **NOT RUN**. No
 se instaló la unidad de actualización ni se ejecutó `update.sh`.
 
-Para arrancar nuevamente desde la raíz de este worktree, **sin NIC**:
+Para nuevos ensayos desde la raíz de este worktree, crear **otro overlay sin
+NIC**. La base ya tiene descendientes de los ensayos de corte: no arrancarla
+en modo escribible ni modificarla mientras se conserven esos descendientes.
+Elegir un nombre nuevo; la guarda impide sobrescribir un ensayo existente:
 
 ```sh
+BASE="$(pwd)/fuera-de-zascarr/ops4-vm-evidencia/lab-debian-02/disco.qcow2"
+DISCO="$(pwd)/fuera-de-zascarr/ops4-vm-evidencia/nuevo-ensayo.qcow2"
+test ! -e "$DISCO" &&
+qemu-img create -f qcow2 -F qcow2 -b "$BASE" "$DISCO" &&
 qemu-system-x86_64 -machine q35,accel=tcg -m 2048 -smp 2 \
   -nodefaults -no-user-config -nic none -display none \
   -serial stdio -monitor none -no-reboot \
-  -drive file=fuera-de-zascarr/ops4-vm-evidencia/lab-debian-02/disco.qcow2,if=virtio,format=qcow2
+  -drive "file=$DISCO,if=virtio,format=qcow2"
 ```
 
 No ejecutar dos instancias sobre el mismo disco. No conectar discos de
@@ -419,6 +426,11 @@ Los [tests estáticos](../../tests/test_ops4_unidad_laboratorio.py) fijan el
 contrato `Type=exec`/timeout/cgroup/sin reinicio, comprueban que importar los
 fixtures no ejecuta procesos y que el instalador no los referencia. Pytest no
 instala ni ejecuta unidades systemd.
+
+También se realizaron [tres cortes abruptos del registro antirrepetición](ops4-registro-repeticiones.md#tres-cortes-abruptos-de-vm-2026-11-20)
+en overlays independientes, antes/después de sus sincronizaciones. Ninguno
+inició una actualización. Las marcas confirmadas sobrevivieron; esto no
+simula pérdida eléctrica del anfitrión ni acredita recuperación del ejecutor.
 
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 

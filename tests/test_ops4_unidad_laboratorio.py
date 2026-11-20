@@ -37,7 +37,7 @@ def test_importar_fixtures_no_lanza_procesos(monkeypatch) -> None:
     monkeypatch.setattr(os, "fork", prohibido)
     monkeypatch.setattr(subprocess, "run", prohibido)
     monkeypatch.setattr(subprocess, "check_output", prohibido)
-    for name in ("timeout-probe.py", "verify-timeout.py"):
+    for name in ("timeout-probe.py", "verify-timeout.py", "replay-crash-probe.py"):
         runpy.run_path(str(FIXTURES / name), run_name="fixture_inspection")
 
 
