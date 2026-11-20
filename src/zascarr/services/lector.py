@@ -432,17 +432,27 @@ _MEDIDAS_MAX = 4096
 #: serie de cientos de números no debe bloquear el feed. El resto se completa en las
 #: siguientes peticiones (lo ya medido no cuenta).
 MAX_MEDIDAS_NUEVAS = 150
+_FALTA = object()
 
 
-def _medir_streaming(f: File) -> tuple[int, str] | None:
-    """`(páginas, tipo)` si el archivo se puede servir YA y sin recodificar; si no, `None`."""
+#: Marca de «no se pudo leer ahora»: un error de disco (USB ocupado) es pasajero y no se memoriza.
+_TRANSITORIO = object()
+
+
+def _medir_streaming(f: File) -> tuple[int, str] | None | object:
+    """`(páginas, tipo)` si el archivo se puede servir YA y sin recodificar; si no, `None`.
+
+    Devuelve `_TRANSITORIO` si falló por un error de disco, que puede no repetirse.
+    """
     try:
         if es_rar_real(f):
             nombres = [p.name for p in CACHE._paginas(f)]
         else:
             nombres = [i.filename for i in _listado(Path(f.file_path))]
-    except (LectorError, OSError):
-        return None
+    except OSError:
+        return _TRANSITORIO
+    except LectorError as exc:
+        return _TRANSITORIO if isinstance(exc.__cause__, OSError) else None
     if not nombres:
         return None
     exts = {Path(n).suffix.lower() for n in nombres}
@@ -464,14 +474,17 @@ def _medir_todos(archivos: dict[UUID, File]) -> dict[UUID, tuple[int, str]]:
             except OSError:
                 continue
             clave = (f.file_path, st.st_mtime_ns, st.st_size)
-            if clave in _MEDIDAS:
-                if _MEDIDAS[clave] is not None:
-                    medidos[issue_id] = _MEDIDAS[clave]
+            previa = _MEDIDAS.get(clave, _FALTA)
+            if previa is not _FALTA:
+                if previa is not None:
+                    medidos[issue_id] = previa
                 continue
             if nuevas >= MAX_MEDIDAS_NUEVAS:
                 continue
             nuevas += 1
         medida = _medir_streaming(f)
+        if medida is _TRANSITORIO:
+            continue
         if clave is not None:
             if len(_MEDIDAS) >= _MEDIDAS_MAX:
                 _MEDIDAS.clear()

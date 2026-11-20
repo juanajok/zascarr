@@ -256,3 +256,51 @@ async def test_el_feed_mide_un_tope_de_archivos_nuevos_por_peticion(tmp_path, mo
         assert len(res) == min(5, 2 * (ronda + 1))   # 2, 4, 5: se completa con las peticiones
         total = res
     assert len(total) == 5
+
+
+@pytest.mark.asyncio
+async def test_un_error_de_disco_pasajero_no_se_memoriza_como_sin_streaming(tmp_path, monkeypatch):
+    """N-4: un OSError transitorio (USB ocupado) no deja el número sin anunciar hasta que cambie."""
+    lector._MEDIDAS.clear()
+    f = _file(_cbz(tmp_path / "t.cbz", {"1.jpg": _imagen("JPEG")}))
+    original = lector._listado
+
+    def _falla(p):
+        raise lector.ArchivoNoLegibleError("No se pudo leer el archivo.") from OSError("ocupado")
+
+    monkeypatch.setattr(lector, "_listado", _falla)
+    db = FakeSession(exec_queue=[FakeExecResult([f]), FakeExecResult([])])
+    assert await lector.streaming_de_numeros(db, [f.issue_id]) == {}
+    assert not lector._MEDIDAS
+    monkeypatch.setattr(lector, "_listado", original)
+    db = FakeSession(exec_queue=[FakeExecResult([f]), FakeExecResult([])])
+    assert (await lector.streaming_de_numeros(db, [f.issue_id]))[f.issue_id].count == 1
+
+
+@pytest.mark.asyncio
+async def test_un_zip_danado_si_se_memoriza_como_sin_streaming(tmp_path):
+    lector._MEDIDAS.clear()
+    ruta = tmp_path / "roto.cbz"
+    ruta.write_bytes(b"PK\x03\x04 no es un zip")
+    f = _file(ruta)
+    db = FakeSession(exec_queue=[FakeExecResult([f]), FakeExecResult([])])
+    assert await lector.streaming_de_numeros(db, [f.issue_id]) == {}
+    assert list(lector._MEDIDAS.values()) == [None]
+
+
+def test_el_vaciado_concurrente_de_la_memoria_no_da_keyerror(tmp_path, monkeypatch):
+    """N-5: la memoria se lee con una sola operación (`.get`), no comprobando y luego indexando."""
+    lector._MEDIDAS.clear()
+    f = _file(_cbz(tmp_path / "c.cbz", {"1.jpg": _imagen("JPEG")}))
+    st = f.file_path
+    lector._medir_todos({f.issue_id: f})
+
+    class Vaciada(dict):
+        def __contains__(self, k):
+            r = super().__contains__(k)
+            self.clear()
+            return r
+
+    monkeypatch.setattr(lector, "_MEDIDAS", Vaciada(lector._MEDIDAS))
+    assert lector._medir_todos({f.issue_id: f})[f.issue_id][0] == 1
+    assert st
