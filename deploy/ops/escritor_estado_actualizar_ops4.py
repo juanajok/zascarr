@@ -55,7 +55,7 @@ def escribir_estado(
             fd = os.open(temporal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             _escribir_todo(fd, contenido)
             fsync(fd)
-        except (OSError, ValueError):
+        except (OSError, TypeError, ValueError):
             return ResultadoEscritura.INCIERTO
         finally:
             if fd is not None:
@@ -65,7 +65,7 @@ def escribir_estado(
             replace(str(temporal), str(destino))
             temporal = None
             fsync(fd_dir)
-        except (OSError, ValueError):
+        except (OSError, TypeError, ValueError):
             return ResultadoEscritura.INCIERTO
         return ResultadoEscritura.OK
     finally:

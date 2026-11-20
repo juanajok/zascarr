@@ -73,3 +73,11 @@ def test_tamano_excesivo(tmp_path) -> None:
 
 def test_directorio_inexistente_falla_cerrado(tmp_path) -> None:
     assert escribir_estado(tmp_path / "no" / "estado.json", ESTADO) is ResultadoEscritura.INVALIDO
+
+
+@pytest.mark.parametrize("fsync,replace", [(None, None), (lambda _f: None, None)])
+def test_callbacks_invalidos_no_publican(tmp_path, fsync, replace) -> None:
+    destino = tmp_path / "estado.json"
+    resultado = escribir_estado(destino, ESTADO, fsync=fsync, replace=replace)
+    assert resultado is ResultadoEscritura.INCIERTO
+    assert not destino.exists() or json.loads(destino.read_text()) == ESTADO

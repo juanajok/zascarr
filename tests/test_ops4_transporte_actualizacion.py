@@ -105,3 +105,32 @@ async def test_timeout_no_autoriza(monkeypatch) -> None:
     assert await pedir_actualizacion(
         SETTINGS, b"peticion\n", id_=ID, conversar=tarda
     ) is CodigoTransporte.NO_DISPONIBLE
+
+
+@pytest.mark.asyncio
+async def test_id_invalido_no_envia() -> None:
+    llamadas = []
+
+    async def conversar(_ruta, _peticion):
+        llamadas.append(1)
+        return respuesta()
+
+    assert await pedir_actualizacion(
+        SETTINGS, b"peticion\n", id_="no-hex", conversar=conversar
+    ) is CodigoTransporte.RESPUESTA_INVALIDA
+    assert llamadas == []
+
+
+@pytest.mark.asyncio
+async def test_clave_duplicada_en_respuesta_no_se_acepta() -> None:
+    bruto = (
+        b'{"v":3,"v":3,"id":"' + ID.encode()
+        + b'","resultado":"aceptada","codigo":"aceptada"}\n'
+    )
+
+    async def conversar(_ruta, _peticion):
+        return bruto
+
+    assert await pedir_actualizacion(
+        SETTINGS, b"peticion\n", id_=ID, conversar=conversar
+    ) is CodigoTransporte.RESPUESTA_INVALIDA
