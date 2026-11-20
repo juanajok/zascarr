@@ -65,4 +65,10 @@ if [ "$(id -u zascarr)" != "${PUID}" ] || [ "$(id -g zascarr)" != "${PGID}" ]; t
     chown -R zascarr:zascarr /app /config/covers 2>/dev/null || true
 fi
 
+# Permisos de lo que ZascArr crea en la biblioteca: con la umask 022 por defecto las carpetas nacían
+# 2755 y dueño zascarr, y el coleccionista (otro usuario del mismo grupo, p. ej. por Samba) no podía
+# mover ni borrar series enteras desde el PC. Con 002 nacen 2775 / 664: el grupo escribe. `runuser`
+# hereda la umask. No toca lo que ya existe (eso lo arregla el operador una vez, ver docs/design).
+umask 002
+
 exec runuser -u zascarr -- "$@"
