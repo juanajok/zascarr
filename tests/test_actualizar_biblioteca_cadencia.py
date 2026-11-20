@@ -219,3 +219,64 @@ def test_una_cadencia_absurda_se_acota_y_no_desborda():
     proxima = rescan_biblioteca.proxima_ejecucion(4_000_000_000)
     assert proxima is not None
     assert proxima <= rescan_biblioteca._arranque + timedelta(minutes=rescan_biblioteca.MAX_MINUTOS)
+
+
+@pytest.mark.asyncio
+async def test_un_rescan_manual_terminado_anota_su_fecha(monkeypatch):
+    """H5 (QA): sin esto «Próxima» y el periódico seguirían contando desde la última anterior."""
+    informe = RescanReport(started_at=datetime.now(UTC), disparador="manual")
+
+    async def _correr(fabrica, disparador):
+        return informe
+
+    monkeypatch.setattr(rescan_biblioteca, "_correr", _correr)
+    assert rescan_biblioteca.iniciar_manual(lambda: _Sesion()) is True
+    await rescan_biblioteca._tarea
+    assert rescan_biblioteca.ultima_ejecucion() == informe.started_at
+
+
+@pytest.mark.asyncio
+async def test_un_fallo_manual_consume_el_turno(monkeypatch):
+    """N1b (QA): un fallo lanzado a mano tampoco se repite en el siguiente turno del periódico."""
+    monkeypatch.setattr(rescan_biblioteca, "_arranque", datetime.now(UTC) - timedelta(days=5))
+
+    async def _correr(fabrica, disparador):
+        raise OSError("disco")
+
+    monkeypatch.setattr(rescan_biblioteca, "_correr", _correr)
+    assert rescan_biblioteca.iniciar_manual(lambda: _Sesion()) is True
+    await rescan_biblioteca._tarea
+    assert rescan_biblioteca.proxima_ejecucion(1440) > datetime.now(UTC) + timedelta(hours=23)
+
+
+@pytest.mark.asyncio
+async def test_un_fallo_sin_historial_con_el_proceso_viejo_consume_el_turno(monkeypatch):
+    """N1g (QA): el caso de N-1 sin historial: el intento cuenta desde AHORA, no desde el arranque."""
+    monkeypatch.setattr(rescan_biblioteca, "_arranque", datetime.now(UTC) - timedelta(days=5))
+
+    async def _correr(fabrica, disparador):
+        raise OSError("disco")
+
+    monkeypatch.setattr(rescan_biblioteca, "_correr", _correr)
+    assert rescan_biblioteca.ultima_ejecucion() is None
+    assert await rescan_biblioteca.ejecutar_automatico(lambda: _Sesion()) is None
+    assert rescan_biblioteca.proxima_ejecucion(1440) > datetime.now(UTC) + timedelta(hours=23)
+
+
+@pytest.mark.asyncio
+async def test_un_turno_saltado_por_una_manual_en_curso_aplaza(monkeypatch):
+    """S5 (QA): si hay una manual corriendo, el automático cede y no reintenta en la vuelta siguiente."""
+    rescan_biblioteca.anotar_ultima(datetime.now(UTC) - timedelta(days=2))
+    rescan_biblioteca._estado.fase = rescan_biblioteca.FaseRescan.CORRIENDO
+    assert await rescan_biblioteca.ejecutar_automatico(lambda: _Sesion()) is None
+    proxima = rescan_biblioteca.proxima_ejecucion(1440)
+    assert datetime.now(UTC) + timedelta(minutes=25) < proxima < datetime.now(UTC) + timedelta(minutes=35)
+
+
+def test_el_bucle_arranca_siempre_aunque_la_cadencia_sea_cero_al_inicio():
+    """L9 (QA): si no arrancara con 0, activar la cadencia en Ajustes exigiría reiniciar."""
+    import inspect
+    fuente = inspect.getsource(main)
+    assert "asyncio.create_task(_rescan_loop())" in fuente
+    trozo = fuente.split("asyncio.create_task(_rescan_loop())", 1)[0][-300:]
+    assert "rescan_interval_minutes" not in trozo.split("# BL-R9", 1)[-1]

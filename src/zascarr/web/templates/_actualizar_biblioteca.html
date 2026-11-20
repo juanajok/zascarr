@@ -26,11 +26,17 @@
     {% else %}Actualizando tu biblioteca{% if estado_rescan.iniciado %} desde las {{ estado_rescan.iniciado | hora }}{% endif %}. Puedes seguir usando ZascArr.{% endif %}
     {% if primera_vez %}La primera vez tarda más: mira todos tus archivos.{% endif %}
   </p>
-  {% elif estado_rescan.fase.value == "ocupado" %}
+  {% elif es_resultado and estado_rescan.fase.value == "ocupado" %}
   {% call ui.aviso("info") %}ZascArr está importando descargas ahora. No se ha lanzado nada; vuelve a probar cuando termine.{% endcall %}
-  {% elif estado_rescan.fase.value == "error" %}
+  {% elif es_resultado and estado_rescan.fase.value == "error" %}
   {% call ui.aviso("warn") %}No se ha podido actualizar la biblioteca. Vuelve a intentarlo; si sigue fallando, mira <a href="/estado">Estado</a>.{% endcall %}
-  {% elif resumen %}
+  {% else %}
+  {#- «Ocupado» y el error con alerta son de la acción, no de la pantalla (Diseño B3): al cargar, un «ocupado»
+      viejo no se pinta y un error queda como aviso ámbar con su hora, sin `role="alert"`. -#}
+  {% if estado_rescan.fase.value == "error" %}
+  {% call ui.aviso("amber", viva=false) %}La última actualización{% if estado_rescan.terminado %} (a las {{ estado_rescan.terminado | hora }}){% endif %} no se pudo completar. Vuelve a intentarlo o mira <a href="/estado">Estado</a>.{% endcall %}
+  {% endif %}
+  {% if resumen %}
   {#- El aviso verde es lo que pasa tras una acción: solo en la respuesta al POST y en el sondeo de esa misma
       ejecución. Al cargar la página solo quedan las líneas y lo que pide atención (con «en la última»). -#}
   {% set nuevos = resumen.nuevos_registrados + resumen.nuevos_a_revisar %}
@@ -48,7 +54,7 @@
     {% if resumen.reenlazados %}{% set _ = partes.append(resumen.reenlazados ~ (" estaba en otra carpeta" if resumen.reenlazados == 1 else " estaban en otra carpeta")) %}{% endif %}
     {% if resumen.reaparecidos %}{% set _ = partes.append(resumen.reaparecidos ~ (" ha vuelto a su sitio" if resumen.reaparecidos == 1 else " han vuelto a su sitio")) %}{% endif %}
     {% call ui.aviso("ok") %}Biblioteca al día: {{ partes | join(". ") }}.
-      {% if resumen.nuevos_a_revisar %}<a href="/ui/pendientes">Revisar {{ "el" if resumen.nuevos_a_revisar == 1 else "los " ~ resumen.nuevos_a_revisar }}</a> ·{% endif %}
+      {% if resumen.nuevos_a_revisar %}<a href="/ui/pendientes">{{ "Revisarlo" if resumen.nuevos_a_revisar == 1 else "Revisar los " ~ resumen.nuevos_a_revisar }}</a> ·{% endif %}
       <a href="/ui/auditoria#rescan-biblioteca">Ver el informe completo</a>{% endcall %}
     {% elif not resumen.desaparecidos and not parcial_rev %}
     {% call ui.aviso("ok") %}Tu biblioteca ya estaba al día: nada nuevo, nada movido, nada desaparecido.{% endcall %}
@@ -61,6 +67,7 @@
   {% if parcial_rev %}
   {% call ui.aviso("amber") %}{% if es_resultado %}No se pudo revisar todo{% else %}En la última actualización no se pudo revisar todo{% endif %}; lo que no se miró no se da por revisado.
     <a href="/ui/auditoria#rescan-biblioteca">Ver el informe completo</a>{% endcall %}
+  {% endif %}
   {% endif %}
   {% endif %}
 </div>

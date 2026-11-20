@@ -184,18 +184,44 @@ def test_al_cargar_la_pagina_lo_que_pide_atencion_sigue_con_su_fecha():
 
 def test_ocupado_es_informacion_y_deja_el_boton_habilitado():
     rescan_biblioteca._estado.fase = rescan_biblioteca.FaseRescan.OCUPADO
-    r = _get()
+    r = _get("/ui/biblioteca/actualizar/estado")
     assert "ZascArr está importando descargas ahora" in r.text
-    boton = r.text.split("<button", 1)[1].split(">", 1)[0]
+    boton = _get().text.split("<button", 1)[1].split(">", 1)[0]
     assert "disabled" not in boton
     assert "ha fallado" not in r.text.lower() and 'role="alert"' not in r.text
 
 
-def test_el_error_es_un_aviso_con_alerta_y_enlace_a_estado():
+def test_ocupado_no_se_pinta_al_cargar_la_pagina():
+    """B3 (Diseño): «ocupado» es de la acción; recargar después no puede decir que se está importando."""
+    rescan_biblioteca._estado.fase = rescan_biblioteca.FaseRescan.OCUPADO
+    html = _get().text
+    assert "importando descargas" not in html and "No se ha lanzado nada" not in html
+
+
+def test_el_error_es_un_aviso_con_alerta_y_enlace_a_estado_tras_la_accion():
     rescan_biblioteca._estado.fase = rescan_biblioteca.FaseRescan.ERROR
-    r = _get()
-    assert "No se ha podido actualizar la biblioteca" in r.text and 'role="alert"' in r.text
-    assert 'href="/estado"' in r.text
+    html = _resultado()
+    assert "No se ha podido actualizar la biblioteca" in html and 'role="alert"' in html
+    assert 'href="/estado"' in html
+
+
+def test_el_error_al_cargar_es_un_aviso_ambar_con_su_hora_y_sin_alerta():
+    """B3 (Diseño): un error viejo no se anuncia como alerta en cada carga de Biblioteca."""
+    rescan_biblioteca._estado.fase = rescan_biblioteca.FaseRescan.ERROR
+    rescan_biblioteca._estado.terminado = datetime.now(UTC)
+    html = _get().text
+    assert "La última actualización (a las " in html and "no se pudo completar" in html
+    assert 'href="/estado"' in html
+    assert 'role="alert"' not in html and "No se ha podido actualizar la biblioteca" not in html
+
+
+def test_con_un_solo_nuevo_el_enlace_no_queda_cojo():
+    """M8 (Diseño): «Revisar el ·» no dice qué; con uno es «Revisarlo», con varios «Revisar los N»."""
+    _terminado(nuevos_a_revisar=1)
+    html = _resultado()
+    assert ">Revisarlo</a>" in html and "Revisar el " not in html
+    _terminado(nuevos_a_revisar=3)
+    assert ">Revisar los 3</a>" in _resultado()
 
 
 def test_el_post_lanza_una_vez_y_el_segundo_dice_que_ya_se_esta_actualizando(monkeypatch):
@@ -277,3 +303,43 @@ def test_el_foco_lo_recibe_la_region_estable_y_el_sondeo_solo_cambia_su_contenid
     html = _get().text
     assert 'hx-target="#actualizar-estado" hx-swap="innerHTML"' in html          # sondeo: solo el interior
     assert 'hx-target="#actualizar-estado" hx-swap="outerHTML"' in html          # formulario: la región, una vez
+
+
+@pytest.mark.parametrize("curso", ["", "0", "2", "si"])
+def test_el_204_solo_con_curso_igual_a_uno(curso):
+    """P1/P4 (QA): estar en curso no basta; el cliente tiene que declarar que ya lo muestra."""
+    rescan_biblioteca._estado.fase = rescan_biblioteca.FaseRescan.CORRIENDO
+    rescan_biblioteca._estado.iniciado = datetime.now(UTC)
+    suf = f"?curso={curso}" if curso else ""
+    r = _get(f"/ui/biblioteca/actualizar/estado{suf}")
+    assert r.status_code == 200 and "Actualizando tu biblioteca" in r.text
+
+
+def test_el_post_tras_terminar_muestra_el_resultado(monkeypatch):
+    """V4 (QA): la respuesta al POST también es «resultado», no solo el sondeo."""
+    _terminado(nuevos_registrados=2)
+    monkeypatch.setattr(rescan_biblioteca, "iniciar_manual", lambda f: True)
+    r = TestClient(app).post("/ui/biblioteca/actualizar", headers={"HX-Request": "true"})
+    assert "Biblioteca al día" in r.text
+    rescan_biblioteca.reiniciar_para_pruebas()
+
+
+def test_el_sondeo_sin_ejecucion_terminada_no_pinta_el_verde(monkeypatch):
+    """V5 (QA): el verde exige que ESTA ejecución haya terminado, no solo que haya un informe antiguo."""
+    async def _ultimo(db):
+        informe = {c: 0 for c in rescan_biblioteca.CAMPOS_RESUMEN}
+        informe.update(errores=[], resultado_biblioteca="comprobada", nuevos_registrados=9,
+                       started_at=datetime.now(UTC))
+        return informe
+
+    monkeypatch.setattr(rescan_biblioteca, "ultimo_persistido", _ultimo)
+    html = _get("/ui/biblioteca/actualizar/estado").text
+    assert "Biblioteca al día" not in html and "ya estaba al día" not in html
+
+
+def test_al_cargar_el_bloque_no_se_roba_el_foco():
+    """F2 (QA): solo la respuesta al POST lleva `autofocus`; cargar Biblioteca no mueve el foco."""
+    assert " autofocus" not in _get().text
+    rescan_biblioteca._estado.fase = rescan_biblioteca.FaseRescan.CORRIENDO
+    rescan_biblioteca._estado.iniciado = datetime.now(UTC)
+    assert " autofocus" not in _get().text
