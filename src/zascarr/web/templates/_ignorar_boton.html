@@ -1,0 +1,8 @@
+{#- #1123: el botón «Ignorar» ya no abre un diálogo nativo (`hx-confirm`): pide una confirmación en la
+    propia tarjeta (`_ignorar_confirmar.html`). `f` = el archivo; `autofoco` = devolver el foco aquí tras
+    «Cancelar» (htmx 4 enfoca el `[autofocus]` del contenido que intercambia). -#}
+<button type="button" class="btn-ignorar" id="ignorar-boton-{{ f.id }}"
+        hx-get="/ui/pendientes/{{ f.id }}/ignorar/confirmar"
+        hx-target="#ignorar-{{ f.id }}" hx-swap="innerHTML"{% if autofoco %} autofocus{% endif %}>
+  Ignorar<span class="sr">: «{{ f.file_name }}»</span>
+</button>

@@ -672,7 +672,13 @@ button.primary,
 .pend-opciones .caption { margin: 0; }
 .pend-opciones [aria-current="true"] { background: var(--yellow); color: var(--on-yellow); border-color: var(--ink); }
 .pending-pie .elegir-otra-serie { flex: 1 1 16rem; }
-.pending-pie .btn-ignorar { margin-left: auto; }
+.pending-pie .ignorar-zona { margin-left: auto; }
+/* #1123: con la confirmación abierta, la zona ocupa la fila entera para que el texto respire. */
+.pending-pie .ignorar-zona:has(.ignorar-confirmar) { flex: 1 1 100%; margin-left: 0; }
+.ignorar-confirmar .acciones-fila { margin-top: var(--space-2); }
+/* #1123: el recibo ocupa el sitio de la fila y no lleva el marco de una tarjeta de trabajo. */
+.pend-recibo { list-style: none; }
+.pend-recibo:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 /* B12: sugerencia de candidato con confirmación de un clic */
 .suggestion {

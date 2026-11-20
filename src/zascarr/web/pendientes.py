@@ -858,8 +858,41 @@ async def crear_one_shot(
     })
 
 
+async def _archivo_o_404(db: AsyncSession, file_id: UUID) -> File:
+    archivo = await db.get(File, file_id)
+    if archivo is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    return archivo
+
+
+def _sin_cache(resp: HTMLResponse) -> HTMLResponse:
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@router.get("/{file_id}/ignorar/confirmar", response_class=HTMLResponse)
+async def confirmar_ignorar(request: Request, file_id: UUID,
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """#1123: la confirmación de «Ignorar», en la propia tarjeta y sin efectos: no escribe nada."""
+    f = await _archivo_o_404(db, file_id)
+    return _sin_cache(templates.TemplateResponse(request, "_ignorar_confirmar.html", {"f": f}))
+
+
+@router.get("/{file_id}/ignorar/cancelar", response_class=HTMLResponse)
+async def cancelar_ignorar(request: Request, file_id: UUID,
+                           db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """#1123: «Cancelar» devuelve el botón (con el foco) y la fila queda como estaba."""
+    f = await _archivo_o_404(db, file_id)
+    return _sin_cache(templates.TemplateResponse(
+        request, "_ignorar_boton.html", {"f": f, "autofoco": True}))
+
+
 @router.post("/{file_id}/ignorar", response_class=HTMLResponse)
-async def ignorar(file_id: UUID, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def ignorar(request: Request, file_id: UUID,
+                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Oculta el archivo de «Por revisar» (`review_dismissed`); no toca ruta ni bytes. Idempotente:
+    un doble envío repite el recibo sin más efectos. #1123: la fila se SUSTITUYE por un recibo en
+    su sitio (antes se borraba), con enlace a «Ignorados»."""
     try:
         await ReviewService(db).dismiss(file_id)
     except ValueError as exc:
@@ -867,7 +900,61 @@ async def ignorar(file_id: UUID, db: AsyncSession = Depends(get_db)) -> HTMLResp
     # Se confirma AQUÍ y no en `get_db` (que lo hace DESPUÉS de responder): el menú pide su contador
     # en cuanto llega la respuesta y, si el commit aún no ha ocurrido, contaría el archivo ignorado.
     await db.commit()
-    # La fila es un <li>; quitar solo #card dejaría un <li> vacío en la lista.
-    # `delete` fuera de banda retira el contenedor completo.
-    return HTMLResponse(
-        RECONTAR_MENU + f'<li id="item-{file_id}" hx-swap-oob="delete"></li>')
+    f = await _archivo_o_404(db, file_id)
+    return _sin_cache(templates.TemplateResponse(
+        request, "_ignorar_resultado.html", {"f": f, "recontar_menu": RECONTAR_MENU}))
+
+
+_TAMANO_IGNORADOS = 50
+
+
+@router.get("/ignorados", response_class=HTMLResponse)
+async def ignorados(request: Request, pagina: int = Query(default=1, ge=1),
+                    db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """#1123: bandeja de los archivos ignorados, con «Volver a Por revisar» por archivo."""
+    servicio = ReviewService(db)
+    try:
+        total = await servicio.contar_ignorados()
+        paginas = max(1, -(-total // _TAMANO_IGNORADOS))
+        pagina = min(pagina, paginas)
+        archivos = await servicio.listar_ignorados(
+            desde=(pagina - 1) * _TAMANO_IGNORADOS, limite=_TAMANO_IGNORADOS)
+    except Exception as exc:  # noqa: BLE001 — un fallo no puede dejar recuentos a medias
+        logger.warning("pendientes.ignorados_fallo", error=type(exc).__name__)
+        return _sin_cache(templates.TemplateResponse(
+            request, "ignorados.html", {"error": True}, status_code=503))
+    contexto = {
+        "error": False, "archivos": [_card_ignorado(f) for f in archivos],
+        "total_texto": _miles(total),
+        "desde": (pagina - 1) * _TAMANO_IGNORADOS + 1 if archivos else 0,
+        "hasta": (pagina - 1) * _TAMANO_IGNORADOS + len(archivos),
+        "anterior": f"/ui/pendientes/ignorados?pagina={pagina - 1}" if pagina > 1 else None,
+        "siguiente": f"/ui/pendientes/ignorados?pagina={pagina + 1}" if pagina < paginas else None,
+    }
+    return _sin_cache(templates.TemplateResponse(request, "ignorados.html", contexto))
+
+
+def _card_ignorado(f: File) -> dict:
+    ruta = Path(f.file_path)
+    return {"file": f,
+            "formato": ((f.file_format.value.upper() if getattr(f, "file_format", None) is not None
+                         else ruta.suffix.lstrip(".").upper()) or "?"),
+            "carpeta": ruta.parent.name or str(ruta.parent)}
+
+
+@router.post("/{file_id}/restaurar", response_class=HTMLResponse)
+async def restaurar(request: Request, file_id: UUID,
+                    db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """#1123: devuelve el archivo a «Por revisar». Solo revierte `review_dismissed`; idempotente."""
+    servicio = ReviewService(db)
+    try:
+        vuelve = await servicio.restore(file_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    # Se confirma aquí: el menú pide su contador al llegar la respuesta (como en `ignorar`).
+    await db.commit()
+    f = await _archivo_o_404(db, file_id)
+    total = await servicio.contar_ignorados()
+    return _sin_cache(templates.TemplateResponse(
+        request, "_ignorado_devuelto.html",
+        {"f": f, "vuelve": vuelve, "total_texto": _miles(total)}))

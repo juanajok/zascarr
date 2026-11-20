@@ -61,7 +61,7 @@ class Desglose:
     total: int = 0
     clasificados: int = 0           # con su número (issue_id)
     por_revisar_presentes: int = 0  # el filtro de «Por revisar», con el archivo en su sitio
-    descartados: int = 0            # «ignorar» en Por revisar
+    descartados: int = 0            # «ignorar» en Por revisar (en superficie: «ignorados», #1123)
     #: «Por revisar» los lista aunque el archivo ya no esté donde dice la BD (no son registrados)
     por_revisar_ausentes: int = 0
 
@@ -83,7 +83,8 @@ class Desglose:
              "/ui/biblioteca"),
             (self.por_revisar_presentes, "por revisar", "/ui/pendientes"),
             (self.sin_numero, "con serie pero sin número", None),
-            (self.descartados, "descartado" if self.descartados == 1 else "descartados", None),
+            (self.descartados, "ignorado" if self.descartados == 1 else "ignorados",
+             "/ui/pendientes/ignorados"),
         )
         return tuple(p for p in partes if p[0])
 
