@@ -54,7 +54,7 @@ function run(conPantalla) {
       : sel === "[data-modo]" ? [root, ...modos] : []),
     getElementById: (id) => (els[id] ||= new E(id)),
     addEventListener: (t, f) => { (doc.listeners[t] ||= []).push(f); },
-    listeners: {}, documentElement: new E("html"), fullscreenElement: null,
+    listeners: {}, documentElement: new E("html"), fullscreenElement: null, body: new E("body"),
   };
   const get = doc.getElementById;
   const menu = get("lector-menu");
@@ -155,6 +155,18 @@ salida.cerrarDelPanel = get("lector-menu").hidden && teclado.doc.activeElement =
 // La raíz no es un botón de modo: ni escucha clics (cerraba Opciones al abrirla) ni recibe aria-pressed.
 salida.raizNoEsBotonDeModo = !(teclado.root.listeners.click || []).length
   && teclado.root.attrs["aria-pressed"] === undefined;
+// #1119 (WCAG 2.1.4): + − 0 solo actúan con el foco en la zona de lectura, no con el foco en el
+// cuerpo ni en otro control; con el foco en ella siguen funcionando.
+const zoomTexto = () => get("lector-zoom-valor").textContent;
+const pulsarZoom = (key, target) => teclado.fire(teclado.doc, "keydown", { key, target, preventDefault: () => {} });
+const zoom0 = zoomTexto();
+pulsarZoom("=", teclado.doc.body);
+pulsarZoom("-", get("lector-brillo"));
+pulsarZoom("0", teclado.doc.body);
+salida.zoomSinFocoNoActua = zoomTexto() === zoom0;
+pulsarZoom("=", get("lector-lienzo"));
+salida.zoomConFocoActua = zoomTexto() !== zoom0;
+pulsarZoom("0", get("lector-lienzo"));
 const contador = get("lector-contador");
 const escrituras = contador.writes;
 teclado.fire(get("lector-pagina"), "load");
@@ -220,6 +232,7 @@ def test_lector_js_fullscreen_doble_y_teclado(tmp_path):
         "hAlternaChrome": True, "espacioNativo": True, "atajoFuera": True,
         "limiteConFoco": True, "escapeDesdeOpciones": True, "tabFueraCierra": True,
         "cerrarDelPanel": True, "raizNoEsBotonDeModo": True,
+        "zoomSinFocoNoActua": True, "zoomConFocoActua": True,
         "contadorSinDuplicados": True, "focoYAnuncioTrasGuardar": True,
         "toqueAvanzaSinBarras": True, "toqueRetrocedeSinBarras": True,
         "deslizarSinBarras": True, "ratonYTeclaSinBarras": True,
