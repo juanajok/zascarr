@@ -2992,6 +2992,7 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .archivo-preferido-opcion { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; }
 .archivo-preferido-opcion input { width: 24px; height: 24px; accent-color: var(--ink); }
 .archivo-preferido-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.archivo-preferido-acciones .btn { min-height: 44px; }
 .archivo-preferido-opcion:focus-within { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
 
 @media (prefers-contrast: more), (forced-colors: active) {

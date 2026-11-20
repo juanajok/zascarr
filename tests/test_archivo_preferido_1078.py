@@ -1,4 +1,4 @@
-# ruff: noqa: F401, F811
+# ruff: noqa: E501, F401, F811
 """#1078: archivo preferido para Leer (servicio y persistencia PG)."""
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def test_preferido_guardado_solo_uuid():
 @pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="requiere TEST_DATABASE_URL")
 async def test_endpoint_guarda_quita_y_valida_ajeno(entorno):
     sid, iid, ajeno = uuid4(), uuid4(), uuid4()
-    f1, f2, f3 = uuid4(), uuid4(), uuid4()
+    f1, f2, f3, f_ajeno = uuid4(), uuid4(), uuid4(), uuid4()
     async with entorno.banco.fabrica() as s:
         s.add(Series(id=sid, title="Preferido"))
         s.add_all([Issue(id=iid, series_id=sid, issue_number="1", volume=1),
@@ -53,7 +53,7 @@ async def test_endpoint_guarda_quita_y_valida_ajeno(entorno):
                        file_name=nombre, file_format=FileFormat.CBZ, metadata_={},
                        is_missing=False))
         await s.flush()
-        s.add(File(id=uuid4(), issue_id=ajeno, file_path=f"/tmp/{uuid4()}-x.cbz",
+        s.add(File(id=f_ajeno, issue_id=ajeno, file_path=f"/tmp/{uuid4()}-x.cbz",
                    file_name="x.cbz", file_format=FileFormat.CBZ, metadata_={},
                    is_missing=False))
         await s.commit()
@@ -84,6 +84,15 @@ async def test_endpoint_guarda_quita_y_valida_ajeno(entorno):
         assert (await c.post(f"/ui/series/{sid}/numero/{iid}/archivo-lectura",
                              data={"file_id": str(uuid4()), "accion": "elegir"},
                              follow_redirects=False)).status_code == 400
+        # Archivo legible, pero de otro número: no vale.
+        assert (await c.post(f"/ui/series/{sid}/numero/{iid}/archivo-lectura",
+                             data={"file_id": str(f_ajeno), "accion": "elegir"},
+                             follow_redirects=False)).status_code == 400
+        hx = await c.post(f"/ui/series/{sid}/numero/{iid}/archivo-lectura",
+                          data={"file_id": str(f1), "accion": "elegir"},
+                          headers={"HX-Request": "true"}, follow_redirects=False)
+        assert hx.status_code == 204 and hx.headers["HX-Redirect"].startswith(
+            f"/ui/series/{sid}/numero/{iid}")
         assert (await c.post(f"/ui/series/{sid}/numero/{iid}/archivo-lectura",
                              data={"accion": "quitar"},
                              follow_redirects=False)).status_code == 303
@@ -97,6 +106,12 @@ async def test_endpoint_guarda_quita_y_valida_ajeno(entorno):
         f.is_missing = True
         await s.commit()
         assert (await lector.archivo_por_defecto(s, iid)).id == str(f1)
+    async with cliente() as c:
+        detalle = await c.get(f"/ui/series/{sid}/numero/{iid}")
+        import re
+        # El preferido inválido no deja ningún radio sin marcar: manda el fallback real.
+        assert re.search(rf'value="{f1}"[^>]*checked', detalle.text)
+        assert not re.search(rf'value="{f3}"[^>]*checked', detalle.text)
 
 
 def test_plantilla_control_solo_con_varios_y_a11y():
@@ -106,8 +121,59 @@ def test_plantilla_control_solo_con_varios_y_a11y():
     assert "archivos_lectura | length > 1" in t
     assert 'class="archivo-preferido"' in t
     assert "<legend>Archivo para leer</legend>" in t
-    assert 'aria-' not in t.split("archivo-preferido", 1)[1].split("</form>", 1)[0] or True
+    assert '<legend>Archivo para leer</legend>' in t
+    assert '<label class="archivo-preferido-opcion">' in t
+    assert "lector_archivo and lector_archivo.id == a.id" in t
     assert "min-height: 44px" in css
     assert ".archivo-preferido legend" in css
-    assert "not preferido_id and lector_archivo" in t
+    assert ".archivo-preferido-acciones .btn { min-height: 44px; }" in css
+    assert ".archivo-preferido-opcion:focus-within" in css
     assert "El archivo preferido ya no está disponible" in t
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="requiere TEST_DATABASE_URL")
+async def test_no_altera_bytes_ni_progreso(entorno, tmp_path):
+    from sqlalchemy import func, select
+
+    from zascarr.models import ReadingProgress, ReadingStatus
+
+    sid, iid = uuid4(), uuid4()
+    ruta = tmp_path / "unico.cbz"
+    ruta.write_bytes(b"bytes-originales")
+    async with entorno.banco.fabrica() as s:
+        s.add(Series(id=sid, title="Bytes"))
+        await s.flush()
+        s.add(Issue(id=iid, series_id=sid, issue_number="1", volume=1))
+        await s.flush()
+        s.add(File(id=uuid4(), issue_id=iid, file_path=str(ruta), file_name="unico.cbz",
+                   file_format=FileFormat.CBZ, metadata_={}, is_missing=False))
+        await s.commit()
+    async with cliente() as c:
+        assert (await c.get(f"/ui/series/{sid}/numero/{iid}")).status_code == 200
+        assert (await c.post(f"/ui/series/{sid}/numero/{iid}/archivo-lectura",
+                             data={"accion": "quitar"},
+                             follow_redirects=False)).status_code == 303
+    assert ruta.read_bytes() == b"bytes-originales"
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(select(func.count()).select_from(ReadingProgress))).scalar_one() == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="requiere TEST_DATABASE_URL")
+async def test_un_solo_archivo_no_muestra_control(entorno):
+    sid, iid = uuid4(), uuid4()
+    async with entorno.banco.fabrica() as s:
+        s.add(Series(id=sid, title="Uno"))
+        await s.flush()
+        s.add(Issue(id=iid, series_id=sid, issue_number="1", volume=1))
+        await s.flush()
+        s.add(File(id=uuid4(), issue_id=iid, file_path=f"/tmp/{uuid4()}.cbz",
+                   file_name="unico.cbz", file_format=FileFormat.CBZ, metadata_={},
+                   is_missing=False))
+        await s.commit()
+    async with cliente() as c:
+        r = await c.get(f"/ui/series/{sid}/numero/{iid}")
+    assert r.status_code == 200
+    assert 'class="archivo-preferido"' not in r.text
+    assert "«Leer» abrirá unico.cbz" in r.text
