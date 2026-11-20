@@ -34,6 +34,7 @@ ENTRADAS: tuple[Entrada, ...] = (
     Entrada("biblioteca", "Biblioteca", "/ui/biblioteca", "Mi colección", "biblioteca"),
     Entrada("mejoras", "Mejoras", "/ui/mejoras", "Mi colección", "mejoras"),
     Entrada("colecciones", "Colecciones", "/ui/colecciones", "Mi colección", "colecciones"),
+    Entrada("listas", "Listas", "/ui/listas", "Mi colección", "list"),
     Entrada("duplicados", "Duplicados", "/ui/auditoria", "Mi colección", "duplicados"),
     Entrada("descubrir", "Descubrir", "/ui/descubrir", "Añadir", "descubrir"),
     Entrada("novedades", "Novedades", "/ui/novedades", "Añadir", "novedades"),
@@ -51,6 +52,7 @@ _PREFIJOS: tuple[tuple[str, str], ...] = (
     ("/ui/biblioteca", "biblioteca"),
     ("/ui/mejoras", "mejoras"),
     ("/ui/colecciones", "colecciones"),
+    ("/ui/listas", "listas"),
     ("/ui/series", "biblioteca"),
     ("/ui/arcos", "biblioteca"),   # Sagas cuelga de Biblioteca (biblioteca.html)
     ("/ui/vistas", "revisar"),     # Vistas de trabajo cuelga de Por revisar (pendientes.html)

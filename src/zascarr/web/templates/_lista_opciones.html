@@ -1,0 +1,14 @@
+{% if listas %}
+<form method="post" action="/ui/listas/anadir" class="form-lista-opciones">
+  <input type="hidden" name="issue_id" value="{{ issue_id }}">
+  <input type="hidden" name="volver" value="/ui/series/{{ serie_id }}/numero/{{ issue_id }}">
+  <label for="lista-destino">Añadir a una lista</label>
+  <select id="lista-destino" name="lista_id" required>
+    {% for l in listas %}<option value="{{ l.id }}">{{ l.nombre }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="btn sm">Añadir</button>
+</form>
+{% else %}
+<p class="muted">Todavía no tienes listas.</p>
+{% endif %}
+<p class="lista-opciones-gestion"><a class="btn ghost sm" href="/ui/listas">Crear o gestionar listas</a></p>

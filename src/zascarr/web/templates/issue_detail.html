@@ -23,6 +23,11 @@
       </a>
       {% endif %}
     </p>
+    <details class="anadir-a-lista" hx-get="/ui/listas/opciones/{{ series.id }}/{{ issue.id }}"
+             hx-trigger="toggle once" hx-target="#lista-opciones" hx-swap="innerHTML">
+      <summary class="btn ghost sm">Añadir a una lista</summary>
+      <div id="lista-opciones"><p class="muted">Cargando listas…</p></div>
+    </details>
     {% if ficha.archivos %}
     <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/mejorar" class="inline-desbloquear">
       <button type="submit" class="btn ghost sm">Buscar una edición mejor</button>

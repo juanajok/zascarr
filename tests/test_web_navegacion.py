@@ -249,14 +249,14 @@ def con_sesion():
 # ── 1. datos del menú ─────────────────────────────────────────────────────────────────────
 URLS_DE_SIEMPRE = {
     "inicio": "/ui/", "revisar": "/ui/pendientes", "biblioteca": "/ui/biblioteca",
-    "colecciones": "/ui/colecciones", "mejoras": "/ui/mejoras",
+    "colecciones": "/ui/colecciones", "listas": "/ui/listas", "mejoras": "/ui/mejoras",
     "duplicados": "/ui/auditoria",
     "descubrir": "/ui/descubrir", "novedades": "/ui/novedades",
     "deseados": "/ui/wishlist", "estado": "/estado", "ajustes": "/ui/ajustes",
 }
 ETIQUETAS = {
     "inicio": "Inicio", "revisar": "Por revisar", "biblioteca": "Biblioteca",
-    "colecciones": "Colecciones", "mejoras": "Mejoras",
+    "colecciones": "Colecciones", "listas": "Listas", "mejoras": "Mejoras",
     "duplicados": "Duplicados", "descubrir": "Descubrir",
     "novedades": "Novedades", "deseados": "Deseados", "estado": "Estado",
     "ajustes": "Ajustes",
@@ -275,7 +275,7 @@ class TestDatosDelMenu:
         por_grupo = {g: [e.etiqueta for e in ENTRADAS if e.grupo == g] for g in GRUPOS}
         assert por_grupo == {
             "Mi colección": ["Inicio", "Por revisar", "Biblioteca", "Mejoras",
-                             "Colecciones", "Duplicados"],
+                             "Colecciones", "Listas", "Duplicados"],
             "Añadir": ["Descubrir", "Novedades", "Deseados"],
             "Sistema": ["Estado", "Ajustes"],
         }
@@ -290,7 +290,7 @@ class TestDatosDelMenu:
     def test_la_barra_inferior_tiene_cuatro_entradas_y_mas_guarda_el_resto(self):
         principales = [e.clave for e in ENTRADAS if e.movil_principal]
         assert principales == ["inicio", "revisar", "deseados", "estado"]
-        assert len([e for e in ENTRADAS if not e.movil_principal]) == 7
+        assert len([e for e in ENTRADAS if not e.movil_principal]) == 8
 
     def test_solo_las_entradas_principales_llevan_contador(self):
         """Las secundarias salen dos veces en el DOM (barra y «Más»): un `id` de contador duplicado
@@ -305,6 +305,7 @@ class TestDatosDelMenu:
         ("/ui/biblioteca?page=2", "biblioteca"), ("/ui/series/123", "biblioteca"),
         ("/ui/mejoras", "mejoras"), ("/ui/mejoras/abc", "mejoras"),
         ("/ui/colecciones", "colecciones"), ("/ui/colecciones/abc", "colecciones"),
+        ("/ui/listas", "listas"), ("/ui/listas/abc", "listas"),
         ("/ui/arcos", "biblioteca"), ("/ui/vistas", "revisar"),
         ("/ui/auditoria", "duplicados"), ("/ui/descubrir", "descubrir"),
         ("/ui/wishlist", "deseados"), ("/estado", "estado"), ("/ui/ajustes", "ajustes"),
@@ -446,6 +447,7 @@ class TestLosEnlacesNoDependenDelFragmento:
 PAGINAS = [
     ("inicio", "/ui/"), ("revisar", "/ui/pendientes"), ("biblioteca", "/ui/biblioteca"),
     ("mejoras", "/ui/mejoras"), ("colecciones", "/ui/colecciones"),
+    ("listas", "/ui/listas"),
     ("duplicados", "/ui/auditoria"), ("descubrir", "/ui/descubrir"),
     ("novedades", "/ui/novedades"), ("deseados", "/ui/wishlist"),
     ("estado", "/estado"), ("ajustes", "/ui/ajustes"),

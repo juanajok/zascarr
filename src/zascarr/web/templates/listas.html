@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Listas — ZascArr{% endblock %}
+{% block content %}
+<header class="biblioteca-cabecera">
+  <h1>Listas</h1>
+  <p class="subtitle">Agrupa números concretos en el orden en que quieres leerlos.</p>
+</header>
+{% if aviso %}{{ ui.aviso("ok", aviso) }}{% endif %}
+{% if error %}{{ ui.aviso("amber", error) }}{% endif %}
+<section aria-labelledby="listas-crear-titulo">
+  <h2 id="listas-crear-titulo">Nueva lista</h2>
+  <form method="post" action="/ui/listas/nueva" class="tarjeta formulario formulario-listas">
+    <label for="lista-nombre">Nombre</label>
+    <input id="lista-nombre" name="name" maxlength="120" required
+           value="{{ (valores.name if valores else '') }}">
+    <label for="lista-descripcion">Descripción (opcional)</label>
+    <textarea id="lista-descripcion" name="description" maxlength="2000">{{ (valores.description if valores else '') }}</textarea>
+    <button type="submit" class="btn">Crear lista</button>
+  </form>
+</section>
+{% if listas %}
+<section aria-labelledby="listas-mias-titulo">
+  <h2 id="listas-mias-titulo">Tus listas</h2>
+  <ul class="listas-indice">
+    {% for l in listas %}
+    <li class="tarjeta lista-resumen">
+      <a href="/ui/listas/{{ l.id }}"><strong>{{ l.nombre }}</strong></a>
+      <span class="muted">{{ l.leidos }} de {{ l.total }} leídos</span>
+      {% if l.descripcion %}<p class="caption">{{ l.descripcion }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+<p class="muted" role="status">Todavía no tienes listas. Crea una y añade números desde su ficha.</p>
+{% endif %}
+{% endblock %}
