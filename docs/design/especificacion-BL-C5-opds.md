@@ -1,5 +1,9 @@
 # Especificación — BL-C5 (#160): catálogo OPDS 1.2 de solo catálogo
 
+> **Superada en parte por BL-LEC5 (#828, 2026-11-19):** «solo catálogo, no contenido» ya no
+> rige. Los números con archivo legible anuncian lectura por páginas OPDS-PSE (§12). Lo demás
+> (sin descarga del archivo entero, sin rutas ni hashes) sigue vigente.
+
 > **Estado: implementado en la rebanada de #160.** Sin migración ni dependencias
 > nuevas. Este documento fija el contrato y las decisiones; cualquier ampliación
 > (descarga, adquisición, escritura, búsqueda) exige otra historia.
@@ -142,3 +146,37 @@ modo que títulos con `& < > " '` quedan escapados por el serializador.
 - `services/auth.py`, `services/series.py` (orden #664), modelos `Series`,
   `Issue`, `Creator`, `Publisher`.
 - Tests: `tests/test_api_opds.py` y regresiones de auth.
+
+## 12. BL-LEC5 (#828): lectura por páginas OPDS-PSE
+
+**Decisión del PO (2026-11-14):** el OPDS sirve también contenido, página a página. Supera
+«solo catálogo» de las secciones 1, 9 y 10; **no** añade descarga del archivo entero.
+
+- **Enlace.** Cada número con archivo legible lleva
+  `<link rel="http://vaemendis.net/opds-pse/stream" type="image/jpeg|png|gif" href="/opds/paginas/{file_id}/{pageNumber}" pse:count="N" pse:lastRead="k"/>`
+  (namespace `http://vaemendis.net/opds-pse/ns`). Lo decide `services/lector.py::streaming_de_numeros`.
+- **Numeración (una sola función, con su prueba).** La especificación OPDS-PSE 1.0
+  (vaemendis.net/opds-pse, 2014) numera las páginas **de 0 a N-1**; el lector de ZascArr, de 1 a N.
+  `lector.pagina_pse_a_lector` suma 1; es el único sitio donde se convierte. Komga hace lo mismo
+  (`pageNumber + 1` en `OpdsController::getBookPageOpds`, MIT).
+- **`pse:lastRead`.** La 1.0 **no lo define**; es una ampliación de Komga, que envía
+  `readProgress.page` sin ajustar. Se envía `ReadingProgress.current_page` (la página en la que
+  estás, 1-basada) y se omite si es `0` o no hay progreso. **Base sin probar con una app real.**
+- **Qué se anuncia.** Un archivo por número (la regla del archivo por defecto de LEC1, función
+  única `_por_defecto`), solo si se sirve **sin espera**: ZIP, o RAR cuya caché de LEC4 ya está
+  lista (nunca se prepara desde el OPDS). Si alguna página no es JPEG, PNG o GIF, el número no
+  anuncia nada: no se recodifica.
+- **Páginas.** `GET /opds/paginas/{file_id}/{n}` llama al mismo `pagina()` que `/ui/leer`: mismos
+  bytes y mismo `ETag`. `file_id` se valida contra la BD (archivo vinculado a un número, no
+  perdido, legible); en cualquier fallo, `404` sin detalle. `Cache-Control: private`,
+  `Vary: Authorization`, `nosniff`. La Basic es la de `/opds` (el middleware cubre `/opds/*`).
+- **URL canónica y coste (dictamen de SecOps, notas N-1 y N-3).** Una página, una URL: `file_id` en
+  su forma canónica y `n` sin espacios, signos, ceros ni dígitos Unicode; lo demás, `404`. El feed
+  memoriza la medida de cada ZIP por ruta + fecha + tamaño (acotada a 4096) y mide como mucho 150
+  archivos nuevos por petición: en una serie grande el resto se anuncia en las siguientes
+  peticiones. Sin medir en la Pi con disco USB frío.
+- **Seguridad.** Abre contenido por Basic: en una LAN sin TLS las credenciales y las páginas
+  viajan en claro (§10). El exterior exige proxy inverso con TLS (ADR 0004). Pasada de SecOps
+  antes de fusionar.
+- **Pruebas.** `tests/test_opds_pse.py` (archivos sintéticos). Prueba con una app real
+  (Panels, Chunky, Mihon, YACReader): **NOT RUN**.

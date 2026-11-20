@@ -1,13 +1,14 @@
 # ruff: noqa: E501
-"""Catálogo OPDS 1.2 de **solo catálogo** (#160, BL-C5).
+"""Catálogo OPDS 1.2 (#160, BL-C5) con lectura por páginas OPDS-PSE (#828, BL-LEC5).
 
-No hay enlaces de adquisición/descarga: el cliente navega por series,
-tradiciones, editoriales y números, nada más. El contrato está en
-`docs/design/especificacion-BL-C5-opds.md`.
+Sigue sin haber enlaces de adquisición/descarga del archivo entero: el cliente navega
+por series, tradiciones, editoriales y números, y lee página a página. El contrato está
+en `docs/design/especificacion-BL-C5-opds.md` (la decisión «solo catálogo» la supera
+BL-LEC5, §12 de ese documento).
 
 El XML se construye con ElementTree (escapado automático). Las rutas de
-archivo, los hashes y los `File` no entran aquí: este router solo lee Series,
-Issue, Creator e Publisher.
+archivo y los hashes no entran aquí: el router lee Series, Issue, Creator y Publisher, y
+el enlace de páginas lo decide `services/lector.py` (una sola lectura de páginas).
 """
 from __future__ import annotations
 
@@ -33,11 +34,20 @@ from zascarr.models import (
     Publisher,
     Series,
 )
+from zascarr.services.lector import (
+    LectorError,
+    Streaming,
+    pagina_pse,
+    streaming_de_numeros,
+)
 from zascarr.services.series import SeriesService
+from zascarr.utils.cover import cached_image_response
 
 ATOM = "http://www.w3.org/2005/Atom"
 OPDS = "http://opds-spec.org/2010/catalog"
 DC = "http://purl.org/dc/terms/"
+PSE = "http://vaemendis.net/opds-pse/ns"
+_REL_PSE = "http://vaemendis.net/opds-pse/stream"
 _TIPO_NAV = "application/atom+xml;profile=opds-catalog;kind=navigation"
 _TIPO_XML = "application/xml; charset=utf-8"
 _PAGE_SIZE = 50
@@ -47,6 +57,7 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 ET.register_namespace("", ATOM)
 ET.register_namespace("opds", OPDS)
 ET.register_namespace("dc", DC)
+ET.register_namespace("pse", PSE)
 
 router = APIRouter(prefix="/opds", tags=["opds"])
 
@@ -162,7 +173,18 @@ def _entrada_serie(feed: ET.Element, serie: Series, autores: list[str]) -> None:
     _enlace(entrada, "alternate", f"/ui/series/{serie.id}", "text/html")
 
 
-def _entrada_issue(feed: ET.Element, issue: Issue, serie: Series) -> None:
+def _enlace_pse(entrada: ET.Element, pse: Streaming) -> None:
+    """Enlace de páginas OPDS-PSE 1.0: `{pageNumber}` va de 0 a N-1 (lo convierte el servicio)."""
+    attrs = {"rel": _REL_PSE, "type": pse.content_type,
+             "href": f"/opds/paginas/{pse.file_id}/{{pageNumber}}",
+             _tag(PSE, "count"): str(pse.count)}
+    if pse.ultima_leida is not None:
+        attrs[_tag(PSE, "lastRead")] = str(pse.ultima_leida)
+    ET.SubElement(entrada, _tag(ATOM, "link"), attrs)
+
+
+def _entrada_issue(feed: ET.Element, issue: Issue, serie: Series,
+                   pse: Streaming | None = None) -> None:
     entrada = ET.SubElement(feed, _tag(ATOM, "entry"))
     etiqueta = f"{serie.title} #{issue.issue_number}" if issue.issue_number else serie.title
     ET.SubElement(entrada, _tag(ATOM, "id")).text = f"urn:zascarr:serie:{serie.id}:numero:{issue.issue_number or issue.id}"
@@ -175,6 +197,8 @@ def _entrada_issue(feed: ET.Element, issue: Issue, serie: Series) -> None:
     if issue.release_date:
         ET.SubElement(entrada, _tag(DC, "issued")).text = issue.release_date.isoformat()
     _enlace(entrada, "alternate", f"/ui/series/{serie.id}", "text/html")
+    if pse is not None:
+        _enlace_pse(entrada, pse)
 
 
 def _pagina_links(entrada: ET.Element, base: str, page: int, pages: int, filtros: dict[str, str]) -> None:
@@ -313,11 +337,38 @@ async def serie_detalle(serie_id: str, request: Request, db: AsyncSession = Depe
     for issue in issues:
         if issue.updated_at and (actualizado is None or issue.updated_at > actualizado):
             actualizado = issue.updated_at
+    streaming = await streaming_de_numeros(db, [i.id for i in issues])
     feed = _feed(str(request.url), serie.title, actualizado, up="/opds/series")
     for issue in issues:
-        _entrada_issue(feed, issue, serie)
+        _entrada_issue(feed, issue, serie, streaming.get(issue.id))
     cuerpo = ET.tostring(feed, encoding="utf-8", xml_declaration=True)
-    return _respuesta(request, cuerpo, actualizado, extra=str(uuid))
+    # La última página leída y la caché de RAR cambian sin tocar `updated_at`: entran en el ETag.
+    huella = hashlib.sha256("|".join(
+        f"{k}:{v.file_id}:{v.count}:{v.ultima_leida}" for k, v in sorted(
+            streaming.items(), key=lambda kv: str(kv[0]))).encode()).hexdigest()
+    return _respuesta(request, cuerpo, actualizado, extra=f"{uuid}|{huella}")
+
+
+@router.get("/paginas/{file_id}/{numero}", response_class=Response)
+async def pagina(file_id: str, numero: str, request: Request,
+                 db: AsyncSession = Depends(get_db)) -> Response:
+    """Una página para un cliente OPDS-PSE (`numero` de 0 a N-1), con la Basic de `/opds`."""
+    sin_pagina = Response(status_code=404, headers={"Cache-Control": "no-store"})
+    try:
+        archivo, n = UUID(file_id), int(numero)
+    except (ValueError, TypeError):
+        return sin_pagina
+    # Una sola URL por página: nada de " 1", "+1", "00", dígitos Unicode ni UUID con otra forma.
+    if str(archivo) != file_id or str(n) != numero or not numero.isascii():
+        return sin_pagina
+    try:
+        recurso = await pagina_pse(db, archivo, n)
+    except LectorError:
+        return sin_pagina
+    respuesta = cached_image_response(request, recurso.datos, recurso.content_type, recurso.etag)
+    respuesta.headers["X-Content-Type-Options"] = "nosniff"
+    respuesta.headers["Vary"] = "Authorization"
+    return respuesta
 
 
 @router.get("/tradiciones", response_class=Response)
