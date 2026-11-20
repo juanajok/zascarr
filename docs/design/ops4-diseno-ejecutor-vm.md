@@ -167,10 +167,18 @@ instalado nada.
 
 Se verificó aparte que `RLIMIT_FSIZE` de 1 MiB rechaza por `EFBIG` una escritura
 adicional en un archivo sintético y se observó un límite de 15 GiB por archivo
-en el proceso QEMU detenido. Esto **no es una cuota global**, no limita otros
-archivos o procesos ni acredita un límite de RAM del proceso. Los 12 GiB
-virtuales tampoco garantizan una cuota física; sigue pendiente el límite total
-efectivo y el aislamiento adicional antes de la instalación.
+en el proceso QEMU detenido. También se comprobó que `RLIMIT_AS` de 64 MiB
+rechaza una reserva sintética de 100 MiB, y que QEMU con límites observados de
+4 GiB de espacio de direcciones, 15 GiB por archivo y 120/125 segundos de CPU
+alcanzó el menú de Debian con 768 MiB de RAM virtual, ISO de solo lectura y
+sin NIC ni disco escribible. QMP cerró la instancia. La captura se conserva en
+evidencia privada.
+
+Estos límites son **por proceso o por archivo**, no una cuota global de disco,
+no limitan otros procesos y `RLIMIT_AS` limita espacio virtual, no una cuota
+agregada de RAM física. `RLIMIT_CPU` es tiempo de CPU, no un plazo de pared.
+Los 12 GiB virtuales tampoco garantizan una cuota física; siguen pendientes el
+límite total efectivo y el aislamiento adicional antes de la instalación.
 
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 
