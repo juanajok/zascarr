@@ -141,3 +141,26 @@ Resolución por hallazgo:
 | s4: caminos de fallo de commit sin prueba | **Corregido**: dos pruebas pg nuevas (lote fallido e informe final fallido) |
 | s5: el rescan no mira el marcador de adopción | **Declarado**: el rescan usa `adopt(alcance=…)`, que no toca el marcador; con el registro inicial a medias, lo que ve se registra y el registro inicial sigue ofreciéndose |
 | s6: un rescan con nuevos escribe dos `ImportRun` | **Declarado**: el `kind="registro_incremental"` de `adopt` es el registro de los nuevos; el `kind="rescan"` es el informe de la operación completa |
+
+## 13. «Actualizar la biblioteca» desde Biblioteca y cadencia en Ajustes (#1160, 2026-11-20)
+
+Mismo servicio, nuevo nombre y nuevas puertas; ningún comportamiento de disco cambia (A3).
+
+- **Nombre único** (decisión del PO tras el dictamen de UX de Diseño): «Actualizar la biblioteca» en el botón de
+  Biblioteca y en el de Duplicados; «Actualizando la biblioteca» en el chip (`TITULOS["rescanear"]`). El
+  identificador interno `rescanear` y la URL `/ui/auditoria/rescanear` no se tocan. Glosario: CLAUDE.md §14.1.
+- **F1** (heredado de BL-R9): el botón de Duplicados se deshabilitaba con la fase `ocupado` y no se rehabilitaba hasta
+  el siguiente lanzamiento. Ahora solo se deshabilita mientras corre. **F2**: `ocupado` ya no se registra como
+  `tareas.error` (el chip global decía «una tarea ha fallado»); termina como tarea normal con su resumen.
+- **Biblioteca** (`web/actualizar_biblioteca.py`, `_actualizar_biblioteca.html`): botón neutro (no `.primary`), garantía
+  junto a la acción, «Última vez · Próxima», región viva estable (solo se sustituye su contenido), sondeo cada 5 s solo
+  mientras dura, foco al mensaje al lanzar y sin autofoco al terminar. Un solo informe largo: el de Duplicados.
+- **Cadencia** (Ajustes → «Actualizar la biblioteca»): apagada / una vez al día (por defecto) / una vez a la semana;
+  un valor fijado por la instalación se muestra como cuarta opción. `rescan_interval_minutes` es ahora campo editable
+  en caliente (`OVERRIDABLE_FIELDS["actualizar_biblioteca"]`), sin migración (fila única `RuntimeSetting`).
+- **Fiabilidad del periódico**: `_rescan_loop` ya no es «dormir un intervalo tras el arranque». Lee una vez el último
+  `ImportRun` `kind="rescan"`, cuenta desde él (`proxima_ejecucion`), mira la cadencia en cada vuelta (cada 60 s) y,
+  si el turno se salta (cerrojo ocupado) o falla, no reintenta antes de `REINTENTO_TRAS_SALTO` (30 min). Sin
+  historial, el primero toca un intervalo después del arranque (el más caro: línea de base `file_mtime_ns`).
+- No hecho: verificación en vivo a 320 px y en los dos temas (NOT RUN hasta ver la PR desplegada con datos reales).
+

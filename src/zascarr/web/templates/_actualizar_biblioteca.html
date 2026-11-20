@@ -1,0 +1,75 @@
+{#- «Actualizar la biblioteca» en Biblioteca (#1160). Una sola plantilla: sin `parcial` pinta el bloque
+    entero; con `parcial` (POST y sondeo) solo el contenido de la región viva, más el botón y las
+    líneas por intercambio fuera de banda. La región viva no se sustituye nunca: solo su contenido. -#}
+{%- macro boton(oob=false) -%}
+<button id="actualizar-boton" type="submit" class="btn sm" aria-describedby="actualizar-garantia"
+        {% if oob %}hx-swap-oob="true"{% endif %}
+        {% if estado_rescan.en_curso %}disabled{% endif %}>
+  {{ "Actualizando…" if estado_rescan.en_curso else "Actualizar la biblioteca" }}
+</button>
+{%- endmacro -%}
+{%- macro lineas(oob=false) -%}
+<p id="actualizar-lineas" class="muted" {% if oob %}hx-swap-oob="true"{% endif %}>
+  <span>{{ texto_ultima }}</span>
+  {% if texto_proxima %}<span class="actualizar-separador" aria-hidden="true"> · </span><span>{{ texto_proxima }}</span>
+  {% elif apagada %}<span class="actualizar-separador" aria-hidden="true"> · </span><span>No se actualiza sola · <a href="/ui/ajustes#actualizar-biblioteca">Cambiarlo</a></span>{% endif %}
+</p>
+{%- endmacro -%}
+{%- macro contenido() -%}
+<div id="actualizar-contenido"
+     {% if estado_rescan.en_curso %}hx-get="/ui/biblioteca/actualizar/estado" hx-trigger="every 5s"
+     hx-target="#actualizar-contenido" hx-swap="outerHTML"{% endif %}>
+  {% if estado_rescan.en_curso %}
+  <p{% if recien_lanzada %} tabindex="-1" autofocus{% endif %}>
+    {% if ya_en_curso %}Ya se está actualizando{% if estado_rescan.iniciado %} (empezó a las {{ estado_rescan.iniciado | hora }}){% endif %}. No se ha lanzado otra.
+    {% else %}Actualizando tu biblioteca{% if estado_rescan.iniciado %} desde las {{ estado_rescan.iniciado | hora }}{% endif %}. Puedes seguir usando ZascArr.{% endif %}
+    {% if primera_vez %}La primera vez tarda más: mira todos tus archivos.{% endif %}
+  </p>
+  {% elif estado_rescan.fase.value == "ocupado" %}
+  {% call ui.aviso("info") %}ZascArr está importando descargas ahora. No se ha lanzado nada; vuelve a probar cuando termine.{% endcall %}
+  {% elif estado_rescan.fase.value == "error" %}
+  {% call ui.aviso("warn") %}No se ha podido actualizar la biblioteca. Vuelve a intentarlo; si sigue fallando, mira <a href="/estado">Estado</a>.{% endcall %}
+  {% elif estado_rescan.fase.value == "terminado" and resumen %}
+  {% set nuevos = resumen.nuevos_registrados + resumen.nuevos_a_revisar %}
+  {% set parcial_rev = resumen.no_revisado or resumen.resultado_biblioteca not in ("", "comprobada") %}
+  {% if nuevos or resumen.re_triados or resumen.reenlazados %}
+  {% call ui.aviso("ok") %}Biblioteca al día:
+    {%- if nuevos %} {{ nuevos }} {{ "nuevo" if nuevos == 1 else "nuevos" }}, {{ resumen.nuevos_registrados }} a su serie y {{ resumen.nuevos_a_revisar }} a «Por revisar»{% endif %}
+    {%- if resumen.re_triados %}{{ "." if nuevos else "" }} {{ resumen.re_triados }} {{ "se ha vuelto a clasificar" if resumen.re_triados == 1 else "se han vuelto a clasificar" }}{% endif %}
+    {%- if resumen.reenlazados %}{{ "." if nuevos or resumen.re_triados else "" }} {{ resumen.reenlazados }} {{ "estaba en otra carpeta" if resumen.reenlazados == 1 else "estaban en otra carpeta" }}{% endif %}.
+    {% if resumen.nuevos_a_revisar %}<a href="/ui/pendientes">Revisar {{ "el" if resumen.nuevos_a_revisar == 1 else "los " ~ resumen.nuevos_a_revisar }}</a> ·{% endif %}
+    <a href="/ui/auditoria#rescan-biblioteca">Ver el informe completo</a>{% endcall %}
+  {% elif not parcial_rev %}
+  {% call ui.aviso("ok") %}Tu biblioteca ya estaba al día: nada nuevo, nada movido, nada desaparecido.{% endcall %}
+  {% endif %}
+  {% if resumen.desaparecidos %}
+  {% call ui.aviso("amber") %}{{ resumen.desaparecidos }} {{ "archivo ya no está" if resumen.desaparecidos == 1 else "archivos ya no están" }} en su sitio.
+    <a href="/ui/no-disponibles">Ver cuáles</a>{% endcall %}
+  {% endif %}
+  {% if parcial_rev %}
+  {% call ui.aviso("amber") %}No se pudo revisar todo; lo que no se miró no se da por revisado.
+    <a href="/ui/auditoria#rescan-biblioteca">Ver el informe completo</a>{% endcall %}
+  {% endif %}
+  {% endif %}
+</div>
+{%- endmacro -%}
+{% if parcial %}
+{{ contenido() }}
+{{ boton(oob=true) }}
+{{ lineas(oob=true) }}
+{% else %}
+<section id="actualizar-biblioteca" class="biblioteca-actualizar" aria-label="Actualizar la biblioteca">
+  <form class="biblioteca-actualizar-accion" hx-post="/ui/biblioteca/actualizar"
+        hx-target="#actualizar-contenido" hx-swap="outerHTML">
+    {{ boton() }}
+    <p id="actualizar-garantia" class="muted">Mira tu disco: no mueve, no renombra ni borra nada.</p>
+  </form>
+  {{ lineas() }}
+  {% call ui.region_viva("actualizar-estado") %}{{ contenido() }}{% endcall %}
+  <details class="biblioteca-actualizar-detalle"><summary>Qué mira</summary>
+    <p>Registra los tebeos nuevos (a su serie si los reconoce, y a «Por revisar» si no), vuelve a clasificar
+      los que cambiaron de contenido y marca los que ya no están en su sitio. No consulta fuentes de datos.
+      Sigue en segundo plano: puedes cerrar esta página.</p>
+  </details>
+</section>
+{% endif %}

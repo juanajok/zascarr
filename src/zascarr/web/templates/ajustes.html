@@ -371,6 +371,22 @@
 
   <h2 class="ajustes-acto" id="ajustes-propio">Tu ZascArr</h2>
 
+    <fieldset class="ajustes-card ajustes-card--ancha" id="actualizar-biblioteca">
+      <legend>Actualizar la biblioteca</legend>
+      <p class="ajustes-desc">ZascArr mira tu disco solo y registra lo nuevo. No mueve, no renombra ni borra nada.</p>
+      <form hx-post="/ui/ajustes/guardar/actualizar-biblioteca" hx-target="#resultado-actualizar" hx-swap="innerHTML">
+        <label>Actualizar sola
+          <select name="rescan_interval_minutes">
+            {% for o in opciones_actualizar %}
+            <option value="{{ o.valor }}" {% if o.marcada %}selected{% endif %}>{{ o.etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="ajustes-actions"><button type="submit">Guardar</button></div>
+      </form>
+      <div id="resultado-actualizar" aria-live="polite"></div>
+    </fieldset>
+
     <fieldset class="ajustes-card ajustes-card--ancha" id="discos-biblioteca">
       <legend>Discos de la biblioteca</legend>
       <p class="ajustes-desc">Reparte tus tradiciones entre los discos que ya tienes montados. Los archivos actuales no se mueven.</p>
