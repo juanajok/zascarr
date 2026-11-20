@@ -380,6 +380,46 @@ contenedor o base, concordancia de `auth_mode` con la app, reclamación
 durable, cerrojo, unidad actualizadora ni cancelación de consultas remotas.
 La actualización sigue deshabilitada.
 
+### Timeout y contención por cgroup en la VM (2026-11-20)
+
+Se instalaron **solo dentro de la VM sin NIC** los fixtures versionados de
+[unidad de sondeo](../../tests/fixtures/ops4-vm/ops4-lab-timeout.service),
+[proceso sintético](../../tests/fixtures/ops4-vm/timeout-probe.py) y
+[verificador](../../tests/fixtures/ops4-vm/verify-timeout.py). No son la unidad
+actualizadora ni están incluidos en el instalador de OPS.
+
+La unidad usa `Type=exec`, `RuntimeMaxSec=2s`, `TimeoutStopSec=1s`,
+`KillMode=control-group`, `SendSIGKILL=yes` y `Restart=no`; corre como
+`nobody:nogroup`, sin capacidades, con `ProtectSystem=strict` y otras
+restricciones. El proceso padre y su hijo ignoran SIGTERM; el hijo invoca
+`setsid()` y registra su nueva sesión en el directorio de runtime. No llaman a
+Docker, a la app, a la BD ni a la red.
+
+**Resultado real:** `Result=timeout`, `ExecMainStatus=9`,
+`ActiveState=failed`, `SubState=failed`, `NRestarts=0`. El verificador comprobó
+que el hijo sí creó otra sesión y que ninguno de los dos procesos seguía
+activo (ausente o zombi, no ejecutable). El caso terminó con código 0. La
+unidad no tiene sección `[Install]`; se limpió el estado fallido y QEMU se
+apagó limpiamente. Evidencia privada: `lector-timeout-v2.log`.
+
+Un primer intento con `systemctl start --wait` falló por «Invalid request
+descriptor» sobre el socket privado. No cuenta como PASS. Se sustituyó por
+`start` normal y observación acotada de propiedades hasta el estado fallido;
+`start=0` no se interpreta como éxito del trabajo.
+
+**Consecuencia para el diseño:** `RuntimeMaxSec` no limita la fase activa de
+`Type=oneshot`; una futura unidad de ese tipo necesitará `TimeoutStartSec`
+explícito. El sondeo usa `Type=exec` deliberadamente. La unidad final sigue
+pendiente de revisión: no copiar estas restricciones a `update.sh`/Docker
+sin verificar permisos, red y directorios escribibles. El cgroup de esta
+unidad no contiene tareas ya delegadas al daemon Docker; tampoco demuestra
+reclamación durable, recuperación ni estado fiable tras cortes.
+
+Los [tests estáticos](../../tests/test_ops4_unidad_laboratorio.py) fijan el
+contrato `Type=exec`/timeout/cgroup/sin reinicio, comprueban que importar los
+fixtures no ejecuta procesos y que el instalador no los referencia. Pytest no
+instala ni ejecuta unidades systemd.
+
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 
 1. La [guía de instalación Debian](https://www.debian.org/releases/trixie/amd64/apas02.en.html)
