@@ -161,6 +161,39 @@ Cuantifica cuánto de la vista de huecos era un artefacto de un campo sin poblar
 (`Issue.sort_order`, que ningún código de `main` escribe) frente al criterio
 nuevo. Fue el instrumento del cierre de `compute_missing_issues` (2026-09-27).
 
+### `censo_calidad.py` — catálogo de calidad del dato (solo lectura)
+
+```bash
+DATABASE_URL=... python3 scripts/medicion/censo_calidad.py --perfil   # fase 1
+DATABASE_URL=... python3 scripts/medicion/censo_calidad.py             # fase 2 (compartible)
+DATABASE_URL=... python3 scripts/medicion/censo_calidad.py --local     # etiquetar (NO compartir)
+DATABASE_URL=... python3 scripts/medicion/censo_calidad.py --json > calidad.json
+```
+
+Mide el catálogo de `docs/design/calidad-dato-*.md`: una fila por comprobación
+(id estable `A1`…`I3`, subcomprobaciones `A4a`, `B1b`…), con **población**,
+**casos** (entidades distintas), instancias, porcentaje y una muestra. Por
+defecto **seudonimiza** títulos y rutas (hash SHA-256 truncado); `--local`
+enseña los originales y es la única salida que sirve para etiquetar el CSV
+(`--csv RUTA --local --muestreo 20 --semilla 42`). El CSV lleva
+`etiqueta_esperada` rellena **antes** de mirar la muestra y `etiqueta_po`
+vacía para que decida el PO.
+
+La conexión entera corre en `BEGIN TRANSACTION READ ONLY`: Postgres rechaza
+cualquier escritura aunque el script se equivocara. `--json` ordena por id e
+incluye `huella` (SHA-256 de población/casos/muestra, sin la fecha) para
+comparar dos ejecuciones; `--solo A,B1` filtra por prefijo.
+
+Lo que **no** mide solo con SQL y sale como `NOT RUN` con su motivo: el número
+que extrae el parser del nombre (`D1b`; `C1` es un proxy declarado) y la
+existencia de copia local de la portada (`I3`, exige recorrer el disco). El
+resto de comprobaciones del catálogo se ejecutan contra la BD.
+
+Pruebas: `tests/test_censo_calidad_pg.py` (Postgres real, se salta sin
+`TEST_DATABASE_URL`) carga `tests/fixtures/calidad_sintetica.sql` con un caso
+por comprobación y ejecuta el script como una persona (subprocess + `--json`).
+
+
 
 ## `medir_asignacion.sh` / `medir_asignacion.py` (ADR 0006)
 
