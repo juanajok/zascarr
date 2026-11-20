@@ -7,6 +7,8 @@
    no decía nada («Portada del número»).
 3. En «Tu lectura», la etiqueta «Nota corta» quedaba al final de la fila de estados, lejos de su
    caja, y el límite de caracteres competía con el botón; la garantía quedaba fuera del formulario.
+4. Dos cajas amarillas en «Tu lectura»: la ayuda pasa a texto secundario y el amarillo queda para la
+   garantía junto a la acción (decisión del PO del 2026-11-20, que revisa en esto la de #1119).
 """
 from __future__ import annotations
 
@@ -75,3 +77,10 @@ def test_la_garantia_va_junto_al_boton_de_guardar():
     formulario = LECTURA.split("<form", 1)[1].split("</form>", 1)[0]
     boton = formulario.index("guardar_mi_lectura")
     assert boton < formulario.index("textos_lectura.garantia")
+
+
+def test_solo_la_garantia_va_en_caja_amarilla():
+    """La ayuda es texto secundario; el amarillo, solo para la garantía (PO, 2026-11-20)."""
+    assert '<p class="muted">{{ textos_lectura.ayuda }}</p>' in LECTURA
+    assert LECTURA.count('class="caption"') == 1
+    assert '<p class="caption">{{ textos_lectura.garantia }}</p>' in LECTURA

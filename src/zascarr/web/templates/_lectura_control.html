@@ -3,7 +3,9 @@
 {% set modo = modo or "fila" %}
 <div class="lectura-control{% if modo == 'bloque' %} lectura-bloque{% endif %}" id="lectura-{{ issue_id }}">
   {% if modo == "bloque" %}
-  <p class="caption">{{ textos_lectura.ayuda }}</p>
+  {#- La ayuda explica, no garantiza: texto secundario. El amarillo queda para la garantía junto al
+      botón (decisión del PO, 2026-11-20, que revisa en esto la de #1119). -#}
+  <p class="muted">{{ textos_lectura.ayuda }}</p>
   {% endif %}
   <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue_id }}/lectura"
         hx-post="/ui/series/{{ series.id }}/numero/{{ issue_id }}/lectura"
