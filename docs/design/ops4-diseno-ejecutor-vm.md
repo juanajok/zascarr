@@ -159,10 +159,18 @@ Sin VM y stack preparados, las pruebas de host siguen **NOT RUN**.
 un directorio privado `0700` fuera de Git y un disco qcow2 nuevo `0600`, con
 12 GiB virtuales. `qemu-img info` muestra ausencia de backing file y
 `qemu-img check` pasó. También se extrajeron de la ISO verificada el kernel y
-el initrd del instalador a ese directorio. No se ha conectado el disco a QEMU,
-particionado ni instalado nada. Los 12 GiB virtuales no constituyen una cuota
-física garantizada; sigue pendiente fijar y comprobar un límite de recursos
-antes de la instalación, además del aislamiento adicional.
+el initrd del instalador a ese directorio. Posteriormente se conectó el qcow2
+como único disco escribible y la ISO como CD de solo lectura a QEMU **con el
+invitado detenido**; QMP confirmó ambos tipos y el estado detenido. La línea
+incluía `-nodefaults -nic none`; después se cerró QEMU. No se ha particionado ni
+instalado nada.
+
+Se verificó aparte que `RLIMIT_FSIZE` de 1 MiB rechaza por `EFBIG` una escritura
+adicional en un archivo sintético y se observó un límite de 15 GiB por archivo
+en el proceso QEMU detenido. Esto **no es una cuota global**, no limita otros
+archivos o procesos ni acredita un límite de RAM del proceso. Los 12 GiB
+virtuales tampoco garantizan una cuota física; sigue pendiente el límite total
+efectivo y el aislamiento adicional antes de la instalación.
 
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 
