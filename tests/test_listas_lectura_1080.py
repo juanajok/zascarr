@@ -30,3 +30,10 @@ def test_acciones_de_fila_agrupadas():
     detalle = Path("src/zascarr/web/templates/lista_detalle.html").read_text()
     assert 'class="lista-item-acciones"' in detalle
     assert detalle.count('class="lista-item-acciones"') == detalle.count("{% for x in items %}")
+
+
+def test_acciones_sueltas_a_44_px():
+    from pathlib import Path as _P
+    css = _P("src/zascarr/static/web.css").read_text()
+    assert ".lista-borrar .btn" in css and ".lista-opciones-gestion .btn" in css
+    assert "lista-opciones-gestion" in _P("src/zascarr/web/templates/_lista_opciones.html").read_text()
