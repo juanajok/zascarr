@@ -3029,6 +3029,21 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .archivo-preferido-acciones .btn { min-height: 44px; }
 .archivo-preferido-opcion:focus-within { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
 
+
+/* #1080: formularios y acciones de listas a 320/1280 */
+.formulario-listas { display: grid; gap: var(--space-2); align-items: start; }
+.formulario-listas label { display: block; font-weight: 700; }
+.formulario-listas input, .formulario-listas textarea, .formulario-listas select { width: 100%; min-height: 44px; padding: var(--space-1) var(--space-2); box-sizing: border-box; }
+.formulario-listas textarea { min-height: 88px; resize: vertical; }
+.formulario-listas .btn { min-height: 44px; justify-self: start; }
+.anadir-a-lista > summary { min-height: 44px; display: inline-flex; align-items: center; }
+.form-lista-opciones { display: grid; gap: var(--space-2); align-items: start; }
+.form-lista-opciones label { display: block; font-weight: 700; }
+.form-lista-opciones select, .form-lista-opciones .btn { min-height: 44px; width: 100%; box-sizing: border-box; }
+.lista-item-acciones { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; flex: 1 1 100%; }
+.lista-item-acciones .btn { min-height: 44px; }
+@media (max-width: 480px) { .lista-item-acciones { flex-direction: column; align-items: stretch; } }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

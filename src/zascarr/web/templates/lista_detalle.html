@@ -14,7 +14,7 @@
 {% if error %}{{ ui.aviso("amber", error) }}{% endif %}
 <section aria-labelledby="lista-editar-titulo">
   <h2 id="lista-editar-titulo">Nombre y descripción</h2>
-  <form method="post" action="/ui/listas/{{ lista.id }}/editar" class="tarjeta formulario">
+  <form method="post" action="/ui/listas/{{ lista.id }}/editar" class="tarjeta formulario formulario-listas">
     <label for="lista-nombre">Nombre</label>
     <input id="lista-nombre" name="name" maxlength="120" required
            value="{{ (valores.name if valores else lista.name) }}">
@@ -32,6 +32,7 @@
       <span class="lista-item-orden">{{ x.position }}</span>
       <a href="/ui/series/{{ x.serie_id }}/numero/{{ x.issue_id }}">{{ x.serie }}{% if x.numero %} #{{ x.numero }}{% endif %}</a>
       {% if x.leido %}{{ ui.chip("ok", "Leído") }}{% endif %}
+      <div class="lista-item-acciones">
       <form method="post" action="/ui/listas/{{ lista.id }}/mover/{{ x.issue_id }}/subir" class="inline">
         <button type="submit" class="btn ghost sm" {% if loop.first %}disabled{% endif %} aria-label="Subir {{ x.serie }} {{ x.numero }}">Subir</button>
       </form>
@@ -41,6 +42,7 @@
       <form method="post" action="/ui/listas/{{ lista.id }}/quitar/{{ x.issue_id }}" class="inline">
         <button type="submit" class="btn ghost sm">Quitar<span class="sr"> {{ x.serie }} {{ x.numero }}</span></button>
       </form>
+      </div>
     </li>
     {% endfor %}
   </ol>

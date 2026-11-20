@@ -9,7 +9,7 @@
 {% if error %}{{ ui.aviso("amber", error) }}{% endif %}
 <section aria-labelledby="listas-crear-titulo">
   <h2 id="listas-crear-titulo">Nueva lista</h2>
-  <form method="post" action="/ui/listas/nueva" class="tarjeta formulario">
+  <form method="post" action="/ui/listas/nueva" class="tarjeta formulario formulario-listas">
     <label for="lista-nombre">Nombre</label>
     <input id="lista-nombre" name="name" maxlength="120" required
            value="{{ (valores.name if valores else '') }}">
