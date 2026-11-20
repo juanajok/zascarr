@@ -571,14 +571,16 @@
       return;
     }
     const enLienzo = target === lienzo;
-    if (key === "+" || key === "=" || key === "NumpadAdd") {
-      if (target === lienzo || target === document.body) { evento.preventDefault(); cambiarZoom(zoom + ZOOM_PASO); return; }
+    // WCAG 2.1.4: los atajos de un carácter (+ − 0 f h m) solo actúan con el foco en la zona de
+    // lectura; con el foco en el cuerpo o en otro control no hacen nada (#1119).
+    if (enLienzo && (key === "+" || key === "=" || key === "NumpadAdd")) {
+      evento.preventDefault(); cambiarZoom(zoom + ZOOM_PASO); return;
     }
-    if (key === "-" || key === "NumpadSubtract") {
-      if (target === lienzo || target === document.body) { evento.preventDefault(); cambiarZoom(zoom - ZOOM_PASO); return; }
+    if (enLienzo && (key === "-" || key === "NumpadSubtract")) {
+      evento.preventDefault(); cambiarZoom(zoom - ZOOM_PASO); return;
     }
-    if (key === "0" || key === "Numpad0") {
-      if (target === lienzo || target === document.body) { evento.preventDefault(); restablecerZoom(); return; }
+    if (enLienzo && (key === "0" || key === "Numpad0")) {
+      evento.preventDefault(); restablecerZoom(); return;
     }
     if (enLienzo && (key === "f" || key === "h" || key === "m")) {
       evento.preventDefault();
