@@ -236,6 +236,12 @@ una prueba con `/bin/true`, no del futuro ejecutor; el conjunto de capacidades
 puede no servir para `update.sh`/Docker y deberá revisarse. La exposición 3.9
 no es una certificación de seguridad.
 
+Se probó también una NIC de usuario de QEMU para instalar Docker/PostgreSQL:
+la interfaz `enp0s1` subió, pero `dhclient` falló y no se obtuvo dirección IPv4;
+la resolución DNS falló. Por tanto la instalación de Docker, PostgreSQL y las
+pruebas de extremo a extremo siguen **NOT RUN**. No se añadió red de producción
+ni se abrió ningún puerto.
+
 No se instalaron Docker ni PostgreSQL, no se instaló la unidad de
 actualización, no se ejecutó `update.sh` y no se tocó la Pi ni datos reales.
 Los intentos previos con contraseña/usuario equivocados se descartaron; los
