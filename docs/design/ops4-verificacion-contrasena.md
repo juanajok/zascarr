@@ -46,7 +46,9 @@ prohíben explícitamente invocarlo.
   concordancia entre sus fuentes efectivas, los cambios/rollback de ajustes
   y la identidad de la instalación **sigue sin acreditarse**. Una coincidencia
   con un hash leído no demuestra por sí sola que sea la contraseña efectiva
-  de esa app en ese instante.
+  de esa app en ese instante. La [auditoría de concordancia](ops4-concordancia-seguridad.md)
+  detalla publicación anterior al commit, rollback, recuperación CLI e
+  identidad/readiness pendientes; M3 sigue abierto.
 - Los límites del host pueden denegar un hash fuera de rango que otra ruta
   histórica acepte. Fallar cerrado es preferible a intentar un coste sin
   límite; la compatibilidad de instalaciones reales necesita revisión.
