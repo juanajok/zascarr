@@ -39,12 +39,12 @@ def clasificar_inicio(observacion: object) -> ResultadoInicio:
     activo = observacion.activo
     if type(codigo) is not int or not isinstance(estado, str) or not isinstance(activo, bool):
         return ResultadoInicio.INCIERTO
-    if estado == "not-found":
-        return ResultadoInicio.NO_DISPONIBLE
-    if estado not in _ESTADOS:
-        return ResultadoInicio.INCIERTO
     if codigo != 0:
         # Un start no cero puede haber arrancado la unidad: nunca se declara inocuo.
+        return ResultadoInicio.INCIERTO
+    if estado == "not-found":
+        return ResultadoInicio.INCIERTO if activo else ResultadoInicio.NO_DISPONIBLE
+    if estado not in _ESTADOS:
         return ResultadoInicio.INCIERTO
     if activo and estado == "active":
         return ResultadoInicio.INICIADO

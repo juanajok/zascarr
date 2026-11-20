@@ -22,6 +22,9 @@ from deploy.ops.experimento_estado_unidad_ops4 import (
         (1, "failed", False, ResultadoInicio.INCIERTO),
         (75, "inactive", False, ResultadoInicio.INCIERTO),
         (0, "not-found", False, ResultadoInicio.NO_DISPONIBLE),
+        (0, "not-found", True, ResultadoInicio.INCIERTO),
+        (1, "not-found", True, ResultadoInicio.INCIERTO),
+        (1, "not-found", False, ResultadoInicio.INCIERTO),
         (0, "desconocido", False, ResultadoInicio.INCIERTO),
     ],
 )

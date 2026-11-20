@@ -19,7 +19,8 @@ _CLAVES = frozenset({
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _HUELLA = re.compile(r"[0-9a-f]{64}\Z")
 _NOMBRE = re.compile(r"[A-Za-z0-9_.-]{1,128}\Z")
-_ORIGEN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+# Etiqueta experimental, no acredita el origen remoto ni una ref independiente.
+_ORIGEN_EXPERIMENTAL = "origin/main"
 
 
 class RegistroInvalidoError(ValueError):
@@ -40,13 +41,15 @@ class Registro:
 def _validar(registro: Registro) -> None:
     if not isinstance(registro, Registro):
         raise RegistroInvalidoError("Registro inválido")
-    if not _SHA.fullmatch(registro.sha) or not _SHA.fullmatch(registro.head0):
+    if not all(type(x) is str and _SHA.fullmatch(x) for x in (registro.sha, registro.head0)):
         raise RegistroInvalidoError("SHA inválido")
-    if not _HUELLA.fullmatch(registro.huella_p):
+    if type(registro.huella_p) is not str or not _HUELLA.fullmatch(registro.huella_p):
         raise RegistroInvalidoError("Huella inválida")
-    if not all(_NOMBRE.fullmatch(x) for x in (registro.instalacion, registro.nonce)):
+    if not all(type(x) is str and _NOMBRE.fullmatch(x) for x in (
+        registro.instalacion, registro.nonce
+    )):
         raise RegistroInvalidoError("Identidad inválida")
-    if not _ORIGEN.fullmatch(registro.origen):
+    if type(registro.origen) is not str or registro.origen != _ORIGEN_EXPERIMENTAL:
         raise RegistroInvalidoError("Origen inválido")
     if type(registro.emitida) is not int or registro.emitida <= 0:
         raise RegistroInvalidoError("Fecha inválida")
@@ -82,7 +85,7 @@ def deserializar(datos: object) -> Registro:
         raise RegistroInvalidoError("Registro inválido")
     try:
         fila = json.loads(bytes(datos[:-1]).decode("utf-8"), object_pairs_hook=_sin_duplicados)
-    except (UnicodeDecodeError, ValueError) as exc:
+    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise RegistroInvalidoError("Registro inválido") from exc
     if not isinstance(fila, dict) or frozenset(fila) != _CLAVES or fila.get("v") != VERSION:
         raise RegistroInvalidoError("Registro inválido")

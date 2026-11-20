@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import contextlib
+import json
+from dataclasses import replace
 
 import pytest
 
@@ -56,6 +58,32 @@ def test_no_canonico_se_rechaza() -> None:
 def test_validacion_de_campos(campo: str, valor: object) -> None:
     with pytest.raises(RegistroInvalidoError):
         serializar(Registro(**({**REGISTRO.__dict__, campo: valor})))
+
+
+@pytest.mark.parametrize("campo", ["sha", "head0", "huella_p", "instalacion", "nonce", "origen"])
+@pytest.mark.parametrize("valor", [None, [], 123, True])
+def test_campos_no_texto_se_rechazan_en_todas_las_entradas(campo, valor) -> None:
+    registro = replace(REGISTRO, **{campo: valor})
+    with pytest.raises(RegistroInvalidoError):
+        serializar(registro)
+    with pytest.raises(RegistroInvalidoError):
+        vigente(registro, REGISTRO.emitida)
+    fila = json.loads(serializar(REGISTRO))
+    fila[campo] = valor
+    datos = json.dumps(fila, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    with pytest.raises(RegistroInvalidoError):
+        deserializar(datos)
+
+
+@pytest.mark.parametrize("origen", ["otro/main", "origin/otra", "../.."])
+def test_etiquetas_de_origen_distintas_no_pasan(origen) -> None:
+    with pytest.raises(RegistroInvalidoError):
+        serializar(replace(REGISTRO, origen=origen))
+
+
+def test_json_anidado_en_exceso_se_rechaza_sin_recursionerror() -> None:
+    with pytest.raises(RegistroInvalidoError):
+        deserializar(b"[" * 1500 + b"]" * 1500 + b"\n")
 
 
 def test_vigencia_estricta() -> None:
