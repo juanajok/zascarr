@@ -10,6 +10,7 @@ EXPERIMENTOS = (
     RAIZ / "deploy" / "ops" / "modelo_aprobacion_ops4.py",
     RAIZ / "deploy" / "ops" / "experimento_estado_unidad_ops4.py",
     RAIZ / "deploy" / "ops" / "experimento_registro_aprobacion_ops4.py",
+    RAIZ / "deploy" / "ops" / "protocolo_actualizar_ops4.py",
 )
 PROHIBIDO = (
     "subprocess", "socket", "urllib", "http.client", "Popen", "os.system",
@@ -24,6 +25,7 @@ def test_los_experimentos_no_se_importan_desde_runtime() -> None:
         texto = ruta.read_text(encoding="utf-8")
         assert "experimento_" not in texto, ruta
         assert "modelo_aprobacion_ops4" not in texto, ruta
+        assert "protocolo_actualizar_ops4" not in texto, ruta
 
 
 def test_experimentos_sin_procesos_red_ni_ejecucion() -> None:
