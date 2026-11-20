@@ -2325,7 +2325,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .barra-orden label { font-size: var(--text-secundario); font-weight: 800; white-space: nowrap; }
 .barra-orden select {
   min-height: 44px;
-  max-width: 9rem;
+  max-width: 11rem;
   padding: 0 10px;
   border: var(--border-chip) solid var(--ink);
   border-radius: var(--radius-pill);
@@ -2399,7 +2399,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .barra-orden { order: 2; }
   .barra-contador { display: inline-flex; order: 4; }
   .barra-vista-grupo { order: 5; margin-left: auto; }
-  .barra-orden select { max-width: 6.5rem; }
+  .barra-orden select { max-width: 9rem; }
   .barra-vista-texto { display: none; }
   .barra-vista-opcion { width: 44px; padding: 0; }
 }

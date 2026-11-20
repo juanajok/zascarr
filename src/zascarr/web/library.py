@@ -664,7 +664,8 @@ async def _contexto(
         filtros_finales.language, filtros_finales.edition_kind,
         filtros_finales.year_from, filtros_finales.year_to,
         filtros_finales.leido, filtros_finales.coleccion,
-        filtros_finales.naturaleza, filtros_finales.formato)) + len(etiquetas_activas)
+        filtros_finales.naturaleza, filtros_finales.formato,
+        filtros_finales.puntuacion)) + len(etiquetas_activas)
     recuento = (_texto_recuento_etiquetas(total, etiquetas_activas)
                 or _texto_recuento(total, bool(activos) or bool(etiquetas_activas)))
     if error:

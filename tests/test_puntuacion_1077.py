@@ -49,3 +49,10 @@ def test_ssr_y_fragmento_con_puntuacion():
     assert f.status_code == 200
     assert "puntuacion=con" in f.headers["HX-Push-Url"]
     assert "orden=valoracion" in f.headers["HX-Push-Url"]
+
+
+def test_puntuacion_cuenta_como_filtro_y_select_cabe():
+    from pathlib import Path as _P
+    css = _P("src/zascarr/static/web.css").read_text()
+    assert "filtros_finales.puntuacion" in _P("src/zascarr/web/library.py").read_text()
+    assert "max-width: 11rem" in css and "max-width: 9rem" in css
