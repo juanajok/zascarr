@@ -308,7 +308,7 @@ def publicar_en_raiz(temp: str | Path, dest: str | Path, raiz: str | Path,
                      sha256_esperado: str | None = None) -> Path:
     """Publica con enlaces confinados desde el fd del temporal (sin reabrir por nombre).
 
-    Riesgo residual aceptado (SEC): un proceso con el mismo UID y escritura en la raíz
+    Riesgo residual aceptado (SEC): un proceso con el mismo UID o grupo y escritura en la raíz
     puede modificar el temporal entre la verificación y el ``link``. Ese actor ya puede
     escribir directamente en la biblioteca, así que no es una frontera de privilegios;
     A3 protege frente a fallos, no frente a un atacante local con escritura.
@@ -469,10 +469,19 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
                     and (st_dst.st_dev, st_dst.st_ino) == (st_src.st_dev, st_src.st_ino)):
                 return root_res / relativo
             comprobar_espacio(root_res, st_src.st_size, "mover a la biblioteca")
-            if st_src.st_dev == os.fstat(parent_fd).st_dev:
+            # Enlazar (sin copiar) solo si el archivo es nuestro: el enlace comparte inodo y modo,
+            # y solo el dueño puede darle escritura de grupo. Si es de otro usuario (p. ej. el de
+            # Transmission) se copia, y la copia nace nuestra con el modo de la biblioteca.
+            if (st_src.st_dev == os.fstat(parent_fd).st_dev
+                    and os.geteuid() in (0, st_src.st_uid)):
                 try:
                     os.link(source.name, final_name, src_dir_fd=src_parent,
                             dst_dir_fd=parent_fd, follow_symlinks=False)
+                    try:
+                        os.chmod(final_name, MODO_ARCHIVO, dir_fd=parent_fd)
+                    except BaseException:
+                        os.unlink(final_name, dir_fd=parent_fd)  # sin publicar a medias
+                        raise
                     os.unlink(source.name, dir_fd=src_parent)
                     return root_res / relativo.parent / final_name
                 except FileExistsError:

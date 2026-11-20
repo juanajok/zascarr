@@ -27,4 +27,4 @@ estricto, se añade una variable `UMASK` con 022 por defecto.
   biblioteca debe copiar el modo (como hace `services/conversion.py::_copiar_permisos`). Pendiente de revisar,
   fuera de #1156: `services/exportacion_kavita.py` (cuatro `mkstemp` en carpetas que Kavita lee) y
   `utils/cbz.py` (`mkstemp` + `os.replace` sin copiar el modo).
-- La rama de `safe_move_en_raiz` que enlaza en el mismo dispositivo (`os.link`) conserva el modo del origen.
+- `safe_move_en_raiz` (lo usa el importador) enlaza en el mismo dispositivo SOLO si el archivo es del proceso (o root): tras el `os.link` se le da `0664` antes de borrar el origen. Si es de otro usuario (p. ej. Transmission) no se puede cambiar su modo, así que se copia y la copia nace con el modo de la biblioteca (cuesta espacio y tiempo extra en ese caso).

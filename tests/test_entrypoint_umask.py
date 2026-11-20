@@ -5,6 +5,8 @@ import os
 import stat
 from pathlib import Path
 
+import pytest
+
 ENTRYPOINT = Path(__file__).resolve().parent.parent / "docker-entrypoint.sh"
 
 
@@ -57,3 +59,70 @@ def test_una_carpeta_nueva_conserva_el_setgid_del_padre(tmp_path):
     finally:
         os.close(fd_padre)
     assert stat.S_IMODE((padre / "serie").stat().st_mode) == 0o2775
+
+
+def test_mover_en_el_mismo_disco_da_escritura_de_grupo_aunque_el_origen_no_la_tenga(tmp_path):
+    """Rama de enlace de `safe_move_en_raiz` (la usa el importador): conservaba el modo."""
+    from zascarr.utils.fs import safe_move_en_raiz
+
+    raiz = tmp_path / "biblioteca"
+    raiz.mkdir()
+    for modo in (0o600, 0o644):
+        origen = tmp_path / f"descarga-{modo:o}.cbz"
+        origen.write_bytes(b"x")
+        origen.chmod(modo)
+        destino = safe_move_en_raiz(origen, raiz / f"Serie {modo:o}" / "n1.cbz", raiz)
+        assert not origen.exists()
+        assert stat.S_IMODE(destino.stat().st_mode) == 0o664, oct(modo)
+        assert stat.S_IMODE(destino.parent.stat().st_mode) & stat.S_IWGRP
+
+
+def test_mover_a_otro_montaje_da_escritura_de_grupo(tmp_path, monkeypatch):
+    """Rama de copia (EXDEV): el archivo final sale 0664 y no queda temporal."""
+    from zascarr.utils import fs
+
+    raiz = tmp_path / "biblioteca"
+    raiz.mkdir()
+    origen = tmp_path / "descarga.cbz"
+    origen.write_bytes(b"contenido")
+    origen.chmod(0o600)
+
+    def _exdev(*a, **k):
+        raise OSError(fs.errno.EXDEV, "otro dispositivo")
+
+    link_real = os.link
+    monkeypatch.setattr(fs.os, "link", lambda *a, **k: link_real(*a, **k)
+                        if "/proc/self/fd" in str(a[0]) else _exdev())
+    destino = fs.safe_move_en_raiz(origen, raiz / "Serie" / "n1.cbz", raiz)
+    assert stat.S_IMODE(destino.stat().st_mode) == 0o664
+    assert [p.name for p in destino.parent.iterdir()] == ["n1.cbz"]
+    assert not origen.exists()
+
+
+def test_el_temporal_sigue_0600_hasta_verificar_y_un_sha_malo_no_lo_abre(tmp_path, monkeypatch):
+    """N-1 (SecOps): el temporal es privado hasta verificar; con sha malo nunca llega a 0664."""
+    from zascarr.utils import fs
+
+    origen = tmp_path / "descarga.cbz"
+    origen.write_bytes(b"contenido")
+    raiz = tmp_path / "biblioteca"
+    raiz.mkdir()
+    temporal = raiz / "Serie" / ".n1.tmp"
+    modos_al_abrir: list[int] = []
+    fchmod_real = os.fchmod
+
+    def _espia(fd, modo):
+        modos_al_abrir.append(stat.S_IMODE(os.fstat(fd).st_mode))
+        return fchmod_real(fd, modo)
+
+    monkeypatch.setattr(fs.os, "fchmod", _espia)
+    with pytest.raises(OSError, match="sha256"):
+        fs.copiar_en_raiz(origen, temporal, raiz, sha256="0" * 64)
+    assert not temporal.exists()
+    assert 0o664 not in modos_al_abrir[-1:]            # el fchmod de archivo no se llegó a ejecutar
+    copia = fs.copiar_en_raiz(origen, temporal, raiz)
+    try:
+        assert modos_al_abrir[-1] == 0o600              # hasta verificar, privado
+        assert stat.S_IMODE(os.fstat(copia.fd).st_mode) == 0o664
+    finally:
+        os.close(copia.fd)
