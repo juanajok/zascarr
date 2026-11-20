@@ -18,12 +18,14 @@ import asyncio
 import contextlib
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 import structlog
-from sqlalchemy import text
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.models import ImportRun
 from zascarr.services import tareas
 from zascarr.services.comprobacion_disco import CLAVE_CERROJO_CICLO
 from zascarr.services.library_adopter import LibraryAdopter, RescanReport
@@ -64,6 +66,120 @@ _tarea: asyncio.Task | None = None
 
 def estado_actual() -> EstadoRescan:
     return _estado
+
+
+# ── Resumen del informe y último rescan persistido (comparten Auditoría y Biblioteca) ──
+
+CAMPOS_RESUMEN = (
+    "files_scanned", "sin_cambios", "ya_registrados", "nuevos_entregados",
+    "nuevos_registrados", "nuevos_a_revisar", "repetidos", "reenlazados",
+    "re_triados", "re_triados_igual", "re_triados_cambiado",
+    "re_triados_a_revisar", "re_triados_descartado", "copias_de_otra",
+    "re_triados_protegidos", "discrepancias_registradas",
+    "desaparecidos", "reaparecidos", "errores", "omitidos", "ambiguos",
+    "no_revisado", "unreadable", "por_comprobar", "resultado_biblioteca",
+)
+
+
+def resumen_de(informe) -> dict | None:
+    """Normaliza el informe —en memoria (`RescanReport`) o persistido (dict de `ultimo_persistido`)—
+    a un dict para la plantilla. Un informe persistido debe pintarse igual que uno en memoria:
+    tras un reinicio del proceso el estado en memoria ya no existe y la pantalla lee el `ImportRun`."""
+    if informe is None:
+        return None
+    fuente = informe.get if isinstance(informe, dict) else (lambda c: getattr(informe, c, None))
+    out: dict = {}
+    for c in CAMPOS_RESUMEN:
+        v = fuente(c)
+        if c in ("errores", "omitidos", "ambiguos") or isinstance(v, (list, tuple)):
+            out[c] = list(v) if v else []
+        elif isinstance(v, bool):
+            out[c] = v
+        elif isinstance(v, (int, float)):
+            out[c] = v or 0
+        else:
+            out[c] = v or ""
+    out["disparador"] = fuente("disparador") or "manual"
+    out["started_at"] = fuente("started_at")
+    return out
+
+
+async def ultimo_persistido(db: AsyncSession) -> dict | None:
+    """El último rescan persistido (`kind="rescan"`), para una página recién cargada."""
+    run = (await db.execute(
+        select(ImportRun)
+        .where(ImportRun.details["kind"].astext == "rescan")
+        .order_by(ImportRun.started_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if not run:
+        return None
+    detalles = dict(run.details or {})
+    detalles["started_at"] = run.started_at
+    detalles["files_scanned"] = run.files_scanned
+    detalles["errores"] = detalles.get("errores") or []
+    return detalles
+
+
+# ── Cuándo toca el siguiente (#1160): se cuenta desde el último rescan, no desde el arranque ──
+
+#: Cadencias que ofrece Ajustes, en minutos: apagada, una vez al día, una vez a la semana.
+INTERVALOS_AJUSTES = (0, 1440, 10080)
+#: Tras un turno saltado (otra operación de disco en marcha) no se reintenta antes de esto.
+REINTENTO_TRAS_SALTO = 1800
+#: Tope de la cadencia (un año): un valor absurdo del `.env` no debe desbordar el cálculo de fechas.
+MAX_MINUTOS = 525600
+
+_arranque: datetime = datetime.now(UTC)
+_ultima: datetime | None = None
+_ultimo_intento: datetime | None = None
+_no_antes_de: datetime | None = None
+
+
+def ultima_ejecucion() -> datetime | None:
+    """Cuándo empezó el último rescan terminado (de este proceso o leído del `ImportRun`)."""
+    return _ultima
+
+
+def anotar_ultima(cuando: datetime | None) -> None:
+    """Recuerda el último rescan; nunca retrocede."""
+    global _ultima
+    if cuando is not None and (_ultima is None or cuando > _ultima):
+        _ultima = cuando
+
+
+async def cargar_ultima_persistida(fabrica) -> None:
+    """Una sola lectura al arrancar: sin ella cada reinicio (cada despliegue) reiniciaría la cuenta."""
+    async with fabrica() as db:
+        ultimo = await ultimo_persistido(db)
+    if ultimo is not None:
+        anotar_ultima(ultimo.get("started_at"))
+
+
+def anotar_intento() -> None:
+    """Un intento fallido consume el turno: la cuenta sigue desde él, no desde el último éxito.
+    Sin esto, un fallo persistente repetiría un rescan completo cada vez que se reintenta."""
+    global _ultimo_intento
+    _ultimo_intento = datetime.now(UTC)
+
+
+def aplazar(segundos: int = REINTENTO_TRAS_SALTO) -> None:
+    """Un turno saltado (cerrojo ocupado) reintenta pasado este tiempo, no un intervalo después."""
+    global _no_antes_de
+    _no_antes_de = datetime.now(UTC) + timedelta(seconds=segundos)
+
+
+def proxima_ejecucion(minutos: int) -> datetime | None:
+    """Cuándo toca el periódico con esa cadencia; `None` si está apagado.
+
+    Se cuenta desde el último rescan o intento (el más reciente); si nunca hubo, desde el arranque
+    del proceso. Puede quedar en el pasado (vencida: toca en cuanto el bucle despierte), salvo que
+    un salto la haya aplazado."""
+    if minutos <= 0:
+        return None
+    base = max([f for f in (_ultima, _ultimo_intento) if f is not None], default=_arranque)
+    proxima = base + timedelta(minutes=min(minutos, MAX_MINUTOS))
+    return max(proxima, _no_antes_de) if _no_antes_de else proxima
 
 
 def consumir_foco_resultado() -> bool:
@@ -114,7 +230,7 @@ async def _ejecutar_tarea(fabrica, disparador: str) -> None:
         await _ejecutar_tarea_con_cerrojo(fabrica, disparador, tarea)
     finally:
         if tarea is not None and tarea.estado.value == "en_curso":
-            tareas.terminar(tarea.id, resumen="Revisión terminada")
+            tareas.terminar(tarea.id, resumen="Biblioteca actualizada")
 
 
 async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
@@ -124,7 +240,8 @@ async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
             _estado.terminado = datetime.now(UTC)
             logger.info("rescan.ocupado", disparador=disparador)
             if tarea is not None:
-                tareas.error(tarea.id, tipo_error="ocupado")
+                # No es un fallo: otra operación de disco tenía el cerrojo y no se lanzó nada.
+                tareas.terminar(tarea.id, resumen="Otra operación de disco estaba en marcha")
             return
         try:
             informe = await _correr(fabrica, disparador)
@@ -132,6 +249,7 @@ async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
             _estado.fase = FaseRescan.TERMINADO
             _estado.run_id = str(informe.run_id) if informe.run_id else None
             _estado.foco_resultado = True
+            anotar_ultima(informe.started_at)
             logger.info(
                 "rescan.terminado", disparador=disparador,
                 run_id=_estado.run_id,
@@ -152,6 +270,7 @@ async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
                 tareas.error(tarea.id, tipo_error=type(exc).__name__)
             _estado.fase = FaseRescan.ERROR
             _estado.causa = type(exc).__name__
+            anotar_intento()
             logger.warning("rescan.fallido", disparador=disparador, error=type(exc).__name__)
         finally:
             _estado.terminado = datetime.now(UTC)
@@ -173,6 +292,7 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
     global _estado
     if _estado.en_curso:
         logger.info("rescan.auto_skipped", motivo="manual_en_curso")
+        aplazar()
         return None
     # Reserva el estado antes del await del cerrojo: un POST manual que llegue entre la
     # comprobación y la adquisición ve «en curso» y no crea otra tarea.
@@ -182,17 +302,19 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
         if not libre:
             _estado = EstadoRescan()
             logger.info("rescan.auto_skipped", motivo="cerrojo_ocupado")
+            aplazar()
             return None
         tarea = tareas.iniciar("rescanear", enlace="/ui/auditoria#rescan-biblioteca",
                                origen="rescan")
         try:
             informe = await _correr(fabrica, DISPARADOR_AUTOMATICO)
             if tarea is not None:
-                tareas.terminar(tarea.id, resumen="Biblioteca revisada")
+                tareas.terminar(tarea.id, resumen="Biblioteca actualizada")
             _estado.informe = informe
             _estado.fase = FaseRescan.TERMINADO
             _estado.run_id = str(informe.run_id) if informe.run_id else None
             _estado.foco_resultado = True
+            anotar_ultima(informe.started_at)
             return informe
         except asyncio.CancelledError:
             if tarea is not None:
@@ -205,6 +327,7 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
                 tareas.error(tarea.id, tipo_error=type(exc).__name__)
             _estado.fase = FaseRescan.ERROR
             _estado.causa = type(exc).__name__
+            anotar_intento()
             logger.warning("rescan.fallido", disparador=DISPARADOR_AUTOMATICO,
                            error=type(exc).__name__)
             return None
@@ -224,8 +347,9 @@ async def detener() -> None:
 
 
 def reiniciar_para_pruebas() -> None:
-    global _tarea, _estado
+    global _tarea, _estado, _ultima, _ultimo_intento, _no_antes_de
     if _tarea is not None and not _tarea.done():
         _tarea.cancel()
     _tarea = None
     _estado = EstadoRescan()
+    _ultima = _ultimo_intento = _no_antes_de = None
