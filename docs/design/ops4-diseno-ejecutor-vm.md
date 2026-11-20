@@ -225,6 +225,17 @@ unidad systemd en el laboratorio y la observación de su resultado; no acredita
 el futuro ejecutor, la actualización, Docker, PostgreSQL ni un entorno de
 producción.
 
+También se creó una unidad de laboratorio `ops4-hardened.service`
+(`Type=oneshot`, `ExecStart=/bin/true`) con `NoNewPrivileges=yes`,
+`PrivateTmp`, `ProtectSystem=strict`, `ProtectHome`, protección de kernel,
+módulos y cgroups, `PrivateDevices`, `RestrictNamespaces`, `RestrictSUIDSGID`,
+`RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, `CapabilityBoundingSet=`
+vacío y `UMask=0077`. `systemd-analyze security` informó **3.9 OK** y la unidad
+arrancó con **`Result=success`, `inactive/dead`**. Es una estimación estática y
+una prueba con `/bin/true`, no del futuro ejecutor; el conjunto de capacidades
+puede no servir para `update.sh`/Docker y deberá revisarse. La exposición 3.9
+no es una certificación de seguridad.
+
 No se instalaron Docker ni PostgreSQL, no se instaló la unidad de
 actualización, no se ejecutó `update.sh` y no se tocó la Pi ni datos reales.
 Los intentos previos con contraseña/usuario equivocados se descartaron; los
