@@ -24,6 +24,13 @@
   <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}">Ver tebeo<span class="sr">{% if n.titulo %}: {{ n.titulo }}{% else %} sin número{% endif %}</span></a>
 </li>
 {%- endmacro %}
+{% macro publicacion_especial(n) -%}
+<li>
+  <span>#{{ n.numero }}{% if n.titulo %} · {{ n.titulo }}{% endif %}</span>
+  <span class="muted">{{ n.formato }}</span>
+  <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}">Ver tebeo<span class="sr">: {{ n.numero }}</span></a>
+</li>
+{%- endmacro %}
 {% if volver %}<a href="{{ volver }}" class="back-link">← Volver{% if volver.startswith('/ui/colecciones/') %} a la colección{% else %} a la biblioteca{% endif %}</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
 
 <div class="series-header">
@@ -107,6 +114,7 @@
   <a class="btn ghost sm" href="#datos-serie">Datos</a>
   <a class="btn ghost sm" href="/ui/series/{{ series.id }}/datos">Completar datos</a>
   {% if archivos_por_numero %}<a class="btn ghost sm" href="#archivos-por-numero">Archivos</a>{% endif %}
+  {% if otras_publicaciones %}<a class="btn ghost sm" href="#tomos-especiales">Tomos y especiales</a>{% endif %}
 </nav>
 
 <p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
@@ -161,6 +169,21 @@
   <summary>Ver {{ restantes }} {{ "publicación sin número" if restantes == 1 else "publicaciones sin número" }} más</summary>
   <ul class="archivos-lista">
     {% for n in sin_numero[limite:] %}{{ publicacion_sin_numero(n) }}{% endfor %}
+  </ul>
+</details>
+{% endif %}
+{% endif %}
+{% if otras_publicaciones %}
+<h2 id="tomos-especiales">Tomos y especiales</h2>
+<p class="muted">Publicaciones con archivo que no cuentan como números de grapa y no alteran tus huecos.</p>
+<ul class="archivos-lista">
+  {% for n in otras_publicaciones[:limite] %}{{ publicacion_especial(n) }}{% endfor %}
+</ul>
+{% if otras_publicaciones|length > limite %}
+<details class="ficha-mas">
+  <summary>Ver {{ otras_publicaciones|length - limite }} publicaciones más</summary>
+  <ul class="archivos-lista">
+    {% for n in otras_publicaciones[limite:] %}{{ publicacion_especial(n) }}{% endfor %}
   </ul>
 </details>
 {% endif %}

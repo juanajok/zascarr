@@ -639,6 +639,33 @@ async def _contexto_politica(db: AsyncSession, series: Series,
     }
 
 
+def _otras_publicaciones(archivos, poseidos: set[int], formatos: dict[str, str]) -> list[dict]:
+    """Publicaciones con archivo que no ocupan un hueco de grapa.
+
+    Un tomo, un anual o un número ``2a`` no es la grapa #2: se muestran en la ficha
+    pero NO entran en `present` ni en el cálculo de huecos. Los «sin número» ya
+    tienen su propio bloque y no se duplican aquí.
+    """
+    otras: list[dict] = []
+    for n in archivos:
+        numero = (n.numero or "").strip()
+        if not numero or numero == "(sin número)":
+            continue
+        if numero.isdigit() and int(numero) in poseidos:
+            continue
+        formatos_publicacion = {
+            a.formato_publicacion for a in n.archivos if a.formato_publicacion
+        }
+        formato = next(iter(formatos_publicacion), "") if len(formatos_publicacion) == 1 else "varios"
+        otras.append({
+            "issue_id": n.issue_id,
+            "numero": numero,
+            "titulo": n.titulo,
+            "formato": formatos.get(formato, formato).capitalize(),
+        })
+    return otras
+
+
 def _contexto_obra_unica(series: Series, estado) -> dict:
     """Datos del badge/control one-shot; sin consultas extra en la ficha."""
     es = series.kind == SeriesKind.ONE_SHOT
@@ -751,6 +778,8 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         **_contexto_obra_unica(series, estado_coleccion),
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
         "archivos_por_numero": archivos,
+        "otras_publicaciones": _otras_publicaciones(
+            archivos, poseidos, FORMATOS_LEGIBLES),
         "formatos_legibles": FORMATOS_LEGIBLES,
         "procedencia": procedencia_de_serie(series),
         # SCR2: doble enlace visible (artículo + CC-BY-SA 3.0) cuando la identifica Fandom.

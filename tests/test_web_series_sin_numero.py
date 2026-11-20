@@ -129,3 +129,25 @@ def test_enlace_del_sin_numero_lleva_a_ficha_con_lectura_segun_disponibilidad(mo
     assert "Sin número" in respuesta.text
     assert (f'href="/ui/leer/{archivo_id}"' in respuesta.text) is legible
     lector.assert_awaited_once_with(sesion, issue.id)
+
+
+def _tomo(numero: str, *, formato="trade_paperback"):
+    return NumeroConArchivos(
+        issue_id=str(uuid4()), numero=numero, titulo="",
+        archivos=[ArchivoDeNumero(
+            id=str(uuid4()), nombre=f"Tomo {numero}.cbz", formato="cbz",
+            falta_en_disco=False, bloqueo=None, formato_publicacion=formato,
+        )],
+    )
+
+
+def test_tomos_y_variantes_sin_hueco_se_muestran_en_la_ficha(monkeypatch):
+    """Un TPB #1 o un 2a no son grapas, pero no pueden quedar sin acceso visible."""
+    publicaciones = [_tomo("1"), _tomo("2"), _tomo("2a")]
+    serie, html = _numeros(monkeypatch, publicaciones)
+    assert "Tomos y especiales" in html
+    assert "Tomo en rústica" in html
+    assert "#1" in html and "#2a" in html
+    for p in publicaciones:
+        assert f'href="/ui/series/{serie.id}/numero/{p.issue_id}"' in html
+    assert "no alteran tus huecos" in html
