@@ -100,6 +100,34 @@
   {% if ficha.archivos | length > 1 %}
   <p class="caption">Este número tiene varios archivos. <strong>Copia exacta</strong> es el mismo contenido; <strong>variante</strong> es otra digitalización del mismo número. La ficha enseña formato y tamaño; la calidad solo si consta. «Separar del número» lo devuelve a «Por revisar» sin borrar ni mover nada.</p>
   {% endif %}
+  {% if archivos_lectura | length > 1 %}
+  <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/archivo-lectura"
+        class="archivo-preferido">
+    <fieldset>
+      <legend>Archivo para leer</legend>
+      <p class="caption">El botón «Leer» abrirá el archivo marcado. Puedes cambiarlo cuando quieras.</p>
+      {% for a in archivos_lectura %}
+      <label class="archivo-preferido-opcion">
+        <input type="radio" name="file_id" value="{{ a.id }}"
+               {% if lector_archivo and lector_archivo.id == a.id %}checked{% endif %}>
+        <span>{{ a.nombre }} <span class="muted">({{ a.formato }})</span></span>
+      </label>
+      {% endfor %}
+      <div class="archivo-preferido-acciones">
+        <button type="submit" name="accion" value="elegir" class="btn sm">Guardar archivo</button>
+        {% if preferido_id %}<button type="submit" name="accion" value="quitar" class="btn ghost sm">Quitar preferencia</button>{% endif %}
+      </div>
+    </fieldset>
+  </form>
+  {% endif %}
+  {% if preferido_invalido %}
+  {{ ui.aviso("amber", "El archivo preferido ya no está disponible; «Leer» abrirá otro archivo.") }}
+  {% endif %}
+  {% if archivos_lectura | length > 1 and lector_archivo %}
+  <p class="caption">Ahora «Leer» abrirá: <strong>{{ lector_archivo.nombre }}</strong>.</p>
+  {% elif archivos_lectura | length == 1 and lector_archivo %}
+  <p class="caption">«Leer» abrirá {{ lector_archivo.nombre }}.</p>
+  {% endif %}
   <ul class="archivos-lista issue-archivos">
     {% for a in ficha.archivos %}
     <li class="archivo-fila">

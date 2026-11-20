@@ -59,6 +59,8 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
     "foro": ("forum_url", "forum_username", "forum_password", "forum_enabled"),
     # BL-D2/D3: perfil legible y cadencia del escaneo de mejoras.
     "calidad": ("quality_profile", "upgrade_scan_interval_minutes", "upgrade_scan_batch"),
+    # #1160: cadencia de «Actualizar la biblioteca» (0 = apagada), editable en Ajustes en caliente.
+    "actualizar_biblioteca": ("rescan_interval_minutes",),
     # BL-B9 (#158): nombres de archivo de destinos nuevos.
     "nombres": ("naming_enabled", "naming_preset", "naming_padding"),
     # B23: decisiones de importación de una serie nueva.

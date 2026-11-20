@@ -4,7 +4,7 @@
 <div class="lector lector-escena{% if preparando %} lector-escena-preparando{% endif %}"
      {% if preparando %}data-estado-url="/ui/leer/{{ archivo.id }}/estado"
      {% if error_inicial %}data-error-inicial{% endif %}{% else %}
-     data-lector data-total="{{ total }}" data-pagina="{{ pagina_actual }}"
+     data-lector data-modo="pantalla" data-total="{{ total }}" data-pagina="{{ pagina_actual }}"
      data-sentido="{{ sentido }}" data-origen-sentido="{{ origen_sentido }}"
      data-pagina-url="/ui/leer/{{ archivo.id }}/pagina/"
      data-progreso-url="/ui/leer/{{ archivo.id }}/progreso"
@@ -30,7 +30,7 @@
       <p class="lector-menu-titulo">Cómo quieres leer</p>
       <div class="lector-modos" role="group" aria-label="Modo de lectura">
         <button type="button" class="btn ghost" data-modo="ancho" aria-pressed="false">Ajustar al ancho</button>
-        <button type="button" class="btn ghost" data-modo="pantalla" aria-pressed="false">Ajustar a la pantalla</button>
+        <button type="button" class="btn ghost" data-modo="pantalla" aria-pressed="true">Ajustar a la pantalla</button>
         <button type="button" class="btn ghost" data-modo="doble" aria-pressed="false">Doble página</button>
       </div>
       <button type="button" class="btn ghost" id="lector-desplazar" hidden>Desplazar la pareja una página</button>

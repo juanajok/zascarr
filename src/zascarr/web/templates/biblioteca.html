@@ -12,6 +12,11 @@
   </div>
 </header>
 
+{#- #1160: «Actualizar la biblioteca», en una franja propia fuera del `if modo` (se ve en Gestión y en
+    Escaparate). Se pide al cargar, como el bloque de Auditoría. -#}
+<div id="actualizar-biblioteca" class="biblioteca-actualizar" hx-get="/ui/biblioteca/actualizar"
+     hx-trigger="load" hx-swap="outerHTML"></div>
+
 <div class="modo-biblioteca">
   <a class="btn sm selector-modo{% if modo != 'escaparate' %} primary{% endif %}" href="/ui/biblioteca?modo=gestion"{% if modo != 'escaparate' %} aria-current="page"{% endif %}>Gestión</a>
   <a class="btn sm selector-modo{% if modo == 'escaparate' %} primary{% endif %}" href="/ui/biblioteca?modo=escaparate"{% if modo == 'escaparate' %} aria-current="page"{% endif %}>Escaparate</a>

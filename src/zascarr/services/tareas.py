@@ -21,7 +21,7 @@ COALESCING_S = 0.25
 
 TITULOS = {
     "importar": "Importando descargas",
-    "rescanear": "Revisando la biblioteca",
+    "rescanear": "Actualizando la biblioteca",
     "registrar": "Registrando tu biblioteca",
     "convertir": "Convirtiendo tebeos",
     "deshacer": "Deshaciendo una conversión",

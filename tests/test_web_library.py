@@ -826,3 +826,11 @@ def test_tradicion_none_sin_anio_deja_la_tarjeta_vacia():
     inicio = r.text.index(">", inicio) + 1
     tarjeta = r.text[inicio:r.text.index("</div>", inicio)]
     assert tarjeta.strip() == ""
+
+
+def test_orden_leido_ultimo_normaliza_y_url():
+    from zascarr.web.library import _leer_filtros, _qs
+    f = _leer_filtros("1", "", "", "", "", "", orden="leido_ultimo")
+    assert f.orden == "leido_ultimo" and "orden=leido_ultimo" in _qs(f, page=1)
+    malo = _leer_filtros("1", "", "", "", "", "", orden="otro")
+    assert malo.orden == "titulo"

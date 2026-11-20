@@ -1,0 +1,103 @@
+{#- «Actualizar la biblioteca» en Biblioteca (#1160). Una sola plantilla con tres modos: `completo` (el
+    bloque entero), `post` (la región viva, una vez, al lanzar) y `sondeo` (solo el contenido de la región).
+    El botón y las líneas se actualizan fuera de banda. -#}
+{%- macro boton(oob=false) -%}
+<button id="actualizar-boton" type="submit" class="btn sm" aria-describedby="actualizar-garantia"
+        {% if oob %}hx-swap-oob="true"{% endif %}
+        {% if estado_rescan.en_curso %}disabled{% endif %}>
+  {{ "Actualizando…" if estado_rescan.en_curso else "Actualizar la biblioteca" }}
+</button>
+{%- endmacro -%}
+{%- macro lineas(oob=false) -%}
+<p id="actualizar-lineas" class="muted" {% if oob %}hx-swap-oob="true"{% endif %}>
+  <span>{{ texto_ultima }}</span>
+  {% if texto_proxima %}<span class="actualizar-separador" aria-hidden="true"> · </span><span>{{ texto_proxima }}</span>
+  {% elif apagada %}<span class="actualizar-separador" aria-hidden="true"> · </span><span>No se actualiza sola · <a href="/ui/ajustes#actualizar-biblioteca">Cambiarlo</a></span>{% endif %}
+</p>
+{%- endmacro -%}
+{%- macro contenido() -%}
+{%- set es_resultado = modo in ("post", "sondeo") -%}
+<div id="actualizar-contenido"
+     {% if estado_rescan.en_curso %}hx-get="/ui/biblioteca/actualizar/estado?curso=1" hx-trigger="every 5s"
+     hx-target="#actualizar-estado" hx-swap="innerHTML"{% endif %}>
+  {% if estado_rescan.en_curso %}
+  <p>
+    {% if ya_en_curso %}Ya se está actualizando{% if estado_rescan.iniciado %} (empezó a las {{ estado_rescan.iniciado | hora }}){% endif %}. No se ha lanzado otra.
+    {% else %}Actualizando tu biblioteca{% if estado_rescan.iniciado %} desde las {{ estado_rescan.iniciado | hora }}{% endif %}. Puedes seguir usando ZascArr.{% endif %}
+    {% if primera_vez %}La primera vez tarda más: mira todos tus archivos.{% endif %}
+  </p>
+  {% elif es_resultado and estado_rescan.fase.value == "ocupado" %}
+  {% call ui.aviso("info") %}ZascArr está importando descargas ahora. No se ha lanzado nada; vuelve a probar cuando termine.{% endcall %}
+  {% elif es_resultado and estado_rescan.fase.value == "error" %}
+  {% call ui.aviso("warn") %}No se ha podido actualizar la biblioteca. Vuelve a intentarlo; si sigue fallando, mira <a href="/estado">Estado</a>.{% endcall %}
+  {% else %}
+  {#- «Ocupado» y el error con alerta son de la acción, no de la pantalla (Diseño B3): al cargar, un «ocupado»
+      viejo no se pinta y un error queda como aviso ámbar con su hora, sin `role="alert"`. -#}
+  {% if estado_rescan.fase.value == "error" %}
+  {% call ui.aviso("amber", viva=false) %}La última actualización{% if estado_rescan.terminado %} (a las {{ estado_rescan.terminado | hora }}){% endif %} no se pudo completar. Vuelve a intentarlo o mira <a href="/estado">Estado</a>.{% endcall %}
+  {% endif %}
+  {% if resumen %}
+  {#- El aviso verde es lo que pasa tras una acción: solo en la respuesta al POST y en el sondeo de esa misma
+      ejecución. Al cargar la página solo quedan las líneas y lo que pide atención (con «en la última»). -#}
+  {% set nuevos = resumen.nuevos_registrados + resumen.nuevos_a_revisar %}
+  {% set parcial_rev = resumen.no_revisado or resumen.resultado_biblioteca not in ("", "comprobada") %}
+  {% set cambios = nuevos or resumen.re_triados or resumen.reenlazados or resumen.reaparecidos %}
+  {% if es_resultado and estado_rescan.fase.value == "terminado" %}
+    {% if cambios %}
+    {% set partes = [] %}
+    {% if nuevos %}
+      {% if not resumen.nuevos_registrados %}{% set _ = partes.append(nuevos ~ (" nuevo" if nuevos == 1 else " nuevos") ~ " a «Por revisar»") %}
+      {% elif not resumen.nuevos_a_revisar %}{% set _ = partes.append(nuevos ~ (" nuevo" if nuevos == 1 else " nuevos") ~ " a su serie") %}
+      {% else %}{% set _ = partes.append(nuevos ~ (" nuevo" if nuevos == 1 else " nuevos") ~ ", " ~ resumen.nuevos_registrados ~ " a su serie y " ~ resumen.nuevos_a_revisar ~ " a «Por revisar»") %}{% endif %}
+    {% endif %}
+    {% if resumen.re_triados %}{% set _ = partes.append(resumen.re_triados ~ (" se ha vuelto a clasificar" if resumen.re_triados == 1 else " se han vuelto a clasificar")) %}{% endif %}
+    {% if resumen.reenlazados %}{% set _ = partes.append(resumen.reenlazados ~ (" estaba en otra carpeta" if resumen.reenlazados == 1 else " estaban en otra carpeta")) %}{% endif %}
+    {% if resumen.reaparecidos %}{% set _ = partes.append(resumen.reaparecidos ~ (" ha vuelto a su sitio" if resumen.reaparecidos == 1 else " han vuelto a su sitio")) %}{% endif %}
+    {% call ui.aviso("ok") %}Biblioteca al día: {{ partes | join(". ") }}.
+      {% if resumen.nuevos_a_revisar %}<a href="/ui/pendientes">{{ "Revisarlo" if resumen.nuevos_a_revisar == 1 else "Revisar los " ~ resumen.nuevos_a_revisar }}</a> ·{% endif %}
+      <a href="/ui/auditoria#rescan-biblioteca">Ver el informe completo</a>{% endcall %}
+    {% elif not resumen.desaparecidos and not parcial_rev %}
+    {% call ui.aviso("ok") %}Tu biblioteca ya estaba al día: nada nuevo, nada movido, nada desaparecido.{% endcall %}
+    {% endif %}
+  {% endif %}
+  {% if resumen.desaparecidos %}
+  {% call ui.aviso("amber") %}{% if es_resultado %}{{ resumen.desaparecidos }} {{ "archivo ya no está" if resumen.desaparecidos == 1 else "archivos ya no están" }} en su sitio.{% else %}En la última actualización, {{ resumen.desaparecidos }} {{ "archivo ya no estaba" if resumen.desaparecidos == 1 else "archivos ya no estaban" }} en su sitio.{% endif %}
+    <a href="/ui/no-disponibles">Ver cuáles</a>{% endcall %}
+  {% endif %}
+  {% if parcial_rev %}
+  {% call ui.aviso("amber") %}{% if es_resultado %}No se pudo revisar todo{% else %}En la última actualización no se pudo revisar todo{% endif %}; lo que no se miró no se da por revisado.
+    <a href="/ui/auditoria#rescan-biblioteca">Ver el informe completo</a>{% endcall %}
+  {% endif %}
+  {% endif %}
+  {% endif %}
+</div>
+{%- endmacro -%}
+{%- macro region(autofoco=false) -%}
+{% call ui.region_viva("actualizar-estado", autofoco=autofoco) %}{{ contenido() }}{% endcall %}
+{%- endmacro -%}
+{% if modo == "sondeo" %}
+{{ contenido() }}
+{{ boton(oob=true) }}
+{{ lineas(oob=true) }}
+{% elif modo == "post" %}
+{#- Sustituye la región entera una sola vez: el botón se deshabilita y el foco se perdería; la región nueva
+    lo recibe (`autofocus`) y, como no se vuelve a sustituir (el sondeo solo cambia su contenido), lo conserva. -#}
+{{ region(autofoco=true) }}
+{{ boton(oob=true) }}
+{{ lineas(oob=true) }}
+{% else %}
+<section id="actualizar-biblioteca" class="biblioteca-actualizar" aria-label="Actualizar la biblioteca">
+  <form class="biblioteca-actualizar-accion" hx-post="/ui/biblioteca/actualizar"
+        hx-target="#actualizar-estado" hx-swap="outerHTML">
+    {{ boton() }}
+    <p id="actualizar-garantia" class="muted">Mira tu disco: no mueve, no renombra ni borra nada.</p>
+  </form>
+  {{ lineas() }}
+  {{ region() }}
+  <details class="biblioteca-actualizar-detalle"><summary>Qué mira</summary>
+    <p>Registra los tebeos nuevos (a su serie si los reconoce, y a «Por revisar» si no), vuelve a clasificar
+      los que cambiaron de contenido y marca los que ya no están en su sitio. No consulta fuentes de datos.
+      Sigue en segundo plano: puedes cerrar esta página.</p>
+  </details>
+</section>
+{% endif %}
