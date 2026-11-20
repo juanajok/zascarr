@@ -11,6 +11,9 @@ Las pruebas inyectan el lanzador; este módulo no ejecuta nada por sí solo.
 """
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
 import subprocess
 from collections.abc import Callable, Sequence
 from enum import StrEnum
@@ -36,10 +39,39 @@ def construir_orden() -> tuple[str, ...]:
     return ("/bin/bash", str(repo / "scripts" / "update.sh"), "--rama", RAMA_FIJA)
 
 
+def _lanzar_grupo(
+    orden: list[str], *, timeout: float, check: bool, shell: bool,
+    env: dict[str, str], stdin: int, stdout: int, stderr: int, close_fds: bool,
+) -> subprocess.CompletedProcess[bytes]:
+    """Aísla el cliente en una sesión y mata su grupo si se interrumpe la espera.
+
+    No cancela tareas ya delegadas a Docker ni descendientes que escapen de
+    la sesión. Hace falta una unidad con cgroup propio para contener todo el
+    trabajo local. Crear y recoger procesos depende del kernel: no es un
+    límite de tiempo real ni una garantía de ausencia de efectos.
+    """
+    if shell or check:
+        raise ValueError("configuración del lanzador no admitida")
+    with subprocess.Popen(
+        orden, env=env, stdin=stdin, stdout=stdout, stderr=stderr,
+        close_fds=close_fds, shell=False, start_new_session=True,
+    ) as process:
+        try:
+            codigo = process.wait(timeout=timeout)
+        except BaseException:
+            # Timeout, cancelación o error: primero detener el grupo exclusivo
+            # del hijo y luego recoger el proceso antes de propagar el fallo.
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+            raise
+        return subprocess.CompletedProcess(orden, codigo)
+
+
 def ejecutar(
     orden: Sequence[str],
     *,
-    lanzar: Callable[..., object] = subprocess.run,
+    lanzar: Callable[..., object] = _lanzar_grupo,
 ) -> ResultadoEjecucion:
     """Lanza una orden ya construida y clasifica sin probar el éxito funcional."""
     if not isinstance(orden, tuple) or orden != construir_orden():

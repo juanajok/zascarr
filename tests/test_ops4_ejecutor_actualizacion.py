@@ -1,7 +1,12 @@
 """Pruebas del ejecutor fijo; nunca lanzan update.sh real."""
 from __future__ import annotations
 
+import contextlib
+import os
+import select
+import signal
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -83,3 +88,78 @@ def test_orden_invalida_no_lanza() -> None:
     lanzador = Lanzador(0)
     assert ejecutor.ejecutar([], lanzar=lanzador) is ejecutor.ResultadoEjecucion.INCIERTO
     assert lanzador.llamadas == []
+
+
+def lanzar_python(code: str, timeout: float = 3) -> subprocess.CompletedProcess[bytes]:
+    """Solo ejecuta procesos sintéticos, nunca el actualizador."""
+    return ejecutor._lanzar_grupo(
+        [sys.executable, "-c", code], timeout=timeout, check=False, shell=False,
+        env={"PATH": ejecutor.PATH_FIJO}, stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True,
+    )
+
+
+@pytest.mark.parametrize("code", [0, 9])
+def test_grupo_real_conserva_codigo(code: int) -> None:
+    result = lanzar_python(f"raise SystemExit({code})")
+    assert result.returncode == code
+
+
+def test_grupo_real_aisla_sesion(tmp_path: Path) -> None:
+    path = tmp_path / "grupo"
+    lanzar_python(
+        f"import os; from pathlib import Path; "
+        f"Path({str(path)!r}).write_text(f'{{os.getpid()}} {{os.getpgrp()}}')"
+    )
+    pid, group = map(int, path.read_text().split())
+    assert pid == group
+    assert group != os.getpgrp()
+
+
+def test_timeout_real_mata_padre_e_hijo_que_ignora_sigterm(tmp_path: Path) -> None:
+    path = tmp_path / "pids"
+    code = (
+        "import os,signal,time\nfrom pathlib import Path\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "child = os.fork()\n"
+        f"if child: Path({str(path)!r}).write_text(f'{{os.getpid()}} {{child}}')\n"
+        "time.sleep(30)\n"
+    )
+    completed = False
+    try:
+        with pytest.raises(subprocess.TimeoutExpired):
+            lanzar_python(code, timeout=1)
+        assert path.exists(), "el proceso sintético no llegó a crear el hijo"
+        parent, child = map(int, path.read_text().split())
+        # El padre ya fue recogido; el hijo puede ser zombi hasta que PID 1
+        # lo recoja. Zombi no ejecuta código ni mantiene descriptores abiertos.
+        assert not Path(f"/proc/{parent}").exists()
+        try:
+            child_fd = os.pidfd_open(child)
+        except ProcessLookupError:
+            pass  # PID 1 ya lo ha recogido.
+        else:
+            try:
+                poller = select.poll()
+                poller.register(child_fd, select.POLLIN)
+                assert poller.poll(1000), "el descendiente sigue ejecutándose"
+            finally:
+                os.close(child_fd)
+        completed = True
+    finally:
+        if not completed and path.exists():
+            for pid in map(int, path.read_text().split()):
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(pid, signal.SIGKILL)
+
+
+def test_timeout_sintetico_integrado_se_clasifica_incierto() -> None:
+    def lanzar(_orden, **kwargs):
+        kwargs["timeout"] = 0.3
+        return ejecutor._lanzar_grupo(
+            [sys.executable, "-c", "import time; time.sleep(30)"], **kwargs,
+        )
+
+    assert ejecutor.ejecutar(
+        ejecutor.construir_orden(), lanzar=lanzar,
+    ) is ejecutor.ResultadoEjecucion.INCIERTO
