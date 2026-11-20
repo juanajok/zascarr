@@ -1357,9 +1357,11 @@ async def cambiar_favorita(series_id: UUID, request: Request, volver: str = Form
     await db.commit()
     if request.headers.get("HX-Request") == "true":
         compacto = origen != "ficha" and not favorito_ficha
+        anuncio = (f"Marcada como favorita: {serie.title}" if serie.favorite
+                   else f"Quitada de favoritas: {serie.title}")
         respuesta = templates.TemplateResponse(
             request, "_favorito_boton.html",
-            {"series": serie, "compacto": compacto})
+            {"series": serie, "compacto": compacto, "anuncio": anuncio})
         respuesta.headers["Cache-Control"] = "no-store"
         return respuesta
     destino = volver if volver.startswith("/ui/") else f"/ui/series/{series_id}"

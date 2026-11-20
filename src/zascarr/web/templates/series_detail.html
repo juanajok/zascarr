@@ -67,6 +67,7 @@
     {% include "_obra_unica_serie.html" %}
     {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
     {% set compacto = false %}{% include "_favorito_boton.html" %}
+    <div id="anuncio-favorito" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
     <p class="series-acciones">
       <a class="btn ghost" href="/ui/series/{{ series.id }}/editar">Editar la ficha</a>
       <a class="btn primary" href="/ui/pendientes/carpetas?serie={{ series.id }}">Añadir números del disco</a>

@@ -70,6 +70,7 @@
   {% call ui.aviso("warn", viva=false) %}<span>No se pudo aplicar la búsqueda<span data-consulta></span>. Los resultados de abajo son los anteriores.</span>
   <button type="button" class="btn" data-reintentar>Reintentar</button>{% endcall %}
 </template>
+<div id="anuncio-favorito" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="rejilla">
   {% include "_rejilla_biblioteca.html" %}
 </div>
