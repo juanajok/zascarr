@@ -72,3 +72,33 @@ PostgreSQL ni de la durabilidad**; esos siguen NOT RUN.
 La puerta actual del auxiliar se comporta de forma cerrada en este host cuando
 se ejecuta con el usuario `pi` y sin privilegios operativos. No cambia el estado
 de #443: la actualización sigue deshabilitada y la PR #1159 continúa en borrador.
+
+
+## systemd: unidad transitoria y unidades reales
+
+Con autorización expresa se usó `sudo` para una prueba **sin instalar nada**:
+
+- `systemd-run --unit=zascarr-ops4-test-<epoch> --collect --wait   --property=Type=oneshot --property=NoNewPrivileges=yes ...`
+- Resultado: `Result=success`, `ActiveState=inactive`, `SubState=dead`;
+  la unidad quedó retirada y el marcador temporal se borró con `sudo`.
+- No se arrancó, paró ni modificó ZascArr, su socket, Docker, PostgreSQL ni
+  ninguna unidad de producción.
+
+Revisión de solo lectura de las unidades instaladas:
+
+- `zascarr-ops@.service`: `NoNewPrivileges=yes`, `ProtectSystem=strict`,
+  `PrivateNetwork=yes`, `CapabilityBoundingSet=` vacío; `ReadWritePaths` solo
+  incluye `/var/lib/zascarr/backup-status` y `/run/zascarr-ops`.
+- `zascarr-ops.socket`: `SocketUser=root`, `SocketGroup=media`, modo `0660`.
+- `zascarr-restaurar@.service`: `User=root`, `ProtectSystem=strict`,
+  `CapabilityBoundingSet=` vacío.
+- No existe una unidad de actualización instalada.
+
+`/opt/zascarr/zascarr/.env` es un **enlace simbólico** con modo 777 que apunta a
+`/opt/zascarr/.env`, cuyo fichero real es `root:root 600`; `pi` no puede leerlo.
+El modo 777 del enlace no expone el contenido.
+
+**NOT RUN:** iniciar una unidad de actualización (no existe), reinicios reales,
+Docker/PostgreSQL de producción, fallos de `fsync` y actualización de punta a
+punta. La prueba transitoria acredita que systemd funciona y que las unidades
+existentes están instaladas; no acredita el futuro ejecutor.
