@@ -109,7 +109,8 @@
   const volver = raiz.dataset.volver;
 
   let sentido = raiz.dataset.sentido === "rtl" ? "rtl" : "ltr";
-  let modo = "ancho";
+  // El lector abre ajustado a la pantalla; el resto de modos siguen disponibles.
+  let modo = "pantalla";
   let desplazamiento = 0;
   let paginaBVisible = false;
   // Zoom propio: el navegador no puede ampliar el lienzo fijo del lector de forma útil.
