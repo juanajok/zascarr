@@ -1,5 +1,10 @@
 # OPS4: auditoría de integración del incremento aislado (#443)
 
+> **Histórica:** esta auditoría se refiere exclusivamente al SHA indicado abajo.
+> La rama ha incorporado después una modificación de plantilla para mostrar un
+> botón deshabilitado; la afirmación de que no cambia `src` ya no describe el
+> diff actual. La función de actualización sigue sin estar conectada.
+
 - **Base:** `61f4d53ab8813526a32a6724c8dee9d10ba2f3a9` (merge-base con `main`).
 - **Cabeza auditada:** `a9dc9d7f`.
 - **Método:** `git diff --name-status origin/main...HEAD` y búsqueda de rutas de
