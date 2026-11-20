@@ -42,6 +42,11 @@ from zascarr.utils.espacio import comprobar_espacio
 # después del nombre saneado, de modo que la ruta final nunca de ENAMETOOLONG.
 _MAX_SEGMENT_BYTES = 240
 
+#: Lo que ZascArr deja en la biblioteca compartida (Samba, Kavita…) lo escribe el grupo: la
+#: umask no basta porque esta capa crea con modos explícitos (#1155).
+MODO_CARPETA = 0o775
+MODO_ARCHIVO = 0o664
+
 
 @dataclass(frozen=True)
 class CopiaEnRaiz:
@@ -131,6 +136,22 @@ def _abrir_raiz_verificada(raiz: str | Path) -> tuple[Path, int]:
         raise
 
 
+def _crear_carpeta(nombre: str, parent_fd: int) -> int:
+    """Crea una carpeta con escritura de grupo, con cualquier umask, y devuelve su fd.
+
+    `mkdir` hereda el setgid de la carpeta padre (Linux); `fchmod` fija los bits de permiso
+    y por eso se vuelve a poner el setgid que ya tuviera, para no perder el grupo heredado.
+    """
+    os.mkdir(nombre, MODO_CARPETA, dir_fd=parent_fd)
+    fd = os.open(nombre, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    try:
+        os.fchmod(fd, MODO_CARPETA | (os.fstat(fd).st_mode & stat.S_ISGID))
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
 def _abrir_padre_en_raiz(raiz_fd: int, relativo: Path, *, crear: bool = True) -> tuple[int, str]:
     """Recorre/crea los componentes del padre con dir_fd y O_NOFOLLOW."""
     parent_fd = raiz_fd
@@ -141,9 +162,7 @@ def _abrir_padre_en_raiz(raiz_fd: int, relativo: Path, *, crear: bool = True) ->
         except FileNotFoundError:
             if not crear:
                 raise
-            os.mkdir(parte, 0o755, dir_fd=parent_fd)
-            fd = os.open(parte, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                         dir_fd=parent_fd)
+            fd = _crear_carpeta(parte, parent_fd)
         if parent_fd != raiz_fd:
             os.close(parent_fd)
         parent_fd = fd
@@ -217,6 +236,9 @@ def copiar_en_raiz(src: str | Path, temp: str | Path, raiz: str | Path, *,
                 raise OSError("copia incompleta: el tamaño no coincide")
             if sha256 is not None and digest.hexdigest() != sha256:
                 raise OSError("copia incompleta: el sha256 no coincide")
+            # El temporal nace 0600 (nadie lo ve a medias); ya verificado, se abre al grupo antes
+            # de publicarlo: sin esto el coleccionista no podría mover ni borrar lo asignado.
+            os.fchmod(temp_fd, MODO_ARCHIVO)
             ok = True
             st_temp = os.fstat(temp_fd)
             return CopiaEnRaiz(path=root_res / relativo.parent / final_name,
@@ -404,9 +426,7 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
                 fd = os.open(parte, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                              dir_fd=parent_fd)
             except FileNotFoundError:
-                os.mkdir(parte, 0o755, dir_fd=parent_fd)
-                fd = os.open(parte, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                             dir_fd=parent_fd)
+                fd = _crear_carpeta(parte, parent_fd)
             if parent_fd != root_fd:
                 os.close(parent_fd)
             parent_fd = fd
@@ -471,6 +491,7 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
                     os.fsync(salida.fileno())
                 if os.fstat(temp_fd).st_size != st_src.st_size:
                     raise OSError("copia incompleta: el tamaño no coincide")
+                os.fchmod(temp_fd, MODO_ARCHIVO)  # verificado: se abre al grupo antes de publicar
                 st_temp = os.fstat(temp_fd)
                 # Publica desde el fd: aunque el nombre temporal se sustituya,
                 # se enlaza el inodo que se acaba de verificar.
