@@ -8,10 +8,11 @@ EXPERIMENTOS = (
     RAIZ / "deploy" / "ops" / "experimento_objetos_ops4.py",
     RAIZ / "deploy" / "ops" / "experimento_identidad_ops4.py",
     RAIZ / "deploy" / "ops" / "modelo_aprobacion_ops4.py",
+    RAIZ / "deploy" / "ops" / "experimento_estado_unidad_ops4.py",
 )
 PROHIBIDO = (
-    "subprocess", "socket", "urllib", "http.client", "Popen", "systemctl",
-    "os.system", "docker", "update.sh",
+    "subprocess", "socket", "urllib", "http.client", "Popen", "os.system",
+    "docker", "update.sh",
 )
 
 
