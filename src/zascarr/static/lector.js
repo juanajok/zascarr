@@ -82,6 +82,9 @@
   const contador = document.getElementById("lector-contador");
   const anterior = document.getElementById("lector-anterior");
   const siguiente = document.getElementById("lector-siguiente");
+  // Solo los botones: la raíz también lleva data-modo y, tomada por botón, cerraba Opciones al
+  // abrirla (el clic subía hasta ella y repetía cambiarModo) y recibía aria-pressed (#1118).
+  const BOTONES_MODO = "button[data-modo]";
   const menuBoton = document.getElementById("lector-menu-boton");
   const menu = document.getElementById("lector-menu");
   const barra = document.getElementById("lector-barra");
@@ -250,7 +253,7 @@
     }
     menuBoton.setAttribute("aria-expanded", String(!menu.hidden));
     desplazar.hidden = modo !== "doble";
-    for (const boton of document.querySelectorAll("[data-modo]")) {
+    for (const boton of document.querySelectorAll(BOTONES_MODO)) {
       boton.setAttribute("aria-pressed", String(boton.dataset.modo === modo));
     }
     botonSentido.textContent = `Sentido: ${sentido === "rtl" ? "derecha a izquierda" : "izquierda a derecha"}`;
@@ -411,7 +414,11 @@
     }
   });
   menuBoton.addEventListener("click", alternarMenu);
-  for (const boton of document.querySelectorAll("[data-modo]")) {
+  // Cierre propio dentro del panel (#1118): con el panel más alto que la pantalla el botón
+  // «Opciones» sale de la vista al desplazarlo, y no debe ser el único modo de cerrar.
+  const menuCerrar = document.getElementById("lector-menu-cerrar");
+  if (menuCerrar) menuCerrar.addEventListener("click", () => cambiarMenu(false, true));
+  for (const boton of document.querySelectorAll(BOTONES_MODO)) {
     boton.addEventListener("click", () => cambiarModo(boton.dataset.modo));
   }
   desplazar.addEventListener("click", () => {

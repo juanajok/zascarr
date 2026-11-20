@@ -2942,6 +2942,17 @@ body:has(.lector-escena) .skip { z-index: 20; }
 }
 .lector-menu[hidden] { display: none; }
 .lector-menu .lector-ayuda { margin: 0; }
+/* #1118: el cierre vive en una cabecera fija del panel; al desplazar un panel más alto que la
+   pantalla (320 px, horizontal, zoom) «Cerrar» no sale de la vista. */
+.lector-menu-cabecera {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center;
+  justify-content: space-between; gap: var(--space-2);
+  margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-3)) 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--paper); border-bottom: var(--border-chip) solid var(--ink-soft);
+}
+.lector-menu-cabecera .lector-menu-titulo { margin: 0; }
+.lector-menu .lector-menu-cabecera .btn { width: auto; flex: 0 0 auto; }
 .lector-menu .lector-ayuda summary { min-height: 44px; display: flex; align-items: center; }
 .lector-menu .caption { margin: 0; }
 .lector-lienzo:focus-visible { outline: 3px solid var(--ink); outline-offset: -4px; }

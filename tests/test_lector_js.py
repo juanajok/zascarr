@@ -49,7 +49,9 @@ function run(conPantalla) {
   els["lector-pantalla-completa"].hidden = true;
   const doc = {
     querySelector: (sel) => (sel === "[data-lector]" ? root : null),
-    querySelectorAll: (sel) => (sel === "[data-modo]" ? modos : []),
+    // Como el DOM real: la raíz también lleva data-modo, así que «[data-modo]» a secas la incluye.
+    querySelectorAll: (sel) => (sel === "button[data-modo]" ? modos
+      : sel === "[data-modo]" ? [root, ...modos] : []),
     getElementById: (id) => (els[id] ||= new E(id)),
     addEventListener: (t, f) => { (doc.listeners[t] ||= []).push(f); },
     listeners: {}, documentElement: new E("html"), fullscreenElement: null,
@@ -142,6 +144,17 @@ salida.escapeDesdeOpciones = tecla("Escape", input) && get("lector-menu").hidden
 teclado.fire(get("lector-menu-boton"), "click");
 teclado.fire(teclado.doc, "focusout", {target: input, relatedTarget: get("lector-lienzo")});
 salida.tabFueraCierra = get("lector-menu").hidden;
+// #1118: el cierre propio del panel devuelve el foco al disparador y no toca página ni modo.
+teclado.fire(get("lector-menu-boton"), "click");
+const paginaAntes = teclado.root.dataset.pagina, modoAntes = teclado.root.dataset.modo;
+teclado.doc.activeElement = get("lector-menu-cerrar");
+teclado.fire(get("lector-menu-cerrar"), "click");
+salida.cerrarDelPanel = get("lector-menu").hidden && teclado.doc.activeElement === get("lector-menu-boton")
+  && get("lector-menu-boton").attrs["aria-expanded"] === "false"
+  && teclado.root.dataset.pagina === paginaAntes && teclado.root.dataset.modo === modoAntes;
+// La raíz no es un botón de modo: ni escucha clics (cerraba Opciones al abrirla) ni recibe aria-pressed.
+salida.raizNoEsBotonDeModo = !(teclado.root.listeners.click || []).length
+  && teclado.root.attrs["aria-pressed"] === undefined;
 const contador = get("lector-contador");
 const escrituras = contador.writes;
 teclado.fire(get("lector-pagina"), "load");
@@ -206,6 +219,7 @@ def test_lector_js_fullscreen_doble_y_teclado(tmp_path):
         "dobleActiva": True, "avanzaConFlecha": True, "fSinApiNoRompe": True,
         "hAlternaChrome": True, "espacioNativo": True, "atajoFuera": True,
         "limiteConFoco": True, "escapeDesdeOpciones": True, "tabFueraCierra": True,
+        "cerrarDelPanel": True, "raizNoEsBotonDeModo": True,
         "contadorSinDuplicados": True, "focoYAnuncioTrasGuardar": True,
         "toqueAvanzaSinBarras": True, "toqueRetrocedeSinBarras": True,
         "deslizarSinBarras": True, "ratonYTeclaSinBarras": True,
