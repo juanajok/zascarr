@@ -1,6 +1,8 @@
 """Pruebas del formato canónico A; sin ficheros, root ni emisión."""
 from __future__ import annotations
 
+import contextlib
+
 import pytest
 
 from deploy.ops.experimento_registro_aprobacion_ops4 import (
@@ -64,3 +66,23 @@ def test_vigencia_estricta() -> None:
     assert not vigente(REGISTRO, inicio + 24 * 3600)
     with pytest.raises(RegistroInvalidoError):
         vigente(REGISTRO, True)
+
+
+def test_mutaciones_deterministas_no_escapan() -> None:
+    import random
+    rng = random.Random(443)
+    base = serializar(REGISTRO)
+    for _ in range(1000):
+        datos = bytearray(base)
+        for _ in range(rng.randint(1, 3)):
+            datos[rng.randrange(len(datos))] = rng.randrange(256)
+        with contextlib.suppress(RegistroInvalidoError):
+            deserializar(bytes(datos))
+
+
+def test_bytes_aleatorios_no_escapan() -> None:
+    import random
+    rng = random.Random(444)
+    for _ in range(500):
+        with contextlib.suppress(RegistroInvalidoError):
+            deserializar(rng.randbytes(rng.randrange(0, 300)))

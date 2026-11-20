@@ -110,3 +110,13 @@ def test_firma_incorrecta_de_actualizar_no_dispara_nada(estado, monkeypatch):
     respuesta = ops.procesar(linea(cuerpo), AHORA, CLAVE, estado, LanzadorProhibido(), copias=[])
     assert respuesta.resultado == "rechazada"
     assert respuesta.codigo == "firma_invalida"
+
+
+def test_bytes_aleatorios_no_escapan_del_parser() -> None:
+    import random
+
+    from deploy.ops import zascarr_ops as ops
+    rng = random.Random(445)
+    for _ in range(500):
+        datos = rng.randbytes(rng.randrange(0, 600)) + b"\n"
+        assert ops.parsear(datos) is None or isinstance(ops.parsear(datos), dict)
