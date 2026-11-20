@@ -71,7 +71,12 @@
   <button type="button" class="btn" data-reintentar>Reintentar</button>{% endcall %}
 </template>
 <div id="anuncio-favorito" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
+<span class="sr" id="rejilla-titulo">Resultados de la biblioteca</span>
+{% if foco_ausente|default(false) %}
+<div id="rejilla" tabindex="-1" autofocus role="region" aria-labelledby="rejilla-titulo">
+{% else %}
 <div id="rejilla">
+{% endif %}
   {% include "_rejilla_biblioteca.html" %}
 </div>
 {% include "_visor_portada.html" %}

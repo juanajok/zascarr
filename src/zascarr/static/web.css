@@ -1821,6 +1821,14 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .library-lista td a { color: var(--ink); font-weight: 700; }
 .library-lista td a:hover { color: var(--cyan-t); }
 .library-lista tr { scroll-margin-block-start: 16px; }
+/* UATP-02: el retorno enfoca por programa (autofocus/tabindex); el anillo de
+   foco también debe verse sin `:focus-visible`. Mismo anillo, sin tokens nuevos. */
+.library-card:focus,
+.library-lista tr:focus,
+#rejilla:focus {
+  outline: 3px solid var(--cyan-t);
+  outline-offset: 3px;
+}
 @media (max-width: 640px) {
   .library-lista, .library-lista tbody, .library-lista tr, .library-lista td { display: block; }
   .library-lista thead {

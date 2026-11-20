@@ -1,8 +1,9 @@
 """#155/BL-D6: UI de colecciones y su política de auto-búsqueda."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, quote, urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Query, Request
@@ -71,6 +72,36 @@ def _url_ficha(cid: UUID, q: str, tradicion: str, seleccion: list[str],
         params.append(("cambio_vista", cambio_vista))
     params += [("serie_ids", sid) for sid in seleccion]
     return f"/ui/colecciones/{cid}?{urlencode(params)}"
+
+
+_PARAMETROS_DE_COLECCION = frozenset({"q", "tradicion", "pagina", "vista"})
+
+
+def consulta_canonica_de_coleccion(coleccion_id: UUID | str, query: str) -> str | None:
+    """Query canónica equivalente de una colección, o `None` si no lo es.
+
+    Solo estado (`q`, `tradicion`, `pagina`, `vista`); banderas de un solo uso,
+    selección y nombres desconocidos se rechazan. No repara.
+    """
+    pares = parse_qsl(query, keep_blank_values=True)
+    nombres = [nombre for nombre, _ in pares]
+    if len(set(nombres)) != len(nombres) or any(not nombre for nombre in nombres):
+        return None
+    if set(nombres) - _PARAMETROS_DE_COLECCION:
+        return None
+    for _, valor in pares:
+        if any(ord(caracter) < 32 or ord(caracter) == 127 for caracter in valor):
+            return None
+    valores = dict(pares)
+    pagina = valores.get("pagina", "1")
+    if not re.fullmatch(r"[0-9]+", pagina) or int(pagina) < 1:
+        return None
+    vista = valores.get("vista", "lista")
+    if vista not in {"lista", "tarjetas"}:
+        return None
+    q, tradicion = _filtros(valores.get("q", ""), valores.get("tradicion", ""))
+    return _url_ficha(
+        coleccion_id, q, tradicion, [], int(pagina), vista).split("?", 1)[1]
 
 
 POLITICAS = {
@@ -144,6 +175,9 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
         "abrir_alta": abrir == "1", "vista": vista,
         "q": q, "tradicion": tradicion, "seleccion": seleccion,
         "pagina": None, "foco_vista": cambio_vista == "1",
+        "url_serie": lambda serie_id: (
+            f"/ui/series/{serie_id}?volver="
+            f"{quote(_url_ficha(coleccion_id, q, tradicion, [], pagina_actual, vista), safe='')}"),
         "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
                                       pagina_actual, "lista", "1"),
         "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,

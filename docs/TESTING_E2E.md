@@ -428,6 +428,58 @@ test "$ACUSES" -ge 1 && echo "acuse restaurado ($ACUSES fila(s))"
 
 ---
 
+## 6 ter. Retorno y foco de Biblioteca (UATP-02)
+
+> Ejecutar **después de §6** (ya hay series). No hay JavaScript: el foco lo decide
+> el HTML (`autofocus`, `tabindex="-1"`). El E2E de navegador real (Chrome/Firefox)
+> se marca **NOT RUN** aquí si no se ejecuta; el HTML no demuestra el foco.
+
+```bash
+cd "$ROOT/zascarr"
+
+SERIES_ID=$("${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
+  "select id from series order by title limit 1;" | tr -d '[:space:]')
+test -n "$SERIES_ID" && echo "SERIES_ID=$SERIES_ID"
+
+# 6 ter.1 Tarjeta enfocada (vista tarjetas): un solo autofocus y su href con foco
+curl -s "$APP_URL/ui/biblioteca?page=1&foco=$SERIES_ID" > /tmp/bib-uatp02.html
+test "$(grep -c autofocus /tmp/bib-uatp02.html)" -eq 1
+grep -F '<a class="library-card" id="serie-'"$SERIES_ID"'"' /tmp/bib-uatp02.html
+grep -F 'foco%3D'"$SERIES_ID" /tmp/bib-uatp02.html
+
+# 6 ter.2 Vista lista: la fila (no la tarjeta) es la enfocable
+curl -s "$APP_URL/ui/biblioteca?page=1&vista=lista&foco=$SERIES_ID" > /tmp/bib-lista.html
+grep -F '<tr id="serie-'"$SERIES_ID"'" tabindex="-1" autofocus>' /tmp/bib-lista.html
+test "$(grep -c autofocus /tmp/bib-lista.html)" -eq 1
+! grep -q 'library-card' /tmp/bib-lista.html
+
+# 6 ter.3 Objetivo ausente o `foco` inválido: respaldo en #rejilla (200, sin 500/422)
+OTRO=00000000-0000-0000-0000-000000000000
+curl -s "$APP_URL/ui/biblioteca?page=1&foco=$OTRO" > /tmp/bib-ausente.html
+grep -F '<div id="rejilla" tabindex="-1" autofocus' /tmp/bib-ausente.html
+test "$(grep -c autofocus /tmp/bib-ausente.html)" -eq 1
+curl -s -o /dev/null -w '%{http_code}\n' "$APP_URL/ui/biblioteca?page=1&foco=no-es-uuid"   # 200
+
+# 6 ter.4 `volver` hostil en la ficha: respaldo «← Biblioteca», sin salir del servidor
+curl -s "$APP_URL/ui/series/$SERIES_ID?volver=%2F%2F%2Fui%2Fbiblioteca" \
+  | grep -F '← Biblioteca'
+curl -s "$APP_URL/ui/series/$SERIES_ID?volver=%2Fui%2F%25%32%65%25%32%65%2Fui%2Fbiblioteca" \
+  | grep -F '← Biblioteca'
+
+# 6 ter.5 Colección (si existe): el enlace de su tarjeta lleva estado, no serie_ids
+CID=$("${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
+  "select id from collections order by name limit 1;" | tr -d '[:space:]')
+if [ -n "$CID" ]; then
+  curl -s "$APP_URL/ui/colecciones/$CID?q=flash&tradicion=manga&pagina=1&vista=tarjetas" \
+    | grep -o '/ui/series/[^" ]*volver=[^" ]*' | head -1
+  # Criterio: el volver decodificado es /ui/colecciones/$CID?q=flash&tradicion=manga&pagina=1&vista=tarjetas
+else
+  echo "6 ter.5 NOT RUN: no hay colecciones (crear una desde /ui/colecciones)"
+fi
+```
+
+---
+
 ## 7. Importador (ciclo real + dedupe + saneado)
 
 ```bash

@@ -834,3 +834,56 @@ def test_orden_leido_ultimo_normaliza_y_url():
     assert f.orden == "leido_ultimo" and "orden=leido_ultimo" in _qs(f, page=1)
     malo = _leer_filtros("1", "", "", "", "", "", orden="otro")
     assert malo.orden == "titulo"
+
+
+class TestFocoDeRetorno:
+    """UATP-02: el servidor enfoca la tarjeta/fila o #rejilla, sin JavaScript."""
+
+    def _get(self, series, params=""):
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/biblioteca?{params}")
+        return r, session
+
+    def test_foco_de_una_serie_enfoca_su_tarjeta(self):
+        series = make_series("Thorgal")
+        r, _ = self._get(series, f"page=1&foco={series.id}")
+        assert r.status_code == 200
+        assert f'<a class="library-card" id="serie-{series.id}" href=' in r.text
+        assert r.text.count("autofocus") == 1
+        assert "library-grid" in r.text
+        # El estado de la vista lo conserva el href de la tarjeta, con foco.
+        assert f"foco={series.id}" in r.text or "foco%3D" in r.text
+
+    def test_foco_en_vista_lista_enfoca_la_fila(self):
+        series = make_series("Thorgal")
+        r, _ = self._get(series, f"page=1&vista=lista&foco={series.id}")
+        assert r.status_code == 200
+        assert f'<tr id="serie-{series.id}" tabindex="-1" autofocus>' in r.text
+        assert r.text.count("autofocus") == 1
+        assert "library-card" not in r.text
+
+    def test_foco_ausente_cae_a_la_rejilla(self):
+        series = make_series("Thorgal")
+        otro = uuid4()
+        r, _ = self._get(series, f"page=1&foco={otro}")
+        assert r.status_code == 200
+        assert re.search(r'<div id="rejilla" tabindex="-1" autofocus\s+role="region"', r.text)
+        assert r.text.count("autofocus") == 1
+        assert f'<a class="library-card" id="serie-{series.id}"' in r.text
+        assert "library-card" in r.text
+
+    def test_foco_invalido_no_da_500_ni_422_y_cae_a_la_rejilla(self):
+        series = make_series("Thorgal")
+        r, _ = self._get(series, "page=1&foco=no-es-uuid")
+        assert r.status_code == 200
+        assert re.search(r'<div id="rejilla" tabindex="-1" autofocus', r.text)
+        assert r.text.count("autofocus") == 1
+
+    def test_sin_foco_no_hay_autofocus(self):
+        series = make_series("Thorgal")
+        r, _ = self._get(series, "page=1")
+        assert r.status_code == 200
+        assert "autofocus" not in r.text
+        assert "set-cookie" not in r.headers
+        assert r.headers["cache-control"] == "no-store"
