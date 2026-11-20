@@ -11,6 +11,7 @@ EXPERIMENTOS = (
     RAIZ / "deploy" / "ops" / "experimento_estado_unidad_ops4.py",
     RAIZ / "deploy" / "ops" / "experimento_registro_aprobacion_ops4.py",
     RAIZ / "deploy" / "ops" / "protocolo_actualizar_ops4.py",
+    RAIZ / "deploy" / "ops" / "verificador_autorizacion_ops4.py",
 )
 PROHIBIDO = (
     "subprocess", "socket", "urllib", "http.client", "Popen", "os.system",
@@ -123,3 +124,27 @@ def test_el_registro_antirrepeticion_no_esta_conectado() -> None:
     paths += [RAIZ / "deploy" / "ops" / "zascarr_ops.py", RAIZ / "scripts" / "instalar_ops.sh"]
     for path in paths:
         assert nombre not in path.read_text(encoding="utf-8"), path
+
+
+def test_la_autorizacion_app_host_no_esta_conectada() -> None:
+    nombres = ("autorizacion_actualizacion", "verificador_autorizacion_ops4")
+    for nombre in nombres:
+        for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+            if ruta.name == "autorizacion_actualizacion.py":
+                continue
+            assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+        assert nombre not in (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(
+            encoding="utf-8"
+        )
+    for ruta in (
+        RAIZ / "src" / "zascarr" / "main.py",
+        RAIZ / "scripts" / "instalar_ops.sh",
+    ):
+        assert "autorizacion_actualizacion" not in ruta.read_text(encoding="utf-8"), ruta
+
+
+def test_el_emisor_de_autorizacion_no_hace_io_ni_red() -> None:
+    ruta = RAIZ / "src" / "zascarr" / "services" / "autorizacion_actualizacion.py"
+    texto = ruta.read_text(encoding="utf-8")
+    for token in ("open(", "Path(", "subprocess", "socket", "docker", "update.sh"):
+        assert token not in texto, token

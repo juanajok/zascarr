@@ -96,7 +96,10 @@ Sigue las guías oficiales con estas precisiones locales:
   cambia la política propuesta C-12, pero **no habilita la función**: hacen
   falta un auxiliar de acción fija, autenticación, revisión de privilegios,
   estado fiable y pruebas aisladas. No conectar `update.sh` directamente a la
-  app ni desplegarlo sin las correspondientes verificaciones.
+  app ni desplegarlo sin las correspondientes verificaciones. Decisión de
+  autoridad (2026-11-20): la app reautentica y emite una autorización corta de
+  un solo uso; el host la verifica. El contrato está aislado, sin conectar ni
+  habilitar.
 
 ## 4. Rendimiento en Pi
 

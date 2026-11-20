@@ -1,9 +1,14 @@
 # OPS4 — concordancia de seguridad entre app y host (M3)
 
 Auditoría de código del 2026-11-20 sobre `b9f5a612`. **M3 sigue abierto.**
+
+**Decisión del usuario (2026-11-20):** la autoridad será la app, que
+reautentica y emite una [autorización corta de un solo uso](ops4-autorizacion-app-host.md);
+el host no leerá el hash para esa comprobación. El contrato aislado ya existe,
+pero la composición, el consumo durable y la revisión SecOps siguen pendientes.
 Una coincidencia con el hash de PostgreSQL no demuestra coincidencia con la
-configuración efectiva de la app. OPS4 está desconectado; este documento no
-acredita explotación en una actualización desplegada ni aprueba integración.
+configuración efectiva. OPS4 está desconectado; este documento no acredita
+explotación en una actualización desplegada ni aprueba integración.
 
 ## Fuentes actuales
 

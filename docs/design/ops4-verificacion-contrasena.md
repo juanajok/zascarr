@@ -48,7 +48,9 @@ prohíben explícitamente invocarlo.
   con un hash leído no demuestra por sí sola que sea la contraseña efectiva
   de esa app en ese instante. La [auditoría de concordancia](ops4-concordancia-seguridad.md)
   detalla publicación anterior al commit, rollback, recuperación CLI e
-  identidad/readiness pendientes; M3 sigue abierto.
+  identidad/readiness pendientes; M3 sigue abierto. La autoridad elegida es la
+  [reautenticación de la app con autorización corta](ops4-autorizacion-app-host.md),
+  todavía sin conectar.
 - Los límites del host pueden denegar un hash fuera de rango que otra ruta
   histórica acepte. Fallar cerrado es preferible a intentar un coste sin
   límite; la compatibilidad de instalaciones reales necesita revisión.
