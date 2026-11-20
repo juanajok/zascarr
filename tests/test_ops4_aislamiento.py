@@ -85,3 +85,11 @@ def test_la_admision_de_host_no_esta_conectada_al_auxiliar() -> None:
         assert nombre not in auxiliar
         for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
             assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+
+
+def test_el_escritor_de_estado_no_esta_conectado() -> None:
+    auxiliar = (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(encoding="utf-8")
+    for nombre in ("escritor_estado_actualizar_ops4", "modelo_fases_actualizacion_ops4"):
+        assert nombre not in auxiliar
+        for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+            assert nombre not in ruta.read_text(encoding="utf-8"), ruta
