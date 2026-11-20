@@ -460,7 +460,8 @@ class TestPoliticaBusquedaD8:
         session.flush.assert_not_called()                             # y no se escribió nada
         assert session._queue == []                                   # ni se hizo la retirada (no hay más consultas)
         assert "No se ha activado: antes tienes que aceptar el aviso legal." in r.text
-        assert 'href="/ui/legal"' in r.text
+        # AC-10 (UATP-01): el enlace lleva la ficha como destino de vuelta.
+        assert f'href="/ui/legal?volver=/ui/series/{series.id}"' in r.text
         assert "dejado de buscar" not in r.text
 
     def test_desactivar_politica_sin_aviso_si_funciona(self):
@@ -1253,6 +1254,53 @@ def test_opcion_reservada_usa_etiqueta_no_valor_crudo(valor, etiqueta):
     assert f'value="{valor.value}"' in html
     assert etiqueta in html
     assert f">{valor.value}" not in html
+
+
+class TestRetornoDelAvisoEnLaFicha:
+    """AC-10 (UATP-01): los enlaces directos al aviso llevan la ficha como vuelta."""
+
+    def test_politica_enlaza_con_la_ficha_y_su_volver_anidado(self):
+        from types import SimpleNamespace
+
+        from zascarr.web.series import templates
+
+        serie_id = uuid4()
+        html = templates.env.get_template("_politica_serie.html").render(
+            series=SimpleNamespace(id=serie_id),
+            politica_actual=WishlistPolicy.NONE,
+            politica_actual_etiqueta="Ninguno",
+            politicas_ofrecidas={},
+            motivo_futuros="",
+            politica_efectiva=WishlistPolicy.NONE,
+            politica_efectiva_etiqueta="Ninguno",
+            coleccion_causa=None,
+            veredicto=SimpleNamespace(tipo="ninguno", no_calculable=False),
+            querer=SimpleNamespace(motivo=None, numeros=[]),
+            lote=25,
+            aviso_legal_pendiente=True,
+            retirados=0,
+            retirados_ahora=None,
+            activacion_bloqueada_por_aviso=True,
+            volver="/ui/biblioteca?q=flash",
+        )
+        assert (
+            f'href="/ui/legal?volver=/ui/series/{serie_id}%3Fvolver%3D'
+            '/ui/biblioteca%253Fq%253Dflash"'
+        ) in html
+
+    def test_seguimiento_enlaza_con_la_ficha(self):
+        from types import SimpleNamespace
+
+        from zascarr.web.series import templates
+
+        serie_id = uuid4()
+        html = templates.env.get_template("_seguimiento_serie.html").render(
+            series=SimpleNamespace(id=serie_id, follow_new_issues=False),
+            es_obra_unica=False,
+            fuentes_descarga_activas=False,
+            activacion_bloqueada_por_aviso=True,
+        )
+        assert f'href="/ui/legal?volver=/ui/series/{serie_id}"' in html
 
 
 class TestAtribucionFandomVisible:

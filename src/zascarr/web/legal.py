@@ -14,11 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
 from zascarr.services.legal import (
+    RETORNO_LEGAL_POR_DEFECTO,
     acknowledge,
     current_legal_version,
     get_acknowledgment,
     render_legal_html,
-    volver_legal,
+    resolver_destino_legal,
 )
 from zascarr.web.routes import crear_templates
 
@@ -32,27 +33,38 @@ async def wizard(request: Request, volver: str = Query(default=""),
                  falta: str = Query(default=""),
                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     ack = await get_acknowledgment(db)
-    return templates.TemplateResponse(request, "legal_wizard.html", {
+    destino = resolver_destino_legal(request, volver)
+    respuesta = templates.TemplateResponse(request, "legal_wizard.html", {
         "accepted": ack is not None,
         "accepted_at": ack.accepted_at if ack else None,
         "legal_version": current_legal_version(),
-        "volver": volver_legal(volver),
+        "volver": destino or RETORNO_LEGAL_POR_DEFECTO,
         "falta": falta == "1",
+        # Solo se promete conservar el destino si de verdad se conservó: si
+        # ningún candidato valía, ya se cayó al respaldo antes de pintar el aviso.
+        "destino_conservado": destino is not None,
     })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 @router.post("/ui/legal/accept")
 async def accept(
+    request: Request,
     acepto_1: bool = Form(default=False), acepto_2: bool = Form(default=False),
     acepto_3: bool = Form(default=False), volver: str = Form(default=""),
     db: AsyncSession = Depends(get_db),
 ):
-    destino = volver_legal(volver)
+    destino = resolver_destino_legal(request, volver)
     if not (acepto_1 and acepto_2 and acepto_3):
-        return RedirectResponse(
-            f"/ui/legal?volver={quote(destino, safe='')}&falta=1", status_code=303)
+        falta = "/ui/legal?falta=1"
+        if destino is not None:
+            falta = f"/ui/legal?volver={quote(destino, safe='')}&falta=1"
+        return RedirectResponse(falta, status_code=303,
+                                headers={"Cache-Control": "no-store"})
     await acknowledge(db)
-    return RedirectResponse(destino, status_code=303)
+    return RedirectResponse(destino or RETORNO_LEGAL_POR_DEFECTO, status_code=303,
+                            headers={"Cache-Control": "no-store"})
 
 
 @router.get("/legal", response_class=HTMLResponse)

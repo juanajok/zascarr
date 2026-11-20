@@ -18,7 +18,7 @@
 
 {% if aviso_legal_pendiente %}
 {% call ui.aviso("warn") %}<strong>Aviso legal pendiente.</strong> Las búsquedas automáticas están en
-  pausa hasta que lo aceptes. <a href="/ui/legal">Aceptarlo ahora</a>.{% endcall %}
+  pausa hasta que lo aceptes. <a href="/ui/legal?volver=%2Fui%2Fwishlist">Aceptarlo ahora</a>.{% endcall %}
 {% endif %}
 {{ legal_disclaimer("wishlist") }}
 

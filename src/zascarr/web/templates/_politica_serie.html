@@ -105,7 +105,9 @@
   {% if activacion_bloqueada_por_aviso %}
   <p class="caption politica-aviso">
     No se ha activado: antes tienes que aceptar el aviso legal.
-    <a href="/ui/legal">Ir al aviso legal</a>
+    {% set destino_aviso = "/ui/series/" ~ series.id %}
+    {% if volver %}{% set destino_aviso = destino_aviso ~ "?volver=" ~ (volver | urlencode) %}{% endif %}
+    <a href="/ui/legal?volver={{ destino_aviso | urlencode }}">Ir al aviso legal</a>
   </p>
   {% elif aviso_legal_pendiente and politica_actual.value != "ninguno" %}
   <p class="caption politica-aviso">
