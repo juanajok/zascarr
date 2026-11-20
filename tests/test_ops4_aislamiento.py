@@ -130,7 +130,7 @@ def test_la_autorizacion_app_host_no_esta_conectada() -> None:
     nombres = ("autorizacion_actualizacion", "verificador_autorizacion_ops4")
     for nombre in nombres:
         for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
-            if ruta.name == "autorizacion_actualizacion.py":
+            if ruta.name in ("autorizacion_actualizacion.py", "solicitud_actualizacion_v4.py"):
                 continue
             assert nombre not in ruta.read_text(encoding="utf-8"), ruta
         assert nombre not in (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(
@@ -158,7 +158,7 @@ def test_la_composicion_de_autorizacion_no_se_importa_desde_runtime() -> None:
         RAIZ / "scripts" / "instalar_ops.sh",
     ]
     for ruta in rutas:
-        if ruta.name == "autorizacion_actualizacion.py":
+        if ruta.name in ("autorizacion_actualizacion.py", "solicitud_actualizacion_v4.py"):
             continue
         texto = ruta.read_text(encoding="utf-8")
         assert "preparar_autorizacion" not in texto, ruta
@@ -210,7 +210,7 @@ def test_el_protocolo_v4_no_esta_conectado() -> None:
         "ops_actualizacion_v4",
     ):
         for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
-            if ruta.name == "ops_actualizacion_v4.py":
+            if ruta.name in ("ops_actualizacion_v4.py", "solicitud_actualizacion_v4.py"):
                 continue
             assert nombre not in ruta.read_text(encoding="utf-8"), ruta
         assert nombre not in (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(
@@ -224,9 +224,22 @@ def test_el_protocolo_v4_no_esta_conectado() -> None:
 def test_el_transporte_v4_no_esta_conectado() -> None:
     nombre = "actualizacion_transporte_v4"
     for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
-        if ruta.name == "actualizacion_transporte_v4.py":
+        if ruta.name in ("actualizacion_transporte_v4.py", "solicitud_actualizacion_v4.py"):
             continue
         assert nombre not in ruta.read_text(encoding="utf-8"), ruta
     assert nombre not in (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(
         encoding="utf-8"
     )
+
+
+def test_el_servicio_v4_no_esta_conectado() -> None:
+    nombre = "solicitud_actualizacion_v4"
+    for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+        if ruta.name == "solicitud_actualizacion_v4.py":
+            continue
+        assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+    for ruta in (
+        RAIZ / "deploy" / "ops" / "zascarr_ops.py",
+        RAIZ / "src" / "zascarr" / "main.py",
+    ):
+        assert nombre not in ruta.read_text(encoding="utf-8"), ruta
