@@ -114,3 +114,27 @@ existentes están instaladas; no acredita el futuro ejecutor.
 Es una evaluación estática de systemd, no una prueba de seguridad ni del
 futuro ejecutor. No se arrancaron esas unidades. No existe una unidad de
 actualización que evaluar.
+
+
+## Prueba de punta a punta por el socket real
+
+Se envió **una** petición v1 firmada con `accion="actualizar"` al socket
+`/var/lib/zascarr/ops/ops.sock`, usando la clave root existente y `sudo`; la
+clave no se imprimió ni se copió al repositorio. Respuesta:
+
+```json
+{"v":1,"id":"c3babc...","resultado":"rechazada","codigo":"accion_no_disponible"}
+```
+
+El journal registra una única conexión `zascarr-ops@...` con
+`UID 0`, `resultado=rechazada`, `codigo=accion_no_disponible`, 1 ms después;
+no se inició copia ni actualización. El script temporal se borró.
+
+En la misma ventana aparecieron copias de `update_20261120_1133/1135` y el
+repositorio de producción pasó a `053b2817` (merge #1161). Son actividad
+externa a esta prueba: la petición se envió a las 11:38, fue rechazada y el
+journal de `zascarr-backup.service` no muestra ejecución. No se les atribuye
+al arnés.
+
+**NOT RUN:** unidad de actualización real (no existe), pruebas destructivas,
+reinicios, Docker/PostgreSQL de producción y recuperación.
