@@ -319,14 +319,19 @@ class TestFragmentoDeRecuento:
 
 class TestIgnorar:
 
-    def test_ignorar_devuelve_vacio_para_eliminar_la_tarjeta(self, tmp_path):
+    def test_ignorar_sustituye_la_fila_por_un_recibo_en_su_sitio(self, tmp_path):
+        """#1123: antes la fila se BORRABA (`hx-swap-oob="delete"`); ahora se sustituye en su sitio por un
+        recibo (la posición no salta) que recibe el foco y enlaza a «Ignorados»."""
         file = File(id=uuid4(), file_path=str(tmp_path / "x.cbz"), file_name="x.cbz",
                     file_format=FileFormat.CBZ, review_dismissed=False)
         with use_fake_session(FakeSession(get_map={(File, file.id): file})) as client:
             r = client.post(f"/ui/pendientes/{file.id}/ignorar")
         assert r.status_code == 200
         assert RECONTAR_MENU in r.text          # el menú recuenta
-        assert f'<li id="item-{file.id}" hx-swap-oob="delete"></li>' in r.text
+        assert 'hx-swap-oob="delete"' not in r.text
+        assert f'<li id="item-{file.id}"' in r.text and 'hx-swap-oob="true"' in r.text
+        assert "autofocus" in r.text and "Ignorado: «x.cbz»" in r.text
+        assert 'href="/ui/pendientes/ignorados"' in r.text
         assert file.review_dismissed is True
 
     def test_ignorar_confirma_antes_de_responder(self, tmp_path):

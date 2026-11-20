@@ -1,0 +1,18 @@
+{#- #1123: confirmación integrada de «Ignorar»: identidad (qué archivo), efecto (qué cambia y qué no) y
+    salida (Cancelar, que devuelve el foco al botón). El foco entra por «Cancelar», la opción segura. -#}
+<div class="ignorar-confirmar" role="group" aria-labelledby="ignorar-titulo-{{ f.id }}">
+  {% call ui.aviso("amber", viva=false) %}
+  <p id="ignorar-titulo-{{ f.id }}"><strong>¿Ignorar «{{ f.file_name }}»?</strong></p>
+  <p>Dejará de salir en «Por revisar». El archivo no se mueve ni se borra, y podrás recuperarlo en «Ignorados».</p>
+  <div class="acciones-fila">
+    <button type="button" class="btn"
+            hx-post="/ui/pendientes/{{ f.id }}/ignorar"
+            hx-target="#pend-recontar" hx-swap="innerHTML" hx-disable="this">
+      Sí, ignorar<span class="sr">: «{{ f.file_name }}»</span>
+    </button>
+    <button type="button" class="btn ghost" autofocus
+            hx-get="/ui/pendientes/{{ f.id }}/ignorar/cancelar"
+            hx-target="#ignorar-{{ f.id }}" hx-swap="innerHTML">Cancelar</button>
+  </div>
+  {% endcall %}
+</div>

@@ -138,13 +138,7 @@
           Mostrar también tomos únicos</label>
         <div id="resultados-{{ c.file.id }}" class="series-results"></div>
       </details>
-      <button type="button" class="btn-ignorar"
-              hx-post="/ui/pendientes/{{ c.file.id }}/ignorar"
-              hx-target="#pend-recontar" hx-swap="innerHTML"
-              hx-disable="this"
-              hx-confirm="¿Ignorar este archivo? No volverá a aparecer aquí.">
-        Ignorar<span class="sr">: «{{ c.file.file_name }}»</span>
-      </button>
+      <div id="ignorar-{{ c.file.id }}" class="ignorar-zona">{% set f = c.file %}{% include "_ignorar_boton.html" %}</div>
     </div>
   </div>
 </div>
