@@ -213,7 +213,8 @@ class SeriesService:
             .scalar_subquery()
         )
         orden = (orden or "titulo").strip().lower()
-        if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente"):
+        if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente",
+                          "leido_ultimo"):
             orden = "titulo"
         # #664: `sort_title` puede ser NULL en toda la biblioteca; el título
         # alfabético cae entonces a `title_norm` (norma de `f_title_norm`).
@@ -229,6 +230,16 @@ class SeriesService:
                        titulo.asc().nulls_last(), Series.id.asc())
         elif orden == "anio_asc":
             ordenes = (Series.start_year.asc().nulls_last(),
+                       titulo.asc().nulls_last(), Series.id.asc())
+        elif orden == "leido_ultimo":
+            ultima_lectura = (
+                select(func.max(ReadingProgress.last_read_at))
+                .join(Issue, Issue.id == ReadingProgress.issue_id)
+                .where(Issue.series_id == Series.id)
+                .correlate(Series)
+                .scalar_subquery()
+            )
+            ordenes = (ultima_lectura.desc().nulls_last(),
                        titulo.asc().nulls_last(), Series.id.asc())
         else:
             ordenes = (Series.created_at.desc(), titulo.asc().nulls_last(),

@@ -272,7 +272,8 @@ def _leer_filtros(
         avisos.append("El filtro de lectura no es válido; se ha quitado.")
         leido = ""
     orden = (orden or "").strip().lower()
-    if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente"):
+    if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente",
+                     "leido_ultimo"):
         orden = "titulo"
     coleccion = (coleccion or "").strip().lower()
     if coleccion and coleccion not in COLECCION_TIPOS:
@@ -673,7 +674,7 @@ async def _contexto(
         "ordenes": (
             ("titulo", "A-Z"), ("titulo_desc", "Z-A"),
             ("anio_desc", "Recientes"), ("anio_asc", "Antiguas"),
-            ("reciente", "Añadidas"),
+            ("reciente", "Añadidas"), ("leido_ultimo", "Leídas recientemente"),
         ),
         "vista": filtros_finales.vista,
         "naturaleza": filtros_finales.naturaleza,
