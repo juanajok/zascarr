@@ -202,6 +202,20 @@ con ensayos de `ENOSPC` y memoria; no se ha creado ninguno. Un vigilante de
 `du` puede reaccionar tarde y no equivale a un límite. Además, los resultados de
 fallos sobre qcow2 almacenado en NTFS no prueban durabilidad física de la Pi.
 
+**Instalación real en la VM desechable:** se reinstaló Debian 13.7.0 amd64
+en el qcow2 de pruebas con preseed, sin NIC y con la ISO como único CD. El
+instalador terminó con código 0; el disco arrancó sin la ISO hasta el login
+`ops4lab login:` en `ttyS0`. Se entró como usuario `ops4` con la contraseña
+sintética de laboratorio y se comprobó `systemd 257
+(257.13-1~deb13u1)`. En cambio, `systemctl is-system-running` y
+`hostnamectl --static` devolvieron código 1 y no mostraron texto claro; la VM
+offline puede estar degradada y **no se declara systemd «healthy»**. No se
+instalaron Docker ni PostgreSQL, no se instaló la unidad de actualización, no
+se ejecutó `update.sh` y no se tocó la Pi ni datos reales. Los intentos previos
+con hash de contraseña y usuario equivocados se descartaron; los registros y
+capturas quedan en evidencia privada fuera de Git. Este resultado acredita que
+el laboratorio puede arrancar Debian, no el ejecutor de OPS4.
+
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 
 1. La [guía de instalación Debian](https://www.debian.org/releases/trixie/amd64/apas02.en.html)
