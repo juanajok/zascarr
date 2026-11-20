@@ -20,9 +20,10 @@ import hashlib
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote, urlsplit
 
 import markdown
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -72,15 +73,75 @@ async def acknowledge(db: AsyncSession) -> LegalAcknowledgment:
     return ack
 
 
-async def require_legal_acknowledgment(db: AsyncSession = Depends(get_db)) -> None:
+RETORNO_LEGAL_POR_DEFECTO = "/ui/biblioteca"
+_MAX_RETORNO_LEGAL = 2000
+
+
+def volver_legal(valor: str | None) -> str:
+    """Destino interno seguro para volver tras aceptar el aviso.
+
+    Solo rutas locales de la propia UI. Rechaza esquemas, hosts, ``//``,
+    retrocesos de ruta, controles y el propio aviso legal. La validación se
+    repite al confirmar: el campo oculto no es una autoridad.
+    """
+    if not valor or len(valor) > _MAX_RETORNO_LEGAL:
+        return RETORNO_LEGAL_POR_DEFECTO
+    if any(ord(c) < 32 or ord(c) == 127 or c == "\\" for c in valor):
+        return RETORNO_LEGAL_POR_DEFECTO
+    try:
+        partes = urlsplit(valor)
+    except ValueError:
+        return RETORNO_LEGAL_POR_DEFECTO
+    if partes.scheme or partes.netloc or not partes.path.startswith("/ui/"):
+        return RETORNO_LEGAL_POR_DEFECTO
+    if partes.path == "/ui/legal" or partes.path.startswith("/ui/legal/"):
+        return RETORNO_LEGAL_POR_DEFECTO
+    if ".." in partes.path.split("/"):
+        return RETORNO_LEGAL_POR_DEFECTO
+    return valor
+
+
+def _destino_de_la_peticion(request: Request | None) -> str:
+    """La página desde la que se intentó la acción, si es una ruta UI válida."""
+    if request is None:
+        return RETORNO_LEGAL_POR_DEFECTO
+    candidatos = (
+        request.headers.get("hx-current-url"),
+        request.headers.get("referer"),
+        (f"{request.url.path}?{request.url.query}" if request.url.query else request.url.path)
+        if request.method == "GET" else None,
+    )
+    for candidato in candidatos:
+        if not candidato:
+            continue
+        # Referer llega como URL absoluta: se conserva solo su parte local.
+        try:
+            partes = urlsplit(candidato)
+        except ValueError:
+            continue
+        if partes.scheme or partes.netloc:
+            candidato = partes.path + (f"?{partes.query}" if partes.query else "")
+        destino = volver_legal(candidato)
+        if destino != RETORNO_LEGAL_POR_DEFECTO:
+            return destino
+    return RETORNO_LEGAL_POR_DEFECTO
+
+
+async def require_legal_acknowledgment(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> None:
     """Dependencia de FastAPI — aplicar SOLO a rutas que disparen
     búsqueda/descarga (crear o reintentar un item de wishlist). El 403
     lleva HX-Redirect: si la petición vino de HTMX (hx-post/hx-get),
     htmx navega solo a /ui/legal — mecanismo nativo, cero JS nuevo. Un
     cliente JSON puro recibe el mismo 403 con el mismo `detail`."""
     if not await is_acknowledged(db):
+        destino = _destino_de_la_peticion(request)
+        url = "/ui/legal"
+        if destino != RETORNO_LEGAL_POR_DEFECTO:
+            url += f"?volver={quote(destino, safe='')}"
         raise HTTPException(
             status_code=403,
             detail="legal_acknowledgment_required",
-            headers={"HX-Redirect": "/ui/legal"},
+            headers={"HX-Redirect": url},
         )

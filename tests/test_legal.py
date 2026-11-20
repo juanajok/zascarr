@@ -7,18 +7,20 @@ y su docstring) — biblioteca/pendientes/ficha de serie no llevan esto.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import LegalAcknowledgment
 from zascarr.services.legal import (
-    current_legal_version, get_acknowledgment, is_acknowledged,
+    current_legal_version,
+    get_acknowledgment,
+    is_acknowledged,
     require_legal_acknowledgment,
 )
 
@@ -92,7 +94,7 @@ class TestAcknowledgment:
     @pytest.mark.asyncio
     async def test_aceptado_con_fila_de_la_version_actual(self):
         ack = LegalAcknowledgment(legal_version=current_legal_version(),
-                                  accepted_at=datetime.now(timezone.utc))
+                                  accepted_at=datetime.now(UTC))
         session = FakeSession(rows=[ack])
         assert await is_acknowledged(session) is True
 
@@ -111,16 +113,21 @@ class TestRequireLegalAcknowledgment:
     async def test_lanza_403_con_hx_redirect_si_no_aceptado(self):
         session = FakeSession(rows=[])
         with pytest.raises(HTTPException) as exc_info:
-            await require_legal_acknowledgment(db=session)
+            await require_legal_acknowledgment(request=_request(), db=session)
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "legal_acknowledgment_required"
-        assert exc_info.value.headers["HX-Redirect"] == "/ui/legal"
+        assert exc_info.value.headers["HX-Redirect"] == "/ui/legal?volver=%2Fui%2Fdeseados"
 
     @pytest.mark.asyncio
     async def test_no_lanza_si_aceptado(self):
         ack = LegalAcknowledgment(legal_version=current_legal_version())
         session = FakeSession(rows=[ack])
-        await require_legal_acknowledgment(db=session)  # no debe lanzar
+        await require_legal_acknowledgment(request=_request(), db=session)  # no debe lanzar
+
+
+def _request(path="/ui/deseados", query=""):
+    return Request({"type": "http", "method": "GET", "path": path,
+                    "query_string": query.encode(), "headers": []})
 
 
 def override_get_db(session):
@@ -150,7 +157,7 @@ class TestApiLegalStatus:
 
     def test_aceptado(self):
         ack = LegalAcknowledgment(legal_version=current_legal_version(),
-                                  accepted_at=datetime.now(timezone.utc))
+                                  accepted_at=datetime.now(UTC))
         with use_fake_session(FakeSession(rows=[ack])) as client:
             r = client.get("/api/legal/status")
         assert r.json()["accepted"] is True
@@ -181,7 +188,7 @@ class TestUiLegal:
 
     def test_wizard_muestra_estado_si_ya_aceptado(self):
         ack = LegalAcknowledgment(legal_version=current_legal_version(),
-                                  accepted_at=datetime.now(timezone.utc))
+                                  accepted_at=datetime.now(UTC))
         with use_fake_session(FakeSession(rows=[ack])) as client:
             r = client.get("/ui/legal")
         assert "aceptado" in r.text.lower()
@@ -191,7 +198,7 @@ class TestUiLegal:
         with use_fake_session(session) as client:
             r = client.post("/ui/legal/accept", data={"acepto_1": "true"}, follow_redirects=False)
         assert r.status_code == 303
-        assert r.headers["location"] == "/ui/legal"
+        assert r.headers["location"] == "/ui/legal?volver=%2Fui%2Fbiblioteca&falta=1"
         assert session.added == []
 
     def test_accept_con_las_tres_casillas_registra_y_redirige(self):
@@ -212,3 +219,64 @@ class TestUiLegal:
         assert r.status_code == 200
         assert "Aviso Legal" in r.text
         assert "<h1>" in r.text or "<h2>" in r.text
+
+
+class TestUatp01RetornoDelAviso:
+    def test_aceptar_desde_deseados_vuelve_al_contexto(self):
+        session = FakeSession()
+        with use_fake_session(session) as client:
+            r = client.post(
+                "/ui/legal/accept",
+                data={"acepto_1": "true", "acepto_2": "true", "acepto_3": "true",
+                      "volver": "/ui/deseados?q=flash&vista=lista"},
+                follow_redirects=False,
+            )
+        assert r.status_code == 303
+        assert r.headers["location"] == "/ui/deseados?q=flash&vista=lista"
+        assert len(session.added) == 1
+
+    @pytest.mark.parametrize("destino", [
+        "https://evil.example/x",
+        "//evil.example/x",
+        "/ui/legal",
+        "/ui/../api/health",
+        "/api/health",
+    ])
+    def test_destino_invalido_cae_al_respaldo_local(self, destino):
+        session = FakeSession()
+        with use_fake_session(session) as client:
+            r = client.post(
+                "/ui/legal/accept",
+                data={"acepto_1": "true", "acepto_2": "true", "acepto_3": "true",
+                      "volver": destino},
+                follow_redirects=False,
+            )
+        assert r.headers["location"] == "/ui/biblioteca"
+
+    def test_falta_conserva_el_destino_y_lo_explica(self):
+        session = FakeSession()
+        with use_fake_session(session) as client:
+            r = client.post(
+                "/ui/legal/accept",
+                data={"acepto_1": "true", "volver": "/ui/deseados?q=flash"},
+                follow_redirects=False,
+            )
+        assert r.headers["location"] == (
+            "/ui/legal?volver=%2Fui%2Fdeseados%3Fq%3Dflash&falta=1")
+        assert session.added == []
+
+    def test_wizard_conserva_destino_en_el_formulario(self):
+        with use_fake_session(FakeSession(rows=[])) as client:
+            r = client.get("/ui/legal?volver=%2Fui%2Fdeseados%3Fq%3Dflash")
+        assert 'name="volver" value="/ui/deseados?q=flash"' in r.text
+
+    @pytest.mark.asyncio
+    async def test_el_gate_conserva_la_pagina_htmx(self):
+        session = FakeSession(rows=[])
+        request = Request({
+            "type": "http", "method": "POST", "path": "/ui/wishlist/anadir",
+            "query_string": b"", "headers": [(b"hx-current-url", b"http://localhost/ui/deseados?q=flash")],
+        })
+        with pytest.raises(HTTPException) as exc:
+            await require_legal_acknowledgment(request=request, db=session)
+        assert exc.value.headers["HX-Redirect"] == "/ui/legal?volver=%2Fui%2Fdeseados%3Fq%3Dflash"
