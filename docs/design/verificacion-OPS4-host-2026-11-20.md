@@ -102,3 +102,15 @@ El modo 777 del enlace no expone el contenido.
 Docker/PostgreSQL de producción, fallos de `fsync` y actualización de punta a
 punta. La prueba transitoria acredita que systemd funciona y que las unidades
 existentes están instaladas; no acredita el futuro ejecutor.
+
+
+## Evaluación de endurecimiento (solo lectura)
+
+`systemd-analyze security` sobre las unidades instaladas:
+
+- `zascarr-ops@.service`: **exposición 3.2 (OK)**.
+- `zascarr-restaurar@.service`: **exposición 4.4 (OK)**.
+
+Es una evaluación estática de systemd, no una prueba de seguridad ni del
+futuro ejecutor. No se arrancaron esas unidades. No existe una unidad de
+actualización que evaluar.
