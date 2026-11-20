@@ -38,3 +38,33 @@ auxiliar (comprobado por `test_ops4_aislamiento.py`).
 La auditoría prueba que el **diff** no toca runtime; no aprueba el diseño del
 futuro ejecutor, la persistencia durable, la fusión ni el despliegue. La PR
 #1159 permanece en borrador.
+
+
+## Auditoría de cierre del incremento actual (2026-11-20)
+
+Base frente a `origin/main`: `61f4d53ab8813526a32a6724c8dee9d10ba2f3a9`.
+Cabeza inspeccionada: `3cfa7117`.
+
+El diff vigente **sí modifica runtime**, además de altas de pruebas/documentación:
+
+- `src/zascarr/web/templates/estado.html`: bloque informativo con botón
+  `disabled`, sin formulario, `hx-*`, `onclick` ni acción.
+- Cuatro módulos nuevos en `src/zascarr/services/` (transporte, protocolo de
+  petición, preparación de solicitud y lectura de estado). No están importados
+  por `main.py`, routers web/API ni el auxiliar; el propio servicio de solicitud
+  solo importa el constructor de protocolo. Las pruebas estáticas de
+  aislamiento lo comprueban.
+
+No hay cambios en `scripts/**`, `deploy/systemd/**`, `Dockerfile`,
+`docker-compose.yml`, el auxiliar `zascarr_ops.py` ni el instalador. La acción
+`actualizar` continúa rechazada y no existe unidad de actualización. En
+consecuencia, este incremento **no puede ejecutar la actualización desde la UI**
+y la mantiene deshabilitada.
+
+Evidencia de esta cabeza: suite completa **8660 passed, 2431 skipped, 0 failed,
+7 warnings**; 670 pruebas OPS4/paridad; Ruff limpio en módulos aislados, tests
+OPS4 y arnés de restauración. El caso PostgreSQL real con Docker quedó omitido
+sin opt-in. Persisten M3 (concordancia efectiva de seguridad app/host), la
+reserva global, el cerrojo, la unidad endurecida, la integración UI/auxiliar y
+la revisión SecOps del SHA final. Esta auditoría no fusiona, habilita ni
+despliega nada.
