@@ -87,9 +87,11 @@ const salida = {
   fullscreenConApi: con.els["lector-pantalla-completa"].hidden === false,
   fullscreenSinApi: sin.els["lector-pantalla-completa"].hidden === true,
   fullscreenOcultaBarra: (() => {
+    con.els["lector-menu"].hidden = false;
     con.fire(con.els["lector-pantalla-completa"], "click");
     (con.doc.listeners.fullscreenchange || []).forEach((f) => f({}));
-    const oculta = con.root.dataset.chrome === "oculto";
+    const oculta = con.root.dataset.chrome === "oculto" &&
+      con.els["lector-menu"].hidden === true;
     con.doc.fullscreenElement = null;
     (con.doc.listeners.fullscreenchange || []).forEach((f) => f({}));
     return oculta && con.root.dataset.chrome === "";

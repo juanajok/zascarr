@@ -503,12 +503,21 @@
   }
   const alCambiarPantalla = () => {
     if (document.fullscreenElement) {
-      // En pantalla completa la barra no debe comerse la parte de arriba de la página.
+      // El botón que entra en pantalla completa vive en la barra: si conserva el foco,
+      // `:focus-within` impide que la barra se oculte. Se cierra el menú y se pasa el
+      // foco al lienzo para que la imagen ocupe toda la pantalla.
+      if (menu && !menu.hidden) {
+        menu.hidden = true;
+        menuBoton.setAttribute("aria-expanded", "false");
+      }
       raiz.dataset.chrome = "oculto";
       if (temporizadorChrome !== null && typeof clearTimeout === "function") {
         clearTimeout(temporizadorChrome);
       }
       temporizadorChrome = null;
+      if (lienzo && typeof lienzo.focus === "function") {
+        lienzo.focus({ preventScroll: true });
+      }
     } else {
       raiz.dataset.chrome = "";
       programaOculto();
