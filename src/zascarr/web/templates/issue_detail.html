@@ -4,35 +4,37 @@
 {% from "_atribucion_fandom.html" import aviso_de_atribucion %}
 <a class="back-link" href="/ui/series/{{ series.id }}">{{ textos.volver }}</a>
 <div class="issue-header">
+  {#- Portada sin pie: es decorativa (`alt=""`) y el título de al lado ya dice de qué número es. -#}
   <div class="issue-portada">
     {{ ui.portada(issue.issue_number or issue.title or series.title, issue.id, "/ui/series/%s/numero/%s/portada.jpg" % (series.id, issue.id), "issue-cover") }}
-    <p class="muted issue-portada-pie">{{ textos.portada_numero }}</p>
   </div>
-  <div>
+  <div class="issue-titulos">
     <h1>{% if issue.issue_number %}Número {{ issue.issue_number }}{% else %}Número{% endif %}</h1>
     {% if issue.title %}<p class="titulo-frase subtitulo-numero">{{ issue.title }}</p>{% endif %}
     {% if not issue.issue_number %}<p class="subtitle">Sin número</p>{% endif %}
     <p class="series-intro">Todo lo que ZascArr sabe de este número.</p>
     {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
-    <p>
-      <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar">Editar el número</a>
-      <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/datos">Completar datos</a>
-      {% if lector_archivo %}
-      <a class="btn primary" href="/ui/leer/{{ lector_archivo.id }}">
-        {% if lector_pagina > 1 %}Continuar (pág. {{ lector_pagina }}){% else %}Leer{% endif %}
-      </a>
-      {% endif %}
-    </p>
+  </div>
+  {#- Todas las acciones en una fila, con el aspecto de las de la cabecera de Biblioteca; «Leer» es la
+      principal y va primero. «Añadir a una lista» abre su panel debajo, sin mover la fila. -#}
+  <div class="issue-acciones">
+    {% if lector_archivo %}
+    <a class="btn primary sm" href="/ui/leer/{{ lector_archivo.id }}">
+      {% if lector_pagina > 1 %}Continuar (pág. {{ lector_pagina }}){% else %}Leer{% endif %}
+    </a>
+    {% endif %}
+    <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar">Editar el número</a>
+    <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/datos">Completar datos</a>
+    {% if ficha.archivos %}
+    <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/mejorar">
+      <button type="submit" class="btn ghost sm">Buscar una edición mejor</button>
+    </form>
+    {% endif %}
     <details class="anadir-a-lista" hx-get="/ui/listas/opciones/{{ series.id }}/{{ issue.id }}"
              hx-trigger="toggle once" hx-target="#lista-opciones" hx-swap="innerHTML">
       <summary class="btn ghost sm">Añadir a una lista</summary>
       <div id="lista-opciones"><p class="muted">Cargando listas…</p></div>
     </details>
-    {% if ficha.archivos %}
-    <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/mejorar" class="inline-desbloquear">
-      <button type="submit" class="btn ghost sm">Buscar una edición mejor</button>
-    </form>
-    {% endif %}
   </div>
 </div>
 {% if colecciones %}

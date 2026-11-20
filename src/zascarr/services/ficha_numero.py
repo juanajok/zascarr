@@ -46,7 +46,6 @@ TEXTOS = {
     "sin_archivos": "No hay ningún archivo vinculado a este número. Puedes vincularlo desde la ficha de la serie.",
     "sin_procedencia": "No consta todavía de dónde sale este dato.",
     "portada_serie": "Portada de la serie",
-    "portada_numero": "Portada del número",
     "publicacion": "Publicación",
     "isbn": "ISBN",
     "volver": "← Volver a la serie",
