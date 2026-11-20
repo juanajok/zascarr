@@ -9,6 +9,15 @@
   </select>
 </div>
 <div class="filtro-campo">
+  <label for="f-puntuacion">Puntuación</label>
+  <select name="puntuacion" id="f-puntuacion">
+    <option value="">Todas</option>
+    <option value="con" {% if filtros.puntuacion == "con" %}selected{% endif %}>Con valoración</option>
+    <option value="sin" {% if filtros.puntuacion == "sin" %}selected{% endif %}>Sin valorar</option>
+    <option value="4-5" {% if filtros.puntuacion == "4-5" %}selected{% endif %}>4–5</option>
+  </select>
+</div>
+<div class="filtro-campo">
   <label for="f-naturaleza">Naturaleza</label>
   <select name="naturaleza" id="f-naturaleza">
     <option value="">Toda naturaleza</option>

@@ -93,6 +93,7 @@ class SeriesService:
         coleccion_ids: set[UUID] | None = None,
         kind: str | None = None,
         format: str | None = None,
+        puntuacion: str | None = None,
         *,
         corregir_pagina: bool = True,
     ) -> tuple[list[Series], int, int]:
@@ -113,6 +114,19 @@ class SeriesService:
             # EXISTS por id: una serie con varios formatos aparece UNA vez.
             query = query.where(Series.id.in_(
                 select(Issue.series_id).where(Issue.format == format)))
+        rating_max = (
+            select(func.max(ReadingProgress.rating))
+            .join(Issue, Issue.id == ReadingProgress.issue_id)
+            .where(Issue.series_id == Series.id)
+            .correlate(Series)
+            .scalar_subquery()
+        )
+        if puntuacion == "con":
+            query = query.where(rating_max.is_not(None))
+        elif puntuacion == "sin":
+            query = query.where(rating_max.is_(None))
+        elif puntuacion == "4-5":
+            query = query.where(rating_max >= 4)
         if status:
             query = query.where(Series.status == status)
         if coleccion:
@@ -214,7 +228,7 @@ class SeriesService:
         )
         orden = (orden or "titulo").strip().lower()
         if orden not in ("titulo", "titulo_desc", "anio_desc", "anio_asc", "reciente",
-                          "leido_ultimo"):
+                         "valoracion", "leido_ultimo"):
             orden = "titulo"
         # #664: `sort_title` puede ser NULL en toda la biblioteca; el título
         # alfabético cae entonces a `title_norm` (norma de `f_title_norm`).
@@ -231,6 +245,16 @@ class SeriesService:
         elif orden == "anio_asc":
             ordenes = (Series.start_year.asc().nulls_last(),
                        titulo.asc().nulls_last(), Series.id.asc())
+        elif orden == "valoracion":
+            rating_orden = (
+                select(func.max(ReadingProgress.rating))
+                .join(Issue, Issue.id == ReadingProgress.issue_id)
+                .where(Issue.series_id == Series.id)
+                .correlate(Series)
+                .scalar_subquery()
+            )
+            ordenes = (rating_orden.desc().nulls_last(), titulo.asc().nulls_last(),
+                       Series.id.asc())
         elif orden == "leido_ultimo":
             ultima_lectura = (
                 select(func.max(ReadingProgress.last_read_at))
@@ -289,6 +313,7 @@ class SeriesService:
         coleccion_ids: set[UUID] | None = None,
         kind: str | None = None,
         format: str | None = None,
+        puntuacion: str | None = None,
     ) -> tuple[list[Series], int]:
         """Contrato histórico `(items, total)` para API y tests."""
         items, total, _ = await self._list_series(
@@ -304,7 +329,7 @@ class SeriesService:
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
-            kind=kind, format=format, corregir_pagina=False,
+            kind=kind, format=format, puntuacion=puntuacion, corregir_pagina=False,
         )
         return items, total
 
@@ -333,6 +358,7 @@ class SeriesService:
         coleccion_ids: set[UUID] | None = None,
         kind: str | None = None,
         format: str | None = None,
+        puntuacion: str | None = None,
     ) -> tuple[list[Series], int, int]:
         """Como `list_series`, pero devuelve también la página efectiva.
 
@@ -352,7 +378,7 @@ class SeriesService:
             etiquetas_positivas=etiquetas_positivas,
             etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             orden=orden, coleccion=coleccion, coleccion_ids=coleccion_ids,
-            kind=kind, format=format,
+            kind=kind, format=format, puntuacion=puntuacion,
         )
 
     async def list_publishers_with_series(self) -> list[Publisher]:
