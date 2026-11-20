@@ -306,6 +306,20 @@
     raiz.dataset.chrome = "";
     programaOculto();
   };
+  const ocultarBarraInmersiva = () => {
+    if (menu && !menu.hidden) {
+      menu.hidden = true;
+      menuBoton.setAttribute("aria-expanded", "false");
+    }
+    raiz.dataset.chrome = "oculto";
+    if (temporizadorChrome !== null && typeof clearTimeout === "function") {
+      clearTimeout(temporizadorChrome);
+    }
+    temporizadorChrome = null;
+    if (lienzo && typeof lienzo.focus === "function") {
+      lienzo.focus({ preventScroll: true });
+    }
+  };
   const cambiarMenu = (abierto, devolverFoco = false) => {
     menu.hidden = !abierto;
     menuBoton.setAttribute("aria-expanded", String(abierto));
@@ -331,6 +345,11 @@
     if (modo !== "doble") { desplazamiento = 0; paginaBVisible = false; }
     else decidirPareja();
     try { window.localStorage.setItem("zascarr.lector.modo", modo); } catch (_) { /* igual */ }
+    if (modo === "pantalla") ocultarBarraInmersiva();
+    else {
+      raiz.dataset.chrome = "";
+      programaOculto();
+    }
     pinta();
   };
   const anunciar = (mensaje) => {
@@ -503,21 +522,7 @@
   }
   const alCambiarPantalla = () => {
     if (document.fullscreenElement) {
-      // El botón que entra en pantalla completa vive en la barra: si conserva el foco,
-      // `:focus-within` impide que la barra se oculte. Se cierra el menú y se pasa el
-      // foco al lienzo para que la imagen ocupe toda la pantalla.
-      if (menu && !menu.hidden) {
-        menu.hidden = true;
-        menuBoton.setAttribute("aria-expanded", "false");
-      }
-      raiz.dataset.chrome = "oculto";
-      if (temporizadorChrome !== null && typeof clearTimeout === "function") {
-        clearTimeout(temporizadorChrome);
-      }
-      temporizadorChrome = null;
-      if (lienzo && typeof lienzo.focus === "function") {
-        lienzo.focus({ preventScroll: true });
-      }
+      ocultarBarraInmersiva();
     } else {
       raiz.dataset.chrome = "";
       programaOculto();
@@ -540,11 +545,12 @@
     const sigueEnOpciones = evento.relatedTarget === menuBoton || menu.contains(evento.relatedTarget);
     if (estabaEnOpciones && !sigueEnOpciones) cambiarMenu(false);
   });
-  if (typeof setTimeout === "function") programaOculto();
+  if (modo === "pantalla") ocultarBarraInmersiva();
+  else if (typeof setTimeout === "function") programaOculto();
 
   document.addEventListener("pointermove", (evento) => {
-    // En pantalla completa la barra está oculta; acercarse arriba la muestra.
-    if (document.fullscreenElement && evento.clientY <= 90) despertarChrome();
+    // Con la barra oculta, acercarse a la franja superior la muestra.
+    if (raiz.dataset.chrome === "oculto" && evento.clientY <= 90) despertarChrome();
   }, { passive: true });
   document.addEventListener("keydown", (evento) => {
     if (evento.defaultPrevented || evento.ctrlKey || evento.altKey || evento.metaKey || evento.isComposing) return;
