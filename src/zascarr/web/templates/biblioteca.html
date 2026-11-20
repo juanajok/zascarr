@@ -26,14 +26,17 @@
 {% else %}
 <form id="filtros" class="barra-biblioteca" action="/ui/biblioteca" method="get"
       hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML"
-      hx-trigger="change, submit">
+      hx-trigger="change, submit" hx-sync="this:replace">
   <input type="hidden" id="f-vista" name="vista" value="{{ filtros.vista }}">
   <input type="hidden" id="f-densidad" name="densidad" value="{{ densidad }}">
   <input type="hidden" id="f-modo" name="modo" value="{{ modo }}">
   <div class="barra-busqueda">
     <label class="sr" for="f-q">Buscar por título</label>
-    {% set valor = filtros.q %}{% set oob = false %}{% set foco = false %}
-    {% include "_campo_q.html" %}
+    <div class="busqueda-campo">
+      {% set valor = filtros.q %}{% set oob = false %}{% set foco = false %}
+      {% include "_campo_q.html" %}
+      <button type="submit" class="btn" id="f-buscar">Buscar</button>
+    </div>
   </div>
 
   <div class="barra-acciones">
@@ -60,6 +63,13 @@
   </div>
 </form>
 
+{#- #1120: región viva estable; `biblioteca-filtros.js` clona aquí el aviso cuando falla una petición
+    que actualiza la rejilla (red caída o 4xx/5xx) y deja a la vista la lista anterior. -#}
+<div id="busqueda-fallo" role="alert" aria-atomic="true"></div>
+<template id="busqueda-fallo-plantilla">
+  {% call ui.aviso("warn", viva=false) %}<span>No se pudo aplicar la búsqueda<span data-consulta></span>. Los resultados de abajo son los anteriores.</span>
+  <button type="button" class="btn" data-reintentar>Reintentar</button>{% endcall %}
+</template>
 <div id="rejilla">
   {% include "_rejilla_biblioteca.html" %}
 </div>

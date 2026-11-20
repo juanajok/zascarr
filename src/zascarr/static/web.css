@@ -2278,6 +2278,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 .barra-busqueda { flex: 1 1 320px; max-width: 560px; min-width: 0; }
 .barra-busqueda input[type="search"] { width: 100%; min-height: 44px; }
+/* #1120: campo + botón «Buscar» (visible y operable sin JavaScript). */
+.busqueda-campo { display: flex; gap: var(--space-2); align-items: stretch; }
+.busqueda-campo input[type="search"] { flex: 1 1 auto; min-width: 0; }
+.busqueda-campo .btn { flex: 0 0 auto; min-height: 44px; min-width: 44px; }
+#busqueda-fallo:empty { display: none; }
+#busqueda-fallo .btn { display: block; margin-top: var(--space-2); }
+#rejilla[data-obsoleta] { opacity: .55; }
 .barra-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-left: auto; min-width: 0; }
 .barra-acciones > * { min-height: 44px; }
 .barra-contador {
