@@ -11,8 +11,13 @@ autorizada: esa identidad y los permisos del host deben comprobarse aparte.
 """
 from __future__ import annotations
 
+import contextlib
+import os
 import re
+import selectors
+import signal
 import subprocess
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -29,12 +34,61 @@ _CONSULTA = (
 )
 
 
+def _ejecutar_acotado(
+    argv: list[str], *, env: dict[str, str], stdin: int, stdout: int,
+    stderr: int, timeout: float, check: bool, close_fds: bool,
+) -> subprocess.CompletedProcess[bytes]:
+    """Lee como máximo MAX_SALIDA+1 bytes y mata el cliente local si excede límites.
+
+    No equivale a cancelar una consulta ya enviada al daemon Docker. No usa
+    communicate(): un productor ilimitado no puede agotar la memoria del lector.
+    El plazo cubre lectura, EOF y espera normal del cliente. La creación y la
+    recogida tras SIGKILL dependen del kernel; no es un límite de tiempo real.
+    """
+    if check or stdout != subprocess.PIPE:
+        raise ValueError("configuración de ejecución no admitida")
+    deadline = time.monotonic() + timeout
+    with subprocess.Popen(
+        argv, env=env, stdin=stdin, stdout=stdout, stderr=stderr,
+        close_fds=close_fds, start_new_session=True,
+    ) as process:
+        finished = False
+        try:
+            assert process.stdout is not None
+            output = bytearray()
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not selector.select(remaining):
+                        raise subprocess.TimeoutExpired(argv, timeout)
+                    chunk = os.read(process.stdout.fileno(), MAX_SALIDA + 1 - len(output))
+                    if not chunk:
+                        break
+                    output.extend(chunk)
+                    if len(output) > MAX_SALIDA:
+                        raise ValueError("salida del cliente por encima del límite")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(argv, timeout)
+            code = process.wait(timeout=remaining)
+            finished = True
+            return subprocess.CompletedProcess(argv, code, bytes(output))
+        finally:
+            # Limpia también descendientes que hayan heredado el pipe. El grupo
+            # es exclusivo del hijo, nunca el grupo del auxiliar o de pytest.
+            if not finished:
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+
+
 class LectorCredenciales:
     """Orden fija; el llamador puede inyectar la ejecución para probar fallos."""
 
     def __init__(
         self,
-        ejecutar: Callable[..., Any] = subprocess.run,
+        ejecutar: Callable[..., Any] = _ejecutar_acotado,
         *,
         db_user: str = DB_USER_POR_DEFECTO,
         db_name: str = DB_NAME_POR_DEFECTO,
