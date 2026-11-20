@@ -33,7 +33,6 @@ def test_acciones_de_fila_agrupadas():
 
 
 def test_acciones_sueltas_a_44_px():
-    from pathlib import Path as _P
-    css = _P("src/zascarr/static/web.css").read_text()
+    css = Path("src/zascarr/static/web.css").read_text()
     assert ".lista-borrar .btn" in css and ".lista-opciones-gestion .btn" in css
-    assert "lista-opciones-gestion" in _P("src/zascarr/web/templates/_lista_opciones.html").read_text()
+    assert "lista-opciones-gestion" in Path("src/zascarr/web/templates/_lista_opciones.html").read_text()

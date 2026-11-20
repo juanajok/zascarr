@@ -3016,7 +3016,7 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .lista-items .archivo-fila { flex-wrap: wrap; align-items: center; min-height: 44px; }
 .lista-item-orden { min-width: 2ch; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
 .lista-items form.inline, .lista-borrar { display: inline; }
-.lista-items .btn, .form-lista-opciones .btn { min-height: 44px; }
+.lista-items .btn, .form-lista-opciones .btn, .lista-borrar .btn, .lista-opciones-gestion .btn { min-height: 44px; }
 .lista-borrar { display: block; margin-top: var(--space-4); }
 
 /* #1078: archivo preferido para leer */
