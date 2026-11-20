@@ -193,6 +193,15 @@ agregada de RAM física. `RLIMIT_CPU` es tiempo de CPU, no un plazo de pared.
 Los 12 GiB virtuales tampoco garantizan una cuota física; siguen pendientes el
 límite total efectivo y el aislamiento adicional antes de la instalación.
 
+Inspección adicional del entorno: el filesystem del laboratorio aparece como
+`ntfs3`; `/sys/fs/cgroup` es cgroup2 montado de solo lectura, el bus de
+`systemctl --user` no está disponible y no aparecen `/dev/fuse` ni `/dev/kvm`.
+No se ha demostrado aquí un cgroup delegado ni una cuota física agregada. Una
+posible vía futura es un volumen con cuota ya provisionada y un cgroup delegado,
+con ensayos de `ENOSPC` y memoria; no se ha creado ninguno. Un vigilante de
+`du` puede reaccionar tarde y no equivale a un límite. Además, los resultados de
+fallos sobre qcow2 almacenado en NTFS no prueban durabilidad física de la Pi.
+
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 
 1. La [guía de instalación Debian](https://www.debian.org/releases/trixie/amd64/apas02.en.html)
