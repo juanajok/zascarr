@@ -121,14 +121,22 @@ obligatorios. El arnés debe comprobarlos antes de cada acción destructiva y
 fallar cerrado ante cualquier ambigüedad. No se autoriza borrar imágenes ni
 recursos fuera de ese laboratorio.
 
-**Disponibilidad observada, no prueba de ejecución:** QEMU 10.2.1 y libvirt
-12.0.0 están presentes; `/dev/kvm` no aparece en este entorno, por lo que solo
-se podría valorar TCG, más lento. Hay recursos aparentes, pero no se ha probado
-permiso para crear VM, imagen de SO, red de aprovisionamiento, snapshots ni el
-stack completo. No se ha arrancado ninguna VM. Antes de crearla: seleccionar
-imagen verificable, comprobar permisos y disponibilidad de red/recursos, y
-registrar el nombre y ruta exactos; no descargar ni instalar en el host a
-ciegas. Sin laboratorio disponible, las pruebas de host son **NOT RUN**.
+**Sondeo QEMU, no prueba de OPS4:** QEMU 10.2.1 y libvirt 12.0.0 están
+presentes; `/dev/kvm` no aparece en este entorno. Se ha iniciado y terminado
+QEMU con `-machine q35,accel=tcg -nodefaults -nic none -display none -S` y
+128 MiB, sin discos ni imagen; QMP respondió `prelaunch`, `running=false` y
+`query-block=[]`, y aceptó `quit`. No arrancó ningún sistema invitado. No se
+ha probado la imagen de SO, red de aprovisionamiento, snapshots ni el stack
+completo. Ninguna VM existente se ha iniciado o modificado.
+
+La [guía oficial de Debian](https://www.debian.org/CD/verify.es.html) describe
+sumas firmadas para imágenes de instalación. `gpgv` está instalado, pero no se
+ha identificado una clave de firma CD local de confianza ni se ha verificado
+una imagen. Una ISO netinst puede requerir red y no demuestra un laboratorio
+completo offline. Deben decidirse imagen, cadena de confianza y aprovisionamiento
+antes de iniciar la instalación; no se asumirá que la red de QEMU por defecto
+impide acceso a la LAN. Hay recursos aparentes, sin garantías de cuota real.
+Sin VM y stack preparados, las pruebas de host siguen **NOT RUN**.
 
 ### Matriz mínima de interrupciones y oráculos
 
