@@ -1833,9 +1833,11 @@ async def elegir_archivo_lectura(series_id: UUID, issue_id: UUID, request: Reque
     if issue is None or issue.series_id != series_id:
         raise HTTPException(status_code=404, detail="Número no encontrado")
     metadata = dict(issue.metadata_ or {})
-    if accion == "quitar" or not file_id:
+    if accion == "quitar":
         metadata.pop("lector_archivo", None)
     else:
+        if not file_id:
+            raise HTTPException(status_code=400, detail="Elige un archivo para leer.")
         legibles = {a.id for a in await archivos_legibles(db, issue_id)}
         if file_id not in legibles:
             raise HTTPException(status_code=400, detail="Ese archivo no se puede leer.")

@@ -104,7 +104,7 @@
       {% for a in archivos_lectura %}
       <label class="archivo-preferido-opcion">
         <input type="radio" name="file_id" value="{{ a.id }}"
-               {% if preferido_id == a.id %}checked{% endif %}>
+               {% if preferido_id == a.id or (not preferido_id and lector_archivo and lector_archivo.id == a.id) %}checked{% endif %}>
         <span>{{ a.nombre }} <span class="muted">({{ a.formato }})</span></span>
       </label>
       {% endfor %}

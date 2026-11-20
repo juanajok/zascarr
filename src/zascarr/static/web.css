@@ -2988,6 +2988,7 @@ body:has(.lector-escena) .skip { z-index: 20; }
 /* #1078: archivo preferido para leer */
 .archivo-preferido { margin: var(--space-2) 0; }
 .archivo-preferido fieldset { border: var(--border-chip) solid var(--ink-soft); border-radius: var(--radius-panel); padding: var(--space-2); }
+.archivo-preferido legend { min-height: 44px; display: inline-flex; align-items: center; padding: 0 var(--space-1); font-weight: 700; }
 .archivo-preferido-opcion { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; }
 .archivo-preferido-opcion input { width: 24px; height: 24px; accent-color: var(--ink); }
 .archivo-preferido-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }

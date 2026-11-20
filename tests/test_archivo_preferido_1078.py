@@ -58,6 +58,16 @@ async def test_endpoint_guarda_quita_y_valida_ajeno(entorno):
                    is_missing=False))
         await s.commit()
     async with cliente() as c:
+        detalle = await c.get(f"/ui/series/{sid}/numero/{iid}")
+        assert detalle.status_code == 200
+        import re
+        # Sin preferencia, el radio por defecto es el archivo que abrirá Leer.
+        assert re.search(rf'value="{f1}"[^>]*checked', detalle.text)
+        # Elegir sin archivo no borra nada ni guarda.
+        vacio = await c.post(f"/ui/series/{sid}/numero/{iid}/archivo-lectura",
+                             data={"file_id": "", "accion": "elegir"},
+                             follow_redirects=False)
+        assert vacio.status_code == 400
         r = await c.post(f"/ui/series/{sid}/numero/{iid}/archivo-lectura",
                          data={"file_id": str(f2), "accion": "elegir"},
                          follow_redirects=False)
@@ -67,6 +77,10 @@ async def test_endpoint_guarda_quita_y_valida_ajeno(entorno):
         assert issue.metadata_["lector_archivo"] == str(f2)
         assert (await lector.archivo_por_defecto(s, iid)).id == str(f2)
     async with cliente() as c:
+        # Un elegir vacío posterior no borra el preferido ya guardado.
+        assert (await c.post(f"/ui/series/{sid}/numero/{iid}/archivo-lectura",
+                             data={"file_id": "", "accion": "elegir"},
+                             follow_redirects=False)).status_code == 400
         assert (await c.post(f"/ui/series/{sid}/numero/{iid}/archivo-lectura",
                              data={"file_id": str(uuid4()), "accion": "elegir"},
                              follow_redirects=False)).status_code == 400
@@ -94,4 +108,6 @@ def test_plantilla_control_solo_con_varios_y_a11y():
     assert "<legend>Archivo para leer</legend>" in t
     assert 'aria-' not in t.split("archivo-preferido", 1)[1].split("</form>", 1)[0] or True
     assert "min-height: 44px" in css
+    assert ".archivo-preferido legend" in css
+    assert "not preferido_id and lector_archivo" in t
     assert "El archivo preferido ya no está disponible" in t
