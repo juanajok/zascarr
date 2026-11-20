@@ -887,3 +887,12 @@ class TestFocoDeRetorno:
         assert "autofocus" not in r.text
         assert "set-cookie" not in r.headers
         assert r.headers["cache-control"] == "no-store"
+
+
+def test_anio_unicode_no_da_500_y_se_aclara():
+    """Regresión SecOps F-2: `_anio` usaba `isdigit()` e `int('²')` lanzaba."""
+    r, _ = TestFocoDeRetorno()._get(make_series(), "page=1&anio_desde=%C2%B2")
+    assert r.status_code == 200
+    assert "El año de «desde» no es válido; se ha quitado." in r.text
+    r2, _ = TestFocoDeRetorno()._get(make_series(), "page=1&anio_hasta=%D9%A3")
+    assert r2.status_code == 200

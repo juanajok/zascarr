@@ -111,8 +111,22 @@ POLITICAS = {
 }
 
 
+def _url_serie(coleccion_id, q: str = "", tradicion: str = "", pagina: int = 1,
+               vista: str = "lista"):
+    """Enlace de una serie de la colección con su estado de vuelta."""
+    destino = _url_ficha(coleccion_id, q, tradicion, [], pagina, vista)
+    plantilla = f"/ui/series/{{serie_id}}?volver={quote(destino, safe='')}"
+    return lambda serie_id: plantilla.format(serie_id=serie_id)
+
+
 def _respuesta(request: Request, plantilla: str, contexto: dict) -> HTMLResponse:
     contexto.setdefault("icono", icono)
+    # Las ramas de error re-renderizan la colección sin pasar por `detalle()`:
+    # sin este respaldo, `coleccion_detalle.html` fallaba con `url_serie` undefined
+    # en cuanto la colección tenía series (SecOps F-1).
+    coleccion = contexto.get("coleccion")
+    if coleccion is not None and "url_serie" not in contexto:
+        contexto["url_serie"] = _url_serie(getattr(coleccion, "id", ""))
     resp = templates.TemplateResponse(request, plantilla, contexto)
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -175,9 +189,7 @@ async def detalle(request: Request, coleccion_id: UUID, guardado: str = "",
         "abrir_alta": abrir == "1", "vista": vista,
         "q": q, "tradicion": tradicion, "seleccion": seleccion,
         "pagina": None, "foco_vista": cambio_vista == "1",
-        "url_serie": lambda serie_id: (
-            f"/ui/series/{serie_id}?volver="
-            f"{quote(_url_ficha(coleccion_id, q, tradicion, [], pagina_actual, vista), safe='')}"),
+        "url_serie": _url_serie(coleccion_id, q, tradicion, pagina_actual, vista),
         "url_vista_lista": _url_ficha(coleccion_id, q, tradicion, seleccion,
                                       pagina_actual, "lista", "1"),
         "url_vista_tarjetas": _url_ficha(coleccion_id, q, tradicion, seleccion,

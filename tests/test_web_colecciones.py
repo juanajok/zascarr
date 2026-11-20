@@ -636,3 +636,81 @@ def test_la_tarjeta_de_la_coleccion_lleva_volver_con_su_estado():
     assert partes.fragment == ""
     assert parse_qs(partes.query) == {
         "q": ["fl"], "tradicion": ["manga"], "pagina": ["2"], "vista": ["tarjetas"]}
+
+
+def _detalle_con_serie():
+    return DetalleColeccion("c1", "Grapas", "En curso", "excluir",
+                            [SerieDeColeccion(
+                                "s1", "Flash", 1987, "faltantes",
+                                "Buscar los números que faltan", "ninguno",
+                                "No buscar automáticamente")])
+
+
+def test_render_de_error_con_coleccion_no_vacia_conserva_el_volver():
+    """Regresión SecOps F-1: las ramas de error no pasaban `url_serie`."""
+    detalle = _detalle_con_serie()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion",
+                   AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            cid = uuid4()
+            r = c.post(f"/ui/colecciones/{cid}/exportar", data={"confirmo": "0"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Flash" in r.text
+    assert 'href="/ui/series/s1?volver=' in r.text
+
+
+def test_editar_invalido_con_coleccion_no_vacia_conserva_el_volver():
+    detalle = _detalle_con_serie()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion",
+                   AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.editar_coleccion", AsyncMock(
+                 return_value=ResultadoColeccion(
+                     False, {"name": "El nombre no puede estar vacío."}))):
+            cid = uuid4()
+            r = c.post(f"/ui/colecciones/{cid}/editar", data={"name": ""})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Flash" in r.text
+    assert 'href="/ui/series/s1?volver=' in r.text
+
+
+def test_portada_invalida_con_coleccion_no_vacia_conserva_el_volver():
+    detalle = _detalle_con_serie()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion",
+                   AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            cid = uuid4()
+            r = c.post(f"/ui/colecciones/{cid}/portada", data={"series_id": "no-es-uuid"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Flash" in r.text
+    assert 'href="/ui/series/s1?volver=' in r.text
+
+
+def test_asignar_invalido_con_coleccion_no_vacia_conserva_el_volver():
+    detalle = _detalle_con_serie()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion",
+                   AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            cid = uuid4()
+            r = c.post(f"/ui/colecciones/{cid}/series", data={"serie_id": "no-es-uuid"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Flash" in r.text
+    assert 'href="/ui/series/s1?volver=' in r.text

@@ -91,10 +91,13 @@ Decisiones:
 ## 5. Contexto de vuelta (adenda)
 
 La colección no debe ser un callejón sin salida. Se añade `volver` a la ficha de
-serie con la URL canónica de su colección; `volver_segura` acepta **solo** una
-ruta `/ui/colecciones/<uuid>` sin query ni ancla (nunca URLs externas), y la
-ficha muestra «Volver a la colección». Los enlaces de la colección a la serie
-llevan ese contexto; los de la biblioteca conservan su retorno actual.
+serie con la URL canónica de su colección **y su estado** (`q`, `tradicion`,
+`vista`, `pagina`); `volver_segura` acepta esa URL canónica o la forma antigua
+`/ui/colecciones/<uuid>` sin query, y rechaza banderas de un solo uso,
+`serie_ids`, fragmentos y URLs externas. La ficha muestra «Volver a la
+colección». Los enlaces de la colección a la serie llevan ese contexto; los de
+la biblioteca conservan su retorno actual. Actualización UATP-02 (2026-11-21):
+la colección restaura estado, no foco/posición (D-1 de su spec).
 
 No se toca la navegación issue→serie: la ficha del número ya vuelve a su serie y
 muestra las colecciones de esta.

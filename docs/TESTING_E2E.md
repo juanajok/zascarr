@@ -452,6 +452,8 @@ curl -s "$APP_URL/ui/biblioteca?page=1&vista=lista&foco=$SERIES_ID" > /tmp/bib-l
 grep -F '<tr id="serie-'"$SERIES_ID"'" tabindex="-1" autofocus>' /tmp/bib-lista.html
 test "$(grep -c autofocus /tmp/bib-lista.html)" -eq 1
 ! grep -q 'library-card' /tmp/bib-lista.html
+# La tabla recorta: el anillo de la fila tiene que ir por dentro.
+grep -A3 '^\.library-lista tr:focus' src/zascarr/static/web.css | grep -F 'outline-offset: -3px'
 
 # 6 ter.3 Objetivo ausente o `foco` inválido: respaldo en #rejilla (200, sin 500/422)
 OTRO=00000000-0000-0000-0000-000000000000

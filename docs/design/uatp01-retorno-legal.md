@@ -108,8 +108,8 @@ mientras no esté, el destino cae al respaldo.
 - `<uuid>` es el UUID canónico de 36 caracteres con guiones (hex en cualquier caja). La ruta se
   compara con `fullmatch`: no vale con barra final, subruta ni sufijo (`.jpg`, `/pagina`, etc.).
 - `/ui/biblioteca` **no es una entrada** de la lista: es el respaldo constante (D-4). Si se
-  quisiera volver a una Biblioteca filtrada habría que añadirla con los parámetros de
-  `web/retorno.py::PARAMETROS_DE_VUELTA`.
+  quisiera volver a una Biblioteca filtrada habría que añadirla con la allowlist derivada
+  `web/library.py::PARAMETROS_DE_BIBLIOTECA` (22 filtros + `foco`), no con una lista manual.
 - Quedan **fuera por definición**: `/ui/legal` y `/ui/legal/accept` (el propio aviso), `/api/**`
   (contrato JSON), endpoints de fragmento (`/ui/wishlist/buscar-serie`,
   `/ui/biblioteca/resultados`, respuestas `_fila_*`/`_resultados_*`, etc.), rutas de imagen y
@@ -359,8 +359,9 @@ al aceptar (peor UX) y debe retirarse también AC-10 para esa página.
 
 **Recomendación: solo respaldo constante**, sin entrada en la allowlist: hoy no hay control
 gateado en Biblioteca y una URL filtrada no se produce. Si el PO quiere «volver a mi Biblioteca
-filtrada», se añade la entrada con los 7 parámetros de `web/retorno.py::PARAMETROS_DE_VUELTA` y su
-prueba; no cambia la seguridad, solo el alcance.
+filtrada», se añade la entrada con la allowlist derivada `web/library.py::PARAMETROS_DE_BIBLIOTECA`
+(22 filtros + `foco`) y su prueba; no cambia la seguridad, solo el alcance. La constante manual
+`PARAMETROS_DE_VUELTA` ya no existe (UATP-02).
 
 ### D-5 · URLs de resultado POST (`/ui/mejoras/escanear`, `/ui/series/.../mejorar`)
 

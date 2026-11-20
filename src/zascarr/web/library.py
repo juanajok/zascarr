@@ -291,7 +291,7 @@ def _leer_filtros(
         texto = (valor or "").strip()
         if not texto:
             return ""
-        if not texto.isdigit() or not 1000 <= int(texto) <= 9999:
+        if not re.fullmatch(r"[0-9]+", texto) or not 1000 <= int(texto) <= 9999:
             avisos.append(f"El año de «{etiqueta}» no es válido; se ha quitado.")
             return ""
         return texto

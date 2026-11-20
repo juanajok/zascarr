@@ -217,8 +217,9 @@ Exigencias:
   `foco` manipulado.
 - El anillo de foco debe verse también con foco **programático**: además del `:focus-visible`
   general, una regla `:focus` para `.library-card`, `.library-lista tr` y `#rejilla` con el anillo
-  existente (`3px var(--cyan-t)`); sin tokens ni colores nuevos. Verificación visual en navegador:
-  §8 (si no se ejecuta, **NOT RUN**).
+  existente (`3px var(--cyan-t)`); sin tokens ni colores nuevos. La fila va con `outline-offset:
+  -3px` porque la tabla recorta con `overflow: hidden`. Verificación visual en navegador: §8 (si
+  no se ejecuta, **NOT RUN**).
 - No se promete la posición exacta en píxeles ni que el navegador restaure el scroll al volver
   con `Atrás`; el contrato es foco + desplazamiento al elemento (o a la rejilla).
 
@@ -334,7 +335,7 @@ Nombres orientativos; lo exigible es el caso. Todo con `FakeSession`/TestClient 
 | T6 | Biblioteca con `foco` de un item, vista tarjetas: un solo `autofocus` en la tarjeta; `id` y `href` intactos | `test_web_library.py` | AC-04 |
 | T7 | Biblioteca con `foco` y `vista=lista`: un solo `autofocus` en la fila; `tabindex="-1"`; no hay `library-card` | `test_web_library.py` | AC-05 |
 | T8 | Biblioteca con `foco` de un UUID que no está en `items` (filtro que lo excluye o página sin él): `#rejilla` con `tabindex="-1" autofocus`; sin `autofocus` en tarjetas; 200 y sin `Location` | `test_web_library.py` | AC-06 |
-| T9 | `foco` inválido directo (`?foco=x`): 200, sin 500/422, sin `autofocus` inventado | `test_web_library.py` | AC-06 |
+| T9 | `foco` inválido directo (`?foco=x`): 200, sin 500/422; sin `autofocus` en tarjetas y `#rejilla` recibe el foco (AC-06) | `test_web_library.py` | AC-06 |
 | T10 | Colección: tarjeta y fila llevan `volver` con estado; ficha devuelve ese mismo valor; URL sin query sigue aceptada; `serie_ids`/`cambio_vista` rechazados | `test_web_colecciones.py`, `test_web_series.py`, `test_web_retorno.py` | AC-08 |
 | T11 | URL canónica larga con `q` no latino de 200 caracteres: válida y vuelta entera; 4097 caracteres: rechazo | `test_web_retorno.py` | AC-10 |
 | T12 | `foco` en `PARAMETROS_DE_QUERY` (`test_log_acceso.py:350`) y los valores de la query no se registran | `test_log_acceso.py` | AC-01/AC-09 |
