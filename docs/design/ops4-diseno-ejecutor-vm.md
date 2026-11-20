@@ -155,6 +155,15 @@ antes de iniciar la instalación; no se asumirá que la red de QEMU por defecto
 impide acceso a la LAN. Hay recursos aparentes, sin garantías de cuota real.
 Sin VM y stack preparados, las pruebas de host siguen **NOT RUN**.
 
+**Preparación del disco:** se ha creado exclusivamente para este laboratorio
+un directorio privado `0700` fuera de Git y un disco qcow2 nuevo `0600`, con
+12 GiB virtuales. `qemu-img info` muestra ausencia de backing file y
+`qemu-img check` pasó. También se extrajeron de la ISO verificada el kernel y
+el initrd del instalador a ese directorio. No se ha conectado el disco a QEMU,
+particionado ni instalado nada. Los 12 GiB virtuales no constituyen una cuota
+física garantizada; sigue pendiente fijar y comprobar un límite de recursos
+antes de la instalación, además del aislamiento adicional.
+
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 
 1. La [guía de instalación Debian](https://www.debian.org/releases/trixie/amd64/apas02.en.html)
