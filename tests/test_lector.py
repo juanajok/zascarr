@@ -199,6 +199,23 @@ def test_el_lector_usa_el_cascaron_inmersivo():
     ):
         assert pieza in plantilla, pieza
 
+def test_opciones_lleva_su_propio_cierre_fijo_dentro_del_panel():
+    """#1118: con el panel más alto que la pantalla, «Opciones» sale de la vista al desplazarlo;
+    el cierre vive dentro del panel, en una cabecera fija, y los botones de modo se piden acotados
+    (la raíz también lleva data-modo y cerraba Opciones al abrirla)."""
+    from pathlib import Path
+    raiz = Path(__file__).resolve().parents[1] / "src" / "zascarr"
+    plantilla = (raiz / "web" / "templates" / "lector.html").read_text(encoding="utf-8")
+    menu = plantilla.split('id="lector-menu"', 1)[1].split("</header>", 1)[0]
+    assert 'id="lector-menu-cerrar"' in menu and "lector-menu-cabecera" in menu
+    css = (raiz / "static" / "web.css").read_text(encoding="utf-8")
+    cabecera = css.split(".lector-menu-cabecera {", 1)[1].split("}", 1)[0]
+    assert "position: sticky" in cabecera and "top: 0" in cabecera
+    js = (raiz / "static" / "lector.js").read_text(encoding="utf-8")
+    assert 'querySelectorAll("[data-modo]")' not in js
+    assert js.count("querySelectorAll(BOTONES_MODO)") == 2
+
+
 def test_el_css_del_lector_oculta_el_marco_y_las_flechas_en_tactil():
     from pathlib import Path
     css = (Path(__file__).resolve().parents[1] / "src" / "zascarr" / "static"
