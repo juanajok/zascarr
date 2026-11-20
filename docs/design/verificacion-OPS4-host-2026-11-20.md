@@ -37,6 +37,23 @@ propio y terminó con código 0:
   de ejecución del futuro actualizador.
 - El arnés prueba la puerta actual, no una implementación futura.
 
+### Límites de permisos observados (solo lectura)
+
+| Ruta | Lectura | Escritura |
+|---|---|---|
+| `/opt/zascarr/zascarr` | sí | **no** |
+| `/opt/zascarr/zascarr/.env` | **no** | no |
+| `/var/backups/zascarr` | sí | **no** |
+| `/var/run/docker.sock` | **sí** | **sí** |
+
+El usuario `pi` pertenece al grupo `docker` y puede operar el socket, lo que en
+la práctica equivale a privilegios elevados sobre los contenedores. El arnés
+**no lo usó**, pero esta identidad no demuestra separación de privilegios. Una
+prueba de contención real necesitaría un usuario sin ese grupo, un espacio de
+nombres o un host separado. Las unidades instaladas son de copia/restauración y
+auxiliar; no se observó ninguna de actualización. Esta comprobación no autoriza
+usar Docker ni systemd.
+
 ## Conclusión
 
 La puerta actual del auxiliar se comporta de forma cerrada en este host cuando
