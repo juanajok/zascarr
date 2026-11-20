@@ -457,6 +457,10 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
             src_fd = os.open(source.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=src_parent)
         except OSError as exc:
             os.close(src_parent)
+            if exc.errno in (errno.EACCES, errno.EPERM):
+                raise DestinoFueraDeRaizError(
+                    "No se puede leer el archivo de origen: el servicio no tiene permiso "
+                    "sobre él (¿es de otro usuario y no lo puede leer el grupo?).") from exc
             raise DestinoFueraDeRaizError("El origen es un symlink o no se puede abrir.") from exc
         try:
             st_src = os.fstat(src_fd)
@@ -478,9 +482,12 @@ def safe_move_en_raiz(src: str | Path, dest: str | Path, raiz: str | Path) -> Pa
                     os.link(source.name, final_name, src_dir_fd=src_parent,
                             dst_dir_fd=parent_fd, follow_symlinks=False)
                     try:
-                        os.chmod(final_name, MODO_ARCHIVO, dir_fd=parent_fd)
+                        # Por fd, no por nombre: la carpeta es escribible por el grupo y un nombre
+                        # sustituido por un symlink haría chmod sobre otro archivo (SecOps F-2).
+                        os.fchmod(src_fd, MODO_ARCHIVO)
                     except BaseException:
-                        os.unlink(final_name, dir_fd=parent_fd)  # sin publicar a medias
+                        with contextlib.suppress(OSError):
+                            os.unlink(final_name, dir_fd=parent_fd)  # sin publicar a medias
                         raise
                     os.unlink(source.name, dir_fd=src_parent)
                     return root_res / relativo.parent / final_name

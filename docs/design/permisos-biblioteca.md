@@ -28,3 +28,10 @@ estricto, se añade una variable `UMASK` con 022 por defecto.
   fuera de #1156: `services/exportacion_kavita.py` (cuatro `mkstemp` en carpetas que Kavita lee) y
   `utils/cbz.py` (`mkstemp` + `os.replace` sin copiar el modo).
 - `safe_move_en_raiz` (lo usa el importador) enlaza en el mismo dispositivo SOLO si el archivo es del proceso (o root): tras el `os.link` se le da `0664` antes de borrar el origen. Si es de otro usuario (p. ej. Transmission) no se puede cambiar su modo, así que se copia y la copia nace con el modo de la biblioteca (cuesta espacio y tiempo extra en ese caso).
+- Con origen de otro usuario que el grupo no puede leer (p. ej. `0600` de Transmission), antes se enlazaba sin leer el
+  contenido; ahora se intenta copiar y falla con un mensaje de permisos (ya no habla de symlink). Las descargas
+  suelen ser legibles por el grupo.
+- Si el grupo del proceso no es el del directorio, `fchmod` quita el setgid de la carpeta nueva (775): no aplica con el
+  `PGID` del grupo compartido (`media`) que configura el instalador.
+- El modo del enlace se fija por descriptor (`os.fchmod(src_fd)`), no por nombre: la carpeta es escribible por el grupo
+  y un nombre sustituido por un symlink haría `chmod` sobre otro archivo (SecOps, F-2).
