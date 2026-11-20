@@ -67,7 +67,7 @@
         <input type="hidden" name="pagina" value="{{ pagina.pagina if pagina else 1 }}">
         <input type="hidden" name="vista" value="{{ vista|default('lista') }}">
         {% for sid in seleccion|default([]) %}<input type="hidden" name="serie_ids" value="{{ sid }}">{% endfor %}
-        <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar de la colección</button>
+        <button class="btn ghost sm" type="submit" aria-label="Quitar de la colección: {{ s.title }}">Quitar de la colección</button>
       </form>
     </article>
     {% endfor %}
@@ -96,7 +96,7 @@
         <input type="hidden" name="pagina" value="{{ pagina.pagina if pagina else 1 }}">
         <input type="hidden" name="vista" value="{{ vista|default('lista') }}">
         {% for sid in seleccion|default([]) %}<input type="hidden" name="serie_ids" value="{{ sid }}">{% endfor %}
-        <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar serie</button>
+        <button class="btn ghost sm" type="submit" aria-label="Quitar serie: {{ s.title }}">Quitar serie</button>
       </form>
     </li>
     {% endfor %}

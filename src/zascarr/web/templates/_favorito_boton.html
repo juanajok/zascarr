@@ -5,7 +5,7 @@
   {% if not compacto %}<input type="hidden" name="volver" value="">
   <input type="hidden" name="origen" value="ficha">
   <input type="hidden" name="favorito-ficha" value="1">{% endif %}
-  <button type="submit"
+  <button type="submit" id="favorito-{{ series.id }}"
           class="favorito-btn{% if not compacto %} btn ghost sm favorito-btn-ficha{% endif %}"
           aria-pressed="{{ 'true' if series.favorite else 'false' }}"
           title="{{ 'Quitar de favoritas' if series.favorite else 'Marcar como favorita' }}">
@@ -13,3 +13,6 @@
     <span class="{% if compacto %}sr{% endif %}">{{ "Quitar de favoritas" if series.favorite else "Marcar como favorita" }}</span>
   </button>
 </form>
+{#- #1122: htmx 4 solo devuelve el foco tras un `outerHTML` a un elemento con `id`; el anuncio va por
+    intercambio fuera de banda al contenido de una región viva que ya estaba en la página. -#}
+{% if anuncio %}<div id="anuncio-favorito" hx-swap-oob="innerHTML">{{ anuncio }}</div>{% endif %}
