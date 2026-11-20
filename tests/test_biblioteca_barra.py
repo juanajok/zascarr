@@ -398,3 +398,26 @@ def test_fragmento_sin_editoriales_y_sin_filtro_no_pinta_el_select():
     panel = r.text[r.text.index('id="filtros-campos"'):]
     panel = panel[:panel.index("</details>") if "</details>" in panel else len(panel)]
     assert 'id="f-publisher"' not in panel
+
+
+def test_busqueda_tiene_disparador_visible_que_funciona_sin_javascript():
+    """#1120: el formulario es un GET normal con un botón «Buscar» visible; Enter y el botón
+    funcionan sin JavaScript, y con él las consultas rápidas se cancelan entre sí."""
+    html = _index()
+    formulario = html[html.index('<form id="filtros"'):html.index("</form>")]
+    assert 'action="/ui/biblioteca"' in formulario and 'method="get"' in formulario
+    assert 'hx-sync="this:replace"' in formulario
+    assert re.search(r'<button type="submit" class="btn" id="f-buscar">Buscar</button>', formulario)
+    assert formulario.index('id="f-q"') < formulario.index('id="f-buscar"')
+
+
+def test_hay_region_viva_estable_y_plantilla_del_aviso_de_fallo():
+    """#1120: la región `role=alert` existe vacía desde el principio (se anuncia al rellenarla) y el
+    aviso con «Reintentar» viene del servidor, sin duplicar el marcado en JavaScript."""
+    html = _index()
+    assert re.search(r'<div id="busqueda-fallo" role="alert" aria-atomic="true"></div>', html)
+    plantilla = html[html.index('<template id="busqueda-fallo-plantilla">'):html.index("</template>")]
+    assert "data-consulta" in plantilla and "data-reintentar" in plantilla
+    assert "los anteriores" in plantilla
+    assert 'role="' not in plantilla  # la región externa ya es la viva: sin alertas anidadas
+    assert html.index('id="busqueda-fallo"') < html.index('id="rejilla"')
