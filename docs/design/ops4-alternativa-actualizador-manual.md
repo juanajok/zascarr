@@ -1,8 +1,9 @@
 # OPS4 — alternativa de botón para el actualizador manual (#443)
 
-**Estado: alternativa para decisión, no aprobada ni implementada.** La SPEC
-[OPS4](especificacion-BL-OPS4.md) vigente mantiene actualización deshabilitada.
-Este documento no autoriza cambiar su política, fusionar ni desplegar.
+**Estado: política elegida por el usuario, no implementada ni habilitada.**
+La [SPEC histórica](especificacion-BL-OPS4.md) mantiene el análisis C-12; el
+[nuevo contrato](ops4-especificacion-main.md) está en revisión. Esta decisión no
+autoriza fusionar, desplegar ni activar.
 
 ## Alternativa planteada
 
@@ -19,7 +20,8 @@ Confiar en `main` sin aprobación administrativa para cada SHA ni rechazo de
 migraciones reduce pasos del usuario, pero también elimina esas dos barreras
 explícitas de la SPEC. Los cambios futuros de `main` y sus migraciones tendrían
 el mismo grado de confianza que una actualización manual por consola. Ese
-intercambio requiere decisión expresa del usuario; no se deduce de una pregunta.
+intercambio fue elegido expresamente por el usuario; no supone que el código
+actual sea seguro para conectarlo directamente a la UI.
 
 ## Lo que se puede aprovechar y lo que falta
 
@@ -48,7 +50,7 @@ host, rutas/entorno, contenido ejecutado con root tras el fetch, concurrencia,
 identidad de imagen y comportamiento de fallos; una rama fija y contraseña no
 resuelven esos riesgos por sí solas.
 
-**Pendiente:** decisión de política; definición de qué código actualizado se
-confía para ejecutarse con privilegios, revisión de seguridad y pruebas de
-extremo a extremo en un entorno aislado. No hay implementación ni aprobación
-de la alternativa en esta rama.
+**Pendiente:** definición de qué código actualizado se confía para ejecutarse
+con privilegios, revisión de seguridad y pruebas de extremo a extremo en un
+entorno aislado. La política fue elegida, pero no hay implementación en esta
+rama.

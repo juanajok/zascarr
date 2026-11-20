@@ -91,6 +91,12 @@ Sigue las guías oficiales con estas precisiones locales:
   SHA completo de la imagen y comparación de ascendencia con `main` en caché;
   sin identidad o sin verificación dice «No se puede comprobar». Nunca
   actualiza, ejecuta Git en la app ni bloquea la página por la red.
+- **Actualización manual desde UI (#443 B):** el PO eligió confiar en `main` y
+  permitir migraciones, sin aprobación por consola de cada SHA. Esta decisión
+  cambia la política propuesta C-12, pero **no habilita la función**: hacen
+  falta un auxiliar de acción fija, autenticación, revisión de privilegios,
+  estado fiable y pruebas aisladas. No conectar `update.sh` directamente a la
+  app ni desplegarlo sin las correspondientes verificaciones.
 
 ## 4. Rendimiento en Pi
 

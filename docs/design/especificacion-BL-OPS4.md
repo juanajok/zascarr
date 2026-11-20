@@ -1,6 +1,8 @@
 # SPEC — Actualizar desde la interfaz (BL-OPS4, #443, historia B) — política C-12 «configuración fija»
 
-> **Estado: especificación por tramos; función NO HABILITADA.** SecOps considera viable la historia B, **no autoriza habilitarla sin controles**. El PO elige la opción C-12 **«configuración fija»**: la UI solo puede actualizar código ordinario si el SHA candidato no altera la superficie privilegiada fijada en el host; los cambios en ella requieren intervención del administrador, y las migraciones nuevas aprobación y revisión aparte. Ni el dictamen de viabilidad ni aprobar un SHA demuestran inocuidad de su código. Activación condicionada a implementar y validar aisladamente todos los controles aplicables (§7); sin Pi ni producción.
+> **Aviso histórico:** el usuario eligió posteriormente actualizar `main` y permitir migraciones sin aprobación por consola de cada SHA. Esos requisitos de C-12 ya no son la política de producto elegida. La [especificación de la alternativa](ops4-especificacion-main.md) está en revisión; este documento conserva el análisis anterior. La actualización sigue deshabilitada hasta implementar y validar las nuevas salvaguardas.
+
+> **Estado anterior (histórico):** la propuesta C-12 consideraba viable la historia B sin autorizar su activación, con superficie privilegiada fija y aprobación adicional para cambios y migraciones. El texto restante describe esa propuesta histórica; no convierte sus antiguas decisiones de producto en las actuales. La función sigue **NO HABILITADA**.
 
 ## 1. Base y alcance
 
