@@ -62,3 +62,10 @@ def test_el_servicio_de_solicitud_no_esta_conectado_a_la_web() -> None:
         texto = ruta.read_text(encoding="utf-8")
         assert "solicitud_actualizacion" not in texto, ruta
         assert "ops_actualizacion_protocolo" not in texto, ruta
+
+
+def test_la_admision_de_actualizacion_no_esta_conectada_al_auxiliar() -> None:
+    auxiliar = (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(encoding="utf-8")
+    assert "admision_actualizar_ops4" not in auxiliar
+    for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+        assert "admision_actualizar_ops4" not in ruta.read_text(encoding="utf-8"), ruta
