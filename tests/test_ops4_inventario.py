@@ -94,6 +94,10 @@ def test_mapa_vacio_se_rechaza_y_truncado_igual_sigue_siendo_limite() -> None:
     assert politica.validar_superficie({}, {}, frozenset()) == "arbol_inseguro"
     assert politica.validar_superficie(BASE, {}, frozenset()) == "arbol_inseguro"
     assert politica.validar_superficie({}, BASE, frozenset()) == "arbol_inseguro"
+    # Los dos mapas omiten la misma superficie protegida: el comparador no
+    # puede detectar esa omisión sin un ancla externa de completitud.
+    truncado = {"src/zascarr/servicio.py": N}
+    assert politica.validar_superficie(truncado, dict(truncado), ALLOWLIST) == "conforme"
 
 
 def test_gate_v3_sigue_cerrado() -> None:
