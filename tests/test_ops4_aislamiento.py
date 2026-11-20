@@ -26,6 +26,7 @@ def test_los_experimentos_no_se_importan_desde_runtime() -> None:
         assert "experimento_" not in texto, ruta
         assert "modelo_aprobacion_ops4" not in texto, ruta
         assert "protocolo_actualizar_ops4" not in texto, ruta
+        assert "ops_actualizacion_protocolo" not in texto, ruta
 
 
 def test_experimentos_sin_procesos_red_ni_ejecucion() -> None:
