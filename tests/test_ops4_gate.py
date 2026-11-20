@@ -84,3 +84,29 @@ def test_version_no_implementada_con_campos_de_actualizacion_se_rechaza(
               "prueba": "secreta", "creada": AHORA, "firma": "f" * 64}
     assert ops.parsear(linea(cuerpo)) is None
     assert ejecutar(cuerpo, estado, monkeypatch).codigo == "esquema_invalido"
+
+
+@pytest.mark.parametrize("linea", [
+    b'{"v":1,"id":"' + b"a" * 32 + b'","accion":"actualizar","creada":1800000000,'
+    b'"firma":"' + b"f" * 64 + b'","firma":"' + b"f" * 64 + b'"}\n',
+    b'{"v":1,"id":"' + b"a" * 32 + b'","accion":"actualizar","creada":1800000000,'
+    b'"firma":"' + b"f" * 64 + b'","relleno":"' + b"x" * 600 + b'"}\n',
+    b'{"v":true,"id":"' + b"a" * 32 + b'","accion":"actualizar","creada":1800000000,'
+    b'"firma":"' + b"f" * 64 + b'"}\n',
+])
+def test_esquema_ambiguo_o_grande_no_llega_al_lanzador(linea, estado, monkeypatch):
+    from deploy.ops import zascarr_ops as ops
+    monkeypatch.setattr(ops.subprocess, "run", lambda *a, **k: pytest.fail("subproceso"))
+    respuesta = ops.procesar(linea, AHORA, CLAVE, estado, LanzadorProhibido(), copias=[])
+    assert respuesta.resultado == "rechazada"
+    assert respuesta.codigo == "esquema_invalido"
+
+
+def test_firma_incorrecta_de_actualizar_no_dispara_nada(estado, monkeypatch):
+    from deploy.ops import zascarr_ops as ops
+    monkeypatch.setattr(ops.subprocess, "run", lambda *a, **k: pytest.fail("subproceso"))
+    cuerpo = {"v": 1, "id": ID, "accion": "actualizar", "creada": AHORA,
+              "firma": "0" * 64}
+    respuesta = ops.procesar(linea(cuerpo), AHORA, CLAVE, estado, LanzadorProhibido(), copias=[])
+    assert respuesta.resultado == "rechazada"
+    assert respuesta.codigo == "firma_invalida"

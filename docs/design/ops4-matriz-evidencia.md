@@ -4,7 +4,7 @@
 
 Fuente normativa: [SPEC BL-OPS4](especificacion-BL-OPS4.md), especialmente §§2–7 y 9–10. La relación de abajo es trazabilidad de cobertura **propuesta**, no una declaración de cumplimiento: un AC puede cubrir solo parte de un FR y varios AC son compuestos. Se conservan los identificadores y escenarios existentes; no se inventan AC nuevos. La historia B sigue **NOT IMPLEMENTED**, sin habilitación ni autorización para Pi o producción. Una aprobación de SHA no certifica inocuidad, autoría ni revisión de seguridad; tampoco autoriza migraciones. La viabilidad SecOps no es autorización de activación.
 
-**Estado de esta revisión:** 229 pruebas aisladas de los ocho archivos citados pasaron con el entorno virtual del proyecto; eso no acredita los criterios compuestos. Los escenarios futuros de aceptación se marcan **NOT RUN**, también cuando exista una simulación parcial. Sin pruebas root, Docker, Postgres, systemd, Pi ni despliegue real en esta revisión.
+**Estado de esta revisión:** 233 pruebas aisladas de los ocho archivos citados pasaron con el entorno virtual del proyecto; eso no acredita los criterios compuestos. Los escenarios futuros de aceptación se marcan **NOT RUN**, también cuando exista una simulación parcial. Sin pruebas root, Docker, Postgres, systemd, Pi ni despliegue real en esta revisión.
 
 ## FR ↔ AC existentes
 
@@ -26,7 +26,7 @@ Fuente normativa: [SPEC BL-OPS4](especificacion-BL-OPS4.md), especialmente §§2
 
 ## Evidencia inspeccionada: límites de cada prueba
 
-- [test_ops4_gate.py](../../tests/test_ops4_gate.py): llama a `procesar` con estado temporal y lanzador/subproceso prohibidos; comprueba rechazo de `actualizar` v1 con HMAC correcto, rechazo de esquema v2 y de versiones 3/4, y estado anterior intacto. La firma de v3 es ficticia, no HMAC v3 válido. No ensaya UI, systemd ni instalación.
+- [test_ops4_gate.py](../../tests/test_ops4_gate.py): llama a `procesar` con estado temporal y lanzador/subproceso prohibidos; comprueba rechazo de `actualizar` v1 con HMAC correcto, rechazo de esquema v2 y de versiones 3/4, y estado anterior intacto. La firma de v3 es ficticia, no HMAC v3 válido. También rechaza JSON con claves duplicadas, `v` booleano, exceso de tamaño y firma incorrecta de `actualizar`, sin lanzar subprocesos. No ensaya UI, systemd ni instalación.
 - [test_ops4_inventario.py](../../tests/test_ops4_inventario.py): compara mapas sintéticos; comprueba cambios/bajas/modos protegidos, altas, rutas inseguras, allowlist y gate v3. El caso positivo solo dice `conforme` para mapas aportados; el test demuestra que dos mapas truncados iguales también pueden dar `conforme`. No prueba obtención, completitud ni sellado de P.
 - [test_ops4_modelo.py](../../tests/test_ops4_modelo.py): simula en memoria reserva, consumo, incertidumbre, identidades y frontera de 24 horas, incluidos cambios horarios. Comprueba expresamente que dos reservas sobre el mismo objeto original son posibles sin cerrojo. **No es un registro de aprobación**, ni acredita exclusión, durabilidad, `fsync`, operador, sudo o reconciliación host.
 - [test_ops4_objetos.py](../../tests/test_ops4_objetos.py): proveedor sintético en memoria de objetos commit/tree/blob; comprueba hashes, tipos, rutas, modos, límites y entradas malformadas. No usa Git ni red, y no prueba un snapshot instalado ni un receptor sin privilegios.
