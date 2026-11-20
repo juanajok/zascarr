@@ -238,9 +238,11 @@ no es una certificación de seguridad.
 
 Se probó también una NIC de usuario de QEMU para instalar Docker/PostgreSQL:
 la interfaz `enp0s1` subió, pero `dhclient` falló y no se obtuvo dirección IPv4;
-la resolución DNS falló. Por tanto la instalación de Docker, PostgreSQL y las
-pruebas de extremo a extremo siguen **NOT RUN**. No se añadió red de producción
-ni se abrió ningún puerto.
+la resolución DNS falló. Una configuración estática de laboratorio
+(`10.0.2.15/24`, puerta `10.0.2.2`, DNS `10.0.2.3`) aceptó la dirección, pero
+la ruta por defecto y el ping a la puerta fallaron. Por tanto la instalación de
+Docker, PostgreSQL y las pruebas de extremo a extremo siguen **NOT RUN**. No se
+añadió red de producción ni se abrió ningún puerto.
 
 No se instalaron Docker ni PostgreSQL, no se instaló la unidad de
 actualización, no se ejecutó `update.sh` y no se tocó la Pi ni datos reales.
