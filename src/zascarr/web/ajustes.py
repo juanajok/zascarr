@@ -41,6 +41,7 @@ from zascarr.services.forum_scraper import (
 )
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.prowlarr import ProwlarrClient
+from zascarr.services.rescan_biblioteca import INTERVALOS_AJUSTES
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
 from zascarr.services.seguridad import (
     MENSAJE_NO_COINCIDEN,
@@ -61,6 +62,7 @@ from zascarr.utils.peticiones import (
     pedir_con_cortesia,
 )
 from zascarr.utils.robots import FUENTES_CON_ROBOTS, AccesoProhibidoPorRobots
+from zascarr.web.actualizar_biblioteca import mensaje_guardado, opciones_cadencia
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -192,6 +194,8 @@ def _contexto() -> dict:
         "webhook_token_configurado": bool(s.webhook_token),
         "webhook_chat_id": s.webhook_chat_id,
         "webhook_incluir_nombres": s.webhook_incluir_nombres,
+        "opciones_actualizar": opciones_cadencia(
+            max(0, int(getattr(s, "rescan_interval_minutes", 1440)))),
         "quality_profile": getattr(s, "quality_profile", "equilibrado"),
         "upgrade_scan_interval_minutes": getattr(s, "upgrade_scan_interval_minutes", 360),
         "upgrade_scan_batch": getattr(s, "upgrade_scan_batch", 3),
@@ -447,6 +451,29 @@ async def probar_avisos(
     return templates.TemplateResponse(request, "_ajustes_prueba.html", {
         "ok": resultado.ok,
         "mensaje": "Aviso enviado." if resultado.ok else f"No se pudo enviar: {resultado.motivo}.",
+    })
+
+
+@router.post("/guardar/actualizar-biblioteca", response_class=HTMLResponse)
+async def guardar_actualizar_biblioteca(
+    request: Request,
+    rescan_interval_minutes: str = Form(default="1440"),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#1160: cadencia de «Actualizar la biblioteca»: apagada, diaria o semanal.
+
+    Un valor fijado en la instalación (p. ej. 720 desde el `.env`) se acepta solo si es el vigente:
+    así guardar sin tocarlo no lo pisa en silencio, y no se admite cualquier otro número."""
+    vigente = max(0, int(getattr(get_settings(), "rescan_interval_minutes", 1440)))
+    try:
+        minutos = int(rescan_interval_minutes)
+    except (TypeError, ValueError):
+        minutos = 1440
+    if minutos not in INTERVALOS_AJUSTES and minutos != vigente:
+        minutos = 1440
+    await RuntimeSettingsService(db).save({"rescan_interval_minutes": minutos})
+    return templates.TemplateResponse(request, "_ajustes_actualizar_guardado.html", {
+        "mensaje": mensaje_guardado(minutos),
     })
 
 

@@ -2240,6 +2240,22 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   box-shadow: var(--shadow-ink);
 }
 
+/* #1160: «Actualizar la biblioteca» en Biblioteca. Botón neutro (no .primary: el principal de la pantalla
+   es el selector de modo), con la garantía al lado y «Última vez · Próxima» debajo. Solo tokens. */
+.biblioteca-actualizar { margin: 0 0 var(--space-3); }
+.biblioteca-actualizar-accion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.biblioteca-actualizar-accion .btn { min-height: 44px; }
+.biblioteca-actualizar-accion .muted, #actualizar-lineas { margin: 0; }
+#actualizar-lineas { margin-top: var(--space-1); font-variant-numeric: tabular-nums; }
+#actualizar-contenido > * { margin-top: var(--space-2); margin-bottom: 0; }
+.biblioteca-actualizar-detalle { margin-top: var(--space-2); }
+@media (max-width: 480px) {
+  .biblioteca-actualizar-accion { flex-direction: column; align-items: stretch; }
+  .biblioteca-actualizar-accion .btn { width: 100%; }
+  #actualizar-lineas span { display: block; }
+  #actualizar-lineas .actualizar-separador { display: none; }
+}
+
 .barra-biblioteca {
   display: flex;
   flex-wrap: wrap;
@@ -2759,9 +2775,11 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 
 /* ── Lector BL-LEC2 (#825): modos, táctil y sentido ────────────────────── */
-.lector-lienzo { touch-action: pan-y pinch-zoom; position: relative; }
+.lector-lienzo { touch-action: none; position: relative; }
+.lector[data-zoom]:not([data-zoom="100"]) .lector-lienzo { cursor: grab; }
+.lector[data-zoom]:not([data-zoom="100"]) .lector-lienzo:active { cursor: grabbing; }
 .lector-paginas { display: flex; gap: 4px; align-items: center; justify-content: center;
-  width: 100%; max-height: 100%; }
+  width: 100%; max-height: 100%; will-change: transform; }
 .lector[data-sentido="rtl"] .lector-paginas { flex-direction: row-reverse; }
 .lector[data-modo="ancho"] .lector-pagina {
   max-width: 100%; max-height: calc(100vh - 22rem); max-height: calc(100dvh - 22rem); }
@@ -2770,6 +2788,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .lector[data-modo="doble"] .lector-pagina {
   max-width: 49%; max-height: calc(100vh - 12rem); max-height: calc(100dvh - 12rem); }
 .lector-menu .btn { min-height: 44px; min-width: 44px; }
+.lector-zoom { display: inline-flex; align-items: center; gap: var(--space-1); }
+.lector-zoom .btn { min-width: 44px; min-height: 44px; padding: 0 var(--space-2); }
+.lector-zoom-valor { min-width: 4.5rem; text-align: center; font-variant-numeric: tabular-nums; }
 .lector-menu { display: grid; gap: var(--space-2); width: 100%; max-width: 42rem;
   padding: var(--space-3); border: var(--border-panel) solid var(--ink);
   border-radius: var(--radius-panel); background: var(--paper); }
@@ -2858,6 +2879,7 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .lector-identidad strong { margin-right: .5rem; }
 .lector-identidad span { color: var(--ink-soft); }
 .lector-barra .lector-contador { flex: 0 0 auto; }
+.lector-barra .lector-zoom { flex: 0 0 auto; }
 #lector-menu-boton { min-width: 44px; min-height: 44px; }
 .lector-espera {
   flex: 1; display: grid; align-content: safe center; justify-items: center;
@@ -2918,6 +2940,8 @@ body:has(.lector-escena) .skip { z-index: 20; }
 
 @media (max-width: 700px) {
   .lector-barra { flex-wrap: wrap; gap: var(--space-1) var(--space-2); padding: .4rem var(--space-2); }
+  .lector-zoom { order: 2; }
+  .lector-zoom-valor { min-width: 3.5rem; }
   .lector-identidad { flex-basis: 100%; order: 3; white-space: normal; }
   .lector-barra .lector-contador { margin-left: auto; }
   .lector-volver { flex: 1 1 auto; }

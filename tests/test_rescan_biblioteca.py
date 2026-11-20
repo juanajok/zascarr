@@ -110,6 +110,18 @@ class TestDisparos:
         assert rescan_biblioteca.estado_actual().fase is rescan_biblioteca.FaseRescan.OCUPADO
         await rescan_biblioteca.detener()
 
+    async def test_ocupado_no_se_registra_como_tarea_fallida(self, monkeypatch):
+        """F2 (Diseño, #1160): «ocupado» no es un fallo; el chip global no debe decir que algo falló."""
+        from zascarr.services import tareas
+        tareas._reset_para_pruebas()
+        monkeypatch.setattr(rescan_biblioteca, "_cerrojo_ciclo", self._cerrojo_ocupado())
+        assert rescan_biblioteca.iniciar_manual(_fabrica) is True
+        await rescan_biblioteca._tarea
+        estados = [t.estado.value for t in tareas._tareas.values()]
+        assert "error" not in estados and estados == ["terminada"]
+        assert tareas.TITULOS["rescanear"] == "Actualizando la biblioteca"
+        await rescan_biblioteca.detener()
+
 
 def test_el_periodico_solo_lo_lanza_el_bucle_de_main():
     """La cadencia periódica la dispara únicamente `main._rescan_loop` (decisión del PO, BL-R9)."""
@@ -124,7 +136,7 @@ class TestTextos:
     def test_cadencia(self, monkeypatch):
         from zascarr.web import auditoria
         for minutos, esperado in (
-            (0, "El rescan automático está apagado."),
+            (0, "La biblioteca no se actualiza sola."),
             (1440, "Además, ZascArr lo hace solo una vez al día."),
             (2880, "Además, ZascArr lo hace solo cada 2 días."),
             (120, "Además, ZascArr lo hace solo cada 2 horas."),
@@ -148,6 +160,37 @@ class TestTextos:
 
 
 class TestPantalla:
+
+    def test_el_boton_no_queda_deshabilitado_tras_un_ocupado(self):
+        """F1 (Diseño, #1160): la fase «ocupado» persiste hasta el siguiente lanzamiento; el botón
+        debe seguir habilitado y el texto decir qué pasó, sin llamarlo error."""
+        from fastapi.testclient import TestClient
+
+        from zascarr.database import get_db
+        from zascarr.main import app
+
+        class Ejec:
+            def scalar_one_or_none(self):
+                return None
+
+        class Sesion:
+            async def execute(self, _st):
+                return Ejec()
+
+        async def _get_db():
+            yield Sesion()
+        rescan_biblioteca._estado.fase = rescan_biblioteca.FaseRescan.OCUPADO
+        app.dependency_overrides[get_db] = _get_db
+        try:
+            r = TestClient(app).get("/ui/auditoria/rescanear")
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+            rescan_biblioteca.reiniciar_para_pruebas()
+        assert r.status_code == 200
+        boton = r.text.split("<button", 1)[1].split(">", 1)[0]
+        assert "disabled" not in boton
+        assert "ZascArr está importando descargas ahora" in r.text
+        assert "ha fallado" not in r.text.lower()
 
     def test_el_fragmento_sin_historial_invita_y_declara_la_garantia(self):
         """Sin ningún rescan: el fragmento se pinta, la garantía U21 va junto a la acción
@@ -173,9 +216,9 @@ class TestPantalla:
         finally:
             app.dependency_overrides.pop(get_db, None)
         assert r.status_code == 200
-        assert "Reescanear la biblioteca" in r.text
+        assert "Actualizar la biblioteca" in r.text
         assert "No mueve, no renombra y no borra nada" in r.text
-        assert "Todavía no se ha hecho ningún rescan" in r.text
+        assert "Todavía no se ha actualizado." in r.text
         for interna in (" stat", "triaje", "cerrojo", "ImportRun"):
             assert interna not in r.text
 
@@ -216,10 +259,10 @@ class TestPantalla:
         finally:
             app.dependency_overrides.pop(get_db, None)
         assert r.status_code == 200
-        assert "Último rescan" in r.text and "automática" in r.text
+        assert "Última vez" in r.text and "automática" in r.text
         assert "<strong>3</strong> nuevos a su serie" in r.text
         assert "<strong>1300</strong> archivos mirados" in r.text
-        assert "Todavía no se ha hecho ningún rescan" not in r.text
+        assert "Todavía no se ha actualizado." not in r.text
 
     def test_el_post_lanza_una_sola_y_enseña_el_curso(self, monkeypatch):
         from fastapi.testclient import TestClient
@@ -251,6 +294,6 @@ class TestPantalla:
         finally:
             app.dependency_overrides.pop(get_db, None)
         assert r.status_code == 200
-        assert "Rescan en curso" in r.text
+        assert "Actualizando la biblioteca" in r.text
         assert "No se ha lanzado otra" not in r.text
-        assert "Reescaneando…" in r.text                   # el botón queda deshabilitado y nombra la tarea
+        assert "Actualizando…" in r.text                   # el botón queda deshabilitado y nombra la tarea

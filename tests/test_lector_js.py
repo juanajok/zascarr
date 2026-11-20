@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Pruebas de comportamiento del JS del lector (BL-LEC2), con un DOM mínimo en Node."""
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ function E(id) {
   this.id = id; this.dataset = {}; this.attrs = {}; this.listeners = {};
   this.hidden = false; this.disabled = false; this.complete = true;
   this.naturalWidth = 800; this.naturalHeight = 1200; this.writes = 0; this._text = "";
-  this._src = null;
+  this._src = null; this.style = {}; this.clientWidth = 1000; this.clientHeight = 800;
 }
 Object.defineProperty(E.prototype, "textContent", {
   get() { return this._text; }, set(value) { this._text = value; this.writes += 1; },
