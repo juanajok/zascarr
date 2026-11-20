@@ -68,7 +68,7 @@ def test_en_reposo_boton_neutro_garantia_y_lineas():
     assert "Actualizar la biblioteca" in r.text
     boton = r.text.split("<button", 1)[1].split(">", 1)[0]
     assert "primary" not in boton and "disabled" not in boton
-    assert "Mira tu disco: no mueve, no renombra ni borra nada." in r.text
+    assert "«Actualizar la biblioteca» mira tu disco: no mueve, no renombra ni borra nada." in r.text
     assert "Todavía no se ha actualizado." in r.text and "Próxima:" in r.text
     assert 'aria-live="polite"' in r.text
 
@@ -302,7 +302,9 @@ def test_el_foco_lo_recibe_la_region_estable_y_el_sondeo_solo_cambia_su_contenid
     rescan_biblioteca._estado.iniciado = datetime.now(UTC)
     html = _get().text
     assert 'hx-target="#actualizar-estado" hx-swap="innerHTML"' in html          # sondeo: solo el interior
-    assert 'hx-target="#actualizar-estado" hx-swap="outerHTML"' in html          # formulario: la región, una vez
+    from tests.test_biblioteca_barra import _index
+    pagina = _index("/ui/biblioteca")                                            # el formulario, en la cabecera
+    assert 'hx-target="#actualizar-estado" hx-swap="outerHTML"' in pagina       # formulario: la región, una vez
 
 
 @pytest.mark.parametrize("curso", ["", "0", "2", "si"])

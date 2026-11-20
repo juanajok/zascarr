@@ -2210,7 +2210,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .biblioteca-cabecera {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "titulo accion" "subtitulo subtitulo";
+  grid-template-areas: "titulo accion" "subtitulo subtitulo" "estado estado";
   gap: var(--space-1) var(--space-4);
   align-items: center;
   margin-bottom: var(--space-3);
@@ -2240,21 +2240,21 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   box-shadow: var(--shadow-ink);
 }
 
-/* #1160: «Actualizar la biblioteca» en Biblioteca. Botón neutro (no .primary: el principal de la pantalla
-   es el selector de modo). Una sola franja: botón y garantía, «Última vez · Próxima» y «Qué mira» en la
-   misma línea mientras quepan; los avisos debajo, a todo el ancho. El botón mide lo mismo que los de la
-   cabecera (40 px; el alto táctil de 44 px lo pone la regla general de pantallas estrechas y táctiles). */
+/* #1160: «Actualizar la biblioteca» en Biblioteca. El botón es una acción más de la cabecera (mismo
+   aspecto que sus vecinos, no .primary: el principal de la pantalla es el selector de modo). Debajo de la
+   frase de entrada, una línea de estado: garantía, «Última vez · Próxima» y «Qué mira» mientras quepan; los
+   avisos debajo, a todo el ancho. El alto táctil de 44 px lo pone la regla general de pantallas estrechas. */
+.biblioteca-actualizar-accion { display: contents; }
 .biblioteca-actualizar {
-  display: flex; flex-wrap: wrap; align-items: center;
-  column-gap: var(--space-4);
-  margin: 0 0 var(--space-3);
+  grid-area: estado;
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  column-gap: var(--space-3);
+  margin: 0;
 }
-.biblioteca-actualizar-accion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
-.biblioteca-actualizar-accion .muted, #actualizar-lineas { margin: 0; }
-/* Sin hueco de fila en la franja: la región viva siempre está (aunque vacía) y un hueco la separaría. El aire
-   entre filas cuando la línea se parte lo da el relleno de las líneas y de «Qué mira», que en una sola fila
-   no suma alto (miden menos que el botón). */
-#actualizar-lineas, .biblioteca-actualizar-detalle { padding-block: var(--space-1); font-variant-numeric: tabular-nums; }
+#actualizar-garantia, #actualizar-lineas { margin: 0; }
+/* Sin hueco de fila: la región viva siempre está (aunque vacía) y un hueco la separaría. */
+#actualizar-lineas { font-variant-numeric: tabular-nums; }
+.biblioteca-actualizar-detalle[open] { flex-basis: 100%; }
 .biblioteca-actualizar-detalle[open] { flex-basis: 100%; }
 #actualizar-estado { flex-basis: 100%; }
 #actualizar-contenido > * { margin-top: var(--space-2); margin-bottom: 0; }
@@ -2393,7 +2393,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (max-width: 640px) {
   .biblioteca-cabecera {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "titulo" "subtitulo" "accion";
+    grid-template-areas: "titulo" "subtitulo" "accion" "estado";
     gap: var(--space-1);
   }
   .biblioteca-cabecera .biblioteca-acciones { justify-self: start; justify-content: flex-start; margin-top: 6px; }
