@@ -24,6 +24,11 @@ y este contrato no está conectado a la web, el auxiliar ni systemd.
   `reclamar_autorizacion` usa `autorizacion-<id>`, separado de
   `solicitud-<id>` de v3, con `O_EXCL`, dos `fsync` y sin borrar marcas ante
   fallo. `crear_reclamador_durable(fd)` lo conecta al verificador.
+  `abrir_directorio_autorizaciones` exige un `uid` explícito y modo `0700`, sin
+  seguir enlaces, antes de usar el descriptor.
+- [Lector de clave dedicada](../../src/zascarr/services/clave_autorizacion.py):
+  exige `uid` y modo `0440`/`0400` exactos, fichero regular, 64 hex o 64+LF,
+  sin seguir enlaces ni bloquear en FIFO. No la crea ni la instala.
 
 El host no consulta `auth_mode`, hashes, DB ni readiness: confía en que la app
 solo emite tras reautenticar. La composición no incluye todavía sesión/origen,
@@ -73,8 +78,8 @@ provisión **no está implementada** y bloquea la integración.
 
 ## Pendiente para integrar
 
-1. Adquirir y provisionar la clave dedicada (32 bytes, permisos mínimos,
-   rotación y directorio durable propios) sin exponerla a la web.
+1. Provisionar la clave dedicada y el directorio durable (el lector y el
+   comprobador existen, pero no hay instalador/ruta/rotación ni despliegue).
 2. Definir el transporte (probablemente nueva versión) y eliminar la
    contraseña del mensaje al host en esa ruta; implementar envío único.
 3. Acreditar propietario/modo/ruta del directorio durable y su retención.
@@ -85,7 +90,7 @@ provisión **no está implementada** y bloquea la integración.
 6. No habilitar la UI ni instalar unidad/auxiliar hasta completar lo anterior.
 
 **Estado de pruebas:** 49 casos de contrato, 59 de composición y 37 de registro
-durable (incluidos aislamiento y UI) forman parte de las **791 pruebas OPS4/paridad** verdes y de la suite completa **8781 passed / 2431 skipped**; el detalle y las limitaciones están en los informes de
+durable (incluidos aislamiento y UI) forman parte de las **791 pruebas OPS4/paridad** verdes y de la suite completa **8821 passed / 2431 skipped**; el detalle y las limitaciones están en los informes de
 [SecOps](secops-ops4-autorizacion-2026-11-20.md),
 [UI](ui-ops4-autorizacion-2026-11-20.md) y
 [QA](qa-ops4-autorizacion-2026-11-20.md). El contrato permanece sin importar

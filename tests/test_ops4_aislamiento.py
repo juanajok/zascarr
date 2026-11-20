@@ -189,3 +189,16 @@ def test_el_registro_de_autorizacion_no_se_conecta_a_runtime_ni_al_auxiliar() ->
     assert nombre not in (RAIZ / "scripts" / "instalar_ops.sh").read_text(encoding="utf-8")
     for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
         assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+
+
+def test_el_lector_de_clave_dedicada_no_esta_conectado() -> None:
+    nombre = "clave_autorizacion"
+    for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+        if ruta.name == "clave_autorizacion.py":
+            continue
+        assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+    for ruta in (
+        RAIZ / "deploy" / "ops" / "zascarr_ops.py",
+        RAIZ / "scripts" / "instalar_ops.sh",
+    ):
+        assert nombre not in ruta.read_text(encoding="utf-8"), ruta

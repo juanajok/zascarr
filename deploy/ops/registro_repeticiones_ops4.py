@@ -133,6 +133,44 @@ def reclamar_id(
     )
 
 
+def abrir_directorio_autorizaciones(
+    ruta: object,
+    *,
+    uid_esperado: int,
+    modo_esperado: int = 0o700,
+) -> int:
+    """Abre el directorio durable dedicado y acredita propietario y modo.
+
+    No lo crea ni lo repara. Exige `0700`, sin escritura de grupo/otros, y un
+    `uid` explícito; no sigue enlaces. El llamador debe usar el descriptor para
+    `reclamar_autorizacion`/`crear_reclamador_durable` y cerrarlo al terminar.
+    Este módulo no demuestra que la ruta sea la provista por el instalador.
+    """
+    if type(uid_esperado) is not int or not 0 <= uid_esperado < 2**32:
+        raise RegistroNoDisponibleError("propietario no acreditado")
+    if type(modo_esperado) is not int or modo_esperado != 0o700:
+        raise RegistroNoDisponibleError("modo no acreditado")
+    try:
+        path = os.fspath(ruta)
+        fd = os.open(
+            path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        )
+    except (OSError, TypeError, ValueError):
+        raise RegistroNoDisponibleError("directorio no disponible") from None
+    try:
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != uid_esperado
+            or stat.S_IMODE(info.st_mode) != modo_esperado
+        ):
+            raise RegistroNoDisponibleError("directorio no seguro")
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def crear_reclamador_durable(
     directorio_fd: int,
     *,

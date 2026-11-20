@@ -368,3 +368,42 @@ def test_procesos_nuevos_no_reutilizan_la_autorizacion(tmp_path: Path) -> None:
                 process.kill()
             process.wait()
     assert (tmp_path / f"{registro.PREFIJO_AUTORIZACION}{ID}").exists()
+
+
+def test_abrir_directorio_durable_acredita_uid_y_modo(tmp_path: Path) -> None:
+    path = tmp_path / "autorizaciones"
+    path.mkdir(mode=0o700)
+    path.chmod(0o700)
+    fd = registro.abrir_directorio_autorizaciones(path, uid_esperado=os.getuid())
+    try:
+        assert registro.reclamar_autorizacion(ID, directorio_fd=fd) is True
+        assert registro.reclamar_autorizacion(ID, directorio_fd=fd) is False
+    finally:
+        os.close(fd)
+
+
+@pytest.mark.parametrize("kind", ["modo", "uid", "fichero", "enlace", "inexistente"])
+def test_abrir_directorio_rechaza_origen_no_acreditado(tmp_path: Path, kind: str) -> None:
+    path = tmp_path / "autorizaciones"
+    if kind == "fichero":
+        path.write_text("no es un directorio", encoding="utf-8")
+    elif kind == "inexistente":
+        pass
+    elif kind == "enlace":
+        real = tmp_path / "real"
+        real.mkdir(mode=0o700)
+        path.symlink_to(real)
+    else:
+        path.mkdir(mode=0o700)
+        path.chmod(0o755 if kind == "modo" else 0o700)
+    uid = os.getuid() + 1 if kind == "uid" else os.getuid()
+    with pytest.raises(registro.RegistroNoDisponibleError):
+        registro.abrir_directorio_autorizaciones(path, uid_esperado=uid)
+
+
+@pytest.mark.parametrize("uid,modo", [(True, 0o700), (-1, 0o700), (0, 0o755), (0, True)])
+def test_abrir_directorio_parametros_invalidos(tmp_path: Path, uid, modo) -> None:
+    path = tmp_path / "autorizaciones"
+    path.mkdir(mode=0o700)
+    with pytest.raises(registro.RegistroNoDisponibleError):
+        registro.abrir_directorio_autorizaciones(path, uid_esperado=uid, modo_esperado=modo)
