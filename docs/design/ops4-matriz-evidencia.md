@@ -8,7 +8,7 @@
 
 Fuente normativa: [SPEC BL-OPS4](especificacion-BL-OPS4.md), especialmente §§2–7 y 9–10. La relación de abajo es trazabilidad de cobertura **propuesta**, no una declaración de cumplimiento: un AC puede cubrir solo parte de un FR y varios AC son compuestos. Se conservan los identificadores y escenarios existentes; no se inventan AC nuevos. La historia B sigue **NOT IMPLEMENTED**, sin habilitación ni autorización para Pi o producción. Una aprobación de SHA no certifica inocuidad, autoría ni revisión de seguridad; tampoco autoriza migraciones. La viabilidad SecOps no es autorización de activación.
 
-**Estado de esta revisión:** 453 pruebas seleccionadas de OPS4 y paridad pasaron con el entorno virtual del proyecto. La suite completa anterior (8273 passed, 2429 skipped) corresponde a un SHA anterior a las últimas correcciones y no se ha repetido en esta revisión. Esto no acredita los criterios compuestos ni prueba un host real. Los escenarios futuros de aceptación se marcan **NOT RUN**, también cuando exista una simulación parcial. Sin pruebas root, Docker, Postgres, systemd, Pi ni despliegue real en esta revisión.
+**Estado de esta revisión:** 453 pruebas seleccionadas de OPS4 y paridad pasaron con el entorno virtual del proyecto. La suite completa se ejecutó en este SHA: 8045 passed, 2429 skipped (7 avisos); no sustituye las pruebas de host aislado. Esto no acredita los criterios compuestos ni prueba un host real. Los escenarios futuros de aceptación se marcan **NOT RUN**, también cuando exista una simulación parcial. Sin pruebas root, Docker, Postgres, systemd, Pi ni despliegue real en esta revisión.
 
 ## FR ↔ AC existentes
 
