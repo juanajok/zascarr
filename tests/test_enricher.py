@@ -709,6 +709,36 @@ class TestLockedFieldsH3:
         assert series.comic_vine_id is None
 
 
+class TestTextoPlanoF4a:
+    """F4a (#1186): la fuente entrega HTML; la descripción y la sinopsis se guardan planas."""
+
+    @pytest.mark.asyncio
+    async def test_enricher_limpia_html_de_la_sinopsis(self):
+        series = make_series("Batman", comic_vine_id=10)
+        issue = Issue(id=uuid4(), series_id=series.id, issue_number="1")
+        client = AsyncMock()
+        client.find_issue.return_value = CVIssueResult(
+            cv_id=99, description="<p>Sinopsis &amp; más</p>")
+        session = FakeSession([
+            FakeExecResult([(issue, series)]),
+            FakeExecResult([]),
+        ])
+        await EnrichmentService(db=session)._enrich_issues_batch(
+            client, 10, EnrichmentReport())
+        assert issue.synopsis == "Sinopsis & más"
+
+    @pytest.mark.asyncio
+    async def test_enricher_limpia_html_de_la_descripcion(self):
+        series = make_series("Batman")
+        client = AsyncMock()
+        client.search_series.return_value = [CVResult(
+            cv_id=1, name="Batman", description="<p>Descripción &amp; más</p>")]
+        service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
+        await service._enrich_series_batch(
+            client, AsyncMock(), AsyncMock(), 10, EnrichmentReport())
+        assert series.description == "Descripción & más"
+
+
 class TestEnrichIssuesBatchH2H3:
     """_enrich_issues_batch no tenía cobertura propia antes de H2/H3; se
     añade aquí junto con las reglas nuevas para no dejar el método sin
