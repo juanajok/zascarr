@@ -61,6 +61,19 @@ resolver el orden de admisión para que una petición ocupada no consuma otra A;
 la reconciliación debe inspeccionar trabajos, procesos, HEAD, imagen, contenedor
 y BD antes de permitir otra aprobación. Todo ello sigue **NOT RUN**.
 
+## Ensayo descartado: registro append-only
+
+Se ensayó un registro append-only con cerrojo, marca de arranque y `fsync`.
+La revisión adversarial encontró fallos que impiden considerarlo una base
+segura: tras un `fsync` fallido del cierre, los bytes podían quedar visibles y
+un proceso nuevo leer el intento como cerrado; un truncado en frontera de línea
+no se detectaba; la marca de arranque no era una barrera de fencing; y una
+reserva podía cruzar el límite de tamaño y dejar el registro ilegible. Los tests
+solo cubrían parte de esos estados y se ejecutaban en tmpfs. **El prototipo se
+retiró**: no se incorpora ni se conecta al auxiliar. La prueba negativa confirma
+que un log local sin ancla externa y sin reconciliación no basta para demostrar
+durabilidad ni exclusión ante fallos.
+
 ## Resultado del experimento de persistencia
 
 Se ensayó un prototipo desechable con `flock`, marcador de reserva y escrituras
