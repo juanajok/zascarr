@@ -117,7 +117,12 @@ from zascarr.services.ficha_numero import (
 from zascarr.services.ficha_numero import (
     TEXTOS as TEXTOS_FICHA,
 )
-from zascarr.services.lector import archivo_por_defecto, total_paginas
+from zascarr.services.lector import (
+    archivo_por_defecto,
+    archivos_legibles,
+    preferido_guardado,
+    total_paginas,
+)
 from zascarr.services.lectura import (
     TEXTOS_LECTURA,
     EstadoInvalidoError,
@@ -790,6 +795,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "aviso_guardado": {
             "serie": "Guardado: la ficha muestra lo que has escrito.",
             "desbloqueado": "Ese dato vuelve a quedar a cargo del enriquecimiento; no se ha borrado.",
+            "archivo": "Guardado: ese archivo abrirá «Leer».",
         }.get(guardado, ""),
         # BL-INF6: separador de caché del navegador de la portada; cambia al elegir otra.
         "portada_version": await _version_de_portada(db, series),
@@ -1817,6 +1823,31 @@ async def descargar_mejora_numero(series_id: UUID, issue_id: UUID, request: Requ
     return respuesta
 
 
+@router.post("/{series_id}/numero/{issue_id}/archivo-lectura")
+async def elegir_archivo_lectura(series_id: UUID, issue_id: UUID, request: Request,
+                                 accion: str = Form(default="elegir"),
+                                 file_id: str = Form(default=""),
+                                 db: AsyncSession = Depends(get_db)):
+    """#1078: guarda/quita el archivo preferido en `Issue.metadata_`. Solo BD."""
+    issue = await db.get(Issue, issue_id)
+    if issue is None or issue.series_id != series_id:
+        raise HTTPException(status_code=404, detail="Número no encontrado")
+    metadata = dict(issue.metadata_ or {})
+    if accion == "quitar" or not file_id:
+        metadata.pop("lector_archivo", None)
+    else:
+        legibles = {a.id for a in await archivos_legibles(db, issue_id)}
+        if file_id not in legibles:
+            raise HTTPException(status_code=400, detail="Ese archivo no se puede leer.")
+        metadata["lector_archivo"] = file_id
+    issue.metadata_ = metadata
+    await db.commit()
+    destino = f"/ui/series/{series_id}/numero/{issue_id}?guardado=archivo"
+    if request.headers.get("HX-Request") == "true":
+        return Response(status_code=204, headers={"HX-Redirect": destino})
+    return RedirectResponse(destino, status_code=303)
+
+
 @router.get("/{series_id}/numero/{issue_id}", response_class=HTMLResponse)
 async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
                          nota: str = Query(default=""),
@@ -1833,6 +1864,10 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
     sinopsis_visible, sinopsis_resto = partir_sinopsis(ficha.sinopsis)
     lectura = await lectura_de(db, issue_id)
     lector_archivo = await archivo_por_defecto(db, issue_id)
+    archivos_lectura = await archivos_legibles(db, issue_id)
+    preferido_id = preferido_guardado(ficha.issue)
+    preferido_invalido = bool(preferido_id) and not any(
+        a.id == preferido_id for a in archivos_lectura)
     lector_pagina = lectura.current_page if lectura else 0
     if lector_archivo is not None and lector_pagina:
         try:
@@ -1848,6 +1883,9 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
         "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
         "lectura": lectura, "textos_lectura": TEXTOS_LECTURA,
         "lector_archivo": lector_archivo,
+        "archivos_lectura": archivos_lectura,
+        "preferido_id": preferido_id,
+        "preferido_invalido": preferido_invalido,
         "lector_pagina": lector_pagina,
         "estados_lectura": ((ReadingStatus.UNREAD, "Sin leer"),
                             (ReadingStatus.READING, "Leyendo"),
@@ -1857,6 +1895,7 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
         "aviso_guardado": {
             "numero": "Guardado: el número muestra lo que has escrito.",
             "desbloqueado": "Ese dato vuelve a quedar a cargo del enriquecimiento; no se ha borrado.",
+            "archivo": "Guardado: ese archivo abrirá «Leer».",
         }.get(guardado, ""),
         "nota_aviso": {
             "vacia": "La nota no puede estar vacía.",

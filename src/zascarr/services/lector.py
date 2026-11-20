@@ -123,29 +123,47 @@ async def archivos_legibles(db: AsyncSession, issue_id: UUID) -> list[ArchivoDeL
             for f in filas if _es_legible(f)]
 
 
-def _por_defecto(candidatos: list, file_id_progreso: object):
+def _por_defecto(candidatos: list, file_id_progreso: object,
+                 file_id_preferido: object = None):
     """Regla única del archivo por defecto de un número (LEC1 y OPDS-PSE la comparten).
 
-    El archivo con el que se leyó por última vez; si no hay o ya no existe, el primero
-    por nombre. `candidatos` ya viene ordenado y solo con archivos legibles.
+    Orden: preferido explícito → archivo del progreso → primero por nombre.
+    `candidatos` ya viene ordenado y solo con archivos legibles; el preferido
+    solo gana si sigue siendo legible.
     """
     if not candidatos:
         return None
-    if file_id_progreso:
-        for c in candidatos:
-            if str(c.id) == str(file_id_progreso):
-                return c
+    for buscado in (file_id_preferido, file_id_progreso):
+        if buscado:
+            for c in candidatos:
+                if str(c.id) == str(buscado):
+                    return c
     return candidatos[0]
+
+
+def preferido_guardado(issue: Issue | None) -> str | None:
+    """`Issue.metadata_["lector_archivo"]`, si es un id con forma de UUID."""
+    metadata = getattr(issue, "metadata_", None) if issue is not None else None
+    valor = (metadata or {}).get("lector_archivo")
+    if not isinstance(valor, str):
+        return None
+    try:
+        UUID(valor)
+    except ValueError:
+        return None
+    return valor
 
 
 async def archivo_por_defecto(db: AsyncSession, issue_id: UUID) -> ArchivoDeLectura | None:
     legibles = await archivos_legibles(db, issue_id)
     if not legibles:
         return None
+    issue = await db.get(Issue, issue_id)
     progreso = (await db.execute(
         select(ReadingProgress).where(ReadingProgress.issue_id == issue_id)
     )).scalar_one_or_none()
-    return _por_defecto(legibles, progreso.file_id if progreso is not None else None)
+    return _por_defecto(legibles, progreso.file_id if progreso is not None else None,
+                        preferido_guardado(issue))
 
 
 async def _abrir(db: AsyncSession, file_id: UUID) -> File:
