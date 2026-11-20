@@ -690,7 +690,7 @@ async def _contexto(
             ("titulo", "A-Z"), ("titulo_desc", "Z-A"),
             ("anio_desc", "Recientes"), ("anio_asc", "Antiguas"),
             ("reciente", "Añadidas"),
-            ("valoracion", "Mejor valoradas"),
+            ("valoracion", "Valoración"),
         ),
         "vista": filtros_finales.vista,
         "naturaleza": filtros_finales.naturaleza,

@@ -52,7 +52,7 @@ def test_ssr_y_fragmento_con_puntuacion():
 
 
 def test_puntuacion_cuenta_como_filtro_y_select_cabe():
-    from pathlib import Path as _P
-    css = _P("src/zascarr/static/web.css").read_text()
-    assert "filtros_finales.puntuacion" in _P("src/zascarr/web/library.py").read_text()
+    css = Path("src/zascarr/static/web.css").read_text()
+    assert "filtros_finales.puntuacion" in Path("src/zascarr/web/library.py").read_text()
+    assert '("valoracion", "Valoración")' in Path("src/zascarr/web/library.py").read_text()
     assert "max-width: 11rem" in css and "max-width: 9rem" in css
