@@ -38,3 +38,11 @@ def test_la_ui_no_menciona_ejecutar_actualizaciones() -> None:
         texto = ruta.read_text(encoding="utf-8").lower()
         assert "actualizar ahora" not in texto, ruta
         assert "hx-post=\"/ui/actualizar" not in texto, ruta
+
+
+def test_experimentos_no_realizan_io_ni_persisten() -> None:
+    for ruta in EXPERIMENTOS:
+        texto = ruta.read_text(encoding="utf-8")
+        for token in ("open(", "Path(", "tempfile", "shutil", "sqlite3", "import os"):
+
+            assert token not in texto, (ruta, token)
