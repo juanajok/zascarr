@@ -15,8 +15,6 @@ import gzip
 import hashlib
 import json
 import os
-import shutil
-import socket
 import subprocess
 import sys
 import threading
@@ -112,13 +110,25 @@ services:
             args += ["-At", "-c", sql]
         return self._compose(*args, input=entrada)
 
+    def _ready_en_logs(self) -> int:
+        """Cuántas veces la imagen oficial ha dicho que acepta conexiones.
+
+        Postgres arranca un servidor temporal para initdb y la creación de `POSTGRES_DB`, lo apaga y
+        arranca el definitivo. La primera línea «ready to accept connections» puede ser la del
+        temporal; esperar solo a `pg_isready` deja una carrera con el apagado (issue #1192).
+        """
+        r = self._compose("logs", "--no-color", "postgres")
+        return r.stdout.count("database system is ready to accept connections")
+
     def esperar_postgres(self) -> None:
         limite = time.monotonic() + 90
         while time.monotonic() < limite:
-            if self._compose("exec", "-T", "postgres", "pg_isready", "-U", "comics_admin",
-                             "-d", "zascarr").returncode == 0:
-                return
-            time.sleep(0.5)
+            # Dos «ready» en el log = el temporal ya se apagó y el definitivo está arriba. Además se
+            # consulta la base real, no solo el socket: `pg_isready` responde antes de que exista.
+            if self._ready_en_logs() >= 2:
+                if self.psql("zascarr", "select 1").returncode == 0:
+                    return
+            time.sleep(0.25)
         raise AssertionError("PostgreSQL de pruebas no arrancó")
 
     def arrancar(self) -> None:
@@ -291,3 +301,23 @@ def test_la_seguridad_vigente_hostil_vuelve_byte_a_byte(tmp_path):
         assert final["webhook_token"] == hostil["webhook_token"]
     finally:
         proyecto.parar()
+
+
+def test_esperar_postgres_no_acepta_el_temporal(monkeypatch):
+    """La espera exige dos «ready» y una consulta real; una sola no basta (#1192)."""
+    class Falso:
+        def __init__(self):
+            self.consultas = 0
+        def _ready_en_logs(self):
+            return 1
+        def psql(self, *_a, **_k):
+            self.consultas += 1
+            return subprocess.CompletedProcess([], 0, "", "")
+
+    falso = Falso()
+    reloj = iter([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100])
+    monkeypatch.setattr(time, "monotonic", lambda: next(reloj))
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+    with pytest.raises(AssertionError):
+        Proyecto.esperar_postgres(falso)
+    assert falso.consultas == 0   # con un único «ready» ni siquiera se consulta
