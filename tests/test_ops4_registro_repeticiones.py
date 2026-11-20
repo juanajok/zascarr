@@ -262,3 +262,109 @@ def test_admision_no_disponible_si_persistencia_no_acreditada(directory_fd) -> N
         verificar_prueba=lambda _: True, reclamar_id=claim,
     ) is CodigoAdmision.NO_DISPONIBLE
     assert registro.reclamar_id(ID, directorio_fd=directory_fd) is False
+
+
+# ── Consumo durable de autorizaciones: namespace propio (SPEC §7.2-§7.3) ──────
+
+
+def test_prefijo_propio_de_autorizacion(tmp_path: Path, directory_fd) -> None:
+    assert registro.reclamar_autorizacion(ID, directorio_fd=directory_fd) is True
+    marca = tmp_path / f"{registro.PREFIJO_AUTORIZACION}{ID}"
+    assert marca.read_bytes() == b""
+    assert stat.S_IMODE(marca.stat().st_mode) == 0o600
+    assert not (tmp_path / f"{registro.PREFIJO_SOLICITUD_V3}{ID}").exists()
+    assert registro.reclamar_autorizacion(ID, directorio_fd=directory_fd) is False
+
+
+def test_prefijos_distintos_no_se_satisfacen_entre_si(tmp_path: Path, directory_fd) -> None:
+    # Una marca del registro experimental v3 en el mismo directorio no consume
+    # ni satisface la autorización, y al revés: comparten ID a propósito.
+    assert registro.reclamar_id(ID, directorio_fd=directory_fd) is True
+    assert registro.reclamar_autorizacion(ID, directorio_fd=directory_fd) is True
+    assert (tmp_path / f"{registro.PREFIJO_SOLICITUD_V3}{ID}").exists()
+    assert (tmp_path / f"{registro.PREFIJO_AUTORIZACION}{ID}").exists()
+    assert registro.reclamar_autorizacion(ID, directorio_fd=directory_fd) is False
+    otro = "c" * 32
+    assert registro.reclamar_autorizacion(otro, directorio_fd=directory_fd) is True
+    assert registro.reclamar_id(otro, directorio_fd=directory_fd) is True
+
+
+def test_vistos_v3_no_satisface_ni_se_satisface_por_la_autorizacion(tmp_path: Path) -> None:
+    vistos = tmp_path / "vistos"
+    autorizaciones = tmp_path / "autorizaciones"
+    vistos.mkdir()
+    autorizaciones.mkdir(mode=0o700)
+    (vistos / ID).write_text("1800000000", encoding="ascii")  # `marcar_visto`
+    auth_fd = os.open(autorizaciones, os.O_RDONLY | os.O_DIRECTORY)
+    vistos_fd = os.open(vistos, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        assert registro.reclamar_autorizacion(ID, directorio_fd=auth_fd) is True
+        # Consumir la autorización no crea ni modifica la marca v3.
+        assert (vistos / ID).read_text(encoding="ascii") == "1800000000"
+        assert sorted(os.listdir(vistos)) == [ID]
+    finally:
+        os.close(vistos_fd)
+        os.close(auth_fd)
+    # Una purga de `vistos` (borrar sus entradas) no reabre la autorización.
+    (vistos / ID).unlink()
+    auth_fd = os.open(autorizaciones, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        assert registro.reclamar_autorizacion(ID, directorio_fd=auth_fd) is False
+    finally:
+        os.close(auth_fd)
+    assert (autorizaciones / f"{registro.PREFIJO_AUTORIZACION}{ID}").exists()
+
+
+def test_el_registro_de_autorizacion_no_vive_en_run_ni_en_vistos() -> None:
+    modulo = Path(registro.__file__).read_text(encoding="utf-8")
+    assert "/run" not in modulo
+    assert "vistos" not in modulo
+    assert registro.PREFIJO_AUTORIZACION != registro.PREFIJO_SOLICITUD_V3
+    assert registro.PREFIJO_AUTORIZACION.startswith("autorizacion-")
+
+
+def test_reclamador_durable_para_el_verificador(directory_fd) -> None:
+    reclamar = registro.crear_reclamador_durable(directory_fd)
+    assert reclamar(ID) is True
+    assert reclamar(ID) is False
+    with pytest.raises(registro.RegistroNoDisponibleError):
+        reclamar("../escape")
+
+
+def test_fallo_de_sincronizacion_en_autorizacion_no_autoriza_ni_borra(directory_fd) -> None:
+    with pytest.raises(registro.RegistroNoDisponibleError):
+        registro.reclamar_autorizacion(
+            ID, directorio_fd=directory_fd, sincronizar=lambda _fd: False,
+        )
+    # La marca creada no se borra aunque la sincronización no se acredite.
+    assert registro.reclamar_autorizacion(ID, directorio_fd=directory_fd) is False
+
+
+def test_procesos_nuevos_no_reutilizan_la_autorizacion(tmp_path: Path) -> None:
+    code = (
+        "import os,sys\n"
+        "from deploy.ops.registro_repeticiones_ops4 import reclamar_autorizacion\n"
+        "fd=os.open(sys.argv[1], os.O_RDONLY|os.O_DIRECTORY)\n"
+        "try: print(reclamar_autorizacion(sys.argv[2], directorio_fd=fd))\n"
+        "finally: os.close(fd)\n"
+    )
+    argv = [sys.executable, "-c", code, str(tmp_path), ID]
+    repo = Path(__file__).resolve().parents[1]
+    processes = []
+    try:
+        for _ in range(8):
+            processes.append(subprocess.Popen(
+                argv, cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ))
+        results = [p.communicate(timeout=15) for p in processes]
+        assert all(p.returncode == 0 for p in processes)
+        assert [out.strip() for out, _err in results].count(b"True") == 1
+        assert [out.strip() for out, _err in results].count(b"False") == 7
+        reopened = subprocess.run(argv, cwd=repo, capture_output=True, check=True, timeout=15)
+        assert reopened.stdout.strip() == b"False"
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+    assert (tmp_path / f"{registro.PREFIJO_AUTORIZACION}{ID}").exists()

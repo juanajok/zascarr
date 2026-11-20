@@ -8,23 +8,26 @@ y este contrato no está conectado a la web, el auxiliar ni systemd.
 
 ## Componentes
 
-- [Emisor en la app](../../src/zascarr/services/autorizacion_actualizacion.py):
-  construye `cuerpo_json.firma_hex` con HMAC-SHA256 sobre el prefijo de dominio
-  `zascarr-ops4-autorizacion-v1`. No incluye contraseña, hash, usuario ni sesión.
-  La clave debe ser de 32 bytes y **dedicada** a esta autorización.
+- [Emisor y composición en la app](../../src/zascarr/services/autorizacion_actualizacion.py):
+  `crear_autorizacion` construye `cuerpo_json.firma_hex` con HMAC-SHA256 sobre
+  `zascarr-ops4-autorizacion-v1`; `preparar_autorizacion` impone la puerta
+  `habilitada`, confirmación, forma de contraseña, `auth_mode`, una única llamada
+  a `comprobar_contrasena_actual` inyectable y emisión solo con `Reauth.OK`.
+  No incluye contraseña, hash, usuario ni sesión. La clave debe ser de 32 bytes
+  y **dedicada**; se recibe como argumento, no se lee ni se reutiliza `ops.key`.
 - [Verificador en el host](../../deploy/ops/verificador_autorizacion_ops4.py):
   comprueba firma, esquema cerrado, acción `actualizar`, ID hexadecimal,
-  ventana de 1–300 s y tolerancia de reloj de 120 s; acepta opcionalmente un
-  `id_esperado` para ligar el testigo a la petición, y después exige un callback
-  de consumo único. Devuelve aceptada, inválida, caducada, repetida o no
-  disponible. No ejecuta nada.
+  ventana de 1–300 s, tolerancia de reloj de 120 s y un `id_esperado`
+  **obligatorio**; después exige un callback de consumo único. Devuelve
+  aceptada, inválida, caducada, repetida o no disponible. No lee hashes ni BD.
+- [Consumo durable](../../deploy/ops/registro_repeticiones_ops4.py):
+  `reclamar_autorizacion` usa `autorizacion-<id>`, separado de
+  `solicitud-<id>` de v3, con `O_EXCL`, dos `fsync` y sin borrar marcas ante
+  fallo. `crear_reclamador_durable(fd)` lo conecta al verificador.
 
-El llamador de la app debe ejecutar **antes**
-`services.reautenticacion.comprobar_contrasena_actual` y no emitir si el
-resultado no es `Reauth.OK`. El emisor puro no puede comprobarlo por sí mismo;
-la futura integración debe imponer ese orden y cubrirlo con una prueba de
-composición. El host no consulta `auth_mode`, hashes, DB ni readiness: confía
-en que la app solo emite tras reautenticar.
+El host no consulta `auth_mode`, hashes, DB ni readiness: confía en que la app
+solo emite tras reautenticar. La composición no incluye todavía sesión/origen,
+envío único ni transporte; por eso la integración completa sigue pendiente.
 
 ## Garantías y límites
 
@@ -39,12 +42,19 @@ Probado en aislamiento:
 - El token no contiene literalmente `prueba`, `password` ni `pbkdf2`.
 - Emisor rechaza clave/ID/instante/vigencia inválidos.
 
-**No probado todavía:** la composición real con reautenticación, la UI, el
-auxiliar, el protocolo de red, la clave compartida, la persistencia durable del
-consumo ni la ejecución. La prueba de hilos no sustituye exclusión entre
-procesos: el callback debe usar el [registro durable](ops4-registro-repeticiones.md)
-o un mecanismo equivalente. El ID del testigo debe ligarse a la petición y a la
-operación, no reutilizarse como identificador de otra acción.
+**Probado en la composición:** orden puerta→confirmación→forma→`auth_mode`→
+reautenticación→emisión; todos los resultados no `OK`, excepciones y valores
+inesperados no emiten; ID CSPRNG generado solo tras OK; clave inválida no
+emite; token oculto en `repr`; E2E composición→verificador→registro durable,
+replay tras reapertura y procesos concurrentes.
+
+**No probado todavía:** la reautenticación real contra el servicio completo, la
+UI, el auxiliar, el protocolo de red, la provisión de la clave dedicada, el
+propietario/modo real del directorio durable, el envío único ni la ejecución.
+La prueba de hilos no sustituye la exclusión entre procesos: el callback debe
+usar el [registro durable](ops4-registro-repeticiones.md) con un directorio
+propio y acreditado. El ID del testigo se liga a la petición con `id_esperado`;
+no debe reutilizarse para otra acción.
 
 La autorización caduca en minutos y es de un uso, pero no demuestra por sí sola
 que el host sea el correcto, que la app esté sana ni que el binario desplegado
@@ -63,17 +73,20 @@ provisión **no está implementada** y bloquea la integración.
 
 ## Pendiente para integrar
 
-1. Adquirir la clave de 32 bytes en la app por el canal ya previsto, sin
-   exponerla a la web ni registrarla.
-2. Llamar a reautenticación y emitir solo con `OK`; probar composición y fallos.
-3. Definir el transporte (probablemente nueva versión de protocolo) y eliminar
-   la contraseña del mensaje al host en esa ruta.
-4. Consumo durable y exclusión entre procesos; ligar testigo, petición y
-   operación.
+1. Adquirir y provisionar la clave dedicada (32 bytes, permisos mínimos,
+   rotación y directorio durable propios) sin exponerla a la web.
+2. Definir el transporte (probablemente nueva versión) y eliminar la
+   contraseña del mensaje al host en esa ruta; implementar envío único.
+3. Acreditar propietario/modo/ruta del directorio durable y su retención.
+4. Integrar sesión/origen y la puerta explícita de habilitación; no conectar la
+   UI ni el auxiliar antes.
 5. Revisión SecOps del SHA final antes de fusionar, conforme a la regla del
    proyecto para cambios que afectan a la contraseña actual.
 6. No habilitar la UI ni instalar unidad/auxiliar hasta completar lo anterior.
 
-Los 38 tests de [test_ops4_autorizacion.py](../../tests/test_ops4_autorizacion.py)
-y la barrera de [aislamiento](../../tests/test_ops4_aislamiento.py) pasan; el
-contrato permanece sin importar desde web, API, main ni el auxiliar.
+**Estado de pruebas:** 49 casos de contrato, 59 de composición y 37 de registro
+durable (incluidos aislamiento y UI) forman parte de las **791 pruebas OPS4/paridad** verdes y de la suite completa **8781 passed / 2431 skipped**; el detalle y las limitaciones están en los informes de
+[SecOps](secops-ops4-autorizacion-2026-11-20.md),
+[UI](ui-ops4-autorizacion-2026-11-20.md) y
+[QA](qa-ops4-autorizacion-2026-11-20.md). El contrato permanece sin importar
+desde web, API, main ni el auxiliar.

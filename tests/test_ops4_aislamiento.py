@@ -148,3 +148,44 @@ def test_el_emisor_de_autorizacion_no_hace_io_ni_red() -> None:
     texto = ruta.read_text(encoding="utf-8")
     for token in ("open(", "Path(", "subprocess", "socket", "docker", "update.sh"):
         assert token not in texto, token
+
+
+def test_la_composicion_de_autorizacion_no_se_importa_desde_runtime() -> None:
+    rutas = list((RAIZ / "src" / "zascarr").rglob("*.py"))
+    rutas += [
+        RAIZ / "deploy" / "ops" / "zascarr_ops.py",
+        RAIZ / "src" / "zascarr" / "main.py",
+        RAIZ / "scripts" / "instalar_ops.sh",
+    ]
+    for ruta in rutas:
+        if ruta.name == "autorizacion_actualizacion.py":
+            continue
+        texto = ruta.read_text(encoding="utf-8")
+        assert "preparar_autorizacion" not in texto, ruta
+        assert "ResultadoAutorizacion" not in texto, ruta
+
+
+def test_el_emisor_no_usa_la_clave_del_auxiliar_ni_registra() -> None:
+    ruta = RAIZ / "src" / "zascarr" / "services" / "autorizacion_actualizacion.py"
+    texto = ruta.read_text(encoding="utf-8")
+    for token in ("ops_key_file", "ops.key", "get_settings", "logging", "logger", "print("):
+        assert token not in texto, token
+
+
+def test_el_verificador_no_lee_hashes_ni_la_bd() -> None:
+    ruta = RAIZ / "deploy" / "ops" / "verificador_autorizacion_ops4.py"
+    texto = ruta.read_text(encoding="utf-8").lower()
+    for token in (
+        "pbkdf2", "auth_password_hash", "asyncpg", "sqlalchemy", "select(",
+        "database_url", "session",
+    ):
+        assert token not in texto, token
+
+
+def test_el_registro_de_autorizacion_no_se_conecta_a_runtime_ni_al_auxiliar() -> None:
+    nombre = "registro_repeticiones_ops4"
+    auxiliar = (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(encoding="utf-8")
+    assert nombre not in auxiliar
+    assert nombre not in (RAIZ / "scripts" / "instalar_ops.sh").read_text(encoding="utf-8")
+    for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+        assert nombre not in ruta.read_text(encoding="utf-8"), ruta

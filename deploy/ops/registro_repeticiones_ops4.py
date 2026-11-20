@@ -1,9 +1,23 @@
-"""Registro experimental antirrepetición de OPS4; no instalado ni conectado.
+"""Consumo durable de un solo uso de OPS4; no instalado ni conectado.
 
 Un directorio ya provisionado por el host contiene marcas permanentes por ID.
-No es la reserva de operación, no adquiere el cerrojo de copia/restauración y
-no autoriza lanzar nada. La retención/capacidad y la identidad del directorio
-siguen pendientes: no se borran marcas automáticamente. Un disco lleno deniega.
+Este módulo no es la reserva de operación, no adquiere el cerrojo de
+copia/restauración y no autoriza lanzar nada. La retención/capacidad y la
+identidad del directorio siguen pendientes: no se borran marcas automáticamente.
+Un disco lleno deniega.
+
+Hay dos espacios de nombres deliberadamente separados:
+
+- `reclamar_autorizacion` crea `autorizacion-<id>` en el directorio **dedicado**
+  de autorizaciones (persistente, root `0700`); es el consumo que exige el
+  verificador para la ruta app→host (`crear_reclamador_durable`).
+- `reclamar_id` conserva el nombre experimental `solicitud-<id>` del registro de
+  peticiones v3. No es el namespace de la autorización: una marca de uno no
+  satisface ni consume la del otro, y comparten el mismo ID a propósito.
+
+Ninguno de los dos usa el directorio temporal del auxiliar ni su purga: ese
+directorio es memoria RAM (tmpfs) y se purga, lo que reabriría la ventana de
+repetición.
 """
 from __future__ import annotations
 
@@ -15,27 +29,29 @@ from collections.abc import Callable
 
 _ID = re.compile(r"[0-9a-f]{32}\Z")
 
+#: Prefijo del consumo durable de autorizaciones; distinto de `solicitud-<id>`.
+PREFIJO_AUTORIZACION = "autorizacion-"
+#: Prefijo del registro experimental de peticiones v3; no usar para autorizar.
+PREFIJO_SOLICITUD_V3 = "solicitud-"
+
 
 class RegistroNoDisponibleError(Exception):
     """Persistencia no acreditada; no autoriza efectos ni reutilización del ID."""
 
 
-def reclamar_id(
-    id_: object,
-    *,
-    directorio_fd: int,
-    sincronizar: Callable[[int], None] = os.fsync,
-) -> bool:
-    """True solo tras creación exclusiva y fsync de marca y directorio.
-
-    False significa que el nombre ya existe (también un enlace o una marca
-    incompleta). Cualquier otro fallo eleva una excepción sin secretos. El
-    llamador aporta un descriptor de directorio confiable; se duplica para
-    anclar todas las operaciones sin resolver de nuevo su ruta. No se acredita
-    aquí procedencia, propiedad esperada ni seguridad de la jerarquía del host.
-    """
+def _nombre(id_: object, prefijo: str) -> str:
     if not isinstance(id_, str) or not _ID.fullmatch(id_):
         raise RegistroNoDisponibleError("identificador no válido")
+    return f"{prefijo}{id_}"
+
+
+def _reclamar_marca(
+    nombre: str,
+    *,
+    directorio_fd: object,
+    sincronizar: Callable[[int], None],
+) -> bool:
+    """Crea `nombre` de forma exclusiva y la confirma con dos `fsync`."""
     if type(directorio_fd) is not int or directorio_fd < 0:
         raise RegistroNoDisponibleError("directorio no disponible")
     directory = None
@@ -47,7 +63,7 @@ def reclamar_id(
             raise RegistroNoDisponibleError("directorio no seguro")
         try:
             marker = os.open(
-                f"solicitud-{id_}",
+                nombre,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
                 0o600, dir_fd=directory,
             )
@@ -75,3 +91,63 @@ def reclamar_id(
         if directory is not None:
             with contextlib.suppress(OSError):
                 os.close(directory)
+
+
+def reclamar_autorizacion(
+    id_: object,
+    *,
+    directorio_fd: int,
+    sincronizar: Callable[[int], None] = os.fsync,
+) -> bool:
+    """Consume una autorización creando `autorizacion-<id>` en su directorio.
+
+    `True` solo tras creación exclusiva y `fsync` de marca y directorio; `False`
+    si el nombre ya existe (también enlace, FIFO, directorio o marca incompleta).
+    Cualquier otro fallo eleva `RegistroNoDisponibleError` sin secretos. El
+    llamador aporta el descriptor del directorio dedicado (persistente, root
+    `0700`, nunca un tmpfs ni el registro de peticiones v3) y no se aceptan
+    rutas de la petición.
+    """
+    return _reclamar_marca(
+        _nombre(id_, PREFIJO_AUTORIZACION),
+        directorio_fd=directorio_fd,
+        sincronizar=sincronizar,
+    )
+
+
+def reclamar_id(
+    id_: object,
+    *,
+    directorio_fd: int,
+    sincronizar: Callable[[int], None] = os.fsync,
+) -> bool:
+    """Registro experimental v3 (`solicitud-<id>`), conservado sin cambios.
+
+    No es el namespace de la autorización (AC-AUT-07): sirve al protocolo de
+    peticiones v3 y no debe conectarse al verificador de autorizaciones.
+    """
+    return _reclamar_marca(
+        _nombre(id_, PREFIJO_SOLICITUD_V3),
+        directorio_fd=directorio_fd,
+        sincronizar=sincronizar,
+    )
+
+
+def crear_reclamador_durable(
+    directorio_fd: int,
+    *,
+    sincronizar: Callable[[int], None] = os.fsync,
+) -> Callable[[str], bool]:
+    """Devuelve el callback de consumo único que exige el verificador del host.
+
+    El directorio debe ser el dedicado y persistente de autorizaciones, abierto
+    por un llamador de confianza; este módulo no lo crea ni comprueba su ruta.
+    Las excepciones suben al verificador, que las convierte en `no_disponible`;
+    un fallo nunca se interpreta como consumo libre.
+    """
+    def reclamar(id_: str) -> bool:
+        return reclamar_autorizacion(
+            id_, directorio_fd=directorio_fd, sincronizar=sincronizar,
+        )
+
+    return reclamar
