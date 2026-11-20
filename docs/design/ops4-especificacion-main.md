@@ -27,6 +27,23 @@ Equivalencia significa resultado y etapas operativas, no invocar a ciegas el scr
 7. **Cerrojo y estado.** Usar el cerrojo común de operaciones del host antes de efectos y mantenerlo durante toda la operación; copia, restauración, actualización manual y actualización UI no deben solaparse. La reserva/inicio frente a peticiones concurrentes debe ser atómica, incluida la ventana entre aceptación y adquisición del cerrojo; ocupado no altera el estado de la operación en curso. El cerrojo solo coordina participantes: Git, Docker o root externos pueden interferir, por lo que se verifica la identidad antes de usarla y ante discrepancia se detiene.
 8. **Observación y recuperación.** Estado host persistente, escritura atómica y permisos adecuados, con id, fase, fecha, HEAD0/S, resultado y evidencia no sensible de imagen/BD; la app solo lo lee. El protocolo deberá precisar el orden de reserva/inicio/fases y las sincronizaciones del archivo y directorio: un rename atómico no garantiza durabilidad, y corrupción, disco lleno o fsync incierto deben fallar cerrado. Distinguir aceptada de terminada, fallo previo de efecto parcial y resultado incierto. Si se pierde respuesta, se reinicia o muere el proceso, no relanzar automáticamente; mostrar «Sin noticias» cuando proceda y exigir reconciliación manual de unidad, código, imagen y BD antes de otro intento. Errores comprensibles y sin secretos explican siguiente paso. No ejecutar `rollback.sh` ni restaurar automáticamente, especialmente tras migraciones parciales: conservar evidencia y orientar a recuperación manual revisada, sin prometer reversibilidad ni disponibilidad continua.
 
+### Carrera de admisión existente: no reutilizar como garantía
+
+El auxiliar actual comprueba el cerrojo y lo libera antes de pedir a systemd
+un `start --no-block`; el script lo adquiere después. Una operación manual o de
+copia/restauración puede ocuparlo en esa ventana, de modo que una orden aceptada
+no garantiza que el trabajador llegue a ejecutarse. El lock de aceptación solo
+serializa auxiliares, no a todos los scripts. Retener el descriptor en el
+auxiliar tampoco transfiere el lock a la unidad de systemd y puede causar un
+interbloqueo si se espera al trabajador.
+
+Antes de habilitar se debe escoger y ensayar una semántica clara: o todos los
+participantes coordinan reserva y adquisición para rechazar ocupado sin
+consumir otra solicitud, o el trabajador aceptado espera su turno de forma
+segura. Ni una cola ni un lock ya existentes proporcionan por sí solos estado
+durable, idempotencia tras un arranque incierto o exclusión de root/Docker
+externos. La integración sigue **pendiente**, sin cambios en OPS1/OPS2.
+
 ## 4. Secuencia y límites de garantía
 
 Petición confirmada → autenticación viva y reserva → cerrojo → validar host/origen y fijar S → si corresponde actualizar: ancla y copia verificada → avance rápido exacto a S → build → migraciones → arranque y salud → registrar resultado y liberar cerrojo. El caso S=HEAD0 propuesto termina antes de la copia/build, pero aún debe revisarse frente a la operación manual. Las validaciones que deban repetirse en la unidad se repiten al usar los recursos; el resultado de la UI no sustituye a ellas. Si no puede persistirse la reserva o el estado antes del inicio, no se inicia; un fallo posterior se trata como incierto, no como ausencia de cambios.
