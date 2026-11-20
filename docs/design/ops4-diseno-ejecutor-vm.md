@@ -129,10 +129,13 @@ QEMU con `-machine q35,accel=tcg -nodefaults -nic none -display none -S` y
 con la ISO conectada como CD de solo lectura, sin NIC ni disco escribible;
 terminó por el límite de tiempo y la consola serie no produjo salida. En otro
 sondeo QMP confirmó un dispositivo de bloque `ro=true` y `running=true` tras
-`cont`, antes de `quit`. Esto demuestra la configuración y ejecución de QEMU,
-**no** que el instalador haya llegado a arrancar ni que Debian esté instalado.
-Red de aprovisionamiento, snapshots y stack completo siguen sin probarse.
-Ninguna VM existente se ha iniciado o modificado.
+`cont`, antes de `quit`. Un tercer sondeo, con VGA virtual y los mismos límites
+sin NIC ni disco escribible, mostró en captura el **menú del instalador Debian
+GNU/Linux (BIOS mode)**. QMP confirmó el único dispositivo de bloque como
+solo lectura y cerró con `quit`; la captura se conserva solo en evidencia
+privada. Llegar al menú no instala Debian ni prueba el runtime de OPS4. Red de
+aprovisionamiento, snapshots y stack completo siguen sin probarse. Ninguna VM
+existente se ha iniciado o modificado.
 
 La [guía oficial de Debian](https://www.debian.org/CD/verify.es.html) describe
 sumas firmadas para imágenes de instalación. Para Debian 13.7.0 amd64 se ha
@@ -143,9 +146,9 @@ por canal independiente. La imagen `debian-13.7.0-amd64-netinst.iso` se ha
 comparado con el manifiesto firmado: SHA-256
 `a7ef94ac2fb9a7fec454552abd629b7cc9d5155c886165a45649f5ce6167e355`,
 792.723.456 bytes, `sha256sum --check` OK. Se conserva fuera de Git en un
-subdirectorio privado. Los sondeos anteriores no confirman que haya arrancado
-el instalador. La verificación no asegura que la
-imagen contenga todos los paquetes ni sustituye una fuente independiente de la
+subdirectorio privado. Se ha observado el menú inicial, no una instalación
+completada. La verificación no asegura que la imagen contenga todos los paquetes
+ni sustituye una fuente independiente de la
 huella. Una ISO netinst puede requerir red y no demuestra un laboratorio
 completo offline. Deben resolverse la confianza de la clave y el aprovisionamiento
 antes de iniciar la instalación; no se asumirá que la red de QEMU por defecto
