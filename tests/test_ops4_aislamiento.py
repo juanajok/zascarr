@@ -93,3 +93,11 @@ def test_el_escritor_de_estado_no_esta_conectado() -> None:
         assert nombre not in auxiliar
         for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
             assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+
+
+def test_el_transporte_de_actualizacion_no_esta_conectado() -> None:
+    for ruta in list((RAIZ / "src" / "zascarr" / "web").rglob("*.py")) + list(
+        (RAIZ / "src" / "zascarr" / "api").rglob("*.py")
+    ) + [RAIZ / "src" / "zascarr" / "main.py"]:
+        texto = ruta.read_text(encoding="utf-8")
+        assert "actualizacion_transporte" not in texto, ruta
