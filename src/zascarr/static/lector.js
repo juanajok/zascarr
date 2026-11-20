@@ -89,6 +89,10 @@
   const fin = document.getElementById("fin");
   const accionesFin = document.getElementById("fin-acciones");
   const paginas = document.getElementById("lector-paginas");
+  const zoomMenos = document.getElementById("lector-zoom-menos");
+  const zoomMas = document.getElementById("lector-zoom-mas");
+  const zoomReset = document.getElementById("lector-zoom-reset");
+  const zoomValor = document.getElementById("lector-zoom-valor");
   const brilloControl = document.getElementById("lector-brillo");
   const contrasteControl = document.getElementById("lector-contraste");
   const sepiaControl = document.getElementById("lector-sepia");
@@ -108,6 +112,16 @@
   let modo = "ancho";
   let desplazamiento = 0;
   let paginaBVisible = false;
+  // Zoom propio: el navegador no puede ampliar el lienzo fijo del lector de forma útil.
+  let zoom = 1;
+  let panX = 0;
+  let panY = 0;
+  let punteroZoom = null;
+  let pinchZoom = null;
+  let movioAlArrastrar = false;
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 4;
+  const ZOOM_PASO = 0.25;
 
   const IMAGEN_KEY = "zascarr.lector.imagen";
   const ajustesImagen = { brillo: 0, contraste: 0, sepia: false, invertir: false };
@@ -239,6 +253,7 @@
       boton.setAttribute("aria-pressed", String(boton.dataset.modo === modo));
     }
     botonSentido.textContent = `Sentido: ${sentido === "rtl" ? "derecha a izquierda" : "izquierda a derecha"}`;
+    aplicarZoom();
     precargar();
   };
 
@@ -256,6 +271,7 @@
     const destino = Math.max(1, Math.min(total, n));
     if (destino === pagina) return;
     pagina = destino;
+    if (zoom > 1) { panX = 0; panY = 0; }
     pinta();
     guarda();
   };
@@ -397,6 +413,80 @@
     try { window.localStorage.removeItem(IMAGEN_KEY); } catch (_) { /* igual */ }
   });
   aplicarImagen();
+  const acotarPan = () => {
+    const ancho = lienzo.clientWidth || 1;
+    const alto = lienzo.clientHeight || 1;
+    const maxX = Math.max(0, (ancho * (zoom - 1)) / 2);
+    const maxY = Math.max(0, (alto * (zoom - 1)) / 2);
+    panX = Math.max(-maxX, Math.min(maxX, panX));
+    panY = Math.max(-maxY, Math.min(maxY, panY));
+  };
+  const aplicarZoom = () => {
+    if (!paginas || !paginas.style) return;
+    if (zoom <= ZOOM_MIN) { zoom = ZOOM_MIN; panX = 0; panY = 0; }
+    acotarPan();
+    paginas.style.transform = zoom === 1 ? "" : `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    paginas.style.transformOrigin = "center center";
+    raiz.dataset.zoom = String(Math.round(zoom * 100));
+    if (zoomValor) zoomValor.textContent = `${Math.round(zoom * 100)} %`;
+    if (zoomMenos) zoomMenos.disabled = zoom <= ZOOM_MIN;
+    if (zoomMas) zoomMas.disabled = zoom >= ZOOM_MAX;
+  };
+  const cambiarZoom = (nuevo) => {
+    zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(nuevo * 100) / 100));
+    if (zoom === 1) { panX = 0; panY = 0; }
+    aplicarZoom();
+    anunciar(zoom === 1 ? "Vista ajustada." : `Zoom ${Math.round(zoom * 100)} %.`);
+  };
+  const restablecerZoom = () => {
+    zoom = 1; panX = 0; panY = 0; aplicarZoom(); anunciar("Vista ajustada.");
+  };
+  if (zoomMenos) zoomMenos.addEventListener("click", () => cambiarZoom(zoom - ZOOM_PASO));
+  if (zoomMas) zoomMas.addEventListener("click", () => cambiarZoom(zoom + ZOOM_PASO));
+  if (zoomReset) zoomReset.addEventListener("click", restablecerZoom);
+  if (lienzo) {
+    lienzo.addEventListener("wheel", (evento) => {
+      if (evento.ctrlKey || evento.metaKey) {
+        evento.preventDefault();
+        cambiarZoom(zoom + (evento.deltaY < 0 ? ZOOM_PASO : -ZOOM_PASO));
+      } else if (zoom > 1) {
+        // Con la página ampliada la rueda desplaza la imagen, no cambia de página.
+        evento.preventDefault();
+        panY -= evento.deltaY;
+        panX -= evento.shiftKey ? evento.deltaY : 0;
+        aplicarZoom();
+      }
+    }, { passive: false });
+  }
+  if (lienzo) {
+    lienzo.addEventListener("pointerdown", (evento) => {
+      if (zoom <= 1 || evento.button !== 0) return;
+      if (evento.target.closest("a, button, input, select, textarea, [contenteditable], [role='button']")) return;
+      punteroZoom = { id: evento.pointerId, x: evento.clientX, y: evento.clientY, px: panX, py: panY };
+      movioAlArrastrar = false;
+      lienzo.setPointerCapture?.(evento.pointerId);
+    });
+    lienzo.addEventListener("pointermove", (evento) => {
+      if (!punteroZoom || evento.pointerId !== punteroZoom.id) return;
+      const dx = evento.clientX - punteroZoom.x;
+      const dy = evento.clientY - punteroZoom.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) movioAlArrastrar = true;
+      panX = punteroZoom.px + dx;
+      panY = punteroZoom.py + dy;
+      aplicarZoom();
+    });
+    const soltarPuntero = (evento) => {
+      if (!punteroZoom || (evento && evento.pointerId !== punteroZoom.id)) return;
+      if (evento && evento.type === "pointerup" && movioAlArrastrar) {
+        // Evita que el clic posterior del arrastre cambie los controles.
+        setTimeout(() => { movioAlArrastrar = false; }, 0);
+      }
+      punteroZoom = null;
+    };
+    lienzo.addEventListener("pointerup", soltarPuntero);
+    lienzo.addEventListener("pointercancel", soltarPuntero);
+  }
+
   const pantallaDisponible = typeof document.documentElement.requestFullscreen === "function";
   const alternarPantalla = () => {
     if (!pantallaDisponible) return;
@@ -410,6 +500,8 @@
     botonPantalla.hidden = false;
     botonPantalla.addEventListener("click", alternarPantalla);
   }
+  document.addEventListener("fullscreenchange", aplicarZoom);
+  if (typeof window.addEventListener === "function") window.addEventListener("resize", aplicarZoom);
 
   // Chrome auto-oculto. Sin JS la barra se queda visible (degradación honesta).
   document.addEventListener("focusin", () => {
@@ -438,6 +530,15 @@
       return;
     }
     const enLienzo = target === lienzo;
+    if (key === "+" || key === "=" || key === "NumpadAdd") {
+      if (target === lienzo || target === document.body) { evento.preventDefault(); cambiarZoom(zoom + ZOOM_PASO); return; }
+    }
+    if (key === "-" || key === "NumpadSubtract") {
+      if (target === lienzo || target === document.body) { evento.preventDefault(); cambiarZoom(zoom - ZOOM_PASO); return; }
+    }
+    if (key === "0" || key === "Numpad0") {
+      if (target === lienzo || target === document.body) { evento.preventDefault(); restablecerZoom(); return; }
+    }
     if (enLienzo && (key === "f" || key === "h" || key === "m")) {
       evento.preventDefault();
       if (key === "f") alternarPantalla();
@@ -476,16 +577,47 @@
   }
 
   let toqueInicio = null;
+  const distanciaToques = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
   lienzo.addEventListener("touchstart", (evento) => {
-    if (evento.touches.length !== 1 || evento.target.closest("a, button, input, select, textarea, [contenteditable], [role='button']")) {
+    if (evento.target.closest("a, button, input, select, textarea, [contenteditable], [role='button']")) {
+      toqueInicio = null; pinchZoom = null; return;
+    }
+    if (evento.touches.length === 2) {
       toqueInicio = null;
+      pinchZoom = { distancia: distanciaToques(evento.touches[0], evento.touches[1]),
+                    zoom: zoom };
+      evento.preventDefault();
       return;
     }
+    if (evento.touches.length !== 1) { toqueInicio = null; return; }
     const t = evento.touches[0];
     const rect = lienzo.getBoundingClientRect();
-    toqueInicio = { x: t.clientX, y: t.clientY, izquierda: rect.left, ancho: rect.width };
-  }, { passive: true });
+    toqueInicio = { x: t.clientX, y: t.clientY, izquierda: rect.left, ancho: rect.width,
+                    px: panX, py: panY, movido: false };
+    if (zoom > 1) evento.preventDefault();
+  }, { passive: false });
+  lienzo.addEventListener("touchmove", (evento) => {
+    if (pinchZoom && evento.touches.length === 2) {
+      evento.preventDefault();
+      const distancia = distanciaToques(evento.touches[0], evento.touches[1]);
+      if (pinchZoom.distancia > 0) cambiarZoom(pinchZoom.zoom * distancia / pinchZoom.distancia);
+      return;
+    }
+    if (!toqueInicio || zoom <= 1 || evento.touches.length !== 1) return;
+    evento.preventDefault();
+    const t = evento.touches[0];
+    const dx = t.clientX - toqueInicio.x;
+    const dy = t.clientY - toqueInicio.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) toqueInicio.movido = true;
+    panX = toqueInicio.px + dx;
+    panY = toqueInicio.py + dy;
+    aplicarZoom();
+  }, { passive: false });
   lienzo.addEventListener("touchend", (evento) => {
+    if (pinchZoom) {
+      if (evento.touches.length < 2) pinchZoom = null;
+      return;
+    }
     if (!toqueInicio || !evento.changedTouches.length) return;
     if (evento.touches.length) { toqueInicio = null; return; }
     const t = evento.changedTouches[0];
@@ -493,6 +625,7 @@
     const dy = t.clientY - toqueInicio.y;
     const origen = toqueInicio;
     toqueInicio = null;
+    if (zoom > 1) return;  // ampliada: el gesto es para moverse, no para pasar página
     if (Math.abs(dx) >= 50 && Math.abs(dx) > 2 * Math.abs(dy)) {
       evento.preventDefault(); // evita también el clic sintético posterior al gesto
       const adelante = (dx < 0) !== (sentido === "rtl");
@@ -506,15 +639,17 @@
     else if (zona > 0.7) (sentido === "rtl" ? retroceder : avanzar)();
     else alternarChrome();
   }, { passive: false });
-  lienzo.addEventListener("touchcancel", () => { toqueInicio = null; });
+  lienzo.addEventListener("touchcancel", () => { toqueInicio = null; pinchZoom = null; });
   lienzo.addEventListener("click", (evento) => {
+    if (movioAlArrastrar) { movioAlArrastrar = false; return; }
     // Las flechas y otros controles conservan su comportamiento nativo.
-    if (evento.button !== 0 || ![lienzo, paginas, imagen, imagenB].includes(evento.target)) return;
+    if (evento.button !== 0 || zoom > 1 || ![lienzo, paginas, imagen, imagenB].includes(evento.target)) return;
     const rect = lienzo.getBoundingClientRect();
     const zona = (evento.clientX - rect.left) / rect.width;
     if (zona >= 0.3 && zona <= 0.7) alternarChrome();
   });
 
   if (imagen.complete && imagen.naturalWidth) decidirPareja();
+  aplicarZoom();
   pinta();
 })();
