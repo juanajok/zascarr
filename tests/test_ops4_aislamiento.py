@@ -115,3 +115,11 @@ def test_el_limite_de_intentos_no_esta_conectado() -> None:
     assert "limite_intentos_actualizar_ops4" not in auxiliar
     for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
         assert "limite_intentos_actualizar_ops4" not in ruta.read_text(encoding="utf-8"), ruta
+
+
+def test_el_registro_antirrepeticion_no_esta_conectado() -> None:
+    nombre = "registro_repeticiones_ops4"
+    paths = list((RAIZ / "src" / "zascarr").rglob("*.py"))
+    paths += [RAIZ / "deploy" / "ops" / "zascarr_ops.py", RAIZ / "scripts" / "instalar_ops.sh"]
+    for path in paths:
+        assert nombre not in path.read_text(encoding="utf-8"), path

@@ -40,7 +40,7 @@ def admitir(
     verificar_prueba: Callable[[str], bool],
     reclamar_id: Callable[[str], bool],
 ) -> CodigoAdmision:
-    """Orden: esquema → firma → frescura → reclamación → prueba.
+    """Orden: esquema → firma → frescura → prueba → reclamación.
 
     Las excepciones de los callbacks se convierten en rechazo; nunca se
     devuelve la petición, la contraseña ni un mensaje de excepción.
