@@ -130,13 +130,58 @@ ha probado la imagen de SO, red de aprovisionamiento, snapshots ni el stack
 completo. Ninguna VM existente se ha iniciado o modificado.
 
 La [guía oficial de Debian](https://www.debian.org/CD/verify.es.html) describe
-sumas firmadas para imágenes de instalación. `gpgv` está instalado, pero no se
-ha identificado una clave de firma CD local de confianza ni se ha verificado
-una imagen. Una ISO netinst puede requerir red y no demuestra un laboratorio
-completo offline. Deben decidirse imagen, cadena de confianza y aprovisionamiento
+sumas firmadas para imágenes de instalación. Para Debian 13.7.0 amd64 se ha
+verificado con `gpgv` la firma del manifiesto SHA-256 con la clave CD de huella
+`DF9B9C49EAA9298432589D76DA87E80D6294BE9B`. La clave y la huella proceden de
+la web oficial por HTTPS: esto confía en TLS/PKI y no constituye corroboración
+por canal independiente. La imagen `debian-13.7.0-amd64-netinst.iso` se ha
+comparado con el manifiesto firmado: SHA-256
+`a7ef94ac2fb9a7fec454552abd629b7cc9d5155c886165a45649f5ce6167e355`,
+792.723.456 bytes, `sha256sum --check` OK. Se conserva fuera de Git en un
+subdirectorio privado; no se ha arrancado. La verificación no asegura que la
+imagen contenga todos los paquetes ni sustituye una fuente independiente de la
+huella. Una ISO netinst puede requerir red y no demuestra un laboratorio
+completo offline. Deben resolverse la confianza de la clave y el aprovisionamiento
 antes de iniciar la instalación; no se asumirá que la red de QEMU por defecto
 impide acceso a la LAN. Hay recursos aparentes, sin garantías de cuota real.
 Sin VM y stack preparados, las pruebas de host siguen **NOT RUN**.
+
+**Plan de aprovisionamiento offline, aún no ejecutado:**
+
+1. La [guía de instalación Debian](https://www.debian.org/releases/trixie/amd64/apas02.en.html)
+   indica que netinst incluye paquetes para un sistema mínimo, pero está
+   orientada a obtener paquetes adicionales por red; el primer DVD permite una
+   instalación sin red con mayor selección. Ninguna de las dos opciones prueba
+   por sí sola disponibilidad de Docker, PostgreSQL o los artefactos de ZascArr.
+2. Seleccionar una versión e imagen **inmutables**, obtener suma y firma
+   oficiales, validar la identidad de la clave y luego la firma del manifiesto
+   y la suma exacta de la imagen. La huella obtenida de la web oficial mediante
+   HTTPS depende de la confianza en TLS y ese sitio; no es corroboración por
+   canal independiente. Sin una cadena de confianza aceptable, no afirmar que
+   la imagen está autenticada ni arrancarla para estas pruebas.
+3. Preparar fuera del invitado los paquetes y dependencias necesarios para la
+   arquitectura y versiones exactas, y las imágenes de contenedor por digest;
+   trasladarlos mediante medio dedicado de solo lectura. No copiar `.env`,
+   credenciales, datos o imágenes privadas de producción. Documentar de forma
+   separada cómo se autentican los paquetes y las imágenes. En el invitado,
+   Docker puede necesitar una red interna para app y BD; `--network none` en
+   cada contenedor no permitiría esa comunicación.
+4. El instalador [acepta preconfiguración](https://www.debian.org/releases/trixie/amd64/apbs02.en.html)
+   desde initrd o medios especificados; no asumir que cualquier segundo CD se
+   monta automáticamente en `/cdrom`. El [ejemplo oficial](https://www.debian.org/releases/trixie/amd64/apbs04.en.html)
+   permite desactivar red y espejo, pero advierte que el nombre de los discos
+   depende de la detección y que el particionado automático puede borrar el
+   disco elegido. No automatizarlo hasta demostrar que solo aparece un disco
+   virtual recién creado y comprobar su identidad.
+5. El sondeo de arranque usaría QEMU sin NIC ni dispositivos compartidos con
+   el invitado, sin socket Docker del host, con límites y directorio dedicado;
+   un fichero qcow2 disperso con tamaño virtual limitado no garantiza por sí
+   solo una cuota física. Una protección adicional por namespaces es deseable,
+   pero el último intento de comprobarla **no llegó a ejecutar `bwrap`**: el
+   propio backend sandbox de la herramienta rechazó la operación al no poder
+   crear namespaces no privilegiados. No se ha verificado que el aislamiento
+   adicional funcione y no se eludirá esa protección. Ni QEMU ni namespaces
+   equivalen a aislamiento perfecto frente a fallos del kernel o hipervisor.
 
 ### Matriz mínima de interrupciones y oráculos
 
