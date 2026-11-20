@@ -8,7 +8,7 @@
 
 Fuente normativa: [SPEC BL-OPS4](especificacion-BL-OPS4.md), especialmente §§2–7 y 9–10. La relación de abajo es trazabilidad de cobertura **propuesta**, no una declaración de cumplimiento: un AC puede cubrir solo parte de un FR y varios AC son compuestos. Se conservan los identificadores y escenarios existentes; no se inventan AC nuevos. La historia B sigue **NOT IMPLEMENTED**, sin habilitación ni autorización para Pi o producción. Una aprobación de SHA no certifica inocuidad, autoría ni revisión de seguridad; tampoco autoriza migraciones. La viabilidad SecOps no es autorización de activación.
 
-**Estado de esta revisión:** 412 pruebas seleccionadas de OPS4 y paridad pasaron con el entorno virtual del proyecto. La suite completa anterior (8273 passed, 2429 skipped) corresponde a un SHA anterior a las últimas correcciones y no se ha repetido en esta revisión. Esto no acredita los criterios compuestos ni prueba un host real. Los escenarios futuros de aceptación se marcan **NOT RUN**, también cuando exista una simulación parcial. Sin pruebas root, Docker, Postgres, systemd, Pi ni despliegue real en esta revisión.
+**Estado de esta revisión:** 436 pruebas seleccionadas de OPS4 y paridad pasaron con el entorno virtual del proyecto. La suite completa anterior (8273 passed, 2429 skipped) corresponde a un SHA anterior a las últimas correcciones y no se ha repetido en esta revisión. Esto no acredita los criterios compuestos ni prueba un host real. Los escenarios futuros de aceptación se marcan **NOT RUN**, también cuando exista una simulación parcial. Sin pruebas root, Docker, Postgres, systemd, Pi ni despliegue real en esta revisión.
 
 ## FR ↔ AC existentes
 
@@ -31,6 +31,7 @@ Fuente normativa: [SPEC BL-OPS4](especificacion-BL-OPS4.md), especialmente §§2
 ## Evidencia inspeccionada: límites de cada prueba
 
 - [test_ops4_cliente_actualizacion.py](../../tests/test_ops4_cliente_actualizacion.py): paridad del constructor v3 y el verificador aislado, incluyendo UTF-8 y límites. El cliente no envía peticiones y el auxiliar actual rechaza v3; no prueba autenticación, confidencialidad, antigüedad ni antirreplay. La contraseña va en claro por el canal local propuesto y no debe registrarse.
+- [test_ops4_solicitud_actualizacion.py](../../tests/test_ops4_solicitud_actualizacion.py): comprueba confirmación, modos de autenticación, reautenticación simulada y construcción de la petición tras OK. No hay transporte, socket ni llamada a unidad; la reautenticación real no se prueba aquí. La lectura de clave se limita a fichero regular sin seguir enlaces y se prueba con el formato del instalador, enlace y FIFO; no verifica propiedad ni modo del host.
 - [test_ops4_estado_actualizacion.py](../../tests/test_ops4_estado_actualizacion.py): lector informativo de JSON cerrado con ID correlacionado, límites y sin seguir enlaces; no acredita procedencia, éxito, durabilidad ni autoridad, y un estado activo sin noticias se vuelve incierto con el reloj de pared.
 
 - [test_ops4_aislamiento.py](../../tests/test_ops4_aislamiento.py): barrera estática que impide que los módulos experimentales se importen desde `src/zascarr` o el auxiliar y busca ciertas cadenas de procesos, red, Docker y `update.sh`. También exige que los experimentos no hagan E/S ni persistan. No sustituye controles de ejecución ni revisa configuración del host.

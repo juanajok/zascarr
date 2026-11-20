@@ -26,7 +26,8 @@ def test_los_experimentos_no_se_importan_desde_runtime() -> None:
         assert "experimento_" not in texto, ruta
         assert "modelo_aprobacion_ops4" not in texto, ruta
         assert "protocolo_actualizar_ops4" not in texto, ruta
-        assert "ops_actualizacion_protocolo" not in texto, ruta
+        if ruta.name != "solicitud_actualizacion.py":
+            assert "ops_actualizacion_protocolo" not in texto, ruta
 
 
 def test_experimentos_sin_procesos_red_ni_ejecucion() -> None:
@@ -51,3 +52,13 @@ def test_experimentos_no_realizan_io_ni_persisten() -> None:
         for token in ("open(", "Path(", "tempfile", "shutil", "sqlite3", "import os"):
 
             assert token not in texto, (ruta, token)
+
+
+def test_el_servicio_de_solicitud_no_esta_conectado_a_la_web() -> None:
+    rutas = list((RAIZ / "src" / "zascarr" / "web").rglob("*.py"))
+    rutas += list((RAIZ / "src" / "zascarr" / "api").rglob("*.py"))
+    rutas.append(RAIZ / "src" / "zascarr" / "main.py")
+    for ruta in rutas:
+        texto = ruta.read_text(encoding="utf-8")
+        assert "solicitud_actualizacion" not in texto, ruta
+        assert "ops_actualizacion_protocolo" not in texto, ruta
