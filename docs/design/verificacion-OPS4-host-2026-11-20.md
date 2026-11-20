@@ -138,3 +138,22 @@ al arnés.
 
 **NOT RUN:** unidad de actualización real (no existe), pruebas destructivas,
 reinicios, Docker/PostgreSQL de producción y recuperación.
+
+
+### Observación de fallo y timeout
+
+En una segunda prueba válida (sin `--collect`, leyendo la unidad antes de
+limpiarla) sendas unidades transitorias desechables quedaron en estado
+`failed`:
+
+| Caso | `systemd-run --wait` | `Result` | `ExecMainStatus` | Estado |
+|---|---|---|---|---|
+| `/bin/false` | código 1 | `exit-code` | 1 | `failed/failed` |
+| `/bin/sleep 5` con `TimeoutStartSec=1s` | código 1 | `timeout` | 15 | `failed/failed` |
+
+Ambas se limpiaron con `systemctl reset-failed` y no se arrancó ninguna unidad
+de producción. La primera tentativa con `--collect` se descartó porque la
+unidad desaparecía antes de leer su estado y `systemctl show` devolvía valores
+por defecto; no se usa como evidencia. También se ejecutó una unidad transitoria
+con `CapabilityBoundingSet=` vacío realizando solo una consulta de lectura; no
+prueba el arranque real de una unidad desde el auxiliar.
