@@ -108,3 +108,10 @@ def test_el_ejecutor_fijo_no_esta_conectado() -> None:
     assert "ejecutor_actualizar_ops4" not in auxiliar
     for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
         assert "ejecutor_actualizar_ops4" not in ruta.read_text(encoding="utf-8"), ruta
+
+
+def test_el_limite_de_intentos_no_esta_conectado() -> None:
+    auxiliar = (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(encoding="utf-8")
+    assert "limite_intentos_actualizar_ops4" not in auxiliar
+    for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+        assert "limite_intentos_actualizar_ops4" not in ruta.read_text(encoding="utf-8"), ruta
