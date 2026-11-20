@@ -86,6 +86,14 @@ const sin = run(false);
 const salida = {
   fullscreenConApi: con.els["lector-pantalla-completa"].hidden === false,
   fullscreenSinApi: sin.els["lector-pantalla-completa"].hidden === true,
+  fullscreenOcultaBarra: (() => {
+    con.fire(con.els["lector-pantalla-completa"], "click");
+    (con.doc.listeners.fullscreenchange || []).forEach((f) => f({}));
+    const oculta = con.root.dataset.chrome === "oculto";
+    con.doc.fullscreenElement = null;
+    (con.doc.listeners.fullscreenchange || []).forEach((f) => f({}));
+    return oculta && con.root.dataset.chrome === "";
+  })(),
   dobleActiva: (() => {
     con.fire(con.modos[2], "click");
     return con.root.dataset.modo === "doble" && con.els["lector-pagina-b"].hidden === false;
@@ -192,6 +200,7 @@ def test_lector_js_fullscreen_doble_y_teclado(tmp_path):
     datos = json.loads(r.stdout)
     assert datos == {
         "fullscreenConApi": True, "fullscreenSinApi": True,
+        "fullscreenOcultaBarra": True,
         "dobleActiva": True, "avanzaConFlecha": True, "fSinApiNoRompe": True,
         "hAlternaChrome": True, "espacioNativo": True, "atajoFuera": True,
         "limiteConFoco": True, "escapeDesdeOpciones": True, "tabFueraCierra": True,
