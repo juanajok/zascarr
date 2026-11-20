@@ -28,12 +28,16 @@ class ResultadoEscritura(StrEnum):
     INVALIDO = "invalido"
 
 
+def _reemplazar(origen: str, destino: str, dir_fd: int) -> None:
+    os.replace(origen, destino, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+
+
 def escribir_estado(
     ruta: str | Path,
     datos: object,
     *,
     fsync: Callable[[int], None] = os.fsync,
-    replace: Callable[[str, str], None] = os.replace,
+    replace: Callable[[str, str, int], None] = _reemplazar,
 ) -> ResultadoEscritura:
     """Intenta publicar una instantánea; solo OK si todas las fases terminan."""
     try:
@@ -51,8 +55,10 @@ def escribir_estado(
             info = os.fstat(fd_dir)
             if not stat.S_ISDIR(info.st_mode):
                 return ResultadoEscritura.INVALIDO
-            temporal = directorio / f".{destino.name}.tmp-{secrets.token_hex(8)}"
-            fd = os.open(temporal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            temporal = f".{destino.name}.tmp-{secrets.token_hex(8)}"
+            fd = os.open(
+                temporal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=fd_dir
+            )
             _escribir_todo(fd, contenido)
             fsync(fd)
         except (OSError, TypeError, ValueError):
@@ -62,7 +68,7 @@ def escribir_estado(
                 os.close(fd)
                 fd = None
         try:
-            replace(str(temporal), str(destino))
+            replace(temporal, destino.name, fd_dir)
             temporal = None
             fsync(fd_dir)
         except (OSError, TypeError, ValueError):
@@ -71,7 +77,7 @@ def escribir_estado(
     finally:
         if temporal is not None:
             with contextlib.suppress(OSError):
-                os.unlink(temporal)
+                os.unlink(temporal, dir_fd=fd_dir)
         os.close(fd_dir)
 
 

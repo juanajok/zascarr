@@ -56,17 +56,17 @@ def admitir(
     if abs(objeto["creada"] - ahora) > TOLERANCIA_RELOJ_S:
         return CodigoAdmision.CADUCADA
     try:
-        reclamada = reclamar_id(objeto["id"])
-    except Exception:  # noqa: BLE001 — un fallo de exclusión no autoriza
-        return CodigoAdmision.NO_DISPONIBLE
-    if reclamada is not True:
-        return CodigoAdmision.REPETIDA
-    try:
         valida = verificar_prueba(objeto["prueba"])
     except Exception:  # noqa: BLE001 — un fallo de autenticación no autoriza
         return CodigoAdmision.NO_DISPONIBLE
     if valida is not True:
         return CodigoAdmision.PRUEBA_INVALIDA
+    try:
+        reclamada = reclamar_id(objeto["id"])
+    except Exception:  # noqa: BLE001 — un fallo de exclusión no autoriza
+        return CodigoAdmision.NO_DISPONIBLE
+    if reclamada is not True:
+        return CodigoAdmision.REPETIDA
     return CodigoAdmision.ACEPTADA
 
 

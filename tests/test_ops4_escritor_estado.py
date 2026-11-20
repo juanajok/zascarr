@@ -37,7 +37,7 @@ def test_original_permanece_si_falla_rename(tmp_path) -> None:
     destino = tmp_path / "estado.json"
     destino.write_text('{"antiguo":true}\n', encoding="utf-8")
 
-    def replace_falla(_a: str, _b: str) -> None:
+    def replace_falla(_a: str, _b: str, _fd: int) -> None:
         raise OSError("rename")
 
     assert escribir_estado(destino, ESTADO, replace=replace_falla) is ResultadoEscritura.INCIERTO

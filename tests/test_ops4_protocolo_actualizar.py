@@ -118,3 +118,10 @@ def test_repetir_validacion_no_es_proteccion_replay():
     datos["firma"] = protocolo.firmar(CLAVE, datos)
     assert protocolo.verificar_firma(CLAVE, protocolo.parsear(linea(datos)))
     assert protocolo.verificar_firma(CLAVE, protocolo.parsear(linea(datos)))
+
+
+def test_crlf_no_se_acepta():
+    datos = peticion()
+    datos["firma"] = protocolo.firmar(CLAVE, datos)
+    bruto = json.dumps(datos, ensure_ascii=False, separators=(",", ":")).encode() + b"\r\n"
+    assert protocolo.parsear(bruto) is None

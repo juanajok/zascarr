@@ -80,12 +80,14 @@ def test_lector_sin_leer_falla_cerrado() -> None:
     assert admitir(construir(), object()) is CodigoAdmision.NO_DISPONIBLE
 
 
-def test_firma_o_replay_no_consulta_bd() -> None:
+def test_firma_o_replay_no_consume_aceptacion() -> None:
     lector = Lector()
     assert admitir(construir(), lector, clave=b"x" * 32) is CodigoAdmision.FIRMA_INVALIDA
     assert lector.llamadas == 0
+    # La repetición se comprueba después de autenticar para no quemar el id
+    # con una contraseña incorrecta; por eso aquí sí se consulta la BD.
     assert admitir(construir(), lector, reclama=False) is CodigoAdmision.REPETIDA
-    assert lector.llamadas == 0
+    assert lector.llamadas == 1
 
 
 def test_no_expone_secretos_en_resultado() -> None:

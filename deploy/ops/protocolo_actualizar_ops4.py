@@ -70,7 +70,7 @@ def parsear(linea: bytes) -> dict[str, Any] | None:
     """Valida el encuadre y esquema; no valida firma, edad ni repetición."""
     if not isinstance(linea, bytes) or len(linea) > MAX_LINEA:
         return None
-    if not linea.endswith(b"\n") or linea.count(b"\n") != 1:
+    if not linea.endswith(b"\n") or linea.count(b"\n") != 1 or linea.endswith(b"\r\n"):
         return None
     try:
         objeto = json.loads(linea[:-1].decode("utf-8"), object_pairs_hook=_sin_duplicados)

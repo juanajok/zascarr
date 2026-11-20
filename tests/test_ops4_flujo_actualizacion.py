@@ -68,7 +68,7 @@ async def test_flujo_completo_en_memoria(tmp_path: Path) -> None:
         preparada.linea.bytes(), clave=CLAVE, ahora=AHORA,
         lector=lector, reclamar_id=reclamar,
     ) is CodigoAdmision.REPETIDA
-    assert lector.llamadas == 1
+    assert lector.llamadas == 2
 
 
 @pytest.mark.asyncio

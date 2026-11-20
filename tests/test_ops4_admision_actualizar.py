@@ -93,13 +93,22 @@ def test_frescura_en_el_limite(creada: int) -> None:
     ) is CodigoAdmision.ACEPTADA
 
 
-def test_repeticion_no_verifica_prueba() -> None:
+def test_repeticion_no_se_acepta_tras_autenticar() -> None:
     dobles = Dobles(reclama=False)
     assert admitir(
         construir(), clave=CLAVE, ahora=AHORA,
         verificar_prueba=dobles.verificar, reclamar_id=dobles.reclamar,
     ) is CodigoAdmision.REPETIDA
-    assert dobles.pruebas == []
+    assert dobles.pruebas == ["clave"]
+
+
+def test_fallo_de_prueba_no_consume_reclamacion() -> None:
+    dobles = Dobles(prueba=False)
+    assert admitir(
+        construir(), clave=CLAVE, ahora=AHORA,
+        verificar_prueba=dobles.verificar, reclamar_id=dobles.reclamar,
+    ) is CodigoAdmision.PRUEBA_INVALIDA
+    assert dobles.ids == []
 
 
 def test_prueba_incorrecta_se_rechaza() -> None:

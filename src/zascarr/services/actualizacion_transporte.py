@@ -33,6 +33,11 @@ class CodigoTransporte(StrEnum):
     RECHAZADA = "rechazada"
     NO_DISPONIBLE = "no_disponible"
     RESPUESTA_INVALIDA = "respuesta_invalida"
+    INCIERTO = "incierto"
+
+
+class IntercambioInciertoError(Exception):
+    """La conexión se estableció: pudo enviarse algo y perderse la respuesta."""
 
 
 Conversar = Callable[[str, bytes], Awaitable[bytes]]
@@ -41,9 +46,13 @@ Conversar = Callable[[str, bytes], Awaitable[bytes]]
 async def _conversar(ruta: str, peticion: bytes) -> bytes:
     lector, escritor = await asyncio.open_unix_connection(ruta, limit=MAX_RESPUESTA * 2)
     try:
-        escritor.write(peticion)
-        await escritor.drain()
-        return await lector.readuntil(b"\n")
+        try:
+            escritor.write(peticion)
+            await escritor.drain()
+            return await lector.readuntil(b"\n")
+        except BaseException as exc:
+            # El socket ya se abrió: no consta que no se enviara o ejecutara nada.
+            raise IntercambioInciertoError from exc
     finally:
         escritor.close()
         with contextlib.suppress(OSError):
@@ -66,7 +75,9 @@ async def pedir_actualizacion(
         respuesta = await asyncio.wait_for(
             conversar(settings.ops_socket_file, peticion), timeout=TIEMPO_S
         )
-    except Exception:  # noqa: BLE001 — un fallo de transporte no autoriza nada
+    except (IntercambioInciertoError, TimeoutError):
+        return CodigoTransporte.INCIERTO
+    except Exception:  # noqa: BLE001 — conexión no establecida o fallo previo
         return CodigoTransporte.NO_DISPONIBLE
     return _interpretar(respuesta, id_)
 
@@ -81,7 +92,11 @@ def _sin_duplicados(pares: list[tuple[str, object]]) -> dict[str, object]:
 def _interpretar(respuesta: object, id_: object) -> CodigoTransporte:
     if not isinstance(respuesta, bytes) or len(respuesta) > MAX_RESPUESTA:
         return CodigoTransporte.RESPUESTA_INVALIDA
-    if not respuesta.endswith(b"\n") or respuesta.count(b"\n") != 1:
+    if (
+        not respuesta.endswith(b"\n")
+        or respuesta.count(b"\n") != 1
+        or respuesta.endswith(b"\r\n")
+    ):
         return CodigoTransporte.RESPUESTA_INVALIDA
     try:
         cuerpo = json.loads(

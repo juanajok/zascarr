@@ -40,7 +40,7 @@ EXITO = {
 }
 
 #: Fases en las que un fallo puede haber dejado efectos parciales.
-INCIERTAS_POR_FALLO = frozenset({Fase.MIGRANDO, Fase.ARRANCANDO, Fase.VERIFICANDO})
+INCIERTAS_POR_FALLO = frozenset({Fase.AVANZANDO, Fase.MIGRANDO, Fase.ARRANCANDO, Fase.VERIFICANDO})
 
 
 def siguiente(fase: object, resultado: object) -> Fase | None:

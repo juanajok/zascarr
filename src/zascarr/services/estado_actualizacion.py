@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Any
 
 MAX_BYTES = 4096
-SIN_NOTICIAS_SEGUNDOS = 600
+#: El ejecutor permite 5400 s; el margen evita declarar incierta una obra sana.
+SIN_NOTICIAS_SEGUNDOS = 7200
 _ID = re.compile(r"[0-9a-f]{32}\Z")
 _CAMPOS = {"schema", "id", "estado", "inicio_epoch", "actualizado_epoch"}
 

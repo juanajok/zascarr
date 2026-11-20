@@ -11,6 +11,7 @@ import pytest
 
 from zascarr.services.estado_actualizacion import (
     MAX_BYTES,
+    SIN_NOTICIAS_SEGUNDOS,
     EstadoActualizacion,
     leer_estado_actualizacion,
 )
@@ -79,11 +80,21 @@ def test_id_distinto_y_reloj_invalido(tmp_path: Path) -> None:
 @pytest.mark.parametrize("state", ["aceptada", "en_curso"])
 def test_sin_noticias_es_incierto_no_fallido(tmp_path: Path, state: str) -> None:
     path = tmp_path / "estado.json"
-    path.write_text(json.dumps(record(estado=state, inicio_epoch=NOW - 600,
-                                      actualizado_epoch=NOW - 600)), encoding="utf-8")
+    path.write_text(
+        json.dumps(record(
+            estado=state, inicio_epoch=NOW - SIN_NOTICIAS_SEGUNDOS,
+            actualizado_epoch=NOW - SIN_NOTICIAS_SEGUNDOS,
+        )),
+        encoding="utf-8",
+    )
     assert read(path) is EstadoActualizacion.INCIERTA
-    path.write_text(json.dumps(record(estado=state, inicio_epoch=NOW - 599,
-                                      actualizado_epoch=NOW - 599)), encoding="utf-8")
+    path.write_text(
+        json.dumps(record(
+            estado=state, inicio_epoch=NOW - SIN_NOTICIAS_SEGUNDOS + 1,
+            actualizado_epoch=NOW - SIN_NOTICIAS_SEGUNDOS + 1,
+        )),
+        encoding="utf-8",
+    )
     assert read(path).value == state
 
 

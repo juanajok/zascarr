@@ -10,6 +10,7 @@ import pytest
 from zascarr.services import actualizacion_transporte
 from zascarr.services.actualizacion_transporte import (
     CodigoTransporte,
+    IntercambioInciertoError,
     pedir_actualizacion,
 )
 
@@ -104,7 +105,17 @@ async def test_timeout_no_autoriza(monkeypatch) -> None:
 
     assert await pedir_actualizacion(
         SETTINGS, b"peticion\n", id_=ID, conversar=tarda
-    ) is CodigoTransporte.NO_DISPONIBLE
+    ) is CodigoTransporte.INCIERTO
+
+
+@pytest.mark.asyncio
+async def test_intercambio_incierto_se_distingue_de_socket_caido() -> None:
+    async def incierto(_ruta, _peticion):
+        raise IntercambioInciertoError()
+
+    assert await pedir_actualizacion(
+        SETTINGS, b"peticion\n", id_=ID, conversar=incierto
+    ) is CodigoTransporte.INCIERTO
 
 
 @pytest.mark.asyncio
@@ -130,6 +141,16 @@ async def test_clave_duplicada_en_respuesta_no_se_acepta() -> None:
 
     async def conversar(_ruta, _peticion):
         return bruto
+
+    assert await pedir_actualizacion(
+        SETTINGS, b"peticion\n", id_=ID, conversar=conversar
+    ) is CodigoTransporte.RESPUESTA_INVALIDA
+
+
+@pytest.mark.asyncio
+async def test_respuesta_crlf_no_se_acepta() -> None:
+    async def conversar(_ruta, _peticion):
+        return respuesta().replace(b"\n", b"\r\n")
 
     assert await pedir_actualizacion(
         SETTINGS, b"peticion\n", id_=ID, conversar=conversar
