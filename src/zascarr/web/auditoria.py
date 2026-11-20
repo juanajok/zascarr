@@ -307,7 +307,7 @@ async def _ultimo_rescan(db: AsyncSession) -> dict | None:
 def _texto_cadencia() -> str:
     minutos = get_settings().rescan_interval_minutes
     if minutos <= 0:
-        return "El rescan automático está apagado."
+        return "La biblioteca no se actualiza sola."
     if minutos == 1440:
         return "Además, ZascArr lo hace solo una vez al día."
     if minutos % 1440 == 0:

@@ -114,7 +114,7 @@ async def _ejecutar_tarea(fabrica, disparador: str) -> None:
         await _ejecutar_tarea_con_cerrojo(fabrica, disparador, tarea)
     finally:
         if tarea is not None and tarea.estado.value == "en_curso":
-            tareas.terminar(tarea.id, resumen="Revisión terminada")
+            tareas.terminar(tarea.id, resumen="Biblioteca actualizada")
 
 
 async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
@@ -124,7 +124,8 @@ async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
             _estado.terminado = datetime.now(UTC)
             logger.info("rescan.ocupado", disparador=disparador)
             if tarea is not None:
-                tareas.error(tarea.id, tipo_error="ocupado")
+                # No es un fallo: otra operación de disco tenía el cerrojo y no se lanzó nada.
+                tareas.terminar(tarea.id, resumen="Otra operación de disco estaba en marcha")
             return
         try:
             informe = await _correr(fabrica, disparador)
@@ -188,7 +189,7 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
         try:
             informe = await _correr(fabrica, DISPARADOR_AUTOMATICO)
             if tarea is not None:
-                tareas.terminar(tarea.id, resumen="Biblioteca revisada")
+                tareas.terminar(tarea.id, resumen="Biblioteca actualizada")
             _estado.informe = informe
             _estado.fase = FaseRescan.TERMINADO
             _estado.run_id = str(informe.run_id) if informe.run_id else None
