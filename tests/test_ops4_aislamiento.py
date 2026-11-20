@@ -9,6 +9,7 @@ EXPERIMENTOS = (
     RAIZ / "deploy" / "ops" / "experimento_identidad_ops4.py",
     RAIZ / "deploy" / "ops" / "modelo_aprobacion_ops4.py",
     RAIZ / "deploy" / "ops" / "experimento_estado_unidad_ops4.py",
+    RAIZ / "deploy" / "ops" / "experimento_registro_aprobacion_ops4.py",
 )
 PROHIBIDO = (
     "subprocess", "socket", "urllib", "http.client", "Popen", "os.system",
