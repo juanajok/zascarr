@@ -209,17 +209,26 @@ instalador terminó con código 0; el disco arrancó sin la ISO hasta el login
 PID 1 es `/sbin/init` (systemd), que existe `/run/systemd/private` y que
 `systemctl --version` informa `systemd 257 (257.13-1~deb13u1)`.
 
-Sin embargo, **el bus de sistema no está disponible**: `systemctl status` y
-`systemd-run` fallan con «Failed to connect to system scope bus via local
-transport: No such file or directory». La instalación mínima offline no
-permite controlar unidades con `systemctl`; por tanto las pruebas de unidad
-transitoria, endurecimiento y ejecutor en esta VM quedan **NOT RUN** y no se
-declara systemd «healthy». No se instalaron Docker ni PostgreSQL, no se instaló
-la unidad de actualización, no se ejecutó `update.sh` y no se tocó la Pi ni
-datos reales. Los intentos previos con hash de contraseña/usuario equivocados
-se descartaron; los registros y capturas quedan en evidencia privada fuera de
-Git. El resultado acredita que el laboratorio instala y arranca Debian, no que
-sirva todavía para validar systemd o el ejecutor.
+El bus D-Bus del sistema no está instalado, por lo que `systemctl` sin más
+falla. Usando el socket privado de systemd,
+`DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/systemd/private`, la misma orden sí
+responde: `systemctl is-system-running` devolvió **`running`** con código 0.
+`systemd-run` transitorio siguió fallando con «Invalid request descriptor» y no
+se usó.
+
+En esa VM se creó una unidad fija de prueba `ops4-test.service` (oneshot,
+`/bin/true`), se hizo `daemon-reload` y se arrancó por el socket privado:
+**`Result=success`, `ExecMainStatus=0`, `inactive/dead`**. Otra unidad
+`ops4-fail.service` con `/bin/false` terminó en **`Result=exit-code`,
+`ExecMainStatus=1`, `failed/failed`**. Esto acredita el ciclo básico de una
+unidad systemd en el laboratorio y la observación de su resultado; no acredita
+el futuro ejecutor, la actualización, Docker, PostgreSQL ni un entorno de
+producción.
+
+No se instalaron Docker ni PostgreSQL, no se instaló la unidad de
+actualización, no se ejecutó `update.sh` y no se tocó la Pi ni datos reales.
+Los intentos previos con contraseña/usuario equivocados se descartaron; los
+registros y capturas quedan en evidencia privada fuera de Git.
 
 **Plan de aprovisionamiento offline, aún no ejecutado:**
 
