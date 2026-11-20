@@ -101,3 +101,10 @@ def test_el_transporte_de_actualizacion_no_esta_conectado() -> None:
     ) + [RAIZ / "src" / "zascarr" / "main.py"]:
         texto = ruta.read_text(encoding="utf-8")
         assert "actualizacion_transporte" not in texto, ruta
+
+
+def test_el_ejecutor_fijo_no_esta_conectado() -> None:
+    auxiliar = (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(encoding="utf-8")
+    assert "ejecutor_actualizar_ops4" not in auxiliar
+    for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+        assert "ejecutor_actualizar_ops4" not in ruta.read_text(encoding="utf-8"), ruta
