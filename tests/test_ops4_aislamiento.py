@@ -202,3 +202,20 @@ def test_el_lector_de_clave_dedicada_no_esta_conectado() -> None:
         RAIZ / "scripts" / "instalar_ops.sh",
     ):
         assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+
+
+def test_el_protocolo_v4_no_esta_conectado() -> None:
+    for nombre in (
+        "protocolo_actualizar_v4_ops4", "admision_v4_actualizar_ops4",
+        "ops_actualizacion_v4",
+    ):
+        for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+            if ruta.name == "ops_actualizacion_v4.py":
+                continue
+            assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+        assert nombre not in (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(
+            encoding="utf-8"
+        )
+        assert nombre not in (RAIZ / "scripts" / "instalar_ops.sh").read_text(
+            encoding="utf-8"
+        )
