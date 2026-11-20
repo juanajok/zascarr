@@ -65,3 +65,20 @@ def test_activar_sin_legal_no_cambia_el_flag(monkeypatch):
     assert r.status_code == 200
     assert serie.follow_new_issues is False and serie.follow_new_issues_since is None
     assert "Falta aceptar el aviso legal" in r.text and "/ui/legal" in r.text
+
+def test_activar_sin_legal_conserva_el_volver_anidado(monkeypatch):
+    """El re-render HTMX del seguimiento no puede perder el contexto de vuelta."""
+    serie = _serie()
+    monkeypatch.setattr("zascarr.web.series.is_acknowledged", AsyncMock(return_value=False))
+    with patch("zascarr.web.series.get_settings") as ajustes:
+        ajustes.return_value = type("A", (), {
+            "forum_enabled": False, "forum_url": "", "forum_username": "",
+            "prowlarr_enabled": False, "prowlarr_api_key": ""})()
+        with use_fake_session(
+                FakeSession(queue=[FakeExecResult([serie])]), ficha=False) as client:
+            r = client.post(f"/ui/series/{serie.id}/seguimiento",
+                            data={"follow_new_issues": "true",
+                                  "volver": f"/ui/biblioteca#serie-{serie.id}"})
+    assert r.status_code == 200
+    assert (f"/ui/series/{serie.id}%3Fvolver%3D"
+            f"/ui/biblioteca%2523serie-{serie.id}") in r.text

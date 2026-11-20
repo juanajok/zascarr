@@ -234,16 +234,63 @@ for p in /ui/ /ui/biblioteca /ui/pendientes /ui/wishlist /ui/legal /legal; do
 done
 #  Criterio: todos 200 (la lectura no está detrás del gate).
 
-# 5.2 Acción de riesgo SIN aceptar: 403
-curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/api/wishlist" \
-  -H 'Content-Type: application/json' -d '{}'
-#  Criterio: 403 (legal_acknowledgment_required). Si se quiere, capturar el
-#  header HX-Redirect que apunta a /ui/legal.
+# 5.2 Acción de riesgo SIN aceptar por API: 403 JSON, no-store, HX-Redirect compatible
+curl -s -D - -o /dev/null -X POST "$APP_URL/api/wishlist" \
+  -H 'Content-Type: application/json' -d '{}' | grep -Ei '^(HTTP/|cache-control|hx-redirect)'
+#  Criterio: 403 legal_acknowledgment_required; Cache-Control: no-store; no Location.
 
-# 5.3 Aceptar (form-encoded, campos reales acepto_1/2/3)
-curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/ui/legal/accept" \
+# 5.2b Acción gateada por htmx: 403 + HX-Redirect con volver codificado y no-store
+curl -s -D - -o /dev/null -X POST "$APP_URL/ui/wishlist/anadir" \
+  -H "Origin: $APP_URL" \
+  -H 'HX-Request: true' -H 'HX-Current-URL: '"$APP_URL"'/ui/wishlist' \
   -H 'Content-Type: application/x-www-form-urlencoded' \
-  --data 'acepto_1=true&acepto_2=true&acepto_3=true'          # → 303 (redirect)
+  --data 'series_id=00000000-0000-0000-0000-000000000001' \
+  | grep -Ei '^(HTTP/|cache-control|hx-redirect)'
+#  Criterio: 403; HX-Redirect: /ui/legal?volver=%2Fui%2Fwishlist; no-store.
+
+# 5.2c Formulario normal bajo /ui/ (sin htmx, navegador): 303 al wizard, no JSON 403
+curl -s -D - -o /dev/null -X POST "$APP_URL/ui/wishlist/anadir" \
+  -H "Origin: $APP_URL" -H 'Accept: text/html' \
+  -H 'Referer: '"$APP_URL"'/ui/series/00000000-0000-0000-0000-000000000001' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'series_id=00000000-0000-0000-0000-000000000001' \
+  | grep -Ei '^(HTTP/|location|cache-control)'
+#  Criterio: 303; Location: /ui/legal?volver=...; no-store.
+
+# 5.3 Aceptación INCOMPLETA primero: no registra, conserva el destino y el aviso es honesto/foco.
+#     (Después de aceptar ya no se ve `falta`; por eso va antes que 5.3b.)
+curl -s -D - -o /dev/null -X POST "$APP_URL/ui/legal/accept" \
+  -H "Origin: $APP_URL" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'acepto_1=true&volver=%2Fui%2Fwishlist' \
+  | grep -Ei '^(HTTP/|location|cache-control)'
+#  Criterio: 303; Location: /ui/legal?volver=%2Fui%2Fwishlist&falta=1; no-store.
+curl -s "$APP_URL/ui/legal?volver=%2Fui%2Fwishlist&falta=1" \
+  | grep -E 'No has aceptado nada|role="alert"|tabindex="-1" autofocus|Después volverás a Deseados'
+#  Criterio: un aviso warn bajo .subtitle, role=alert, un solo autofocus y el destino nombrado.
+
+# 5.3b Aceptación COMPLETA (después de 5.3): 303 al destino y una fila de acuse
+curl -s -D - -o /dev/null -X POST "$APP_URL/ui/legal/accept" \
+  -H "Origin: $APP_URL" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'acepto_1=true&acepto_2=true&acepto_3=true&volver=%2Fui%2Fwishlist' \
+  | grep -Ei '^(HTTP/|location|cache-control)'
+#  Criterio: 303; Location: /ui/wishlist; no-store.
+
+# 5.3c Destino hostil o no canónico: respaldo, nunca 500 ni salida externa
+for v in '%2F%2Fevil.example' '%2F%2F%2Fui%2Fwishlist' '%2Fui%2F%25%32%65%25%32%65%2Fapi' \
+         '%2Fui%2Fmejoras%3Fpagina%3D%C2%B2' '%2Fui%2Fmejoras%3Fpagina%3D%EF%BC%91%EF%BC%92'; do
+  curl -s -D - -o /dev/null -X POST "$APP_URL/ui/legal/accept" \
+    -H "Origin: $APP_URL" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    --data 'acepto_1=true&acepto_2=true&acepto_3=true&volver='"$v" \
+    | grep -Ei '^(HTTP/|location)'
+done
+#  Criterio: 303 a /ui/biblioteca; ningún Location empieza por //; «pagina=²» no da 500.
+
+# 5.3d (re-render htmx con `volver` anidado) NO se ejecuta aquí: en 5.3b/5.3c el acuse ya
+#      está registrado y el parcial de seguimiento no pinta el enlace al aviso. Se prueba
+#      DESPUÉS de §6, cuando ya hay series reales: ver «6 bis».
 
 # 5.4 Tras aceptar, la acción de riesgo ya no es 403 por el gate
 #     (puede ser 4xx de validación de body; NO debe ser 403 legal)
@@ -324,6 +371,59 @@ PY
 # Guardar copia de los fixtures ANTES de importar (para las pruebas de dedupe)
 mkdir -p "$ROOT/fixtures"
 cp "$ROOT/data/downloads/comics/Batman 001.cbz" "$ROOT/fixtures/Batman 001.cbz"
+```
+
+---
+
+## 6 bis. Retorno legal con series reales (UATP-01, ex 5.3d)
+
+> Ejecutar **después de §6** (ya hay series). En 5.3b/5.3c el acuse quedó registrado y el
+> parcial de seguimiento no pinta el enlace al aviso: aquí se borra el acuse a propósito, se
+> comprueba que el enlace con `volver` anidado existe **antes de aceptar** y se restaura el acuse
+> para seguir el recorrido. Si algo falla a mitad, repetir 5.3b (aceptación completa) deja el
+> acuse como estaba.
+
+```bash
+cd "$ROOT/zascarr"
+
+# 6 bis.1 Acuse PENDIENTE y una serie real (la siembra §6)
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
+  "delete from legal_acknowledgments;"
+SERIES_ID=$("${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
+  "select id from series order by title limit 1;" | tr -d '[:space:]')
+if [ -z "$SERIES_ID" ]; then
+  echo "6 bis NOT RUN: no hay series; ejecutar §6 primero"
+  exit 1
+fi
+echo "SERIES_ID=$SERIES_ID"
+
+# 6 bis.2 Comprobar el enlace ANTES de aceptar (seguimiento bloqueado por el aviso)
+RESP=$(curl -s -X POST "$APP_URL/ui/series/$SERIES_ID/seguimiento" \
+  -H "Origin: $APP_URL" \
+  -H 'HX-Request: true' -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'follow_new_issues=true' \
+  --data-urlencode "volver=/ui/biblioteca#serie-$SERIES_ID")
+printf '%s\n' "$RESP" | grep -F 'Falta aceptar el aviso legal'
+ENLACE_ESPERADO="ui/legal?volver=/ui/series/$SERIES_ID%3Fvolver%3D/ui/biblioteca%2523serie-$SERIES_ID"
+if printf '%s' "$RESP" | grep -qF "$ENLACE_ESPERADO"; then
+  echo "OK: el enlace conserva el volver anidado de la ficha"
+else
+  echo "FALLO: no aparece el enlace esperado; ¿se perdió el volver en el re-render?"
+  printf '%s\n' "$RESP" | grep -o 'ui/legal?volver=[^"]*' || true
+  exit 1
+fi
+#  Criterio: el parcial de seguimiento bloqueado conserva `volver` anidado y el enlace
+#  contiene /ui/series/$SERIES_ID...volver=.../ui/biblioteca...#serie-$SERIES_ID.
+
+# 6 bis.3 Restaurar el acuse para el resto del recorrido (lo dejaba 5.3b)
+curl -s -o /dev/null -X POST "$APP_URL/ui/legal/accept" \
+  -H "Origin: $APP_URL" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'acepto_1=true&acepto_2=true&acepto_3=true&volver=%2Fui%2Fwishlist'
+ACUSES=$("${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
+  "select count(*) from legal_acknowledgments;" | tr -d '[:space:]')
+test "$ACUSES" -ge 1 && echo "acuse restaurado ($ACUSES fila(s))"
+#  Criterio: el acuse vuelve a constar; si no, repetir 5.3b antes de seguir.
 ```
 
 ---

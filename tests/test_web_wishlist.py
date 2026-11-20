@@ -125,6 +125,8 @@ class TestIndex:
             r = client.get("/ui/wishlist")
         assert r.status_code == 200
         assert "Aviso legal pendiente" in r.text
+        # AC-10 (UATP-01): el enlace directo lleva el destino de vuelta.
+        assert 'href="/ui/legal?volver=%2Fui%2Fwishlist"' in r.text
 
 
     def test_un_deseo_que_espera_no_dice_buscando(self):

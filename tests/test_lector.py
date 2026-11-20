@@ -466,7 +466,8 @@ def test_tarjeta_final_falta_sin_legal_lleva_al_aviso(tmp_path, monkeypatch):
     with use_fake_session(db) as client:
         r = client.get(f"/ui/leer/{f.id}")
     assert "Te falta el" in r.text and "#2" in r.text
-    assert 'href="/ui/legal"' in r.text
+    # AC-10 (UATP-01): el enlace directo lleva el destino de vuelta al lector.
+    assert f'href="/ui/legal?volver=%2Fui%2Fleer%2F{f.id}"' in r.text
     assert f'hx-post="/ui/leer/{f.id}/deseo"' not in r.text
 
 
@@ -493,6 +494,7 @@ def test_deseo_sin_aviso_legal_da_403_y_no_escribe(tmp_path):
         r = client.post(f"/ui/leer/{f.id}/deseo")
     assert r.status_code == 403
     assert r.headers["hx-redirect"] == "/ui/legal"
+    assert r.headers["cache-control"] == "no-store"
     assert db.commit.await_count == 0
 
 

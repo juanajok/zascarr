@@ -356,8 +356,12 @@ PARAMETROS_DE_QUERY = frozenset({
     # BL-FILT1 (#397): filtro de «Pendientes por carpeta» (estado de la vista, no se registra).
     "nombre", "estado", "por_confirmar", "en_conflicto",
     "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
-    # BL-IT03 (#286): contexto de vuelta Biblioteca → ficha; solo ruta local validada.
+    # BL-IT03 (#286) y UATP-01 (#1124): contexto de vuelta (Biblioteca → ficha o
+    # aviso legal → página); solo ruta local validada.
     "volver",
+    # UATP-01 (#1124): el wizard legal marca «falta=1» cuando no se han marcado las tres
+    # casillas; es estado de la vista, no un dato de la persona.
+    "falta",
     # BL-IT02 (#284): presentación tarjetas/lista de la Biblioteca.
     "vista",
     # BL-ETQ1a (#403): texto tecleado en el autocompletado de la ficha.
