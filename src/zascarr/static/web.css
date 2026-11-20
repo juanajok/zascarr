@@ -2213,7 +2213,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   grid-template-areas: "titulo accion" "subtitulo subtitulo";
   gap: var(--space-1) var(--space-4);
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: var(--space-3);
 }
 .biblioteca-cabecera h1 { grid-area: titulo; margin: 0; }
 .biblioteca-cabecera .subtitle { grid-area: subtitulo; margin: 0; }
@@ -2241,19 +2241,27 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 
 /* #1160: «Actualizar la biblioteca» en Biblioteca. Botón neutro (no .primary: el principal de la pantalla
-   es el selector de modo), con la garantía al lado y «Última vez · Próxima» debajo. Solo tokens. */
-.biblioteca-actualizar { margin: 0 0 var(--space-3); }
+   es el selector de modo). Una sola franja: botón y garantía, «Última vez · Próxima» y «Qué mira» en la
+   misma línea mientras quepan; los avisos debajo, a todo el ancho. El botón mide lo mismo que los de la
+   cabecera (40 px; el alto táctil de 44 px lo pone la regla general de pantallas estrechas y táctiles). */
+.biblioteca-actualizar {
+  display: flex; flex-wrap: wrap; align-items: center;
+  column-gap: var(--space-4);
+  margin: 0 0 var(--space-3);
+}
 .biblioteca-actualizar-accion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
-.biblioteca-actualizar-accion .btn { min-height: 44px; }
 .biblioteca-actualizar-accion .muted, #actualizar-lineas { margin: 0; }
-#actualizar-lineas { margin-top: var(--space-1); font-variant-numeric: tabular-nums; }
+/* Sin hueco de fila en la franja: la región viva siempre está (aunque vacía) y un hueco la separaría. El aire
+   entre filas cuando la línea se parte lo da el relleno de las líneas y de «Qué mira», que en una sola fila
+   no suma alto (miden menos que el botón). */
+#actualizar-lineas, .biblioteca-actualizar-detalle { padding-block: var(--space-1); font-variant-numeric: tabular-nums; }
+.biblioteca-actualizar-detalle[open] { flex-basis: 100%; }
+#actualizar-estado { flex-basis: 100%; }
 #actualizar-contenido > * { margin-top: var(--space-2); margin-bottom: 0; }
-.biblioteca-actualizar-detalle { margin-top: var(--space-2); }
 @media (max-width: 480px) {
-  .biblioteca-actualizar-accion { flex-direction: column; align-items: stretch; }
-  .biblioteca-actualizar-accion .btn { width: 100%; }
   #actualizar-lineas span { display: block; }
   #actualizar-lineas .actualizar-separador { display: none; }
+  .biblioteca-actualizar-detalle { flex-basis: 100%; }
 }
 
 .barra-biblioteca {
