@@ -281,7 +281,7 @@
     temporizadorChrome = null;
     if (!menu.hidden || focoEnChrome()) return;  // Opciones abiertas o foco dentro: no ocultar
     temporizadorChrome = setTimeout(() => {
-      if (focoEnChrome()) return;                // el foco sigue dentro; no ocultar
+      if (!menu.hidden || focoEnChrome()) return; // opciones o foco dentro: no ocultar
       raiz.dataset.chrome = "oculto";
     }, 3000);
   };
@@ -412,18 +412,18 @@
   }
 
   // Chrome auto-oculto. Sin JS la barra se queda visible (degradación honesta).
-  const despertarPorEvento = () => despertarChrome();
-  document.addEventListener("mousemove", despertarPorEvento, { passive: true });
-  document.addEventListener("pointerdown", despertarPorEvento, { passive: true });
-  document.addEventListener("focusin", despertarPorEvento);
+  document.addEventListener("focusin", () => {
+    if (focoEnChrome()) despertarChrome();
+  });
   document.addEventListener("focusout", (evento) => {
-    despertarChrome();
+    if ((barra && barra.contains(evento.target)) || (menu && menu.contains(evento.target))) {
+      programaOculto();
+    }
     if (menu.hidden || !evento.relatedTarget) return;
     const estabaEnOpciones = evento.target === menuBoton || menu.contains(evento.target);
     const sigueEnOpciones = evento.relatedTarget === menuBoton || menu.contains(evento.relatedTarget);
     if (estabaEnOpciones && !sigueEnOpciones) cambiarMenu(false);
   });
-  document.addEventListener("fullscreenchange", despertarPorEvento);
   if (typeof setTimeout === "function") programaOculto();
 
   document.addEventListener("keydown", (evento) => {
@@ -437,7 +437,6 @@
       else window.location.assign(volver);
       return;
     }
-    if (key !== "h") despertarChrome();
     const enLienzo = target === lienzo;
     if (enLienzo && (key === "f" || key === "h" || key === "m")) {
       evento.preventDefault();
@@ -478,29 +477,43 @@
 
   let toqueInicio = null;
   lienzo.addEventListener("touchstart", (evento) => {
-    despertarChrome();
-    if (evento.touches.length !== 1) return;
+    if (evento.touches.length !== 1 || evento.target.closest("a, button, input, select, textarea, [contenteditable], [role='button']")) {
+      toqueInicio = null;
+      return;
+    }
     const t = evento.touches[0];
-    toqueInicio = { x: t.clientX, y: t.clientY, ancho: lienzo.clientWidth };
+    const rect = lienzo.getBoundingClientRect();
+    toqueInicio = { x: t.clientX, y: t.clientY, izquierda: rect.left, ancho: rect.width };
   }, { passive: true });
   lienzo.addEventListener("touchend", (evento) => {
     if (!toqueInicio || !evento.changedTouches.length) return;
+    if (evento.touches.length) { toqueInicio = null; return; }
     const t = evento.changedTouches[0];
     const dx = t.clientX - toqueInicio.x;
     const dy = t.clientY - toqueInicio.y;
     const origen = toqueInicio;
     toqueInicio = null;
     if (Math.abs(dx) >= 50 && Math.abs(dx) > 2 * Math.abs(dy)) {
+      evento.preventDefault(); // evita también el clic sintético posterior al gesto
       const adelante = (dx < 0) !== (sentido === "rtl");
       adelante ? avanzar() : retroceder();
       return;
     }
     if (Math.abs(dx) > 12 || Math.abs(dy) > 12) return;
-    const zona = t.clientX / origen.ancho;
+    evento.preventDefault(); // el toque ya se ha atendido; no repetirlo como clic
+    const zona = (t.clientX - origen.izquierda) / origen.ancho;
     if (zona < 0.3) (sentido === "rtl" ? avanzar : retroceder)();
     else if (zona > 0.7) (sentido === "rtl" ? retroceder : avanzar)();
-    else alternarMenu();
-  }, { passive: true });
+    else alternarChrome();
+  }, { passive: false });
+  lienzo.addEventListener("touchcancel", () => { toqueInicio = null; });
+  lienzo.addEventListener("click", (evento) => {
+    // Las flechas y otros controles conservan su comportamiento nativo.
+    if (evento.button !== 0 || ![lienzo, paginas, imagen, imagenB].includes(evento.target)) return;
+    const rect = lienzo.getBoundingClientRect();
+    const zona = (evento.clientX - rect.left) / rect.width;
+    if (zona >= 0.3 && zona <= 0.7) alternarChrome();
+  });
 
   if (imagen.complete && imagen.naturalWidth) decidirPareja();
   pinta();

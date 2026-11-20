@@ -25,6 +25,7 @@ Object.defineProperty(E.prototype, "textContent", {
   get() { return this._text; }, set(value) { this._text = value; this.writes += 1; },
 });
 E.prototype.contains = function (other) { return other === this || other?.parent === this; };
+E.prototype.closest = function () { return this.interactivo ? this : null; };
 E.prototype.querySelector = function () { return this.control; };
 E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push(f); };
 E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
@@ -146,6 +147,37 @@ acciones.control.focus = () => { teclado.doc.activeElement = acciones.control; }
 teclado.fire(acciones, "htmx:after:swap", {target: acciones});
 salida.focoYAnuncioTrasGuardar = teclado.doc.activeElement === acciones.control &&
   get("lector-resultado").textContent === "Guardado: Leído.";
+const tactil = run(true);
+const lienzoTactil = tactil.els['lector-lienzo'];
+lienzoTactil.getBoundingClientRect = () => ({left: 0, width: 1000});
+tactil.root.dataset.chrome = 'oculto';
+const tocar = (x, finX = x) => {
+  tactil.fire(tactil.doc, 'pointerdown', {pointerType: 'touch', target: lienzoTactil});
+  tactil.fire(lienzoTactil, 'touchstart', {target: lienzoTactil, touches: [{clientX: x, clientY: 100}]});
+  tactil.fire(lienzoTactil, 'touchend', {target: lienzoTactil, touches: [], changedTouches: [{clientX: finX, clientY: 100}], preventDefault: () => {}});
+};
+tocar(850);
+salida.toqueAvanzaSinBarras = tactil.root.dataset.pagina === '2' && tactil.root.dataset.chrome === 'oculto';
+tocar(150);
+salida.toqueRetrocedeSinBarras = tactil.root.dataset.pagina === '1' && tactil.root.dataset.chrome === 'oculto';
+tocar(800, 200);
+salida.deslizarSinBarras = tactil.root.dataset.pagina === '2' && tactil.root.dataset.chrome === 'oculto';
+tocar(500);
+salida.centroMuestra = tactil.root.dataset.chrome === '';
+tocar(500);
+salida.centroOculta = tactil.root.dataset.chrome === 'oculto';
+const botonFin = new E('fin-boton'); botonFin.interactivo = true;
+let cancelado = false;
+tactil.fire(lienzoTactil, 'touchstart', {target: botonFin, touches: [{clientX: 850, clientY: 100}]});
+tactil.fire(lienzoTactil, 'touchend', {target: botonFin, touches: [], changedTouches: [{clientX: 850, clientY: 100}], preventDefault: () => { cancelado = true; }});
+salida.controlesTactilesNativos = !cancelado && tactil.root.dataset.pagina === '2';
+tactil.fire(lienzoTactil, 'click', {target: lienzoTactil, button: 0, clientX: 500});
+salida.clicCentralMuestra = tactil.root.dataset.chrome === '';
+const escritorio = run(true);
+escritorio.root.dataset.chrome = 'oculto';
+escritorio.fire(escritorio.doc, 'mousemove', {pointerType: 'mouse', target: escritorio.els['lector-lienzo']});
+escritorio.fire(escritorio.doc, 'keydown', {key: 'ArrowRight', target: escritorio.els['lector-lienzo'], preventDefault: () => {}});
+salida.ratonYTeclaSinBarras = escritorio.root.dataset.pagina === '2' && escritorio.root.dataset.chrome === 'oculto';
 process.stdout.write(JSON.stringify(salida));
 '''
 
@@ -163,6 +195,10 @@ def test_lector_js_fullscreen_doble_y_teclado(tmp_path):
         "hAlternaChrome": True, "espacioNativo": True, "atajoFuera": True,
         "limiteConFoco": True, "escapeDesdeOpciones": True, "tabFueraCierra": True,
         "contadorSinDuplicados": True, "focoYAnuncioTrasGuardar": True,
+        "toqueAvanzaSinBarras": True, "toqueRetrocedeSinBarras": True,
+        "deslizarSinBarras": True, "ratonYTeclaSinBarras": True,
+        "centroMuestra": True, "centroOculta": True,
+        "controlesTactilesNativos": True, "clicCentralMuestra": True,
     }
 
 
