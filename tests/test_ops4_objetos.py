@@ -166,3 +166,67 @@ def test_tipo_no_coincide_con_modo() -> None:
     commit = objeto("commit", b"tree " + tree.encode() + IDENTIDADES + b"\n\n", almacen)
     with pytest.raises(ObjetoInvalidoError):
         inventariar(commit, almacen.__getitem__)
+
+
+def test_presupuesto_rutas_utf8_repetidas_y_frontera() -> None:
+    almacen = {}
+    blob = objeto("blob", b"x", almacen)
+    sub = objeto("tree", entrada(b"100644", "é".encode(), blob), almacen)
+    vacio = objeto("tree", b"", almacen)
+    tree = objeto(
+        "tree",
+        entrada(b"40000", b"a", sub)
+        + entrada(b"40000", b"b", sub)
+        + entrada(b"40000", b"vacio", vacio),
+        almacen,
+    )
+    commit = objeto("commit", b"tree " + tree.encode() + IDENTIDADES + b"\n\n", almacen)
+    # a, b y vacio suman 7 bytes; a/é y b/é suman otros 8.
+    limites = replace(Limites(), bytes_rutas_totales=15)
+    primero = inventariar(commit, almacen.__getitem__, limites)
+    assert set(primero) == {"a/é", "b/é"}
+    assert inventariar(commit, almacen.__getitem__, limites) == primero
+    with pytest.raises(ObjetoInvalidoError, match="bytes de rutas"):
+        inventariar(commit, almacen.__getitem__, replace(limites, bytes_rutas_totales=14))
+
+
+def test_directorios_vacios_anchos_agotan_presupuesto_antes_de_encolarlos() -> None:
+    almacen = {}
+    vacio = objeto("tree", b"", almacen)
+    nombres = [f"dir{i:04d}".encode() for i in range(1000)]
+    tree = objeto("tree", b"".join(entrada(b"40000", n, vacio) for n in nombres), almacen)
+    commit = objeto("commit", b"tree " + tree.encode() + IDENTIDADES + b"\n\n", almacen)
+    limites = replace(Limites(), bytes_rutas_totales=7000)
+    assert inventariar(commit, almacen.__getitem__, limites) == {}
+    llamadas = []
+
+    def proveedor(sha: str) -> tuple[str, bytes]:
+        llamadas.append(sha)
+        return almacen[sha]
+
+    with pytest.raises(ObjetoInvalidoError, match="bytes de rutas"):
+        inventariar(commit, proveedor, replace(limites, bytes_rutas_totales=6999))
+    assert llamadas == [commit, tree]
+
+
+def test_hash_git_actualiza_sin_concatenar_contenido(monkeypatch: pytest.MonkeyPatch) -> None:
+    almacen, commit, _, _ = preparar()
+    original = hashlib.sha1
+    recibidos = []
+
+    class HashVigilado:
+        def __init__(self, cabecera: bytes) -> None:
+            assert cabecera.endswith(b"\0")
+            self.hash = original(cabecera)
+
+        def update(self, datos: bytes) -> None:
+            recibidos.append(datos)
+            self.hash.update(datos)
+
+        def hexdigest(self) -> str:
+            return self.hash.hexdigest()
+
+    monkeypatch.setattr(hashlib, "sha1", HashVigilado)
+    inventariar(commit, almacen.__getitem__)
+    assert len(recibidos) == 4
+    assert all(any(datos is contenido for _, contenido in almacen.values()) for datos in recibidos)

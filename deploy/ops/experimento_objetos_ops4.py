@@ -40,6 +40,7 @@ class Limites:
     entradas: int = 100_000
     profundidad: int = 64
     bytes_ruta: int = 4096
+    bytes_rutas_totales: int = 16 * 1024 * 1024
 
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -54,6 +55,8 @@ def inventariar(
     El proveedor recibe SHA-1 hexadecimal minúsculo y devuelve (tipo, bytes).
     Los límites cuentan cada lectura y cada entrada, incluso referencias repetidas.
     El resultado solo describe archivos; los árboles vacíos no tienen entrada.
+    bytes_rutas_totales suma los bytes UTF-8 de cada ruta procesada, tanto de
+    archivos como directorios, incluidos separadores y prefijos repetidos.
     """
     if not isinstance(limites, Limites) or any(
         type(v) is not int or v <= 0 for v in vars(limites).values()
@@ -64,6 +67,7 @@ def inventariar(
     objetos = 0
     total = 0
     entradas = 0
+    bytes_rutas = 0
     resultado: dict[str, Entrada] = {}
 
     def leer(sha: str, esperado: str) -> bytes:
@@ -89,7 +93,9 @@ def inventariar(
         if total > limites.bytes_totales:
             raise ObjetoInvalidoError("Presupuesto de bytes agotado")
         cabecera = esperado.encode("ascii") + b" " + str(len(datos)).encode("ascii") + b"\0"
-        if hashlib.sha1(cabecera + datos).hexdigest() != sha:
+        hash_git = hashlib.sha1(cabecera)
+        hash_git.update(datos)
+        if hash_git.hexdigest() != sha:
             raise ObjetoInvalidoError("Hash Git incorrecto")
         return datos
 
@@ -177,8 +183,12 @@ def inventariar(
                 raise ObjetoInvalidoError("Orden de árbol no canónico")
             anterior = clave
             ruta = prefijo + nombre
-            if len(ruta.encode("utf-8")) > limites.bytes_ruta:
+            longitud_ruta = len(ruta.encode("utf-8"))
+            if longitud_ruta > limites.bytes_ruta:
                 raise ObjetoInvalidoError("Ruta demasiado larga")
+            bytes_rutas += longitud_ruta
+            if bytes_rutas > limites.bytes_rutas_totales:
+                raise ObjetoInvalidoError("Presupuesto de bytes de rutas agotado")
             hijo = datos[nulo + 1 : nulo + 21].hex()
             pos = nulo + 21
             if modo == b"40000":

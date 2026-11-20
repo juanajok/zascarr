@@ -23,9 +23,43 @@ El lector procesa objetos suministrados por un proveedor inyectado, no hace
 `fetch` ni genera un snapshot materializado. SHA-1 no acredita autoría ni
 resistencia suficiente a colisiones; no se verifican firmas ni ascendencia, y
 los árboles vacíos no figuran en el inventario de blobs. Los límites se aplican
-tras recibir cada objeto, por lo que no acotan la memoria del proveedor ni el
-coste total del inventario. Un resultado correcto solo vale dentro de estas
+tras recibir cada objeto, por lo que no acotan la memoria del proveedor ni
+constituyen un límite de RAM del proceso. El presupuesto agregado de rutas
+reduce la amplificación por prefijos repetidos; no mide el coste de objetos Python. Un resultado correcto solo vale dentro de estas
 hipótesis; no prueba procedencia, integridad de P ni transferencia segura a root.
+
+## Hipótesis a revisar: cierre preventivo y capacidad efímera
+
+La revisión propone estudiar un cierre global persistente por instalación que
+se confirma durable **antes de cualquier efecto** y permanece cerrado durante
+todo el intento. Una capacidad efímera, vinculada a una instancia coordinadora
+y a un solo intento, sería necesaria además para arrancar la unidad; al perder
+la instancia o reiniciar no podría recrearse automáticamente desde el disco.
+La ausencia o corrupción del estado, el arranque y cualquier resultado
+incierto deben denegar. Una nueva generación exigiría reconciliación explícita
+en el host antes de una nueva aprobación.
+
+Esto es **una hipótesis de diseño, no una solución aprobada**. Hay que definir
+y revisar el canal de capacidad, la identidad de procesos, la concurrencia y
+el comportamiento ante parada del coordinador. Un `fsync` fallido después de
+`rename` puede dejar el estado anterior visible tras un corte; no se puede
+deducir seguridad de intentar escribir un aviso de incertidumbre en el mismo
+medio averiado. El diseño no puede interpretar un estado anterior como permiso
+para reintentar automáticamente. La evaluación debe explorar ambos resultados
+del renombrado, fallos en cada escritura y `fsync`, reinicios, unidad invocada
+sin capacidad y respuesta de `start` perdida; sin evidencia, no se habilita.
+Incluso un `fsync` exitoso supone filesystem y hardware que respeten flush.
+
+La revisión adversarial señala que «capacidad efímera» no identifica por sí
+sola un mecanismo seguro: un PID se reutiliza, un descriptor puede haberse
+transferido y matar el coordinador no detiene necesariamente una unidad ya
+iniciada. Hay que demostrar entrega, autenticación, consumo único y el gate
+dentro de la unidad, además de evitar activaciones por dependencias o
+reintentos. Un cierre global no sustituye la aprobación A durable, el cerrojo
+común, la revalidación ni el estado informativo exigidos por la SPEC. Se debe
+resolver el orden de admisión para que una petición ocupada no consuma otra A;
+la reconciliación debe inspeccionar trabajos, procesos, HEAD, imagen, contenedor
+y BD antes de permitir otra aprobación. Todo ello sigue **NOT RUN**.
 
 ## Resultado del experimento de persistencia
 
