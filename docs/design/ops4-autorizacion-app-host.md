@@ -90,7 +90,7 @@ provisión **no está implementada** y bloquea la integración.
 6. No habilitar la UI ni instalar unidad/auxiliar hasta completar lo anterior.
 
 **Estado de pruebas:** 49 casos de contrato, 59 de composición y 37 de registro
-durable (incluidos aislamiento y UI) forman parte de las **791 pruebas OPS4/paridad** verdes y de la suite completa **8843 passed / 2431 skipped**; el detalle y las limitaciones están en los informes de
+durable (incluidos aislamiento y UI) forman parte de las **791 pruebas OPS4/paridad** verdes y de la suite completa **8864 passed / 2431 skipped**; el detalle y las limitaciones están en los informes de
 [SecOps](secops-ops4-autorizacion-2026-11-20.md),
 [UI](ui-ops4-autorizacion-2026-11-20.md) y
 [QA](qa-ops4-autorizacion-2026-11-20.md). El contrato permanece sin importar

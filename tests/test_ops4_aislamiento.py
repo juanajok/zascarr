@@ -219,3 +219,14 @@ def test_el_protocolo_v4_no_esta_conectado() -> None:
         assert nombre not in (RAIZ / "scripts" / "instalar_ops.sh").read_text(
             encoding="utf-8"
         )
+
+
+def test_el_transporte_v4_no_esta_conectado() -> None:
+    nombre = "actualizacion_transporte_v4"
+    for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+        if ruta.name == "actualizacion_transporte_v4.py":
+            continue
+        assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+    assert nombre not in (RAIZ / "deploy" / "ops" / "zascarr_ops.py").read_text(
+        encoding="utf-8"
+    )
