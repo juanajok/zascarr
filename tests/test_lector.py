@@ -13,7 +13,7 @@ from PIL import Image
 from tests.test_pendientes import FakeExecResult, FakeSession, use_fake_session
 from zascarr.core.importer_triage import parse_comic_info
 from zascarr.main import app
-from zascarr.models import File, FileFormat, Issue, Series
+from zascarr.models import File, FileFormat, Issue, ReadingStatus, Series
 from zascarr.services import lector
 
 
@@ -402,7 +402,6 @@ def test_tarjeta_final_ofrece_marcar_leido(tmp_path, monkeypatch):
 
 
 def test_marcar_leido_desde_la_tarjeta_usa_el_servicio_y_pinta_deshacer(tmp_path, monkeypatch):
-    from zascarr.models import ReadingStatus
     from zascarr.web import lector as wlector
 
     f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "leer")
@@ -420,7 +419,6 @@ def test_marcar_leido_desde_la_tarjeta_usa_el_servicio_y_pinta_deshacer(tmp_path
 
 
 def test_deshacer_leido_vuelve_a_leyendo(tmp_path, monkeypatch):
-    from zascarr.models import ReadingStatus
     from zascarr.web import lector as wlector
 
     f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "leer")
@@ -479,3 +477,44 @@ def test_deseo_sin_aviso_legal_da_403_y_no_escribe(tmp_path):
     assert r.status_code == 403
     assert r.headers["hx-redirect"] == "/ui/legal"
     assert db.commit.await_count == 0
+
+
+def test_guardar_progreso_rellena_page_count_solo_si_falta_y_un_archivo(tmp_path):
+    f = _file(tmp_path)
+    issue = Issue(id=f.issue_id, series_id=uuid4(), issue_number="1", volume=1,
+                  page_count=None, metadata_={})
+
+    class Db(FakeSession):
+        def add(self, obj):
+            pass
+
+    db = Db(get_map={(File, f.id): f, (Issue, issue.id): issue},
+            exec_queue=[FakeExecResult(1), FakeExecResult([])])
+    import asyncio
+    asyncio.run(lector.guardar_progreso(db, f.id, 2))
+    assert issue.page_count == 3
+    assert issue.metadata_["page_count_origen"] == "lector"
+
+
+def test_guardar_progreso_no_pisa_page_count_ni_escribe_con_varios_archivos(tmp_path):
+    f = _file(tmp_path)
+    issue = Issue(id=f.issue_id, series_id=uuid4(), issue_number="1", volume=1,
+                  page_count=7, metadata_={"page_count_origen": "comicinfo"})
+
+    class Db(FakeSession):
+        def add(self, obj):
+            pass
+
+    db = Db(get_map={(File, f.id): f, (Issue, issue.id): issue},
+            exec_queue=[FakeExecResult([])])
+    import asyncio
+    asyncio.run(lector.guardar_progreso(db, f.id, 1))
+    assert issue.page_count == 7
+    assert issue.metadata_["page_count_origen"] == "comicinfo"
+
+    issue2 = Issue(id=f.issue_id, series_id=uuid4(), issue_number="1", volume=1,
+                   page_count=None, metadata_={})
+    db2 = Db(get_map={(File, f.id): f, (Issue, issue2.id): issue2},
+             exec_queue=[FakeExecResult(2), FakeExecResult([])])
+    asyncio.run(lector.guardar_progreso(db2, f.id, 1))
+    assert issue2.page_count is None and "page_count_origen" not in issue2.metadata_

@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -245,6 +245,27 @@ async def total_paginas(db: AsyncSession, file_id: UUID) -> int:
     return len(await asyncio.to_thread(_listado, Path(f.file_path)))
 
 
+async def _rellenar_page_count(db: AsyncSession, f: File, total: int) -> None:
+    """#1079: rellena `Issue.page_count` solo si falta y hay un único archivo.
+
+    Nunca pisa una cifra existente (fuente/ComicInfo) y no decide nada cuando
+    el número tiene varias ediciones con posibles totales distintos.
+    """
+    issue = await db.get(Issue, f.issue_id)
+    if issue is None or issue.page_count is not None:
+        return
+    cuantos = (await db.execute(
+        select(func.count()).select_from(File).where(
+            File.issue_id == f.issue_id, File.is_missing.is_(False))
+    )).scalar_one()
+    if cuantos != 1:
+        return
+    issue.page_count = total
+    meta = dict(issue.metadata_ or {})
+    meta["page_count_origen"] = "lector"
+    issue.metadata_ = meta
+
+
 async def guardar_progreso(db: AsyncSession, file_id: UUID, n: int) -> None:
     f = await _abrir(db, file_id)
     if es_rar_real(f):
@@ -255,6 +276,7 @@ async def guardar_progreso(db: AsyncSession, file_id: UUID, n: int) -> None:
     if total == 0:
         raise ArchivoNoLegibleError("El tebeo todavía se está preparando.")
     n = max(1, min(int(n), total))
+    await _rellenar_page_count(db, f, total)
     progreso = (await db.execute(
         select(ReadingProgress).where(ReadingProgress.issue_id == f.issue_id)
     )).scalar_one_or_none()
