@@ -4,7 +4,7 @@
 
 Fuente normativa: [SPEC BL-OPS4](especificacion-BL-OPS4.md), especialmente §§2–7 y 9–10. La relación de abajo es trazabilidad de cobertura **propuesta**, no una declaración de cumplimiento: un AC puede cubrir solo parte de un FR y varios AC son compuestos. Se conservan los identificadores y escenarios existentes; no se inventan AC nuevos. La historia B sigue **NOT IMPLEMENTED**, sin habilitación ni autorización para Pi o producción. Una aprobación de SHA no certifica inocuidad, autoría ni revisión de seguridad; tampoco autoriza migraciones. La viabilidad SecOps no es autorización de activación.
 
-**Estado de esta revisión:** 224 pruebas aisladas de los siete archivos citados pasaron con el entorno virtual del proyecto; eso no acredita los criterios compuestos. Los escenarios futuros de aceptación se marcan **NOT RUN**, también cuando exista una simulación parcial. Sin pruebas root, Docker, Postgres, systemd, Pi ni despliegue real en esta revisión.
+**Estado de esta revisión:** 229 pruebas aisladas de los ocho archivos citados pasaron con el entorno virtual del proyecto; eso no acredita los criterios compuestos. Los escenarios futuros de aceptación se marcan **NOT RUN**, también cuando exista una simulación parcial. Sin pruebas root, Docker, Postgres, systemd, Pi ni despliegue real en esta revisión.
 
 ## FR ↔ AC existentes
 
@@ -33,6 +33,7 @@ Fuente normativa: [SPEC BL-OPS4](especificacion-BL-OPS4.md), especialmente §§2
 - [test_ops4_arnes_git.py](../../tests/test_ops4_arnes_git.py): crea repositorios locales efímeros y comprueba secuencialmente que una ref remota puede avanzar mientras el SHA capturado permanece; el entorno Git del arnés es aislado. No prueba un ejecutor, ni barreras concurrentes del flujo, ni que este se detenga.
 - [test_ops4_identidad.py](../../tests/test_ops4_identidad.py): contrasta SHA aportados sintéticamente. La marca de fiabilidad procede del llamador; no acredita autenticidad, `fast-forward` ni autorización.
 - [test_ops4_crash_model.py](../../tests/test_ops4_crash_model.py): simula resultados posibles de un renombrado sin sincronización y una puerta hipotética cerrada al arranque. No acredita persistencia física ni un mecanismo real de reconciliación.
+- [test_ops4_ui_gate.py](../../tests/test_ops4_ui_gate.py): comprueba que Estado no pinta controles de actualización dentro de la sección de versión y que no existe una ruta POST ejecutable en el enrutador actual. No certifica una futura UI ni el comportamiento de autenticación. Los 503 de middleware no se usan como prueba de inexistencia.
 
 ## AC existentes: observables futuros
 
