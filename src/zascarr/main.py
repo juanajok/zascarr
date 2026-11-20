@@ -130,7 +130,7 @@ async def _rescan_loop() -> None:
     intervalo después del arranque: es el más caro (línea de base `file_mtime_ns` NULL: lee todos
     los CBZ una vez) y no debe competir con el arranque de la Pi. Comparte el cerrojo de ciclo con
     el importador: si coinciden, uno de los dos se salta ese turno y el rescan reintenta pasado
-    `REINTENTO_TRAS_SALTO`.
+    `REINTENTO_TRAS_SALTO`; un fallo consume el turno (no se repite hasta la siguiente cadencia).
     """
     from zascarr.database import async_session_factory
     from zascarr.services import rescan_biblioteca
@@ -140,19 +140,16 @@ async def _rescan_loop() -> None:
     except Exception:
         logger.exception("rescan.ultima_no_leida")
     logger.info("rescan.scheduler_started")
-    bucle = asyncio.get_running_loop()
-    no_antes_de = 0.0
     while True:
         await asyncio.sleep(60)
         try:
             proxima = rescan_biblioteca.proxima_ejecucion(
                 max(0, int(get_settings().rescan_interval_minutes)))
-            if proxima is None or datetime.now(UTC) < proxima or bucle.time() < no_antes_de:
+            if proxima is None or datetime.now(UTC) < proxima:
                 continue
             informe = await rescan_biblioteca.ejecutar_automatico(async_session_factory)
-            if informe is None:
-                no_antes_de = bucle.time() + rescan_biblioteca.REINTENTO_TRAS_SALTO
-            elif (informe.nuevos_entregados or informe.re_triados
+            if informe is not None and (
+                    informe.nuevos_entregados or informe.re_triados
                     or informe.desaparecidos or informe.reaparecidos):
                 logger.info(
                     "rescan.cycle_done",
@@ -166,7 +163,7 @@ async def _rescan_loop() -> None:
                 )
         except Exception:
             logger.exception("rescan.cycle_failed")
-            no_antes_de = bucle.time() + rescan_biblioteca.REINTENTO_TRAS_SALTO
+            rescan_biblioteca.anotar_intento()
 
 
 async def _ccm_comicinfo_loop() -> None:

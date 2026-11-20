@@ -159,8 +159,16 @@ Mismo servicio, nuevo nombre y nuevas puertas; ningún comportamiento de disco c
   un valor fijado por la instalación se muestra como cuarta opción. `rescan_interval_minutes` es ahora campo editable
   en caliente (`OVERRIDABLE_FIELDS["actualizar_biblioteca"]`), sin migración (fila única `RuntimeSetting`).
 - **Fiabilidad del periódico**: `_rescan_loop` ya no es «dormir un intervalo tras el arranque». Lee una vez el último
-  `ImportRun` `kind="rescan"`, cuenta desde él (`proxima_ejecucion`), mira la cadencia en cada vuelta (cada 60 s) y,
-  si el turno se salta (cerrojo ocupado) o falla, no reintenta antes de `REINTENTO_TRAS_SALTO` (30 min). Sin
+  `ImportRun` `kind="rescan"`, cuenta desde él (`proxima_ejecucion`) y mira la cadencia en cada vuelta (cada 60 s).
+  Un turno saltado (cerrojo ocupado) se aplaza `REINTENTO_TRAS_SALTO` (30 min, `aplazar`); un **fallo consume el
+  turno** (`anotar_intento`: la cuenta sigue desde el intento, no desde el último éxito; SecOps N-1: sin esto un fallo
+  persistente repetía un rescan completo ~48 veces al día). La cadencia se acota a un año (`MAX_MINUTOS`). Sin
   historial, el primero toca un intervalo después del arranque (el más caro: línea de base `file_mtime_ns`).
+- **El aviso de resultado es de la acción, no de la pantalla** (Diseño B2): el verde («Biblioteca al día…», «ya estaba
+  al día») sale solo en la respuesta al POST y en el sondeo de esa ejecución; al cargar Biblioteca quedan las líneas
+  «Última vez · Próxima» y lo que pide atención («En la última actualización, N archivos ya no estaban en su sitio»).
+  «Ya estaba al día» exige desaparecidos = 0, reaparecidos = 0 y revisión completa (Diseño B1); los reaparecidos se
+  cuentan. El sondeo responde 204 mientras sigue «en curso» (nada se sustituye: el lector de pantalla no repite y el
+  foco no se pierde) y el foco lo tiene la región viva, que solo se sustituye entera una vez, al lanzar.
 - No hecho: verificación en vivo a 320 px y en los dos temas (NOT RUN hasta ver la PR desplegada con datos reales).
 

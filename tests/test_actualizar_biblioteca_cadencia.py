@@ -163,6 +163,7 @@ async def test_un_turno_saltado_no_se_reintenta_en_la_vuelta_siguiente(monkeypat
 
     async def _automatico(fabrica):
         saltos.append(1)
+        rescan_biblioteca.aplazar()   # lo que hace el servicio real al saltar el turno
         return None   # cerrojo ocupado por el importador
 
     config = SimpleNamespace(rescan_interval_minutes=1440)
@@ -173,3 +174,48 @@ async def test_un_turno_saltado_no_se_reintenta_en_la_vuelta_siguiente(monkeypat
     with pytest.raises(asyncio.CancelledError):
         await main._rescan_loop()
     assert len(saltos) == 1
+
+
+class _Sesion:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+@pytest.mark.asyncio
+async def test_un_fallo_consume_el_turno_y_no_se_repite_hasta_la_siguiente_cadencia(monkeypatch):
+    """N-1 (SecOps): con un fallo persistente no se lanza un rescan completo cada 30 min."""
+    rescan_biblioteca.anotar_ultima(datetime.now(UTC) - timedelta(days=2))
+
+    async def _correr(fabrica, disparador):
+        raise OSError("disco")
+
+    monkeypatch.setattr(rescan_biblioteca, "_correr", _correr)
+    assert await rescan_biblioteca.ejecutar_automatico(lambda: _Sesion()) is None
+    proxima = rescan_biblioteca.proxima_ejecucion(1440)
+    assert proxima > datetime.now(UTC) + timedelta(hours=23)          # no «en unos minutos»
+
+
+@pytest.mark.asyncio
+async def test_un_turno_saltado_aplaza_y_la_proxima_lo_refleja(monkeypatch):
+    """M5 (Diseño): tras un «ocupado», «Próxima» no dice «en unos minutos» durante media hora."""
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _ocupado(fabrica):
+        yield False
+
+    rescan_biblioteca.anotar_ultima(datetime.now(UTC) - timedelta(days=2))
+    monkeypatch.setattr(rescan_biblioteca, "_cerrojo_ciclo", _ocupado)
+    assert await rescan_biblioteca.ejecutar_automatico(lambda: _Sesion()) is None
+    proxima = rescan_biblioteca.proxima_ejecucion(1440)
+    assert datetime.now(UTC) + timedelta(minutes=25) < proxima < datetime.now(UTC) + timedelta(minutes=35)
+
+
+def test_una_cadencia_absurda_se_acota_y_no_desborda():
+    """N-2 (SecOps): un valor enorme del `.env` no revienta el cálculo de la fecha."""
+    proxima = rescan_biblioteca.proxima_ejecucion(4_000_000_000)
+    assert proxima is not None
+    assert proxima <= rescan_biblioteca._arranque + timedelta(minutes=rescan_biblioteca.MAX_MINUTOS)

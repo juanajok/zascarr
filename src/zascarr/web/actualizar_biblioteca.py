@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr import database
@@ -25,9 +25,9 @@ router = APIRouter(prefix="/ui/biblioteca", tags=["ui"])
 
 #: Nombre de cada cadencia que ofrece Ajustes (minutos → etiqueta).
 ETIQUETAS_CADENCIA = {
-    0: "Desactivado",
     1440: "Una vez al día",
     10080: "Una vez a la semana",
+    0: "Desactivado",
 }
 
 
@@ -91,7 +91,7 @@ def mensaje_guardado(minutos: int) -> str:
 
 
 async def contexto_fragmento(db: AsyncSession, *, ya_en_curso: bool = False,
-                             recien_lanzada: bool = False, parcial: bool = False) -> dict:
+                             modo: str = "completo") -> dict:
     """Todo lo que pinta el fragmento; solo lee memoria y el último `ImportRun`."""
     estado = rescan_biblioteca.estado_actual()
     resumen = rescan_biblioteca.resumen_de(estado.informe)
@@ -104,8 +104,7 @@ async def contexto_fragmento(db: AsyncSession, *, ya_en_curso: bool = False,
         "estado_rescan": estado,
         "resumen": resumen,
         "ya_en_curso": ya_en_curso,
-        "recien_lanzada": recien_lanzada,
-        "parcial": parcial,
+        "modo": modo,
         "primera_vez": ultima is None,
         "texto_ultima": texto_ultima(ultima),
         "texto_proxima": None if estado.en_curso else texto_proxima(minutos),
@@ -128,10 +127,15 @@ async def estado_actualizacion(request: Request,
 
 
 @router.get("/actualizar/estado", response_class=HTMLResponse)
-async def sondeo_actualizacion(request: Request,
-                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    """Solo el contenido, el botón y las líneas (fuera de banda); lo pide el sondeo."""
-    contexto = await contexto_fragmento(db, parcial=True)
+async def sondeo_actualizacion(request: Request, curso: str = Query(default=""),
+                               db: AsyncSession = Depends(get_db)) -> Response:
+    """Solo el contenido, el botón y las líneas (fuera de banda); lo pide el sondeo.
+
+    Si el cliente ya muestra «en curso» (`curso=1`) y sigue en curso, responde 204: sin cambio no se
+    sustituye nada (un lector de pantalla no repite el mensaje cada 5 s y el foco no se pierde)."""
+    if curso == "1" and rescan_biblioteca.estado_actual().en_curso:
+        return _no_store(Response(status_code=204))
+    contexto = await contexto_fragmento(db, modo="sondeo")
     return _no_store(
         templates.TemplateResponse(request, "_actualizar_biblioteca.html", contexto))
 
@@ -142,7 +146,6 @@ async def actualizar(request: Request, db: AsyncSession = Depends(get_db)):
     lanzada = rescan_biblioteca.iniciar_manual(database.async_session_factory)
     if request.headers.get("HX-Request") != "true":
         return RedirectResponse("/ui/biblioteca", status_code=303)
-    contexto = await contexto_fragmento(
-        db, ya_en_curso=not lanzada, recien_lanzada=True, parcial=True)
+    contexto = await contexto_fragmento(db, ya_en_curso=not lanzada, modo="post")
     return _no_store(
         templates.TemplateResponse(request, "_actualizar_biblioteca.html", contexto))

@@ -2242,7 +2242,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* #1160: «Actualizar la biblioteca» en Biblioteca. Botón neutro (no .primary: el principal de la pantalla
    es el selector de modo), con la garantía al lado y «Última vez · Próxima» debajo. Solo tokens. */
-.biblioteca-actualizar { margin: 0 0 14px; }
+.biblioteca-actualizar { margin: 0 0 var(--space-3); }
 .biblioteca-actualizar-accion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
 .biblioteca-actualizar-accion .btn { min-height: 44px; }
 .biblioteca-actualizar-accion .muted, #actualizar-lineas { margin: 0; }

@@ -408,6 +408,9 @@ PARAMETROS_DE_QUERY = frozenset({
     "abrir",
     # Logs persistidos: filtros de fecha/hora/evento (solo lectura, saneados).
     "fecha", "hora", "evento",
+    # #1160: marca interna del sondeo de «Actualizar la biblioteca» («1» = el cliente ya muestra «en curso»);
+    # sin datos de la persona.
+    "curso",
 })
 
 

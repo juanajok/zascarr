@@ -125,11 +125,15 @@ async def ultimo_persistido(db: AsyncSession) -> dict | None:
 
 #: Cadencias que ofrece Ajustes, en minutos: apagada, una vez al día, una vez a la semana.
 INTERVALOS_AJUSTES = (0, 1440, 10080)
-#: Tras un turno saltado (otra operación de disco en marcha) o fallido, no se reintenta antes.
+#: Tras un turno saltado (otra operación de disco en marcha) no se reintenta antes de esto.
 REINTENTO_TRAS_SALTO = 1800
+#: Tope de la cadencia (un año): un valor absurdo del `.env` no debe desbordar el cálculo de fechas.
+MAX_MINUTOS = 525600
 
 _arranque: datetime = datetime.now(UTC)
 _ultima: datetime | None = None
+_ultimo_intento: datetime | None = None
+_no_antes_de: datetime | None = None
 
 
 def ultima_ejecucion() -> datetime | None:
@@ -152,15 +156,30 @@ async def cargar_ultima_persistida(fabrica) -> None:
         anotar_ultima(ultimo.get("started_at"))
 
 
+def anotar_intento() -> None:
+    """Un intento fallido consume el turno: la cuenta sigue desde él, no desde el último éxito.
+    Sin esto, un fallo persistente repetiría un rescan completo cada vez que se reintenta."""
+    global _ultimo_intento
+    _ultimo_intento = datetime.now(UTC)
+
+
+def aplazar(segundos: int = REINTENTO_TRAS_SALTO) -> None:
+    """Un turno saltado (cerrojo ocupado) reintenta pasado este tiempo, no un intervalo después."""
+    global _no_antes_de
+    _no_antes_de = datetime.now(UTC) + timedelta(seconds=segundos)
+
+
 def proxima_ejecucion(minutos: int) -> datetime | None:
     """Cuándo toca el periódico con esa cadencia; `None` si está apagado.
 
-    Se cuenta desde el último rescan; si nunca hubo, desde el arranque del proceso. Puede quedar
-    en el pasado (vencida: toca en cuanto el bucle despierte)."""
+    Se cuenta desde el último rescan o intento (el más reciente); si nunca hubo, desde el arranque
+    del proceso. Puede quedar en el pasado (vencida: toca en cuanto el bucle despierte), salvo que
+    un salto la haya aplazado."""
     if minutos <= 0:
         return None
-    base = _ultima or _arranque
-    return base.replace(tzinfo=base.tzinfo or UTC) + timedelta(minutes=minutos)
+    base = max([f for f in (_ultima, _ultimo_intento) if f is not None], default=_arranque)
+    proxima = base + timedelta(minutes=min(minutos, MAX_MINUTOS))
+    return max(proxima, _no_antes_de) if _no_antes_de else proxima
 
 
 def consumir_foco_resultado() -> bool:
@@ -251,6 +270,7 @@ async def _ejecutar_tarea_con_cerrojo(fabrica, disparador: str, tarea) -> None:
                 tareas.error(tarea.id, tipo_error=type(exc).__name__)
             _estado.fase = FaseRescan.ERROR
             _estado.causa = type(exc).__name__
+            anotar_intento()
             logger.warning("rescan.fallido", disparador=disparador, error=type(exc).__name__)
         finally:
             _estado.terminado = datetime.now(UTC)
@@ -272,6 +292,7 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
     global _estado
     if _estado.en_curso:
         logger.info("rescan.auto_skipped", motivo="manual_en_curso")
+        aplazar()
         return None
     # Reserva el estado antes del await del cerrojo: un POST manual que llegue entre la
     # comprobación y la adquisición ve «en curso» y no crea otra tarea.
@@ -281,6 +302,7 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
         if not libre:
             _estado = EstadoRescan()
             logger.info("rescan.auto_skipped", motivo="cerrojo_ocupado")
+            aplazar()
             return None
         tarea = tareas.iniciar("rescanear", enlace="/ui/auditoria#rescan-biblioteca",
                                origen="rescan")
@@ -305,6 +327,7 @@ async def ejecutar_automatico(fabrica) -> RescanReport | None:
                 tareas.error(tarea.id, tipo_error=type(exc).__name__)
             _estado.fase = FaseRescan.ERROR
             _estado.causa = type(exc).__name__
+            anotar_intento()
             logger.warning("rescan.fallido", disparador=DISPARADOR_AUTOMATICO,
                            error=type(exc).__name__)
             return None
@@ -324,9 +347,9 @@ async def detener() -> None:
 
 
 def reiniciar_para_pruebas() -> None:
-    global _tarea, _estado, _ultima
+    global _tarea, _estado, _ultima, _ultimo_intento, _no_antes_de
     if _tarea is not None and not _tarea.done():
         _tarea.cancel()
     _tarea = None
     _estado = EstadoRescan()
-    _ultima = None
+    _ultima = _ultimo_intento = _no_antes_de = None
