@@ -46,13 +46,26 @@ propio y terminó con código 0:
 | `/var/backups/zascarr` | sí | **no** |
 | `/var/run/docker.sock` | **sí** | **sí** |
 
-El usuario `pi` pertenece al grupo `docker` y puede operar el socket, lo que en
-la práctica equivale a privilegios elevados sobre los contenedores. El arnés
-**no lo usó**, pero esta identidad no demuestra separación de privilegios. Una
-prueba de contención real necesitaría un usuario sin ese grupo, un espacio de
-nombres o un host separado. Las unidades instaladas son de copia/restauración y
-auxiliar; no se observó ninguna de actualización. Esta comprobación no autoriza
-usar Docker ni systemd.
+El usuario `pi` pertenece al grupo `docker` y puede operar el socket. La
+primera pasada **no lo usó**, pero esa identidad no demuestra separación de
+privilegios. Las unidades instaladas son de copia/restauración y auxiliar; no
+se observó ninguna de actualización. Esta comprobación no autoriza usar Docker
+ni systemd.
+
+### Repetición en sandbox sin grupos privilegiados
+
+Se repitió el arnés con **bubblewrap 0.12.0**:
+
+```text
+bwrap --unshare-all --die-with-parent --ro-bind / / --dev /dev --proc /proc   --tmpfs /tmp --bind <temporal> /tmp/ops4 --setenv OPS4_TMP /tmp/ops4   --chdir /home/pi/ops4-harness python3 /home/pi/ops4-harness/ops4_host_unprivileged.py
+```
+
+Dentro del sandbox: `uid=1000(pi)`, grupos solo `1000(pi),65534(nogroup)`,
+sin red y con `/` de solo lectura; solo el directorio temporal era escribible.
+Resultado: los tres casos volvieron a ser rechazados, `UNIDADES` solo tenía
+`copia`/`restaurar` y no se lanzó ningún subproceso. El sandbox reduce la
+superficie de esta prueba, pero **no es una validación de systemd, Docker,
+PostgreSQL ni de la durabilidad**; esos siguen NOT RUN.
 
 ## Conclusión
 
