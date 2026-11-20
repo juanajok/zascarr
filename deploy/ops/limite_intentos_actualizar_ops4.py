@@ -41,7 +41,8 @@ class LimiteIntentos:
             if len(self._fallos) >= UMBRAL_FALLOS:
                 self._bloqueado_hasta = instante + BLOQUEO_S
 
-    def exito(self) -> None:
+    def exito(self, ahora: float | None = None) -> None:
+        """Un acierto limpia el bloqueo; el instante se acepta por interfaz común."""
         with self._lock:
             self._fallos.clear()
             self._bloqueado_hasta = 0.0

@@ -21,6 +21,7 @@ def admitir_host(
     ahora: object,
     lector: object,
     reclamar_id: Callable[[str], bool],
+    limite: object | None = None,
 ) -> CodigoAdmision:
     """Ordena firma/frescura/reclamación y verifica la contraseña viva.
 
@@ -34,11 +35,31 @@ def admitir_host(
         return CodigoAdmision.NO_DISPONIBLE
     if not callable(leer):
         return CodigoAdmision.NO_DISPONIBLE
+    if limite is not None:
+        permite = getattr(limite, "permite", None)
+        if not callable(permite):
+            return CodigoAdmision.NO_DISPONIBLE
+        try:
+            if permite(ahora) is not True:
+                return CodigoAdmision.BLOQUEADA
+        except Exception:  # noqa: BLE001
+            return CodigoAdmision.NO_DISPONIBLE
 
     def comprobar(prueba: str) -> bool:
         return verificar_prueba_viva(prueba, leer)
 
-    return admitir(
+    resultado = admitir(
         linea, clave=clave, ahora=ahora,
         verificar_prueba=comprobar, reclamar_id=reclamar_id,
     )
+    if limite is not None and resultado in (
+        CodigoAdmision.ACEPTADA, CodigoAdmision.PRUEBA_INVALIDA
+    ):
+        metodo = getattr(limite, "exito" if resultado is CodigoAdmision.ACEPTADA else "fallo", None)
+        if not callable(metodo):
+            return CodigoAdmision.NO_DISPONIBLE
+        try:
+            metodo(ahora)
+        except Exception:  # noqa: BLE001
+            return CodigoAdmision.NO_DISPONIBLE
+    return resultado

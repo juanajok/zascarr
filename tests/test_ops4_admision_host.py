@@ -95,3 +95,64 @@ def test_no_expone_secretos_en_resultado() -> None:
     resultado = admitir(construir(prueba="secreto"), lector)
     assert resultado is CodigoAdmision.PRUEBA_INVALIDA
     assert "secreto" not in str(resultado)
+
+
+class Limite:
+    def __init__(self, permite=True) -> None:
+        self._permite = permite
+        self.calls: list[tuple[str, object]] = []
+
+    def permite(self, ahora):
+        self.calls.append(("permite", ahora))
+        return self._permite
+
+    def exito(self, ahora):
+        self.calls.append(("exito", ahora))
+
+    def fallo(self, ahora):
+        self.calls.append(("fallo", ahora))
+
+
+def test_limite_bloquea_y_cuenta_fallos() -> None:
+    bloqueado = Limite(False)
+    assert admitir_host(
+        construir(), clave=CLAVE, ahora=AHORA, lector=Lector(),
+        reclamar_id=lambda _: True, limite=bloqueado,
+    ) is CodigoAdmision.BLOQUEADA
+    assert bloqueado.calls == [("permite", AHORA)]
+
+    fallo = Limite()
+    assert admitir_host(
+        construir(prueba="otra"), clave=CLAVE, ahora=AHORA, lector=Lector(),
+        reclamar_id=lambda _: True, limite=fallo,
+    ) is CodigoAdmision.PRUEBA_INVALIDA
+    assert ("fallo", AHORA) in fallo.calls
+
+    exito = Limite()
+    assert admitir_host(
+        construir(), clave=CLAVE, ahora=AHORA, lector=Lector(),
+        reclamar_id=lambda _: True, limite=exito,
+    ) is CodigoAdmision.ACEPTADA
+    assert ("exito", AHORA) in exito.calls
+
+
+def test_limite_invalido_falla_cerrado() -> None:
+    assert admitir_host(
+        construir(), clave=CLAVE, ahora=AHORA, lector=Lector(),
+        reclamar_id=lambda _: True, limite=object(),
+    ) is CodigoAdmision.NO_DISPONIBLE
+
+
+def test_limite_real_bloquea_tras_cinco_fallos() -> None:
+    from deploy.ops.limite_intentos_actualizar_ops4 import UMBRAL_FALLOS, LimiteIntentos
+
+    limite = LimiteIntentos()
+    for _ in range(UMBRAL_FALLOS):
+        assert admitir_host(
+            construir(prueba="otra"), clave=CLAVE, ahora=AHORA, lector=Lector(),
+            reclamar_id=lambda _: True, limite=limite,
+        ) is CodigoAdmision.PRUEBA_INVALIDA
+    assert admitir_host(
+        construir(), clave=CLAVE, ahora=AHORA, lector=Lector(),
+        reclamar_id=lambda _: True, limite=limite,
+    ) is CodigoAdmision.BLOQUEADA

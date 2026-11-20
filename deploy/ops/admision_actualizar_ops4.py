@@ -29,6 +29,7 @@ class CodigoAdmision(StrEnum):
     REPETIDA = "repetida"
     PRUEBA_INVALIDA = "prueba_invalida"
     NO_DISPONIBLE = "no_disponible"
+    BLOQUEADA = "bloqueada"
 
 
 def admitir(
