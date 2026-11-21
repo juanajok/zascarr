@@ -8,6 +8,8 @@ en test_series_service.py.
 from __future__ import annotations
 
 import re
+from html import unescape
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -94,10 +96,23 @@ class TestIndex:
         with use_fake_session(session) as client:
             r = client.get("/ui/biblioteca?vista=lista")
         assert r.status_code == 200
-        assert f'hx-get="/ui/series/{series.id}/previa"' in r.text
-        assert f'hx-target="#previa-l-{series.id}"' in r.text
-        assert "Ver portada" in r.text
-        assert 'hx-target="next .previa-numero"' in r.text
+        html = unescape(r.text)
+        assert f'hx-get="/ui/series/{series.id}/previa"' in html
+        assert f'hx-target="#previa-l-{series.id}"' in html
+        assert "Ver portada" in html
+        assert 'hx-target="next .previa-numero"' in html
+        # UATP-05: el envoltorio cierra con Escape/clic; la fija no se abre por hover.
+        envoltorio = re.search(
+            r'<span class="chip-previa chip-previa-lista"[^>]*>', html).group(0)
+        assert f'hx-get="/ui/series/{series.id}/previa?cerrar=1"' in envoltorio
+        assert "keyup[key=='Escape']" in envoltorio
+        assert "click from:'find .previa-numero'" in envoltorio
+        assert f'hx-target="#previa-l-{series.id}"' in envoltorio
+        assert 'hx-sync="closest .chip-previa:replace"' in envoltorio
+        enlace = re.search(
+            r'<a [^>]*hx-target="#previa-l-' + str(series.id) + r'"[^>]*>', html).group(0)
+        assert 'hx-trigger="focusin delay:150ms"' in enlace
+        assert "mouseenter" not in enlace
 
     def test_la_portada_de_la_rejilla_lleva_v2(self):
         """R-01 de BL-PORT1 (#300): sin `?v=2` el navegador puede pintar hasta 24 h la
@@ -896,3 +911,20 @@ def test_anio_unicode_no_da_500_y_se_aclara():
     assert "El año de «desde» no es válido; se ha quitado." in r.text
     r2, _ = TestFocoDeRetorno()._get(make_series(), "page=1&anio_hasta=%D9%A3")
     assert r2.status_code == 200
+
+
+def test_previa_generica_cerrar_no_consulta_la_bd(monkeypatch):
+    """UATP-05: `?cerrar=1` responde 200 vacío antes de tocar la BD o el disco."""
+    series = make_series("Batman")
+
+    class _SinBd:
+        async def get(self, *_args, **_kwargs):
+            raise AssertionError("cerrar la previa no debe consultar la BD")
+
+    with use_fake_session(_SinBd()) as client, patch(
+            "zascarr.web.series.portada_cacheada", side_effect=AssertionError(
+                "cerrar no busca la portada en disco")) as mock:
+        r = client.get(f"/ui/series/{series.id}/previa?cerrar=1")
+    assert r.status_code == 200 and r.text == ""
+    assert r.headers["cache-control"] == "no-store"
+    assert mock.call_count == 0

@@ -418,6 +418,9 @@ PARAMETROS_DE_QUERY = frozenset({
     # #1160: marca interna del sondeo de «Actualizar la biblioteca» («1» = el cliente ya muestra «en curso»);
     # sin datos de la persona.
     "curso",
+    # UATP-05 (#1143): «cerrar=1» pide el hueco vacío de la previa; es una orden sin datos de
+    # la persona (no lleva id, texto ni estado de la vista).
+    "cerrar",
 })
 
 

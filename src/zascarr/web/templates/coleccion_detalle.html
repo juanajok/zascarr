@@ -77,15 +77,19 @@
     {% for s in coleccion.series %}
     <li class="coleccion-serie-fila">
       <div>
-        <span class="chip-previa chip-previa-lista">
+        <span class="chip-previa chip-previa-lista"
+              hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}?cerrar=1"
+              hx-trigger="keyup[key=='Escape'], click from:'find .previa-numero'"
+              hx-target="#previa-m-{{ s.id }}" hx-swap="innerHTML"
+              hx-sync="closest .chip-previa:replace">
           <a href="{{ url_serie(s.id) }}"
              hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
              hx-target="#previa-m-{{ s.id }}" hx-swap="innerHTML"
-             hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{{ s.title }}</a>
+             hx-trigger="focusin delay:150ms" hx-sync="closest .chip-previa:replace">{{ s.title }}</a>
           <button type="button" class="btn ghost sm chip-previa-boton"
                   hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
                   hx-target="next .previa-numero" hx-swap="innerHTML"
-                  hx-trigger="click">Ver portada<span class="sr"> de {{ s.title }}</span></button>
+                  hx-trigger="click" hx-sync="closest .chip-previa:replace">Ver portada<span class="sr"> de {{ s.title }}</span></button>
           <span class="previa-numero" id="previa-m-{{ s.id }}" aria-hidden="true"></span>
         </span>
         <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>

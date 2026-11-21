@@ -270,8 +270,15 @@ async def portada(coleccion_id: UUID, request: Request,
 
 @router.get("/{coleccion_id}/previa/{serie_id}", response_class=HTMLResponse)
 async def previa_serie(request: Request, coleccion_id: UUID, serie_id: UUID,
+                       cerrar: bool = Query(False),
                        db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    """Fragmento HTMX con la portada local de una serie; no toca disco ni red."""
+    """Fragmento HTMX con la portada local de una serie; no toca disco ni red.
+
+    UATP-05 (#1143): `cerrar=1` devuelve el hueco vacío antes de consultar la BD, sin sustituir
+    el enlace ni el botón (el foco no se mueve).
+    """
+    if cerrar:
+        return HTMLResponse("", headers={"Cache-Control": "no-store"})
     coleccion = await db.get(Collection, coleccion_id)
     serie = await db.get(Series, serie_id) if coleccion is not None else None
     if (coleccion is None or serie is None

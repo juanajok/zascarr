@@ -1,6 +1,7 @@
 """BL-INF4 (#590): rutas de la vista previa del número (servicio sustituido)."""
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
@@ -45,7 +46,9 @@ def test_fragmento_devuelve_la_miniatura(tmp_path):
     assert f"/ui/series/{serie}/numero/{issue}/previa.jpg" in r.text
     assert 'class="previa-numero-img"' in r.text
     assert "Nº 1" in r.text and "El Día del Sol Negro" in r.text
-    assert "Pulsa para abrir la ficha" in r.text
+    # UATP-05 / D-5: el pie no promete una acción que la tarjeta no hace.
+    assert "Vista previa · Esc o clic para apartarla" in r.text
+    assert "Pulsa para abrir la ficha" not in r.text
     assert r.headers["Cache-Control"] == "no-store"
 
 
@@ -151,3 +154,61 @@ def test_portada_hd_sirve_1200_con_etag_y_404():
     assert r.status_code == 200 and r304.status_code == 304
     assert mock.await_args.kwargs["ancho"] == ANCHO_HD
     assert r.headers["Cache-Control"] == "private, max-age=86400"
+
+
+# --- UATP-05 (#1143): cerrar sin mover el foco -------------------------------------------
+
+
+def _cliente_sin_tocar_bd():
+    """Cliente cuya sesión falla si alguien la consulta: cerrar no necesita saber si existe."""
+    class _Sesion:
+        async def get(self, *_args, **_kwargs):
+            raise AssertionError("cerrar la previa no debe consultar la BD")
+
+    async def _db():
+        yield _Sesion()
+
+    app.dependency_overrides[get_db] = _db
+    return TestClient(app)
+
+
+def test_cerrar_numero_devuelve_200_vacio_sin_bd_ni_disco():
+    serie, issue = uuid4(), uuid4()
+    c = _cliente_sin_tocar_bd()
+    try:
+        with patch.object(web, "ruta_previa", AsyncMock(
+                side_effect=AssertionError("cerrar no busca la previa"))) as mock:
+            r = c.get(f"/ui/series/{serie}/numero/{issue}/previa?cerrar=1")
+    finally:
+        _cerrar()
+
+    assert r.status_code == 200
+    assert r.text == ""
+    assert r.headers["Cache-Control"] == "no-store"
+    assert mock.await_count == 0
+
+
+def test_cerrar_numero_tambien_en_visita_directa():
+    """Una visita directa a `?cerrar=1` no enlazada devuelve igualmente el hueco vacío."""
+    serie, issue = uuid4(), uuid4()
+    c = _cliente_sin_tocar_bd()
+    try:
+        r = c.get(f"/ui/series/{serie}/numero/{issue}/previa?cerrar=1")
+    finally:
+        _cerrar()
+
+    assert r.status_code == 200 and r.text == ""
+    assert r.headers["Cache-Control"] == "no-store"
+
+
+def test_la_tarjeta_no_tiene_enfocables_y_su_pie_es_honesto():
+    plantillas = Path(__file__).resolve().parents[1] / "src/zascarr/web/templates"
+    numero = (plantillas / "_previa_numero.html").read_text()
+    serie = (plantillas / "_previa_serie.html").read_text()
+    for texto in (numero, serie):
+        assert "Vista previa · Esc o clic para apartarla" in texto
+        assert "Pulsa para abrir la ficha" not in texto
+        # Decorativa y sin trampa: nada enfocable ni roles nuevos dentro de la tarjeta.
+        for etiqueta in ("<a ", "<button", "<input", "tabindex=", "role="):
+            assert etiqueta not in texto
+    assert 'alt=""' in numero

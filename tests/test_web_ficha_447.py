@@ -2,7 +2,9 @@
 """#447 web: ficha de serie y de número con TestClient (sin red)."""
 from __future__ import annotations
 
+import re
 from datetime import date
+from html import unescape
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -240,3 +242,48 @@ def test_especial_sin_numero_se_pinta_con_titulo_no_con_hashtag_vacio(monkeypatc
     assert r.status_code == 200
     assert "Sin número · Bad Weekend" in r.text
     assert "#(sin número)" not in r.text
+
+
+def test_cierre_con_escape_en_los_chips_de_la_ficha(monkeypatch):
+    """UATP-05 (#1143): Escape/clic vacían el hueco sin sustituir enlace ni botón."""
+    from types import SimpleNamespace
+
+    from zascarr.services.archivos_por_numero import NumeroConArchivos
+    from zascarr.services.ficha_numero import FichaSerie, NumeroEnlace
+    from zascarr.web import series as web_series
+    serie = make_series(total_issues=1)
+    ficha = FichaSerie(serie=serie, sinopsis="", numeros=[
+        NumeroEnlace(id="issue-1", numero="01", tiene_archivos=True)])
+    monkeypatch.setattr(web_series, "cargar_ficha_serie", AsyncMock(return_value=ficha))
+    monkeypatch.setattr(web_series, "numeros_poseidos", AsyncMock(return_value={"01"}))
+    monkeypatch.setattr(web_series, "huecos_de_serie", AsyncMock(return_value=SimpleNamespace(
+        computable=True, faltantes=[], motivo=None)))
+    monkeypatch.setattr(web_series, "archivos_por_numero", AsyncMock(return_value=[
+        NumeroConArchivos(issue_id="issue-1", numero="01", archivos=[])]))
+    with use_fake_session(FakeSession([FakeExecResult([serie])]
+                                      + [FakeExecResult([])] * 8)) as client:
+        r = client.get(f"/ui/series/{serie.id}")
+    html = unescape(r.text)
+
+    anclado = re.search(r'<span class="chip-previa"[^>]*>', html).group(0)
+    assert f'hx-get="/ui/series/{serie.id}/numero/issue-1/previa?cerrar=1"' in anclado
+    assert "keyup[key=='Escape']" in anclado
+    assert "click from:'find .previa-numero'" in anclado
+    assert 'hx-target="#previa-issue-1"' in anclado
+    assert 'hx-sync="closest .chip-previa:replace"' in anclado
+
+    fijo = re.search(r'<span class="chip-previa chip-previa-lista"[^>]*>', html).group(0)
+    assert f'hx-get="/ui/series/{serie.id}/numero/issue-1/previa?cerrar=1"' in fijo
+    assert 'hx-target="#previa-archivo-issue-1"' in fijo
+    assert "keyup[key=='Escape']" in fijo
+    assert "click from:'find .previa-numero'" in fijo
+    assert 'hx-sync="closest .chip-previa:replace"' in fijo
+
+    # Enter abre la ficha con el href: el enlace anclado no dispara petición al pulsarlo.
+    enlace_anclado = re.search(r'<a class="chip-enlace"[^>]*>', html).group(0)
+    assert "mouseenter delay:150ms, focusin delay:150ms" in enlace_anclado
+    assert 'hx-trigger="click"' not in enlace_anclado
+    # La fija ya no se abre por hover: su enlace solo escucha el foco.
+    enlace_fijo = re.search(r'<a [^>]*hx-target="#previa-archivo-issue-1"[^>]*>', html).group(0)
+    assert 'hx-trigger="focusin delay:150ms"' in enlace_fijo
+    assert "mouseenter" not in enlace_fijo
