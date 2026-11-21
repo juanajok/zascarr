@@ -17,6 +17,8 @@
 | 320: ficha vuelve a Deseados | PASS | `href=/ui/wishlist`, «← Volver a Deseados» |
 | 320: vuelta a Deseados | PASS | URL final `/ui/wishlist` |
 | 390: referencias, enlaces, aria y sin scroll | PASS | `scrollWidth=innerWidth=390` |
+| 320: Tab llega al enlace de la fila | PASS | foco en `a.wishlist-title` con `href=/ui/series/…?volver=/ui/wishlist` |
+| 320: recarga conserva referencias y href | PASS | dos referencias y dos enlaces tras reload |
 
 Capturas:
 
