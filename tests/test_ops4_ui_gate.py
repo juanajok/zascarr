@@ -77,9 +77,17 @@ def test_estado_avisa_version_disponible_sin_accion(cliente):
 
 
 @pytest.mark.parametrize("ruta", ["/ui/version/estado", "/ui/version/actualizar",
-                                   "/ui/actualizar", "/actualizar"])
+                                   "/actualizar"])
 def test_post_actualizacion_no_resuelve_ruta_ejecutable(cliente, ruta):
     # Match.FULL detecta también rutas parametrizadas, no solo igualdad de strings.
     # Se comprueba el enrutado: un middleware puede devolver 503 antes del 404.
     scope = {"type": "http", "method": "POST", "path": ruta, "root_path": ""}
     assert not [route for route in app.router.routes if route.matches(scope)[0] == Match.FULL]
+
+
+def test_la_ruta_de_actualizacion_existe_solo_tras_la_puerta(cliente):
+    """La ruta se registra, pero sin habilitar responde 404 antes de autenticar."""
+    scope = {"type": "http", "method": "POST", "path": "/ui/actualizar", "root_path": ""}
+    assert [route for route in app.router.routes if route.matches(scope)[0] == Match.FULL]
+    respuesta = cliente.post("/ui/actualizar", data={"contrasena": "x", "entiendo": "si"})
+    assert respuesta.status_code == 404
