@@ -702,7 +702,8 @@ class TestConsultaEnLaUrl:
             return client.get("/ui/wishlist", params={"q": q} if q is not None else None)
 
     def test_q_rellena_el_campo_y_pinta_los_resultados_sin_js(self, monkeypatch):
-        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN, start_year=2011)
+        serie = Series(
+            id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN, start_year=2011)
         r = self._pagina(monkeypatch, "bat", [serie])
         assert r.status_code == 200
         assert 'id="q-deseados" value="bat"' in r.text
