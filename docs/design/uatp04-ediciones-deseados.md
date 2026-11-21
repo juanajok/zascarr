@@ -2,7 +2,7 @@
 
 > **Estado:** implementada en TDD (task-52, 2026-11-21) siguiendo las recomendaciones D-1…D-5;
 > pendiente la ratificación final del PO, la pasada independiente de QA/SecOps y la evidencia de
-> navegador (NOT RUN si no se ejecuta). El benchmark previo (**task-46**, 2026-11-21, solo lectura
+> navegador **PASS en Chrome** (320/390); evidencia en [`uatp04/resultado-chrome.md`](uatp04/resultado-chrome.md). El benchmark previo (**task-46**, 2026-11-21, solo lectura
 > y no versionado) comprobó que los criterios de #1142 **no se cumplían** antes de este corte.
 >
 > **Insumos:** [#1142 · UATP-04](https://github.com/juanajok/zascarr/issues/1142),
@@ -293,7 +293,7 @@ implementación si su contrato cambia; este documento es el contrato de UATP-04.
 | T-8 | [`tests/test_web_series.py`](../../tests/test_web_series.py) | Ficha con `volver=/ui/wishlist`: `href="/ui/wishlist"` y «Volver a Deseados»; un valor manipulado cae a Biblioteca. |
 | T-9 | [`tests/test_web_css_contraste.py`](../../tests/test_web_css_contraste.py) | `.wishlist-title` con `overflow-wrap: anywhere`; `a` subrayado; enlace de fila ≥ 24 px en el bloque U16; sin `ellipsis`/`nowrap` en la referencia. |
 | T-10 | [`tests/test_wishlist_series_pg.py`](../../tests/test_wishlist_series_pg.py) (**PG opcional**, skip sin `TEST_DATABASE_URL`) | Con Postgres real, dos series «Flash» 1987/2011 calculan `Flash (1987)`/`Flash (2011)` y `_row` devuelve esas referencias. |
-| T-11 | Evidencia de navegador (§8) | 320/390 px, teclado y recarga; **NOT RUN** si no se ejecuta. |
+| T-11 | Evidencia de navegador (§8) | 320/390 px, teclado y recarga; **PASS Chrome** en [`uatp04/resultado-chrome.md`](uatp04/resultado-chrome.md). |
 
 Comandos mínimos:
 
