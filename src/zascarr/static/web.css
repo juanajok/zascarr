@@ -2875,15 +2875,27 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .chip-filtro { text-decoration: none; }
 .chip-filtro:focus-visible { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
 
-/* BL-LEC3 (#826): tarjeta de «fin del tebeo». */
-.lector-fin { width: 100%; max-width: 42rem; display: grid; gap: var(--space-2);
-  padding: var(--space-3); border: var(--border-panel) solid var(--ink);
-  border-radius: var(--radius-panel); background: var(--paper); }
+/* BL-LEC3 decisión D (#826): la página de fin ocupa el área de lectura entera, como una
+   contraportada. NO es una tarjeta: sin borde de panel, sin sombra y con fondo papel opaco que
+   cubre la escena (no tapa parcialmente la última página: la sustituye). El contenido va centrado
+   con medida legible, se desplaza en vertical y no produce desplazamiento horizontal. */
+.lector-fin {
+  position: absolute; inset: 0; z-index: 3;
+  display: grid; align-content: safe center; justify-items: center;
+  gap: var(--space-3); width: 100%;
+  padding: calc(var(--space-6) + var(--space-6)) var(--space-3) var(--space-6);
+  overflow: auto; overflow-x: hidden;
+  background: var(--paper); color: var(--ink);
+}
 .lector-fin[hidden] { display: none; }
-.lector-fin-acciones { display: grid; gap: var(--space-2); }
-.lector-fin .btn, .lector-menu .caption a { min-height: 44px; display: inline-flex; align-items: center; }
-.lector-fin h2 { margin: 0; }
-.lector-fin p { margin: 0; }
+.lector-fin-acciones { display: grid; gap: var(--space-2); width: min(42rem, 100%); }
+.lector-fin .btn, .lector-menu .caption a { min-height: 44px; max-width: 100%;
+  display: inline-flex; align-items: center; }
+.lector-fin h2 { margin: 0; text-align: center; }
+.lector-fin p { margin: 0; overflow-wrap: anywhere; }
+.lector-fin-portada { display: grid; justify-items: center; }
+.lector-fin-portada .portada-fin { width: min(9rem, 40vw);
+  border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); }
 
 
 
@@ -2941,11 +2953,9 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .lector-escena[data-modo="ancho"] .lector-pagina { max-width: 100%; max-height: 100vh; max-height: 100dvh; }
 .lector-escena[data-modo="pantalla"] .lector-pagina { max-width: 100%; max-height: 100vh; max-height: 100dvh; }
 .lector-escena[data-modo="doble"] .lector-pagina { max-width: 49%; max-height: 100vh; max-height: 100dvh; }
-.lector-escena .lector-fin {
-  position: absolute; z-index: 3; left: 50%; bottom: var(--space-3);
-  transform: translateX(-50%); width: min(42rem, calc(100% - 2 * var(--space-3)));
-  max-height: calc(100dvh - 6rem); overflow: auto;
-}
+/* El lienzo declara `display: flex` y `position: absolute`: sin esta regla, el atributo `hidden`
+   (que el JS pone al abrir la página de fin) no lo ocultaría ni lo sacaría del árbol de foco. */
+.lector-lienzo[hidden] { display: none; }
 
 .lector-flecha {
   position: absolute; top: 50%; z-index: 3; width: 48px; height: 48px;

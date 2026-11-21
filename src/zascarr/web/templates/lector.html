@@ -79,9 +79,16 @@
     </div>
   </div>
   {% else %}
+  {#- BL-LEC3 decisión D (#826): en la última página el avance sigue operativo y se llama «Ver el
+      final»: abre la página de fin, no una página N+1. El sentido decide qué flecha avanza. -#}
+  {% set en_ultima = pagina_actual >= total %}
+  {% set en_primera = pagina_actual <= 1 %}
+  {% set avanza_derecha = sentido != "rtl" %}
+  {% set etiqueta_avance = "Ver el final" if en_ultima else "Página siguiente" %}
   <div class="lector-lienzo" id="lector-lienzo" tabindex="0" role="group" aria-label="Zona de lectura">
     <button type="button" class="lector-flecha lector-flecha-anterior" id="lector-anterior"
-            aria-label="Página anterior" aria-disabled="{{ 'true' if pagina_actual <= 1 else 'false' }}">‹</button>
+            aria-label="{{ etiqueta_avance if not avanza_derecha else 'Página anterior' }}"
+            aria-disabled="{{ 'true' if (avanza_derecha and en_primera) else 'false' }}">‹</button>
     <div class="lector-paginas" id="lector-paginas">
       <img id="lector-pagina" class="lector-pagina"
            src="/ui/leer/{{ archivo.id }}/pagina/{{ pagina_actual }}"
@@ -89,16 +96,26 @@
       <img id="lector-pagina-b" class="lector-pagina" alt="" hidden>
     </div>
     <button type="button" class="lector-flecha lector-flecha-siguiente" id="lector-siguiente"
-            aria-label="Página siguiente" aria-disabled="{{ 'true' if pagina_actual >= total else 'false' }}">›</button>
+            aria-label="{{ etiqueta_avance if avanza_derecha else 'Página anterior' }}"
+            aria-disabled="{{ 'true' if (not avanza_derecha and en_primera) else 'false' }}">›</button>
   </div>
 
   <p id="lector-resultado" class="sr" aria-live="polite" aria-atomic="true"></p>
   {% if siguiente %}
+  {#- La página de fin es contenido, no un diálogo: `section` nombrada por el h2, sin backdrop ni
+      trampa de foco. Llega oculta del servidor y solo la abre el JS con intención de avanzar. -#}
   <section id="fin" class="lector-fin" hidden aria-labelledby="fin-titulo">
-    <h2 id="fin-titulo" class="titulo-frase" tabindex="-1">Has llegado al final</h2>
+    <h2 id="fin-titulo" tabindex="-1">Fin del número</h2>
+    {% if siguiente.estado == "leer" and siguiente.issue %}
+    <div class="lector-fin-portada" id="fin-portada"
+         data-portada-url="/ui/series/{{ siguiente.serie.id if siguiente.serie else serie.id }}/numero/{{ siguiente.issue.id }}/portada.jpg">
+      {{ ui.portada(siguiente.serie.title if siguiente.serie else serie.title, siguiente.issue.id, none, "portada-fin") }}
+    </div>
+    {% endif %}
     <div id="fin-acciones" class="lector-fin-acciones">
       {% include "_lector_fin.html" %}
     </div>
+    <button type="button" class="btn ghost" id="fin-quedarme">Quedarme en esta página</button>
   </section>
   {% endif %}
   {% endif %}
