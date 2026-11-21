@@ -8,7 +8,7 @@ reautenticar. No se ha desplegado ni habilitado en producción.
 ## Configuración
 
 - `OPS4_ACTUALIZACION_HABILITADA` (bool, `false`).
-- `OPS4_AUTORIZACION_KEY_FILE` (por defecto `/var/lib/zascarr/ops4/autorizacion.key`).
+- `OPS4_AUTORIZACION_KEY_FILE` (por defecto `/run/zascarr-ops/actualizar.key` en el contenedor; fichero real `/var/lib/zascarr/ops/actualizar.key`).
 - `OPS4_SOCKET_FILE` (por defecto `/run/zascarr-ops/actualizar.sock`).
 
 La clave y el socket son dedicados; no se reutilizan los de copia/restauración.

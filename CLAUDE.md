@@ -98,8 +98,9 @@ Sigue las guías oficiales con estas precisiones locales:
   estado fiable y pruebas aisladas. No conectar `update.sh` directamente a la
   app ni desplegarlo sin las correspondientes verificaciones. Decisión de
   autoridad (2026-11-20): la app reautentica y emite una autorización corta de
-  un solo uso; el host la verifica. El contrato está aislado, sin conectar ni
-  habilitar.
+  un solo uso; el host la verifica. La rama tiene la UI conectada solo detrás
+  de `OPS4_ACTUALIZACION_HABILITADA=false`, auxiliar/unidad separados y
+  instalador sin activación por defecto. No está habilitada ni desplegada.
 
 ## 4. Rendimiento en Pi
 

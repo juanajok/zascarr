@@ -160,6 +160,10 @@ services:
       - COPIAS_FILE=/run/backup-status/copias.json
       - OMITIDA_FILE=/run/backup-status/omitida.json
       - OPS_RESTAURAR_STATUS_FILE=/run/backup-status/ops-restaurar.json
+      # OPS4: apagado por defecto; la ruta de clave/socket dedicada ya está en el volumen ops.
+      - OPS4_ACTUALIZACION_HABILITADA=${OPS4_ACTUALIZACION_HABILITADA:-false}
+      - OPS4_AUTORIZACION_KEY_FILE=/run/zascarr-ops/actualizar.key
+      - OPS4_SOCKET_FILE=/run/zascarr-ops/actualizar.sock
       - COVERS_CACHE_PATH=/config/covers
       - LECTOR_CACHE_PATH=/config/lector
       - LECTOR_CACHE_BYTES=${LECTOR_CACHE_BYTES:-1073741824}

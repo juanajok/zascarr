@@ -24,7 +24,7 @@ _CAMPOS_RESPUESTA = frozenset({"v", "id", "resultado", "codigo"})
 _ID = re.compile(r"[0-9a-f]{32}\Z")
 _CODIGOS = frozenset({
     "aceptada", "esquema_invalido", "firma_invalida", "caducada",
-    "autorizacion_invalida", "repetida", "no_disponible",
+    "autorizacion_invalida", "repetida", "operacion_en_curso", "no_disponible",
 })
 
 

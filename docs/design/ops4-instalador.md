@@ -12,8 +12,10 @@ provisiona OPS4 **sin habilitar la UI ni activar el socket por defecto**.
 - Sustituye `@ZASCARR_DATA_DIR@`/`@GRUPO@` e instala el socket y las unidades.
 - **Sin `--activar` no habilita nada**: las unidades quedan en disco, sin
   `[Install]`, y la UI sigue con `OPS4_ACTUALIZACION_HABILITADA=false`.
-- `--activar` habilita/inicia solo el socket; `--sin-systemd` permite probar
-  la copia de archivos sin systemd; `--dry-run` no escribe.
+- `--activar` **inicia** el socket (sin persistencia; no usa `enable`), no la
+  UI. El mensaje advierte de que la unidad fija puede ejecutar `update.sh` si
+  recibe una petición válida y de que la bandera de UI sigue en `false`.
+  `--sin-systemd` evita systemd; `--dry-run` no escribe.
 - `--quitar` retira unidades/módulos y conserva clave/datos; con
   `--borrar-clave` elimina también la clave.
 

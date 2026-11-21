@@ -15,7 +15,13 @@ OPS4_DIR="${DATA_DIR}/ops4"
 DEST_AUX="/usr/local/lib/zascarr/zascarr-actualizar-aux"
 DEST_LIB="/usr/local/lib/zascarr"
 DEST_UNITS="/etc/systemd/system"
-GRUPO="${OPS4_GROUP:-${OPS_GROUP:-root}}"
+leer_env() { [[ -f "${ENV_FILE:-}" ]] && sed -n "s/^$1=//p" "${ENV_FILE}" | tail -1 | tr -d "\"'" || true; }
+GRUPO="${OPS4_GROUP:-${OPS_GROUP:-}}"
+if [[ -z "${GRUPO}" ]]; then
+    gid="$(leer_env PGID)"; gid="${gid:-1000}"
+    GRUPO="$(getent group "${gid}" | cut -d: -f1)"
+fi
+GRUPO="${GRUPO:-$(id -gn)}"
 if [[ "${ZASCARR_PRUEBAS:-}" == "1" ]]; then
     DEST_AUX="${OPS4_DEST_AUX:-${DEST_AUX}}"
     DEST_LIB="${OPS4_DEST_LIB:-${DEST_LIB}}"
@@ -138,10 +144,11 @@ done
 if (( ! SIN_SYSTEMD )); then
     run systemctl daemon-reload
     if (( ACTIVAR )); then
-        run systemctl enable --now zascarr-actualizar.socket
-        say "Socket habilitado en esta máquina."
+        run systemctl start zascarr-actualizar.socket
+        say "Socket iniciado (no persistente). La unidad fija puede ejecutar update.sh si recibe una petición válida."
+        say "La UI sigue deshabilitada por defecto (OPS4_ACTUALIZACION_HABILITADA=false)."
     else
-        say "Unidades instaladas, NO habilitadas. Usa --activar para el socket."
+        say "Unidades instaladas, NO activadas. Usa --activar para iniciar el socket."
     fi
 else
     say "Instalación de archivos completada; systemd omitido (--sin-systemd)."
