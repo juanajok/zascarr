@@ -1,6 +1,7 @@
 """Puerta UI OPS4; sin host real, socket ni ejecución."""
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -108,3 +109,75 @@ async def test_incierta_no_invita_a_reintentar(monkeypatch) -> None:
     respuesta = await actualizacion.actualizar(None, "clave", "si")
     assert respuesta.status_code == 200
     assert b"No vuelvas a intentarlo" in respuesta.body
+
+
+@pytest.mark.asyncio
+async def test_ruta_hasta_socket_real_con_consumo_durable(tmp_path, monkeypatch) -> None:
+    import asyncio
+    import json
+    import os
+
+    from deploy.ops.admision_v4_actualizar_ops4 import CodigoV4, admitir_v4
+    from deploy.ops.registro_repeticiones_ops4 import (
+        abrir_directorio_autorizaciones,
+        crear_reclamador_durable,
+    )
+    from zascarr.config import get_settings
+    from zascarr.services.auth import hash_password
+    from zascarr.services.clave_autorizacion import leer_clave_autorizacion
+    from zascarr.services.reautenticacion import reiniciar_estado
+
+    clave = bytes(range(32))
+    key = tmp_path / "actualizar.key"
+    key.write_text(clave.hex() + "\n", encoding="ascii")
+    key.chmod(0o440)
+    consumidos = tmp_path / "consumidos"
+    consumidos.mkdir(mode=0o700)
+    consumidos.chmod(0o700)
+    fd = abrir_directorio_autorizaciones(consumidos, uid_esperado=os.getuid())
+    ruta = tmp_path / "actualizar.sock"
+    settings = get_settings().model_copy(update={
+        "auth_mode": "password",
+        "auth_username": "ana",
+        "auth_password_hash": hash_password("secreta"),
+        "ops4_actualizacion_habilitada": True,
+        "ops4_autorizacion_key_file": str(key),
+        "ops4_socket_file": str(ruta),
+    })
+    monkeypatch.setattr(actualizacion, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        actualizacion, "leer_clave_autorizacion",
+        lambda path, **_kwargs: leer_clave_autorizacion(
+            path, uid_esperado=os.getuid(), modo_esperado=0o440,
+        ),
+    )
+    reclamar = crear_reclamador_durable(fd)
+
+    async def handler(reader, writer):
+        try:
+            linea = await reader.readline()
+            codigo = admitir_v4(
+                linea, clave=clave, ahora=int(time.time()), reclamar_uso=reclamar,
+            )
+            resultado = "aceptada" if codigo is CodigoV4.ACEPTADA else "rechazada"
+            ident = json.loads(linea)["id"]
+            writer.write((json.dumps(
+                {"v": 4, "id": ident, "resultado": resultado,
+                 "codigo": codigo.value}, separators=(",", ":"),
+            ) + "\n").encode())
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    server = await asyncio.start_unix_server(handler, path=str(ruta))
+    reiniciar_estado()
+    try:
+        async with server:
+            respuesta = await actualizacion.actualizar(None, "secreta", "si")
+        assert respuesta.status_code == 200
+        assert b"aceptada" in respuesta.body.lower()
+        assert any(p.name.startswith("autorizacion-") for p in consumidos.iterdir())
+    finally:
+        reiniciar_estado()
+        os.close(fd)

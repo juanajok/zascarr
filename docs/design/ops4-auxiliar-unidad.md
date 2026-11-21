@@ -43,7 +43,7 @@ si el cerrojo, el registro o el inicio no se pueden acreditar.
   contrato estático.
 - [test_ops4_aislamiento.py](../../tests/test_ops4_aislamiento.py): el
   auxiliar no se importa desde web/API/main ni desde el auxiliar existente.
-- **915 pruebas OPS4/paridad** y suite completa **8905 passed / 2431 skipped / 0 failed** verdes.
+- **916 pruebas OPS4/paridad** y suite completa **8906 passed / 2431 skipped / 0 failed** verdes.
 
 ## Integración real en la VM (2026-11-21)
 

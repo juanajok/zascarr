@@ -32,14 +32,16 @@ lenguaje llano de la pantalla. No hay JavaScript nuevo.
   a reintentar.
 - [test_ops4_ui_gate.py](../../tests/test_ops4_ui_gate.py): la ruta solo está
   activa tras la puerta; sin habilitar responde 404.
-- **897 pruebas OPS4/paridad** y suite completa **8905 passed / 2431 skipped /
-  0 failed** verdes.
+- **916 pruebas OPS4/paridad** y suite completa **8906 passed / 2431 skipped /
+  0 failed** verdes. Incluye un E2E local ruta→servicio→socket Unix temporal→
+  admisión→consumo durable.
 
 ## Límites
 
-- El auxiliar y las unidades ya están en la rama; el circuito auxiliar→unidad
-  se validó en la VM con un `update.sh` falso, pero **la UI end-to-end no**. El
-  formulario no se probó contra el socket real y la bandera sigue apagada.
+- El auxiliar y las unidades están en la rama; el circuito auxiliar→unidad se
+  validó en la VM con un `update.sh` falso y la ruta se validó localmente contra
+  un socket/admisión reales. **No** se ha probado el formulario HTTP completo en
+  la VM ni el `update.sh` real. La bandera sigue apagada.
 - Falta provisionar la clave/directorio, instalar la unidad endurecida y
   revisar SecOps del SHA final.
 - La sesión y el origen siguen protegidos por el middleware existente; no se
