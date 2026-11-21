@@ -1,7 +1,9 @@
 # Recuperar los controles del lector móvil y volver al número (UATP-03 / UXA-10)
 
 > **Estado:** implementada en TDD (task-34, 2026-11-21). El PO **aceptó D-1…D-5** (§12) y pidió
-> continuar; la evidencia Chrome (AC-09/T12) queda **NOT RUN** hasta ejecutarla en navegador real.
+> continuar. **AC-09/T12 PASS** en Chrome 320×568, 390×844 y 568×320; evidencia en
+> [`uatp03/resultado-chrome.md`](uatp03/resultado-chrome.md). Firefox/Safari/iOS/Android físico y
+> lector de pantalla quedan **NOT RUN**.
 > El benchmark previo (**task-32**, 2026-11-21, solo lectura y no versionado) dictaminó NO PASA.
 >
 > **Insumos:** [#1127 · UXA-10](https://github.com/juanajok/zascarr/issues/1127) (ampliada por
@@ -409,10 +411,9 @@ AC-08; P-7 → AC-10 (fuera de alcance).
   que no se oculta con el foco dentro ni con Opciones abierto (#1072), pasar página sin mostrar la
   barra (#1157), flujo de la página de fin y «Quedarme» (#826) y `UXA-01`/`#1072` en las suites
   existentes.
-- **AC-09 · Evidencia Chrome 320/390/568×320.** Matriz de §10 ejecutada en Chrome estable (registrar
-  versión), con capturas y medidas, y estados **PASS/FAIL/NOT RUN** por fila. Sin navegador no hay
-  PASS: Node/TestClient no sustituyen a AC-09. Safari/iOS, Android/tablet física, Firefox y lector
-  de pantalla quedan **NOT RUN** y se declaran; la prueba con móvil físico del cierre de #1141 no
+- **AC-09 · Evidencia Chrome 320/390/568×320.** **PASS** en Chrome, con capturas y medidas en
+  [`uatp03/resultado-chrome.md`](uatp03/resultado-chrome.md). Safari/iOS, Android/tablet física,
+  Firefox y lector de pantalla quedan **NOT RUN** y se declaran; la prueba con móvil físico del cierre de #1141 no
   se declara PASS desde esta historia.
 - **AC-10 · Sin desbordamiento de alcance.** No se toca el alto de la barra (~198 px), el guardado
   con `keepalive`, el backend/modelo/migraciones, las dependencias ni el número de ficheros JS
@@ -435,7 +436,7 @@ Nombres orientativos; lo exigible es el caso y su espera.
 | T9 | Servicio/web | Escritura acota a `[1,total]` y responde 204; lectura y escritura comparten el mismo criterio | `tests/test_lector.py` | AC-06 |
 | T10 | Estático | «Volver al número» es el primer control de la barra, ≥44 px y sin `white-space: nowrap` que desborde; la franja de 44 px solo revela con chrome oculto | `tests/test_lector.py` / `test_web_css_320.py` | AC-05 |
 | T11 | Regresión | Suites de lector (incl. RAR/preparación, fin, siguiente), contraste/tokens y `ruff`; UXA-01/#1072/#1179/#826 sin cambios | comandos §10 | AC-08/AC-10 |
-| T12 | Navegador real | Matriz Chrome 320×568, 390×844 y 568×320: AC-01…AC-07 con medidas, teclado y toque; PASS/FAIL/NOT RUN por fila | Chrome + `docs/design/uatp03/` | AC-09 |
+| T12 | Navegador real | Matriz Chrome 320×568, 390×844 y 568×320: AC-01…AC-07 con medidas, teclado y toque; PASS/FAIL/NOT RUN por fila | Chrome + `docs/design/uatp03/resultado-chrome.md` | AC-09: **PASS** |
 
 ## 10. Evidencia y comandos
 
