@@ -23,16 +23,16 @@
       {% if lector_pagina > 1 %}Continuar (pág. {{ lector_pagina }}){% else %}Leer{% endif %}
     </a>
     {% endif %}
-    <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar">Editar el número</a>
-    <a class="btn ghost sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/datos">Completar datos</a>
+    <a class="btn sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar">Editar el número</a>
+    <a class="btn sm" href="/ui/series/{{ series.id }}/numero/{{ issue.id }}/datos">Completar datos</a>
     {% if ficha.archivos %}
     <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/mejorar">
-      <button type="submit" class="btn ghost sm">Buscar una edición mejor</button>
+      <button type="submit" class="btn sm">Buscar una edición mejor</button>
     </form>
     {% endif %}
     <details class="anadir-a-lista" hx-get="/ui/listas/opciones/{{ series.id }}/{{ issue.id }}"
              hx-trigger="toggle once" hx-target="#lista-opciones" hx-swap="innerHTML">
-      <summary class="btn ghost sm">Añadir a una lista</summary>
+      <summary class="btn sm">Añadir a una lista</summary>
       <div id="lista-opciones"><p class="muted">Cargando listas…</p></div>
     </details>
   </div>
@@ -138,7 +138,7 @@
       {% if a.clasificacion == "copia" %}{{ ui.chip("ok", "Copia exacta") }}
       {% elif a.clasificacion == "variante" %}{{ ui.chip("info", "Variante del mismo número") }}
       {% elif a.clasificacion == "sin_comprobar" %}{{ ui.chip("neutro", "Contenido sin comprobar") }}{% endif %}
-      {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}
+      {% if a.falta_en_disco %}{{ ui.chip("amber", "Por confirmar") }} <span class="muted">Quizá no esté en el disco</span>{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}
       {% if a.formato == "cbr" %}
       <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/convertir"
          hx-get="/ui/series/{{ series.id }}/archivos/{{ a.id }}/convertir"

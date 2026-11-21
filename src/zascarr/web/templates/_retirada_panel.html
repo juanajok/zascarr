@@ -92,7 +92,7 @@
       <ul class="desv-lista">
         {% for a in archivos %}
         <li><span class="nombre-archivo">{{ a.nombre }}</span>{% if a.numero %} · #{{ a.numero }}{% endif %}
-          {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% endif %}
+          {% if a.falta_en_disco %}{{ ui.chip("amber", "Por confirmar") }} <span class="muted">Quizá no esté en el disco</span>{% endif %}
           <span class="muted">{{ a.ruta }}</span></li>
         {% endfor %}
       </ul>

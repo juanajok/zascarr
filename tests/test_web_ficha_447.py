@@ -146,7 +146,8 @@ def test_series_fuentes_sigue_dentro_de_la_cabecera_y_chip_con_sr():
         r = client.get(f"/ui/series/{serie.id}")
     html = r.text
     assert html.index("Aviso legal") < html.index("Sobre esta serie")
-    assert 'class="caption">Los que más números firman' in html
+    # Sin autores, la nota de procedencia no tiene nada que explicar (revisión del 2026-11-21).
+    assert "Los que más números firman" not in html
     # La altura de 40 px se comprueba por selector en test_web_css_contraste.
 
 

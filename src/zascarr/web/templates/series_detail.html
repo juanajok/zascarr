@@ -38,14 +38,19 @@
 {%- endmacro %}
 {% if volver %}<a href="{{ volver }}" class="back-link">← Volver{% if volver == '/ui/wishlist' %} a Deseados{% elif volver.startswith('/ui/colecciones/') %} a la colección{% else %} a la biblioteca{% endif %}</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
 
+{#- Cabecera (revisión del 2026-11-21, ficha en docs/design/benchmark-ficha-serie-maquetacion.md): portada a la
+    izquierda; a su lado, el título a ras de la portada y una sola fila de acciones, la principal
+    primero. Lo poco frecuente (tomo único, retirar, aviso legal) va plegado al final de la cabecera, con
+    la atribución de los datos visible (#447, SCR2/SCR7). En el móvil la portada encoge y se queda junto
+    al título; las acciones bajan a todo el ancho. -#}
 <div class="series-header">
   {#- BL-INF6: el envoltorio lleva id para que el panel pueda refrescar la portada nueva por OOB
-      sin recargar; `display: contents` lo hace invisible para el flex del encabezado. El `?v=`
+      sin recargar; `display: contents` lo hace invisible para la rejilla del encabezado. El `?v=`
       cambia al elegir una portada: el navegador no pinta 24 h la anterior (R-01). -#}
   <span class="portada-serie-envoltura" id="portada-serie">
     {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=%s" % (series.id, portada_version), "series-cover") }}
   </span>
-  <div>
+  <div class="series-titulos">
     <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle anio-titulo">({{ series.start_year }})</span>{% endif %}</h1>
     {% if series.publisher %}<p class="series-meta"><a class="chip chip-filtro" href="/ui/biblioteca?publisher_id={{ series.publisher.id }}">{{ series.publisher.name }}</a></p>{% endif %}
     {% if series.genres %}
@@ -69,63 +74,68 @@
         Número total de la serie desconocido todavía: no se puede calcular huecos.
       {% endif %}
     </p>
-    {% include "_obra_unica_serie.html" %}
     {% if aviso_guardado %}{{ ui.aviso("ok", aviso_guardado) }}{% endif %}
-    {% set compacto = false %}{% include "_favorito_boton.html" %}
-    <div id="anuncio-favorito" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
-    <p class="series-acciones">
-      <a class="btn ghost" href="/ui/series/{{ series.id }}/editar">Editar la ficha</a>
-      <a class="btn primary" href="/ui/pendientes/carpetas?serie={{ series.id }}">Añadir números del disco</a>
-      <span class="muted">Abre las carpetas pendientes con esta serie ya fijada. Vincular no mueve ni renombra el archivo.</span>
-    </p>
-    <details class="series-retirar">
-      <summary>Retirar de mi biblioteca</summary>
-      <p class="caption">Quita la serie de ZascArr, pero no borra, mueve ni renombra los archivos del disco.</p>
-      <p class="series-acciones">
-        <a class="btn ghost" href="/ui/series/{{ series.id }}/retirar">Retirar de mi biblioteca</a>
-      </p>
-    </details>
-    <details class="series-fuentes">
-      <summary>Aviso legal</summary>
-      {{ legal_disclaimer("metadata") }}
-    </details>
-    {#- SCR2/SCR7: una sola caja de atribución (Fandom y relleno), visible sin desplegar. #}
-    {% if atribucion_fandom or atribucion_relleno %}
-    <div class="atribucion-fuentes">
-      <p class="caption">Parte de los datos de esta ficha viene de:</p>
-      <ul class="atribucion-lista">
-        {% if atribucion_fandom %}
-        <li>«{{ atribucion_fandom.titulo }}» en
-          <a href="{{ atribucion_fandom.url_articulo }}" target="_blank" rel="noopener noreferrer">{{ atribucion_fandom.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>,
-          bajo la <a href="{{ atribucion_fandom.url_licencia }}" target="_blank" rel="noopener noreferrer">licencia Creative Commons BY-SA 3.0<span class="sr"> (se abre en otra pestaña)</span></a>.</li>
-        {% endif %}
-        {% for datos in atribucion_relleno %}
-        <li>{% if datos.url_ficha %}<a href="{{ datos.url_ficha }}" target="_blank" rel="noopener noreferrer">{{ datos.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>{% else %}{{ datos.nombre }}{% endif %},
-          bajo <a href="{{ datos.url_licencia }}" target="_blank" rel="noopener noreferrer">{{ datos.licencia }}<span class="sr"> (se abre en otra pestaña)</span></a>.</li>
-        {% endfor %}
-      </ul>
+  </div>
+  <div class="series-acciones-cabecera">
+    <div class="series-acciones">
+      <a class="btn primary sm" href="/ui/pendientes/carpetas?serie={{ series.id }}" aria-describedby="series-garantia">Añadir números del disco</a>
+      <a class="btn sm" href="/ui/series/{{ series.id }}/editar">Editar la ficha</a>
+      <a class="btn sm" href="/ui/series/{{ series.id }}/datos">Completar datos</a>
+      {% set compacto = false %}{% include "_favorito_boton.html" %}
     </div>
-    {% endif %}
+    <div id="anuncio-favorito" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
+    <p class="muted" id="series-garantia">Abre las carpetas pendientes con esta serie fijada. Vincular no mueve ni renombra el archivo.</p>
+    <div class="series-poco-frecuente">
+      {% include "_obra_unica_serie.html" %}
+      <details class="series-retirar">
+        <summary>Retirar de mi biblioteca</summary>
+        <p class="caption">Quita la serie de ZascArr, pero no borra, mueve ni renombra los archivos del disco.</p>
+        <p class="series-acciones">
+          <a class="btn sm" href="/ui/series/{{ series.id }}/retirar">Retirar de mi biblioteca</a>
+        </p>
+      </details>
+      <details class="series-fuentes">
+        <summary>Aviso legal</summary>
+        {{ legal_disclaimer("metadata") }}
+      </details>
+      {#- SCR2/SCR7: una sola caja de atribución (Fandom y relleno), visible sin desplegar. #}
+      {% if atribucion_fandom or atribucion_relleno %}
+      <div class="atribucion-fuentes">
+        <p class="caption">Parte de los datos de esta ficha viene de:</p>
+        <ul class="atribucion-lista">
+          {% if atribucion_fandom %}
+          <li>«{{ atribucion_fandom.titulo }}» en
+            <a href="{{ atribucion_fandom.url_articulo }}" target="_blank" rel="noopener noreferrer">{{ atribucion_fandom.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>,
+            bajo la <a href="{{ atribucion_fandom.url_licencia }}" target="_blank" rel="noopener noreferrer">licencia Creative Commons BY-SA 3.0<span class="sr"> (se abre en otra pestaña)</span></a>.</li>
+          {% endif %}
+          {% for datos in atribucion_relleno %}
+          <li>{% if datos.url_ficha %}<a href="{{ datos.url_ficha }}" target="_blank" rel="noopener noreferrer">{{ datos.nombre }}<span class="sr"> (se abre en otra pestaña)</span></a>{% else %}{{ datos.nombre }}{% endif %},
+            bajo <a href="{{ datos.url_licencia }}" target="_blank" rel="noopener noreferrer">{{ datos.licencia }}<span class="sr"> (se abre en otra pestaña)</span></a>.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
   </div>
 </div>
 
+{#- La barra sigue el orden de la página: un salto nunca pasa por encima de lo que la barra pone antes. -#}
 <nav class="ficha-nav" aria-label="Secciones de la ficha">
   <a class="btn ghost sm" href="#numeros-serie">Números</a>
+  {% if otras_publicaciones %}<a class="btn ghost sm" href="#tomos-especiales">Tomos y especiales</a>{% endif %}
   <a class="btn ghost sm" href="#sagas-serie">Sagas</a>
-  <a class="btn ghost sm" href="#politica-serie">Búsqueda</a>
-  <a class="btn ghost sm" href="#seguimiento-serie">Seguimiento</a>
+  <a class="btn ghost sm" href="#datos-serie">Datos</a>
   <a class="btn ghost sm" href="#etiquetas-serie">Etiquetas</a>
   <a class="btn ghost sm" href="#colecciones-serie">Colecciones</a>
+  <a class="btn ghost sm" href="#politica-serie">Búsqueda</a>
+  <a class="btn ghost sm" href="#seguimiento-serie">Seguimiento</a>
   <a class="btn ghost sm" href="#coleccion-serie">Completitud</a>
-  <a class="btn ghost sm" href="#datos-serie">Datos</a>
-  <a class="btn ghost sm" href="/ui/series/{{ series.id }}/datos">Completar datos</a>
   {% if archivos_por_numero %}<a class="btn ghost sm" href="#archivos-por-numero">Archivos</a>{% endif %}
-  {% if otras_publicaciones %}<a class="btn ghost sm" href="#tomos-especiales">Tomos y especiales</a>{% endif %}
 </nav>
 
 <p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
 
-<section id="numeros-serie" class="ficha-numeros" aria-label="Números de la serie">
+<section id="numeros-serie" class="ficha-numeros card ficha-bloque" aria-label="Números de la serie">
 {% set limite = 30 %}
 {% set sin_numero = archivos_por_numero|selectattr("numero", "equalto", "(sin número)")|list %}
 {% if estado_coleccion.tipo != "no_completar" and missing %}
@@ -199,17 +209,7 @@
 <section id="sagas-serie" class="series-sagas" aria-label="Sagas de la serie"
          hx-get="/ui/series/{{ series.id }}/sagas" hx-trigger="load" hx-swap="outerHTML"></section>
 
-{#- BL-INF6 (#592): «Elegir portada». El panel NO se pide hasta desplegarlo (cero miniaturas y
-    cero consultas en la carga de la ficha): el `toggle` nativo del <details> dispara el `hx-get`.
-    El `summary` va sin atributos para que siga siendo un desplegable normal de teclado. -#}
-<details class="elegir-portada" id="elegir-portada"
-         hx-get="/ui/series/{{ series.id }}/portada/elegir"
-         hx-trigger="toggle once" hx-target="this" hx-swap="outerHTML">
-  <summary>Elegir portada</summary>
-  <p class="muted">Cargando las portadas disponibles…</p>
-</details>
-
-<section id="datos-serie" class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
+<section id="datos-serie" class="ficha-serie-datos card ficha-bloque" aria-labelledby="ficha-serie-datos-titulo">
   <h2 id="ficha-serie-datos-titulo">{{ textos_ficha.serie_bloque }}</h2>
   {% if serie_vacia %}
   <p class="ficha-sinopsis">{{ textos_ficha.sin_datos }}</p>
@@ -237,8 +237,8 @@
     {% if series.end_year %}<div><dt>{{ textos_ficha.fin }}</dt><dd>{{ series.end_year }}</dd></div>{% endif %}
   </dl>
   <h3>{{ textos_ficha.autores }}</h3>
-  <p class="caption">Los que más números firman, según los datos de la serie.</p>
   {% if ficha and ficha.autores %}
+  <p class="caption">Los que más números firman, según los datos de la serie.</p>
   <dl class="ficha-autores">
     {% for clave, etiqueta in roles_ficha %}
     {% if clave in ("writer", "penciler") and ficha.autores.get(clave) %}
@@ -291,7 +291,7 @@
     {% endfor %}
   </dl>
   {% if hay_manual or hay_bloqueado %}
-  <p class="caption">
+  <p class="muted">
     {%- if hay_manual %}<strong>Manual</strong> significa que lo has escrito tú. {% endif -%}
     {%- if hay_bloqueado %}<strong>Protegido</strong> significa que el enriquecimiento no lo sobrescribe. {% endif -%}
     ZascArr no muestra propuestas que no tenga registradas.
@@ -300,10 +300,84 @@
 </details>
 {% endif %}{% endif %}
   {% endif %}
+  {#- Lo que trata de los datos de la serie, junto: la portada, otras fuentes y revisar cambios. -#}
+  {#- BL-INF6 (#592): «Elegir portada». El panel NO se pide hasta desplegarlo (cero miniaturas y
+      cero consultas en la carga de la ficha): el `toggle` nativo del <details> dispara el `hx-get`.
+      El `summary` va sin atributos para que siga siendo un desplegable normal de teclado. -#}
+  <details class="elegir-portada" id="elegir-portada"
+           hx-get="/ui/series/{{ series.id }}/portada/elegir"
+           hx-trigger="toggle once" hx-target="this" hx-swap="outerHTML">
+    <summary>Elegir portada</summary>
+    <p class="muted">Cargando las portadas disponibles…</p>
+  </details>
+  {% if series.comic_vine_id or series.anilist_id or series.tebeosfera_slug or series.gcd_id %}
+  <div class="series-otras-fuentes">
+    <h3>Otras fuentes</h3>
+    <a class="btn ghost sm" href="/ui/series/{{ series.id }}/asociar">Buscar en otra fuente</a>
+    <p class="caption">Solo compara fichas: no se guarda nada hasta que lo confirmes.</p>
+  </div>
+  {% endif %}
+  <details class="series-enriquecimiento">
+    <summary>Revisar cambios de datos</summary>
+    <p class="muted">Consulta la fuente y revisa campo a campo qué cambiaría. No se aplica nada hasta que lo confirmes.</p>
+    <form method="post" action="/ui/series/{{ series.id }}/enriquecimiento/previsualizar">
+      <button class="btn ghost" type="submit">Ver propuesta de la fuente</button>
+    </form>
+  </details>
 </section>
 
+<section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
+         hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
+
+<section id="colecciones-serie" class="series-colecciones" aria-label="Colecciones"
+         hx-get="/ui/series/{{ series.id }}/colecciones" hx-trigger="load" hx-swap="outerHTML"></section>
+
+{% include "_politica_serie.html" %}
+
+{% include "_seguimiento_serie.html" %}
+
+<section id="coleccion-serie" class="coleccion-serie card ficha-bloque" aria-labelledby="coleccion-serie-titulo"
+         {% if aviso_coleccion %}tabindex="-1" autofocus{% endif %}>
+  <h2 id="coleccion-serie-titulo">Completitud</h2>
+  <p>
+    {% if estado_coleccion.tipo == "no_completar" %}
+      {{ ui.chip("neutro", "No la vas a completar") }}
+    {% elif estado_coleccion.tipo == "completa" %}
+      {{ ui.chip("neutro", "Completa") }}
+    {% elif estado_coleccion.tipo == "faltan" %}
+      {{ ui.chip("neutro", "Te faltan " ~ (estado_coleccion.faltantes|length)) }}
+    {% else %}
+      {{ ui.chip("neutro", "No se puede calcular") }}
+      {% if estado_coleccion.motivo %}{% set m = estado_coleccion.motivo %}<span class="muted">{{ m[:1]|upper ~ m[1:] }}{% if not m.endswith(".") %}.{% endif %}</span>{% endif %}
+    {% endif %}
+  </p>
+  {% if aviso_coleccion %}{{ ui.aviso("ok" if coleccion_exito else "amber", aviso_coleccion) }}{% endif %}
+  {% if estado_coleccion.no_completar %}
+  <form method="post" action="/ui/series/{{ series.id }}/coleccion">
+    <input type="hidden" name="accion" value="revertir">
+    <input type="hidden" name="version" value="{{ coleccion_version }}">
+    <button class="btn ghost sm" type="submit">Volver a completarla</button>
+  </form>
+  {% elif conflicto_coleccion %}
+  <form method="post" action="/ui/series/{{ series.id }}/coleccion">
+    <input type="hidden" name="accion" value="no_completar">
+    <input type="hidden" name="confirmar" value="si">
+    <input type="hidden" name="version" value="{{ coleccion_version }}">
+    <button class="btn ghost sm" type="submit">Sí, no la voy a completar</button>
+  </form>
+  {% else %}
+  <form method="post" action="/ui/series/{{ series.id }}/coleccion">
+    <input type="hidden" name="accion" value="no_completar">
+    <input type="hidden" name="version" value="{{ coleccion_version }}">
+    <button class="btn ghost sm" type="submit">No la voy a completar</button>
+  </form>
+  {% endif %}
+</section>
+
+{% include "_nota_serie.html" %}
+
 {% if mas_serie %}
-<section class="mas-serie" aria-labelledby="mas-serie-titulo">
+<section class="mas-serie card ficha-bloque" aria-labelledby="mas-serie-titulo">
   <h2 id="mas-serie-titulo" class="titulo-frase">Más en tu biblioteca</h2>
   <ul class="escaparate-lista" tabindex="0" aria-label="Más en tu biblioteca">
     {% for x in mas_serie %}
@@ -312,88 +386,31 @@
   </ul>
 </section>
 {% endif %}
-<section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
-         hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
-<section id="colecciones-serie" class="series-colecciones" aria-label="Colecciones"
-         hx-get="/ui/series/{{ series.id }}/colecciones" hx-trigger="load" hx-swap="outerHTML"></section>
-{% include "_politica_serie.html" %}
-{% include "_seguimiento_serie.html" %}
-{% include "_nota_serie.html" %}
-
-    <section id="coleccion-serie" class="coleccion-serie" aria-labelledby="coleccion-serie-titulo"
-             {% if aviso_coleccion %}tabindex="-1" autofocus{% endif %}>
-      <h2 id="coleccion-serie-titulo">Completitud</h2>
-      <p>
-        {% if estado_coleccion.tipo == "no_completar" %}
-          {{ ui.chip("neutro", "No la vas a completar") }}
-        {% elif estado_coleccion.tipo == "completa" %}
-          {{ ui.chip("neutro", "Completa") }}
-        {% elif estado_coleccion.tipo == "faltan" %}
-          {{ ui.chip("neutro", "Te faltan " ~ (estado_coleccion.faltantes|length)) }}
-        {% else %}
-          {{ ui.chip("neutro", "No se puede calcular") }}
-          <span class="muted">{{ estado_coleccion.motivo }}</span>
-        {% endif %}
-      </p>
-      {% if aviso_coleccion %}{{ ui.aviso("ok" if coleccion_exito else "amber", aviso_coleccion) }}{% endif %}
-      {% if estado_coleccion.no_completar %}
-      <form method="post" action="/ui/series/{{ series.id }}/coleccion">
-        <input type="hidden" name="accion" value="revertir">
-        <input type="hidden" name="version" value="{{ coleccion_version }}">
-        <button class="btn ghost sm" type="submit">Volver a completarla</button>
-      </form>
-      {% elif conflicto_coleccion %}
-      <form method="post" action="/ui/series/{{ series.id }}/coleccion">
-        <input type="hidden" name="accion" value="no_completar">
-        <input type="hidden" name="confirmar" value="si">
-        <input type="hidden" name="version" value="{{ coleccion_version }}">
-        <button class="btn ghost sm" type="submit">Sí, no la voy a completar</button>
-      </form>
-      {% else %}
-      <form method="post" action="/ui/series/{{ series.id }}/coleccion">
-        <input type="hidden" name="accion" value="no_completar">
-        <input type="hidden" name="version" value="{{ coleccion_version }}">
-        <button class="btn ghost sm" type="submit">No la voy a completar</button>
-      </form>
-      {% endif %}
-    </section>
-
-
-
-
-
-
-
-{% if series.comic_vine_id or series.anilist_id or series.tebeosfera_slug or series.gcd_id %}
-<section class="series-otras-fuentes" aria-labelledby="otras-fuentes-titulo">
-  <h2 id="otras-fuentes-titulo">Otras fuentes</h2>
-  <a class="btn ghost sm" href="/ui/series/{{ series.id }}/asociar">Buscar en otra fuente</a>
-  <p class="caption">Solo compara fichas: no se guarda nada hasta que lo confirmes.</p>
-</section>
-{% endif %}
-
-<details class="series-enriquecimiento">
-  <summary>Revisar cambios de datos</summary>
-  <p class="muted">Consulta la fuente y revisa campo a campo qué cambiaría. No se aplica nada hasta que lo confirmes.</p>
-  <form method="post" action="/ui/series/{{ series.id }}/enriquecimiento/previsualizar">
-    <button class="btn ghost" type="submit">Ver propuesta de la fuente</button>
-  </form>
-</details>
 
 {% if archivos_por_numero %}
 {#- BL-R1b (#254, D10): los archivos de cada número y, cuando el servicio lo permite (D9), «Deshacer esta vinculación». -#}
-<section class="archivos-serie" id="archivos-por-numero" aria-labelledby="archivos-titulo">
+<section class="archivos-serie card ficha-bloque" id="archivos-por-numero" aria-labelledby="archivos-titulo">
   <h2 id="archivos-titulo">Archivos por número</h2>
   <p>Cada número de la serie con sus archivos.</p>
   <p class="archivos-lote">
-    <button class="btn ghost" type="button"
+    <button class="btn sm" type="button"
             hx-get="/ui/series/{{ series.id }}/convertir"
             hx-target="#conversion-lote" hx-swap="innerHTML">Convertir los CBR</button>
     <span class="muted">De 5 en 5; los bloqueados y compartidos no se tocan. El original se aparta y se puede deshacer.</span>
   </p>
   <div id="conversion-lote"></div>
+  {#- Como «En tu biblioteca»: los primeros números a la vista y el resto plegado (una serie de 100
+      números desplegaba 100 bloques, el 80 % de la página). Un solo bucle: el visor de portadas sigue
+      pasando de un número al siguiente a través del pliegue. -#}
+  {% set restantes_archivos = archivos_por_numero|length - limite %}
   <ul class="archivos-numeros">
     {% for n in archivos_por_numero %}
+    {% if loop.index0 == limite %}
+  </ul>
+  <details class="ficha-mas">
+    <summary>Ver {{ "el número restante" if restantes_archivos == 1 else "los %d números restantes" % restantes_archivos }}</summary>
+    <ul class="archivos-numeros">
+    {% endif %}
     <li class="archivos-numero" data-numero="{{ n.numero }}">
       {% set sin_numero = n.numero == "(sin número)" %}
       <h3 class="archivos-numero-titulo">
@@ -426,7 +443,7 @@
         <li class="archivo-fila" data-archivo="{{ a.id }}">
           <span class="nombre-archivo">{{ a.nombre }}</span>
           <span class="muted">{{ a.formato|upper }}</span>
-          {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}
+          {% if a.falta_en_disco %}{{ ui.chip("amber", "Por confirmar") }} <span class="muted">Quizá no esté en el disco</span>{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}
           {% if a.bloqueo is none %}
           <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/deshacer">Desvincular<span class="sr"> {{ a.nombre }}</span></a>
           {% else %}
@@ -451,6 +468,7 @@
     </li>
     {% endfor %}
   </ul>
+  {% if restantes_archivos > 0 %}</details>{% endif %}
 </section>
 {% endif %}
 

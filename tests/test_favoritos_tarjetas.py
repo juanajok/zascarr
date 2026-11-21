@@ -86,7 +86,8 @@ def test_css_favorito_44_y_sin_tapar_titulo():
     assert ".favorito-btn" in css and "width: 44px" in css and "height: 44px" in css
     assert ".library-card-wrap .favorito-form" in css and "position: absolute" in css
     assert "top: var(--space-2)" in css
-    assert ".favorito-btn-ficha { width: auto; min-height: 44px;" in css
+    # En la ficha es una acción más de la fila: botón neutro de 40 px (44 en táctil, regla general).
+    assert ".favorito-btn-ficha {\n  width: auto; height: auto; min-height: 40px;" in css
     assert "white-space: nowrap" in css
 
 

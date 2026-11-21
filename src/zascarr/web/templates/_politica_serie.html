@@ -8,7 +8,7 @@
    El veredicto NO lista todos los números: una serie de 200 inundaría la
    página. Resume el conteo y dice el tope por ciclo, que es lo que de verdad
    condiciona cuándo entrarán. #}
-<div id="politica-serie" class="politica-serie">
+<div id="politica-serie" class="politica-serie card ficha-bloque">
   <h2>Búsqueda automática</h2>
   <p class="subtitle">
     Qué busca ZascArr por su cuenta, hasta que lo cambies. Lo que añadas a mano se busca siempre.
@@ -56,7 +56,7 @@
 
   <details class="politica-detalles">
     <summary>¿Por qué una opción no se puede elegir?</summary>
-    <p class="caption politica-futuros" id="politica-futuros">
+    <p class="muted politica-futuros" id="politica-futuros">
       Todavía no se puede elegir «Números que aún no han salido»: {{ motivo_futuros }}.
     </p>
   </details>
@@ -76,7 +76,8 @@
       La configuración de ZascArr tiene desactivadas estas búsquedas automáticas, así que no buscará
       ninguno por su cuenta. Lo que añadas a mano a Deseados sí se busca.
     {% elif v.tipo == "motivo" %}
-      {{ querer.motivo }}
+      {#- El motivo llega como cláusula («la serie no tiene…»): aquí va solo, así que es una frase. -#}
+      {% set m = querer.motivo %}{{ m[:1]|upper ~ m[1:] }}{% if not m.endswith(".") %}.{% endif %}
       {% if v.diferido %}
       Si llega a conocerse el total de números de esta serie, ZascArr empezará a buscar lo que falte sin que
       tengas que hacer nada.

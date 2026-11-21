@@ -821,8 +821,7 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
 .issue-grid { display: flex; flex-wrap: wrap; gap: 7px; margin: var(--space-2) 0 20px; }
 
 /* D8: selector de política de búsqueda en la ficha de serie. */
-.politica-serie { margin-top: 28px; }
-.coleccion-serie { margin-top: 22px; display: grid; gap: var(--space-2); }
+.coleccion-serie { display: grid; gap: var(--space-2); }
 .coleccion-serie form { margin: 0; }
 .politica-form {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -855,13 +854,39 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
 
 .ficha-nav { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0 0 var(--space-4); }
 .ficha-nav .btn { min-height: 40px; }
+/* Cada sección de la ficha es una viñeta (`.card`, «la viñeta es la unidad»), con el mismo hueco entre
+   ellas; el título arranca a ras del canto. */
+.ficha-bloque { margin: 0 0 var(--space-4); scroll-margin-top: var(--space-4); }
+.ficha-bloque > h2:first-child, .ficha-bloque > summary:first-child { margin-top: 0; }
+.ficha-bloque > :last-child { margin-bottom: 0; }
+.ficha-bloque .elegir-portada[open] { background: var(--paper); }
+details.ficha-bloque > summary { cursor: pointer; font-weight: 700; min-height: 40px; display: flex; align-items: center; }
+details.ficha-bloque:not([open]) { padding-block: var(--space-1); }
 .ficha-mas { margin: var(--space-2) 0; }
 .ficha-mas summary { cursor: pointer; min-height: 40px; padding: var(--space-1) 0; color: var(--ink-soft); font-weight: 700; }
 .ficha-numeros, #politica-serie, #etiquetas-serie, #colecciones-serie, #coleccion-serie, #datos-serie, #archivos-por-numero { scroll-margin-top: var(--space-4); }
-.series-header { display: flex; gap: 22px; margin-bottom: var(--space-5); flex-wrap: wrap; }
-/* Los datos van a la derecha de la portada: sin base propia, su texto largo los mandaba debajo incluso a
-   1280 px. Bajan solo cuando no caben (y en el móvil, por la regla de ≤ 860 px). */
-.series-header > div { flex: 1 1 20rem; min-width: 0; }
+/* Cabecera de la serie (revisión del 2026-11-21, docs/design/benchmark-ficha-serie-maquetacion.md), como la del
+   número: portada a la izquierda; a su lado, el título a ras de la portada y una sola fila de acciones.
+   Lo poco frecuente (tomo único, retirar) va plegado debajo. En el móvil la portada encoge y se queda
+   junto al título; las acciones bajan a todo el ancho. */
+.series-header {
+  display: grid; grid-template-columns: 140px minmax(0, 1fr);
+  grid-template-areas: "portada titulos" "portada acciones";
+  gap: var(--space-3) var(--space-4); align-items: start;
+  margin-bottom: var(--space-4);
+}
+.series-header .series-cover { grid-area: portada; }
+.series-titulos { grid-area: titulos; min-width: 0; }
+.series-titulos h1 { margin-top: 0; }
+.series-titulos > :last-child { margin-bottom: 0; }
+.series-acciones-cabecera { grid-area: acciones; min-width: 0; display: grid; gap: var(--space-2); }
+.series-acciones-cabecera > * { margin: 0; }
+.series-acciones-cabecera .series-acciones { margin: 0; gap: var(--space-2); }
+.series-acciones .favorito-form { margin: 0; }
+.series-poco-frecuente { display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: var(--space-4); }
+.series-poco-frecuente .obra-unica { display: contents; }
+.series-poco-frecuente details[open] { flex-basis: 100%; }
+.series-poco-frecuente .atribucion-fuentes { flex-basis: 100%; }
 .anio-titulo { display: inline; }
 /* #854: cifras que se comparan en la ficha (año del título y totales). */
 .anio-titulo, .series-meta { font-variant-numeric: tabular-nums; }
@@ -879,10 +904,9 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
 /* Fila de enlaces secundarios bajo la frase de entrada (p. ej. las otras formas de revisar). */
 .acciones-fila { display: flex; flex-wrap: wrap; gap: var(--space-1) 14px; align-items: center; margin: var(--space-1) 0 var(--space-4); }
 .series-retirar { margin-top: var(--space-2); }
-.series-retirar summary { cursor: pointer; color: var(--ink-soft); font-weight: 600; padding: var(--space-2) 0; min-height: 40px; }
 .series-fuentes, .politica-detalles { margin-top: var(--space-2); }
 .politica-detalles code { font-size: var(--text-secundario); }
-.series-fuentes summary, .politica-detalles summary {
+.series-retirar summary, .series-fuentes summary, .politica-detalles summary {
   cursor: pointer; color: var(--ink-soft); font-size: var(--text-secundario); font-weight: 600;
   padding: var(--space-2) 0; min-height: 40px;
 }
@@ -1139,7 +1163,7 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
   .series-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 14px; }
   .search-form { flex-direction: column; }
   .search-input { max-width: none; }
-  .series-header { flex-direction: column; }
+  .series-header { grid-template-columns: 120px minmax(0, 1fr); }
   .portada.series-cover { width: 120px; }
 }
 
@@ -1148,8 +1172,8 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
 }
 
 @media (max-width: 480px) {
-  .portada.series-cover { width: 96px; }
-  .series-header { margin-bottom: var(--space-3); }
+  .portada.series-cover { width: 88px; }
+  .series-header { grid-template-columns: 88px minmax(0, 1fr); grid-template-areas: "portada titulos" "acciones acciones"; }
 }
 
 /* ── 16a. DESCUBRIR (C0) — tarjeta horizontal (portada + ficha), a
@@ -1614,10 +1638,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .error-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 
 /* ── BL-R1b (#254): archivos por número y «Deshacer esta vinculación» ─────── */
-.archivos-serie { margin-top: 28px; }
 .archivos-numeros, .archivos-lista { list-style: none; margin: 0; padding: 0; }
 .archivos-numero { margin: 0 0 14px; }
 .archivos-numero-titulo { margin: 0 0 var(--space-1); font-size: var(--text-cuerpo); font-variant-numeric: tabular-nums; }
+/* Los botones del título del número fijan su fuente: dentro del `h3` heredaban Anton en mayúsculas
+   («VER PORTADA AMPLIADA»), y las mayúsculas son solo para rótulos de ≤ 3 palabras. */
+.archivos-numero-titulo .btn { font-family: var(--font-body); text-transform: none; letter-spacing: normal; }
 .archivo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-3); padding: 6px 0; border-top: var(--border-line) solid var(--ink-faint); }
 .archivo-fila .nombre-archivo { overflow-wrap: anywhere; font-weight: 600; }
 .archivo-razon { font-size: var(--text-secundario); }
@@ -1931,15 +1957,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
    especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
 
 /* ── BL-ETQ1a (#403): etiquetas en la ficha ───────────────────────────────── */
-.series-sagas { margin: 10px 0 6px; }
-.series-sagas h2 { margin: 0 0 4px; }
 .series-sagas-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
 .series-sagas-lista li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.series-colecciones { margin: 10px 0 6px; }
-.series-colecciones h2 { margin: 0 0 4px; }
+/* Fuera de la ficha de serie (la del número), sin viñeta: márgenes propios. */
+.series-colecciones:not(.ficha-bloque) { margin: 10px 0 6px; }
+.series-colecciones:not(.ficha-bloque) h2 { margin: 0 0 4px; }
 .series-colecciones-lista { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.series-etiquetas { margin: 14px 0 6px; }
-.series-etiquetas h2 { margin: 0 0 2px; }
 .series-etiquetas > .muted { margin: 0 0 var(--space-2); }
 .etiquetas-lista { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; min-height: 44px; }
 .etiqueta-chip {
@@ -1949,7 +1972,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 .etiqueta-x {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 36px; min-height: 36px; border: 0; background: transparent;
+  min-width: 40px; min-height: 40px; border: 0; background: transparent;
   color: var(--ink); font-size: var(--text-secundario); line-height: 1; cursor: pointer;
   border-radius: 999px; padding: 0 var(--space-2);
 }
@@ -2001,14 +2024,14 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .discrepancia-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 6px 0; align-items: center; }
 
 /* #447: ficha de serie y de número (solo lectura) */
-.ficha-serie-datos, .ficha-serie-datos ~ section, .issue-header { margin-top: 18px; }
+.issue-header { margin-top: 18px; }
 .ficha-sinopsis { max-width: 70ch; line-height: 1.6; overflow-wrap: anywhere; }
 .ficha-serie-meta, .ficha-autores { display: grid; gap: 6px 18px; margin: 10px 0; }
 .ficha-serie-meta > div, .ficha-autores > div { display: grid; grid-template-columns: minmax(8rem, 14rem) 1fr; gap: var(--space-2); }
 .ficha-serie-meta dt, .ficha-autores dt { font-weight: 700; }
 .ficha-serie-meta dd, .ficha-autores dd { margin: 0; overflow-wrap: anywhere; }
 /* Cabecera del número (2026-11-20): portada a la izquierda; a su lado, el título (arriba, a ras de la
-   portada) y una sola fila de acciones con el aspecto de las de Biblioteca. En el móvil la portada
+   portada) y una sola fila de acciones neutras (`.btn.sm`), como las de Biblioteca. En el móvil la portada
    encoge y se queda junto al título; las acciones bajan a todo el ancho. */
 .issue-header {
   display: grid; grid-template-columns: 120px minmax(0, 1fr);
@@ -2023,11 +2046,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .issue-titulos > :last-child { margin-bottom: 0; }
 .issue-acciones { grid-area: acciones; display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2); }
 .issue-acciones form { margin: 0; }
-.issue-acciones .btn.ghost {
-  color: var(--ink); background: var(--paper); border-color: var(--ink); box-shadow: var(--shadow-ink-sm);
-  text-decoration: none;
-}
-.issue-acciones .btn.ghost:hover { background: var(--paper-2); color: var(--ink); transform: none; box-shadow: var(--shadow-ink); }
 /* «Añadir a una lista» abre su panel bajo la fila, a todo el ancho, sin desplazar los botones. */
 .issue-acciones .anadir-a-lista[open] > summary { background: var(--paper-2); }
 .issue-acciones .anadir-a-lista > #lista-opciones {
@@ -2303,19 +2321,6 @@ body:has(.chip-previa:focus-within > .previa-numero:not(:empty))
   gap: var(--space-2);
   margin: 0 0 var(--space-3);
 }
-.biblioteca-acciones .biblioteca-accion {
-  text-decoration: none;
-  color: var(--ink);
-  background: var(--paper);
-  border-color: var(--ink);
-  box-shadow: var(--shadow-ink-sm);
-}
-.biblioteca-acciones .biblioteca-accion:hover {
-  background: var(--paper-2);
-  color: var(--ink);
-  transform: none;
-  box-shadow: var(--shadow-ink);
-}
 
 /* #1160: «Actualizar la biblioteca» en Biblioteca. El botón es una acción más del grupo de acciones (mismo
    aspecto que sus vecinos, no .primary: el principal de la pantalla es el selector de modo). Justo debajo
@@ -2536,7 +2541,7 @@ body:has(.chip-previa:focus-within > .previa-numero:not(:empty))
 .previa-error { margin: 0 0 var(--space-2); font-weight: 700; }
 
 /* BL-WK4 (#342): notas de colección discretas en las fichas. */
-.notas-serie, .nota-numero { margin-top: 22px; }
+.nota-numero { margin-top: 22px; }
 .nota-form { display: grid; gap: 6px; margin-top: 6px; }
 .nota-form textarea { width: 100%; max-width: 48rem; font: inherit; }
 .nota-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -2828,7 +2833,12 @@ body:has(.chip-previa:focus-within > .previa-numero:not(:empty))
 .favorito-btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .favorito-btn svg { width: 22px; height: 22px; }
 .favorito-form { margin: var(--space-2) 0 0; }
-.favorito-btn-ficha { width: auto; min-height: 44px; padding: 0 var(--space-3); white-space: nowrap; }
+/* En la ficha es una acción más de la fila: el botón neutro (`.btn.sm`), no la píldora de la tarjeta.
+   «Favorita» marcada conserva el relleno de tinta: dice el estado además del texto. */
+.favorito-btn-ficha {
+  width: auto; height: auto; min-height: 40px; padding: var(--space-1) var(--space-3); white-space: nowrap;
+  border-width: var(--border-control); border-radius: var(--radius-panel); box-shadow: var(--shadow-ink-sm);
+}
 .library-card-wrap .favorito-btn { opacity: 0; }
 .library-card-wrap:hover .favorito-btn,
 .library-card-wrap:focus-within .favorito-btn { opacity: 1; }

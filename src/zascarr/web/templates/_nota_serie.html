@@ -1,6 +1,6 @@
 {#- BL-WK4 (#342): notas de la serie y de sus números. Sin JS; autoescape. -#}
 {% if nota_serie or notas_numeros %}
-<section id="notas-serie" class="notas-serie" aria-labelledby="notas-serie-titulo">
+<section id="notas-serie" class="notas-serie card ficha-bloque" aria-labelledby="notas-serie-titulo">
   <h2 id="notas-serie-titulo">Notas</h2>
   {% if nota_aviso %}{{ ui.aviso("ok" if nota_aviso in ("Nota guardada.", "Nota borrada.") else "amber", nota_aviso) }}{% endif %}
   <form method="post" action="/ui/series/{{ series.id }}/nota" class="nota-form">
@@ -34,7 +34,7 @@
 </section>
 {% else %}
 {% if nota_aviso %}{{ ui.aviso("amber", nota_aviso) }}{% endif %}
-<details id="notas-serie" class="notas-serie">
+<details id="notas-serie" class="notas-serie card ficha-bloque">
   <summary>Añadir nota</summary>
   <form method="post" action="/ui/series/{{ series.id }}/nota" class="nota-form">
     <label for="nota-serie-texto">Nota de la serie</label>

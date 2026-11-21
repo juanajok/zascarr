@@ -3,7 +3,7 @@
     El botón vive en las acciones de la cabecera (`biblioteca.html`); este bloque, debajo de la frase de
     entrada. Botón y líneas se actualizan fuera de banda, también al cargar. -#}
 {%- macro boton(oob=false) -%}
-<button id="actualizar-boton" type="submit" class="btn ghost sm biblioteca-accion" aria-describedby="actualizar-garantia"
+<button id="actualizar-boton" type="submit" class="btn sm biblioteca-accion" aria-describedby="actualizar-garantia"
         {% if oob %}hx-swap-oob="true"{% endif %}
         {% if estado_rescan.en_curso %}disabled{% endif %}>
   {{ "Actualizando…" if estado_rescan.en_curso else "Actualizar la biblioteca" }}

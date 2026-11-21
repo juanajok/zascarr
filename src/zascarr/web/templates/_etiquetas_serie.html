@@ -1,4 +1,4 @@
-<section id="etiquetas-serie" class="series-etiquetas" aria-labelledby="etiquetas-titulo">
+<section id="etiquetas-serie" class="series-etiquetas card ficha-bloque" aria-labelledby="etiquetas-titulo">
   <h2 id="etiquetas-titulo">Etiquetas</h2>
   <p class="muted">Lo que tratan tus tebeos. Se guarda al momento; no toca los archivos.</p>
   {% if error %}{{ ui.aviso("warn", error) }}{% endif %}
@@ -45,7 +45,7 @@
            hx-get="/ui/series/{{ series.id }}/etiquetas/sugerir"
            hx-trigger="input changed delay:300ms, search"
            hx-target="#sugerencias-etiqueta" hx-sync="this:replace">
-    <button class="btn ghost" type="submit">Añadir</button>
+    <button class="btn sm" type="submit">Añadir</button>
   </form>
   <div id="sugerencias-etiqueta" class="series-results"></div>
 </section>

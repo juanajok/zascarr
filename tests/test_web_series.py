@@ -582,10 +582,11 @@ class TestPresupuestoTextoU21:
         antes = html.split('id="wishlist_policy"', 1)[0]
         # Presupuesto explícito de #304: .series-acciones tiene su propio límite
         # (test_presupuesto_de_la_accion_nueva); este cómputo mide la entrada de #208.
-        antes = re.sub(r'<p class="series-acciones">.*?</p>', '', antes, flags=re.S)
+        antes = re.sub(r'<div class="series-acciones">.*?</div>', '', antes, flags=re.S)
+        antes = re.sub(r'<p class="muted" id="series-garantia">.*?</p>', '', antes, flags=re.S)
         # BL-INF1 (#447): el bloque informativo va después de la cabecera y no compite
         # con el presupuesto de la entrada de #208.
-        antes = re.sub(r'<section[^>]*class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
+        antes = re.sub(r'<section[^>]*class="ficha-serie-datos[^"]*".*?</section>', '', antes, flags=re.S)
         # #803: la navegación por anclas es un control de la ficha, no texto de entrada.
         antes = re.sub(r'<nav class="ficha-nav".*?</nav>', '', antes, flags=re.S)
         # Los números son el contenido principal, no la entrada de texto de #208.
@@ -622,9 +623,13 @@ class TestPresupuestoTextoU21:
 
     def test_presupuesto_de_la_accion_nueva(self):
         html = self._render()
-        accion = re.search(r'<p class="series-acciones">(.*?)</p>', html, re.S)
+        # Revisión del 2026-11-21: la fila de acciones de la cabecera y su garantía, sin la marca de
+        # favorita (un control con su propio texto, como en la medición de la entrada).
+        accion = re.search(r'<div class="series-acciones">(.*?)</div>\s*<div id="anuncio-favorito".*?'
+                           r'<p class="muted" id="series-garantia">(.*?)</p>', html, re.S)
         assert accion is not None
-        palabras = re.findall(r"\w+", self._texto(accion.group(1)))
+        botones = re.sub(r'<form[^>]*class="favorito-form".*?</form>', '', accion.group(1), flags=re.S)
+        palabras = re.findall(r"\w+", self._texto(botones + " " + accion.group(2)))
         assert len(palabras) <= 24, (len(palabras), " ".join(palabras))
         assert "Añadir números del disco" in self._texto(accion.group(1))
 
