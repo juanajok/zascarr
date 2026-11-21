@@ -297,6 +297,43 @@ volcar_postgres() {
     return 0
 }
 
+# ── Versión declarada de la copia (UATP-06/07, D-2) ──────────────────────────────────────────────────
+# `app_version` sale de la fuente única del paquete (`pyproject.toml`), no de un literal: el literal de
+# `config.py` se compara con esta en `tests/test_version_copia.py`. Si no se puede leer, `""`.
+leer_app_version() {
+    local fichero="${REPO_DIR}/pyproject.toml" valor=""
+    if [[ -f "${fichero}" && -r "${fichero}" ]]; then
+        valor="$(awk '
+            /^\[project\][[:space:]]*$/ { dentro=1; next }
+            dentro && /^\[/ { dentro=0 }
+            dentro && /^[[:space:]]*version[[:space:]]*=/ {
+                v=$0
+                sub(/^[^=]*=[[:space:]]*/, "", v)
+                gsub(/["[:space:]]/, "", v)
+                print v
+                exit
+            }
+        ' "${fichero}" 2>/dev/null || true)"
+    fi
+    [[ "${valor}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || valor=""
+    printf '%s' "${valor}"
+}
+
+# Identidad de la imagen (Dockerfile, ADR 0025). Es un dato INFORMATIVO de la copia: si la app está
+# parada, el build fue manual o el contenedor no está, devuelve `""` y la copia sigue adelante.
+leer_build_sha() {
+    local sha=""
+    if command -v timeout >/dev/null 2>&1; then
+        sha="$(timeout 5 "${COMPOSE[@]}" exec -T zascarr printenv BUILD_SHA 2>/dev/null \
+            | tr -d '[:space:]' || true)"
+    else
+        sha="$("${COMPOSE[@]}" exec -T zascarr printenv BUILD_SHA 2>/dev/null \
+            | tr -d '[:space:]' || true)"
+    fi
+    [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || sha=""
+    printf '%s' "${sha}"
+}
+
 # Manifiesto de una copia: identidad del candidato + integridad. Atómico y 0600.
 # `extra` es un objeto JSON con campos adicionales (offsite, ref emparejada...).
 # Devuelve la ruta del manifiesto por stdout; 1 si no se pudo escribir.
@@ -304,6 +341,7 @@ escribir_manifiesto() {
     local dump="$1" origen="$2" id="$3"
     local extra="${4:-}"
     local base stem dir manifest tmp sha bytes created commit alembic
+    local app_version build_sha head_json build_json app_json alembic_json
     [[ -n "${extra}" ]] || extra="{}"
     [[ -f "${dump}" ]] || { echo "[manifiesto] ERROR: no existe ${dump}" >&2; return 1; }
     command -v jq >/dev/null 2>&1 || { echo "[manifiesto] ERROR: falta jq" >&2; return 1; }
@@ -318,6 +356,13 @@ escribir_manifiesto() {
     commit="$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || true)"
     alembic="$("${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${DB_NAME}" -At \
         -c "select version_num from alembic_version" 2>/dev/null | tr -d '[:space:]' || true)"
+    app_version="$(leer_app_version)"
+    build_sha="$(leer_build_sha)"
+    # Cada valor se valida con su regex; lo que no cumpla se declara `null` («no consta»), nunca se inventa.
+    head_json="null";    [[ "${commit}" =~ ^[0-9a-f]{40}$ ]] && head_json="\"${commit}\""
+    build_json="null";   [[ -n "${build_sha}" ]] && build_json="\"${build_sha}\""
+    app_json="null";     [[ -n "${app_version}" ]] && app_json="\"${app_version}\""
+    alembic_json="null"; [[ "${alembic}" =~ ^[0-9]{4}$ ]] && alembic_json="\"${alembic}\""
     if ! jq -n \
         --arg backup "${base}" \
         --arg sha256 "${sha}" \
@@ -328,9 +373,15 @@ escribir_manifiesto() {
         --arg origin "${origen}" \
         --arg id "${id}" \
         --argjson extra "${extra}" \
+        --argjson v_head "${head_json}" \
+        --argjson v_build "${build_json}" \
+        --argjson v_app "${app_json}" \
+        --argjson v_alembic "${alembic_json}" \
         '{schema: 1, backup: $backup, sha256: $sha256, bytes: $bytes,
           codigo_desplegado_sha_completo: $commit, alembic: $alembic,
-          created_at: $created, origin: $origin, id: $id} + $extra' \
+          created_at: $created, origin: $origin, id: $id,
+          version_de_la_copia: {head: $v_head, build_sha: $v_build,
+                                app_version: $v_app, alembic: $v_alembic}} + $extra' \
         > "${tmp}"; then
         rm -f "${tmp}"
         echo "[manifiesto] ERROR: jq no pudo escribir ${manifest}" >&2
