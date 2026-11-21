@@ -48,6 +48,7 @@ Alterna el orden de las tareas 1 y 2 entre personas.
 - «Toque» = cada pulsación (abrir y cerrar paneles incluidos; escribir no cuenta; Atrás cuenta).
 - «Hasta la sección» = hasta ver la lista de series (tarea 1) o la pantalla Estado (tarea 2).
 - Un fallo de puntería se anota aparte y no cuenta.
+- Anotar si «Más» **no responde a la primera** (dos agentes de la simulación lo dijeron; con el panel oculto no se pudo distinguir de un fallo de la herramienta).
 
 ## Cómo se decide
 

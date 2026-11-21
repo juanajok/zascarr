@@ -67,3 +67,42 @@ La simulación no inclina la balanza por sí sola: el coste se desplaza entre do
 3. Otra variante (p. ej. B cambiando «Inicio» en vez de «Estado»).
 
 Hasta que el PO decida, la navegación por defecto no cambia.
+
+## Ronda 2 (2026-11-21): con el interruptor real y el guion de la prueba
+
+Misma comparación, ya sobre el código fusionado (`NAV_MOVIL_VARIANTE`, #1218), con el guion de `uxa08b-prueba-con-personas.md`: tres tareas (Flash, Estado, Por revisar), orden alternado entre Marta y Dani, cuatro participantes (uno por perfil y variante), tomados de cero. En B el punto de «Más» **no se encendió** (hoy solo responde a seguridad), que es la situación real. Una primera pasada de Dani en A se **descartó**: el panel del navegador estaba oculto y no pudo hacer ningún toque; se repitió.
+
+| Perfil · variante | Tarea | Primer toque | Toques hasta la sección | Toques totales | Fallos de puntería | Éxito |
+|---|---|---|---|---|---|---|
+| Marta · A | Flash | Más | 2 | 5 | 0 | Sí |
+| Marta · A | Estado | Estado | 1 | 1 | 0 | Sí (sin verificar la pantalla) |
+| Marta · A | Por revisar | Revisar | 1 | 1 | 0 | Sí |
+| Dani · A | Estado | Estado | 1 | 1 | 0 | Sí |
+| Dani · A | Flash | Más | 2 | 3 | 3 | Sí |
+| Dani · A | Por revisar | Revisar | 1 | 1 | 0 | Sí |
+| Marta · B | Flash | Biblioteca | 1 | 6 | 4 | Sí |
+| Marta · B | Estado | Más | 2 | 2 | 2 | Sí |
+| Marta · B | Por revisar | Revisar | 1 | 1 | 0 | Sí |
+| Dani · B | Estado | Más | 2 | 2 | 1 | Sí |
+| Dani · B | Flash | Biblioteca | 1 | 4 | 0 | Sí |
+| Dani · B | Por revisar | Revisar | 1 | 1 | 0 | Sí |
+
+**Lectura de las dos rondas juntas (8 recorridos por tarea y variante entre las dos rondas, 2 por celda y ronda):**
+
+- **Éxito:** 100 % en las dos variantes y en las tres tareas.
+- **Biblioteca:** A siempre 2 toques hasta la lista (Más → Biblioteca), con «Más» como primer toque «por descarte»; B siempre 1.
+- **Estado:** A siempre 1; B siempre 2 (Más → Estado), también por descarte.
+- **Por revisar** (control): 1 toque en ambas; «Revisar» en la barra y «Por revisar» en el título no confundió a nadie.
+- **El resultado no cambió entre rondas:** el coste se desplaza entre Biblioteca y Estado. La simulación **no** desempata.
+
+**Observaciones nuevas**
+
+- Dani en B: «Estado» estaba «casi al final, junto a Ajustes» en un menú de ocho opciones; lo reconoció por el icono de pulso. Pidió «un acceso directo o un aviso visible si algo falla».
+- Dani en A: «Estado» abrió con «Atención: VPN, Copias de seguridad, Comprobación de restauración» pero no le quedó claro cuántos avisos hay ni su gravedad.
+- Marta en B: tocó «Escaparate» por error al entrar en Biblioteca y la vista le pareció vacía («Todavía no hay actividad…»); tuvo que volver a «Gestión». No tiene que ver con la barra, pero es un tropiezo real de esa pantalla.
+- «Más»: dos agentes (uno en A, otro en B) dijeron que no respondía a la primera. Con el panel del navegador oculto no se puede distinguir un fallo de la herramienta de uno real. **A comprobar en móvil real** (anotarlo en la prueba con personas).
+- Reapareció que los resultados de «Buscar» quedan bajo los botones (#1214).
+
+**Límites añadidos:** el panel del navegador estuvo oculto durante la ronda; algunos toques fallaron por la herramienta y se cuentan aparte. Sigue siendo una simulación con agentes: n = 1 por celda y ronda, sin tiempos.
+
+**Qué sigue siendo verdad de la decisión:** B solo es defendible con un aviso de salud completo fuera de «Más» (#1219). La prueba con personas reales, con la anotación sobre «Más», sigue pendiente.
