@@ -1,8 +1,8 @@
 # Volver de la ficha a la Biblioteca con su estado (UATP-02 / UXA-08)
 
-> **Estado:** implementada en TDD (task-24, 2026-11-21); pendiente la pasada independiente de
-> UI/UX, SecOps y QA y el E2E de navegador (T14, **NOT RUN** si no se ejecuta). **No declara
-> cumplida** UATP-02: fija el contrato, los criterios y la evidencia que faltan.
+> **Estado:** implementada y validada (TDD + SecOps + UI/UX + QA, 2026-11-21). T14 ejecutado
+> en Chrome 156 (escritorio y 320 px): **PASS**; Firefox **NOT RUN** por limitación del entorno.
+> Decisiones D-1, D-2 y D-3 aceptadas por el PO. Evidencia: [`uatp02/resultado-t14.md`](uatp02/resultado-t14.md).
 >
 > **Insumos:** [#1125 · UXA-08](https://github.com/juanajok/zascarr/issues/1125) (ampliada por
 > UATP-02), [#1141 · épica UATP](https://github.com/juanajok/zascarr/issues/1141), el informe de
@@ -340,7 +340,7 @@ Nombres orientativos; lo exigible es el caso. Todo con `FakeSession`/TestClient 
 | T11 | URL canónica larga con `q` no latino de 200 caracteres: válida y vuelta entera; 4097 caracteres: rechazo | `test_web_retorno.py` | AC-10 |
 | T12 | `foco` en `PARAMETROS_DE_QUERY` (`test_log_acceso.py:350`) y los valores de la query no se registran | `test_log_acceso.py` | AC-01/AC-09 |
 | T13 | `no-store` en la página de vuelta; sin `Set-Cookie`; no se escribe nada en la BD (espía de sesión) | `test_web_library.py` | AC-09 |
-| T14 | E2E manual: Firefox y Chrome, tarjetas y lista, objetivo con y sin coincidencia; «Volver» restaura chips/página/orden/vista; foco visible; Colecciones con vista y página | navegador real + `docs/TESTING_E2E.md` si aplica | AC-04/05/06/08; **NOT RUN** si no se ejecuta |
+| T14 | E2E manual: Chrome y Firefox, tarjetas y lista, objetivo con y sin coincidencia; «Volver» restaura chips/página/orden/vista; foco visible; Colecciones con vista y página | navegador real + `docs/TESTING_E2E.md` si aplica | AC-04/05/06/08; **PASS Chrome**; Firefox **NOT RUN** (sandbox del entorno) |
 
 Comandos mínimos:
 
@@ -364,8 +364,9 @@ dispositivo que `/` (CLAUDE.md §8). No hace falta Postgres para T1–T13.
   exacto; para AC-10, longitudes y resultado.
 - **HTML observado:** para AC-04/05/06, fragmentos exactos con `autofocus` (uno solo) y el
   `tabindex` de la fila o `#rejilla`, más el `href` de la tarjeta/volver.
-- **Navegador real:** T14 Chrome/Firefox (y 320 px si se toca CSS). Si no se ejecuta, **NOT RUN**
-  explícito; no se afirma «enfoca en el navegador» solo por el HTML.
+- **Navegador real:** T14 **PASS en Chrome 156** (escritorio y 320 px, tarjeta/lista/ausente);
+  evidencia en [`uatp02/resultado-t14.md`](uatp02/resultado-t14.md). Firefox **NOT RUN**: el
+  binario falla en este entorno con `unshare(CLONE_NEWPID): EPERM`; no se declara PASS.
 - **No-regresión:** inventario de logs actualizado (`foco`) y suites de Biblioteca, ficha y
   colecciones en verde.
 
@@ -376,12 +377,15 @@ dispositivo que `/` (CLAUDE.md §8). No hace falta Postgres para T1–T13.
 | [`ui-migracion.md:220`](ui-migracion.md:220) | Inventario de `/ui/biblioteca` y `/ui/biblioteca/resultados`: los 21 parámetros de estado reales y `foco` (22 en la ruta de la página). |
 | [`benchmark-deep-dive-colecciones-2026-11-14.md:93`](benchmark-deep-dive-colecciones-2026-11-14.md:93) | §5: el retorno a colección conserva estado (`q`, `tradicion`, `vista`, `pagina`) además del destino; sin foco. |
 | `docs/design/uatp01-retorno-legal.md` §8 D-4 | Referencia a los «7 parámetros de `PARAMETROS_DE_VUELTA`»: se actualiza a la allowlist derivada de §3.1 si el PO retoma la entrada de Biblioteca en el gate legal. No cambia el gate. |
-| Este documento | Estado y evidencia al cerrar; D-1…D-3 resueltas por el PO. |
+| Este documento | Estado y evidencia al cerrar; D-1…D-3 resueltas por el PO (2026-11-21). |
 | `docs/BACKLOG.md` | Solo al cerrar la historia P1, con la nota del mecanismo (allowlist derivada + `foco` + canonical/round-trip). |
 
 ## 10. Decisiones pendientes del PO
 
 ### D-1 · Foco y posición al volver a una Colección
+
+**Decisión del PO (2026-11-21): aceptada la recomendación.** El estado se restaura; el foco y la
+posición en Colecciones no se prometen y quedan como posible historia aparte.
 
 La historia pide estado en Colecciones; el **foco/posición** exigiría ids estables en sus listas
 y el mismo respaldo que la Biblioteca. **Recomendación:** aceptar la limitación de §3.4 en
@@ -389,6 +393,8 @@ UATP-02 y abrir una historia aparte si el PO lo pide; el estado (lo que hoy se p
 restaura.
 
 ### D-2 · Modo escaparate
+
+**Decisión del PO (2026-11-21): aceptada la recomendación.** El escaparate sigue sin `volver`.
 
 Las sugerencias del escaparate enlazan a la ficha **sin `volver`**
 ([`_escaparate.html:10`](../../src/zascarr/web/templates/_escaparate.html:10)), así que «Volver»
@@ -398,6 +404,9 @@ UATP-02) y anotarlo como limitación. Si el PO quiere conservarlo, es una entrad
 contrato y una prueba.
 
 ### D-3 · Aviso cuando el `volver` se rechaza
+
+**Decisión del PO (2026-11-21): aceptada la recomendación.** El rechazo sigue siendo silencioso,
+con respaldo a Biblioteca.
 
 Hoy el rechazo es silencioso: la ficha pinta «← Biblioteca» sin decir por qué. **Recomendación:
 no añadir aviso** (no ha fallado ninguna acción de la persona; el coste de un aviso es ruido y
