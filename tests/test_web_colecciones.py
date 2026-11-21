@@ -1,7 +1,9 @@
 """#155/BL-D6: UI de colecciones (servicio sustituido, sin BD)."""
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
+from html import unescape
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -91,6 +93,18 @@ def test_detalle_muestra_series_y_selector():
     assert 'class="chip-previa chip-previa-lista"' in r.text
     assert "Ver portada" in r.text
     assert 'hx-target="next .previa-numero"' in r.text
+    # UATP-05 / D-4: la fija se abre con foco o con su botón, no por hover; y se cierra sin
+    # sustituir el enlace (el foco no se mueve) con Escape o clic en la tarjeta.
+    html = unescape(r.text)
+    envoltorio = re.search(r'<span class="chip-previa chip-previa-lista"[^>]*>', html).group(0)
+    assert 'hx-get="/ui/colecciones/c1/previa/s1?cerrar=1"' in envoltorio
+    assert "keyup[key=='Escape']" in envoltorio
+    assert "click from:'find .previa-numero'" in envoltorio
+    assert 'hx-target="#previa-m-s1"' in envoltorio
+    assert 'hx-sync="closest .chip-previa:replace"' in envoltorio
+    enlace = re.search(r'<a [^>]*hx-target="#previa-m-s1"[^>]*>', html).group(0)
+    assert 'hx-trigger="focusin delay:150ms"' in enlace
+    assert "mouseenter" not in enlace
     # Sin imágenes masivas: la portada de cada serie se pide solo al fragmento.
     assert 'src="/ui/series/s1/portada"' not in r.text
     assert 'src="/ui/series/s2/portada"' not in r.text
@@ -559,9 +573,12 @@ def test_cambio_vista_con_aviso_no_duplica_autofocus():
 
 def test_patron_chip_previa_y_override_tactil():
     css = Path("src/zascarr/static/web.css").read_text()
+    plano = " ".join(css.split())
     assert ".coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty)" in css
     assert ".chip-previa-lista:focus-within > .previa-numero:not(:empty)" in css
-    assert ".chip-previa-boton" in css and "min-height: 44px" in css
+    # UATP-05 / D-4: el botón «Ver portada» también con puntero fino (la fija no abre por hover).
+    assert (".chip-previa-boton { display: inline-flex; align-items: center; "
+            "min-height: 44px; }") in plano
     assert "position: fixed" in css
     assert "z-index: 50" in css
     assert "bottom: calc(64px + 16px)" in css
@@ -714,3 +731,35 @@ def test_asignar_invalido_con_coleccion_no_vacia_conserva_el_volver():
     assert r.status_code == 200
     assert "Flash" in r.text
     assert 'href="/ui/series/s1?volver=' in r.text
+
+
+def test_endpoint_previa_cerrar_no_consulta_bd_ni_disco():
+    """UATP-05: `?cerrar=1` responde 200 vacío antes de tocar la BD o el disco."""
+    cid, sid = uuid4(), uuid4()
+
+    class _SinBd:
+        async def get(self, *_args, **_kwargs):
+            raise AssertionError("cerrar la previa no debe consultar la BD")
+
+        async def execute(self, *_args, **_kwargs):
+            raise AssertionError("cerrar la previa no debe consultar la BD")
+
+        async def commit(self):
+            raise AssertionError("cerrar la previa no debe escribir")
+
+        async def rollback(self):
+            raise AssertionError("cerrar la previa no debe escribir")
+
+    async def _db():
+        yield _SinBd()
+
+    app.dependency_overrides[get_db] = _db
+    try:
+        with patch("zascarr.web.colecciones.portada_cacheada",
+                   side_effect=AssertionError("cerrar no busca la portada")) as mock:
+            r = TestClient(app).get(f"/ui/colecciones/{cid}/previa/{sid}?cerrar=1")
+    finally:
+        _cerrar()
+    assert r.status_code == 200 and r.text == ""
+    assert r.headers["cache-control"] == "no-store"
+    assert mock.call_count == 0

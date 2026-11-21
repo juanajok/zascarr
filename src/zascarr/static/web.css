@@ -2034,12 +2034,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (prefers-reduced-motion: reduce) { .conversion-espera::before { animation: none; } }
 .conversion-resultado-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 
-/* BL-INF4: vista previa de la portada del número al pasar el ratón o el foco.
+/* BL-INF4/UATP-05: vista previa de la portada del número al pasar el ratón o el foco.
    El contenedor lleva ancho propio: dentro de un chip, `max-width:100%` del img global lo
-   encogía al ancho del chip (~40 px). Va DEBAJO del chip para no tapar el rótulo de la sección;
-   `pointer-events:none` para no robar el hover ni el clic. */
+   encogía al ancho del chip (~40 px). Va DEBAJO del chip para no tapar el rótulo de la sección.
+   UATP-05 (#1143): la tarjeta es zona de puntero —se recorre sin cerrarse y su clic la aparta
+   en vez de atravesarla— y solo se pinta una a la vez, con prioridad del foco. */
 .chip-previa { position: relative; display: inline-flex; }
-.chip-previa-boton { display: none; }
+/* La previa fija ya no se abre por hover: su disparador es el foco o el botón «Ver portada»,
+   que ahora está disponible también con puntero fino (antes solo en táctil). */
+.chip-previa-boton { display: inline-flex; align-items: center; min-height: 44px; }
 .chip-previa-lista > .previa-numero {
   position: fixed;
   z-index: 50;
@@ -2049,19 +2052,31 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   transform: translateY(-50%);
   width: 200px;
   max-width: calc(100vw - 48px);
-  pointer-events: none;
 }
 .previa-numero {
   position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-  width: 220px; z-index: 30; pointer-events: none;
-  display: none; overflow: hidden;
+  width: 220px; z-index: 30;
+  display: none;
   border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
   background: var(--paper); box-shadow: var(--shadow-ink-sm);
 }
+/* Puente de 8 px (WCAG 1.4.13, Hoverable): zona de puntero invisible para cruzar el hueco entre
+   el chip y la tarjeta. Es hijo de la tarjeta, así que pisarlo mantiene el `:hover` del chip y
+   no se extiende sobre la caja del enlace. */
+.chip-previa:not(.chip-previa-lista) > .previa-numero::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  top: -8px; height: 8px;
+}
 /* Solo la previa del número que se está mirando: al salir del chip (o mover el foco) se oculta.
-   Antes cada chip conservaba la suya y se acumulaban todas. */
-.chip-previa:hover > .previa-numero:not(:empty),
+   La anclada se abre también con el puntero; la fija, solo con foco o su botón (nunca hover). */
+.chip-previa:not(.chip-previa-lista):hover > .previa-numero:not(:empty),
 .chip-previa:focus-within > .previa-numero:not(:empty) { display: block; }
+/* La previa del foco manda: con el foco en un chip, la de otro chip bajo el puntero se oculta.
+   Antes se pintaban las dos y la del hover tapaba el texto y el anillo del enfocado. */
+body:has(.chip-previa:focus-within > .previa-numero:not(:empty))
+  .chip-previa:hover:not(:focus-within) > .previa-numero:not(:empty) { display: none; }
 .previa-numero img { display: block; width: 100%; height: auto; max-width: none; }
 .previa-pie {
   display: block; padding: 6px 10px;
@@ -2077,7 +2092,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   width: 0; height: 0;
 }
 .previa-pie .previa-pista { display: block; color: var(--ink-soft); font-size: var(--text-secundario); }
-.previa-card { animation: previa-aparece .12s ease-out; }
+/* El recorte de esquinas va en la tarjeta interior: el contenedor dibuja la flecha (::before) y
+   el puente (::after) fuera de su caja, y `overflow:hidden` en él los recortaba (la flecha no se
+   veía; el puente quedaba cortado). */
+.previa-card { display: block; overflow: hidden; border-radius: var(--radius-panel); animation: previa-aparece .12s ease-out; }
 @keyframes previa-aparece { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .previa-card { animation: none; } }
 @media (max-width: 860px), (pointer: coarse) { .previa-numero { display: none; } }
@@ -2647,9 +2665,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .coleccion-serie-card .btn { margin: 0 var(--space-2) 10px; min-height: 44px; }
 .coleccion-check.chip-previa:focus-within > .previa-numero:not(:empty) {
   display: block;
-}
-@media (hover: none), (pointer: coarse) {
-  .chip-previa-boton { display: inline-flex; align-items: center; min-height: 44px; }
 }
 @media (max-width: 860px), (pointer: coarse) {
   .chip-previa-lista > .previa-numero {
