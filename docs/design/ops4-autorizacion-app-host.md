@@ -89,7 +89,7 @@ provisión **no está implementada** y bloquea la integración.
    proyecto para cambios que afectan a la contraseña actual.
 6. No habilitar la UI ni instalar unidad/auxiliar hasta completar lo anterior.
 
-**Estado de pruebas:** 49 casos de contrato, 59 de composición y 37 de registro
+**Estado de pruebas:** 49 casos de contrato, 59 de composición y 47 de registro
 durable (incluidos aislamiento y UI) forman parte de las **791 pruebas OPS4/paridad** verdes y de la suite completa **8880 passed / 2431 skipped**; el detalle y las limitaciones están en los informes de
 [SecOps](secops-ops4-autorizacion-2026-11-20.md),
 [UI](ui-ops4-autorizacion-2026-11-20.md) y
