@@ -24,11 +24,28 @@ directorios temporales y `--sin-systemd`, sin tocar systemd, la Pi ni
 producción. Verifican clave/modo, directorios, módulos, unidades sustituidas,
 idempotencia, dry-run, retirada y argumentos inválidos.
 
+## Validación real en la VM (2026-11-21)
+
+Se ejecutó el instalador en un overlay desechable sin NIC, con 9p de solo
+lectura para el repo y una clave precreada conocida. `--yes --activar`
+conservó la clave, instaló módulos/unidades, activó el socket y mostró que la
+UI seguía deshabilitada por defecto.
+
+- Socket `LISTEN` en `/var/lib/zascarr/ops/actualizar.sock`.
+- Clave existente conservada; modo/propietario comprobados.
+- Petición v4: `{"resultado":"aceptada","codigo":"aceptada"}`.
+- Unidad fija con `update.sh` falso: `Result=success`, `ExecMainStatus=0`,
+  `inactive/dead`; marcador escrito.
+- Segunda petición: `repetida`.
+- QEMU terminó con código 0.
+
+Evidencia privada: `instalador-ops4/run-01`. **No** se ejecutó `update.sh` real,
+no se usó la Pi y no se activó la bandera de UI.
+
 ## Límites
 
-- El instalador **no se ha ejecutado en la VM ni en la Pi**. La VM se
-  provisionó manualmente; sus resultados están en
-  [auxiliar/unidad](ops4-auxiliar-unidad.md).
+- El instalador no se ha ejecutado en la Pi. La VM validó archivos, socket,
+  auxiliar y unidad con script falso, no el actualizador real.
 - No implementa rotación de clave, cuota/retención del registro ni
   configuración de la UI; no enciende `OPS4_ACTUALIZACION_HABILITADA`.
 - La unidad de actualización ejecuta `update.sh` real si se activa; instalar
