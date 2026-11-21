@@ -272,7 +272,8 @@ def test_cabecera_accion_es_boton_y_no_enlace_subrayado():
     from pathlib import Path
     html = _index()
     assert 'class="biblioteca-acciones"' in html
-    assert html.count('class="btn ghost sm biblioteca-accion"') == 3
+    # Tres enlaces y «Actualizar la biblioteca» (#1160).
+    assert html.count('class="btn ghost sm biblioteca-accion"') == 4
     assert 'href="/ui/mejoras"' in html
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     assert ".biblioteca-acciones {" in css

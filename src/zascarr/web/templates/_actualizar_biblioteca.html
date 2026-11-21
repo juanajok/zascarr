@@ -1,8 +1,9 @@
 {#- «Actualizar la biblioteca» en Biblioteca (#1160). Una sola plantilla con tres modos: `completo` (el
     bloque entero), `post` (la región viva, una vez, al lanzar) y `sondeo` (solo el contenido de la región).
-    El botón y las líneas se actualizan fuera de banda. -#}
+    El botón vive en las acciones de la cabecera (`biblioteca.html`); este bloque, debajo de la frase de
+    entrada. Botón y líneas se actualizan fuera de banda, también al cargar. -#}
 {%- macro boton(oob=false) -%}
-<button id="actualizar-boton" type="submit" class="btn sm" aria-describedby="actualizar-garantia"
+<button id="actualizar-boton" type="submit" class="btn ghost sm biblioteca-accion" aria-describedby="actualizar-garantia"
         {% if oob %}hx-swap-oob="true"{% endif %}
         {% if estado_rescan.en_curso %}disabled{% endif %}>
   {{ "Actualizando…" if estado_rescan.en_curso else "Actualizar la biblioteca" }}
@@ -87,11 +88,7 @@
 {{ lineas(oob=true) }}
 {% else %}
 <section id="actualizar-biblioteca" class="biblioteca-actualizar" aria-label="Actualizar la biblioteca">
-  <form class="biblioteca-actualizar-accion" hx-post="/ui/biblioteca/actualizar"
-        hx-target="#actualizar-estado" hx-swap="outerHTML">
-    {{ boton() }}
-    <p id="actualizar-garantia" class="muted">Mira tu disco: no mueve, no renombra ni borra nada.</p>
-  </form>
+  <p id="actualizar-garantia" class="muted">«Actualizar la biblioteca» mira tu disco: no mueve, no renombra ni borra nada.</p>
   {{ lineas() }}
   <details class="biblioteca-actualizar-detalle"><summary>Qué mira</summary>
     <p>Registra los tebeos nuevos (a su serie si los reconoce, y a «Por revisar» si no), vuelve a clasificar
@@ -100,4 +97,5 @@
   </details>
   {{ region() }}
 </section>
+{{ boton(oob=true) }}
 {% endif %}
