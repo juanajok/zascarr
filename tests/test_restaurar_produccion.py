@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import fcntl
 import gzip
+import hashlib
 import json
-import os
+import re
 import stat
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -29,8 +29,10 @@ from tests._restaurar_produccion import (
     estado_restaurar,
     eventos,
     ejecutar,
-    plantilla_eventos,
+    intentos_jsonl,
     preparar,
+    recomputar_manifiesto,
+    reescribir_manifiesto,
     sql_dump,
 )
 
@@ -43,6 +45,75 @@ FASES = {"verificando", "preparando", "restaurando", "comprobando", "parando",
 def _sin_violaciones(ctx) -> None:
     texto = "\n".join(eventos(ctx))
     assert "VIOLACION" not in texto, texto
+
+
+# ── UATP-06/07: utilidades de la matriz negativa ────────────────────────────────────────────────────────────────
+def _sentar_estado(ctx) -> tuple[str, str]:
+    """Filas testigo de la base viva + huellas de la copia buena, antes del intento."""
+    (ctx["estado_docker"] / "db.zascarr").write_text("filas-testigo\n", encoding="utf-8")
+    return (hashlib.sha256(ctx["dump"].read_bytes()).hexdigest(),
+            hashlib.sha256(ctx["manifest"].read_bytes()).hexdigest())
+
+
+def _sin_copy(sql: str, tabla: str) -> str:
+    salida, dentro = [], False
+    for linea in sql.splitlines():
+        if linea.startswith(f"COPY public.{tabla} "):
+            dentro = True
+            continue
+        if dentro:
+            dentro = linea != "\\."
+            continue
+        salida.append(linea)
+    return "\n".join(salida) + "\n"
+
+
+def _mutar_copia(ctx, caso: str) -> None:
+    """N-01/N-02/N-03: el laboratorio aísla la comprobación que debe fallar."""
+    if caso == "sha256":
+        reescribir_manifiesto(ctx, sha256="0" * 64)
+    elif caso == "gzip":
+        datos = ctx["dump"].read_bytes()
+        ctx["dump"].write_bytes(datos[: len(datos) // 2])
+        recomputar_manifiesto(ctx)
+    elif caso in ("series", "issues"):
+        sql = gzip.decompress(ctx["dump"].read_bytes()).decode("utf-8")
+        ctx["dump"].write_bytes(gzip.compress(_sin_copy(sql, caso).encode("utf-8")))
+        recomputar_manifiesto(ctx)
+    else:  # pragma: no cover - error de la propia prueba
+        raise AssertionError(caso)
+
+
+def _solo_config(ctx) -> None:
+    """Cero eventos de contenedor: el único `docker` es `compose config` (FR-17/AC-06-02)."""
+    assert eventos(ctx) == [], eventos(ctx)
+    lineas = [linea for linea in ctx["stub"].read_text(encoding="utf-8").splitlines() if linea]
+    assert len(lineas) == 1, lineas
+    assert " config " in lineas[0] + " " and "--format json" in lineas[0], lineas[0]
+    for prohibido in (" exec ", " stop ", " up ", " run ", " create ", " start ", " restart ",
+                      " rm ", "createdb", "dropdb", "pg_dump", "psql"):
+        assert prohibido not in lineas[0], lineas[0]
+
+
+def _intacto(ctx, dump_sha: str, manifest_sha: str) -> None:
+    """La base viva, la salud, la copia B0 y su manifiesto no cambian (AC-06-03/05)."""
+    assert (ctx["estado_docker"] / "db.zascarr").read_text(encoding="utf-8") == "filas-testigo\n"
+    for nombre in ("zascarr_restaurando", "zascarr_previa", "zascarr_fallida"):
+        assert not (ctx["estado_docker"] / f"db.{nombre}").exists(), nombre
+    assert not (ctx["estado_docker"] / "app_parada").exists()
+    assert ctx["curl"].read_text(encoding="utf-8") == ""          # ni se consultó la salud
+    assert hashlib.sha256(ctx["dump"].read_bytes()).hexdigest() == dump_sha
+    assert hashlib.sha256(ctx["manifest"].read_bytes()).hexdigest() == manifest_sha
+    assert (ctx["backup"] / f"backup_{ctx['ts']}.sql.gz").exists()
+
+
+def _assert_intento(estado: dict, ctx) -> None:
+    assert isinstance(estado["intento"], str) and re.fullmatch(r"[0-9a-f]{16}", estado["intento"])
+    assert estado["comprobacion"] is None
+    assert estado["base_en_su_sitio"] is True
+    assert estado["copia_version"] == {
+        "head": ctx["head"], "build_sha": "b" * 40, "app_version": "1.15.1", "alembic": "0020",
+    }
 
 
 # ── Camino feliz ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -104,6 +175,18 @@ def test_restaura_en_base_nueva_y_cambia_por_renombrado(tmp_path):
     assert estado["actualizado_epoch"] >= estado["inicio_epoch"] > 0
     assert stat.S_IMODE((ctx["status"] / "ops-restaurar.json").stat().st_mode) == 0o644
     assert not list(ctx["status"].glob(".ops-restaurar.json.tmp*"))
+    # D-2/D-5: el intento queda identificado, sin comprobación fallida y con la tupla de versión de la copia.
+    _assert_intento(estado, ctx)
+    assert estado["resultado"] == "hecha"
+    registro = intentos_jsonl(ctx)
+    assert len(registro) == 1
+    assert registro[0]["intento"] == estado["intento"]
+    assert registro[0]["resultado"] == "hecha" and registro[0]["error"] is None
+    assert registro[0]["comprobacion"] is None
+    assert registro[0]["base_en_su_sitio"] is True
+    assert registro[0]["copia_version"] == estado["copia_version"]
+    assert stat.S_IMODE((ctx["status"] / "ops-restaurar-intentos.jsonl").stat().st_mode) == 0o644
+    assert not list(ctx["status"].glob(".ops-restaurar-intentos.jsonl.tmp*"))
 
 
 def test_copia_previa_y_seguridad_exigen_la_app_parada(tmp_path):
@@ -292,3 +375,156 @@ def test_el_cerrojo_ocupado_sale_75_con_omitida_y_sin_escribir_ops_restaurar(tmp
     assert isinstance(omitida["omitida_epoch"], int)
     assert not (ctx["status"] / "ops-restaurar.json").exists()
     assert not any(e.startswith("createdb ") for e in eventos(ctx))
+
+
+# ── UATP-06: matriz negativa por el camino de producción (T-06-01…T-06-04) ─────────────────────────────────────
+@pytest.mark.parametrize(
+    "caso, comprobacion",
+    [
+        ("sha256", "sha256_copia"),      # N-01: manifiesto con SHA alterado y dump intacto
+        ("gzip", "gzip_cabecera"),       # N-02: gzip truncado con manifiesto recalculado
+        ("series", "tablas_dump"),       # N-03a: falta `series`
+        ("issues", "tablas_dump"),       # N-03b: falta `issues` (D-6(a), FR-17(d) enmendado)
+    ],
+)
+def test_una_copia_danada_se_rechaza_antes_de_tocar_contenedores_ni_base(tmp_path, caso, comprobacion):
+    """AC-06-01…AC-06-06: rechazo en el preflight, base y copia buena intactas, diagnóstico por intento."""
+    ctx = preparar(tmp_path)
+    _mutar_copia(ctx, caso)
+    dump_sha, manifest_sha = _sentar_estado(ctx)
+
+    r = ejecutar(ctx)
+    assert r.returncode != 0, r.stdout + r.stderr
+
+    estado = estado_restaurar(ctx)
+    assert estado is not None
+    assert estado["resultado"] == "fallida"
+    assert estado["error"] == "copia_no_valida"
+    assert estado["comprobacion"] == comprobacion
+    assert estado["base_en_su_sitio"] is True
+    assert estado["recuentos"] is None
+    assert isinstance(estado["intento"], str) and re.fullmatch(r"[0-9a-f]{16}", estado["intento"])
+    assert estado["copia_version"] == {
+        "head": ctx["head"], "build_sha": "b" * 40, "app_version": "1.15.1", "alembic": "0020",
+    }
+
+    _solo_config(ctx)
+    _intacto(ctx, dump_sha, manifest_sha)
+
+    registro = intentos_jsonl(ctx)
+    assert len(registro) == 1, registro
+    linea = registro[0]
+    assert linea["schema"] == 1
+    assert linea["intento"] == estado["intento"]
+    assert linea["copia"] == "backup-20260101_120000"
+    assert linea["copia_epoch"] > 0
+    assert linea["resultado"] == "fallida" and linea["error"] == "copia_no_valida"
+    assert linea["comprobacion"] == comprobacion
+    assert linea["base_en_su_sitio"] is True
+    assert linea["copia_version"] == estado["copia_version"]
+    assert linea["fin_epoch"] >= linea["inicio_epoch"] >= linea["copia_epoch"]
+    # FR-24: solo códigos, números, booleanos y la tupla de versión; nada de rutas ni hashes de archivo.
+    texto = (ctx["status"] / "ops-restaurar-intentos.jsonl").read_text(encoding="utf-8")
+    assert str(tmp_path) not in texto and ".sql.gz" not in texto and dump_sha not in texto
+
+
+def test_dos_intentos_distintos_conservan_el_anterior(tmp_path):
+    """T-06-05/AC-06-06: dos intentos tienen id distinto y el fallido anterior no se pierde."""
+    ctx = preparar(tmp_path)
+    reescribir_manifiesto(ctx, sha256="0" * 64)
+    r1 = ejecutar(ctx)
+    assert r1.returncode != 0
+    intento1 = estado_restaurar(ctx)["intento"]
+    r2 = ejecutar(ctx)
+    assert r2.returncode != 0
+    intento2 = estado_restaurar(ctx)["intento"]
+    assert intento1 != intento2
+    registro = intentos_jsonl(ctx)
+    assert [linea["intento"] for linea in registro] == [intento1, intento2]
+    assert all(linea["resultado"] == "fallida" for linea in registro)
+    assert stat.S_IMODE((ctx["status"] / "ops-restaurar-intentos.jsonl").stat().st_mode) == 0o644
+    assert not list(ctx["status"].glob(".ops-restaurar-intentos.jsonl.tmp*"))
+
+
+def test_el_registro_de_intentos_conserva_solo_los_20_mas_recientes(tmp_path):
+    """D-5/R-07: el `.jsonl` está acotado a 20 líneas y no deja temporales."""
+    ctx = preparar(tmp_path)
+    reescribir_manifiesto(ctx, sha256="0" * 64)
+    ruta = ctx["status"] / "ops-restaurar-intentos.jsonl"
+    ruta.write_text("".join(json.dumps({"schema": 1, "n": i}) + "\n" for i in range(20)),
+                    encoding="utf-8")
+    r = ejecutar(ctx)
+    assert r.returncode != 0
+    lineas = ruta.read_text(encoding="utf-8").splitlines()
+    assert len(lineas) == 20
+    assert json.loads(lineas[0])["n"] == 1                  # la más antigua (n=0) se descarta
+    assert json.loads(lineas[-1])["resultado"] == "fallida"
+    assert not list(ctx["status"].glob(".ops-restaurar-intentos.jsonl.tmp*"))
+
+
+# ── UATP-07/3: `copia_version` (T-07-03) ───────────────────────────────────────────────────────────────────────
+def test_un_manifiesto_sin_version_deja_copia_version_null(tmp_path):
+    """D-2: copia antigua sin la clave ⇒ `null` («no consta»), nunca se infiere; la restauración no falla."""
+    ctx = preparar(tmp_path, version_copia=None)
+    r = ejecutar(ctx, extra_env={"FAKE_ENFORCE_STOP": "1"})
+    assert r.returncode == 0, r.stdout + r.stderr
+    estado = estado_restaurar(ctx)
+    assert estado["resultado"] == "hecha"
+    assert estado["copia_version"] is None
+    assert intentos_jsonl(ctx)[0]["copia_version"] is None
+
+
+@pytest.mark.parametrize("version_hostil", [
+    {"head": "no-es-un-sha"},
+    {"head": ["a" * 40]},
+    {"head": "a" * 40, "build_sha": "b" * 40, "app_version": "1.15.1", "alembic": "zzzz"},
+    {"head": "a" * 40, "build_sha": "b" * 40, "app_version": "1.15.1", "alembic": "0020",
+     "comando": "rm -rf / ; DB_PASSWORD=secreto"},
+    {"solo": "texto libre con una ruta /home/ana/.env"},
+])
+def test_un_objeto_de_version_hostil_no_llega_al_estado(tmp_path, version_hostil):
+    """D-2/FR-24: solo las cuatro claves con sus regex; lo demás no se copia al estado ni al `.jsonl`."""
+    ctx = preparar(tmp_path, version_copia=version_hostil)
+    r = ejecutar(ctx, extra_env={"FAKE_ENFORCE_STOP": "1"})
+    # El intento es válido salvo por la versión: la restauración no se bloquea (D-2(a)).
+    assert r.returncode == 0, r.stdout + r.stderr
+    estado = estado_restaurar(ctx)
+    assert estado["resultado"] == "hecha"
+    assert estado["copia_version"] is None
+    texto = json.dumps(estado) + json.dumps(intentos_jsonl(ctx))
+    assert "rm -rf" not in texto and "DB_PASSWORD" not in texto and "texto libre" not in texto
+
+
+# ── FR-17(d): HEAD y árbol no cambian hasta el final (cierre en falso) ────────────────────────────────────────
+def test_si_el_head_cambia_al_final_se_falla_cerrado(tmp_path):
+    """FR-17(d): releer HEAD al final del `--produccion`; si cambió, no se declara terminada."""
+    ctx = preparar(tmp_path)
+    r = ejecutar(ctx, extra_env={"FAKE_ENFORCE_STOP": "1", "FAKE_CAMBIA_HEAD": "1",
+                                 "FAKE_HEAD_FALSO": "c" * 40})
+    assert r.returncode != 0, r.stdout + r.stderr
+    ev = eventos(ctx)
+    assert "up zascarr" in ev
+    assert "dropdb zascarr_previa" not in ev               # no se declara terminada ni se borra la previa
+    estado = estado_restaurar(ctx)
+    assert estado["resultado"] == "fallida"
+    assert estado["error"] == "unexpected"
+    assert estado["comprobacion"] is None
+    assert estado["base_en_su_sitio"] is True
+    assert estado["recuentos"] is None
+    assert (ctx["estado_docker"] / "db.zascarr").exists()
+    assert (ctx["estado_docker"] / "db.zascarr_previa").exists()
+    assert intentos_jsonl(ctx)[-1]["resultado"] == "fallida"
+
+
+def test_si_el_arbol_se_ensucia_al_final_se_falla_cerrado(tmp_path):
+    """FR-17(d): el árbol limpio también se relee al final; un cambio posterior no pasa."""
+    ctx = preparar(tmp_path)
+    r = ejecutar(ctx, extra_env={"FAKE_ENFORCE_STOP": "1", "FAKE_ARBOL_SUCIO": "1"})
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert "up zascarr" in eventos(ctx)
+    assert "dropdb zascarr_previa" not in eventos(ctx)
+    estado = estado_restaurar(ctx)
+    assert estado["resultado"] == "fallida"
+    assert estado["error"] == "unexpected"
+    assert estado["base_en_su_sitio"] is True
+    assert (ctx["estado_docker"] / "db.zascarr_previa").exists()

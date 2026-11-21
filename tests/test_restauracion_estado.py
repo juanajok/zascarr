@@ -324,3 +324,47 @@ def test_el_contexto_solo_conserva_las_copias_restaurables():
         [{"id": "backup-1", "restaurable": True}, {"id": "backup-2", "restaurable": False}],
     )
     assert [c["id"] for c in contexto["copias"]] == ["backup-1"]
+
+
+# ── UATP-06 D-5: claves nuevas del intento (T-06-06) ───────────────────────────────────────────
+def test_las_claves_nuevas_del_intento_no_cambian_la_causa_ni_se_pintan(ajustes):
+    """`intento`/`comprobacion`/`copia_version` son aditivas: el lector las ignora (FR-24, D-5)."""
+    intento = "a1b2c3d4e5f60718"
+    _escribir(ajustes, "ops-restaurar.json", {
+        "schema": 1, "intento": intento, "copia": TS_COPIA, "copia_epoch": COPIA_DATE,
+        "inicio_epoch": AHORA - 120, "actualizado_epoch": AHORA - 5,
+        "fase": "verificando", "resultado": "fallida", "error": "copia_no_valida",
+        "comprobacion": "sha256_copia", "base_en_su_sitio": True, "recuentos": None,
+        "copia_version": {"head": "a" * 40, "build_sha": "b" * 40,
+                          "app_version": "1.15.1", "alembic": "0020"},
+    })
+    v = ops_host.resolver_restauracion(ajustes.s, AHORA)
+    assert v.estado == ops_host.EstadoRestaurar.FALLO
+    assert "está dañada" in v.mensaje and "Elige otra" in v.mensaje
+    assert v.base_en_su_sitio is True
+    visible = json.dumps([v.estado.value if hasattr(v.estado, "value") else v.estado,
+                          v.mensaje, v.detalle])
+    assert intento not in visible and "sha256_copia" not in visible and "0020" not in visible
+
+
+@pytest.mark.parametrize("extra", [
+    {"intento": 1234567890123456, "comprobacion": ["sha256_copia"],
+     "copia_version": "1.15.1"},
+    {"intento": "<script>alert(1)</script>", "comprobacion": {"x": "y"},
+     "copia_version": {"head": "a" * 40}},
+    {"intento": None, "comprobacion": None, "copia_version": None},
+])
+def test_un_intento_hostil_no_tumba_el_lector_ni_se_pinta(ajustes, extra):
+    """Un fichero con tipos erróneos no da 500 ni pinta cadenas libres; se queda en la causa genérica."""
+    datos = {
+        "schema": 1, "copia": TS_COPIA, "copia_epoch": COPIA_DATE,
+        "inicio_epoch": AHORA - 120, "actualizado_epoch": AHORA - 5,
+        "fase": "verificando", "resultado": "fallida", "error": "<b>roto</b>",
+        "base_en_su_sitio": True, "recuentos": None,
+    }
+    datos.update(extra)
+    _escribir(ajustes, "ops-restaurar.json", datos)
+    v = ops_host.resolver_restauracion(ajustes.s, AHORA)
+    assert v.estado == ops_host.EstadoRestaurar.FALLO
+    assert "<script>" not in v.mensaje and "<b>" not in v.mensaje
+    assert "sha256_copia" not in v.mensaje

@@ -170,6 +170,20 @@ def _sql(
     return "\n".join(lineas) + "\n"
 
 
+def _sin_copy(sql: str, tabla: str) -> str:
+    """El SQL sin el bloque `COPY public.<tabla> … \\.` (mutación de laboratorio de N-03)."""
+    salida, dentro = [], False
+    for linea in sql.splitlines():
+        if linea.startswith(f"COPY public.{tabla} "):
+            dentro = True
+            continue
+        if dentro:
+            dentro = linea != "\\."
+            continue
+        salida.append(linea)
+    return "\n".join(salida) + "\n"
+
+
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-C", str(repo), *args],
@@ -444,6 +458,20 @@ class TestRestaurarDatos:
         )
         assert r.returncode == 0, r.stdout + r.stderr
         assert "schema" in (r.stdout + r.stderr).lower()
+
+    @pytest.mark.parametrize("tabla", ["series", "issues"])
+    def test_dump_sin_una_tabla_del_preflight_aborta_antes_de_tocar(self, tmp_path, tabla):
+        """UATP-06 D-6/FR-17(d): `issues` también es obligatoria, no solo `series`/`files`/`wishlist`.
+
+        Un dump sin ninguna de ellas se rechaza en el preflight (SHA, gzip y cabecera pueden pasar),
+        antes de crear nada; el modo aislado conserva su contrato y el de producción añade
+        `comprobacion`.
+        """
+        ctx = _preparar(tmp_path, sql=_sin_copy(_sql(), tabla))
+        r = _ejecutar(ctx)
+        assert r.returncode != 0
+        _sin_destructivos(ctx)
+        assert tabla in (r.stdout + r.stderr).lower()
 
     def test_manifiesto_de_otro_codigo_aborta(self, tmp_path):
         ctx = _preparar(tmp_path)
