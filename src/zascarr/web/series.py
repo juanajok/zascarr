@@ -1986,9 +1986,15 @@ async def marcar_leido(series_id: UUID, issue_id: UUID, request: Request,
 
 
 @router.get("/{series_id}/previa", response_class=HTMLResponse)
-async def previa_serie(series_id: UUID, request: Request,
+async def previa_serie(series_id: UUID, request: Request, cerrar: bool = Query(False),
                        db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    """Fragmento de previa de portada de una serie para las listas (hover/foco)."""
+    """Fragmento de previa de portada de una serie para las listas (foco o su botón).
+
+    UATP-05 (#1143): con `cerrar=1` devuelve el hueco vacío sin tocar la BD ni el disco; es el
+    cierre de Escape/clic que no sustituye el enlace (el foco se queda donde estaba).
+    """
+    if cerrar:
+        return HTMLResponse("", headers={"Cache-Control": "no-store"})
     series = await db.get(Series, series_id)
     if series is None:
         if request.headers.get("HX-Request") == "true":
@@ -2004,9 +2010,16 @@ async def previa_serie(series_id: UUID, request: Request,
 
 @router.get("/{series_id}/numero/{issue_id}/previa", response_class=HTMLResponse)
 async def previa_numero(series_id: UUID, issue_id: UUID, request: Request,
+                        cerrar: bool = Query(False),
                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     """BL-INF4: fragmento con la miniatura de la portada del número (hover/foco). Sin caché: es
-    diminuto; la imagen y la miniatura en disco ya se cachean."""
+    diminuto; la imagen y la miniatura en disco ya se cachean.
+
+    UATP-05 (#1143): `cerrar=1` devuelve 200 vacío con `no-store` antes de consultar nada; así
+    Escape/clic apartan la tarjeta sin mover el foco ni sustituir el chip.
+    """
+    if cerrar:
+        return HTMLResponse("", headers={"Cache-Control": "no-store"})
     issue = await db.get(Issue, issue_id)
     if issue is None or issue.series_id != series_id:
         # htmx 4 intercambia también los 4xx: un chip obsoleto inyectaría el JSON del error en el
