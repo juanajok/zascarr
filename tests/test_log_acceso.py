@@ -356,8 +356,15 @@ PARAMETROS_DE_QUERY = frozenset({
     # BL-FILT1 (#397): filtro de «Pendientes por carpeta» (estado de la vista, no se registra).
     "nombre", "estado", "por_confirmar", "en_conflicto",
     "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
-    # BL-IT03 (#286): contexto de vuelta Biblioteca → ficha; solo ruta local validada.
+    # BL-IT03 (#286) y UATP-01 (#1124): contexto de vuelta (Biblioteca → ficha o
+    # aviso legal → página); solo ruta local validada.
     "volver",
+    # UATP-01 (#1124): el wizard legal marca «falta=1» cuando no se han marcado las tres
+    # casillas; es estado de la vista, no un dato de la persona.
+    "falta",
+    # UATP-02 (#1125): transporte del foco de vuelta a Biblioteca; es el UUID de la
+    # serie (no un dato nuevo) y la biblioteca lo valida sin lanzar.
+    "foco",
     # BL-IT02 (#284): presentación tarjetas/lista de la Biblioteca.
     "vista",
     # BL-ETQ1a (#403): texto tecleado en el autocompletado de la ficha.
@@ -438,12 +445,14 @@ class TestInventarioDeParametros:
     def test_ninguna_ruta_lee_la_query_a_mano_sin_declararla(self):
         """Un parámetro leído con `request.query_params` no aparece en las rutas: se vigila por texto.
 
-        Única excepción declarada: `web/contexto_carpetas.py` reenvía por el asistente los cuatro
-        parámetros del filtro de «Pendientes por carpeta» (todos declarados en su ruta) y el
-        contexto de la lista (serie/limite/desplazamiento). No lee nada nuevo de la persona: los
-        valores de una URL que la vista ya recibió."""
+        Excepciones declaradas:
+        - `web/contexto_carpetas.py` reenvía por el asistente los cuatro parámetros del filtro de
+          «Pendientes por carpeta» (todos declarados en su ruta) y el contexto de la lista
+          (serie/limite/desplazamiento). No lee nada nuevo de la persona.
+        - `web/library.py` **deriva** la allowlist de `PARAMETROS_DE_BIBLIOTECA` de la propia
+          ruta de FastAPI (`dependant.query_params`); no lee la query de la petición."""
         usos = [str(p.relative_to(RAIZ)) for p in (RAIZ / "src").rglob("*.py") if "query_params" in p.read_text(encoding="utf-8")]
-        assert usos == ["src/zascarr/web/contexto_carpetas.py"], (
+        assert usos == ["src/zascarr/web/library.py", "src/zascarr/web/contexto_carpetas.py"], (
             f"hay lectura manual de query_params: {usos}; añádela al inventario y a esta prueba")
 
     def test_cada_parametro_con_su_centinela_no_llega_al_registro_ni_su_nombre_con_valor(self):

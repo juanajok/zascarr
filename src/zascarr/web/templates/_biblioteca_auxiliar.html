@@ -1,0 +1,19 @@
+{#- Acciones auxiliares de Biblioteca (UXA-08): van DESPUÉS de la búsqueda y los filtros, no antes. En un móvil
+    de 320 px, encima de la barra ocupaban ~400 px y dejaban la búsqueda bajo la barra inferior. -#}
+<div class="biblioteca-acciones" role="group" aria-label="Más acciones de la biblioteca">
+  {#- #1160: «Actualizar la biblioteca» es una acción más de la pantalla y va con las demás. El estado del
+      botón (deshabilitado mientras corre) llega fuera de banda con el bloque que se pide al cargar. -#}
+  <form class="biblioteca-actualizar-accion" hx-post="/ui/biblioteca/actualizar"
+        hx-target="#actualizar-estado" hx-swap="outerHTML">
+    <button id="actualizar-boton" type="submit" class="btn ghost sm biblioteca-accion"
+            aria-describedby="actualizar-garantia">Actualizar la biblioteca</button>
+  </form>
+  <a class="btn ghost sm biblioteca-accion" href="/ui/mejoras">Mejoras</a>
+  <a class="btn ghost sm biblioteca-accion" href="/ui/arcos">Sagas en orden</a>
+  <a class="btn ghost sm biblioteca-accion" href="/ui/biblioteca/comicinfo">Leer la información de mis archivos</a>
+</div>
+
+{#- Garantía, «Última vez · Próxima», «Qué mira» y los avisos, justo bajo el grupo de acciones (se ve en
+    Gestión y en Escaparate). Se pide al cargar, como el bloque de Auditoría. -#}
+<div id="actualizar-biblioteca" class="biblioteca-actualizar" hx-get="/ui/biblioteca/actualizar"
+     hx-trigger="load" hx-swap="outerHTML"></div>

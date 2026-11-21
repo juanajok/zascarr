@@ -82,12 +82,23 @@
   const contador = document.getElementById("lector-contador");
   const anterior = document.getElementById("lector-anterior");
   const siguiente = document.getElementById("lector-siguiente");
+  // Solo los botones: la raíz también lleva data-modo y, tomada por botón, cerraba Opciones al
+  // abrirla (el clic subía hasta ella y repetía cambiarModo) y recibía aria-pressed (#1118).
+  const BOTONES_MODO = "button[data-modo]";
   const menuBoton = document.getElementById("lector-menu-boton");
   const menu = document.getElementById("lector-menu");
   const barra = document.getElementById("lector-barra");
   const resultado = document.getElementById("lector-resultado");
   const fin = document.getElementById("fin");
   const accionesFin = document.getElementById("fin-acciones");
+  const tituloFin = document.getElementById("fin-titulo");
+  const quedarmeFin = document.getElementById("fin-quedarme");
+  const portadaFin = document.getElementById("fin-portada");
+  // BL-LEC3 decisión D (#826): la página de fin solo se abre con intención de avanzar desde la
+  // última página. Al llegar no se muestra nada.
+  let finAbierto = false;
+  let chromeAntesDeFin = false;
+  let portadaFinPedida = false;
   const paginas = document.getElementById("lector-paginas");
   const zoomMenos = document.getElementById("lector-zoom-menos");
   const zoomMas = document.getElementById("lector-zoom-mas");
@@ -183,6 +194,13 @@
     const a = pareja();
     return a + 1 <= total ? [a, a + 1] : [a];
   };
+  const textoPaginas = (visibles) => (visibles.length > 1
+    ? `Páginas ${visibles[0]}–${visibles[1]} de ${total}`
+    : `Página ${visibles[0]} de ${total}`);
+  const enUltimaPagina = () => {
+    const visibles = paginasVisibles();
+    return visibles[visibles.length - 1] >= total;
+  };
 
   const precargadas = new Map();
   const precargar = () => {
@@ -226,31 +244,29 @@
       imagenB.removeAttribute("src");
       imagenB.alt = "";
     }
-    const paginasLeidas = visibles.length > 1
-      ? `Páginas ${visibles[0]}–${visibles[1]} de ${total}`
-      : `Página ${visibles[0]} de ${total}`;
+    const paginasLeidas = textoPaginas(visibles);
     if (contador.textContent !== paginasLeidas) contador.textContent = paginasLeidas;
     const enInicio = visibles[0] <= 1;
     const enFin = visibles[visibles.length - 1] >= total;
     // Las flechas izquierda/derecha cambian de significado en RTL: el botón
-    // izquierdo avanza cuando se lee de derecha a izquierda.
-    anterior.setAttribute("aria-disabled", String(sentido === "rtl" ? enFin : enInicio));
-    siguiente.setAttribute("aria-disabled", String(sentido === "rtl" ? enInicio : enFin));
+    // izquierdo avanza cuando se lee de derecha a izquierda. En la última página el avance sigue
+    // operativo y se llama «Ver el final»: abre la página de fin (no hay página N+1).
+    const etiquetaAvance = enFin ? "Ver el final" : "Página siguiente";
+    anterior.setAttribute("aria-disabled",
+      String(sentido === "rtl" ? false : enInicio));
+    siguiente.setAttribute("aria-disabled",
+      String(sentido === "rtl" ? enInicio : false));
     anterior.setAttribute("aria-label",
-      sentido === "rtl" ? "Página siguiente" : "Página anterior");
+      sentido === "rtl" ? etiquetaAvance : "Página anterior");
     siguiente.setAttribute("aria-label",
-      sentido === "rtl" ? "Página anterior" : "Página siguiente");
+      sentido === "rtl" ? "Página anterior" : etiquetaAvance);
     raiz.dataset.modo = modo;
     raiz.dataset.sentido = sentido;
     raiz.dataset.desplazamiento = String(desplazamiento);
     raiz.dataset.pagina = String(pagina);
-    if (fin && fin.hidden !== !enFin) {
-      if (!enFin && fin.contains(document.activeElement)) lienzo.focus();
-      fin.hidden = !enFin;
-    }
     menuBoton.setAttribute("aria-expanded", String(!menu.hidden));
     desplazar.hidden = modo !== "doble";
-    for (const boton of document.querySelectorAll("[data-modo]")) {
+    for (const boton of document.querySelectorAll(BOTONES_MODO)) {
       boton.setAttribute("aria-pressed", String(boton.dataset.modo === modo));
     }
     botonSentido.textContent = `Sentido: ${sentido === "rtl" ? "derecha a izquierda" : "izquierda a derecha"}`;
@@ -268,7 +284,67 @@
     }).catch(() => {});
   };
 
+  const anunciar = (mensaje) => {
+    if (resultado && resultado.textContent !== mensaje) resultado.textContent = mensaje;
+  };
+  // La portada del siguiente número se pide SOLO al abrir la página de fin y una sola vez por
+  // carga; el HTML inicial no lleva `src`. Si falla, se oculta la imagen y queda el marcador de
+  // `ui.portada` (sin mensaje de error ni imagen rota).
+  const hidratarPortadaFin = () => {
+    if (portadaFinPedida || !portadaFin) return;
+    const url = portadaFin.dataset ? portadaFin.dataset.portadaUrl : null;
+    const marco = typeof portadaFin.querySelector === "function"
+      ? portadaFin.querySelector(".portada") : null;
+    if (!url || !marco || typeof document.createElement !== "function") return;
+    portadaFinPedida = true;
+    const img = document.createElement("img");
+    img.alt = "";
+    img.decoding = "async";
+    img.addEventListener("error", () => {
+      img.hidden = true;
+      img.removeAttribute("src");
+    });
+    img.src = url;
+    if (typeof marco.appendChild === "function") marco.appendChild(img);
+  };
+  const abrirFin = () => {
+    if (!fin || finAbierto) return;
+    finAbierto = true;
+    // La barra flotante taparía el título en móviles: en la página de fin se oculta y se
+    // restaura al volver (solo si estaba visible antes de entrar).
+    chromeAntesDeFin = raiz.dataset.chrome === "oculto";
+    ocultarBarraInmersiva();
+    fin.hidden = false;
+    if (typeof fin.scrollTop === "number") fin.scrollTop = 0;
+    paginas.hidden = true;
+    if (lienzo) lienzo.hidden = true;
+    if (anterior) anterior.hidden = true;
+    if (siguiente) siguiente.hidden = true;
+    hidratarPortadaFin();
+    if (tituloFin && typeof tituloFin.focus === "function") {
+      tituloFin.focus({ preventScroll: true });
+    }
+    anunciar("Fin del número.");
+  };
+  const cerrarFin = () => {
+    if (!fin || !finAbierto) return;
+    finAbierto = false;
+    // Primero se recupera la página (y el foco) y solo después se oculta el fin: nunca se oculta
+    // #fin con el foco dentro (FR-22).
+    paginas.hidden = false;
+    if (anterior) anterior.hidden = false;
+    if (siguiente) siguiente.hidden = false;
+    if (lienzo) {
+      lienzo.hidden = false;
+      if (typeof lienzo.focus === "function") lienzo.focus({ preventScroll: true });
+    }
+    fin.hidden = true;
+    if (!chromeAntesDeFin) despertarChrome();
+    anunciar(`${textoPaginas(paginasVisibles())}.`);
+  };
+
   const ir = (n) => {
+    if (finAbierto) return;
     const destino = Math.max(1, Math.min(total, n));
     if (destino === pagina) return;
     pagina = destino;
@@ -277,10 +353,13 @@
     guarda();
   };
   const avanzar = () => {
+    if (finAbierto) return;
+    if (enUltimaPagina()) { abrirFin(); return; }
     if (modo === "doble" && paginaBVisible) ir(pagina + 2);
     else ir(pagina + 1);
   };
   const retroceder = () => {
+    if (finAbierto) { cerrarFin(); return; }
     if (modo === "doble" && paginaBVisible) ir(pagina - 2);
     else ir(pagina - 1);
   };
@@ -352,9 +431,6 @@
     }
     pinta();
   };
-  const anunciar = (mensaje) => {
-    if (resultado && resultado.textContent !== mensaje) resultado.textContent = mensaje;
-  };
   let guardandoSentido = false;
   const cambiarSentido = () => {
     if (guardandoSentido) return;
@@ -411,7 +487,11 @@
     }
   });
   menuBoton.addEventListener("click", alternarMenu);
-  for (const boton of document.querySelectorAll("[data-modo]")) {
+  // Cierre propio dentro del panel (#1118): con el panel más alto que la pantalla el botón
+  // «Opciones» sale de la vista al desplazarlo, y no debe ser el único modo de cerrar.
+  const menuCerrar = document.getElementById("lector-menu-cerrar");
+  if (menuCerrar) menuCerrar.addEventListener("click", () => cambiarMenu(false, true));
+  for (const boton of document.querySelectorAll(BOTONES_MODO)) {
     boton.addEventListener("click", () => cambiarModo(boton.dataset.modo));
   }
   desplazar.addEventListener("click", () => {
@@ -419,6 +499,7 @@
     pinta();
   });
   botonSentido.addEventListener("click", cambiarSentido);
+  if (quedarmeFin) quedarmeFin.addEventListener("click", cerrarFin);
   if (brilloControl) brilloControl.addEventListener("input", () =>
     cambiarImagen({ brillo: numeroAcotado(brilloControl.value) }));
   if (contrasteControl) contrasteControl.addEventListener("input", () =>
@@ -523,6 +604,14 @@
   const alCambiarPantalla = () => {
     if (document.fullscreenElement) {
       ocultarBarraInmersiva();
+    } else if (finAbierto) {
+      // Salir de fullscreen con la página de fin abierta no debe hacer parpadear la barra
+      // sobre su título durante los 3 s del auto-ocultado.
+      raiz.dataset.chrome = "oculto";
+      if (temporizadorChrome !== null && typeof clearTimeout === "function") {
+        clearTimeout(temporizadorChrome);
+      }
+      temporizadorChrome = null;
     } else {
       raiz.dataset.chrome = "";
       programaOculto();
@@ -549,29 +638,37 @@
   else if (typeof setTimeout === "function") programaOculto();
 
   document.addEventListener("pointermove", (evento) => {
-    // Con la barra oculta, acercarse a la franja superior la muestra.
-    if (raiz.dataset.chrome === "oculto" && evento.clientY <= 90) despertarChrome();
+    // Con la barra oculta, acercarse a la franja superior la muestra; en la página de fin
+    // no se muestra para no tapar su título (se sale con «Quedarme»/Esc).
+    if (!finAbierto && raiz.dataset.chrome === "oculto" && evento.clientY <= 90) {
+      despertarChrome();
+    }
   }, { passive: true });
   document.addEventListener("keydown", (evento) => {
     if (evento.defaultPrevented || evento.ctrlKey || evento.altKey || evento.metaKey || evento.isComposing) return;
     const { key, target } = evento;
+    const enFinPagina = !!fin && !fin.hidden
+      && (target === fin || (typeof fin.contains === "function" && fin.contains(target)));
     if (key === "Escape") {
-      if (document.fullscreenElement) return;
+      if (document.fullscreenElement) return;  // Esc es del navegador (sale de pantalla completa)
       evento.preventDefault();
       if (!menu.hidden) cambiarMenu(false, menu.contains(target));
+      else if (finAbierto) cerrarFin();        // en la página de fin, Esc vuelve; no cierra el lector
       else if (raiz.dataset.chrome === "oculto") despertarChrome();
       else window.location.assign(volver);
       return;
     }
     const enLienzo = target === lienzo;
-    if (key === "+" || key === "=" || key === "NumpadAdd") {
-      if (target === lienzo || target === document.body) { evento.preventDefault(); cambiarZoom(zoom + ZOOM_PASO); return; }
+    // WCAG 2.1.4: los atajos de un carácter (+ − 0 f h m) solo actúan con el foco en la zona de
+    // lectura; con el foco en el cuerpo o en otro control no hacen nada (#1119).
+    if (enLienzo && (key === "+" || key === "=" || key === "NumpadAdd")) {
+      evento.preventDefault(); cambiarZoom(zoom + ZOOM_PASO); return;
     }
-    if (key === "-" || key === "NumpadSubtract") {
-      if (target === lienzo || target === document.body) { evento.preventDefault(); cambiarZoom(zoom - ZOOM_PASO); return; }
+    if (enLienzo && (key === "-" || key === "NumpadSubtract")) {
+      evento.preventDefault(); cambiarZoom(zoom - ZOOM_PASO); return;
     }
-    if (key === "0" || key === "Numpad0") {
-      if (target === lienzo || target === document.body) { evento.preventDefault(); restablecerZoom(); return; }
+    if (enLienzo && (key === "0" || key === "Numpad0")) {
+      evento.preventDefault(); restablecerZoom(); return;
     }
     if (enLienzo && (key === "f" || key === "h" || key === "m")) {
       evento.preventDefault();
@@ -581,6 +678,19 @@
       return;
     }
     const enFlecha = target === anterior || target === siguiente;
+    if (enFinPagina) {
+      // FR-20: dentro de la página de fin, Espacio/Enter sobre un control no se interceptan y se
+      // puede salir con Tab. Las teclas de avance, Home y End no hacen nada; las de vuelta, sí.
+      const interactivo = target && typeof target.closest === "function"
+        && target.closest("a, button, input, select, textarea, [contenteditable], [role='button']");
+      if (interactivo) return;
+      const volverTecla = sentido === "rtl" ? "ArrowRight" : "ArrowLeft";
+      if (key === volverTecla || key === "PageUp" || (key === " " && evento.shiftKey)) {
+        evento.preventDefault();
+        cerrarFin();
+      }
+      return;
+    }
     if (!enLienzo && !enFlecha && target !== document.body) return;
     const siguienteTecla = sentido === "rtl" ? "ArrowLeft" : "ArrowRight";
     const anteriorTecla = sentido === "rtl" ? "ArrowRight" : "ArrowLeft";
@@ -599,6 +709,17 @@
       }
     });
     accionesFin.addEventListener("htmx:after:swap", (evento) => {
+      // Deseados: el recambio se limita a #fin-deseo (no borra la vuelta); si el foco se quedó en
+      // el body al desaparecer el botón, vuelve a «Quedarme» y el resultado se anuncia (FR-15).
+      if (evento.target && evento.target !== accionesFin && evento.target.id === "fin-deseo") {
+        if (document.activeElement === document.body) {
+          const destino = quedarmeFin || document.getElementById("fin-titulo");
+          if (destino && typeof destino.focus === "function") destino.focus({ preventScroll: true });
+        }
+        const texto = (evento.target.textContent || "").trim();
+        if (texto) anunciar(texto);
+        return;
+      }
       // HTMX emite el evento desde la diana cuando el formulario se ha sustituido.
       if (evento.target !== accionesFin) return;
       const control = accionesFin.querySelector("[data-lector-leido]");
@@ -682,6 +803,47 @@
     const zona = (evento.clientX - rect.left) / rect.width;
     if (zona >= 0.3 && zona <= 0.7) alternarChrome();
   });
+
+  // FR-21: en la página de fin, el deslizamiento o toque de retroceso vuelve a la última página;
+  // el de avance no hace nada y los controles reciben su toque con normalidad. El zoom no impide
+  // volver (la página de fin no se amplía).
+  if (fin) {
+    let toqueFin = null;
+    const enControl = (elemento) => elemento && typeof elemento.closest === "function"
+      && elemento.closest("a, button, input, select, textarea, [contenteditable], [role='button']");
+    fin.addEventListener("touchstart", (evento) => {
+      if (enControl(evento.target) || !evento.touches || evento.touches.length !== 1) {
+        toqueFin = null; return;
+      }
+      const t = evento.touches[0];
+      toqueFin = { x: t.clientX, y: t.clientY };
+    }, { passive: true });
+    fin.addEventListener("touchend", (evento) => {
+      if (!toqueFin || !evento.changedTouches || !evento.changedTouches.length) {
+        toqueFin = null; return;
+      }
+      if (evento.touches && evento.touches.length) { toqueFin = null; return; }
+      const t = evento.changedTouches[0];
+      const dx = t.clientX - toqueFin.x;
+      const dy = t.clientY - toqueFin.y;
+      toqueFin = null;
+      if (Math.abs(dx) >= 50 && Math.abs(dx) > 2 * Math.abs(dy)) {
+        evento.preventDefault();
+        const adelante = (dx < 0) !== (sentido === "rtl");
+        if (!adelante) cerrarFin();
+        return;
+      }
+      if (Math.abs(dx) > 12 || Math.abs(dy) > 12) return;
+      // Toque corto: solo la zona de retroceso vuelve (en RTL, la derecha).
+      const rect = typeof fin.getBoundingClientRect === "function"
+        ? fin.getBoundingClientRect() : null;
+      if (!rect || !rect.width) return;
+      const zona = (t.clientX - rect.left) / rect.width;
+      const zonaVuelta = sentido === "rtl" ? zona > 0.7 : zona < 0.3;
+      if (zonaVuelta) { evento.preventDefault(); cerrarFin(); }
+    }, { passive: false });
+    fin.addEventListener("touchcancel", () => { toqueFin = null; });
+  }
 
   if (imagen.complete && imagen.naturalWidth) decidirPareja();
   aplicarZoom();

@@ -672,7 +672,13 @@ button.primary,
 .pend-opciones .caption { margin: 0; }
 .pend-opciones [aria-current="true"] { background: var(--yellow); color: var(--on-yellow); border-color: var(--ink); }
 .pending-pie .elegir-otra-serie { flex: 1 1 16rem; }
-.pending-pie .btn-ignorar { margin-left: auto; }
+.pending-pie .ignorar-zona { margin-left: auto; }
+/* #1123: con la confirmación abierta, la zona ocupa la fila entera para que el texto respire. */
+.pending-pie .ignorar-zona:has(.ignorar-confirmar) { flex: 1 1 100%; margin-left: 0; }
+.ignorar-confirmar .acciones-fila { margin-top: var(--space-2); }
+/* #1123: el recibo ocupa el sitio de la fila y no lleva el marco de una tarjeta de trabajo. */
+.pend-recibo { list-style: none; }
+.pend-recibo:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 /* B12: sugerencia de candidato con confirmación de un clic */
 .suggestion {
@@ -1235,6 +1241,8 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
    hace cada cosa y quien lo necesita lo abre (presupuesto de texto, CLAUDE.md §6). */
 .ajustes-mas { margin: 0; }
 .ajustes-mas summary { cursor: pointer; color: var(--ink-soft); font-size: var(--text-secundario); font-weight: 600; }
+/* #1121: en escritorio medían 22 px (WCAG 2.5.8 pide 24 y el contrato local 40; en táctil ya llegan a 44). */
+.ajustes-mas summary { min-height: 40px; padding: var(--space-2) 0; box-sizing: border-box; }
 .ajustes-mas[open] summary { margin-bottom: 6px; }
 .ajustes-donde { font-weight: 400; color: var(--ink-soft); }
 .ajustes-hint {
@@ -1244,6 +1252,7 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
 .ajustes-hint code {
   background: var(--paper); border: var(--border-line) solid var(--ink-faint);
   border-radius: 3px; padding: 0 var(--space-1); font-size: var(--text-code-inline);
+  overflow-wrap: anywhere;  /* #1121: una dirección larga no ensancha la tarjeta a 320 px */
 }
 .ajustes-card form { display: flex; flex-direction: column; gap: 10px; }
 .ajustes-card label {
@@ -1382,7 +1391,8 @@ button[disabled], .btn[disabled] {
   padding: 2px 10px;
   border: var(--border-chip) solid var(--ink); border-radius: var(--radius-pill);
   background: var(--paper); color: var(--ink);
-  white-space: nowrap;
+  /* #1121: un chip con un nombre largo (editorial, serie) se parte en vez de ensanchar la página a 320 px. */
+  max-width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere;
 }
 .chip.ok    { background: var(--ok-bg);    color: var(--ok-t); }
 .chip.warn  { background: var(--warn-bg);  color: var(--warn-t); }
@@ -1817,6 +1827,18 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .library-lista td a { color: var(--ink); font-weight: 700; }
 .library-lista td a:hover { color: var(--cyan-t); }
 .library-lista tr { scroll-margin-block-start: 16px; }
+/* UATP-02: el retorno enfoca por programa (autofocus/tabindex); el anillo de
+   foco también debe verse sin `:focus-visible`. Mismo anillo, sin tokens nuevos. */
+.library-card:focus,
+#rejilla:focus {
+  outline: 3px solid var(--cyan-t);
+  outline-offset: 3px;
+}
+/* La tabla recorta con `overflow: hidden`: el anillo de la fila va por dentro. */
+.library-lista tr:focus {
+  outline: 3px solid var(--cyan-t);
+  outline-offset: -3px;
+}
 @media (max-width: 640px) {
   .library-lista, .library-lista tbody, .library-lista tr, .library-lista td { display: block; }
   .library-lista thead {
@@ -2210,51 +2232,47 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .biblioteca-cabecera {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "titulo accion" "subtitulo subtitulo" "estado estado";
+  grid-template-areas: "titulo accion" "subtitulo subtitulo";
   gap: var(--space-1) var(--space-4);
   align-items: center;
   margin-bottom: var(--space-3);
 }
 .biblioteca-cabecera h1 { grid-area: titulo; margin: 0; }
 .biblioteca-cabecera .subtitle { grid-area: subtitulo; margin: 0; }
-.biblioteca-cabecera .biblioteca-acciones {
-  grid-area: accion;
-  justify-self: end;
-  align-self: center;
+.biblioteca-acciones {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--space-2);
+  margin: 0 0 var(--space-3);
 }
-.biblioteca-cabecera .biblioteca-accion {
+.biblioteca-acciones .biblioteca-accion {
   text-decoration: none;
   color: var(--ink);
   background: var(--paper);
   border-color: var(--ink);
   box-shadow: var(--shadow-ink-sm);
 }
-.biblioteca-cabecera .biblioteca-accion:hover {
+.biblioteca-acciones .biblioteca-accion:hover {
   background: var(--paper-2);
   color: var(--ink);
   transform: none;
   box-shadow: var(--shadow-ink);
 }
 
-/* #1160: «Actualizar la biblioteca» en Biblioteca. El botón es una acción más de la cabecera (mismo
-   aspecto que sus vecinos, no .primary: el principal de la pantalla es el selector de modo). Debajo de la
-   frase de entrada, una línea de estado: garantía, «Última vez · Próxima» y «Qué mira» mientras quepan; los
-   avisos debajo, a todo el ancho. El alto táctil de 44 px lo pone la regla general de pantallas estrechas. */
+/* #1160: «Actualizar la biblioteca» en Biblioteca. El botón es una acción más del grupo de acciones (mismo
+   aspecto que sus vecinos, no .primary: el principal de la pantalla es el selector de modo). Justo debajo
+   del grupo, una línea de estado: garantía, «Última vez · Próxima» y «Qué mira» mientras quepan; los avisos
+   debajo, a todo el ancho. El alto táctil de 44 px lo pone la regla general de pantallas estrechas. */
 .biblioteca-actualizar-accion { display: contents; }
 .biblioteca-actualizar {
-  grid-area: estado;
   display: flex; flex-wrap: wrap; align-items: baseline;
   column-gap: var(--space-3);
-  margin: 0;
+  margin: calc(-1 * var(--space-2)) 0 var(--space-3);
 }
 #actualizar-garantia, #actualizar-lineas { margin: 0; }
 /* Sin hueco de fila: la región viva siempre está (aunque vacía) y un hueco la separaría. */
 #actualizar-lineas { font-variant-numeric: tabular-nums; }
-.biblioteca-actualizar-detalle[open] { flex-basis: 100%; }
 .biblioteca-actualizar-detalle[open] { flex-basis: 100%; }
 #actualizar-estado { flex-basis: 100%; }
 #actualizar-contenido > * { margin-top: var(--space-2); margin-bottom: 0; }
@@ -2278,6 +2296,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 .barra-busqueda { flex: 1 1 320px; max-width: 560px; min-width: 0; }
 .barra-busqueda input[type="search"] { width: 100%; min-height: 44px; }
+/* #1120: campo + botón «Buscar» (visible y operable sin JavaScript). */
+.busqueda-campo { display: flex; gap: var(--space-2); align-items: stretch; }
+.busqueda-campo input[type="search"] { flex: 1 1 auto; min-width: 0; }
+.busqueda-campo .btn { flex: 0 0 auto; min-height: 44px; min-width: 44px; }
+#busqueda-fallo:empty { display: none; }
+#busqueda-fallo .btn { display: block; margin-top: var(--space-2); }
+#rejilla[data-obsoleta] { opacity: .55; }
 .barra-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-left: auto; min-width: 0; }
 .barra-acciones > * { min-height: 44px; }
 .barra-contador {
@@ -2342,6 +2367,17 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .barra-panel-campos input[type="search"], .barra-panel-campos select { width: 100%; max-width: none; min-height: 44px; }
 .barra-biblioteca .barra-panel-campos select, .barra-biblioteca .barra-panel-campos input[type="search"] { max-width: none; width: 100%; }
 .barra-panel-ayuda { grid-column: 1 / -1; margin: 0; }
+/* UXA-08: pie del panel con el cierre visible. El panel tiene scroll propio (hoja inferior en el móvil,
+   caja flotante en escritorio): el pie se queda pegado abajo para que «Cerrar filtros» se alcance sin
+   recorrer todos los campos. */
+.barra-panel-pie {
+  grid-column: 1 / -1; display: flex; justify-content: flex-end;
+  position: sticky; bottom: calc(-1 * var(--space-3)); z-index: 1;
+  margin: 0 calc(-1 * var(--space-3)) calc(-1 * var(--space-3));
+  padding: var(--space-2) var(--space-3);
+  background: var(--paper); border-top: var(--border-chip) solid var(--ink);
+}
+.barra-panel-cerrar { min-height: 44px; }
 .barra-panel-campos .series-results { position: static; max-height: 14rem; overflow: auto; }
 .barra-panel-campos .series-results a { min-height: 44px; display: flex; align-items: center; }
 .barra-panel-campos .series-results:not(:empty) { padding: 6px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); }
@@ -2393,10 +2429,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (max-width: 640px) {
   .biblioteca-cabecera {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "titulo" "subtitulo" "accion" "estado";
+    grid-template-areas: "titulo" "subtitulo" "accion";
     gap: var(--space-1);
   }
-  .biblioteca-cabecera .biblioteca-acciones { justify-self: start; justify-content: flex-start; margin-top: 6px; }
   .barra-panel-campos {
     position: fixed;
     top: auto;
@@ -2414,6 +2449,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
     border-radius: var(--radius-panel) var(--radius-panel) 0 0;
     box-shadow: var(--shadow-ink);
   }
+  .barra-panel-cerrar { width: 100%; }
 }
 @media (max-width: 480px) {
   .barra-biblioteca { padding: var(--space-2); gap: 6px; }
@@ -2788,6 +2824,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .lector[data-zoom]:not([data-zoom="100"]) .lector-lienzo:active { cursor: grabbing; }
 .lector-paginas { display: flex; gap: 4px; align-items: center; justify-content: center;
   width: 100%; max-height: 100%; will-change: transform; }
+.lector-paginas[hidden] { display: none; }
 .lector[data-sentido="rtl"] .lector-paginas { flex-direction: row-reverse; }
 .lector[data-modo="ancho"] .lector-pagina {
   max-width: 100%; max-height: calc(100vh - 22rem); max-height: calc(100dvh - 22rem); }
@@ -2846,15 +2883,27 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .chip-filtro { text-decoration: none; }
 .chip-filtro:focus-visible { outline: var(--border-chip) solid var(--ink); outline-offset: 2px; }
 
-/* BL-LEC3 (#826): tarjeta de «fin del tebeo». */
-.lector-fin { width: 100%; max-width: 42rem; display: grid; gap: var(--space-2);
-  padding: var(--space-3); border: var(--border-panel) solid var(--ink);
-  border-radius: var(--radius-panel); background: var(--paper); }
+/* BL-LEC3 decisión D (#826): la página de fin ocupa el área de lectura entera, como una
+   contraportada. NO es una tarjeta: sin borde de panel, sin sombra y con fondo papel opaco que
+   cubre la escena (no tapa parcialmente la última página: la sustituye). El contenido va centrado
+   con medida legible, se desplaza en vertical y no produce desplazamiento horizontal. */
+.lector-fin {
+  position: absolute; inset: 0; z-index: 3;
+  display: grid; align-content: safe center; justify-items: center;
+  gap: var(--space-3); width: 100%;
+  padding: calc(var(--space-6) + var(--space-6)) var(--space-3) var(--space-6);
+  overflow: auto; overflow-x: hidden;
+  background: var(--paper); color: var(--ink);
+}
 .lector-fin[hidden] { display: none; }
-.lector-fin-acciones { display: grid; gap: var(--space-2); }
-.lector-fin .btn, .lector-menu .caption a { min-height: 44px; display: inline-flex; align-items: center; }
-.lector-fin h2 { margin: 0; }
-.lector-fin p { margin: 0; }
+.lector-fin-acciones { display: grid; gap: var(--space-2); width: min(42rem, 100%); }
+.lector-fin .btn, .lector-menu .caption a { min-height: 44px; max-width: 100%;
+  display: inline-flex; align-items: center; }
+.lector-fin h2 { margin: 0; text-align: center; }
+.lector-fin p { margin: 0; overflow-wrap: anywhere; }
+.lector-fin-portada { display: grid; justify-items: center; }
+.lector-fin-portada .portada-fin { width: min(9rem, 40vw);
+  border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel); }
 
 
 
@@ -2912,11 +2961,9 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .lector-escena[data-modo="ancho"] .lector-pagina { max-width: 100%; max-height: 100vh; max-height: 100dvh; }
 .lector-escena[data-modo="pantalla"] .lector-pagina { max-width: 100%; max-height: 100vh; max-height: 100dvh; }
 .lector-escena[data-modo="doble"] .lector-pagina { max-width: 49%; max-height: 100vh; max-height: 100dvh; }
-.lector-escena .lector-fin {
-  position: absolute; z-index: 3; left: 50%; bottom: var(--space-3);
-  transform: translateX(-50%); width: min(42rem, calc(100% - 2 * var(--space-3)));
-  max-height: calc(100dvh - 6rem); overflow: auto;
-}
+/* El lienzo declara `display: flex` y `position: absolute`: sin esta regla, el atributo `hidden`
+   (que el JS pone al abrir la página de fin) no lo ocultaría ni lo sacaría del árbol de foco. */
+.lector-lienzo[hidden] { display: none; }
 
 .lector-flecha {
   position: absolute; top: 50%; z-index: 3; width: 48px; height: 48px;
@@ -2942,6 +2989,17 @@ body:has(.lector-escena) .skip { z-index: 20; }
 }
 .lector-menu[hidden] { display: none; }
 .lector-menu .lector-ayuda { margin: 0; }
+/* #1118: el cierre vive en una cabecera fija del panel; al desplazar un panel más alto que la
+   pantalla (320 px, horizontal, zoom) «Cerrar» no sale de la vista. */
+.lector-menu-cabecera {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center;
+  justify-content: space-between; gap: var(--space-2);
+  margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-3)) 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--paper); border-bottom: var(--border-chip) solid var(--ink-soft);
+}
+.lector-menu-cabecera .lector-menu-titulo { margin: 0; }
+.lector-menu .lector-menu-cabecera .btn { width: auto; flex: 0 0 auto; }
 .lector-menu .lector-ayuda summary { min-height: 44px; display: flex; align-items: center; }
 .lector-menu .caption { margin: 0; }
 .lector-lienzo:focus-visible { outline: 3px solid var(--ink); outline-offset: -4px; }

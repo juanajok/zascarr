@@ -276,11 +276,11 @@ def test_cabecera_accion_es_boton_y_no_enlace_subrayado():
     assert html.count('class="btn ghost sm biblioteca-accion"') == 4
     assert 'href="/ui/mejoras"' in html
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
-    assert ".biblioteca-cabecera .biblioteca-acciones {" in css
-    assert ".biblioteca-cabecera .biblioteca-accion {" in css
-    assert "display: flex;" in css.split(".biblioteca-cabecera .biblioteca-acciones {", 1)[1].split("}", 1)[0]
+    assert ".biblioteca-acciones {" in css
+    assert ".biblioteca-acciones .biblioteca-accion {" in css
+    assert "display: flex;" in css.split(".biblioteca-acciones {", 1)[1].split("}", 1)[0]
     assert "text-decoration: none;" in css
-    assert "grid-template-areas: \"titulo accion\" \"subtitulo subtitulo\" \"estado estado\";" in css
+    assert "grid-template-areas: \"titulo accion\" \"subtitulo subtitulo\";" in css
 
 
 def test_contador_es_dato_no_boton():
@@ -399,3 +399,49 @@ def test_fragmento_sin_editoriales_y_sin_filtro_no_pinta_el_select():
     panel = r.text[r.text.index('id="filtros-campos"'):]
     panel = panel[:panel.index("</details>") if "</details>" in panel else len(panel)]
     assert 'id="f-publisher"' not in panel
+
+
+def test_busqueda_tiene_disparador_visible_que_funciona_sin_javascript():
+    """#1120: el formulario es un GET normal con un botón «Buscar» visible; Enter y el botón
+    funcionan sin JavaScript, y con él las consultas rápidas se cancelan entre sí."""
+    html = _index()
+    formulario = html[html.index('<form id="filtros"'):html.index("</form>")]
+    assert 'action="/ui/biblioteca"' in formulario and 'method="get"' in formulario
+    assert 'hx-sync="this:replace"' in formulario
+    assert re.search(r'<button type="submit" class="btn" id="f-buscar">Buscar</button>', formulario)
+    assert formulario.index('id="f-q"') < formulario.index('id="f-buscar"')
+
+
+def test_hay_region_viva_estable_y_plantilla_del_aviso_de_fallo():
+    """#1120: la región `role=alert` existe vacía desde el principio (se anuncia al rellenarla) y el
+    aviso con «Reintentar» viene del servidor, sin duplicar el marcado en JavaScript."""
+    html = _index()
+    assert re.search(r'<div id="busqueda-fallo" role="alert" aria-atomic="true"></div>', html)
+    plantilla = html[html.index('<template id="busqueda-fallo-plantilla">'):html.index("</template>")]
+    assert "data-consulta" in plantilla and "data-reintentar" in plantilla
+    assert "los anteriores" in plantilla
+    assert 'role="' not in plantilla  # la región externa ya es la viva: sin alertas anidadas
+    assert html.index('id="busqueda-fallo"') < html.index('id="rejilla"')
+
+
+def test_busqueda_y_filtros_van_antes_que_las_acciones_auxiliares():
+    """UXA-08: a 320 px las acciones auxiliares encima de la barra (~400 px) dejaban la búsqueda bajo la
+    barra inferior. El orden del DOM es el de lectura y el del teclado: búsqueda, «Filtros», acciones, lista."""
+    html = _index()
+    orden = [html.index(marca) for marca in (
+        'id="f-q"', 'id="panel-filtros"', 'class="biblioteca-acciones"', 'id="rejilla"')]
+    assert orden == sorted(orden)
+    cabecera = html.split("</header>", 1)[0]
+    assert "biblioteca-accion" not in cabecera
+    assert 'aria-label="Más acciones de la biblioteca"' in html
+
+
+def test_el_panel_de_filtros_tiene_cierre_visible_en_la_barra_y_en_el_oob():
+    """UXA-08: «Cerrar filtros» va dentro de los campos, que el OOB de HTMX vuelve a pintar."""
+    for ruta in ("/ui/biblioteca", "/ui/biblioteca/resultados"):
+        html = _index(ruta)
+        assert html.count("data-cerrar-filtros") == 1, ruta
+        assert "Cerrar filtros" in html, ruta
+        # Dentro de los campos (no en la barra): el OOB sustituye ese contenedor entero.
+        assert html.index('id="filtros-campos"') < html.index("data-cerrar-filtros"), ruta
+        assert 'type="button" class="btn barra-panel-cerrar"' in html, ruta

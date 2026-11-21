@@ -55,7 +55,7 @@
   <div class="series-grid coleccion-series-grid">
     {% for s in coleccion.series %}
     <article class="series-card coleccion-serie-card">
-      <a class="coleccion-serie-card-enlace" href="/ui/series/{{ s.id }}?volver={{ ('/ui/colecciones/' ~ coleccion.id) | urlencode }}"
+      <a class="coleccion-serie-card-enlace" href="{{ url_serie(s.id) }}"
          aria-label="Abrir la serie {{ s.title }}">
         <div class="coleccion-serie-card-portada">{{ ui.portada(s.title, s.id, "/ui/series/" ~ s.id ~ "/portada", clase="portada-tarjeta", carga="lazy") }}</div>
         <span class="series-title">{{ s.title }}</span>
@@ -67,7 +67,7 @@
         <input type="hidden" name="pagina" value="{{ pagina.pagina if pagina else 1 }}">
         <input type="hidden" name="vista" value="{{ vista|default('lista') }}">
         {% for sid in seleccion|default([]) %}<input type="hidden" name="serie_ids" value="{{ sid }}">{% endfor %}
-        <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar de la colección</button>
+        <button class="btn ghost sm" type="submit" aria-label="Quitar de la colección: {{ s.title }}">Quitar de la colección</button>
       </form>
     </article>
     {% endfor %}
@@ -78,7 +78,7 @@
     <li class="coleccion-serie-fila">
       <div>
         <span class="chip-previa chip-previa-lista">
-          <a href="/ui/series/{{ s.id }}?volver={{ ('/ui/colecciones/' ~ coleccion.id) | urlencode }}"
+          <a href="{{ url_serie(s.id) }}"
              hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
              hx-target="#previa-m-{{ s.id }}" hx-swap="innerHTML"
              hx-trigger="mouseenter delay:150ms, focusin delay:150ms">{{ s.title }}</a>
@@ -96,7 +96,7 @@
         <input type="hidden" name="pagina" value="{{ pagina.pagina if pagina else 1 }}">
         <input type="hidden" name="vista" value="{{ vista|default('lista') }}">
         {% for sid in seleccion|default([]) %}<input type="hidden" name="serie_ids" value="{{ sid }}">{% endfor %}
-        <button class="btn ghost sm" type="submit" aria-label="Quitar {{ s.title }} de la colección">Quitar serie</button>
+        <button class="btn ghost sm" type="submit" aria-label="Quitar serie: {{ s.title }}">Quitar serie</button>
       </form>
     </li>
     {% endfor %}

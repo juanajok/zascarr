@@ -1,4 +1,8 @@
-{#- Contenido de la tarjeta de fin (LEC3 + LECUX2). Se pinta en el servidor; el JS solo la muestra al llegar al final. -#}
+{#- Contenido de la página de fin (LEC3 + LECUX2 + BL-LEC3 decisión D). Se pinta en el servidor; el
+    JS solo la muestra con intención de avanzar desde la última página. «Quedarme en esta página»
+    vive fuera de #fin-acciones (lector.html) para que los recambios HTMX no borren la vuelta.
+    Un solo principal por pantalla (D-LEC-8): «Leer el #K» o «Añadir a Deseados»; «Marcar como
+    leído» es explícito y neutro (D-LEC-2, FR-14). -#}
 {% if leido %}
 <p><strong>Guardado: Leído.</strong></p>
 <form method="post" action="/ui/leer/{{ archivo.id }}/leido"
@@ -10,20 +14,22 @@
 <form method="post" action="/ui/leer/{{ archivo.id }}/leido"
       hx-post="/ui/leer/{{ archivo.id }}/leido" hx-target="#fin-acciones" hx-swap="innerHTML">
   <input type="hidden" name="operacion" value="marcar">
-  <button type="submit" class="btn primary" data-lector-leido="false">Marcar como leído</button>
+  <button type="submit" class="btn" data-lector-leido="false">Marcar como leído</button>
 </form>
 {% endif %}
 {% if siguiente.estado == "leer" %}
 <p>Has terminado el #{{ numero.issue_number or "?" }}. Siguiente: <strong>#{{ siguiente.numero }}</strong>.</p>
-<p><a class="btn{% if not leido %} ghost{% endif %}" href="/ui/leer/{{ siguiente.archivo.id }}">Leer el #{{ siguiente.numero }}</a></p>
+<p><a class="btn primary" href="/ui/leer/{{ siguiente.archivo.id }}">Leer el #{{ siguiente.numero }}</a></p>
 {% elif siguiente.estado == "falta" %}
 <p>Te falta el <strong>#{{ siguiente.numero }}</strong> de <em>{{ serie.title }}</em>.</p>
 {% if legal_aceptado %}
-<form hx-post="/ui/leer/{{ archivo.id }}/deseo" hx-target="#fin-acciones" hx-swap="innerHTML">
-  <button type="submit" class="btn">Añadir a Deseados</button>
-</form>
+<div id="fin-deseo">
+  <form hx-post="/ui/leer/{{ archivo.id }}/deseo" hx-target="#fin-deseo" hx-swap="innerHTML">
+    <button type="submit" class="btn primary">Añadir a Deseados</button>
+  </form>
+</div>
 {% else %}
-<p><a class="btn" href="/ui/legal">Añadir a Deseados</a></p>
+<p><a class="btn primary" href="/ui/legal?volver=%2Fui%2Fleer%2F{{ archivo.id }}">Añadir a Deseados</a></p>
 <p class="caption">Antes tienes que leer y aceptar el aviso legal; después podrás pedirlo.</p>
 {% endif %}
 {% else %}

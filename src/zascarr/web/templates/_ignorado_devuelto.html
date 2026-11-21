@@ -1,0 +1,10 @@
+{#- #1123: recibo de «Volver a Por revisar» en la bandeja. Sustituye la fila en su sitio, recibe el foco y
+    actualiza el total y el menú. -#}
+<li id="ign-{{ f.id }}" class="pending-item pend-recibo" tabindex="-1" autofocus role="group"
+    aria-label="Archivo devuelto">
+  {% call ui.aviso("ok", viva=false) %}«{{ f.file_name }}»
+  {% if vuelve %}vuelve a <a href="/ui/pendientes">«Por revisar»</a>.{% else %}ya no está ignorado, pero no entra en «Por revisar»
+  porque no está sin clasificar.{% endif %}{% endcall %}
+  <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
+</li>
+<span id="ignorados-total" hx-swap-oob="true">{{ total_texto }}</span>

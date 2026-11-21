@@ -106,6 +106,7 @@ from zascarr.services.fandom import (
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 from zascarr.utils.peticiones import ErrorDePeticion
+from zascarr.utils.texto_html import texto_plano
 
 logger = structlog.get_logger()
 
@@ -852,7 +853,9 @@ class EnrichmentService:
         if id_field not in locked:
             setattr(series, id_field, match.source_id)
         if "description" not in locked and not series.description:
-            series.description = match.description
+            # F4a (#1186): la fuente entrega HTML; el campo es texto plano y la
+            # ficha no debe enseñar etiquetas. Vacío se guarda como NULL.
+            series.description = texto_plano(match.description) or None
         if "cover_url" not in locked and not series.cover_url:
             series.cover_url = match.cover_url
         if "total_issues" not in locked and not series.total_issues and match.count_of_issues:
@@ -1028,7 +1031,7 @@ class EnrichmentService:
             if "comic_vine_id" not in locked:
                 issue.comic_vine_id = match.cv_id
             if "synopsis" not in locked and not issue.synopsis:
-                issue.synopsis = match.description
+                issue.synopsis = texto_plano(match.description) or None
             if "cover_url" not in locked and not issue.cover_url:
                 issue.cover_url = match.image_url
             if "release_date" not in locked and issue.release_date is None:
@@ -1120,7 +1123,7 @@ class EnrichmentService:
             if "release_date" not in locked and issue.release_date is None and detalle.release_date:
                 issue.release_date = detalle.release_date
             if "synopsis" not in locked and not issue.synopsis and detalle.synopsis:
-                issue.synopsis = detalle.synopsis
+                issue.synopsis = texto_plano(detalle.synopsis) or None
             if "cover_url" not in locked and not issue.cover_url and detalle.cover_url:
                 issue.cover_url = detalle.cover_url
             if issue.metadata_source is None:

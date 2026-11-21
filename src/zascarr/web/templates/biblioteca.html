@@ -5,22 +5,6 @@
 <header class="biblioteca-cabecera">
   <h1>Biblioteca</h1>
   <p class="subtitle">Busca por título y acota el resto desde «Filtros».</p>
-  <div class="biblioteca-acciones">
-    {#- #1160: «Actualizar la biblioteca» es una acción más de la pantalla y va con las demás. El estado del
-        botón (deshabilitado mientras corre) llega fuera de banda con el bloque que se pide al cargar. -#}
-    <form class="biblioteca-actualizar-accion" hx-post="/ui/biblioteca/actualizar"
-          hx-target="#actualizar-estado" hx-swap="outerHTML">
-      <button id="actualizar-boton" type="submit" class="btn ghost sm biblioteca-accion"
-              aria-describedby="actualizar-garantia">Actualizar la biblioteca</button>
-    </form>
-    <a class="btn ghost sm biblioteca-accion" href="/ui/mejoras">Mejoras</a>
-    <a class="btn ghost sm biblioteca-accion" href="/ui/arcos">Sagas en orden</a>
-    <a class="btn ghost sm biblioteca-accion" href="/ui/biblioteca/comicinfo">Leer la información de mis archivos</a>
-  </div>
-  {#- Garantía, «Última vez · Próxima», «Qué mira» y los avisos: bajo la frase de entrada, fuera del
-      `if modo` (se ve en Gestión y en Escaparate). Se pide al cargar, como el bloque de Auditoría. -#}
-  <div id="actualizar-biblioteca" class="biblioteca-actualizar" hx-get="/ui/biblioteca/actualizar"
-       hx-trigger="load" hx-swap="outerHTML"></div>
 </header>
 
 <div class="modo-biblioteca">
@@ -28,18 +12,22 @@
   <a class="btn sm selector-modo{% if modo == 'escaparate' %} primary{% endif %}" href="/ui/biblioteca?modo=escaparate"{% if modo == 'escaparate' %} aria-current="page"{% endif %}>Escaparate</a>
 </div>
 {% if modo == "escaparate" %}
+{% include "_biblioteca_auxiliar.html" %}
 {% include "_escaparate.html" %}
 {% else %}
 <form id="filtros" class="barra-biblioteca" action="/ui/biblioteca" method="get"
       hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML"
-      hx-trigger="change, submit">
+      hx-trigger="change, submit" hx-sync="this:replace">
   <input type="hidden" id="f-vista" name="vista" value="{{ filtros.vista }}">
   <input type="hidden" id="f-densidad" name="densidad" value="{{ densidad }}">
   <input type="hidden" id="f-modo" name="modo" value="{{ modo }}">
   <div class="barra-busqueda">
     <label class="sr" for="f-q">Buscar por título</label>
-    {% set valor = filtros.q %}{% set oob = false %}{% set foco = false %}
-    {% include "_campo_q.html" %}
+    <div class="busqueda-campo">
+      {% set valor = filtros.q %}{% set oob = false %}{% set foco = false %}
+      {% include "_campo_q.html" %}
+      <button type="submit" class="btn" id="f-buscar">Buscar</button>
+    </div>
   </div>
 
   <div class="barra-acciones">
@@ -66,7 +54,23 @@
   </div>
 </form>
 
+{#- UXA-08: búsqueda y filtros van antes que las acciones auxiliares (orden de lectura y de teclado). -#}
+{% include "_biblioteca_auxiliar.html" %}
+
+{#- #1120: región viva estable; `biblioteca-filtros.js` clona aquí el aviso cuando falla una petición
+    que actualiza la rejilla (red caída o 4xx/5xx) y deja a la vista la lista anterior. -#}
+<div id="busqueda-fallo" role="alert" aria-atomic="true"></div>
+<template id="busqueda-fallo-plantilla">
+  {% call ui.aviso("warn", viva=false) %}<span>No se pudo aplicar la búsqueda<span data-consulta></span>. Los resultados de abajo son los anteriores.</span>
+  <button type="button" class="btn" data-reintentar>Reintentar</button>{% endcall %}
+</template>
+<div id="anuncio-favorito" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
+<span class="sr" id="rejilla-titulo">Resultados de la biblioteca</span>
+{% if foco_ausente|default(false) %}
+<div id="rejilla" tabindex="-1" autofocus role="region" aria-labelledby="rejilla-titulo">
+{% else %}
 <div id="rejilla">
+{% endif %}
   {% include "_rejilla_biblioteca.html" %}
 </div>
 {% include "_visor_portada.html" %}

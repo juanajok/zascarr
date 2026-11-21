@@ -390,7 +390,7 @@ class TestUnaCuentaQueCuadra:
                             desglose=d))
         assert texto(html, "subtitle") == (
             "Tienes 10 tebeos registrados: 4 clasificados, 3 por revisar, "
-            "2 con serie pero sin número y 1 descartado.")
+            "2 con serie pero sin número y 1 ignorado.")
 
     def test_una_sola_parte_dice_todos(self):
         html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=5, sin_clasificar=5))

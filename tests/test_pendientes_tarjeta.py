@@ -212,12 +212,11 @@ def test_la_lista_es_una_lista_y_el_vacio_usa_el_componente_del_sistema(monkeypa
     assert vacia.status_code == 200 and 'class="empty-state"' in vacia.text
 
 
-def test_ignorar_deja_el_recuento_fuera_de_la_fila_que_se_borra():
-    """El OOB delete retira el <li>; los disparadores del menú/rango no pueden
-    vivir dentro de él o se borrarían con la fila."""
-    plantilla = (Path(__file__).resolve().parents[1] / "src" / "zascarr" /
-                 "web" / "templates" / "_tarjeta_pendiente.html").read_text("utf-8")
-    assert 'hx-target="#pend-recontar" hx-swap="innerHTML"' in plantilla
-    pagina = (Path(__file__).resolve().parents[1] / "src" / "zascarr" /
-              "web" / "templates" / "pendientes.html").read_text("utf-8")
+def test_ignorar_deja_el_recuento_fuera_de_la_fila_que_se_sustituye():
+    """El recibo sustituye al <li> por OOB; los disparadores del menú/rango no pueden vivir dentro de él
+    o se perderían con la fila. #1123: el botón que confirma vive ahora en su propio parcial."""
+    web = Path(__file__).resolve().parents[1] / "src" / "zascarr" / "web" / "templates"
+    confirmar = (web / "_ignorar_confirmar.html").read_text("utf-8")
+    assert 'hx-target="#pend-recontar" hx-swap="innerHTML"' in confirmar
+    pagina = (web / "pendientes.html").read_text("utf-8")
     assert 'id="pend-recontar"' in pagina

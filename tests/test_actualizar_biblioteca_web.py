@@ -52,14 +52,19 @@ def _terminado(**campos):
 
 
 def test_biblioteca_pide_el_bloque_al_cargar_y_fuera_del_modo():
-    """La franja va en Gestión y en Escaparate: el marcador está antes del `if modo` de la plantilla."""
+    """La franja va en Gestión y en Escaparate: el parcial se incluye en las dos ramas del `if modo`."""
     from pathlib import Path
 
     from tests.test_biblioteca_barra import _index
     html = _index("/ui/biblioteca")
     assert 'hx-get="/ui/biblioteca/actualizar"' in html and 'hx-trigger="load"' in html
-    fuente = (Path(web.__file__).parent / "templates" / "biblioteca.html").read_text(encoding="utf-8")
-    assert fuente.index("/ui/biblioteca/actualizar") < fuente.index('{% if modo == "escaparate" %}')
+    plantillas = Path(web.__file__).parent / "templates"
+    assert 'hx-get="/ui/biblioteca/actualizar"' in (plantillas / "_biblioteca_auxiliar.html").read_text(encoding="utf-8")
+    fuente = (plantillas / "biblioteca.html").read_text(encoding="utf-8")
+    incluye = '{% include "_biblioteca_auxiliar.html" %}'
+    assert fuente.count(incluye) == 2
+    rama_escaparate = fuente.split('{% if modo == "escaparate" %}', 1)[1].split("{% else %}", 1)[0]
+    assert incluye in rama_escaparate
 
 
 def test_en_reposo_boton_neutro_garantia_y_lineas():
@@ -303,7 +308,7 @@ def test_el_foco_lo_recibe_la_region_estable_y_el_sondeo_solo_cambia_su_contenid
     html = _get().text
     assert 'hx-target="#actualizar-estado" hx-swap="innerHTML"' in html          # sondeo: solo el interior
     from tests.test_biblioteca_barra import _index
-    pagina = _index("/ui/biblioteca")                                            # el formulario, en la cabecera
+    pagina = _index("/ui/biblioteca")                                            # el formulario, con las acciones
     assert 'hx-target="#actualizar-estado" hx-swap="outerHTML"' in pagina       # formulario: la región, una vez
 
 

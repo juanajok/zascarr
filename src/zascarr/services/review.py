@@ -381,3 +381,35 @@ class ReviewService:
             raise ValueError("Archivo no encontrado")
         file.review_dismissed = True
         await self.db.flush()
+
+    async def restore(self, file_id) -> bool:
+        """#1123: devuelve un archivo ignorado a «Por revisar». Solo revierte `review_dismissed`:
+        ni la ruta, ni el archivo, ni sus metadatos. Idempotente. Devuelve si vuelve a la cola (la
+        cola exige además `match_status = unsorted`; con número ya no es un pendiente)."""
+        file = await self.db.get(File, file_id)
+        if not file:
+            raise ValueError("Archivo no encontrado")
+        if file.issue_id is None:
+            file.review_dismissed = False
+            await self.db.flush()
+        return (file.issue_id is None
+                and (file.metadata_ or {}).get("match_status") == "unsorted")
+
+    @staticmethod
+    def _condiciones_ignorados() -> tuple:
+        """Lo que cuenta Inicio como «ignorado» y lista la bandeja: un filtro, para que cuadren."""
+        return (File.is_missing.is_(False), File.issue_id.is_(None),
+                File.review_dismissed.is_(True))
+
+    async def contar_ignorados(self) -> int:
+        total = (await self.db.execute(
+            select(func.count()).select_from(File).where(*self._condiciones_ignorados()))
+        ).scalar_one()
+        return int(total or 0)
+
+    async def listar_ignorados(self, *, desde: int = 0, limite: int = 50) -> list[File]:
+        """Página de ignorados, en orden estable (nombre, id): paginar no repite ni omite."""
+        filas = await self.db.execute(
+            select(File).where(*self._condiciones_ignorados())
+            .order_by(File.file_name, File.id).offset(desde).limit(limite))
+        return list(filas.scalars().all())

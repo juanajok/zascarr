@@ -1,0 +1,7 @@
+{#- #1123: recibo de «Ignorar». Sustituye a la fila EN SU SITIO (la posición no salta) y recibe el foco; el
+    recuento y el menú se refrescan con los disparadores de `RECONTAR_MENU`. -#}
+<li id="item-{{ f.id }}" class="pending-item pend-recibo" hx-swap-oob="true" tabindex="-1" autofocus
+    role="group" aria-label="Archivo ignorado">
+  {% call ui.aviso("ok", viva=false) %}Ignorado: «{{ f.file_name }}». Ya no sale en «Por revisar»; el archivo sigue donde estaba.
+  <a href="/ui/pendientes/ignorados">Ver ignorados</a>{% endcall %}
+</li>

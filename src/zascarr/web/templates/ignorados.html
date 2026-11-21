@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Ignorados — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="/ui/pendientes">← Volver a «Por revisar»</a></p>
+<h1>Ignorados</h1>
+{% if error %}
+<p class="caption" role="alert">No se pudieron leer los ignorados. Vuelve a intentarlo en unos segundos.</p>
+<p><a class="btn ghost" href="/ui/pendientes/ignorados">Reintentar</a></p>
+{% else %}
+<p class="subtitle">Archivos que ocultaste de «Por revisar». Siguen en tu disco, sin tocar: devuélvelos si fue un error.</p>
+{% if not archivos %}
+{{ ui.estado_vacio("No hay archivos ignorados", "Lo que ignores en «Por revisar» aparecerá aquí.") }}
+{% else %}
+<p class="pend-rango">Ignorados {{ desde }}–{{ hasta }} de <span id="ignorados-total">{{ total_texto }}</span>.</p>
+<ul class="pending-grid" role="list">
+  {% for c in archivos %}
+  <li id="ign-{{ c.file.id }}" class="pending-item">
+    <article class="pending-card" aria-labelledby="ign-nombre-{{ c.file.id }}">
+      <div class="pending-body">
+        <h2 class="filename" id="ign-nombre-{{ c.file.id }}">{{ c.file.file_name }}</h2>
+        <div class="detected">{{ c.formato }} · Carpeta: {{ c.carpeta }}</div>
+        <button type="button" class="btn ghost"
+                hx-post="/ui/pendientes/{{ c.file.id }}/restaurar"
+                hx-target="#ign-{{ c.file.id }}" hx-swap="outerHTML" hx-disable="this">
+          Volver a «Por revisar»<span class="sr">: «{{ c.file.file_name }}»</span>
+        </button>
+      </div>
+    </article>
+  </li>
+  {% endfor %}
+</ul>
+{% if anterior or siguiente %}
+<nav class="pend-paginas" aria-label="Páginas de ignorados">
+  {% if anterior %}<a rel="prev" href="{{ anterior }}">← Anteriores</a>{% endif %}
+  {% if siguiente %}<a rel="next" href="{{ siguiente }}">Siguientes →</a>{% endif %}
+</nav>
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

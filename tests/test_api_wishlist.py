@@ -99,6 +99,9 @@ class TestAddToWishlistM1:
             r = client.post("/api/wishlist", json={"series_id": str(uuid4())})
         assert r.status_code == 403
         assert r.json()["detail"] == "legal_acknowledgment_required"
+        # AC-09/AC-12 (UATP-01): la API no redirige y la respuesta no se cachea.
+        assert "location" not in r.headers
+        assert r.headers["cache-control"] == "no-store"
 
 
 class TestUpdateWishlistM1:

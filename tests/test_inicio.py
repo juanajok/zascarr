@@ -227,7 +227,9 @@ class TestDesglose:
 
     def test_singular(self):
         d = inicio.Desglose(total=2, clasificados=1, descartados=1)
-        assert [t for _, t, _ in d.partes] == ["clasificado", "descartado"]
+        assert [t for _, t, _ in d.partes] == ["clasificado", "ignorado"]
+        # #1123: el recuento enlaza a la bandeja.
+        assert d.partes[-1][2] == "/ui/pendientes/ignorados"
 
     @pytest.mark.asyncio
     async def test_una_sola_consulta_con_el_filtro_de_por_revisar(self):

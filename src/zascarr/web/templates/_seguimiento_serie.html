@@ -12,10 +12,14 @@
   {% endif %}
   {% if activacion_bloqueada_por_aviso %}
   {{ ui.aviso("warn", "Falta aceptar el aviso legal: el seguimiento no se ha activado. Desactivar siempre se puede.") }}
-  <p><a href="/ui/legal">Aceptar el aviso legal</a></p>
+  {% set destino_aviso = "/ui/series/" ~ series.id %}
+  {% if volver %}{% set destino_aviso = destino_aviso ~ "?volver=" ~ (volver | urlencode) %}{% endif %}
+  <p><a href="/ui/legal?volver={{ destino_aviso | urlencode }}">Aceptar el aviso legal</a></p>
   {% endif %}
   <form hx-post="/ui/series/{{ series.id }}/seguimiento"
         hx-target="#seguimiento-serie" hx-swap="outerHTML">
+    {# El POST re-renderiza el parcial: sin `volver`, el enlace al aviso perdería la ficha. #}
+    <input type="hidden" name="volver" value="{{ volver or '' }}">
     <label class="legal-checkbox">
       <input type="checkbox" name="follow_new_issues" value="true"
              {% if series.follow_new_issues %}checked{% endif %}>

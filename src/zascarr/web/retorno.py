@@ -1,63 +1,148 @@
-"""Contexto de retorno Biblioteca → ficha → Biblioteca (BL-IT03, #286).
+"""Contexto de retorno Biblioteca / Colección → ficha (BL-IT03 #286, UATP-02).
 
 La URL es la única fuente de contexto: la tarjeta lleva `volver` con la URL
-canónica de la Biblioteca y el ancla de la serie. La ficha valida ese valor y
-solo lo usa si es una ruta local de `/ui/biblioteca` con parámetros conocidos.
+canónica de la Biblioteca (o de la Colección) y el ancla de la serie. La ficha
+valida ese valor y solo lo usa si es un destino local con estado canónico.
 No hay historial paralelo, estado global, redirección externa ni JavaScript.
 """
 from __future__ import annotations
 
 import re
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qsl, quote, urlsplit
 from uuid import UUID
 
-#: Parámetros que la URL de retorno puede llevar. Son los de la Biblioteca;
-#: cualquier otro se rechaza en vez de reenviarlo a ciegas.
-PARAMETROS_DE_VUELTA = frozenset({
-    "q", "tradition", "publisher_id", "character_id", "story_arc_id", "page",
-    "vista",
-})
+#: Tope de longitud del `volver` ya codificado: una `q` canónica de 200
+#: caracteres no latinos puede superar 2000 al ir dentro de la query.
+MAX_VOLVER = 4096
 
-_ANCLA_DE_SERIE = re.compile(r"^serie-[0-9a-fA-F-]{36}$")
-_RUTA_DE_COLECCION = re.compile(
-    r"^/ui/colecciones/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+_UUID = (r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+         r"[0-9a-f]{4}-[0-9a-f]{12}")
+_ANCLA_DE_SERIE = re.compile(rf"^serie-({_UUID})$")
+_RUTA_DE_COLECCION = re.compile(rf"^/ui/colecciones/({_UUID})$")
 
 
 def url_de_ficha(series_id: UUID | str, url_biblioteca: str) -> str:
-    """URL de la ficha que recuerda de dónde vino, con ancla para enfocar la tarjeta."""
-    destino = f"{url_biblioteca}#serie-{series_id}"
-    return f"/ui/series/{series_id}?volver={quote(destino, safe='')}"
+    """URL de la ficha con el destino canónico, `foco` y el ancla de su tarjeta."""
+    sid = str(UUID(str(series_id)))
+    separador = "&" if "?" in url_biblioteca else "?"
+    destino = f"{url_biblioteca}{separador}foco={sid}#serie-{sid}"
+    return f"/ui/series/{sid}?volver={quote(destino, safe='')}"
+
+
+def _controles(valor: str) -> bool:
+    return any(ord(caracter) < 32 or ord(caracter) == 127 for caracter in valor)
+
+
+def _pares(query: str) -> list[tuple[str, str]] | None:
+    try:
+        pares = parse_qsl(query, keep_blank_values=True)
+    except ValueError:
+        return None
+    nombres = [nombre for nombre, _ in pares]
+    if len(set(nombres)) != len(nombres) or any(not nombre for nombre in nombres):
+        return None
+    if any(_controles(valor) for _, valor in pares):
+        return None
+    return pares
+
+
+def _foco_valido(foco: str, fragmento: str | None, series_id: UUID | str | None) -> bool:
+    try:
+        if str(UUID(foco)) != foco:
+            return False
+    except (ValueError, TypeError):
+        return False
+    if fragmento is not None:
+        ancla = _ANCLA_DE_SERIE.fullmatch(fragmento)
+        if ancla is None or ancla.group(1) != foco:
+            return False
+    return series_id is None or str(series_id) == foco
+
+
+def _biblioteca(valor: str, partes, series_id: UUID | str | None) -> str | None:
+    from zascarr.web.library import consulta_canonica_de_biblioteca
+
+    fragmento = partes.fragment or None
+    if fragmento is not None and _ANCLA_DE_SERIE.fullmatch(fragmento) is None:
+        return None
+    if _controles(partes.query):
+        return None
+    pares = _pares(partes.query)
+    if pares is None:
+        return None
+    if "#" in valor and fragmento is None:
+        return None
+    foco = None
+    query_estado = partes.query
+    if any(nombre == "foco" for nombre, _ in pares):
+        if [nombre for nombre, _ in pares].count("foco") != 1 or pares[-1][0] != "foco":
+            return None
+        foco = pares[-1][1]
+        if not _foco_valido(foco, fragmento, series_id):
+            return None
+        sufijo = f"foco={foco}"
+        if partes.query == sufijo:
+            query_estado = ""
+        elif partes.query.endswith("&" + sufijo):
+            query_estado = partes.query[:-len(sufijo) - 1]
+        else:
+            return None
+    if query_estado:
+        if consulta_canonica_de_biblioteca(query_estado) != query_estado:
+            return None
+    elif "?" in valor and not (foco is not None and partes.query == f"foco={foco}"):
+        # `/ui/biblioteca` (sin `?`) es la forma por defecto; `?` vacío no.
+        return None
+    if (fragmento is not None and series_id is not None
+            and fragmento != f"serie-{series_id}"):
+        return None
+    return valor
+
+
+def _coleccion(valor: str, partes, coleccion_id: str) -> str | None:
+    from zascarr.web.colecciones import consulta_canonica_de_coleccion
+
+    if "#" in valor:
+        return None
+    if "?" not in valor:
+        return valor
+    if not partes.query:
+        return None
+    if consulta_canonica_de_coleccion(coleccion_id, partes.query) != partes.query:
+        return None
+    return valor
 
 
 def volver_segura(valor: str | None, series_id: UUID | str | None = None) -> str | None:
-    """La URL de vuelta si es local y tiene el contrato esperado; si no, `None`.
+    """La URL de vuelta si es local y canónica; `None` en cualquier otro caso.
 
-    Se rechazan URLs absolutas, esquemas (`javascript:`, `https:`), rutas ajenas,
-    parámetros desconocidos y anclas que no sean `serie-<uuid>`. Si se pasa
-    `series_id`, el ancla debe ser la de ESA ficha: un ancla de otra serie no
-    aterrizaría en ninguna tarjeta y se descarta. No se normaliza ni se reescribe
-    el valor: se devuelve tal cual para que la Biblioteca aplique su propia
-    validación al abrirlo.
+    No repara ni normaliza: rechaza `//`, `%` en la ruta, controles, espacios,
+    barra invertida, `..`, query no canónica, `foco` incoherente, ancla ajena,
+    fragmento en Colección y banderas de un solo uso. Mantiene ancla y el
+    estado de Biblioteca/Colección.
     """
-    if not valor or len(valor) > 2000:
+    if not valor or len(valor) > MAX_VOLVER:
         return None
-    if any(ord(caracter) < 32 or ord(caracter) == 127 for caracter in valor):
+    if not valor.startswith("/") or valor.startswith("//"):
         return None
-    partes = urlsplit(valor)
+    if any(caracter.isspace() or caracter == "\\"
+           for caracter in valor):
+        return None
+    if _controles(valor):
+        return None
+    try:
+        partes = urlsplit(valor)
+    except ValueError:
+        return None
     if partes.scheme or partes.netloc:
         return None
-    if _RUTA_DE_COLECCION.fullmatch(partes.path):
-        # Colección → serie: solo la ficha de la colección, sin query ni ancla.
-        return valor if not partes.query and not partes.fragment else None
-    if partes.path != "/ui/biblioteca":
+    ruta = partes.path
+    if ("%" in ruta or "//" in ruta or ".." in ruta.split("/")
+            or "." in ruta.split("/")):
         return None
-    if partes.fragment:
-        if not _ANCLA_DE_SERIE.fullmatch(partes.fragment):
-            return None
-        if series_id is not None and partes.fragment != f"serie-{series_id}":
-            return None
-    parametros = parse_qs(partes.query, keep_blank_values=True)
-    if set(parametros) - PARAMETROS_DE_VUELTA:
-        return None
-    return valor
+    if partes.path == "/ui/biblioteca":
+        return _biblioteca(valor, partes, series_id)
+    coleccion = _RUTA_DE_COLECCION.fullmatch(partes.path)
+    if coleccion is not None:
+        return _coleccion(valor, partes, coleccion.group(1))
+    return None
