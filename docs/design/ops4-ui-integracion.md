@@ -37,9 +37,9 @@ lenguaje llano de la pantalla. No hay JavaScript nuevo.
 
 ## Límites
 
-- El auxiliar y las unidades ya están en la rama, pero **no instalados**; habilitar
-  la UI contra un host sin ese servicio devolverá «no disponible». No se ha
-  probado en la VM con el auxiliar real.
+- El auxiliar y las unidades ya están en la rama; el circuito auxiliar→unidad
+  se validó en la VM con un `update.sh` falso, pero **la UI end-to-end no**. El
+  formulario no se probó contra el socket real y la bandera sigue apagada.
 - Falta provisionar la clave/directorio, instalar la unidad endurecida y
   revisar SecOps del SHA final.
 - La sesión y el origen siguen protegidos por el middleware existente; no se

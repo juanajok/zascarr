@@ -45,6 +45,31 @@ si el cerrojo, el registro o el inicio no se pueden acreditar.
   auxiliar no se importa desde web/API/main ni desde el auxiliar existente.
 - **915 pruebas OPS4/paridad** y suite completa **8905 passed / 2431 skipped / 0 failed** verdes.
 
+## Integración real en la VM (2026-11-21)
+
+Se preparó un overlay desechable sobre `lab-debian-02`, sin NIC, con un
+directorio 9p de solo lectura y un `update.sh` **falso** que solo escribía
+`/var/lib/zascarr/update-marker`. No se usó el actualizador real, Docker
+operativo, la Pi ni datos reales.
+
+Dentro del invitado se instalaron la clave `0440`, los directorios
+`ops4/consumidos` `0700`, el socket, el auxiliar y las unidades. El socket
+quedó `LISTEN` en `/var/lib/zascarr/ops/actualizar.sock`. Un cliente Python
+envió una petición v4 construida en el anfitrión:
+
+- Respuesta: `{"v":4,"id":"a"×32,"resultado":"aceptada","codigo":"aceptada"}`.
+- La unidad fija arrancó el `update.sh` falso: `Result=success`,
+  `ExecMainStatus=0`, `ActiveState=inactive`, `SubState=dead`.
+- El marcador `update-marker` existió.
+- La segunda petición idéntica fue rechazada como `repetida`.
+- QEMU terminó limpiamente con código 0.
+
+Esto acredita el circuito **socket → auxiliar → testigo/consumo → systemd →
+unidad fija** con un script inocuo. **No** acredita el `update.sh` real, la
+UI end-to-end (la petición se construyó fuera del formulario), Docker,
+PostgreSQL, copias, migraciones, la Pi ni la revisión SecOps. La evidencia
+privada está en `unidad-ops4/run-01`; no contiene secretos de producción.
+
 ## Límites
 
 - **No hay instalador de estas unidades todavía**; no se han copiado a
