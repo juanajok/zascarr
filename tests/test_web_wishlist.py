@@ -688,3 +688,63 @@ def test_buscar_ahora_no_accede_a_relaciones_sin_precargar(monkeypatch):
         r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
     assert r.status_code == 200
     assert "Resultados encontrados" in r.text
+
+
+class TestConsultaEnLaUrl:
+    """UATP-01b (#1199): la consulta de búsqueda viaja en `?q=`."""
+
+    def _pagina(self, monkeypatch, q, series=()):
+        monkeypatch.setattr(
+            "zascarr.web.wishlist.WishlistService.search_series",
+            AsyncMock(return_value=list(series)))
+        cola = [FakeExecResult([]), _accepted()]
+        with use_fake_session(FakeSession(exec_queue=cola)) as client:
+            return client.get("/ui/wishlist", params={"q": q} if q is not None else None)
+
+    def test_q_rellena_el_campo_y_pinta_los_resultados_sin_js(self, monkeypatch):
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN, start_year=2011)
+        r = self._pagina(monkeypatch, "bat", [serie])
+        assert r.status_code == 200
+        assert 'id="q-deseados" value="bat"' in r.text
+        assert re.search(r'id="resultados-wishlist" class="series-results">\s*<ul', r.text)
+        assert "Batman" in r.text
+
+    def test_q_sin_coincidencias_lo_dice(self, monkeypatch):
+        r = self._pagina(monkeypatch, "zzz")
+        assert "Sin coincidencias" in r.text
+
+    @pytest.mark.parametrize("q", [None, "", "   "])
+    def test_sin_consulta_es_la_pagina_de_siempre(self, monkeypatch, q):
+        r = self._pagina(monkeypatch, q)
+        assert r.status_code == 200
+        assert 'id="resultados-wishlist" class="series-results"></div>' in r.text
+        assert "Sin coincidencias" not in r.text
+
+    def test_q_de_201_caracteres_se_ignora(self, monkeypatch):
+        r = self._pagina(monkeypatch, "x" * 201)
+        assert r.status_code == 200
+        assert "x" * 201 not in r.text
+        assert "Sin coincidencias" not in r.text
+
+    def test_q_con_html_se_escapa(self, monkeypatch):
+        r = self._pagina(monkeypatch, '"><script>alert(1)</script>')
+        assert "<script>alert(1)" not in r.text
+        assert "&lt;script&gt;" in r.text
+
+    def test_el_aviso_legal_pendiente_vuelve_con_la_consulta(self, monkeypatch):
+        monkeypatch.setattr(
+            "zascarr.web.wishlist.WishlistService.search_series", AsyncMock(return_value=[]))
+        with use_fake_session(
+                FakeSession(exec_queue=[FakeExecResult([]), FakeExecResult([])])) as client:
+            r = client.get("/ui/wishlist", params={"q": "bat man"})
+        assert 'href="/ui/legal?volver=%2Fui%2Fwishlist%3Fq%3Dbat%2Bman"' in r.text
+
+    def test_buscar_serie_actualiza_la_url_de_la_pagina(self):
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([])])) as client:
+            r = client.get("/ui/wishlist/buscar-serie", params={"q": "bat man"})
+        assert r.headers["HX-Replace-Url"] == "/ui/wishlist?q=bat+man"
+
+    def test_buscar_serie_vacia_deja_la_url_limpia(self):
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([])])) as client:
+            r = client.get("/ui/wishlist/buscar-serie", params={"q": " "})
+        assert r.headers["HX-Replace-Url"] == "/ui/wishlist"

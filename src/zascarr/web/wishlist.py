@@ -9,6 +9,7 @@ no aquí, mismo patrón que pendientes.py/ReviewService (B2).
 """
 from __future__ import annotations
 
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -35,6 +36,8 @@ from zascarr.web.routes import crear_templates
 templates = crear_templates()
 
 router = APIRouter(prefix="/ui/wishlist", tags=["ui"])
+
+_MAX_CONSULTA = 200
 
 _ESTADO_LABEL = {
     # «Buscando…» solo mientras se busca de verdad: un deseo que espera al ciclo (o al aviso legal,
@@ -91,7 +94,12 @@ async def _get_row(db: AsyncSession, item_id) -> dict:
 
 
 @router.get("", response_class=HTMLResponse)
-async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def index(
+    request: Request, q: str = "", db: AsyncSession = Depends(get_db)
+) -> HTMLResponse:
+    # UATP-01b (#1199): la consulta viaja en la URL para recuperarla al volver (p. ej. tras
+    # el aviso legal). Más de 200 caracteres se ignora, igual que el retorno legal.
+    consulta = q.strip() if len(q) <= _MAX_CONSULTA else ""
     items = list((await db.execute(
         select(Wishlist)
         # D8: los items que la política retiró no son deseos activos, pero
@@ -113,8 +121,14 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
     en_descarga = sum(
         1 for r in rows
         if r["item"].status in (WishlistStatus.DOWNLOADING, WishlistStatus.DOWNLOADED))
+    series_list = await WishlistService(db).search_series(consulta) if consulta else None
     return templates.TemplateResponse(
         request, "wishlist.html", {
+            "consulta": consulta,
+            "volver_legal": quote(
+                "/ui/wishlist?" + urlencode({"q": consulta}) if consulta else "/ui/wishlist",
+                safe=""),
+            "series_list": series_list,
             "rows": rows,
             "total": len(rows),
             "en_descarga": en_descarga,
@@ -129,9 +143,16 @@ async def buscar_serie(
     request: Request, q: str = "", db: AsyncSession = Depends(get_db)
 ) -> HTMLResponse:
     series_list = await WishlistService(db).search_series(q)
-    return templates.TemplateResponse(
+    respuesta = templates.TemplateResponse(
         request, "_resultados_series_wishlist.html", {"series_list": series_list}
     )
+    # Reemplaza (no apila) la URL de la página con la consulta: recargar, un enlace y el
+    # retorno del aviso legal la conservan sin llenar el historial de una entrada por tecla.
+    consulta = q.strip()
+    respuesta.headers["HX-Replace-Url"] = (
+        "/ui/wishlist?" + urlencode({"q": consulta})
+        if consulta and len(q) <= _MAX_CONSULTA else "/ui/wishlist")
+    return respuesta
 
 
 @router.post(

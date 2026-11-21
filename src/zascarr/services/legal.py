@@ -87,8 +87,8 @@ _MAX_RETORNO_LEGAL = 2000
 #: No se reutiliza `PARAMETROS_DE_QUERY` (tests/test_log_acceso.py): es el
 #: inventario del registro de acceso, no el contrato de este retorno.
 _RETORNOS_LEGALES: tuple[tuple[re.Pattern[str], frozenset[str]], ...] = (
-    # Deseados: hoy la búsqueda vive en el DOM, no en la URL (`index` no lee `q`).
-    (re.compile(r"/ui/wishlist"), frozenset()),
+    # Deseados: la consulta de búsqueda viaja en `q` (UATP-01b, #1199).
+    (re.compile(r"/ui/wishlist"), frozenset({"q"})),
     # Descubrir: ahí se renderiza el «Añadir a deseados» del alta.
     (re.compile(r"/ui/descubrir"), frozenset({"q"})),
     (re.compile(r"/ui/descubrir/identificador"), frozenset({"identificador"})),

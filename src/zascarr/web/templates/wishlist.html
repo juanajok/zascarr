@@ -18,13 +18,13 @@
 
 {% if aviso_legal_pendiente %}
 {% call ui.aviso("warn") %}<strong>Aviso legal pendiente.</strong> Las búsquedas automáticas están en
-  pausa hasta que lo aceptes. <a href="/ui/legal?volver=%2Fui%2Fwishlist">Aceptarlo ahora</a>.{% endcall %}
+  pausa hasta que lo aceptes. <a href="/ui/legal?volver={{ volver_legal }}">Aceptarlo ahora</a>.{% endcall %}
 {% endif %}
 {{ legal_disclaimer("wishlist") }}
 
 <label class="sr" for="q-deseados">Buscar serie para añadir a Deseados</label>
 <input type="search" class="series-search" placeholder="Buscar serie para añadir…"
-       name="q" id="q-deseados"
+       name="q" id="q-deseados" value="{{ consulta }}"
        hx-get="/ui/wishlist/buscar-serie"
        hx-trigger="input changed delay:400ms, search"
        hx-target="#resultados-wishlist"
@@ -32,7 +32,7 @@
        hx-indicator="#buscando-series">
 <span class="htmx-indicator caption" id="buscando-series"
       role="status" aria-live="polite">Buscando series…</span>
-<div id="resultados-wishlist" class="series-results"></div>
+<div id="resultados-wishlist" class="series-results">{% if series_list is not none %}{% include "_resultados_series_wishlist.html" %}{% endif %}</div>
 
 {% if en_descarga %}
 <div id="wishlist-progreso" hx-get="/ui/wishlist/progreso" hx-trigger="load, every 30s"
