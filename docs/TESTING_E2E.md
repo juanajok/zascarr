@@ -1045,3 +1045,177 @@ base de datos** a la vez (la serie sembrada en v2 desaparece, la de v1 persiste)
 `rollback.sh` imprime la revisión de Alembic y el recuento `series/files/wishlist`
 de la BD restaurada. Cualquier `exit != 0` se registra con el log
 `$UT/backups/rollback_<TS>.log` y la copia de seguridad correspondiente.
+
+---
+
+## 17. Recuperación UATP-06/07 (A6): copia de archivos manual y reapertura
+
+> **Decisión D-1: la copia de archivos es un paso manual documentado, NO una función de ZascArr.**
+> `backup.sh` sigue copiando solo PostgreSQL y **no** se añade herramienta de copia/restauración de
+> archivos ni de portadas (el contenedor es de solo lectura para la app y la biblioteca puede ser de
+> cientos de GB). Lo que se acredita aquí es el procedimiento del host y su evidencia en
+> `docs/uat/A6/resultado.md` y `docs/uat/A6/evidencia/resultado.txt` (D-4), saneada según §7.6 de
+> `docs/design/uatp06-07-recuperacion.md`: **sin rutas, hostnames, IPs, usuarios, nombres reales ni
+> secretos**.
+>
+> Este bloque se ejecuta en **E-A6**, una instalación aislada de la candidata (proyecto Compose,
+> puerto y volúmenes distintos), con `auth_mode=password`. La instalación real no se toca
+> (`R-11` de la spec). Si el proyecto no se llama `zascarr`, exporta
+> `ZASCARR_PRUEBAS=1 PROYECTO_PRODUCCION=<nombre>` (FR-17.f de BL-OPS2).
+
+### 17.1 Lo que ya está en la candidata (comprobación previa)
+
+| Pieza | Dónde | Comprobación |
+|---|---|---|
+| `version_de_la_copia = {head, build_sha, app_version, alembic}` en el manifiesto | `scripts/_comun.sh::escribir_manifiesto` | `jq .version_de_la_copia "$BACKUP_DIR"/MANIFIESTO-backup_<TS>.json`; `null` = «no consta», nunca se infiere |
+| `intento`, `comprobacion`, `copia_version` en `ops-restaurar.json` | `scripts/restaurar_datos.sh::estado_restaurar` | `jq '{intento, comprobacion, copia_version}' "$BACKUP_STATUS_DIR/ops-restaurar.json"` |
+| Registro por intento `ops-restaurar-intentos.jsonl` (máx. 20, `0644`) | `scripts/restaurar_datos.sh::registrar_intento_jsonl` | `tail -n 1 "$BACKUP_STATUS_DIR/ops-restaurar-intentos.jsonl"` |
+| Preflight con tabla `issues` (D-6/FR-17(d)) | `scripts/restaurar_datos.sh` (bucle de tablas) | un dump sin `issues` se rechaza antes de todo contenedor |
+| FR-17(d): relee HEAD/árbol al final de `--produccion` | `scripts/restaurar_datos.sh::ejecutar_produccion` (paso 9 bis) | si el código cambió, `fallida`/`unexpected`/`base_en_su_sitio:true` y no se declara terminada |
+
+```bash
+cd "$ROOT/zascarr"
+bash -n scripts/_comun.sh && bash -n scripts/restaurar_datos.sh
+pytest -q tests/test_restaurar_produccion.py tests/test_backup_script.py \
+  tests/test_version_copia.py tests/test_restaurar_datos.py tests/test_restauracion_estado.py
+#  Criterio: exit 0. T-06-01…T-06-05, T-07-01…T-07-03 y T-07-05 en verde.
+```
+
+### 17.2 Semilla y copia buena B0
+
+1. Serie, número y archivo testigo `ARCHIVO-A` (CBZ multipágina determinista) con UUID fijos.
+2. Abrir el lector de la candidata, avanzar a la página **P = 3** y esperar el `POST`
+   `/ui/leer/<file_id>/progreso` con `pagina=3` (204). La fila `reading_progress` la escribe el
+   lector real, no SQL a mano.
+3. Parar la app y ejecutar `backup.sh` (sin offsite puede terminar con `offsite_mount_missing`:
+   B0 y su manifiesto ya están escritos; registrar el motivo y **no** invalidar B0).
+4. Duplicar B0 con otro `<TS>` para la matriz negativa y mutar **solo el duplicado**; regenerar
+   `copias.json` con `escribir_copias_json`. **B0 no se muta**.
+
+```bash
+"${COMPOSE[@]}" stop zascarr
+sudo -E bash scripts/backup.sh || true
+test -s "$BACKUP_DIR"/backup_<TS>.sql.gz && test -s "$BACKUP_DIR"/MANIFIESTO-backup_<TS>.json
+jq .version_de_la_copia "$BACKUP_DIR"/MANIFIESTO-backup_<TS>.json
+"${COMPOSE[@]}" start zascarr
+```
+
+### 17.3 Matriz negativa de producción (N-01…N-04)
+
+Cada fila se ejecuta por el **mismo camino de producción** (`restaurar_datos.sh --produccion
+--copia <TS>` o la acción «Restaurar…»). Antes y después se toma la instantánea canónica
+(HEAD/árbol, `alembic_version`, recuentos, testigo, `/api/health`, SHA-256 de B0 y de su
+manifiesto, `docker inspect` de `zascarr`/`postgres`).
+
+| ID | Mutación de la copia | `error` | `comprobacion` | `base_en_su_sitio` | Eventos Docker |
+|---|---|---|---|---|---|
+| N-01 | manifiesto con `sha256` alterado, dump intacto | `copia_no_valida` | `sha256_copia` | `true` | 0 |
+| N-02 | `.sql.gz` truncado y manifiesto/sidecar recalculados | `copia_no_valida` | `gzip_cabecera` | `true` | 0 |
+| N-03a | dump sin `COPY public.series`, recomprimido y recalculado | `copia_no_valida` | `tablas_dump` | `true` | 0 |
+| N-03b | dump sin `COPY public.issues`, recomprimido y recalculado | `copia_no_valida` | `tablas_dump` | `true` | 0 |
+| N-04 | B0 válida (control positivo) | `null` | `null` | `true` | los del flujo aprobado |
+
+```bash
+# Eventos de contenedor en segundo plano: al final del intento, 0 líneas.
+docker events --since <inicio> --until <fin> \
+  --filter event=create --filter event=start --filter event=stop --filter event=kill \
+  --filter event=die --filter event=destroy --filter event=exec_create --filter event=exec_start \
+  --filter label=com.docker.compose.project=<PROYECTO> > "$ROOT/eventos.txt"
+
+sudo -E bash scripts/restaurar_datos.sh --produccion --copia <TS>
+cat "$BACKUP_STATUS_DIR/ops-restaurar.json"
+tail -n 1 "$BACKUP_STATUS_DIR/ops-restaurar-intentos.jsonl"
+wc -l "$ROOT/eventos.txt"          # 0 en N-01…N-03b
+```
+
+Criterio de cada fila negativa: `rc != 0`; estado `fallida` con el `error`/`comprobacion` de la
+tabla; `base_en_su_sitio:true`; **cero eventos de contenedor** y ninguna sentencia de escritura;
+B0 y su manifiesto con el mismo SHA-256; `copias.json` sigue ofreciendo B0; la persona ve
+«Esa copia está dañada, así que no se ha usado. Elige otra.» y **no** el aviso de base fuera de
+su sitio; dos intentos tienen `intento` distinto y el anterior sigue en el `.jsonl`.
+
+### 17.4 Copia de archivos manual (D-1)
+
+**Solo raíces de biblioteca.** Fuera: portadas (`covers/`), `.env`, credenciales, configuración
+del host, volumen de PostgreSQL y los dumps de copia.
+
+1. **Raíces.** Listar `library_roots` con `enabled` (`path`, `host_path`, `is_default`). Si
+   `host_path` está vacío y es la raíz por defecto, usar `HOST_LIBRARY_DIR`; si sigue vacío,
+   **abortar** (no se inventa una ruta: se declara en Ajustes). Rechazar raíces anidadas, `/`, la
+   home del usuario, puntos de montaje de Docker/VPN y raíces no montadas o no legibles. En A6 se
+   etiquetan `R1`, `R2`… (la ruta real solo en la consola privada del operador).
+2. **Destino.** Vacío (`find "$DEST" -mindepth 1 -maxdepth 1 -print -quit` sin salida), en otro
+   sistema de archivos (`stat -c %d` distinto de cada origen), montado y escribible, y **no** dentro
+   de un origen ni conteniéndolo. Sin `--delete`. Se monta en el entorno aislado en la **misma ruta
+   de contenedor** que tenía la instalación (`files.file_path` guarda rutas del contenedor).
+3. **Orden.** Copiar archivos → restaurar catálogo → arrancar/verificar. La app está parada
+   (PostgreSQL sigue en marcha) durante la copia y la restauración; si se restaura antes de copiar,
+   el importador/auditoría pueden ver la biblioteca vacía (R-7 de BL-OPS2).
+4. **Copia.** `rsync -aHAX --numeric-ids` (o `-aH` si el FS no soporta ACL/xattr), sin seguir
+   enlaces (`-l`), con `--info=progress2`. Enlaces simbólicos como enlaces y hardlinks preservados.
+
+```bash
+# Espacio suficiente para el inventario + 10 % (du -sb y df -B1), y destino vacío y distinto.
+findmnt -T "$DEST"
+test -z "$(find "$DEST" -mindepth 1 -maxdepth 1 -print -quit)"
+stat -c '%d %n' "$RAIZ" "$DEST"                       # %d distinto
+rsync -aHAX --numeric-ids --info=progress2 "$RAIZ"/ "$DEST"/
+```
+
+Verificación (obligatoria) antes y después, con el hash final idéntico:
+
+```bash
+# Mtime (con nanosegundos) + tamaño de todos los ficheros de la raíz:
+find "$RAIZ" -type f -printf '%P\0%T@\0%s\0' | sort -z | sha256sum
+# Inventario: nº de ficheros y bytes; huella testigo del CBZ (y de la página P).
+stat -c '%y' "$ARCHIVO_A"                              # con nanosegundos
+sha256sum "$ARCHIVO_A"
+# Opcional y costoso: sha256 de TODA la raíz; si no se ejecuta, NOT RUN motivo=coste.
+```
+
+Criterio: mtime/inventario y SHA-256 testigo idénticos; `files.sha256_hash` del testigo coincide
+con el archivo copiado; el FS destino conserva nanosegundos (exFAT/NTFS = FAIL de F-02, no
+«aceptable»).
+
+### 17.5 Reapertura en la página guardada (R-01…R-05)
+
+Con el catálogo restaurado en el entorno aislado y los archivos en su ruta de contenedor:
+
+```bash
+curl -fsS -b <COOKIE> "$APP_URL/ui/series/<SERIE>/numero/<NUMERO>" | grep 'Continuar (pág. 3)'
+curl -fsS -b <COOKIE> "$APP_URL/ui/leer/<FILE_ID>"                 | grep 'data-pagina="3"'
+curl -fsS -b <COOKIE> "$APP_URL/ui/leer/<FILE_ID>/pagina/3"        | sha256sum
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
+  "select current_page, status from reading_progress where issue_id = '<NUMERO>';"
+```
+
+Criterio: la ficha ofrece «Continuar (pág. P)»; el lector abre en `data-pagina=P`; la página P
+servida tiene el SHA-256 testigo; `files.file_path` existe con el `sha256_hash` correcto; y las
+relaciones y el progreso (`reading_progress.current_page=P`, `file_id`, estado) coinciden sin
+huérfanos. Si R-01/R-02/R-03 fallan, UATP-07 no se acredita aunque los recuentos cuadren.
+
+### 17.6 A6: evidencia y cierre
+
+- `docs/uat/A6/resultado.md`: cabecera (historias, fecha ISO, entorno `E-A6`, candidata T1/C con
+  `tag_commit`/`build_sha`/`app_version`/`alembic`, tag antiguo `v1.15.1`), tabla de comprobaciones
+  con `ID`/`Esperado`/`Obtenido`/`PASS|FAIL|NOT RUN`/evidencia, instantánea antes/después, versión,
+  copia de archivos, reapertura y pendientes.
+- `docs/uat/A6/evidencia/resultado.txt`: una línea `CHECK <ID> <PASS|FAIL|NOT RUN> [clave=valor …]`
+  por comprobación, comandos exactos y salida saneada.
+- **Versión declarada:** `tag_commit == head == build_sha` y `app_version` coincidente con
+  `pyproject.toml`/`/api/health`; si falta `build_sha` se dice «la identidad de la imagen no
+  consta» y V-01 es FAIL, no PASS parcial. **Nunca** se declara la copia solo como «1.15.1».
+- **Cierre:** `PASS` global solo si todas las comprobaciones obligatorias están en PASS y el saneado
+  no encuentra secretos. `NOT RUN` en una obligatoria impide declarar cumplida la historia; no se
+  convierte en PASS por «lo demás funciona».
+
+```bash
+grep -nE 'DB_PASSWORD|PASSWORD=|SECRET|TOKEN|api[_-]?key|auth_password|webhook|/home/|/mnt/|/media/|([0-9]{1,3}\.){3}[0-9]{1,3}' \
+  docs/uat/A6/resultado.md docs/uat/A6/evidencia/resultado.txt || true
+#  Criterio: sin coincidencias (A-02); si hay alguna, se redacta antes de publicar el fichero.
+```
+
+> **Estado de esta rama:** el código, los tests y este runbook están entregados. La ejecución real
+> de A6 (E-A6, Pi/navegador, `docker events`, copia de archivos en disco secundario) queda
+> **NOT RUN** hasta que QA/PO la ejecuten sobre la candidata identificada; este documento no
+> declara cumplidas UATP-06 ni UATP-07.
