@@ -110,10 +110,9 @@ suite. El caso PostgreSQL real sigue omitido sin `TEST_DATABASE_URL` o
 ## Revisión posterior (2026-11-21)
 
 Se añadieron dos pruebas de composición con el servicio real de
-reautenticación. La suite completa de esa cabeza dio **8881 passed, 2431
-skipped y 1 failed**: el fallo fue
-`test_ensayo_f1bis_arnes.py::TestPresupuestoDeDescarga::test_se_corta_mientras_se_descarga_y_mata_el_grupo_entero`,
-un umbral de 4 s ajeno a OPS4. Ese test pasó aislado en 1,94 s. No se declara
-una suite completa limpia para esta cabeza; la última limpia fue **8880
-passed** antes de estas dos pruebas. Las **892 pruebas OPS4/paridad** y Ruff
-del cambio pasan.
+reautenticación. La primera pasada completa dio 8881 passed y 1 fallo de
+temporización en `test_ensayo_f1bis_arnes` (umbral de 4 s y `pgrep -f` que se
+autocoincidía). Se estabilizó el test comprobando la ausencia del KILL de
+respaldo y procesos `sleep 61.37` exactos, sin subir el umbral para ocultar el
+comportamiento. La repetición completa terminó en **8882 passed, 2431 skipped,
+7 avisos, 0 failed**. Las **892 pruebas OPS4/paridad** y Ruff pasan.
