@@ -51,6 +51,24 @@
     {% if series.genres %}
     <p class="series-meta">{{ series.genres|map(attribute="name")|join(", ") }}</p>
     {% endif %}
+    {#- UXA-09: una sola acción principal, junto al título para que se vea sin desplazarse en el móvil.
+        «Continuar» si hay progreso, «Leer» si hay destino claro, y «Añadir números del disco» solo
+        cuando no hay nada que leer (ese botón sigue más abajo, con las demás acciones de gestión). -#}
+    {% if destino_lectura %}
+    {% set d = destino_lectura %}
+    {% set cual = (" el #" ~ d.numero) if d.numero else "" %}
+    <p class="series-leer">
+      {% if d.tipo == "elegir" %}
+      <a class="btn primary" href="/ui/series/{{ series.id }}/numero/{{ d.issue_id }}">Elegir cómo leer{{ cual }}</a>
+      {% elif d.tipo == "continuar" %}
+      <a class="btn primary" href="/ui/leer/{{ d.archivo_id }}">Continuar{{ cual }}{% if d.pagina > 1 %} (pág. {{ d.pagina }}){% endif %}</a>
+      {% elif d.tipo == "releer" %}
+      <a class="btn primary" href="/ui/leer/{{ d.archivo_id }}">Leer de nuevo{{ cual }}</a>
+      {% else %}
+      <a class="btn primary" href="/ui/leer/{{ d.archivo_id }}">Leer{{ cual }}</a>
+      {% endif %}
+    </p>
+    {% endif %}
     {#- «Completa» solo si los huecos se pudieron calcular: sin `computable` no hay con qué restar, y antes
         una serie de AniList con 8 de 30 decía «Ningún hueco — la tienes completa» (caso real, 2026-10-20). -#}
     <p class="subtitle">
@@ -75,7 +93,7 @@
     <div id="anuncio-favorito" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
     <p class="series-acciones">
       <a class="btn ghost" href="/ui/series/{{ series.id }}/editar">Editar la ficha</a>
-      <a class="btn primary" href="/ui/pendientes/carpetas?serie={{ series.id }}">Añadir números del disco</a>
+      <a class="btn{% if not destino_lectura %} primary{% else %} ghost{% endif %}" href="/ui/pendientes/carpetas?serie={{ series.id }}">Añadir números del disco</a>
       <span class="muted">Abre las carpetas pendientes con esta serie ya fijada. Vincular no mueve ni renombra el archivo.</span>
     </p>
     <details class="series-retirar">
