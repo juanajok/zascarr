@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import re
 from html.parser import HTMLParser
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -285,7 +285,10 @@ class TestTrasIntercambiosHtmx:
         """`asignar` con error devuelve la TARJETA entera: hx-target="#card-<id>" outerHTML."""
         archivo = _archivo("Paracuellos 05.cbz", con_sugerencia=True)
         pagina = _por_revisar([archivo, _archivo("Otro 01.cbz")])
-        sesion = FakeSession(get_map={(File, archivo.id): archivo})
+        # La tarjeta comprueba su sugerencia contra `series`: la guardada existe.
+        sugerida = UUID(archivo.metadata_["candidates"][0]["series_id"])
+        sesion = FakeSession(get_map={(File, archivo.id): archivo},
+                             exec_queue=[FakeExecResult([sugerida])])
         with use_fake_session(sesion) as client:
             r = client.post(f"/ui/pendientes/{archivo.id}/asignar",
                             data={"series_id": str(uuid4()), "issue_number": " "},

@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
@@ -44,6 +44,9 @@ class FakeExecResult:
     def scalars(self):
         return FakeScalarResult(self._rows)
 
+    def all(self):
+        return list(self._rows)
+
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
 
@@ -51,7 +54,15 @@ class FakeExecResult:
         return self._rows if isinstance(self._rows, int) else self._rows[0]
 
 
-def cola_de(files: list) -> list:
+def _ids_de_candidatas(files: list) -> list[UUID]:
+    ids: list[UUID] = []
+    for f in files:
+        for c in ((f.metadata_ or {}).get("candidates") or [])[:1]:
+            ids.append(UUID(str(c["series_id"])))
+    return ids
+
+
+def cola_de(files: list, series_actuales: list[UUID] | None = None) -> list:
     """Lo que consume `GET /ui/pendientes` (cursor, U12): el total, la lista y —si hay lista— cuántos van antes del
     primero. `imported_at` ADMITE NULL en la BD real (la migración inicial no pone NOT NULL); los archivos de
     estas pruebas no lo traen y se rellena para que el cursor tenga clave. El caso NULL real tiene su prueba
@@ -61,7 +72,12 @@ def cola_de(files: list) -> list:
         f.imported_at = f.imported_at or ahora
     if not files:
         return [FakeExecResult(0), FakeExecResult([])]
-    return [FakeExecResult(len(files)), FakeExecResult(files), FakeExecResult(0)]
+    cola = [FakeExecResult(len(files)), FakeExecResult(files), FakeExecResult(0)]
+    # La tarjeta comprueba la sugerencia contra `series`: por defecto, todas existen.
+    ids = _ids_de_candidatas(files)
+    if ids:
+        cola.append(FakeExecResult(ids if series_actuales is None else series_actuales))
+    return cola
 
 
 class FakeSession:
