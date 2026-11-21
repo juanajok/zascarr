@@ -19,6 +19,13 @@
   window.addEventListener("scroll", colocar, { passive: true });
   document.body.addEventListener("htmx:afterSwap", colocar);
   document.addEventListener("click", (evento) => {
+    // UXA-08: «Cerrar filtros» (delegado: el OOB de HTMX sustituye el contenido del panel).
+    const cerrar = evento.target instanceof Element ? evento.target.closest("[data-cerrar-filtros]") : null;
+    if (cerrar && panel.contains(cerrar)) {
+      panel.open = false;
+      boton.focus();
+      return;
+    }
     if (panel.open && !panel.contains(evento.target)) panel.open = false;
   });
   document.addEventListener("keydown", (evento) => {
