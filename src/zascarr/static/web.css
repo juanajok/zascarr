@@ -2239,23 +2239,21 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 .biblioteca-cabecera h1 { grid-area: titulo; margin: 0; }
 .biblioteca-cabecera .subtitle { grid-area: subtitulo; margin: 0; }
-.biblioteca-cabecera .biblioteca-acciones {
-  grid-area: accion;
-  justify-self: end;
-  align-self: center;
+.biblioteca-acciones {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--space-2);
+  margin: 0 0 var(--space-3);
 }
-.biblioteca-cabecera .biblioteca-accion {
+.biblioteca-acciones .biblioteca-accion {
   text-decoration: none;
   color: var(--ink);
   background: var(--paper);
   border-color: var(--ink);
   box-shadow: var(--shadow-ink-sm);
 }
-.biblioteca-cabecera .biblioteca-accion:hover {
+.biblioteca-acciones .biblioteca-accion:hover {
   background: var(--paper-2);
   color: var(--ink);
   transform: none;
@@ -2371,6 +2369,17 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .barra-panel-campos input[type="search"], .barra-panel-campos select { width: 100%; max-width: none; min-height: 44px; }
 .barra-biblioteca .barra-panel-campos select, .barra-biblioteca .barra-panel-campos input[type="search"] { max-width: none; width: 100%; }
 .barra-panel-ayuda { grid-column: 1 / -1; margin: 0; }
+/* UXA-08: pie del panel con el cierre visible. El panel tiene scroll propio (hoja inferior en el móvil,
+   caja flotante en escritorio): el pie se queda pegado abajo para que «Cerrar filtros» se alcance sin
+   recorrer todos los campos. */
+.barra-panel-pie {
+  grid-column: 1 / -1; display: flex; justify-content: flex-end;
+  position: sticky; bottom: calc(-1 * var(--space-3)); z-index: 1;
+  margin: 0 calc(-1 * var(--space-3)) calc(-1 * var(--space-3));
+  padding: var(--space-2) var(--space-3);
+  background: var(--paper); border-top: var(--border-chip) solid var(--ink);
+}
+.barra-panel-cerrar { min-height: 44px; }
 .barra-panel-campos .series-results { position: static; max-height: 14rem; overflow: auto; }
 .barra-panel-campos .series-results a { min-height: 44px; display: flex; align-items: center; }
 .barra-panel-campos .series-results:not(:empty) { padding: 6px; border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); }
@@ -2425,7 +2434,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
     grid-template-areas: "titulo" "subtitulo" "accion";
     gap: var(--space-1);
   }
-  .biblioteca-cabecera .biblioteca-acciones { justify-self: start; justify-content: flex-start; margin-top: 6px; }
   .barra-panel-campos {
     position: fixed;
     top: auto;
@@ -2443,6 +2451,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
     border-radius: var(--radius-panel) var(--radius-panel) 0 0;
     box-shadow: var(--shadow-ink);
   }
+  .barra-panel-cerrar { width: 100%; }
 }
 @media (max-width: 480px) {
   .barra-biblioteca { padding: var(--space-2); gap: 6px; }

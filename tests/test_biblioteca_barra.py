@@ -275,9 +275,9 @@ def test_cabecera_accion_es_boton_y_no_enlace_subrayado():
     assert html.count('class="btn ghost sm biblioteca-accion"') == 3
     assert 'href="/ui/mejoras"' in html
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
-    assert ".biblioteca-cabecera .biblioteca-acciones {" in css
-    assert ".biblioteca-cabecera .biblioteca-accion {" in css
-    assert "display: flex;" in css.split(".biblioteca-cabecera .biblioteca-acciones {", 1)[1].split("}", 1)[0]
+    assert ".biblioteca-acciones {" in css
+    assert ".biblioteca-acciones .biblioteca-accion {" in css
+    assert "display: flex;" in css.split(".biblioteca-acciones {", 1)[1].split("}", 1)[0]
     assert "text-decoration: none;" in css
     assert "grid-template-areas: \"titulo accion\" \"subtitulo subtitulo\";" in css
 
@@ -421,3 +421,26 @@ def test_hay_region_viva_estable_y_plantilla_del_aviso_de_fallo():
     assert "los anteriores" in plantilla
     assert 'role="' not in plantilla  # la región externa ya es la viva: sin alertas anidadas
     assert html.index('id="busqueda-fallo"') < html.index('id="rejilla"')
+
+
+def test_busqueda_y_filtros_van_antes_que_las_acciones_auxiliares():
+    """UXA-08: a 320 px las acciones auxiliares encima de la barra (~400 px) dejaban la búsqueda bajo la
+    barra inferior. El orden del DOM es el de lectura y el del teclado: búsqueda, «Filtros», acciones, lista."""
+    html = _index()
+    orden = [html.index(marca) for marca in (
+        'id="f-q"', 'id="panel-filtros"', 'class="biblioteca-acciones"', 'id="rejilla"')]
+    assert orden == sorted(orden)
+    cabecera = html.split("</header>", 1)[0]
+    assert "biblioteca-accion" not in cabecera
+    assert 'aria-label="Más acciones de la biblioteca"' in html
+
+
+def test_el_panel_de_filtros_tiene_cierre_visible_en_la_barra_y_en_el_oob():
+    """UXA-08: «Cerrar filtros» va dentro de los campos, que el OOB de HTMX vuelve a pintar."""
+    for ruta in ("/ui/biblioteca", "/ui/biblioteca/resultados"):
+        html = _index(ruta)
+        assert html.count("data-cerrar-filtros") == 1, ruta
+        assert "Cerrar filtros" in html, ruta
+        # Dentro de los campos (no en la barra): el OOB sustituye ese contenedor entero.
+        assert html.index('id="filtros-campos"') < html.index("data-cerrar-filtros"), ruta
+        assert 'type="button" class="btn barra-panel-cerrar"' in html, ruta

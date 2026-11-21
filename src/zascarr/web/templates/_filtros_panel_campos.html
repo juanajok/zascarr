@@ -124,3 +124,7 @@
 <input type="hidden" name="page" value="1">
 <p class="caption barra-panel-ayuda">Los filtros se aplican al cambiarlos.</p>
 <noscript><button class="btn ghost sm" type="submit">Aplicar filtros</button></noscript>
+{#- UXA-08: cierre visible dentro del panel (en el móvil el panel cubre la pantalla y el botón «Filtros» queda
+    fuera de la vista). `biblioteca-filtros.js` lo cierra y devuelve el foco a «Filtros». Sin JavaScript no hace
+    nada, y entonces el panel se cierra con el propio botón «Filtros». -#}
+<div class="barra-panel-pie"><button type="button" class="btn barra-panel-cerrar" data-cerrar-filtros>Cerrar filtros</button></div>
