@@ -806,6 +806,46 @@ sin overflow horizontal en móvil; tema oscuro aplica; el botón no permite dobl
 **Evidencia:** `docs/design/uatp03/resultado-chrome.md` con SHA, versión de Chrome,
 viewport, PASS/FAIL/NOT RUN por fila y capturas. Sin esa ejecución AC-09 queda NOT RUN.
 
+### 13.9 UATP-05 · cerrar la vista previa del número sin mover el foco
+
+> Requiere una serie con varios números con archivo (ficha: chips de «Números» y lista de
+> «Archivos por número»), una lista de Biblioteca y una colección con ≥3 series. Ejecutar en
+> Chrome estable (registrar versión) a 1440×900, 1024×768 (o zoom 125 %), 720×900 (zoom 200 % de
+> 1440) y 390×844 táctil emulado. Sin navegador, **NOT RUN**; el HTML no acredita foco, hover ni
+> clic reales. Contrato y CSS: `docs/design/uatp05-previa-teclado.md` (§3–§8).
+
+```text
+1. Teclado, 1440: Tab al chip de un número; esperar la tarjeta; Escape.
+   El hueco queda vacío, activeElement sigue en el mismo enlace, su anillo :focus-visible
+   se ve; no hay navegación ni POST. Repetir en la fija (enlace y «Ver portada»).
+2. Siguiente control: con el puntero parado en el chip A y el foco en B (Tab), solo se pinta
+   la previa de B; el rectángulo de B (texto y anillo) no lo tapa ninguna tarjeta y
+   elementFromPoint en su centro devuelve el chip.
+3. Puntero, 1440: hover en un chip; mover despacio hasta la tarjeta cruzando el hueco de 8 px
+   (no parpadea ni se cierra), recorrerla sin timeout y ver la flecha; al salir, se oculta.
+4. Clic que no atraviesa: en Colecciones, clic sobre la previa fija que tapa «Quitar de la
+   colección»: descarta la previa y NO lanza el POST de baja ni navega.
+5. Enter nativo: con la previa abierta, Enter en el chip navega a la ficha con el href, sin
+   petición htmx ni trampa de foco; Tab/Shift+Tab siguen su orden.
+6. Variante fija: en Biblioteca (vista lista) y Colecciones, pasar el ratón por el chip NO
+   abre la tarjeta; abre con foco o con «Ver portada» (44 px, visible también con ratón);
+   Escape/clic la apartan y dejan libre el control de debajo.
+7. Red lenta: CDP Network.emulateNetworkConditions lento (o un CBR); con la petición de
+   apertura en vuelo, Escape; la tarjeta no reaparece al terminar la carga. La ventana de
+   150 ms previa al arranque es límite declarado (spec §3.4), no se exige.
+8. reduced-motion (emulado): abrir, recorrer y Escape sin animación y con el mismo comportamiento.
+9. 1024×768 / zoom 125 %: repetir 1–3 sin scroll horizontal y con la tarjeta dentro del
+   viewport. A 720×900 la previa anclada no se sirve: registrar el límite de spec §8 y
+   comprobar que foco/texto/Enter siguen intactos y que la fija con botón abre y se descarta.
+10. Táctil emulado 390×844: «Ver portada» y toque en la tarjeta abren/cierran sin scroll
+   horizontal; la anclada sigue oculta (límite declarado).
+```
+
+**Evidencia:** `docs/design/uatp05/resultado-chrome.md` con SHA, versión de Chrome, fecha,
+viewport, PASS/FAIL/NOT RUN por fila y capturas de abierta, descartada y siguiente control. Sin
+esa ejecución AC-09 queda NOT RUN. Una prueba de humo headless sobre el marcado del contrato no
+sustituye a esta matriz.
+
 ---
 
 ## 14. Casos de error / seguridad / regresión
