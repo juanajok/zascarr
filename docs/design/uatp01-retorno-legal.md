@@ -184,8 +184,8 @@ El gate distingue el tipo de cliente de la petición gateada (no el destino):
   `volver` es inválido pinta el respaldo y no promete conservarlo.
 - **Aviso de aceptación incompleta:** va **debajo** de la frase de entrada (`.subtitle`) y antes
   del formulario, con `ui.aviso("warn", …, foco=true)`: `role="alert"` (anunciable) y **un solo**
-  `tabindex="-1" autofocus` en la página. Copy exacto: «No has aceptado nada: marca las tres
-  casillas y vuelve a pulsar «Aceptar y continuar».»; si el destino se conservó, añade «Después
+  `tabindex="-1" autofocus` en la página. Copy exacto: «Faltan casillas por marcar: marca las tres
+  y vuelve a pulsar «Aceptar y continuar».» (UXA-07: antes decía «No has aceptado nada», que confundía con 1 o 2 casillas marcadas); si el destino se conservó, añade «Después
   volverás <etiqueta>.» con `a Deseados`, `a Descubrir`, `a Mejoras`, `a la serie`, `al número`,
   `al lector` o `a la biblioteca` (respaldo). El texto viejo «tu destino se conserva» no se usa.
 - **Rama «ya aceptado»:** el enlace es `← Volver <etiqueta>` con la misma etiqueta del destino

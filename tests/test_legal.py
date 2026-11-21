@@ -619,7 +619,7 @@ class TestUatp01RetornoDelAviso:
         with use_fake_session(FakeSession(rows=[])) as client:
             r = client.get("/ui/legal?volver=//evil.example/x&falta=1")
         assert r.status_code == 200
-        assert "No has aceptado nada: marca las tres casillas" in r.text
+        assert "Faltan casillas por marcar: marca las tres" in r.text
         assert "Después volverás" not in r.text
         assert "tu destino se conserva" not in r.text
 
@@ -632,8 +632,8 @@ class TestUatp01RetornoDelAviso:
         assert 'role="alert"' in r.text
         assert 'tabindex="-1" autofocus' in r.text
         # Debajo de la frase de entrada y antes del formulario.
-        assert r.text.index('class="subtitle"') < r.text.index("No has aceptado nada")
-        assert r.text.index("No has aceptado nada") < r.text.index("<form")
+        assert r.text.index('class="subtitle"') < r.text.index("Faltan casillas por marcar")
+        assert r.text.index("Faltan casillas por marcar") < r.text.index("<form")
 
     def test_solo_hay_un_autofocus_en_el_wizard(self):
         with use_fake_session(FakeSession(rows=[])) as client:

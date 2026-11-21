@@ -266,7 +266,7 @@ curl -s -D - -o /dev/null -X POST "$APP_URL/ui/legal/accept" \
   | grep -Ei '^(HTTP/|location|cache-control)'
 #  Criterio: 303; Location: /ui/legal?volver=%2Fui%2Fwishlist&falta=1; no-store.
 curl -s "$APP_URL/ui/legal?volver=%2Fui%2Fwishlist&falta=1" \
-  | grep -E 'No has aceptado nada|role="alert"|tabindex="-1" autofocus|Después volverás a Deseados'
+  | grep -E 'Faltan casillas por marcar|role="alert"|tabindex="-1" autofocus|Después volverás a Deseados'
 #  Criterio: un aviso warn bajo .subtitle, role=alert, un solo autofocus y el destino nombrado.
 
 # 5.3b Aceptación COMPLETA (después de 5.3): 303 al destino y una fila de acuse

@@ -12,7 +12,7 @@
   busque o descargue algo por ti, primero necesitas leer y aceptar esto.
 </p>
 {% if falta %}
-  {% set texto_falta = "No has aceptado nada: marca las tres casillas y vuelve a pulsar «Aceptar y continuar»." %}
+  {% set texto_falta = "Faltan casillas por marcar: marca las tres y vuelve a pulsar «Aceptar y continuar»." %}
   {% if destino_conservado %}{% set texto_falta = texto_falta ~ " Después volverás " ~ volver_etiqueta ~ "." %}{% endif %}
   {{ ui.aviso("warn", texto_falta, foco=true) }}
 {% endif %}
