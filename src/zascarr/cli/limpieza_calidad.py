@@ -21,7 +21,7 @@ import sys
 from dataclasses import asdict
 
 from zascarr.database import async_session_factory, engine
-from zascarr.services.limpieza_calidad import LOTE, MUESTRA, LOTES, LimpiezaCalidad
+from zascarr.services.limpieza_calidad import LOTE, LOTES, MUESTRA, LimpiezaCalidad
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -29,10 +29,22 @@ def _parser() -> argparse.ArgumentParser:
         prog="zascarr-limpieza-calidad",
         description="Lotes L2/L3/L4 de calidad: vista previa por defecto.",
     )
-    p.add_argument("lote", choices=LOTES, help="l3 (pendientes), l2 (vínculos) o l4 (locked_fields)")
-    p.add_argument("--apply", action="store_true", help="aplica una tanda (por defecto solo cuenta y muestra)")
-    p.add_argument("--limite", type=int, default=LOTE, help=f"filas por tanda (por defecto {LOTE})")
-    p.add_argument("--muestra", type=int, default=MUESTRA, help=f"filas de la vista previa (por defecto {MUESTRA})")
+    p.add_argument(
+        "lote", choices=LOTES,
+        help="l3 (pendientes), l2 (vínculos) o l4 (locked_fields)",
+    )
+    p.add_argument(
+        "--apply", action="store_true",
+        help="aplica una tanda (por defecto solo cuenta y muestra)",
+    )
+    p.add_argument(
+        "--limite", type=int, default=LOTE,
+        help=f"filas por tanda (por defecto {LOTE})",
+    )
+    p.add_argument(
+        "--muestra", type=int, default=MUESTRA,
+        help=f"filas de la vista previa (por defecto {MUESTRA})",
+    )
     p.add_argument("--json", action="store_true", help="resultado legible por máquina")
     return p
 
