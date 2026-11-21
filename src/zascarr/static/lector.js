@@ -604,6 +604,14 @@
   const alCambiarPantalla = () => {
     if (document.fullscreenElement) {
       ocultarBarraInmersiva();
+    } else if (finAbierto) {
+      // Salir de fullscreen con la página de fin abierta no debe hacer parpadear la barra
+      // sobre su título durante los 3 s del auto-ocultado.
+      raiz.dataset.chrome = "oculto";
+      if (temporizadorChrome !== null && typeof clearTimeout === "function") {
+        clearTimeout(temporizadorChrome);
+      }
+      temporizadorChrome = null;
     } else {
       raiz.dataset.chrome = "";
       programaOculto();

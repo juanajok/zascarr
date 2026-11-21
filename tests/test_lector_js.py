@@ -773,9 +773,11 @@ const abiertaEnPantalla = pantalla.fin.hidden === false
 tecla(pantalla, "Escape", pantalla.finTitulo);
 const sigueAbierta = pantalla.fin.hidden === false;
 pantalla.doc.fullscreenElement = null;
+(pantalla.doc.listeners.fullscreenchange || []).forEach((f) => f({}));
+const barraNoParpadea = pantalla.root.dataset.chrome === "oculto";
 tecla(pantalla, "Escape", pantalla.finTitulo);
 salida.pantallaCompletaNoCierraFin = enPantalla && abiertaEnPantalla && sigueAbierta
-  && pantalla.fin.hidden === true;
+  && barraNoParpadea && pantalla.fin.hidden === true;
 
 // AC-15: en la página de fin Home/End y el avance no actúan; Espacio sobre un control no se
 // intercepta (actúa de forma nativa).
