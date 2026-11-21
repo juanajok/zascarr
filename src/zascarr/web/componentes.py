@@ -16,8 +16,9 @@ from dataclasses import dataclass
 
 from jinja2 import Environment
 
+from zascarr.config import get_settings
 from zascarr.web.iconos import icono
-from zascarr.web.menu import ENTRADAS, GRUPOS, entrada_activa
+from zascarr.web.menu import GRUPOS, entrada_activa, entradas_para, mas_tiene_aviso
 from zascarr.web.portada_marca import marca_de_portada
 
 
@@ -97,7 +98,9 @@ def registrar(env: Environment) -> None:
     modulo = env.get_template(PLANTILLA, globals={
         "aspecto": aspecto, "tipo_aviso": tipo_aviso,
         # V3: los datos del menú (web/menu.py) tampoco son globales del entorno.
-        "ENTRADAS": ENTRADAS, "GRUPOS": GRUPOS, "entrada_activa": entrada_activa,
+        "ENTRADAS": entradas_para(get_settings().nav_movil_variante), "GRUPOS": GRUPOS,
+        "entrada_activa": entrada_activa,
+        "mas_con_aviso": mas_tiene_aviso(get_settings().nav_movil_variante),
         "icono": icono, "marca_de_portada": marca_de_portada,
     }).module
     env.globals[ESPACIO_DE_NOMBRES] = modulo

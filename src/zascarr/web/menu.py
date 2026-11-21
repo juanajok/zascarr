@@ -10,7 +10,7 @@ qué ruta. `/estado` se queda en `/estado`.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,27 @@ ENTRADAS: tuple[Entrada, ...] = (
             movil_principal=True, contador="estado"),
     Entrada("ajustes", "Ajustes", "/ui/ajustes", "Sistema", "ajustes"),
 )
+
+#: UXA-08b (#1205): variantes de la barra inferior del móvil. «a» es `ENTRADAS` tal cual; «b» pone
+#: Biblioteca en la barra y Estado dentro de «Más» (cuyo aviso pasa a un punto sobre «Más»).
+VARIANTES = ("a", "b")
+
+
+def entradas_para(variante: str) -> tuple[Entrada, ...]:
+    """Entradas del menú para la variante pedida (la desconocida es «a»)."""
+    if variante != "b":
+        return ENTRADAS
+    return tuple(
+        replace(e, movil_principal=True) if e.clave == "biblioteca"
+        else replace(e, movil_principal=False) if e.clave == "estado"
+        else e
+        for e in ENTRADAS)
+
+
+def mas_tiene_aviso(variante: str) -> bool:
+    """¿«Más» guarda alguna entrada con contador? Entonces «Más» lleva su propio punto de aviso."""
+    return any(e.contador and not e.movil_principal for e in entradas_para(variante))
+
 
 #: prefijo de ruta → entrada. Se compara por segmentos (`/ui/pendientes` y `/ui/pendientes/x`, no
 #: `/ui/pendientes-otra-cosa`). La ficha de serie cuelga de Biblioteca.
