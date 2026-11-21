@@ -13,6 +13,13 @@
 {% if sin_fuentes %}{{ ui.aviso("amber", sin_fuentes) }}{% endif %}
 {% if error %}{{ ui.aviso("amber", error) }}{% endif %}
 
+{% if sugerencias_rol %}
+{{ ui.aviso("amber", "Hay datos de edición que no se están usando porque su fuente está como «obra de referencia»: " ~ sugerencias_rol | map(attribute="nombre") | join(", ") ~ ". Si esa fuente describe la edición que tienes, cámbiala a «Edición que tengo» y guarda el rol.") }}
+{% for s in sugerencias_rol %}
+<p class="muted">{{ s.nombre }} trae {{ s.campos | join(", ") }}{% if s.desde_alta %} y esta serie se creó desde esa fuente{% endif %}.</p>
+{% endfor %}
+{% endif %}
+
 {% if not con_ficha %}
 <section class="pending-card">
   <h2 class="titulo-frase">Buscar fichas de fuentes</h2>

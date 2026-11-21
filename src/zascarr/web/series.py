@@ -871,6 +871,30 @@ def _roles_ccm(series: Series, contexto) -> list[dict]:
     return salida
 
 
+def _sugerencias_rol_ccm(series: Series, contexto) -> list[dict]:
+    """Datos de edición que una fuente ya trajo pero el rol deja fuera."""
+    alta = (series.metadata_ or {}).get("alta") if isinstance(series.metadata_, dict) else None
+    origen_alta = str(alta.get("fuente") or "") if isinstance(alta, dict) else ""
+    salida: list[dict] = []
+    for registro in contexto.registros:
+        if rol_de(series, registro.fuente).value != "obra_referencia":
+            continue
+        campos = registro.normalizado.get("edition_scope")
+        if not isinstance(campos, dict) or not campos:
+            continue
+        etiquetas = [_ETIQUETAS_CCM.get(campo, campo) for campo in campos
+                     if campo in _ETIQUETAS_CCM]
+        if not etiquetas:
+            continue
+        salida.append({
+            "fuente": registro.fuente,
+            "nombre": NOMBRE_DE_FUENTE.get(registro.fuente, registro.fuente),
+            "campos": etiquetas,
+            "desde_alta": registro.fuente == origen_alta,
+        })
+    return salida
+
+
 async def _datos_ccm(db: AsyncSession, series_id: UUID) -> dict:
     contexto = await cargar_contexto(db, series_id)
     prov, filas = await _procedencia_ccm(db, series_id)
@@ -890,6 +914,7 @@ async def _datos_ccm(db: AsyncSession, series_id: UUID) -> dict:
         "sin_dato": tuple(c for c in plan.cambios if c.estado == "sin_dato"),
         "con_ficha": bool(contexto.registros),
         "nombres_fuente": NOMBRE_DE_FUENTE,
+        "sugerencias_rol": _sugerencias_rol_ccm(serie, contexto),
     }
 
 
