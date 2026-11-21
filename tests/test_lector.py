@@ -766,6 +766,20 @@ class TestUatp03AsaYFoco:
             r = client.get(f"/ui/leer/{f.id}")
         assert "toca la lengüeta de arriba o el centro de la página" in r.text
 
+    def test_volver_al_numero_es_el_primer_control_y_no_desborda(self):
+        from pathlib import Path
+
+        html = Path("src/zascarr/web/templates/lector.html").read_text(encoding="utf-8")
+        inicio = html.index('class="lector-barra"')
+        volver = html.index('class="back-link lector-volver"', inicio)
+        assert volver < html.index('class="lector-identidad"', inicio)
+        assert volver < html.index('id="lector-zoom-menos"', inicio)
+        assert volver < html.index('id="lector-menu-boton"', inicio)
+        css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+        bloque = css.split(".lector-volver {", 1)[1].split("}", 1)[0]
+        assert "min-height: 44px" in bloque
+        assert "white-space: nowrap" not in bloque
+
     def test_css_del_asa_es_44x44_y_solo_con_chrome_oculto(self):
         from pathlib import Path
 

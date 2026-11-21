@@ -2948,16 +2948,13 @@ body:has(.lector-escena) .skip { display: none; }
   border: var(--border-panel) solid var(--ink); border-top: 0;
   border-radius: 0 0 var(--radius-panel) var(--radius-panel);
   background: var(--paper); color: var(--ink); cursor: pointer;
-  transition: opacity .18s ease;
 }
-.lector-asa[hidden] { display: none; }
 .lector-escena[data-chrome="oculto"] .lector-asa:not([hidden]) { display: inline-flex; }
 .lector-asa svg { width: 20px; height: 20px; }
 .lector-asa:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 @media (forced-colors: active) {
   .lector-asa { border-color: CanvasText; }
 }
-@media (prefers-reduced-motion: reduce) { .lector-asa { transition: none !important; } }
 .lector-espera {
   flex: 1; display: grid; align-content: safe center; justify-items: center;
   gap: var(--space-2); padding: var(--space-4); text-align: center;

@@ -373,7 +373,7 @@
     return (barra && barra.contains(activo)) || (menu && menu.contains(activo));
   };
   const esVisible = (elemento) => {
-    for (let nodo = elemento; nodo; nodo = nodo.parent) {
+    for (let nodo = elemento; nodo; nodo = nodo.parentElement) {
       if (nodo.hidden) return false;
     }
     if (elemento.offsetParent === null) return elemento === lienzo || elemento === asa;
@@ -698,7 +698,9 @@
 
   document.addEventListener("pointermove", (evento) => {
     // Con la barra oculta, acercarse a la franja superior la muestra; en la página de fin
-    // no se muestra para no tapar su título (se sale con «Quedarme»/Esc).
+    // no se muestra para no tapar su título (se sale con «Quedarme»/Esc). Sobre el asa no se
+    // revela: el ratón tiene que poder llegar al clic sin que desaparezca antes.
+    if (asa && evento.target && asa.contains(evento.target)) return;
     if (!finAbierto && raiz.dataset.chrome === "oculto" && evento.clientY <= 90) {
       despertarChrome();
     }
@@ -722,10 +724,12 @@
       }
       const indice = lista.indexOf(activo);
       if (indice === -1) {
-        evento.preventDefault();
-        const destino = evento.shiftKey ? lista[lista.length - 1] : lista[0];
-        if (destino && typeof destino.focus === "function") destino.focus({ preventScroll: true });
-      } else if (!evento.shiftKey && indice === lista.length - 1) {
+        // Foco en un elemento de la escena que no entra en el ciclo (p. ej. `#fin-titulo`
+        // con `tabindex="-1"`): el Tab nativo decide; interceptarlo saltaría a la barra y la
+        // barra taparía la página de fin (#826).
+        return;
+      }
+      if (!evento.shiftKey && indice === lista.length - 1) {
         evento.preventDefault();
         if (lista[0] && typeof lista[0].focus === "function") lista[0].focus({ preventScroll: true });
       } else if (evento.shiftKey && indice === 0) {

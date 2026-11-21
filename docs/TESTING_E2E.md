@@ -788,7 +788,8 @@ sin overflow horizontal en móvil; tema oscuro aplica; el botón no permite dobl
    imagen, modo y zoom sin cambios; sin POST /progreso ni /sentido.
 3. Tocar la franja superior (<=44 px) con la barra oculta: revela y NO cambia de página.
 4. Tab desde body: entra en la barra y la revela; Tab desde el último enfocable vuelve
-   al primero; Shift+Tab al revés; el foco no sale de .lector-escena.
+   al primero; Shift+Tab al revés; el foco no sale de .lector-escena. Con #fin abierto y
+   foco en #fin-titulo, Tab va al primer control del fin, sin revelar/tapar con la barra.
 5. Opciones: abrir con toque/Enter; tocar título/leyenda/párrafo no cierra ni manda el
    foco a main; «Cerrar» y Escape cierran, foco al disparador, aria-expanded=false,
    página/modo/imagen intactos.

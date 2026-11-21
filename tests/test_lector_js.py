@@ -871,6 +871,10 @@ function E(id) {
 E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push(f); };
 E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
 E.prototype.getAttribute = function (k) { return this.attrs[k] ?? null; };
+Object.defineProperty(E.prototype, "parent", {
+  get() { return this.parentElement; },
+  set(valor) { this.parentElement = valor; },
+});
 E.prototype.removeAttribute = function (k) { delete this.attrs[k]; };
 E.prototype.contains = function (o) { for (let n = o; n; n = n.parent) if (n === this) return true; return false; };
 E.prototype.closest = function (sel) {
@@ -907,7 +911,10 @@ function montar(sentido) {
   lienzo.getBoundingClientRect = () => ({ left: 0, width: 1000 });
   doc.getElementById("lector-pagina").parent = lienzo;
   doc.getElementById("lector-paginas").parent = lienzo;
-  const orden = [volver, menuBoton, menuCerrar, asa, lienzo];
+  const fin = doc.getElementById("fin"); fin.parent = root; fin.hidden = true;
+  const finTitulo = doc.getElementById("fin-titulo"); finTitulo.parent = fin;
+  const finQuedarme = doc.getElementById("fin-quedarme"); finQuedarme.parent = fin;
+  const orden = [volver, menuBoton, menuCerrar, asa, lienzo, finQuedarme];
   root.querySelectorAll = () => orden;
   barra.querySelectorAll = () => [volver, menuBoton];
   const sandbox = {
@@ -985,6 +992,43 @@ tocar(150);
 const izqAvanza = rtl.root.dataset.pagina === "2";
 tocar(850);
 salida.rtlToca = izqAvanza && rtl.root.dataset.pagina === "1";
+const deslizar = (run, x1, x2) => {
+  run.fire(run.lienzo, "touchstart", { target: run.lienzo,
+    touches: [{ clientX: x1, clientY: 100 }] });
+  run.fire(run.lienzo, "touchend", { target: run.lienzo, touches: [],
+    changedTouches: [{ clientX: x2, clientY: 100 }], preventDefault: () => {} });
+};
+const rtlSwipe = montar("rtl");
+rtlSwipe.root.dataset.chrome = "oculto";
+deslizar(rtlSwipe, 200, 800);
+const swipeAvanza = rtlSwipe.root.dataset.pagina === "2";
+deslizar(rtlSwipe, 800, 200);
+salida.rtlDesliza = swipeAvanza && rtlSwipe.root.dataset.pagina === "1";
+const rtlTeclas = montar("rtl");
+const tecla = (run, key) => run.fire(run.doc, "keydown", {
+  key, target: run.lienzo, preventDefault: () => {} });
+tecla(rtlTeclas, "ArrowLeft");
+const teclaIzqAvanza = rtlTeclas.root.dataset.pagina === "2";
+tecla(rtlTeclas, "ArrowRight");
+salida.rtlTeclas = teclaIzqAvanza && rtlTeclas.root.dataset.pagina === "1";
+const finTab = montar("ltr");
+finTab.root.dataset.chrome = "oculto";
+finTab.menuBoton.parent = finTab.barra;
+const fin = finTab.doc.getElementById("fin"); fin.hidden = false;
+const titulo = finTab.doc.getElementById("fin-titulo");
+finTab.doc.activeElement = titulo;
+let interceptado = false;
+finTab.fire(finTab.doc, "keydown", { key: "Tab", target: titulo,
+  preventDefault: () => { interceptado = true; } });
+salida.finTabNativo = !interceptado && finTab.doc.activeElement === titulo
+  && finTab.root.dataset.chrome === "oculto";
+const asaRaton = montar("ltr");
+asaRaton.fire(asaRaton.doc, "pointermove", { target: asaRaton.asa, clientY: 10 });
+const asaSigueVisible = asaRaton.root.dataset.chrome === "oculto"
+  && asaRaton.asa.hidden === false;
+asaRaton.fire(asaRaton.asa, "click", { target: asaRaton.asa });
+salida.asaRatonActiva = asaSigueVisible && asaRaton.root.dataset.chrome === ""
+  && asaRaton.doc.activeElement === asaRaton.volver;
 process.stdout.write(JSON.stringify(salida));
 '''
 
@@ -1000,4 +1044,6 @@ def test_uatp03_asa_foco_tab_y_opciones(tmp_path):
         "asaRevelaYEnfoca": True, "tabEntraEnBarra": True, "tabCicla": True,
         "textoNoCierra": True, "cerrarDevuelveFoco": True,
         "franjaRevelaSinPagina": True, "rtlToca": True,
+        "rtlDesliza": True, "rtlTeclas": True,
+        "finTabNativo": True, "asaRatonActiva": True,
     }

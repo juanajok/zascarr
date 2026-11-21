@@ -211,7 +211,10 @@ El lector es una escena modal (`position: fixed; inset: 0`), no una página más
    (en táctil, el lienzo; en escritorio, la última flecha o el control de fin si está abierto),
    Tab vuelve al primer control de la barra; desde el primero, Shift+Tab va al último. El ciclo se
    calcula con los enfocables **visibles en ese momento** (`display`, `hidden`, `offsetParent`),
-   no con una lista fija que ignore las flechas ocultas o la página de fin.
+   no con una lista fija que ignore las flechas ocultas o la página de fin. **Excepción:** si el
+   foco está dentro de la escena pero en un elemento que no entra en el ciclo (p. ej. `#fin-titulo`
+   con `tabindex="-1"`), no se intercepta: el Tab nativo va al primer control de la página de fin,
+   sin revelar la barra ni taparla (#826).
 4. Salir sigue siendo explícito: `Volver al número` (enlace o <kbd>Escape</kbd> con la barra
    visible) y el botón de la ficha. El ciclo de foco no encierra a nadie: no se intercepta
    <kbd>Escape</kbd> ni se bloquea la navegación.
@@ -455,7 +458,7 @@ ruff check src/ tests/
 |---|---|---|
 | Asa | `#lector-asa` visible con barra oculta; `getBoundingClientRect()` ≥44×44; `hidden=false`; `aria-label`/`aria-controls` | AC-01 |
 | Primer fotograma | Cargar en modo pantalla; el asa no espera hover ni 3 s | AC-01 |
-| Toque en asa | `data-chrome=""`, página/imagen/modo sin cambios, foco en `Volver al número` | AC-02 |
+| Toque/ratón en asa | `data-chrome=""`, página/imagen/modo sin cambios, foco en `Volver al número`; `pointermove` sobre el asa no la oculta antes del clic | AC-02 |
 | Carga/Tab | `document.activeElement === document.body`; sin `:focus-visible` en la escena; Tab llega a `Volver al número`, la barra se ve; Tab desde el lienzo no sale del documento | AC-03 |
 | Opciones | Abrir, tocar el título/leyenda/párrafo (no se cierra, foco no va a `main`), «Cerrar» y Escape (foco al disparador, `aria-expanded=false`, página intacta) | AC-04 |
 | Volver al número | Rectángulo del enlace dentro del viewport; `scrollWidth <= innerWidth`; clic vuelve a `/ui/series/.../numero/...` | AC-05 |
