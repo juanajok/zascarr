@@ -4,6 +4,7 @@ Todas las variables se leen del entorno (o .env). Validación estricta al arranq
 """
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import structlog
 from pydantic import Field, model_validator
@@ -242,6 +243,9 @@ class Settings(BaseSettings):
     # envía a `unar`, el recorrido de portada lo trata como no candidato SIN gastar intento ni dejar
     # marca, y la cascada sigue.
     lector_rar_enabled: bool = Field(default=True)
+    # UXA-08b (#1205): prueba controlada de la barra inferior del móvil. «a» (por defecto) es la
+    # de siempre; «b» pone Biblioteca en la barra y Estado en «Más», con un punto de aviso en «Más».
+    nav_movil_variante: Literal["a", "b"] = Field(default="a")
     # #123b: rutas LOCALES (dentro del contenedor) para el aviso de disco.
     # Lista separada por comas; no se mira la biblioteca de red. `/config/covers`
     # cuelga del volumen de datos y es local; de cada ruta se usa su primer ancestro existente;

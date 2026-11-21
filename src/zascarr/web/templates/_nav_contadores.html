@@ -6,3 +6,4 @@
 <span id="cnt-pendientes" class="badge hot" hx-swap-oob="true"{% if not pendientes %} hidden{% endif %}>{% if pendientes %}{{ cuenta(pendientes) }}<span class="sr"> por revisar</span>{% endif %}</span>
 <span id="cnt-deseados" class="badge" hx-swap-oob="true"{% if not deseados %} hidden{% endif %}>{% if deseados %}{{ cuenta(deseados) }}<span class="sr"> deseados</span>{% endif %}</span>
 <span id="cnt-estado" class="dot" hx-swap-oob="true"{% if not atencion %} hidden{% endif %}>{% if atencion %}<span class="sr">necesita atención</span>{% endif %}</span>
+{% if mas_con_aviso %}<span id="cnt-mas" class="dot" hx-swap-oob="true"{% if not atencion %} hidden{% endif %}>{% if atencion %}<span class="sr">Más: necesita atención</span>{% endif %}</span>{% endif %}

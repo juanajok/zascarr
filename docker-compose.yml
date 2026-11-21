@@ -170,6 +170,8 @@ services:
       - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-30}
       # #418 (ADR 0015): interruptor del lector de .cbr con `unar` (por defecto, encendido)
       - LECTOR_RAR_ENABLED=${LECTOR_RAR_ENABLED:-true}
+      # UXA-08b (#1205): prueba controlada de la barra inferior del móvil («a» = la de siempre)
+      - NAV_MOVIL_VARIANTE=${NAV_MOVIL_VARIANTE:-a}
       - TZ=${TZ:-Europe/Madrid}
       # Observabilidad: nivel real de structlog y formato JSON/consola.
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

@@ -32,9 +32,11 @@ import structlog
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse
 
+from zascarr.config import get_settings
 from zascarr.database import async_session_factory
 from zascarr.services.navegacion import contadores
 from zascarr.services.seguridad import estado_de_seguridad
+from zascarr.web.menu import mas_tiene_aviso
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -87,7 +89,8 @@ async def contadores_del_menu(request: Request) -> Response:
         cuentas, atencion = tarea.result()
         return templates.TemplateResponse(
             request, "_nav_contadores.html",
-            {"pendientes": cuentas.pendientes, "deseados": cuentas.deseados, "atencion": atencion},
+            {"pendientes": cuentas.pendientes, "deseados": cuentas.deseados, "atencion": atencion,
+             "mas_con_aviso": mas_tiene_aviso(get_settings().nav_movil_variante)},
             headers=CABECERAS,
         )
     except Exception as exc:  # noqa: BLE001 — cualquier fallo se degrada a «no cambies nada»
