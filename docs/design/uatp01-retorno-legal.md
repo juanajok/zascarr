@@ -397,3 +397,10 @@ siendo local).
   [Radarr · `login.html`](https://github.com/Radarr/Radarr/blob/develop/frontend/src/login.html),
   [Radarr · `AuthenticationController.cs`](https://github.com/Radarr/Radarr/blob/develop/src/Radarr.Http/Authentication/AuthenticationController.cs).
 - Contrato de retorno ya existente (no se modifica): `src/zascarr/web/retorno.py` (BL-IT03, #286).
+
+## Actualización UATP-01b (#1199)
+
+`GET /ui/wishlist?q=…` ya lee la consulta (hasta 200 caracteres; más se ignora): rellena el campo y
+pinta los resultados sin JavaScript. `buscar-serie` responde con `HX-Replace-Url` para que la URL de
+la página lleve `?q=` (reemplaza, no apila una entrada por tecla), y `_RETORNOS_LEGALES` admite `q` en
+`/ui/wishlist`. Aceptar el aviso no añade ni busca nada: solo devuelve a la página con la consulta.

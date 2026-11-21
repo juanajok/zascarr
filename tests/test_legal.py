@@ -287,6 +287,7 @@ class TestVolverLegal:
     @pytest.mark.parametrize("destino", [
         "/ui/wishlist",
         "/ui/wishlist?",
+        "/ui/wishlist?q=flash",
         "/ui/descubrir?q=flash",
         "/ui/descubrir/identificador?identificador=urn%3Aisbn%3A9788467900000",
         "/ui/mejoras",
@@ -331,7 +332,9 @@ class TestVolverLegal:
         "/ui/wishlist%20",
         # Páginas y parámetros fuera de la lista cerrada.
         "/ui/desconocida",
-        "/ui/wishlist?q=flash",
+        "/ui/wishlist?q=" + "x" * 201,
+        "/ui/wishlist?q=a&q=b",
+        "/ui/wishlist?foo=bar",
         "/ui/mejoras?foo=bar",
         "/ui/mejoras?guardado=escaneado",
         "/ui/mejoras?pagina=0",
@@ -467,7 +470,7 @@ class TestUatp01RetornoDelAviso:
         "/ui/../api/health",
         "/ui/%2e%2e/api/health",
         "/ui/desconocida",
-        "/ui/wishlist?q=flash",
+        "/ui/wishlist?foo=bar",
         "/ui/biblioteca?q=flash",
         "/api/health",
     ])
