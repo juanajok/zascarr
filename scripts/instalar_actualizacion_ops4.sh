@@ -92,8 +92,11 @@ crear_dirs() {
     run install -d -m 0750 "${OPS_DIR}"
     run install -d -m 0700 "${OPS4_DIR}"
     run install -d -m 0700 "${OPS4_DIR}/consumidos"
+    # H-5: la app (PUID:PGID, montaje ro) debe leer el estado 0640 root:<grupo>;
+    # el grupo del fichero lo toma el escritor del directorio. Si no se puede
+    # fijar el dueño, se aborta: un estado ilegible es "sin noticias" permanente.
     if (( ! DRY_RUN )) && [[ "${ZASCARR_PRUEBAS:-}" != "1" ]]; then
-        chown "root:${GRUPO}" "${OPS_DIR}" || true
+        chown "root:${GRUPO}" "${OPS_DIR}"
     fi
 }
 crear_clave() {

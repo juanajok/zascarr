@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 import subprocess
 from pathlib import Path
 
@@ -125,3 +126,34 @@ def test_grupo_no_resuelto_aborta(tmp_path: Path) -> None:
     assert r.returncode == 1
     assert "No se pudo resolver el grupo" in r.stderr
     assert not (tmp_path / "data").exists()
+
+
+def test_directorio_del_estado_queda_0750_para_el_grupo(tmp_path: Path) -> None:
+    """H-5: la app corre con PUID:PGID; `ops` debe ser 0750 root:<grupo>."""
+    r = ejecutar(tmp_path, "--yes", "--sin-systemd")
+    assert r.returncode == 0, r.stderr
+    ops = tmp_path / "data" / "ops"
+    assert stat.S_IMODE(ops.stat().st_mode) == 0o750
+
+
+def test_instalador_prepara_permisos_sin_habilitar() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert 'install -d -m 0750 "${OPS_DIR}"' in script
+    assert 'chown "root:${GRUPO}" "${OPS_DIR}"' in script
+    # Provisionar no es habilitar: solo --activar hace `systemctl start`.
+    assert "systemctl enable" not in script.replace("systemctl disable", "")
+    assert "systemctl start zascarr-actualizar.socket" in script
+    assert "systemctl enable --now" not in script
+
+
+def test_unidad_instalada_cierra_estado_sin_execstartpost(tmp_path: Path) -> None:
+    r = ejecutar(tmp_path, "--yes", "--sin-systemd")
+    assert r.returncode == 0, r.stderr
+    texto = (tmp_path / "units" / "zascarr-actualizar.service").read_text(encoding="utf-8")
+    assert "ExecStartPost=" not in texto
+    stops = [linea for linea in texto.splitlines() if linea.startswith("ExecStopPost=")]
+    assert len(stops) == 1
+    assert stops[0].startswith("ExecStopPost=-")
+    assert "-/run/zascarr-ops.lock" in texto
+    assert str(tmp_path / "data") in texto
+    assert "@ZASCARR_DATA_DIR@" not in texto

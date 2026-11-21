@@ -18,25 +18,47 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-
-from escritor_estado_actualizar_ops4 import (  # noqa: E402
-    ResultadoEscritura,
-    escribir_estado,
-)
-from protocolo_actualizar_v4_ops4 import (  # noqa: E402
-    decodificar_autorizacion,
-    parsear,
-    verificar_firma,
-)
-from registro_repeticiones_ops4 import (  # noqa: E402
-    abrir_directorio_autorizaciones,
-    crear_reclamador_durable,
-)
-from verificador_autorizacion_ops4 import (  # noqa: E402
-    CodigoAutorizacion,
-    verificar_autorizacion,
-)
+try:  # importado como paquete (pruebas): una sola identidad de módulo
+    from .escritor_estado_actualizar_ops4 import (  # noqa: E402
+        ResultadoEscritura,
+        escribir_estado,
+        propietario_servicio,
+        publicar_transicion,
+    )
+    from .protocolo_actualizar_v4_ops4 import (  # noqa: E402
+        decodificar_autorizacion,
+        parsear,
+        verificar_firma,
+    )
+    from .registro_repeticiones_ops4 import (  # noqa: E402
+        abrir_directorio_autorizaciones,
+        crear_reclamador_durable,
+    )
+    from .verificador_autorizacion_ops4 import (  # noqa: E402
+        CodigoAutorizacion,
+        verificar_autorizacion,
+    )
+except ImportError:  # instalado como script suelto en /usr/local/lib/zascarr
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    from escritor_estado_actualizar_ops4 import (  # noqa: E402
+        ResultadoEscritura,
+        escribir_estado,
+        propietario_servicio,
+        publicar_transicion,
+    )
+    from protocolo_actualizar_v4_ops4 import (  # noqa: E402
+        decodificar_autorizacion,
+        parsear,
+        verificar_firma,
+    )
+    from registro_repeticiones_ops4 import (  # noqa: E402
+        abrir_directorio_autorizaciones,
+        crear_reclamador_durable,
+    )
+    from verificador_autorizacion_ops4 import (  # noqa: E402
+        CodigoAutorizacion,
+        verificar_autorizacion,
+    )
 
 UNIDAD = "zascarr-actualizar.service"
 RUTA_CERROJO = "/run/zascarr-ops.lock"
@@ -65,9 +87,17 @@ def rechazo(codigo: str, id_: str | None = None) -> Respuesta:
 
 def procesar(
     linea: bytes, *, clave: bytes, ahora: int,
-    reclamar_uso, iniciar, cerrojo_ocupado, escribir=None,
+    reclamar_uso, iniciar, cerrojo_ocupado, escribir=None, transicionar=None,
 ) -> Respuesta:
-    """Orden: esquema → firma → frescura → cerrojo → testigo → consumo → inicio."""
+    """Orden: esquema → firma → frescura → cerrojo → testigo → consumo → estado → inicio.
+
+    T-17: solo se escribe `aceptada` (con el consumo durable ya reclamado);
+    tras `systemctl start` no se escribe ninguna instantánea más. Si el start
+    falla se intenta `fallida` por la guarda de monotonía, que no pisa un
+    terminal escrito por el finalizador.
+    """
+    if transicionar is None:
+        transicionar = escribir
     if type(clave) is not bytes or len(clave) != 32:
         return rechazo("no_disponible")
     if type(ahora) is not int or not 0 <= ahora < 2**63:
@@ -110,11 +140,11 @@ def procesar(
     except Exception:  # noqa: BLE001
         return rechazo("no_disponible", id_)
     if iniciada is not True:
-        if escribir is not None:
-            escribir({**inicial, "estado": "fallida", "actualizado_epoch": ahora})
+        if transicionar is not None:
+            transicionar({**inicial, "estado": "fallida", "actualizado_epoch": ahora})
         return rechazo("no_disponible", id_)
-    if escribir is not None:
-        escribir({**inicial, "estado": "en_curso", "actualizado_epoch": ahora})
+    # T-17: no se escribe `en_curso` después del start. El finalizador cierra;
+    # una instantánea posterior podría pisar un terminal si la unidad acaba antes.
     return Respuesta("aceptada", "aceptada", id_)
 
 
@@ -194,6 +224,7 @@ def _leer_linea() -> bytes:
 def main() -> int:
     dir_ops = os.environ.get("ZASCARR_OPS_DIR", "/var/lib/zascarr/ops")
     dir_ops4 = os.environ.get("ZASCARR_OPS4_DIR", "/var/lib/zascarr/ops4")
+    ruta_estado = os.path.join(dir_ops, "actualizar-status.json")
     clave = _leer_clave(os.path.join(dir_ops, "actualizar.key"))
     linea = _leer_linea()
     reclamar = None
@@ -203,11 +234,17 @@ def main() -> int:
             os.path.join(dir_ops4, "consumidos"), uid_esperado=0, modo_esperado=0o700,
         )
         reclamar = crear_reclamador_durable(fd_dir)
+        propietario = propietario_servicio(ruta_estado)
         respuesta = procesar(
             linea, clave=clave or b"", ahora=int(time.time()),
             reclamar_uso=reclamar, iniciar=_iniciar, cerrojo_ocupado=_cerrojo_ocupado,
             escribir=lambda datos: escribir_estado(
-                os.path.join(dir_ops, "actualizar-status.json"), datos,
+                ruta_estado, datos, propietario=propietario,
+            ),
+            transicionar=lambda datos: publicar_transicion(
+                ruta_estado, datos["estado"],
+                ahora=datos["actualizado_epoch"], id_=datos["id"],
+                inicio_epoch=datos["inicio_epoch"], propietario=propietario,
             ),
         )
     except Exception:  # noqa: BLE001 — nunca se devuelve un éxito dudoso

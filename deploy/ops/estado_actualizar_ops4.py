@@ -4,28 +4,66 @@
 Uso fijo desde la unidad:
   zascarr-estado-actualizar-ops4 --ruta ... --resultado hecha|fallida|incierta
 
-Conserva el id y `inicio_epoch` del estado que escribió el auxiliar. Si no hay
-estado válido, sale 0 sin inventar uno: la unidad no debe fallar por no poder
-anotar una fase. No acepta texto libre ni imprime el estado.
+El resultado que recibe viene de la tabla cerrada de `ExecStopPost` (A1):
+  SERVICE_RESULT:EXIT_CODE:EXIT_STATUS
+    success:exited:0   -> hecha     (único éxito limpio)
+    exit-code:exited:75-> fallida   (cerrojo ocupado: pre-efecto por contrato)
+    *                  -> incierta  (timeout, señal, código 1, parada manual...)
+
+Conserva `id` e `inicio_epoch` del estado que escribió el auxiliar, no inventa
+estado si no hay uno válido y nunca pisa un terminal (monotonía). Devuelve 0
+cuando no hay nada que escribir y 1 solo si la escritura durable no se pudo
+confirmar; la unidad lleva el prefijo `-`, así que ese 1 no convierte en
+fallida una actualización correcta. No acepta texto libre ni imprime el estado.
 """
 from __future__ import annotations
 
 import argparse
-import json
 import os
-import re
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+try:  # importado como paquete (pruebas, `python -m`): una sola identidad de módulo
+    from .escritor_estado_actualizar_ops4 import (  # noqa: E402
+        ResultadoEscritura,
+        ResultadoLectura,
+        leer_estado_estricto,
+        propietario_servicio,
+        publicar_transicion,
+    )
+except ImportError:  # instalado como script suelto en /usr/local/lib/zascarr
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+    from escritor_estado_actualizar_ops4 import (  # noqa: E402
+        ResultadoEscritura,
+        ResultadoLectura,
+        leer_estado_estricto,
+        propietario_servicio,
+        publicar_transicion,
+    )
 
-from escritor_estado_actualizar_ops4 import (  # noqa: E402
-    ResultadoEscritura,
-    escribir_estado,
-)
-
-_ID = re.compile(r"[0-9a-f]{32}\Z")
 _RESULTADOS = {"hecha", "fallida", "incierta"}
+_EXITO_LIMPIO = ("success", "exited", "0")
+_PRE_EFECTO_CONTRATO = ("exit-code", "exited", "75")
+
+
+def resultado_final(
+    service_result: object, exit_code: object, exit_status: object,
+) -> str | None:
+    """Tabla pura de A1; `None` si los valores no son cadenas de systemd.
+
+    Es la referencia normativa de la cadena de `ExecStopPost`: solo el éxito
+    limpio es `hecha`, solo el 75 del cerrojo es `fallida` (ocurre antes de
+    cualquier efecto); el resto es `incierta` (H-13: `update.sh` usa 1 antes y
+    después de tocar código/BD, así que no se puede distinguir pre de post).
+    """
+    if not (type(service_result) is str and type(exit_code) is str
+            and type(exit_status) is str):
+        return None
+    if (service_result, exit_code, exit_status) == _EXITO_LIMPIO:
+        return "hecha"
+    if (service_result, exit_code, exit_status) == _PRE_EFECTO_CONTRATO:
+        return "fallida"
+    return "incierta"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,25 +76,24 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.resultado not in _RESULTADOS:
         return 2
-    try:
-        with open(args.ruta, encoding="utf-8") as fh:
-            datos = json.load(fh)
-        if (
-            type(datos) is not dict
-            or set(datos) != {"schema", "id", "estado", "inicio_epoch", "actualizado_epoch"}
-            or type(datos["id"]) is not str
-            or not _ID.fullmatch(datos["id"])
-            or type(datos["inicio_epoch"]) is not int
-            or not 0 <= datos["inicio_epoch"] <= int(time.time())
-        ):
-            return 0
-    except (OSError, ValueError, TypeError):
+    lectura, datos = leer_estado_estricto(args.ruta)
+    if lectura is not ResultadoLectura.OK or datos is None:
         return 0
-    datos["estado"] = args.resultado
-    datos["actualizado_epoch"] = int(time.time())
-    if escribir_estado(args.ruta, datos) is not ResultadoEscritura.OK:
-        return 1
-    return 0
+    if datos["estado"] in {"hecha", "fallida", "incierta"}:
+        return 0
+    ahora = int(time.time())
+    if ahora < datos["inicio_epoch"]:
+        # Reloj invertido: el lector lo dará incierta; no se escribe.
+        return 0
+    resultado = publicar_transicion(
+        args.ruta,
+        args.resultado,
+        ahora=ahora,
+        id_=datos["id"],
+        inicio_epoch=datos["inicio_epoch"],
+        propietario=propietario_servicio(args.ruta),
+    )
+    return 1 if resultado is ResultadoEscritura.INCIERTO else 0
 
 
 if __name__ == "__main__":

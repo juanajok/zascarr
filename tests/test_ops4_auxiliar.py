@@ -6,7 +6,11 @@ import json
 import pytest
 
 from deploy.ops import protocolo_actualizar_v4_ops4 as protocolo
-from deploy.ops.escritor_estado_actualizar_ops4 import ResultadoEscritura
+from deploy.ops.escritor_estado_actualizar_ops4 import (
+    ResultadoEscritura,
+    escribir_estado,
+    publicar_transicion,
+)
 from deploy.ops.zascarr_actualizar_aux import (
     UNIDAD,
     Respuesta,
@@ -32,8 +36,11 @@ def peticion(*, id_: str = ID, ahora: int = AHORA, token: bytes | None = None) -
 
 
 class Dobles:
-    def __init__(self, *, cerrojo=False, inicio=True, escribir=ResultadoEscritura.OK) -> None:
+    def __init__(self, *, cerrojo=False, inicio=True,
+                 escribir=ResultadoEscritura.OK,
+                 transicionar=ResultadoEscritura.OK) -> None:
         self.escritura = escribir
+        self.transicion = transicionar
         self.estados: list[dict] = []
         self.cerrojo = cerrojo
         self.inicio = inicio
@@ -52,8 +59,14 @@ class Dobles:
         return self.inicio
 
     def escribir(self, datos: dict):
+        self.llamadas.append(("escribir", datos["estado"]))
         self.estados.append(datos)
         return self.escritura
+
+    def transicionar(self, datos: dict):
+        self.llamadas.append(("transicionar", datos["estado"]))
+        self.estados.append(datos)
+        return self.transicion
 
     def ocupado(self) -> bool:
         self.llamadas.append(("cerrojo", ""))
@@ -64,7 +77,7 @@ def ejecutar(linea: bytes, dobles: Dobles) -> Respuesta:
     return procesar(
         linea, clave=CLAVE, ahora=AHORA, reclamar_uso=dobles.reclamar,
         iniciar=dobles.iniciar, cerrojo_ocupado=dobles.ocupado,
-        escribir=dobles.escribir,
+        escribir=dobles.escribir, transicionar=dobles.transicionar,
     )
 
 
@@ -111,7 +124,7 @@ def test_firma_incorrecta_no_consume_ni_inicia() -> None:
     respuesta = procesar(
         linea, clave=CLAVE, ahora=AHORA, reclamar_uso=dobles.reclamar,
         iniciar=dobles.iniciar, cerrojo_ocupado=dobles.ocupado,
-        escribir=dobles.escribir,
+        escribir=dobles.escribir, transicionar=dobles.transicionar,
     )
     assert respuesta.codigo == "firma_invalida"
     assert dobles.llamadas == []
@@ -131,7 +144,7 @@ def test_caducidad_y_ligadura_no_inician(linea, ahora, esperado) -> None:
     respuesta = procesar(
         linea, clave=CLAVE, ahora=ahora, reclamar_uso=dobles.reclamar,
         iniciar=dobles.iniciar, cerrojo_ocupado=dobles.ocupado,
-        escribir=dobles.escribir,
+        escribir=dobles.escribir, transicionar=dobles.transicionar,
     )
     assert respuesta.codigo == esperado
     assert [x for x in dobles.llamadas if x[0] == "iniciar"] == []
@@ -157,18 +170,24 @@ def test_clave_invalida_no_consume() -> None:
     respuesta = procesar(
         peticion(), clave=b"x" * 31, ahora=AHORA, reclamar_uso=dobles.reclamar,
         iniciar=dobles.iniciar, cerrojo_ocupado=dobles.ocupado,
-        escribir=dobles.escribir,
+        escribir=dobles.escribir, transicionar=dobles.transicionar,
     )
     assert respuesta.codigo == "no_disponible"
     assert dobles.llamadas == []
 
 
-def test_escribe_aceptada_antes_de_iniciar_y_en_curso_despues() -> None:
+# ── T-17: el auxiliar no escribe nada después del start ─────────────────────
+
+
+def test_escribe_aceptada_antes_de_iniciar_y_nada_despues() -> None:
     dobles = Dobles()
     respuesta = ejecutar(peticion(), dobles)
     assert respuesta.codigo == "aceptada"
-    assert [e["estado"] for e in dobles.estados] == ["aceptada", "en_curso"]
+    assert [e["estado"] for e in dobles.estados] == ["aceptada"]
     assert all(e["id"] == ID for e in dobles.estados)
+    posicion_escritura = dobles.llamadas.index(("escribir", "aceptada"))
+    posicion_inicio = dobles.llamadas.index(("iniciar", UNIDAD))
+    assert posicion_escritura < posicion_inicio
 
 
 def test_si_no_puede_escribir_estado_no_inicia() -> None:
@@ -183,3 +202,63 @@ def test_inicio_fallido_deja_estado_fallida() -> None:
     respuesta = ejecutar(peticion(), dobles)
     assert respuesta.codigo == "no_disponible"
     assert [e["estado"] for e in dobles.estados] == ["aceptada", "fallida"]
+    assert ("transicionar", "fallida") in dobles.llamadas
+
+
+def _ruta_estado(tmp_path):
+    return tmp_path / "actualizar-status.json"
+
+
+def _callbacks_reales(ruta):
+    def escribir(datos: dict):
+        return escribir_estado(ruta, datos)
+
+    def transicionar(datos: dict):
+        return publicar_transicion(
+            ruta, datos["estado"], ahora=datos["actualizado_epoch"],
+            id_=datos["id"], inicio_epoch=datos["inicio_epoch"],
+        )
+
+    return escribir, transicionar
+
+
+def test_terminal_escrito_por_el_finalizador_no_se_pisa_tras_start_exitoso(tmp_path) -> None:
+    ruta = _ruta_estado(tmp_path)
+    escribir, transicionar = _callbacks_reales(ruta)
+    estado_final = {}
+
+    def iniciar(unidad: str) -> bool:
+        # El finalizador cierra la unidad (terminal) antes de que el auxiliar vuelva.
+        actual = json.loads(ruta.read_text(encoding="utf-8"))
+        actual["estado"] = "hecha"
+        assert escribir_estado(ruta, actual) is ResultadoEscritura.OK
+        estado_final["leido"] = actual["estado"]
+        return True
+
+    respuesta = procesar(
+        peticion(), clave=CLAVE, ahora=AHORA, reclamar_uso=lambda _id: True,
+        iniciar=iniciar, cerrojo_ocupado=lambda: False,
+        escribir=escribir, transicionar=transicionar,
+    )
+    assert respuesta.codigo == "aceptada"
+    assert json.loads(ruta.read_text(encoding="utf-8"))["estado"] == "hecha"
+
+
+def test_terminal_escrito_por_el_finalizador_no_se_pisa_si_falla_el_start(tmp_path) -> None:
+    ruta = _ruta_estado(tmp_path)
+    escribir, transicionar = _callbacks_reales(ruta)
+
+    def iniciar(unidad: str) -> bool:
+        # Carrera T-17: el finalizador dejó terminal antes de que el auxiliar anote fallida.
+        actual = json.loads(ruta.read_text(encoding="utf-8"))
+        actual["estado"] = "hecha"
+        assert escribir_estado(ruta, actual) is ResultadoEscritura.OK
+        return False
+
+    respuesta = procesar(
+        peticion(), clave=CLAVE, ahora=AHORA, reclamar_uso=lambda _id: True,
+        iniciar=iniciar, cerrojo_ocupado=lambda: False,
+        escribir=escribir, transicionar=transicionar,
+    )
+    assert respuesta.codigo == "no_disponible"
+    assert json.loads(ruta.read_text(encoding="utf-8"))["estado"] == "hecha"

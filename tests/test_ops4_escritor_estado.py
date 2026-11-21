@@ -1,17 +1,47 @@
-"""Pruebas del escritor atómico; no hay ejecución ni autorización."""
+"""Pruebas del escritor atómico y de la guarda de monotonía; sin sistema real.
+
+El estado que lee la app corre con PUID:PGID sobre un montaje `ro`: el fichero
+debe quedar `0640 root:<grupo>` (no `0600 root:root`) para que la app pueda
+leerlo, y la guarda de transición no puede pisar un terminal.
+"""
 from __future__ import annotations
 
 import json
+import os
+import stat
 
 import pytest
 
 from deploy.ops.escritor_estado_actualizar_ops4 import (
     MAX_BYTES,
+    MODO_ESTADO,
     ResultadoEscritura,
+    ResultadoLectura,
     escribir_estado,
+    leer_estado_estricto,
+    propietario_servicio,
+    publicar_transicion,
 )
 
-ESTADO = {"schema": 1, "estado": "aceptada", "id": "a" * 32}
+ID = "a" * 32
+AHORA = 1_800_000_000
+ESTADO = {"schema": 1, "estado": "aceptada", "id": ID}
+
+
+def _inicial(tmp_path, *, estado="en_curso", inicio=AHORA - 5, actualizado=AHORA - 5):
+    ruta = tmp_path / "estado.json"
+    assert escribir_estado(ruta, {
+        "schema": 1, "id": ID, "estado": estado,
+        "inicio_epoch": inicio, "actualizado_epoch": actualizado,
+    }) is ResultadoEscritura.OK
+    return ruta
+
+
+def _leer(ruta):
+    return json.loads(ruta.read_text(encoding="utf-8"))
+
+
+# ── Publicación atómica ─────────────────────────────────────────────────────
 
 
 def test_publica_json_canonico(tmp_path) -> None:
@@ -81,3 +111,168 @@ def test_callbacks_invalidos_no_publican(tmp_path, fsync, replace) -> None:
     resultado = escribir_estado(destino, ESTADO, fsync=fsync, replace=replace)
     assert resultado is ResultadoEscritura.INCIERTO
     assert not destino.exists() or json.loads(destino.read_text()) == ESTADO
+
+
+# ── Permisos del fichero de estado (H-5) ────────────────────────────────────
+
+
+def test_fichero_queda_0640_para_que_la_app_pueda_leerlo(tmp_path) -> None:
+    destino = tmp_path / "estado.json"
+    assert escribir_estado(destino, ESTADO) is ResultadoEscritura.OK
+    assert MODO_ESTADO == 0o640
+    assert stat.S_IMODE(destino.stat().st_mode) == 0o640
+    assert not destino.stat().st_mode & stat.S_IWGRP
+    assert not destino.stat().st_mode & stat.S_IWOTH
+
+
+def test_propietario_explicito_se_aplica(tmp_path) -> None:
+    destino = tmp_path / "estado.json"
+    resultado = escribir_estado(
+        destino, ESTADO, propietario=(os.getuid(), os.getgid()),
+    )
+    assert resultado is ResultadoEscritura.OK
+    info = destino.stat()
+    assert (info.st_uid, info.st_gid) == (os.getuid(), os.getgid())
+    assert stat.S_IMODE(info.st_mode) == 0o640
+
+
+def test_propietario_servicio_usa_el_grupo_del_directorio(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    destino = tmp_path / "estado.json"
+    assert propietario_servicio(destino) == (0, tmp_path.stat().st_gid)
+
+
+def test_propietario_servicio_sin_privilegios_no_cambia_dueno(monkeypatch) -> None:
+    monkeypatch.setattr(os, "geteuid", lambda: 1000)
+    assert propietario_servicio("/var/lib/zascarr/ops/actualizar-status.json") is None
+
+
+# ── Lector estricto ─────────────────────────────────────────────────────────
+
+
+def test_lector_estricto_acepta_el_esquema_1(tmp_path) -> None:
+    ruta = _inicial(tmp_path)
+    lectura, datos = leer_estado_estricto(ruta)
+    assert lectura is ResultadoLectura.OK
+    assert datos is not None and datos["id"] == ID
+
+
+@pytest.mark.parametrize("payload", [
+    b"",
+    b"[]",
+    b'{"schema":1,"schema":1}',
+    b'{"schema":1}',
+    f'{{"schema":1,"id":"{ID}","estado":"aceptada","inicio_epoch":1,'
+    f'"actualizado_epoch":1,"extra":1}}'.encode(),
+    f'{{"schema":2,"id":"{ID}","estado":"aceptada","inicio_epoch":1,'
+    f'"actualizado_epoch":1}}'.encode(),
+    b'{"schema":1,"id":"zz","estado":"aceptada","inicio_epoch":1,"actualizado_epoch":1}',
+    f'{{"schema":1,"id":"{ID}","estado":"raro","inicio_epoch":1,'
+    f'"actualizado_epoch":1}}'.encode(),
+    f'{{"schema":1,"id":"{ID}","estado":"aceptada","inicio_epoch":2,'
+    f'"actualizado_epoch":1}}'.encode(),
+])
+def test_lector_estricto_falla_cerrado(tmp_path, payload) -> None:
+    ruta = tmp_path / "estado.json"
+    ruta.write_bytes(payload)
+    lectura, datos = leer_estado_estricto(ruta)
+    assert lectura is ResultadoLectura.INVALIDO
+    assert datos is None
+
+
+def test_lector_estricto_no_sigue_enlaces_ni_abre_directorios(tmp_path) -> None:
+    real = _inicial(tmp_path)
+    enlace = tmp_path / "enlace.json"
+    enlace.symlink_to(real)
+    assert leer_estado_estricto(enlace)[0] is ResultadoLectura.INVALIDO
+    assert leer_estado_estricto(tmp_path)[0] is ResultadoLectura.INVALIDO
+    assert leer_estado_estricto(tmp_path / "no-existe.json")[0] is ResultadoLectura.AUSENTE
+
+
+def test_lector_estricto_rechaza_grupo_o_otros_con_escritura(tmp_path) -> None:
+    ruta = _inicial(tmp_path)
+    ruta.chmod(0o664)
+    assert leer_estado_estricto(ruta)[0] is ResultadoLectura.INVALIDO
+
+
+# ── Guarda de monotonía (publicar_transicion) ───────────────────────────────
+
+
+def test_transicion_conserva_id_e_inicio_y_actualiza_epoch(tmp_path) -> None:
+    ruta = _inicial(tmp_path)
+    assert publicar_transicion(
+        ruta, "hecha", ahora=AHORA + 10, id_=ID, inicio_epoch=AHORA - 5,
+    ) is ResultadoEscritura.OK
+    datos = _leer(ruta)
+    assert datos["estado"] == "hecha"
+    assert datos["id"] == ID
+    assert datos["inicio_epoch"] == AHORA - 5
+    assert datos["actualizado_epoch"] == AHORA + 10
+
+
+def test_terminal_no_se_pisa(tmp_path) -> None:
+    ruta = _inicial(tmp_path, estado="hecha")
+    for nuevo in ("en_curso", "fallida", "incierta"):
+        assert publicar_transicion(
+            ruta, nuevo, ahora=AHORA + 10, id_=ID, inicio_epoch=AHORA - 5,
+        ) is ResultadoEscritura.INVALIDO
+    datos = _leer(ruta)
+    assert datos["estado"] == "hecha"
+    assert datos["actualizado_epoch"] == AHORA - 5
+
+
+def test_no_baja_actualizado_epoch(tmp_path) -> None:
+    ruta = _inicial(tmp_path, inicio=AHORA - 5, actualizado=AHORA)
+    assert publicar_transicion(
+        ruta, "hecha", ahora=AHORA - 1, id_=ID, inicio_epoch=AHORA - 5,
+    ) is ResultadoEscritura.INVALIDO
+    assert _leer(ruta)["estado"] == "en_curso"
+
+
+@pytest.mark.parametrize("cambios", [
+    {"id_": "b" * 32, "inicio_epoch": AHORA - 5},
+    {"id_": ID, "inicio_epoch": AHORA - 100},
+])
+def test_rechaza_cambiar_id_o_inicio(tmp_path, cambios) -> None:
+    ruta = _inicial(tmp_path)
+    assert publicar_transicion(
+        ruta, "hecha", ahora=AHORA + 10, **cambios,
+    ) is ResultadoEscritura.INVALIDO
+    assert _leer(ruta)["estado"] == "en_curso"
+
+
+def test_reloj_invertido_no_escribe(tmp_path) -> None:
+    ruta = _inicial(tmp_path, inicio=AHORA + 100, actualizado=AHORA + 100)
+    assert publicar_transicion(
+        ruta, "hecha", ahora=AHORA, id_=ID, inicio_epoch=AHORA + 100,
+    ) is ResultadoEscritura.INVALIDO
+    datos = _leer(ruta)
+    assert datos["estado"] == "en_curso"
+    assert datos["actualizado_epoch"] == AHORA + 100
+
+
+def test_sin_estado_no_crea_nada(tmp_path) -> None:
+    ruta = tmp_path / "no-existe.json"
+    assert publicar_transicion(
+        ruta, "hecha", ahora=AHORA, id_=ID, inicio_epoch=AHORA - 5,
+    ) is ResultadoEscritura.INVALIDO
+    assert not ruta.exists()
+
+
+def test_transicion_con_fallo_durable_es_incierta_y_no_pisa(tmp_path) -> None:
+    ruta = _inicial(tmp_path)
+
+    def fsync_falla(_fd: int) -> None:
+        raise OSError("fsync")
+
+    assert publicar_transicion(
+        ruta, "hecha", ahora=AHORA + 10, id_=ID, inicio_epoch=AHORA - 5,
+        fsync=fsync_falla,
+    ) is ResultadoEscritura.INCIERTO
+    assert _leer(ruta)["estado"] == "en_curso"
+
+
+@pytest.mark.parametrize("estado", ["", "ok", "HECHA", None, 1])
+def test_transicion_solo_acepta_estados_cerrados(tmp_path, estado) -> None:
+    ruta = _inicial(tmp_path)
+    assert publicar_transicion(ruta, estado, ahora=AHORA) is ResultadoEscritura.INVALIDO

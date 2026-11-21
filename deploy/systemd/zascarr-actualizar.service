@@ -10,8 +10,12 @@ Type=exec
 User=root
 WorkingDirectory=@REPO@
 ExecStart=/bin/bash @REPO@/scripts/update.sh --rama main
-ExecStartPost=/usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-estado-actualizar-ops4 --ruta @ZASCARR_DATA_DIR@/ops/actualizar-status.json --resultado hecha
-ExecStopPost=/bin/sh -c 'test "$SERVICE_RESULT" = success || /usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-estado-actualizar-ops4 --ruta @ZASCARR_DATA_DIR@/ops/actualizar-status.json --resultado fallida'
+# A1: sin ExecStartPost. Un único cierre de último recurso, con `-`: un fallo
+# del finalizador no convierte en fallida una actualización correcta (T-10).
+# Solo `success:exited:0` es `hecha`; el 75 es el cerrojo ocupado, que por
+# contrato ocurre antes de efectos; el resto (código 1, timeout, señal, parada
+# manual) es `incierta` porque no se puede distinguir pre de post-efecto (H-13).
+ExecStopPost=-/bin/sh -c 'case "$SERVICE_RESULT:$EXIT_CODE:$EXIT_STATUS" in success:exited:0) r=hecha;; exit-code:exited:75) r=fallida;; *) r=incierta;; esac; exec /usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-estado-actualizar-ops4 --ruta @ZASCARR_DATA_DIR@/ops/actualizar-status.json --resultado "$r"'
 RuntimeMaxSec=5400
 TimeoutStopSec=60
 KillMode=control-group
@@ -29,6 +33,8 @@ RestrictNamespaces=yes
 RestrictSUIDSGID=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 # El script necesita escribir el repo, datos, copias y cerrojo; no se amplía a más.
-ReadWritePaths=/opt/zascarr /var/lib/zascarr /var/backups/zascarr /run/zascarr-ops.lock
+# `-` en el cerrojo (H-7): un host sin OPS1 puede no tenerlo y el sandbox no debe
+# impedir el arranque de la unidad.
+ReadWritePaths=/opt/zascarr /var/lib/zascarr /var/backups/zascarr -/run/zascarr-ops.lock
 CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID CAP_NET_BIND_SERVICE
 # Sin [Install]: no arranca al boot ni se activa solo.

@@ -14,6 +14,10 @@ def _leer(nombre: str) -> configparser.ConfigParser:
     return config
 
 
+def _texto(nombre: str) -> str:
+    return (UNIDADES / nombre).read_text(encoding="utf-8")
+
+
 def test_unidad_de_actualizacion_tiene_accion_fija_y_limites() -> None:
     config = _leer("zascarr-actualizar.service")
     servicio = config["Service"]
@@ -27,10 +31,43 @@ def test_unidad_de_actualizacion_tiene_accion_fija_y_limites() -> None:
     assert servicio["Restart"] == "no"
     assert "/opt/zascarr" in servicio["ReadWritePaths"]
     assert servicio["WorkingDirectory"] == "@REPO@"
-    assert "--resultado hecha" in servicio["ExecStartPost"]
-    assert "SERVICE_RESULT" in servicio["ExecStopPost"]
     assert "AF_INET" in servicio["RestrictAddressFamilies"]
     assert "Install" not in config
+
+
+def test_la_unidad_no_marca_hecha_al_arrancar() -> None:
+    """H-1/T-10: `ExecStartPost` escribía `hecha` tras el exec, no al terminar."""
+    texto = _texto("zascarr-actualizar.service")
+    lineas = [linea for linea in texto.splitlines() if linea.startswith("ExecStartPost=")]
+    assert lineas == []
+
+
+def test_unico_execstoppost_con_prefijo_y_mapeo_de_systemd() -> None:
+    texto = _texto("zascarr-actualizar.service")
+    stops = [linea for linea in texto.splitlines() if linea.startswith("ExecStopPost=")]
+    assert len(stops) == 1
+    assert stops[0].startswith("ExecStopPost=-")
+    valor = stops[0][len("ExecStopPost="):]
+    assert valor.startswith("-/bin/sh -c")
+    for variable in ("SERVICE_RESULT", "EXIT_CODE", "EXIT_STATUS"):
+        assert variable in valor
+    # Tabla normativa de A1: solo el éxito limpio es `hecha`; el 75 del cerrojo
+    # es pre-efecto por contrato; todo lo demás es incierta (H-13).
+    assert 'success:exited:0) r=hecha' in valor
+    assert 'exit-code:exited:75) r=fallida' in valor
+    assert '*) r=incierta' in valor
+    assert '--resultado "$r"' in valor
+
+
+def test_readwritepaths_incluye_el_cerrojo_con_prefijo() -> None:
+    servicio = _leer("zascarr-actualizar.service")["Service"]
+    rutas = servicio["ReadWritePaths"].split()
+    # H-7: un host sin OPS1 puede no tener /run/zascarr-ops.lock; el `-` evita
+    # que el sandbox falle al arrancar la unidad.
+    assert "-/run/zascarr-ops.lock" in rutas
+    assert "/opt/zascarr" in rutas
+    assert "/var/lib/zascarr" in rutas
+    assert "/var/backups/zascarr" in rutas
 
 
 def test_unidad_auxiliar_no_tiene_red_ni_capacidades() -> None:

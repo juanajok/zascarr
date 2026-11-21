@@ -3,12 +3,17 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
+from deploy.ops.escritor_estado_actualizar_ops4 import (
+    ResultadoEscritura,
+    escribir_estado,
+)
 from zascarr.services.estado_actualizacion import (
     MAX_BYTES,
     SIN_NOTICIAS_SEGUNDOS,
@@ -145,3 +150,11 @@ def test_no_revela_secretos_ni_rutas(tmp_path: Path) -> None:
     result = read(path)
     assert result is EstadoActualizacion.INCIERTA
     assert "secreta" not in str(result)
+
+
+def test_lee_el_estado_0640_que_escribe_el_host(tmp_path: Path) -> None:
+    """H-5: el escritor crea `0640`; la app (PUID:PGID, montaje `ro`) lo lee."""
+    path = tmp_path / "actualizar-status.json"
+    assert escribir_estado(path, record(estado="hecha")) is ResultadoEscritura.OK
+    assert stat.S_IMODE(path.stat().st_mode) == 0o640
+    assert read(path) is EstadoActualizacion.HECHA
