@@ -52,9 +52,11 @@ def test_instala_clave_dirs_modulos_y_unidades_sin_activar(tmp_path: Path) -> No
         texto = destino.read_text(encoding="utf-8")
         if unidad != "zascarr-actualizar.service":
             assert str(tmp_path / "data") in texto
-    assert "/opt/zascarr/zascarr" in (
+    unit_actualizar = (
         tmp_path / "units" / "zascarr-actualizar.service"
     ).read_text(encoding="utf-8")
+    assert str(RAIZ) in unit_actualizar
+    assert "@REPO@" not in unit_actualizar
     assert "systemd omitido" in r.stdout
     assert "OPS4_ACTUALIZACION_HABILITADA (por defecto false)" in r.stdout
 

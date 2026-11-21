@@ -19,13 +19,14 @@ def test_unidad_de_actualizacion_tiene_accion_fija_y_limites() -> None:
     servicio = config["Service"]
     assert servicio["Type"] == "exec"
     assert servicio["ExecStart"] == (
-        "/bin/bash /opt/zascarr/zascarr/scripts/update.sh --rama main"
+        "/bin/bash @REPO@/scripts/update.sh --rama main"
     )
     assert servicio["RuntimeMaxSec"] == "5400"
     assert servicio["KillMode"] == "control-group"
     assert servicio["SendSIGKILL"] == "yes"
     assert servicio["Restart"] == "no"
     assert "/opt/zascarr" in servicio["ReadWritePaths"]
+    assert servicio["WorkingDirectory"] == "@REPO@"
     assert "AF_INET" in servicio["RestrictAddressFamilies"]
     assert "Install" not in config
 

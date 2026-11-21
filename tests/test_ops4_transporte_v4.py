@@ -21,7 +21,7 @@ from zascarr.services.actualizacion_transporte_v4 import (
 )
 
 ID = "a" * 32
-SETTINGS = SimpleNamespace(ops_socket_file="/no/existe.sock")
+SETTINGS = SimpleNamespace(ops4_socket_file="/no/existe.sock")
 
 
 def respuesta_v4(codigo: CodigoV4) -> bytes:
@@ -138,7 +138,7 @@ async def test_conversador_real_por_socket_temporal(tmp_path) -> None:
     server = await asyncio.start_unix_server(handler, path=str(ruta))
     async with server:
         assert await pedir_actualizacion_v4(
-            SimpleNamespace(ops_socket_file=str(ruta)), b"peticion\n", id_=ID,
+            SimpleNamespace(ops4_socket_file=str(ruta)), b"peticion\n", id_=ID,
             conversar=_conversar,
         ) is CodigoTransporteV4.ACEPTADA
 
@@ -174,7 +174,7 @@ async def test_flujo_v4_socket_temporal_con_consumo_durable(tmp_path) -> None:
 
         server = await asyncio.start_unix_server(handler, path=str(ruta))
         async with server:
-            config = SimpleNamespace(ops_socket_file=str(ruta))
+            config = SimpleNamespace(ops4_socket_file=str(ruta))
             assert await pedir_actualizacion_v4(
                 config, peticion, id_=ID,
             ) is CodigoTransporteV4.ACEPTADA
@@ -183,3 +183,12 @@ async def test_flujo_v4_socket_temporal_con_consumo_durable(tmp_path) -> None:
             ) is CodigoTransporteV4.RECHAZADA
     finally:
         os.close(fd)
+
+
+@pytest.mark.asyncio
+async def test_sin_socket_v4_no_cae_al_de_copias() -> None:
+    settings = SimpleNamespace(ops_socket_file="/tmp/copias.sock")
+    assert await pedir_actualizacion_v4(
+        settings, b"peticion\n", id_=ID,
+        conversar=lambda *_: pytest.fail("no debe abrir el socket de copias"),
+    ) is CodigoTransporteV4.NO_DISPONIBLE

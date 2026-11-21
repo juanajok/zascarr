@@ -101,6 +101,8 @@ Sigue las guías oficiales con estas precisiones locales:
   un solo uso; el host la verifica. La rama tiene la UI conectada solo detrás
   de `OPS4_ACTUALIZACION_HABILITADA=false`, auxiliar/unidad separados y
   instalador sin activación por defecto. No está habilitada ni desplegada.
+  La decisión de confianza en `main`, acción fija y riesgo residual de la clave
+  compartida está en [ADR 0026](docs/adr/0026-actualizacion-manual-confianza-main.md).
 
 ## 4. Rendimiento en Pi
 

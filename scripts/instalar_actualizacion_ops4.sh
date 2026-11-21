@@ -71,6 +71,7 @@ sustituir() {
     texto="${texto%x}"
     texto="${texto//@ZASCARR_DATA_DIR@/${DATA_DIR}}"
     texto="${texto//@GRUPO@/${GRUPO}}"
+    texto="${texto//@REPO@/${REPO_DIR}}"
     if [[ "${texto}" =~ @[A-Z_]+@ ]]; then
         echo "Marcadores sin sustituir en $1" >&2; return 1
     fi

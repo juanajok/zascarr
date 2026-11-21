@@ -18,8 +18,10 @@ from zascarr.services.solicitud_actualizacion_v4 import (
     ResultadoSolicitudV4,
     solicitar_actualizacion_v4,
 )
+from zascarr.web.routes import crear_templates
 
 router = APIRouter(tags=["ui"])
+templates = crear_templates()
 
 _MENSAJES = {
     ResultadoSolicitudV4.NO_HABILITADA: "La actualización no está habilitada.",
@@ -41,6 +43,15 @@ _MENSAJES = {
 }
 
 
+def _respuesta(request: Request | None, mensaje: str, tipo: str, status_code: int) -> HTMLResponse:
+    if request is None:
+        return HTMLResponse(f"<p>{mensaje}</p>", status_code=status_code)
+    return templates.TemplateResponse(
+        request, "actualizacion_resultado.html",
+        {"mensaje": mensaje, "tipo": tipo}, status_code=status_code,
+    )
+
+
 @router.post("/ui/actualizar", response_class=HTMLResponse)
 async def actualizar(
     request: Request,
@@ -52,7 +63,7 @@ async def actualizar(
     if not settings.ops4_actualizacion_habilitada:
         raise HTTPException(status_code=404, detail="No disponible")
     if entiendo != "si":
-        return HTMLResponse("<p>Confirma que entiendes la operación.</p>", status_code=400)
+        return _respuesta(request, "Confirma que entiendes la operación.", "warn", 400)
     try:
         clave = await asyncio.to_thread(
             leer_clave_autorizacion,
@@ -61,8 +72,8 @@ async def actualizar(
             modo_esperado=0o440,
         )
     except ValueError:
-        return HTMLResponse(
-            "<p>La clave de actualización no está disponible.</p>", status_code=503,
+        return _respuesta(
+            request, "La clave de actualización no está disponible.", "warn", 503,
         )
     resultado = await solicitar_actualizacion_v4(
         settings, clave=clave, contrasena=contrasena, entiendo=True,
@@ -71,4 +82,5 @@ async def actualizar(
     mensaje = _MENSAJES.get(
         resultado.resultado, "No se pudo completar la solicitud.",
     )
-    return HTMLResponse(f"<p>{mensaje}</p>", status_code=200)
+    tipo = "ok" if resultado.resultado is ResultadoSolicitudV4.ACEPTADA else "warn"
+    return _respuesta(request, mensaje, tipo, 200)

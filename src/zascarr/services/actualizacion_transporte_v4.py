@@ -73,8 +73,6 @@ async def pedir_actualizacion_v4(
         return CodigoTransporteV4.RESPUESTA_INVALIDA
     socket_file = getattr(settings, "ops4_socket_file", None)
     if not isinstance(socket_file, str) or not socket_file:
-        socket_file = getattr(settings, "ops_socket_file", None)
-    if not isinstance(socket_file, str) or not socket_file:
         return CodigoTransporteV4.NO_DISPONIBLE
     try:
         respuesta = await asyncio.wait_for(

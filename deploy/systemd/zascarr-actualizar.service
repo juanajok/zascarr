@@ -8,8 +8,8 @@ Requires=docker.service
 [Service]
 Type=exec
 User=root
-WorkingDirectory=/opt/zascarr/zascarr
-ExecStart=/bin/bash /opt/zascarr/zascarr/scripts/update.sh --rama main
+WorkingDirectory=@REPO@
+ExecStart=/bin/bash @REPO@/scripts/update.sh --rama main
 RuntimeMaxSec=5400
 TimeoutStopSec=60
 KillMode=control-group

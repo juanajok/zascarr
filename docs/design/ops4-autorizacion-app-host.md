@@ -95,3 +95,13 @@ durable (incluidos aislamiento y UI) forman parte de las **791 pruebas OPS4/pari
 [UI](ui-ops4-autorizacion-2026-11-20.md) y
 [QA](qa-ops4-autorizacion-2026-11-20.md). El contrato permanece sin importar
 desde web, API, main ni el auxiliar.
+
+
+## Riesgo residual (ADR 0026)
+
+El testigo y la firma comparten `actualizar.key`, y la app debe leerla para
+emitir el testigo. Cualquier código del contenedor o proceso del grupo con
+acceso a la clave puede fabricar una petición válida sin contraseña. La acción
+fija, el socket restringido, el consumo único y el cerrojo acotan el daño; no
+acreditan identidad humana en el host. La decisión está en
+[ADR 0026](../../adr/0026-actualizacion-manual-confianza-main.md).

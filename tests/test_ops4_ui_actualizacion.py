@@ -181,3 +181,29 @@ async def test_ruta_hasta_socket_real_con_consumo_durable(tmp_path, monkeypatch)
     finally:
         reiniciar_estado()
         os.close(fd)
+
+
+@pytest.mark.asyncio
+async def test_resultado_se_pinta_en_el_layout_normal(monkeypatch) -> None:
+    from starlette.requests import Request
+
+    monkeypatch.setattr(actualizacion, "get_settings", lambda: config(
+        ops4_actualizacion_habilitada=True,
+    ))
+    monkeypatch.setattr(actualizacion, "leer_clave_autorizacion", lambda *a, **k: b"k" * 32)
+
+    async def aceptada(_settings, **_kwargs):
+        return SolicitudV4(ResultadoSolicitudV4.ACEPTADA, id="a" * 32)
+
+    monkeypatch.setattr(actualizacion, "solicitar_actualizacion_v4", aceptada)
+    request = Request({
+        "type": "http", "http_version": "1.1", "method": "POST",
+        "path": "/ui/actualizar", "raw_path": b"/ui/actualizar",
+        "query_string": b"", "headers": [], "client": ("test", 1),
+        "server": ("test", 80), "scheme": "http", "root_path": "",
+    })
+    respuesta = await actualizacion.actualizar(request, "clave", "si")
+    assert respuesta.status_code == 200
+    assert b"<html" in respuesta.body
+    assert b"Volver a Estado" in respuesta.body
+    assert b"Solicitud aceptada" in respuesta.body
