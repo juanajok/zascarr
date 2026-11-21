@@ -2916,7 +2916,7 @@ body:has(.lector-escena) .tareas-fuera,
 body:has(.lector-escena) .site-footer { display: none; }
 body:has(.lector-escena) .app { display: block; }
 body:has(.lector-escena) .contenido > .content { max-width: none; width: 100%; padding: 0; }
-body:has(.lector-escena) .skip { z-index: 20; }
+body:has(.lector-escena) .skip { display: none; }
 
 .lector-escena {
   position: fixed; inset: 0; z-index: 10; display: block;
@@ -2940,6 +2940,24 @@ body:has(.lector-escena) .skip { z-index: 20; }
 .lector-barra .lector-contador { flex: 0 0 auto; }
 .lector-barra .lector-zoom { flex: 0 0 auto; }
 #lector-menu-boton { min-width: 44px; min-height: 44px; }
+/* UATP-03 D-1: asa 44×44, visible solo con la barra oculta y fuera de #fin. */
+.lector-asa {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 4;
+  display: none; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px; padding: 0;
+  border: var(--border-panel) solid var(--ink); border-top: 0;
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+  background: var(--paper); color: var(--ink); cursor: pointer;
+  transition: opacity .18s ease;
+}
+.lector-asa[hidden] { display: none; }
+.lector-escena[data-chrome="oculto"] .lector-asa:not([hidden]) { display: inline-flex; }
+.lector-asa svg { width: 20px; height: 20px; }
+.lector-asa:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+@media (forced-colors: active) {
+  .lector-asa { border-color: CanvasText; }
+}
+@media (prefers-reduced-motion: reduce) { .lector-asa { transition: none !important; } }
 .lector-espera {
   flex: 1; display: grid; align-content: safe center; justify-items: center;
   gap: var(--space-2); padding: var(--space-4); text-align: center;

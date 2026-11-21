@@ -774,6 +774,35 @@ const border = await card.evaluate(el => getComputedStyle(el).borderWidth);   //
 **Criterio**: CSS cargado; `backgroundColor` ≈ el token `--paper`; bordes >= 2px;
 sin overflow horizontal en móvil; tema oscuro aplica; el botón no permite doble envío.
 
+### 13.8 UATP-03 · asa, foco y reapertura del lector
+
+> Requiere una serie con un número y un CBZ de ≥3 páginas. Ejecutar en Chrome estable
+> (registrar versión) a 320×568, 390×844 y 568×320. Sin navegador, **NOT RUN**; el HTML
+> no acredita el foco real.
+
+```text
+1. Abrir /ui/leer/<file_id> en modo pantalla. Con la barra oculta:
+   #lector-asa visible, getBoundingClientRect() >= 44x44, aria-label/aria-controls.
+   activeElement === body y ningún :focus-visible dentro de .lector-escena.
+2. Tocar el asa: data-chrome="", asa oculta, foco en «Volver al número»; página,
+   imagen, modo y zoom sin cambios; sin POST /progreso ni /sentido.
+3. Tocar la franja superior (<=44 px) con la barra oculta: revela y NO cambia de página.
+4. Tab desde body: entra en la barra y la revela; Tab desde el último enfocable vuelve
+   al primero; Shift+Tab al revés; el foco no sale de .lector-escena.
+5. Opciones: abrir con toque/Enter; tocar título/leyenda/párrafo no cierra ni manda el
+   foco a main; «Cerrar» y Escape cierran, foco al disparador, aria-expanded=false,
+   página/modo/imagen intactos.
+6. «Volver al número» dentro del viewport, >=44 px de alto y scrollWidth <= innerWidth.
+7. Reabrir: avanzar a N, volver al número y abrir: src /pagina/N y contador N/M;
+   con progreso 99/3 se sirve 3.
+8. RTL: sentido RTL, toque izquierdo avanza y derecho retrocede; etiquetas de acción;
+   pareja doble espejada.
+9. Regresión: pasar página por toque/deslizamiento no muestra la barra; fin y «Quedarme» OK.
+```
+
+**Evidencia:** `docs/design/uatp03/resultado-chrome.md` con SHA, versión de Chrome,
+viewport, PASS/FAIL/NOT RUN por fila y capturas. Sin esa ejecución AC-09 queda NOT RUN.
+
 ---
 
 ## 14. Casos de error / seguridad / regresión

@@ -68,8 +68,8 @@ async def leer(request: Request, file_id: UUID,
         select(ReadingProgress).where(ReadingProgress.issue_id == numero.id)
     )).scalar_one_or_none()
     actual = progreso.current_page if progreso is not None else 1
-    if actual < 1 or actual > total:
-        actual = 1
+    # UATP-03 D-4: reanudar en la última si la guardada supera el total; <1, en la primera.
+    actual = max(1, min(actual, max(1, total)))
     serie = await db.get(Series, numero.series_id)
     sentido, origen_sentido = await sentido_de_lectura(db, file_id)
     siguiente = await siguiente_numero(db, file_id)

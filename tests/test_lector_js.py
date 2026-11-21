@@ -855,3 +855,149 @@ def test_lector_js_pagina_de_fin_bajo_intencion(tmp_path):
         "portadaSeHidrataAlAbrirYSoloUnaVez": True,
         "deseoMantieneLaVueltaYAnuncia": True,
     }
+
+
+HARNESS_UATP03 = r'''
+const fs = require("fs");
+const vm = require("vm");
+const js = fs.readFileSync(process.argv[2], "utf8");
+let DOC = null;
+function E(id) {
+  this.id = id; this.dataset = {}; this.attrs = {}; this.listeners = {};
+  this.hidden = false; this.parent = null; this.style = {}; this.textContent = "";
+  this.complete = true; this.naturalWidth = 800; this.naturalHeight = 1200;
+  this.offsetParent = {}; this.clientWidth = 1000; this.clientHeight = 800;
+}
+E.prototype.addEventListener = function (t, f) { (this.listeners[t] ||= []).push(f); };
+E.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
+E.prototype.getAttribute = function (k) { return this.attrs[k] ?? null; };
+E.prototype.removeAttribute = function (k) { delete this.attrs[k]; };
+E.prototype.contains = function (o) { for (let n = o; n; n = n.parent) if (n === this) return true; return false; };
+E.prototype.closest = function (sel) {
+  // Suficiente para el arnés: los controles interactivos se marcan con `.interactivo`.
+  if (this.interactivo) return this;
+  if (this.parent && this.parent.interactivo) return this.parent;
+  return null;
+};
+E.prototype.focus = function () { DOC.activeElement = this; };
+E.prototype.getBoundingClientRect = function () { return { left: 0, width: 1000 }; };
+function montar(sentido) {
+  const els = {};
+  const body = new E("body");
+  const doc = {
+    activeElement: body, body, documentElement: new E("html"), fullscreenElement: null,
+    listeners: {},
+    addEventListener: (t, f) => { (doc.listeners[t] ||= []).push(f); },
+    getElementById: (id) => (els[id] ||= new E(id)),
+    querySelector: (sel) => (sel === "[data-lector]" ? root : null),
+    querySelectorAll: () => [],
+  };
+  DOC = doc;
+  const root = new E("root");
+  root.dataset = { total: "8", pagina: "1", sentido: sentido || "ltr",
+    paginaUrl: "/p/", progresoUrl: "/prog", sentidoUrl: "/sent", volver: "/volver" };
+  doc.querySelector = (sel) => (sel === "[data-lector]" ? root : null);
+  const barra = doc.getElementById("lector-barra"); barra.parent = root;
+  const volver = new E("volver"); volver.parent = barra; volver.interactivo = true;
+  const menuBoton = doc.getElementById("lector-menu-boton"); menuBoton.parent = barra;
+  const menu = doc.getElementById("lector-menu"); menu.parent = barra; menu.hidden = true;
+  const menuCerrar = doc.getElementById("lector-menu-cerrar"); menuCerrar.parent = menu;
+  const asa = doc.getElementById("lector-asa"); asa.parent = root; asa.hidden = true;
+  const lienzo = doc.getElementById("lector-lienzo"); lienzo.parent = root;
+  lienzo.getBoundingClientRect = () => ({ left: 0, width: 1000 });
+  doc.getElementById("lector-pagina").parent = lienzo;
+  doc.getElementById("lector-paginas").parent = lienzo;
+  const orden = [volver, menuBoton, menuCerrar, asa, lienzo];
+  root.querySelectorAll = () => orden;
+  barra.querySelectorAll = () => [volver, menuBoton];
+  const sandbox = {
+    document: doc, URLSearchParams, console,
+    window: { localStorage: { getItem: () => null, setItem: () => {} },
+              location: { assign: () => {} } },
+    fetch: () => Promise.resolve({ ok: true }),
+    HTMLInputElement: function () {}, HTMLTextAreaElement: function () {},
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(js, sandbox);
+  const fire = (el, tipo, ev = {}) => (el.listeners[tipo] || []).forEach((f) => f(ev));
+  return { root, doc, fire, asa, volver, barra, menu, menuBoton, menuCerrar, lienzo, pc: null };
+}
+const salida = {};
+const inicial = montar("ltr");
+salida.asaVisibleInicial = inicial.root.dataset.chrome === "oculto" && inicial.asa.hidden === false;
+salida.sinFocoInicial = inicial.doc.activeElement === inicial.doc.body;
+inicial.fire(inicial.asa, "click", { target: inicial.asa });
+salida.asaRevelaYEnfoca = inicial.root.dataset.chrome === "" && inicial.asa.hidden === true
+  && inicial.doc.activeElement === inicial.volver;
+const tabBody = montar("ltr");
+let cancelado = false;
+tabBody.fire(tabBody.doc, "keydown", { key: "Tab", target: tabBody.doc.body,
+  preventDefault: () => { cancelado = true; } });
+salida.tabEntraEnBarra = cancelado && tabBody.root.dataset.chrome === ""
+  && tabBody.doc.activeElement === tabBody.volver;
+const ciclo = montar("ltr");
+ciclo.root.dataset.chrome = "";
+ciclo.doc.activeElement = ciclo.lienzo;
+let c1 = false;
+ciclo.fire(ciclo.doc, "keydown", { key: "Tab", target: ciclo.lienzo, preventDefault: () => { c1 = true; } });
+const trasUltimo = ciclo.doc.activeElement === ciclo.volver;
+ciclo.doc.activeElement = ciclo.volver;
+let c2 = false;
+ciclo.fire(ciclo.doc, "keydown", { key: "Tab", shiftKey: true, target: ciclo.volver,
+  preventDefault: () => { c2 = true; } });
+salida.tabCicla = c1 && trasUltimo && c2 && ciclo.doc.activeElement === ciclo.lienzo;
+const opciones = montar("ltr");
+opciones.fire(opciones.menuBoton, "click", { target: opciones.menuBoton });
+const texto = new E("texto"); texto.parent = opciones.menu;
+let pd = false;
+opciones.fire(opciones.menu, "pointerdown", { target: texto,
+  preventDefault: () => { pd = true; } });
+opciones.doc.activeElement = opciones.menuBoton;
+opciones.fire(opciones.doc, "focusout", { target: opciones.menuBoton,
+  relatedTarget: opciones.doc.body });
+salida.textoNoCierra = pd && !opciones.menu.hidden
+  && opciones.doc.activeElement !== opciones.doc.body;
+opciones.doc.activeElement = opciones.menuCerrar;
+const paginaAntes = opciones.root.dataset.pagina;
+opciones.fire(opciones.menuCerrar, "click", { target: opciones.menuCerrar });
+salida.cerrarDevuelveFoco = opciones.menu.hidden
+  && opciones.doc.activeElement === opciones.menuBoton
+  && opciones.menuBoton.attrs["aria-expanded"] === "false"
+  && opciones.root.dataset.pagina === paginaAntes;
+const franja = montar("ltr");
+franja.root.dataset.chrome = "oculto";
+const evInicio = { target: franja.lienzo, touches: [{ clientX: 500, clientY: 10 }] };
+const evFin = { target: franja.lienzo, touches: [], changedTouches: [{ clientX: 500, clientY: 10 }],
+  preventDefault: () => {} };
+franja.fire(franja.lienzo, "touchstart", evInicio);
+franja.fire(franja.lienzo, "touchend", evFin);
+salida.franjaRevelaSinPagina = franja.root.dataset.chrome === ""
+  && franja.root.dataset.pagina === "1";
+const rtl = montar("rtl");
+rtl.root.dataset.chrome = "oculto";
+const tocar = (x) => {
+  rtl.fire(rtl.lienzo, "touchstart", { target: rtl.lienzo,
+    touches: [{ clientX: x, clientY: 100 }] });
+  rtl.fire(rtl.lienzo, "touchend", { target: rtl.lienzo, touches: [],
+    changedTouches: [{ clientX: x, clientY: 100 }], preventDefault: () => {} });
+};
+tocar(150);
+const izqAvanza = rtl.root.dataset.pagina === "2";
+tocar(850);
+salida.rtlToca = izqAvanza && rtl.root.dataset.pagina === "1";
+process.stdout.write(JSON.stringify(salida));
+'''
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="requiere Node para ejecutar el JS")
+def test_uatp03_asa_foco_tab_y_opciones(tmp_path):
+    harness = tmp_path / "uatp03.js"
+    harness.write_text(HARNESS_UATP03, encoding="utf-8")
+    r = subprocess.run(["node", str(harness), str(JS)], capture_output=True, text=True,
+                       timeout=30, check=True)
+    datos = json.loads(r.stdout)
+    assert datos == {
+        "asaVisibleInicial": True, "sinFocoInicial": True,
+        "asaRevelaYEnfoca": True, "tabEntraEnBarra": True, "tabCicla": True,
+        "textoNoCierra": True, "cerrarDevuelveFoco": True,
+        "franjaRevelaSinPagina": True, "rtlToca": True,
+    }
