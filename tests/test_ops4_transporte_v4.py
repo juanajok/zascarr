@@ -53,6 +53,12 @@ async def test_aceptada_y_rechazada() -> None:
         SETTINGS, b"peticion\n", id_=ID,
         conversar=conversar(respuesta(resultado="rechazada", codigo="repetida")),
     ) is CodigoTransporteV4.RECHAZADA
+    assert await pedir_actualizacion_v4(
+        SETTINGS, b"peticion\n", id_=ID,
+        conversar=conversar(respuesta(
+            resultado="rechazada", codigo="operacion_en_curso",
+        )),
+    ) is CodigoTransporteV4.OCUPADA
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,8 @@ RAIZ = Path(__file__).resolve().parents[1]
 SCRIPT = RAIZ / "scripts" / "instalar_actualizacion_ops4.sh"
 
 
-def ejecutar(tmp_path: Path, *args: str, extra_env: dict | None = None):
+def ejecutar(tmp_path: Path, *args: str, extra_env: dict | None = None,
+             sin_grupo: bool = False):
     entorno = os.environ.copy()
     entorno.update({
         "ZASCARR_PRUEBAS": "1",
@@ -22,6 +23,8 @@ def ejecutar(tmp_path: Path, *args: str, extra_env: dict | None = None):
         "OPS4_DEST_UNIDADES": str(tmp_path / "units"),
         "OPS4_GROUP": subprocess.check_output(["id", "-gn"], text=True).strip(),
     })
+    if sin_grupo:
+        entorno.pop("OPS4_GROUP", None)
     if extra_env:
         entorno.update(extra_env)
     return subprocess.run(
@@ -53,7 +56,7 @@ def test_instala_clave_dirs_modulos_y_unidades_sin_activar(tmp_path: Path) -> No
         tmp_path / "units" / "zascarr-actualizar.service"
     ).read_text(encoding="utf-8")
     assert "systemd omitido" in r.stdout
-    assert "OPS4_ACTUALIZACION_HABILITADA=false" in r.stdout
+    assert "OPS4_ACTUALIZACION_HABILITADA (por defecto false)" in r.stdout
 
 
 def test_idempotente_conserva_la_clave(tmp_path: Path) -> None:
@@ -89,3 +92,33 @@ def test_quitar_conserva_clave_y_borrar_clave_la_elimina(tmp_path: Path) -> None
 @pytest.mark.parametrize("args", [("--opcion-mala",), ("--borrar-clave",)])
 def test_argumentos_invalidos(tmp_path: Path, args) -> None:
     assert ejecutar(tmp_path, *args).returncode == 2
+
+
+def test_grupo_por_defecto_desde_env_pgid(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / ".env").write_text(
+        f"PGID={subprocess.check_output(['id', '-g'], text=True).strip()}\n",
+        encoding="utf-8",
+    )
+    grupo = subprocess.check_output(["id", "-gn"], text=True).strip()
+    r = ejecutar(
+        tmp_path, "--yes", "--sin-systemd", sin_grupo=True,
+        extra_env={"ENV_FILE": str(root / ".env"), "ZASCARR_ROOT": str(root)},
+    )
+    assert r.returncode == 0, r.stderr
+    unit = tmp_path / "units" / "zascarr-actualizar.socket"
+    assert f"SocketGroup={grupo}" in unit.read_text(encoding="utf-8")
+
+
+def test_grupo_no_resuelto_aborta(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / ".env").write_text("PGID=424242\n", encoding="utf-8")
+    r = ejecutar(
+        tmp_path, "--yes", "--sin-systemd", sin_grupo=True,
+        extra_env={"ENV_FILE": str(root / ".env"), "ZASCARR_ROOT": str(root)},
+    )
+    assert r.returncode == 1
+    assert "No se pudo resolver el grupo" in r.stderr
+    assert not (tmp_path / "data").exists()

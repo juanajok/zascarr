@@ -133,6 +133,7 @@ async def solicitar_actualizacion_v4(
 _MAPA_TRANSPORTE = {
     CodigoTransporteV4.ACEPTADA: SolicitudV4(ResultadoSolicitudV4.ACEPTADA),
     CodigoTransporteV4.RECHAZADA: SolicitudV4(ResultadoSolicitudV4.RECHAZADA),
+    CodigoTransporteV4.OCUPADA: SolicitudV4(ResultadoSolicitudV4.OCUPADA),
     CodigoTransporteV4.NO_DISPONIBLE: SolicitudV4(ResultadoSolicitudV4.NO_DISPONIBLE),
     CodigoTransporteV4.RESPUESTA_INVALIDA:
         SolicitudV4(ResultadoSolicitudV4.RESPUESTA_INVALIDA),

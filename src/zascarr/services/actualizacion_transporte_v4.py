@@ -31,6 +31,7 @@ _CODIGOS = frozenset({
 class CodigoTransporteV4(StrEnum):
     ACEPTADA = "aceptada"
     RECHAZADA = "rechazada"
+    OCUPADA = "ocupada"
     NO_DISPONIBLE = "no_disponible"
     RESPUESTA_INVALIDA = "respuesta_invalida"
     INCIERTO = "incierto"
@@ -121,6 +122,8 @@ def _interpretar(respuesta: object, id_: object) -> CodigoTransporteV4:
         return CodigoTransporteV4.RESPUESTA_INVALIDA
     if resultado == "aceptada" and cuerpo["codigo"] == "aceptada":
         return CodigoTransporteV4.ACEPTADA
+    if resultado == "rechazada" and cuerpo["codigo"] == "operacion_en_curso":
+        return CodigoTransporteV4.OCUPADA
     if resultado == "rechazada" and cuerpo["codigo"] != "aceptada":
         return CodigoTransporteV4.RECHAZADA
     return CodigoTransporteV4.RESPUESTA_INVALIDA

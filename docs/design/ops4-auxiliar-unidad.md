@@ -72,9 +72,9 @@ privada está en `unidad-ops4/run-01`; no contiene secretos de producción.
 
 ## Límites
 
-- **No hay instalador de estas unidades todavía**; no se han copiado a
-  systemd ni arrancado. No se ha probado en la VM el auxiliar real, el socket,
-  la clave, el registro, el cerrojo ni el `update.sh` fijo.
+- El instalador ya instala estas unidades sin activarlas por defecto y
+  `--activar` inicia el socket sin persistencia. Se probó en la VM con
+  `update.sh` falso; no se ha probado el actualizador real ni la Pi.
 - `zascarr-actualizar.service` ejecuta el actualizador real si se instala y
   arranca; por eso no tiene `[Install]` y no se instala desde
   `instalar_ops.sh`. No debe habilitarse en la Pi sin revisión SecOps.

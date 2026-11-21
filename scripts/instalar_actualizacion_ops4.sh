@@ -9,19 +9,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ZASCARR_ROOT="${ZASCARR_ROOT:-$(cd "${REPO_DIR}/.." && pwd)}"
+ENV_FILE="${ENV_FILE:-${ZASCARR_ROOT}/.env}"
 DATA_DIR="${OPS4_DATA_DIR:-${ZASCARR_DATA_DIR:-/var/lib/zascarr}}"
 OPS_DIR="${DATA_DIR}/ops"
 OPS4_DIR="${DATA_DIR}/ops4"
 DEST_AUX="/usr/local/lib/zascarr/zascarr-actualizar-aux"
 DEST_LIB="/usr/local/lib/zascarr"
 DEST_UNITS="/etc/systemd/system"
-leer_env() { [[ -f "${ENV_FILE:-}" ]] && sed -n "s/^$1=//p" "${ENV_FILE}" | tail -1 | tr -d "\"'" || true; }
+leer_env() { [[ -f "${ENV_FILE}" ]] && sed -n "s/^$1=//p" "${ENV_FILE}" | tail -1 | tr -d "\"'" || true; }
 GRUPO="${OPS4_GROUP:-${OPS_GROUP:-}}"
 if [[ -z "${GRUPO}" ]]; then
     gid="$(leer_env PGID)"; gid="${gid:-1000}"
-    GRUPO="$(getent group "${gid}" | cut -d: -f1)"
+    GRUPO="$(getent group "${gid}" 2>/dev/null | cut -d: -f1 || true)"
 fi
-GRUPO="${GRUPO:-$(id -gn)}"
+if [[ -z "${GRUPO}" ]] || ! getent group "${GRUPO}" >/dev/null 2>&1; then
+    echo "No se pudo resolver el grupo de servicio (PGID/.env u OPS4_GROUP); no se instala nada." >&2
+    exit 1
+fi
 if [[ "${ZASCARR_PRUEBAS:-}" == "1" ]]; then
     DEST_AUX="${OPS4_DEST_AUX:-${DEST_AUX}}"
     DEST_LIB="${OPS4_DEST_LIB:-${DEST_LIB}}"
@@ -146,11 +151,11 @@ if (( ! SIN_SYSTEMD )); then
     if (( ACTIVAR )); then
         run systemctl start zascarr-actualizar.socket
         say "Socket iniciado (no persistente). La unidad fija puede ejecutar update.sh si recibe una petición válida."
-        say "La UI sigue deshabilitada por defecto (OPS4_ACTUALIZACION_HABILITADA=false)."
+        say "La bandera de UI depende de OPS4_ACTUALIZACION_HABILITADA (por defecto false)."
     else
         say "Unidades instaladas, NO activadas. Usa --activar para iniciar el socket."
     fi
 else
     say "Instalación de archivos completada; systemd omitido (--sin-systemd)."
 fi
-say "La actualización sigue deshabilitada por defecto (OPS4_ACTUALIZACION_HABILITADA=false)."
+say "La bandera de UI es OPS4_ACTUALIZACION_HABILITADA (por defecto false)."

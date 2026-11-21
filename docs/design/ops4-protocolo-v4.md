@@ -1,8 +1,9 @@
 # OPS4 — protocolo v4 aislado (autorización sin contraseña)
 
-Sustituye la contraseña de v3 por el testigo corto app→host. **No está
-conectado** al auxiliar, la UI, systemd ni el transporte de socket; v3 sigue
-siendo el protocolo histórico aislado y no se ha habilitado nada.
+Sustituye la contraseña de v3 por el testigo corto app→host. En la rama hay
+transporte y servicio app, y la UI/auxiliar están conectados **solo detrás de
+la bandera apagada**; no se ha habilitado ni desplegado. v3 sigue siendo el
+protocolo histórico aislado.
 
 ## Formato
 
