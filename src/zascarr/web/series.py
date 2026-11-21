@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import threading
 import time
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -118,8 +119,10 @@ from zascarr.services.ficha_numero import (
     TEXTOS as TEXTOS_FICHA,
 )
 from zascarr.services.lector import (
+    CONTINUAR,
     archivo_por_defecto,
     archivos_legibles,
+    destino_de_lectura_de_serie,
     preferido_guardado,
     total_paginas,
 )
@@ -730,6 +733,23 @@ async def cambiar_obra_unica(
     return templates.TemplateResponse(request, "_obra_unica_serie.html", contexto)
 
 
+async def _destino_de_lectura(db: AsyncSession, series_id: UUID):
+    """Botón de lectura de la ficha de serie (UXA-09); un fallo no puede romper la ficha."""
+    try:
+        destino = await destino_de_lectura_de_serie(db, series_id)
+        if destino is not None and destino.tipo == CONTINUAR and destino.archivo_id:
+            # Igual que en la ficha del número: la página no pasa del total del archivo.
+            try:
+                pagina = min(destino.pagina, await total_paginas(db, UUID(destino.archivo_id)))
+            except Exception:  # noqa: BLE001 — sin total fiable no se promete una página
+                pagina = 0
+            destino = replace(destino, pagina=pagina)
+        return destino
+    except Exception:  # noqa: BLE001
+        logger.warning("serie.destino_lectura_fallo", series_id=str(series_id), exc_info=True)
+        return None
+
+
 @router.get("/{series_id}", response_class=HTMLResponse)
 async def detalle(series_id: UUID, request: Request, volver: str = Query(default=""),
                   coleccion: str = Query(default=""), nota: str = Query(default=""),
@@ -807,6 +827,8 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         }.get(guardado, ""),
         # BL-INF6: separador de caché del navegador de la portada; cambia al elegir otra.
         "portada_version": await _version_de_portada(db, series),
+        # UXA-09: va la última, como el resto de consultas añadidas después de las históricas.
+        "destino_lectura": await _destino_de_lectura(db, series_id),
     })
     # #233/BL-R4: el aviso de una propuesta sin aplicar y sus acciones no se sirven de caché.
     respuesta.headers["Cache-Control"] = "no-store"

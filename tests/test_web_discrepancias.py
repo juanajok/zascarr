@@ -93,7 +93,7 @@ def test_la_ficha_avisa_que_la_propuesta_no_se_ha_aplicado_y_ofrece_las_dos_sali
     assert f'href="/ui/series/{series.id}/archivos/{FILE}/deshacer"' in texto
     assert "Mantener lo mío" in texto and "Revisar" in texto
     # Un solo botón principal en la ficha (el de «Añadir números»); las salidas de BL-R4 no lo son.
-    assert len(re.findall(r'class="btn primary\b', texto)) == 1
+    assert len(re.findall(r'class="btn (?:sm )?primary\b', texto)) == 1
 
 
 def _bloque_discrepancias(texto: str) -> str:

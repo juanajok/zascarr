@@ -433,6 +433,110 @@ async def siguiente_numero(db: AsyncSession, file_id: UUID) -> Siguiente:
     return Siguiente(SIN_SIGUIENTE, serie=serie)
 
 
+# ── Destino de lectura de una serie (UXA-09, #1126) ──────────────────────────────────────
+CONTINUAR = "continuar"
+RELEER = "releer"
+ELEGIR = "elegir"
+
+
+@dataclass(frozen=True)
+class CandidatoDeLectura:
+    """Un número con al menos un archivo legible, con lo que hace falta para elegirlo."""
+    issue_id: str
+    numero: str | None
+    orden: float | None
+    archivos: list
+    preferido: str | None
+    estado: ReadingStatus
+    pagina: int
+    file_id_progreso: str | None
+    ultima_lectura: datetime | None
+
+
+@dataclass(frozen=True)
+class DestinoDeSerie:
+    """Qué ofrece la ficha de serie como lectura principal.
+
+    `archivo_id` es `None` cuando el número tiene varias ediciones legibles sin preferida ni
+    progreso: la ficha no elige por la persona y la lleva a la ficha del número (`ELEGIR`).
+    """
+    tipo: str
+    issue_id: str
+    numero: str | None
+    archivo_id: str | None
+    pagina: int = 0
+
+
+def _clave_de_orden(c: CandidatoDeLectura) -> tuple:
+    return (c.orden is None, c.orden if c.orden is not None else 0.0, c.numero or "")
+
+
+def elegir_destino_de_serie(candidatos: list[CandidatoDeLectura]) -> DestinoDeSerie | None:
+    """Regla única del botón de lectura de la serie. Función pura.
+
+    1. «Continuar»: hay un número «leyendo» con página guardada → el de lectura más reciente.
+    2. «Leer»: el primer número sin terminar, en el orden de la serie.
+    3. «Releer»: todo está terminado → el primero.
+    El archivo sale de la misma regla que la ficha del número (`_por_defecto`: preferido →
+    archivo del progreso → primero por nombre), salvo que haya varias ediciones y ninguna señal
+    que desempate: entonces `ELEGIR`.
+    """
+    if not candidatos:
+        return None
+    ordenados = sorted(candidatos, key=_clave_de_orden)
+    retomables = [c for c in ordenados if c.estado == ReadingStatus.READING and c.pagina > 0]
+    if retomables:
+        elegido = max(retomables, key=lambda c: c.ultima_lectura
+                      or datetime.min.replace(tzinfo=UTC))
+        tipo = CONTINUAR
+    else:
+        sin_terminar = [c for c in ordenados
+                        if c.estado not in (ReadingStatus.COMPLETED, ReadingStatus.DROPPED)]
+        elegido, tipo = (sin_terminar[0], LEER) if sin_terminar else (ordenados[0], RELEER)
+    archivo = _por_defecto(elegido.archivos, elegido.file_id_progreso, elegido.preferido)
+    signals = {str(x) for x in (elegido.preferido, elegido.file_id_progreso) if x}
+    sin_desempate = len(elegido.archivos) > 1 and not any(
+        str(a.id) in signals for a in elegido.archivos)
+    if archivo is None or sin_desempate:
+        return DestinoDeSerie(ELEGIR, elegido.issue_id, elegido.numero, None)
+    return DestinoDeSerie(tipo, elegido.issue_id, elegido.numero, str(archivo.id),
+                          elegido.pagina if tipo == CONTINUAR else 0)
+
+
+async def destino_de_lectura_de_serie(db: AsyncSession, series_id: UUID) -> DestinoDeSerie | None:
+    """Destino de lectura de la serie o `None` si ningún número tiene un archivo legible.
+
+    Dos consultas (archivos y progresos de toda la serie), no una por número.
+    """
+    filas = (await db.execute(
+        select(Issue, File).join(File, File.issue_id == Issue.id)
+        .where(Issue.series_id == series_id, File.is_missing.is_(False))
+        .order_by(File.file_name)
+    )).all()
+    por_numero: dict = {}
+    for issue, f in filas:
+        if _es_legible(f):
+            por_numero.setdefault(issue.id, (issue, []))[1].append(
+                ArchivoDeLectura(str(f.id), f.file_name,
+                                 f.file_format.value.upper() if f.file_format else "?"))
+    if not por_numero:
+        return None
+    progresos = {p.issue_id: p for p in (await db.execute(
+        select(ReadingProgress).where(ReadingProgress.issue_id.in_(list(por_numero)))
+    )).scalars().all()}
+    candidatos = []
+    for issue_id, (issue, archivos) in por_numero.items():
+        p = progresos.get(issue_id)
+        candidatos.append(CandidatoDeLectura(
+            issue_id=str(issue_id), numero=issue.issue_number, orden=issue.sort_order,
+            archivos=archivos, preferido=preferido_guardado(issue),
+            estado=p.status if p is not None else ReadingStatus.UNREAD,
+            pagina=p.current_page if p is not None and p.current_page else 0,
+            file_id_progreso=str(p.file_id) if p is not None and p.file_id else None,
+            ultima_lectura=p.last_read_at if p is not None else None))
+    return elegir_destino_de_serie(candidatos)
+
+
 # ── OPDS-PSE (BL-LEC5, #828) ─────────────────────────────────────────────────────────────
 #: Solo se anuncian páginas que un cliente OPDS lee tal cual: no se recodifica nada.
 _PSE_CT = {"image/jpeg", "image/png", "image/gif"}

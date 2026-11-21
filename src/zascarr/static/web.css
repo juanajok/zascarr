@@ -900,6 +900,9 @@ details.ficha-bloque:not([open]) { padding-block: var(--space-1); }
 .filtro-favoritas input { width: 24px; height: 24px; accent-color: var(--mag-t); }
 .series-meta { color: var(--ink-soft); font-size: var(--text-didascalia); margin: 2px 0; }
 .series-intro { margin: 0 0 6px; font-weight: 600; }
+/* UXA-09: lectura principal junto al título; el botón es de 44 px de alto como el resto. */
+.series-leer { margin: var(--space-2) 0 0; }
+.series-leer .btn { min-height: 44px; }
 .series-acciones { display: flex; flex-wrap: wrap; gap: var(--space-2) 14px; align-items: center; margin: 10px 0 0; }
 /* Fila de enlaces secundarios bajo la frase de entrada (p. ej. las otras formas de revisar). */
 .acciones-fila { display: flex; flex-wrap: wrap; gap: var(--space-1) 14px; align-items: center; margin: var(--space-1) 0 var(--space-4); }

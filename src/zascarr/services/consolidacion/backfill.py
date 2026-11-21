@@ -17,6 +17,10 @@ from sqlalchemy.orm import selectinload
 
 from zascarr.core.consolidacion.ambitos import CAMPOS_SERIE
 from zascarr.models import FieldProvenance, Series
+from zascarr.services.consolidacion.consulta import (
+    SerieNoEncontradaError,
+    cargar_contexto,
+)
 
 _CAMPOS_COMICINFO = {"synopsis": "description"}
 
@@ -105,4 +109,87 @@ class Backfill:
                 informe.filas += 1
                 informe.por_confianza[confianza] = informe.por_confianza.get(confianza, 0) + 1
         await self._db.flush()
+        return informe
+
+
+@dataclass
+class InformeBackfillEstricto:
+    series: int = 0
+    filas: int = 0
+    sin_coincidencia: int = 0
+    por_fuente: dict[str, int] = field(default_factory=dict)
+    preview: bool = True
+
+
+class BackfillEstricto:
+    """Origen solo cuando el valor guardado coincide con el de la fuente.
+
+    Para cada campo que el motor CCM puede consolidar, compara el valor actual
+    de la serie con cada candidato del registro de fuente. Solo escribe
+    `field_provenance` si hay coincidencia exacta; si no, el campo se queda
+    «origen no registrado» (no se inventa ni se marca `legado`).
+    """
+
+    def __init__(self, db: AsyncSession, *, ahora: datetime | None = None):
+        self._db = db
+        self._ahora = ahora or datetime.now(UTC)
+
+    async def ejecutar(
+        self, *, preview: bool = True, limite: int | None = None
+    ) -> InformeBackfillEstricto:
+        consulta = (
+            select(Series)
+            .where(Series.metadata_source.is_not(None), Series.metadata_source != "manual")
+            .order_by(Series.id)
+        )
+        if limite is not None:
+            consulta = consulta.limit(max(0, limite))
+        series = (await self._db.execute(consulta)).scalars().all()
+        informe = InformeBackfillEstricto(series=len(series), preview=preview)
+        for serie in series:
+            try:
+                contexto = await cargar_contexto(self._db, serie.id)
+            except SerieNoEncontradaError:
+                continue
+            for cambio in contexto.plan().cambios:
+                actual = cambio.valor_actual
+                if _vacio(actual):
+                    continue
+                candidatos = [c for c in cambio.candidatos
+                              if not _vacio(c.valor) and c.valor == actual]
+                if not candidatos:
+                    if cambio.candidatos:
+                        informe.sin_coincidencia += 1
+                    continue
+                candidato = next(
+                    (c for c in candidatos if c.fuente == (serie.metadata_source or "")),
+                    candidatos[0],
+                )
+                informe.filas += 1
+                fuente = candidato.fuente
+                informe.por_fuente[fuente] = informe.por_fuente.get(fuente, 0) + 1
+                if preview:
+                    continue
+                dato = {
+                    "valor": candidato.valor,
+                    "ambito": cambio.ambito.value,
+                    "external_id": candidato.external_id,
+                    "url": candidato.url,
+                    "licencia": candidato.licencia,
+                    "confianza": "fuente",
+                    "descartados": {},
+                }
+                statement = pg_insert(FieldProvenance).values(
+                    entity_type="series", entity_id=serie.id, field=cambio.campo,
+                    source=candidato.fuente, value=dato, fetched_at=self._ahora,
+                    locked=cambio.campo in (serie.locked_fields or []),
+                ).on_conflict_do_update(
+                    index_elements=["entity_type", "entity_id", "field"],
+                    set_={"source": candidato.fuente, "value": dato,
+                          "fetched_at": self._ahora,
+                          "locked": cambio.campo in (serie.locked_fields or [])},
+                )
+                await self._db.execute(statement)
+        if not preview:
+            await self._db.flush()
         return informe
