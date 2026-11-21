@@ -6,7 +6,7 @@
   <button type="button" class="btn-reintentar"
           hx-post="/ui/wishlist/{{ row.item.id }}/reintentar"
           hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
-          aria-label="Reintentar la búsqueda de {{ row.titulo }}">
+          aria-label="Reintentar la búsqueda de {{ row.referencia }}">
     Reintentar
   </button>
   {% endif %}
@@ -16,7 +16,7 @@
           hx-post="/ui/wishlist/{{ row.item.id }}/buscar-ahora"
           hx-target="#candidatos-{{ row.item.id }}" hx-swap="outerHTML"
           hx-indicator="#buscando-{{ row.item.id }}" hx-disable="this"
-          aria-label="Buscar ahora {{ row.titulo }}">
+          aria-label="Buscar ahora {{ row.referencia }}">
     Buscar ahora
   </button>
   <span class="htmx-indicator wishlist-buscando" id="buscando-{{ row.item.id }}"
@@ -24,7 +24,7 @@
     Buscando en Prowlarr y en el foro… puede tardar hasta 2 minutos; no cierres la página.
     <button type="button" class="btn ghost sm"
             hx-on::click="htmx.trigger('#boton-buscar-{{ row.item.id }}', 'htmx:abort')"
-            aria-label="Cancelar la búsqueda de {{ row.titulo }}">Cancelar búsqueda</button>
+            aria-label="Cancelar la búsqueda de {{ row.referencia }}">Cancelar búsqueda</button>
     <span class="muted">La espera se cancela; lo ya enviado no se deshace.</span>
   </span>
   {% endif %}
@@ -33,7 +33,7 @@
           hx-post="/ui/wishlist/{{ row.item.id }}/marcar-conseguido"
           hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
           hx-confirm="¿Marcar como conseguido? Ya no se volverá a buscar."
-          aria-label="Marcar {{ row.titulo }} como conseguido">
+          aria-label="Marcar {{ row.referencia }} como conseguido">
     Ya lo tengo
   </button>
   {% endif %}
@@ -41,6 +41,6 @@
           hx-post="/ui/wishlist/{{ row.item.id }}/quitar"
           hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
           hx-confirm="¿Quitar de la lista de deseos?"
-          aria-label="Quitar {{ row.titulo }} de Deseados">
+          aria-label="Quitar {{ row.referencia }} de Deseados">
     Quitar
   </button>

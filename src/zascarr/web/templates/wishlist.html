@@ -32,7 +32,7 @@
        hx-indicator="#buscando-series">
 <span class="htmx-indicator caption" id="buscando-series"
       role="status" aria-live="polite">Buscando series…</span>
-<div id="resultados-wishlist" class="series-results">{% if series_list is not none %}{% include "_resultados_series_wishlist.html" %}{% endif %}</div>
+<div id="resultados-wishlist" class="series-results" aria-live="polite">{% if series_list is not none %}{% include "_resultados_series_wishlist.html" %}{% endif %}</div>
 
 {% if en_descarga %}
 <div id="wishlist-progreso" hx-get="/ui/wishlist/progreso" hx-trigger="load, every 30s"
