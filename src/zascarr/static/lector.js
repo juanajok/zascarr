@@ -88,6 +88,7 @@
   const menuBoton = document.getElementById("lector-menu-boton");
   const menu = document.getElementById("lector-menu");
   const barra = document.getElementById("lector-barra");
+  const asa = document.getElementById("lector-asa");
   const resultado = document.getElementById("lector-resultado");
   const fin = document.getElementById("fin");
   const accionesFin = document.getElementById("fin-acciones");
@@ -313,8 +314,9 @@
     // La barra flotante taparía el título en móviles: en la página de fin se oculta y se
     // restaura al volver (solo si estaba visible antes de entrar).
     chromeAntesDeFin = raiz.dataset.chrome === "oculto";
-    ocultarBarraInmersiva();
+    ocultarBarraInmersiva(false);
     fin.hidden = false;
+    sincronizarAsa();
     if (typeof fin.scrollTop === "number") fin.scrollTop = 0;
     paginas.hidden = true;
     if (lienzo) lienzo.hidden = true;
@@ -340,6 +342,7 @@
     }
     fin.hidden = true;
     if (!chromeAntesDeFin) despertarChrome();
+    else sincronizarAsa();
     anunciar(`${textoPaginas(paginasVisibles())}.`);
   };
 
@@ -369,6 +372,41 @@
     if (!activo) return false;
     return (barra && barra.contains(activo)) || (menu && menu.contains(activo));
   };
+  const esVisible = (elemento) => {
+    for (let nodo = elemento; nodo; nodo = nodo.parentElement) {
+      if (nodo.hidden) return false;
+    }
+    if (elemento.offsetParent === null) return elemento === lienzo || elemento === asa;
+    return true;
+  };
+  const enfocablesVisibles = () => {
+    if (!raiz.querySelectorAll) return [];
+    const selector = "a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])";
+    return Array.from(raiz.querySelectorAll(selector)).filter(esVisible);
+  };
+  const primerControlBarra = () => {
+    if (!barra || !barra.querySelectorAll) return null;
+    const selector = "a[href], button, input, select, textarea, summary";
+    return Array.from(barra.querySelectorAll(selector)).find(esVisible) || null;
+  };
+  const sincronizarAsa = () => {
+    if (!asa) return;
+    asa.hidden = !(raiz.dataset.chrome === "oculto" && !finAbierto);
+  };
+  const ponerChrome = (oculto) => {
+    raiz.dataset.chrome = oculto ? "oculto" : "";
+    sincronizarAsa();
+  };
+  const revelarYEnfocarPrimero = () => {
+    ponerChrome(false);
+    const primero = primerControlBarra();
+    if (primero && typeof primero.focus === "function") {
+      primero.focus({ preventScroll: true });
+    } else if (barra && typeof barra.focus === "function") {
+      barra.focus({ preventScroll: true });
+    }
+    return primero;
+  };
   const programaOculto = () => {
     if (typeof setTimeout !== "function") return;
     if (temporizadorChrome !== null && typeof clearTimeout === "function") {
@@ -378,24 +416,24 @@
     if (!menu.hidden || focoEnChrome()) return;  // Opciones abiertas o foco dentro: no ocultar
     temporizadorChrome = setTimeout(() => {
       if (!menu.hidden || focoEnChrome()) return; // opciones o foco dentro: no ocultar
-      raiz.dataset.chrome = "oculto";
+      ponerChrome(true);
     }, 3000);
   };
   const despertarChrome = () => {
-    raiz.dataset.chrome = "";
+    ponerChrome(false);
     programaOculto();
   };
-  const ocultarBarraInmersiva = () => {
+  const ocultarBarraInmersiva = (enfocar = true) => {
     if (menu && !menu.hidden) {
       menu.hidden = true;
       menuBoton.setAttribute("aria-expanded", "false");
     }
-    raiz.dataset.chrome = "oculto";
+    ponerChrome(true);
     if (temporizadorChrome !== null && typeof clearTimeout === "function") {
       clearTimeout(temporizadorChrome);
     }
     temporizadorChrome = null;
-    if (lienzo && typeof lienzo.focus === "function") {
+    if (enfocar && lienzo && typeof lienzo.focus === "function") {
       lienzo.focus({ preventScroll: true });
     }
   };
@@ -408,16 +446,23 @@
   const alternarMenu = () => cambiarMenu(menu.hidden, menu.contains(document.activeElement));
   const alternarChrome = () => {
     if (!menu.hidden || focoEnChrome()) return;
-    raiz.dataset.chrome = raiz.dataset.chrome === "oculto" ? "" : "oculto";
     if (raiz.dataset.chrome === "oculto") {
+      ponerChrome(false);
+      programaOculto();
+    } else {
+      ponerChrome(true);
       if (temporizadorChrome !== null && typeof clearTimeout === "function") {
         clearTimeout(temporizadorChrome);
       }
       temporizadorChrome = null;
-    } else {
-      programaOculto();
     }
   };
+  if (asa) {
+    asa.addEventListener("click", () => {
+      if (raiz.dataset.chrome !== "oculto" || finAbierto) return;
+      revelarYEnfocarPrimero();
+    });
+  }
   const cambiarModo = (nuevo) => {
     if (nuevo !== "ancho" && nuevo !== "pantalla" && nuevo !== "doble") return;
     modo = nuevo;
@@ -426,7 +471,7 @@
     try { window.localStorage.setItem("zascarr.lector.modo", modo); } catch (_) { /* igual */ }
     if (modo === "pantalla") ocultarBarraInmersiva();
     else {
-      raiz.dataset.chrome = "";
+      ponerChrome(false);
       programaOculto();
     }
     pinta();
@@ -607,13 +652,13 @@
     } else if (finAbierto) {
       // Salir de fullscreen con la página de fin abierta no debe hacer parpadear la barra
       // sobre su título durante los 3 s del auto-ocultado.
-      raiz.dataset.chrome = "oculto";
+      ponerChrome(true);
       if (temporizadorChrome !== null && typeof clearTimeout === "function") {
         clearTimeout(temporizadorChrome);
       }
       temporizadorChrome = null;
     } else {
-      raiz.dataset.chrome = "";
+      ponerChrome(false);
       programaOculto();
     }
     aplicarZoom();
@@ -630,16 +675,35 @@
       programaOculto();
     }
     if (menu.hidden || !evento.relatedTarget) return;
+    const relacionado = evento.relatedTarget;
+    if (relacionado === document.body) return;  // texto no interactivo: no cierra ni roba foco
+    const esEnfocable = relacionado === menuBoton || relacionado === lienzo
+      || (typeof relacionado.closest === "function"
+          && relacionado.closest("a[href], button, input, select, textarea, summary, [tabindex]"));
+    if (!esEnfocable) return;
     const estabaEnOpciones = evento.target === menuBoton || menu.contains(evento.target);
-    const sigueEnOpciones = evento.relatedTarget === menuBoton || menu.contains(evento.relatedTarget);
+    const sigueEnOpciones = relacionado === menuBoton || menu.contains(relacionado);
     if (estabaEnOpciones && !sigueEnOpciones) cambiarMenu(false);
   });
-  if (modo === "pantalla") ocultarBarraInmersiva();
+  if (menu) {
+    const noInteractivo = (elemento) => !(elemento && typeof elemento.closest === "function"
+      && elemento.closest("a[href], button, input, select, textarea, summary, label, [contenteditable], [role='button']"));
+    // Solo puntero/ratón: `touchstart.preventDefault` bloquearía el desplazamiento del panel.
+    ["pointerdown", "mousedown"].forEach((tipo) => menu.addEventListener(tipo, (evento) => {
+      if (noInteractivo(evento.target) && evento.preventDefault) evento.preventDefault();
+    }, { passive: false }));
+  }
+  if (modo === "pantalla") ocultarBarraInmersiva(false);
   else if (typeof setTimeout === "function") programaOculto();
 
   document.addEventListener("pointermove", (evento) => {
     // Con la barra oculta, acercarse a la franja superior la muestra; en la página de fin
-    // no se muestra para no tapar su título (se sale con «Quedarme»/Esc).
+    // no se muestra para no tapar su título (se sale con «Quedarme»/Esc). Con ratón y el asa
+    // ya visible no se auto-revela: en una trayectoria real (y=300→90→22) el primer evento bajo
+    // 90 revelaría y ocultaría el asa antes de llegar al clic. El ratón pulsa el asa; el hover de
+    // la franja sigue disponible en cuanto la barra está revelada.
+    if (evento.pointerType === "mouse" && asa && !asa.hidden) return;
+    if (asa && evento.target && asa.contains(evento.target)) return;
     if (!finAbierto && raiz.dataset.chrome === "oculto" && evento.clientY <= 90) {
       despertarChrome();
     }
@@ -647,6 +711,37 @@
   document.addEventListener("keydown", (evento) => {
     if (evento.defaultPrevented || evento.ctrlKey || evento.altKey || evento.metaKey || evento.isComposing) return;
     const { key, target } = evento;
+    if (key === "Tab") {
+      const menuAbierto = !!menu && !menu.hidden;
+      const activo = document.activeElement;
+      if (menuAbierto && menu.contains(activo)) return;  // el focusout/cierre deciden al salir
+      const lista = enfocablesVisibles();
+      if (!lista.length) return;
+      const dentro = raiz.contains ? raiz.contains(activo) : activo === raiz;
+      if (!dentro || activo === document.body || activo === lienzo) {
+        evento.preventDefault();
+        if (raiz.dataset.chrome === "oculto") ponerChrome(false);
+        const destino = evento.shiftKey ? lista[lista.length - 1] : lista[0];
+        if (destino && typeof destino.focus === "function") destino.focus({ preventScroll: true });
+        return;
+      }
+      const indice = lista.indexOf(activo);
+      if (indice === -1) {
+        // Foco en un elemento de la escena que no entra en el ciclo (p. ej. `#fin-titulo`
+        // con `tabindex="-1"`): el Tab nativo decide; interceptarlo saltaría a la barra y la
+        // barra taparía la página de fin (#826).
+        return;
+      }
+      if (!evento.shiftKey && indice === lista.length - 1) {
+        evento.preventDefault();
+        if (lista[0] && typeof lista[0].focus === "function") lista[0].focus({ preventScroll: true });
+      } else if (evento.shiftKey && indice === 0) {
+        evento.preventDefault();
+        const ultimo = lista[lista.length - 1];
+        if (ultimo && typeof ultimo.focus === "function") ultimo.focus({ preventScroll: true });
+      }
+      return;
+    }
     const enFinPagina = !!fin && !fin.hidden
       && (target === fin || (typeof fin.contains === "function" && fin.contains(target)));
     if (key === "Escape") {
@@ -748,7 +843,7 @@
     const t = evento.touches[0];
     const rect = lienzo.getBoundingClientRect();
     toqueInicio = { x: t.clientX, y: t.clientY, izquierda: rect.left, ancho: rect.width,
-                    px: panX, py: panY, movido: false };
+                    px: panX, py: panY, movido: false, franja: t.clientY <= 44 };
     if (zoom > 1) evento.preventDefault();
   }, { passive: false });
   lienzo.addEventListener("touchmove", (evento) => {
@@ -789,6 +884,12 @@
     }
     if (Math.abs(dx) > 12 || Math.abs(dy) > 12) return;
     evento.preventDefault(); // el toque ya se ha atendido; no repetirlo como clic
+    // UATP-03 D-1: la franja superior (44 px) revela sin cambiar de página; solo un toque sin
+    // desplazamiento. Los deslizamientos ya se han resuelto arriba.
+    if (origen.franja && raiz.dataset.chrome === "oculto") {
+      despertarChrome();
+      return;
+    }
     const zona = (t.clientX - origen.izquierda) / origen.ancho;
     if (zona < 0.3) (sentido === "rtl" ? avanzar : retroceder)();
     else if (zona > 0.7) (sentido === "rtl" ? retroceder : avanzar)();

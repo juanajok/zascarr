@@ -534,7 +534,7 @@ No vuelven sin un motivo nuevo y una ficha propia (benchmark §7.5):
 | D-LUX5 | ¿Hay lector de pantalla disponible para verificar LECUX5? | Si no, NOT RUN y no se declara la épica cerrada del todo |
 | D-LUX6 | Publicar como épica del tablero con sus historias | **Hecho (2026-11-17):** #1067 y #1068–#1073, en Backlog; la aprobación de prioridad sigue siendo D-LUX1 |
 | D-LUX7 | Lectura inmersiva: ¿por defecto o accionable? | **Por defecto**: abrir el lector ya sin marco y con chrome auto-oculto; el fullscreen del navegador es un extra |
-| D-LUX8 | Flechas superpuestas: ¿siempre visibles o al pasar el ratón? | Al pasar el ratón/enfocar en PC; nunca en táctil (el gesto manda) |
+| D-LUX8 | Flechas superpuestas: ¿siempre visibles o al pasar el ratón? | Al pasar el ratón/enfocar en PC; nunca en táctil (el gesto manda). **UATP-03 (2026-11-21):** con la barra oculta se añade un asa visible de 44×44 y una franja superior táctil de 44 px que revela los controles; el resto del comportamiento inmersivo no cambia |
 | D-LUX9 | Al ocultar el pie, ¿dónde queda el aviso legal? | Enlace «Aviso legal» dentro de «Opciones» y en la ficha al volver |
 | D-LUX10 | Fondo del visor inmersivo | Neutro del tema activo; si el PO quiere negro de visor de fotos, se fija aquí |
 

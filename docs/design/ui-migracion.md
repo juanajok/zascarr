@@ -220,6 +220,11 @@ conserva el `403` con `detail`. `volver` se valida contra una lista cerrada).
 | legal | GET | `/ui/legal` | volver,falta | legal_wizard.html | — | — |
 | legal | POST | `/ui/legal/accept` | acepto_1,acepto_2,acepto_3,volver | (redirige) | 303 | — |
 | legal | GET | `/legal` | — | legal_full.html | — | — |
+| lector | GET | `/ui/leer/{file_id}` | — | lector.html | 404 | — |
+| lector | POST | `/ui/leer/{file_id}/leido` | operacion | _lector_fin.html / redirige | 400,404 | — |
+| lector | POST | `/ui/leer/{file_id}/progreso` | pagina | (204/vacío) | — | — |
+| lector | POST | `/ui/leer/{file_id}/sentido` | sentido | (vacío) | — | — |
+| lector | GET | `/ui/leer/{file_id}/pagina/{n}` | — | imagen de página | 404,416 | — |
 | library | GET | `/ui/biblioteca` | page,tradition,publisher_id,character_id,story_arc_id,q,vista,etiquetas,leido,orden,coleccion,author_id,favoritos,idioma,edicion,anio_desde,anio_hasta,densidad,modo,naturaleza,formato,puntuacion,foco | biblioteca.html | — | — |
 | library | GET | `/ui/biblioteca/resultados` | page,tradition,publisher_id,character_id,story_arc_id,q,vista,etiquetas,leido,orden,coleccion,author_id,favoritos,idioma,edicion,anio_desde,anio_hasta,densidad,modo,naturaleza,formato,puntuacion | _rejilla_biblioteca.html | — | — |
 | library | GET | `/ui/biblioteca/buscar-personaje` | q | _resultados_personaje.html | — | — |
@@ -252,6 +257,7 @@ campos y forma del fragmento hasta que otra los sustituya y esté escrito en su 
 | Contrato | Quién lo usa | Qué espera |
 |---|---|---|
 | `POST /ui/pendientes/{id}/asignar` → `""` | tarjeta de `pendientes.html`, `hx-target="#card-{id}"` `hx-swap="outerHTML"` | 200 con cuerpo vacío = la tarjeta desaparece; 400/409 → ver §2.5 |
+| `/ui/leer/{file_id}` (contrato de cliente) | `lector.html`, `static/lector.js` | `data-chrome` (`""`/`oculto`), `#lector-asa` (visible solo con chrome oculto, `aria-controls="lector-barra"`), foco inicial en `body`, Tab entra en la barra y la revela, ciclo de foco dentro de `.lector-escena`, Cerrar/Escape devuelven el foco al disparador; `data-pagina` inicial acotada a `[1,total]` |
 | `POST /ui/pendientes/{id}/ignorar` → `""` | mismo patrón, con `hx-confirm` | idem |
 | `GET /ui/pendientes/{id}/buscar-serie?q=` → `_resultados_serie.html` | `keyup changed delay:400ms` | fragmento con un `assign-form` por serie, que a su vez hace `hx-post` a `asignar` |
 | `POST /ui/wishlist/anadir` (`series_id`) → `_fila_wishlist.html` | panel, Deseados, `_serie_creada.html`, `_resultados_series_wishlist.html` | una fila lista para insertar; `403`+`HX-Redirect` (o `303`+`Location` en formulario normal) si falta el aviso legal, con `volver` validado y `no-store` |

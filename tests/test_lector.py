@@ -743,3 +743,80 @@ def test_guardar_progreso_no_pisa_page_count_ni_escribe_con_varios_archivos(tmp_
              exec_queue=[FakeExecResult(2), FakeExecResult([])])
     asyncio.run(lector.guardar_progreso(db2, f.id, 1))
     assert issue2.page_count is None and "page_count_origen" not in issue2.metadata_
+
+
+class TestUatp03AsaYFoco:
+    """UATP-03: asa descubrible, foco sin forzar, reapertura y RTL."""
+
+    def test_el_asa_esta_en_el_html_con_aria_icono_y_oculto(self, tmp_path, monkeypatch):
+        f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "sin_siguiente")
+        with use_fake_session(db) as client:
+            r = client.get(f"/ui/leer/{f.id}")
+        assert r.status_code == 200
+        assert 'id="lector-asa"' in r.text
+        assert 'aria-label="Mostrar los controles"' in r.text
+        assert 'aria-controls="lector-barra"' in r.text
+        bloque = r.text.split('id="lector-asa"', 1)[1].split("</button>", 1)[0]
+        assert "<svg" in bloque
+        assert "hidden" in r.text.split('id="lector-asa"', 1)[1].split(">", 1)[0]
+
+    def test_la_ayuda_menciona_la_lengueta_y_el_centro(self, tmp_path, monkeypatch):
+        f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "sin_siguiente")
+        with use_fake_session(db) as client:
+            r = client.get(f"/ui/leer/{f.id}")
+        assert "toca la lengüeta de arriba o el centro de la página" in r.text
+
+    def test_volver_al_numero_es_el_primer_control_y_no_desborda(self):
+        from pathlib import Path
+
+        html = Path("src/zascarr/web/templates/lector.html").read_text(encoding="utf-8")
+        inicio = html.index('class="lector-barra"')
+        volver = html.index('class="back-link lector-volver"', inicio)
+        assert volver < html.index('class="lector-identidad"', inicio)
+        assert volver < html.index('id="lector-zoom-menos"', inicio)
+        assert volver < html.index('id="lector-menu-boton"', inicio)
+        css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+        bloque = css.split(".lector-volver {", 1)[1].split("}", 1)[0]
+        assert "min-height: 44px" in bloque
+        assert "white-space: nowrap" not in bloque
+
+    def test_css_del_asa_es_44x44_y_solo_con_chrome_oculto(self):
+        from pathlib import Path
+
+        css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+        bloque = css.split(".lector-asa {", 1)[1].split("}", 1)[0]
+        assert "min-width: 44px" in bloque and "min-height: 44px" in bloque
+        assert "z-index: 4" in bloque
+        assert '[data-chrome="oculto"] .lector-asa' in css
+        assert "body:has(.lector-escena) .skip" in css
+        assert "[data-chrome=\"oculto\"] .lector-asa" in css
+
+    @pytest.mark.parametrize(("guardada", "esperada"), [
+        (None, "1"), (2, "2"), (99, "3"), (0, "1"), (-5, "1"),
+    ])
+    def test_reabrir_usa_la_pagina_guardada_acotada(
+            self, tmp_path, monkeypatch, guardada, esperada):
+        f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "sin_siguiente",
+                                        pagina=guardada)
+        with use_fake_session(db) as client:
+            r = client.get(f"/ui/leer/{f.id}")
+        assert r.status_code == 200
+        assert f'data-pagina="{esperada}"' in r.text
+        assert f"/pagina/{esperada}" in r.text
+        assert f"Página {esperada} de 3" in r.text
+
+    def test_render_rtl_tiene_sentido_etiquetas_y_origen(self, tmp_path, monkeypatch):
+        from zascarr.web import lector as wlector
+
+        async def _rtl(*_a, **_k):
+            return "rtl", "serie"
+
+        monkeypatch.setattr(wlector, "sentido_de_lectura", _rtl)
+        f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "sin_siguiente")
+        with use_fake_session(db) as client:
+            r = client.get(f"/ui/leer/{f.id}")
+        assert r.status_code == 200
+        assert 'data-sentido="rtl"' in r.text
+        assert 'aria-label="Página siguiente"' in r.text or 'aria-label="Ver el final"' in r.text
+        assert "Sentido: derecha a izquierda" in r.text
+        assert "Sentido guardado para esta serie." in r.text
