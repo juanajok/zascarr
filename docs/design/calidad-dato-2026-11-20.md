@@ -15,7 +15,9 @@
 > desplegados. **Aplicados:** L1 (622 sinopsis), L2 (26 vínculos), L3 (9
 > pendientes) y L4 (4 `locked_fields`). F4a **0/826**, A1a **0/1.424**, D6a
 > **0/606**, F5 **0/2.785**; A1b sube a 347 por el historial legítimo de L2. Ver
-> §12 y §13. La medición de referencia sigue siendo la del 2026-11-20.
+> §12 y §13. **L7/L8 revisados (2026-11-21):** L7 sin cambios; F1d/H2/F2a
+> sin cambios; **I1 corregido (0/38)**. Total estimado **147**. Ver §14. La
+> medición de referencia sigue siendo la del 2026-11-20.
 >
 > **Aviso de precisión.** El PO confirmó «todo como la hipótesis»: la columna
 > `etiqueta_esperada` se aceptó sin revisión fila a fila. Por tanto las
@@ -120,7 +122,7 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 | F5 | S3 | 2.786 | 4 | 4 | 4/0/0 | 100 % | 4 exacto → **0 tras L4** | FAIL → PASS | `locked_fields` inexistentes |
 | F1d | S3 | 3 | 3 | 3 | 3/0/0 | 100 % | 3 exacto | FAIL | `end_year` con serie en curso |
 | F2a | S3 | 46 | 1 | 1 | 0/0/1 | — | sin medir | SIN MEDIR | editorial española/americana |
-| I1 | S3 | 29 | 1 | 1 | 1/0/0 | 100 % | 1 exacto | FAIL | progreso incoherente |
+| I1 | S3 | 29 | 1 | 1 | 1/0/0 | 100 % | 1 exacto → **0 tras L8** | FAIL → PASS | progreso incoherente |
 
 **Estimación puntual:** S1 76 antes de L6 y **75 después** (B5a) · S2 104 · S3 591
 (F2a y B8 excluidos por quedar «sin medir»). Total **771 → 770** defectos estimados,
@@ -129,7 +131,9 @@ corrigen la falta de etiquetado independiente. **Tras L1 (2026-11-21):** S3
 **591 → 8** (F5 4, F1d 3, I1 1); total **770 → 187**. **Tras L2/L3/L4
 (2026-11-21):** S2 **104 → 69** (A1a y D6a resueltos); S3 **8 → 4** (F5
 resuelto); total **187 → 148**. A1b sube de 321 a 347 por las 26 entradas de
-historial de L2; es el comportamiento legítimo de ADR 0014.
+historial de L2; es el comportamiento legítimo de ADR 0014. **Tras revisar
+L7/L8 (2026-11-21):** L7 sin cambios; F1d/H2/F2a sin cambios; I1 corregido
+(1 → 0). S3 **4 → 3** (F1d 3); total **148 → 147**.
 
 ### 4.2 PASS (población > 0 y 0 casos)
 
@@ -304,14 +308,15 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
 - **Síntoma:** la persona cree que un campo está protegido y el enricher lo pisa.
 - **Propuesta:** lote L4 (4) + validación en el servicio/UI.
 
-### [F1d / F2a / I1] Datos pequeños — S3
+### [F1d / F2a / I1] Datos pequeños — S3 — REVISADO
 
 - **F1d:** 3 series con `end_year` y `status='ongoing'`; hay que decidir cuál es
   el dato correcto (`edicion_serie`).
 - **F2a:** 1 serie con editorial española y tradición `american`; el CSV la dejó
   «sin medir» por una discrepancia entre la tabla del chat («no sé») y la
   hipótesis del CSV («defecto»). Se queda SIN MEDIR, no se cuenta.
-- **I1:** 1 progreso incoherente; decidir si se corrige página, estado o fechas.
+- **I1:** corregido; era una fila `unread`, página 0, sin archivos. I1 0/38
+  (2026-11-21).
 
 ### [A1b / D5] Legítimos que la comprobación confunde
 
@@ -438,22 +443,28 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
   transacción, commit; copia previa de §11. Resultado: `start_year=1990`,
   B1b 0/29. Reversible con el mismo servicio (1990 → 1987) o con la copia.
 
-### L7 — Pregunta: 61 números con formato o número incoherente (C2b/C2c, C2a/C3a) · S2
+### L7 — Revisado: 61 números con formato o número incoherente (C2b/C2c, C2a/C3a) · S2
 
 - **Evidencia:** 23 tomos/ómnibus como grapa, 38 anuales/decimales como grapa, 4
   `one_shot` con `single_issue`, 4 con `#1` inventado.
-- **Decisión por número:** cambiar `Issue.format` con
-  `edicion_manual.guardar_numero` (tomo/ómnibus/álbum…), mover el número a una
-  serie/edición propia, o dejarlo. En `one_shot`, ADR 0022 ya dice qué es
-  correcto; aun así, la marca es una decisión humana.
+- **Decisión del PO (2026-11-21): sin cambios.** Los 18 Catwoman «Vol 02» son
+  números de volumen, no tomos (falso positivo de C2b); los 5 Saga sí son tomos,
+  pero se dejan; los 38 decimales/anuales son números sueltos legítimos (C2c);
+  las 4 obras únicas manuales conservan el `#1` (C2a/C3a). No se escribió nada.
 
-### L8 — Preguntas pequeñas: F1d, H2, I1, F2a
+### L8 — Revisado: F1d/H2/F2a sin cambios; I1 corregido
 
-- **F1d (3):** ¿sobra `end_year` o sobra `status='ongoing'`?
-- **H2 (1):** ¿cuál es el valor correcto y quién cambió el campo?
-- **I1 (1):** ¿se corrige la página, el estado o la fecha?
-- **F2a (1):** queda «sin medir»; si el PO lo reclasifica, se decide con la
-  editorial y el país.
+- **F1d (3):** se dejan; no se cambia `end_year` ni `ongoing`.
+- **H2 (1):** se deja; `end_year=2020` y la procedencia Tebeosfera coinciden; el
+  check no demuestra una contradicción.
+- **I1 (1): corregido.** Se borró la fila `reading_progress`
+  `d5249763-0a91-4ae5-80c4-3d67f1a57c2d` (issue
+  `ede1d8e1-0c0c-4117-adc1-a9f07a46de8b`, `unread`, página 0, sin archivos).
+  I1 0/38. La copia de la actualización `update_20261121_144410.sql.gz` contiene
+  la fila; las correcciones L2/L3/L4 posteriores son reversibles y están
+  documentadas.
+- **F2a (1):** se deja sin medir; editorial española con tradición `american`
+  (edición de material americano).
 
 ### Lo que NO se propone corregir
 
@@ -633,10 +644,29 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
   F1c, F4a). No hay efecto atribuible a los lotes fuera de los objetivos.
 - **Reversible:** L2 por el historial; L3 por `match_status_previo`; L4
   volviendo a añadir los nombres (no protegían nada); y la copia previa.
-- **Qué queda:** L7/L8 (preguntas de formato/número y F1d/H2/I1), H1 (proceso
-  CCM), B5a (75, decisión del PO) y la prevención de código (#1185, #1187,
-  #1188, #1189, #1190).
+- **Qué queda:** L7/L8 revisados (§14); F1d/H2/F2a se dejan como dato; H1
+  (proceso CCM), B5a (75, decisión del PO) y la prevención de código (#1185,
+  #1187, #1188, #1189, #1190).
+
+## 14. Decisiones L7/L8
+
+- **L7 (61 + 8):** sin cambios. C2b: 18 Catwoman «Vol 02» son números de
+  volumen (falso positivo), 5 Saga son tomos reales; C2c: 38 decimales/anuales
+  son números sueltos legítimos; C2a/C3a: 4 obras únicas manuales conservan el
+  `#1`. No se escribió nada.
+- **L8:** F1d (3) se deja; H2 (1) se deja (valor y procedencia coinciden); F2a
+  (1) queda sin medir; **I1 (1) corregido**: borrada la fila de
+  `reading_progress` `d5249763-0a91-4ae5-80c4-3d67f1a57c2d` (issue
+  `ede1d8e1-0c0c-4117-adc1-a9f07a46de8b`, `unread`, página 0, sin archivos).
+- **Después:** I1 **0/38**; censo completo 82 comprobaciones, huella
+  `32a53151c679af54`; ninguna otra comprobación cambió de casos. Total estimado
+  **147** (S1 75, S2 69, S3 3: F1d).
+- **Copia:** `update_20261121_144410.sql.gz` (contiene la fila I1); las
+  correcciones L2/L3/L4 posteriores están documentadas y son reversibles.
+- **Qué queda:** B5a (75, decisión del PO), H1 (proceso CCM), la prevención de
+  código (#1185, #1187, #1188, #1189, #1190) y los datos F1d/H2/F2a, que el PO
+  decidió no tocar.
 
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
-L6, L1, L2, L3 y L4 están aplicados; las preguntas L7/L8 siguen pendientes de
-aprobación.*
+L6, L1, L2, L3 y L4 están aplicados; L7/L8 revisados (I1 aplicado); F1d/H2/F2a
+se dejan como dato.*
