@@ -22,12 +22,12 @@ Los resultados incluyen el ID solo cuando se llegó a emitir la petición.
 ## Pruebas
 
 - [Servicio](../../src/zascarr/services/solicitud_actualizacion_v4.py) y
-  [tests](../../tests/test_ops4_solicitud_v4.py): **15 casos**.
+  [tests](../../tests/test_ops4_solicitud_v4.py): **17 casos**.
 - No habilitada, confirmación, `auth_mode=none`, reauth incorrecta/bloqueada/
   excepción, éxito con petición v4 verificable, clave inválida, fallo de
   construcción, preparación inesperada, `ahora` inválido, transporte incierto
   sin reintento, `conversar` inyectado y ausencia de secretos en `repr`.
-- **890 pruebas OPS4/paridad** verdes; suite completa pendiente de repetir.
+- **892 pruebas OPS4/paridad** verdes. La última pasada completa tuvo 8881 superadas y un fallo de temporización ajeno a OPS4 (`test_ensayo_f1bis_arnes`), que pasó aislado en 1,94 s; no se declara suite limpia tras estos dos tests.
 
 ## Límites
 

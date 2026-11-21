@@ -86,7 +86,7 @@ Cambios solo en tests:
 Resultados de las pruebas dirigidas: **90 passed, 2 skipped** al ejecutar
 `test_restore_script.py`, `test_restaurar_produccion_pg.py` (omitido sin
 opt-in) y `test_ops4_pg_optin.py`; Ruff limpio en esos ficheros. La selección
-OPS4/paridad pasó a **890 pruebas superadas**.
+OPS4/paridad pasó a **892 pruebas superadas**.
 
 La suite completa **se repitió después de esta corrección**: 8880 passed,
 2431 skipped, 0 failed. Los dos fallos históricos quedan cerrados a nivel de
@@ -95,7 +95,7 @@ suite. El caso PostgreSQL real sigue omitido sin `TEST_DATABASE_URL` o
 
 ## Evidencia complementaria
 
-- **890 pruebas seleccionadas de OPS4/paridad** superadas tras corregir el
+- **892 pruebas seleccionadas de OPS4/paridad** superadas tras corregir el
   arnés. El código de producto no cambió en esta corrección.
 - Ruff pasó sobre todos los módulos `deploy/ops`, tests OPS4, fixtures de VM y
   los cuatro servicios nuevos aislados de actualización.
@@ -105,3 +105,15 @@ suite. El caso PostgreSQL real sigue omitido sin `TEST_DATABASE_URL` o
 - No se ha fusionado, habilitado ni desplegado OPS4. La revisión final SecOps
   sigue pendiente. La suite global está verde, pero el caso PostgreSQL real con
   Docker sigue sin revalidarse en esta pasada ni acredita producción.
+
+
+## Revisión posterior (2026-11-21)
+
+Se añadieron dos pruebas de composición con el servicio real de
+reautenticación. La suite completa de esa cabeza dio **8881 passed, 2431
+skipped y 1 failed**: el fallo fue
+`test_ensayo_f1bis_arnes.py::TestPresupuestoDeDescarga::test_se_corta_mientras_se_descarga_y_mata_el_grupo_entero`,
+un umbral de 4 s ajeno a OPS4. Ese test pasó aislado en 1,94 s. No se declara
+una suite completa limpia para esta cabeza; la última limpia fue **8880
+passed** antes de estas dos pruebas. Las **892 pruebas OPS4/paridad** y Ruff
+del cambio pasan.

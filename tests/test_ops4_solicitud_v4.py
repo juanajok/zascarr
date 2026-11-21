@@ -6,15 +6,21 @@ from types import SimpleNamespace
 import pytest
 
 from deploy.ops import protocolo_actualizar_v4_ops4 as protocolo
+from zascarr.config import get_settings
 from zascarr.services.actualizacion_transporte_v4 import (
     CodigoTransporteV4,
     IntercambioInciertoError,
 )
+from zascarr.services.auth import hash_password
 from zascarr.services.autorizacion_actualizacion import (
     PreparacionAutorizacion,
     ResultadoAutorizacion,
 )
-from zascarr.services.reautenticacion import Reauth, ResultadoReauth
+from zascarr.services.reautenticacion import (
+    Reauth,
+    ResultadoReauth,
+    reiniciar_estado,
+)
 from zascarr.services.solicitud_actualizacion_v4 import (
     ResultadoSolicitudV4,
     solicitar_actualizacion_v4,
@@ -224,3 +230,43 @@ async def test_timeout_del_transporte_es_incierto() -> None:
         habilitada=True, ahora=AHORA, comprobar=ok, enviar=enviar,
     )
     assert resultado.resultado is ResultadoSolicitudV4.INCIERTA
+
+
+@pytest.mark.asyncio
+async def test_composicion_con_reautenticacion_real() -> None:
+    settings = get_settings().model_copy(update={
+        "auth_mode": "password",
+        "auth_username": "ana",
+        "auth_password_hash": hash_password("secreta-sintetica"),
+    })
+    enviar = Enviar()
+    reiniciar_estado()
+    try:
+        resultado = await solicitar_actualizacion_v4(
+            settings, clave=CLAVE, contrasena="secreta-sintetica", entiendo=True,
+            habilitada=True, ahora=AHORA, enviar=enviar,
+        )
+        assert resultado.resultado is ResultadoSolicitudV4.ACEPTADA
+        assert len(enviar.llamadas) == 1
+    finally:
+        reiniciar_estado()
+
+
+@pytest.mark.asyncio
+async def test_contrasena_incorrecta_contra_reauth_real_no_envia() -> None:
+    settings = get_settings().model_copy(update={
+        "auth_mode": "password",
+        "auth_username": "ana",
+        "auth_password_hash": hash_password("secreta-sintetica"),
+    })
+    enviar = Enviar()
+    reiniciar_estado()
+    try:
+        resultado = await solicitar_actualizacion_v4(
+            settings, clave=CLAVE, contrasena="incorrecta", entiendo=True,
+            habilitada=True, ahora=AHORA, enviar=enviar,
+        )
+        assert resultado.resultado is ResultadoSolicitudV4.CONTRASENA_INCORRECTA
+        assert enviar.llamadas == []
+    finally:
+        reiniciar_estado()
