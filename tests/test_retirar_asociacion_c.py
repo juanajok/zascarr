@@ -25,16 +25,20 @@ SECRETO = "x" * 32
 
 
 class _Res:
-    def __init__(self, *, scalar=None, rowcount=0, first=None):
+    def __init__(self, *, scalar=None, rowcount=0, first=None, rows=None):
         self._scalar = scalar
         self.rowcount = rowcount
         self._first = first
+        self._rows = rows or []
 
     def scalar_one_or_none(self):
         return self._scalar
 
     def first(self):
         return self._first
+
+    def all(self):
+        return self._rows
 
 
 class _DB:
@@ -50,6 +54,14 @@ class _DB:
     async def execute(self, statement, *_a, **_k):
         self.llamadas += 1
         self.sentencias.append(statement)
+        # B5a: la consulta de ids de número no consume la cola de los tests;
+        # sin números que retirar, el comportamiento es el mismo.
+        descripciones = getattr(statement, "column_descriptions", None) or []
+        if descripciones and all(
+            getattr(d.get("entity"), "__name__", "") == "Issue"
+            for d in descripciones if isinstance(d, dict)
+        ):
+            return _Res()
         if hasattr(statement, "_values"):
             self.valores = {getattr(k, "name", k): getattr(v, "value", v)
                             for k, v in statement._values.items()}
