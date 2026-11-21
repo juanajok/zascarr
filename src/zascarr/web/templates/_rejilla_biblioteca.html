@@ -6,6 +6,7 @@
     filtros normalizados; la plantilla no concatena parámetros a mano. -#}
 {#- `quitar` es interno y de valores cerrados: un valor desconocido se ignora
     (no enfoca ni emite el campo fuera de banda) — BL-IT01, spec §6.2. -#}
+{% set foco_objetivo = foco_tarjeta|default("", true) %}
 {% set quitar = request.query_params.get("quitar") %}
 {% set quitar_valido = quitar if quitar in (
   "q", "tradition", "publisher_id", "character_id", "story_arc_id", "author_id",
@@ -112,7 +113,7 @@
   </thead>
   <tbody>
     {% for series in items %}
-    <tr id="serie-{{ series.id }}">
+    <tr id="serie-{{ series.id }}"{% if foco_objetivo and foco_objetivo == series.id|string %} tabindex="-1" autofocus{% endif %}>
       <td data-label="Título">
         <span class="chip-previa chip-previa-lista">
           <a href="{{ url_serie(series.id) }}"
@@ -137,7 +138,7 @@
 <div class="library-grid library-grid-{{ densidad }}">
   {% for series in items %}
   <div class="library-card-wrap">
-  <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}">
+  <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}"{% if foco_objetivo and foco_objetivo == series.id|string %} autofocus{% endif %}>
     {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id) }}
     {% set leidos = series.lectura_leidos|default(0, true) %}
     {% set total_lectura = series.lectura_total|default(0, true) %}

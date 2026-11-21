@@ -18,8 +18,9 @@ sirve.
 from __future__ import annotations
 
 import contextlib
+import re
 from dataclasses import dataclass, replace
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode
 from uuid import UUID
 
 import structlog
@@ -177,7 +178,7 @@ def _leer_filtros(
     orden: str = "",
     coleccion: str = "",
     author_id: str = "",
-    favorito: str = "",
+    favoritos: str = "",
     idioma: str = "",
     edicion: str = "",
     anio_desde: str = "",
@@ -249,7 +250,7 @@ def _leer_filtros(
     modo_final = modo_limpio or "gestion"
     if modo_final == "escaparate" and (
             any((texto, tradicion, publisher_id, character_id, story_arc_id,
-                 author_id, favorito, (idioma or ""), (edicion or ""), etiquetas,
+                 author_id, favoritos, (idioma or ""), (edicion or ""), etiquetas,
                  leido, coleccion, (anio_desde or ""), (anio_hasta or ""),
                  (naturaleza or ""), (formato or ""), (puntuacion or "")))
             or vista_limpia == "lista"):
@@ -290,7 +291,7 @@ def _leer_filtros(
         texto = (valor or "").strip()
         if not texto:
             return ""
-        if not texto.isdigit() or not 1000 <= int(texto) <= 9999:
+        if not re.fullmatch(r"[0-9]+", texto) or not 1000 <= int(texto) <= 9999:
             avisos.append(f"El año de «{etiqueta}» no es válido; se ha quitado.")
             return ""
         return texto
@@ -307,7 +308,7 @@ def _leer_filtros(
         character_id=_uuid(character_id, "personaje"),
         story_arc_id=_uuid(story_arc_id, "saga"),
         author_id=_uuid(author_id, "autor"),
-        favorito=favorito in ("1", "si", "true"),
+        favorito=favoritos in ("1", "si", "true"),
         language=(idioma or "").strip().lower()[:10],
         edition_kind=(edicion if edicion in
                       {"oficial", "tradumaqueta", "escaneo_propio", "otro"} else ""),
@@ -793,7 +794,7 @@ async def sugerir_etiquetas(
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
-        coleccion=coleccion, author_id=author_id, favorito=favoritos,
+        coleccion=coleccion, author_id=author_id, favoritos=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
         densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     tokens = etiquetas.strip().split()
@@ -863,12 +864,12 @@ async def index(
     coleccion: str = "", author_id: str = "", favoritos: str = "",
     anio_desde: str = "", anio_hasta: str = "", idioma: str = "", edicion: str = "",
     densidad: str = "", modo: str = "", naturaleza: str = "", formato: str = "",
-    puntuacion: str = "",
+    puntuacion: str = "", foco: str = "",
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
-        leido, orden, coleccion, author_id=author_id, favorito=favoritos,
+        leido, orden, coleccion, author_id=author_id, favoritos=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
         densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     publishers: list = []
@@ -892,9 +893,22 @@ async def index(
             ctx["modo"] = "gestion"
     if editoriales_error and not ctx["error"]:
         ctx["avisos"].append("No se pudieron cargar las editoriales; puedes seguir filtrando.")
+    # `foco` es transporte del retorno (no estado): se valida aquí sin lanzar
+    # y solo enfoca si la serie está en esta página; si no, respaldo en #rejilla.
+    foco_uuid = ""
+    if foco:
+        try:
+            foco_uuid = str(UUID(foco))
+        except (ValueError, TypeError):
+            foco_uuid = ""
+    en_pagina = bool(foco_uuid) and any(
+        str(serie.id) == foco_uuid for serie in ctx["items"])
     ctx.update({
         "publishers": publishers,
         "tradiciones": [(t.value, _TRADICION_LABEL[t]) for t in ComicTradition],
+        "foco_tarjeta": foco_uuid if en_pagina else "",
+        "foco_ausente": (bool(foco) and not en_pagina
+                         and filtros.modo != "escaparate"),
     })
     respuesta = templates.TemplateResponse(request, "biblioteca.html", ctx)
     respuesta.headers["Cache-Control"] = "no-store"
@@ -914,7 +928,7 @@ async def resultados(
 ) -> HTMLResponse:
     filtros = _leer_filtros(
         page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
-        leido, orden, coleccion, author_id=author_id, favorito=favoritos,
+        leido, orden, coleccion, author_id=author_id, favoritos=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
         densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     return await _respuesta_fragmento(request, await _contexto(db, filtros), db)
@@ -971,7 +985,7 @@ async def buscar_personaje(
         texto, q = _texto_buscador(q), ""
     filtros = _leer_filtros(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
-        coleccion=coleccion, author_id=author_id, favorito=favoritos,
+        coleccion=coleccion, author_id=author_id, favoritos=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
         densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     service = SeriesService(db)
@@ -1003,7 +1017,7 @@ async def buscar_saga(
         texto, q = _texto_buscador(q), ""
     filtros = _leer_filtros(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
-        coleccion=coleccion, author_id=author_id, favorito=favoritos,
+        coleccion=coleccion, author_id=author_id, favoritos=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
         densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     service = SeriesService(db)
@@ -1035,7 +1049,7 @@ async def buscar_autor(
         texto, q = _texto_buscador(q), ""
     filtros = _leer_filtros(
         1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas,
-        coleccion=coleccion, author_id=author_id, favorito=favoritos,
+        coleccion=coleccion, author_id=author_id, favoritos=favoritos,
         idioma=idioma, edicion=edicion, anio_desde=anio_desde, anio_hasta=anio_hasta,
         densidad=densidad, modo=modo, naturaleza=naturaleza, formato=formato, puntuacion=puntuacion)
     service = SeriesService(db)
@@ -1050,3 +1064,60 @@ async def buscar_autor(
         "_resultados_entidad.html",
         {"resultados": await _buscar(filtros, "author_id", encontrados), "texto": texto},
     )
+
+
+#: Nombres de query que acepta la ruta GET de Biblioteca, derivados de FastAPI
+#: (una sola fuente): incluye alias y el `foco` que esta historia añade.
+_RUTA_INDEX = next(
+    ruta for ruta in router.routes
+    if ruta.path == "/ui/biblioteca" and "GET" in ruta.methods)
+PARAMETROS_DE_BIBLIOTECA = frozenset(
+    parametro.alias or parametro.name
+    for parametro in _RUTA_INDEX.dependant.query_params)
+_PARAMETROS_DE_ESTADO = PARAMETROS_DE_BIBLIOTECA - {"foco"}
+
+
+def consulta_canonica_de_biblioteca(query: str) -> str | None:
+    """Query canónica equivalente a `query`, o `None` si la ruta la corregiría.
+
+    No repara: normaliza con `_leer_filtros` y re-emite con `_qs`; la
+    comparación exacta vive en `web.retorno`. `foco` no es estado y lo valida
+    allí aparte.
+    """
+    pares = parse_qsl(query, keep_blank_values=True)
+    nombres = [nombre for nombre, _ in pares]
+    if len(set(nombres)) != len(nombres) or any(not nombre for nombre in nombres):
+        return None
+    if set(nombres) - _PARAMETROS_DE_ESTADO:
+        return None
+    for nombre, valor in pares:
+        if any(ord(caracter) < 32 or ord(caracter) == 127 for caracter in valor):
+            return None
+        if nombre in ("page", "anio_desde", "anio_hasta") and not re.fullmatch(r"[0-9]+", valor):
+            return None
+    valores = dict(pares)
+    filtros = _leer_filtros(
+        valores.get("page", "1"),
+        valores.get("q", ""),
+        valores.get("tradition", ""),
+        valores.get("publisher_id", ""),
+        valores.get("character_id", ""),
+        valores.get("story_arc_id", ""),
+        valores.get("vista", ""),
+        valores.get("etiquetas", ""),
+        valores.get("leido", ""),
+        valores.get("orden", ""),
+        valores.get("coleccion", ""),
+        author_id=valores.get("author_id", ""),
+        favoritos=valores.get("favoritos", ""),
+        idioma=valores.get("idioma", ""),
+        edicion=valores.get("edicion", ""),
+        anio_desde=valores.get("anio_desde", ""),
+        anio_hasta=valores.get("anio_hasta", ""),
+        densidad=valores.get("densidad", ""),
+        modo=valores.get("modo", ""),
+        naturaleza=valores.get("naturaleza", ""),
+        formato=valores.get("formato", ""),
+        puntuacion=valores.get("puntuacion", ""),
+    )
+    return _qs(filtros, page=filtros.page)

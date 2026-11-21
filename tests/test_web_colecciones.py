@@ -158,8 +158,10 @@ def test_vista_tarjetas_hace_clicable_portada_y_titulo_de_la_serie():
         SerieDeColeccion("s1", "Flash", 1987, "ninguno", "No buscar", "ninguno", "No buscar"),
     ])
     try:
-        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
-             patch("zascarr.web.colecciones.pagina_series_sin_coleccion", AsyncMock(return_value=_pagina())), \
+        with patch("zascarr.web.colecciones.detalle_coleccion",
+                   AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.pagina_series_sin_coleccion",
+                   AsyncMock(return_value=_pagina())), \
              patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
              patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
             r = c.get(f"/ui/colecciones/{uuid4()}?vista=tarjetas")
@@ -591,7 +593,6 @@ def test_detalle_no_carga_la_lista_de_alta_hasta_abrir_el_boton():
 def test_panel_de_alta_solo_trae_series_al_abrirlo():
     cid = uuid4()
     sid = str(uuid4())
-    detalle = DetalleColeccion(str(cid), "Grapas", None, "heredar", [])
     c = _cliente()
     try:
         with patch("zascarr.web.colecciones.pagina_series_sin_coleccion", AsyncMock(
@@ -605,3 +606,111 @@ def test_panel_de_alta_solo_trae_series_al_abrirlo():
     assert "Añadir series seleccionadas" in r.text
     assert r.headers["cache-control"] == "no-store"
     assert "<!doctype html>" not in r.text
+
+
+def test_la_tarjeta_de_la_coleccion_lleva_volver_con_su_estado():
+    """UATP-02: el retorno a Colección conserva q/tradicion/pagina/vista."""
+    from urllib.parse import parse_qs, unquote, urlsplit
+
+    detalle = DetalleColeccion("c1", "Grapas", "En curso", "excluir",
+                               [SerieDeColeccion(
+                                   "s1", "Flash", 1987, "faltantes",
+                                   "Buscar los números que faltan", "ninguno",
+                                   "No buscar automáticamente")])
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion", AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            cid = uuid4()
+            r = c.get(f"/ui/colecciones/{cid}?q=fl&tradicion=manga&pagina=2&vista=tarjetas")
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    enlaces = [h for h in r.text.split('href="') if h.startswith("/ui/series/s1?volver=")]
+    assert enlaces
+    href = enlaces[0].split('"', 1)[0].replace("&amp;", "&")
+    destino = unquote(urlsplit(href).query.removeprefix("volver="))
+    partes = urlsplit(destino)
+    assert partes.path == f"/ui/colecciones/{cid}"
+    assert partes.fragment == ""
+    assert parse_qs(partes.query) == {
+        "q": ["fl"], "tradicion": ["manga"], "pagina": ["2"], "vista": ["tarjetas"]}
+
+
+def _detalle_con_serie():
+    return DetalleColeccion("c1", "Grapas", "En curso", "excluir",
+                            [SerieDeColeccion(
+                                "s1", "Flash", 1987, "faltantes",
+                                "Buscar los números que faltan", "ninguno",
+                                "No buscar automáticamente")])
+
+
+def test_render_de_error_con_coleccion_no_vacia_conserva_el_volver():
+    """Regresión SecOps F-1: las ramas de error no pasaban `url_serie`."""
+    detalle = _detalle_con_serie()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion",
+                   AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            cid = uuid4()
+            r = c.post(f"/ui/colecciones/{cid}/exportar", data={"confirmo": "0"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Flash" in r.text
+    assert 'href="/ui/series/s1?volver=' in r.text
+
+
+def test_editar_invalido_con_coleccion_no_vacia_conserva_el_volver():
+    detalle = _detalle_con_serie()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion",
+                   AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.editar_coleccion", AsyncMock(
+                 return_value=ResultadoColeccion(
+                     False, {"name": "El nombre no puede estar vacío."}))):
+            cid = uuid4()
+            r = c.post(f"/ui/colecciones/{cid}/editar", data={"name": ""})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Flash" in r.text
+    assert 'href="/ui/series/s1?volver=' in r.text
+
+
+def test_portada_invalida_con_coleccion_no_vacia_conserva_el_volver():
+    detalle = _detalle_con_serie()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion",
+                   AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            cid = uuid4()
+            r = c.post(f"/ui/colecciones/{cid}/portada", data={"series_id": "no-es-uuid"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Flash" in r.text
+    assert 'href="/ui/series/s1?volver=' in r.text
+
+
+def test_asignar_invalido_con_coleccion_no_vacia_conserva_el_volver():
+    detalle = _detalle_con_serie()
+    c = _cliente()
+    try:
+        with patch("zascarr.web.colecciones.detalle_coleccion",
+                   AsyncMock(return_value=detalle)), \
+             patch("zascarr.web.colecciones.candidatas_portada", AsyncMock(return_value=[])), \
+             patch("zascarr.web.colecciones.historial_exportaciones", AsyncMock(return_value=[])):
+            cid = uuid4()
+            r = c.post(f"/ui/colecciones/{cid}/series", data={"serie_id": "no-es-uuid"})
+    finally:
+        _cerrar()
+    assert r.status_code == 200
+    assert "Flash" in r.text
+    assert 'href="/ui/series/s1?volver=' in r.text

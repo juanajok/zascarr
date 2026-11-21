@@ -220,8 +220,8 @@ conserva el `403` con `detail`. `volver` se valida contra una lista cerrada).
 | legal | GET | `/ui/legal` | volver,falta | legal_wizard.html | — | — |
 | legal | POST | `/ui/legal/accept` | acepto_1,acepto_2,acepto_3,volver | (redirige) | 303 | — |
 | legal | GET | `/legal` | — | legal_full.html | — | — |
-| library | GET | `/ui/biblioteca` | page,tradition,publisher_id,character_id,story_arc_id,q | biblioteca.html | — | — |
-| library | GET | `/ui/biblioteca/resultados` | page,tradition,publisher_id,character_id,story_arc_id,q | _rejilla_biblioteca.html | — | — |
+| library | GET | `/ui/biblioteca` | page,tradition,publisher_id,character_id,story_arc_id,q,vista,etiquetas,leido,orden,coleccion,author_id,favoritos,idioma,edicion,anio_desde,anio_hasta,densidad,modo,naturaleza,formato,puntuacion,foco | biblioteca.html | — | — |
+| library | GET | `/ui/biblioteca/resultados` | page,tradition,publisher_id,character_id,story_arc_id,q,vista,etiquetas,leido,orden,coleccion,author_id,favoritos,idioma,edicion,anio_desde,anio_hasta,densidad,modo,naturaleza,formato,puntuacion | _rejilla_biblioteca.html | — | — |
 | library | GET | `/ui/biblioteca/buscar-personaje` | q | _resultados_personaje.html | — | — |
 | library | GET | `/ui/biblioteca/buscar-saga` | q | _resultados_saga.html | — | — |
 | pendientes | GET | `/ui/pendientes` | — | pendientes.html | — | — |
@@ -257,7 +257,7 @@ campos y forma del fragmento hasta que otra los sustituya y esté escrito en su 
 | `POST /ui/wishlist/anadir` (`series_id`) → `_fila_wishlist.html` | panel, Deseados, `_serie_creada.html`, `_resultados_series_wishlist.html` | una fila lista para insertar; `403`+`HX-Redirect` (o `303`+`Location` en formulario normal) si falta el aviso legal, con `volver` validado y `no-store` |
 | `POST /ui/wishlist/{id}/(quitar\|reintentar\|buscar-ahora\|cancelar-busqueda\|enviar-candidato)` | `_fila_wishlist.html`, `_candidatos_wishlist.html` | filas/candidatos como arriba; `enviar-candidato` exige `token` |
 | `POST /ui/ajustes/guardar/*` y `probar/*` (12 rutas) | `ajustes.html` | `_ajustes_guardado.html` / `_ajustes_prueba.html`; **D11: guardar aplica al instante y los secretos nunca vuelven en claro**; **A6: el guardarraíl de contraseña** (400) |
-| `GET /ui/biblioteca/resultados`, `buscar-personaje`, `buscar-saga` | `biblioteca.html`, paginación | rejilla / listas con enlaces `?character_id=`/`?story_arc_id=` |
+| `GET /ui/biblioteca/resultados`, `buscar-personaje`, `buscar-saga` | `biblioteca.html`, paginación | rejilla / listas con enlaces `?character_id=`/`?story_arc_id=`; `volver` a la ficha con la URL canónica (22 parámetros) + `foco` y ancla `#serie-<uuid>` |
 | `POST /ui/auditoria/(analizar\|adoptar)` | `auditoria.html` | informe / resultado de adopción; **solo lectura salvo adoptar, y adoptar no mueve nada** |
 | `GET /api/health` | `estado.html` (`fetch`) | JSON con `status`, `checks`, `warnings`, **`seguridad`** (A11), `version` |
 | `GET /estado` | menú, mensaje del arranque degradado | página servida con la BD caída |
