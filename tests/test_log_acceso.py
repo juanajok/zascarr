@@ -452,8 +452,10 @@ class TestInventarioDeParametros:
         - `web/library.py` **deriva** la allowlist de `PARAMETROS_DE_BIBLIOTECA` de la propia
           ruta de FastAPI (`dependant.query_params`); no lee la query de la petición."""
         usos = [str(p.relative_to(RAIZ)) for p in (RAIZ / "src").rglob("*.py") if "query_params" in p.read_text(encoding="utf-8")]
-        assert usos == ["src/zascarr/web/library.py", "src/zascarr/web/contexto_carpetas.py"], (
-            f"hay lectura manual de query_params: {usos}; añádela al inventario y a esta prueba")
+        assert sorted(usos) == sorted([
+            "src/zascarr/web/library.py",
+            "src/zascarr/web/contexto_carpetas.py",
+        ]), f"hay lectura manual de query_params: {usos}; añádela al inventario y a esta prueba"
 
     def test_cada_parametro_con_su_centinela_no_llega_al_registro_ni_su_nombre_con_valor(self):
         centinelas = {nombre: f"CENTINELA-{nombre.upper().replace('_', '-')}-INV" for nombre in sorted(PARAMETROS_DE_QUERY)}
