@@ -27,6 +27,8 @@ def test_unidad_de_actualizacion_tiene_accion_fija_y_limites() -> None:
     assert servicio["Restart"] == "no"
     assert "/opt/zascarr" in servicio["ReadWritePaths"]
     assert servicio["WorkingDirectory"] == "@REPO@"
+    assert "--resultado hecha" in servicio["ExecStartPost"]
+    assert "SERVICE_RESULT" in servicio["ExecStopPost"]
     assert "AF_INET" in servicio["RestrictAddressFamilies"]
     assert "Install" not in config
 

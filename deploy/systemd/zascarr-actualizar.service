@@ -10,6 +10,8 @@ Type=exec
 User=root
 WorkingDirectory=@REPO@
 ExecStart=/bin/bash @REPO@/scripts/update.sh --rama main
+ExecStartPost=/usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-estado-actualizar-ops4 --ruta @ZASCARR_DATA_DIR@/ops/actualizar-status.json --resultado hecha
+ExecStopPost=/bin/sh -c 'test "$SERVICE_RESULT" = success || /usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-estado-actualizar-ops4 --ruta @ZASCARR_DATA_DIR@/ops/actualizar-status.json --resultado fallida'
 RuntimeMaxSec=5400
 TimeoutStopSec=60
 KillMode=control-group
