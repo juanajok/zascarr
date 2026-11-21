@@ -400,7 +400,7 @@ Nombres orientativos; lo exigible es el caso y su espera.
 | T6 | Web | Render de ficha, Biblioteca lista y Colecciones: atributos nuevos, botón visible, objetivo de cada previa; sin 500/422 | `test_web_ficha_447.py`, `test_web_library.py`, `test_web_colecciones.py` | AC-01/07 |
 | T7 | Regresión | BL-INF4: imagen 240 px, ETag/304, 404 sin caché, fragmento vacío sin previa, 404 de número ajeno, no-store; contraste/tokens y 320 px | comandos §11 | AC-10 |
 | T8 | Estático | No hay JS nuevo en la previa: sin `hx-on` ni `<script>` en sus plantillas y sin cambios en `static/lector.js`; solo atributos htmx (`hx-get`, `hx-trigger`, `hx-sync`, `hx-target`, `hx-swap`) | revisión + CI | AC-10 |
-| T9 | Chrome real | Matriz §11: Escape sin mover foco, siguiente visible, puente/hover, clic que no atraviesa, una sola previa, fija, Enter, aborto con red lenta, reduced-motion, 1024/zoom y 720 | Chrome + `docs/design/uatp05/resultado-chrome.md` | AC-01…AC-09 |
+| T9 | Chrome real | Matriz §11: Escape sin mover foco, puente/hover, clic que no atraviesa, fija y 1024/720/390; red lenta y reduced-motion **NOT RUN** | Chrome + `docs/design/uatp05/resultado-chrome.md` | AC-01…AC-09: **PASS Chrome** |
 | T10 | Docs | Este doc con decisión del PO, E2E 13.8 y correcciones de BL-INF4/UI; comentario en #1143 | revisión | D-6 |
 
 ## 11. Evidencia E2E (Chrome real)
@@ -423,7 +423,7 @@ La evidencia de cierre del piloto UAT se anota además en `A3/resultado.md` (ref
 | V9 · 720×900 (zoom 200 % de 1440) | Repetir V1 con la ficha y, si aplica, la lista | Límite de §8: la anclada no se sirve; foco/texto/Enter intactos; la fija con botón se puede abrir/descartar |
 | V10 · 390×844 táctil emulado | Toque en «Ver portada» y toque en la tarjeta | AC-07/04: abre/cierra sin scroll horizontal; la anclada sigue oculta (límite) |
 
-**Reglas de evidencia:** una fila no ejecutada es **NOT RUN**, no PASS. Safari/iOS, Firefox, lector
+**Reglas de evidencia:** una fila no ejecutada es **NOT RUN**, no PASS. Evidencia Chrome versionada en [`uatp05/resultado-chrome.md`](uatp05/resultado-chrome.md); red lenta y reduced-motion siguen **NOT RUN**. Safari/iOS, Firefox, lector
 de pantalla, móvil/táctil físico, Pi y `forced-colors` reales quedan **NOT RUN** declarados. Las
 capturas y la tabla final viven en `docs/design/uatp05/resultado-chrome.md`.
 
