@@ -607,6 +607,14 @@ salida.finOcultoAlLlegar = camino.fin.hidden === true
   && camino.doc.activeElement === camino.lienzo
   && camino.llamadas.length === 1;   // solo el POST /progreso del pase de página
 
+// La página de fin oculta la barra que tapaba el título en móvil y la restaura al volver.
+const barra = run({ total: 4, pagina: 4, modo: "ancho" });
+barra.root.dataset.chrome = "";
+barra.fire(barra.els["lector-siguiente"], "click");
+const barraOculta = barra.root.dataset.chrome === "oculto";
+barra.fire(barra.finQuedarme, "click");
+salida.finOcultaYRestauraLaBarra = barraOculta && barra.root.dataset.chrome === "";
+
 // El avance en la última página sigue disponible y se anuncia como «Ver el final».
 const disponible = run({ total: 4, pagina: 4 });
 salida.avanceDisponibleEnUltima = disponible.els["lector-siguiente"].getAttribute("aria-disabled") === "false"
@@ -824,6 +832,7 @@ def test_lector_js_pagina_de_fin_bajo_intencion(tmp_path):
     datos = json.loads(r.stdout)
     assert datos == {
         "finOcultoAlLlegar": True,
+        "finOcultaYRestauraLaBarra": True,
         "avanceDisponibleEnUltima": True,
         "avanzarAbreFin": True,
         "siguienteNoDisponibleEnUltima": True,

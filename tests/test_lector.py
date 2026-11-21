@@ -533,7 +533,8 @@ def test_el_fin_llega_en_el_html_oculto_sin_contenido_visible(tmp_path, monkeypa
 @pytest.mark.parametrize(("estado", "frase"), [
     pytest.param("leer", "Siguiente: <strong>#2</strong>", id="leer"),
     pytest.param("falta", "Te falta el <strong>#2</strong>", id="falta"),
-    pytest.param("sin_siguiente", "No hay un número siguiente en tu biblioteca.", id="sin_siguiente"),
+    pytest.param("sin_siguiente", "No hay un número siguiente en tu biblioteca.",
+                 id="sin_siguiente"),
 ])
 def test_el_fin_se_pinta_oculto_en_los_tres_estados(tmp_path, monkeypatch, estado, frase):
     f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, estado)
@@ -558,7 +559,8 @@ def test_la_pagina_de_fin_no_es_un_dialogo(tmp_path, monkeypatch):
 
 
 def test_el_control_de_avanzar_sigue_operativo_en_la_ultima_pagina(tmp_path, monkeypatch):
-    """FR-2: en la última página el avance no está desactivado: abre el final y se llama «Ver el final»."""
+    """FR-2: en la última página el avance no está desactivado: abre el final y se llama
+    «Ver el final»."""
     f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "leer", pagina=3)
     with use_fake_session(db) as client:
         r = client.get(f"/ui/leer/{f.id}")
@@ -622,7 +624,7 @@ def test_fin_falta_conserva_la_puerta_legal(tmp_path, monkeypatch):
         r = client.get(f"/ui/leer/{f.id}")
     fin = _bloque_fin(r.text)
     assert f'href="/ui/legal?volver=%2Fui%2Fleer%2F{f.id}"' in fin
-    assert 'hx-post="/ui/leer/%s/deseo"' % f.id not in fin
+    assert f'hx-post="/ui/leer/{f.id}/deseo"' not in fin
     assert "Antes tienes que leer y aceptar el aviso legal" in fin
 
     f2, db2 = _pantalla_con_siguiente(tmp_path, monkeypatch, "falta", legal=True)

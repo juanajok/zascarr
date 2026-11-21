@@ -97,6 +97,7 @@
   // BL-LEC3 decisión D (#826): la página de fin solo se abre con intención de avanzar desde la
   // última página. Al llegar no se muestra nada.
   let finAbierto = false;
+  let chromeAntesDeFin = false;
   let portadaFinPedida = false;
   const paginas = document.getElementById("lector-paginas");
   const zoomMenos = document.getElementById("lector-zoom-menos");
@@ -309,6 +310,10 @@
   const abrirFin = () => {
     if (!fin || finAbierto) return;
     finAbierto = true;
+    // La barra flotante taparía el título en móviles: en la página de fin se oculta y se
+    // restaura al volver (solo si estaba visible antes de entrar).
+    chromeAntesDeFin = raiz.dataset.chrome === "oculto";
+    ocultarBarraInmersiva();
     fin.hidden = false;
     if (typeof fin.scrollTop === "number") fin.scrollTop = 0;
     paginas.hidden = true;
@@ -334,6 +339,7 @@
       if (typeof lienzo.focus === "function") lienzo.focus({ preventScroll: true });
     }
     fin.hidden = true;
+    if (!chromeAntesDeFin) despertarChrome();
     anunciar(`${textoPaginas(paginasVisibles())}.`);
   };
 
@@ -624,8 +630,11 @@
   else if (typeof setTimeout === "function") programaOculto();
 
   document.addEventListener("pointermove", (evento) => {
-    // Con la barra oculta, acercarse a la franja superior la muestra.
-    if (raiz.dataset.chrome === "oculto" && evento.clientY <= 90) despertarChrome();
+    // Con la barra oculta, acercarse a la franja superior la muestra; en la página de fin
+    // no se muestra para no tapar su título (se sale con «Quedarme»/Esc).
+    if (!finAbierto && raiz.dataset.chrome === "oculto" && evento.clientY <= 90) {
+      despertarChrome();
+    }
   }, { passive: true });
   document.addEventListener("keydown", (evento) => {
     if (evento.defaultPrevented || evento.ctrlKey || evento.altKey || evento.metaKey || evento.isComposing) return;
