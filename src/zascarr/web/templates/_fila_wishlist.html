@@ -1,9 +1,11 @@
 <div class="wishlist-row" id="fila-{{ row.item.id }}">
   {% if row.puede_buscar_ahora %}
   <input type="checkbox" name="item_id" value="{{ row.item.id }}"
-         aria-label="Seleccionar {{ row.titulo }}">
+         aria-label="Seleccionar {{ row.referencia }}">
   {% endif %}
-  <span class="wishlist-title">{{ row.titulo }}</span>
+  <span class="wishlist-title">
+    {% if row.enlace_ficha %}<a href="{{ row.enlace_ficha }}">{{ row.referencia }}<span class="sr"> — ver la ficha de la serie</span></a>{% else %}{{ row.referencia }}{% endif %}
+  </span>
   <div class="wishlist-estado" id="estado-fila-{{ row.item.id }}">
     {% include "_estado_wishlist.html" %}
   </div>

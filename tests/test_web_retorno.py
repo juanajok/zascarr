@@ -193,3 +193,15 @@ def test_una_url_canonica_larga_se_acepta_y_otra_mayor_no():
     assert len(valor) < MAX_VOLVER
     assert volver_segura(valor, sid) == valor
     assert volver_segura("/ui/biblioteca?q=" + "x" * (MAX_VOLVER + 1)) is None
+
+
+def test_url_de_ficha_desde_deseos_y_volver_exacto():
+    from zascarr.web.retorno import url_de_ficha_desde_deseos
+
+    sid = uuid4()
+    assert url_de_ficha_desde_deseos(sid) == (
+        f"/ui/series/{sid}?volver=%2Fui%2Fwishlist")
+    assert volver_segura("/ui/wishlist") == "/ui/wishlist"
+    for malo in ("/ui/wishlist?x=1", "/ui/wishlist#f", "/ui/wishlist/",
+                 "//ui/wishlist", "/ui/wishlist/../x", "/api/wishlist"):
+        assert volver_segura(malo) is None, malo

@@ -806,6 +806,28 @@ sin overflow horizontal en móvil; tema oscuro aplica; el botón no permite dobl
 **Evidencia:** `docs/design/uatp03/resultado-chrome.md` con SHA, versión de Chrome,
 viewport, PASS/FAIL/NOT RUN por fila y capturas. Sin esa ejecución AC-09 queda NOT RUN.
 
+### 13.9 UATP-04 · ediciones homónimas en Deseados
+
+> Fixture: dos series «Flash», 1987 y 2011, en Deseados. Requiere navegador real; sin él,
+> **NOT RUN** (el HTML no sustituye la comprobación visual ni la de lector de pantalla).
+
+```text
+1. /ui/wishlist muestra «Flash (1987)» y «Flash (2011)» (reference_name), no solo «Flash».
+2. Cada fila enlaza a /ui/series/<id>?volver=%2Fui%2Fwishlist; recargar conserva hrefs y textos.
+3. Nombres accesibles distintos por fila: Seleccionar/Reintentar/Buscar/Cancelar/Marcar/Quitar
+   y Progreso incluyen la referencia.
+4. #resultados-wishlist anuncia resultados y «Sin coincidencias.» (aria-live=polite, sin role extra).
+5. Selector: cada «Añadir a deseados» incluye su referencia; tras añadir dice «Añadido: …» y no
+   se confunde con el otro resultado.
+6. Abrir ficha desde una fila → «← Volver a Deseados» → /ui/wishlist.
+7. 320×568 y 390×844: sin scroll horizontal; referencia completa (sin ellipsis), enlace ≥24 px,
+   chip/estado y motivo legibles.
+8. Teclado: enlace de fila alcanzable con Tab; sin cambios de foco inesperados.
+```
+
+**Criterio:** PASS solo si se ejecutó en Chrome (registrar versión y viewports). Lector de
+pantalla real, Safari/iOS y dispositivo físico: **NOT RUN**.
+
 ---
 
 ## 14. Casos de error / seguridad / regresión

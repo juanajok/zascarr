@@ -774,7 +774,9 @@ button[type="submit"].btn-sugerencia {
      Con `wrap` lo que no cabe pasa a la línea siguiente; nada se oculta ni se encoge. */
   flex-wrap: wrap;
 }
-.wishlist-title { flex: 1 1 10rem; font-size: var(--text-nav); font-weight: 600; }
+.wishlist-title { flex: 1 1 10rem; font-size: var(--text-nav); font-weight: 600;
+  overflow-wrap: anywhere; }
+.wishlist-title a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 /* El panel de candidatos de «Buscar ahora» ocupa su propia línea, pero solo cuando tiene
    contenido: vacío no debe forzar una línea (12 px de hueco) en cada fila. */
 .wishlist-row .candidatos-wishlist:not(:empty) { flex: 1 1 100%; }
@@ -1605,7 +1607,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   select:not([hidden]):not([multiple]):not([size]), textarea:not([hidden]):not([data-u16]) {
     font-size: var(--text-cuerpo); min-height: 44px;
   }button:not([hidden]):not([data-u16]), .btn:not([hidden]), summary:not([hidden]), .pend-paginas a:not([hidden]), .back-link:not([hidden]), .page-link:not([hidden]), .side .brand:not([hidden]) { min-height: 44px; }
-  .metric-detail a { display: inline-block; min-height: 24px; }
+  .metric-detail a, .wishlist-title a { display: inline-block; min-height: 24px; }
 }
 
 /* Página de error propia (web/errores.py): una salida clara, la principal primero. */

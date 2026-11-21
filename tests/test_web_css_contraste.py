@@ -801,3 +801,14 @@ class TestFilaDeDeseados:
         regla = self._regla(".wishlist-row .candidatos-wishlist:not(:empty)")
         assert regla["flex"] == "1 1 100%"
         assert not any(s == ".wishlist-row .candidatos-wishlist" for s, _ in _reglas())
+
+    def test_la_referencia_no_se_trunca_y_el_enlace_se_subraya(self):
+        regla = self._regla(".wishlist-title")
+        assert regla["overflow-wrap"] == "anywhere"
+        assert "text-overflow" not in regla and "white-space" not in regla
+        enlace = self._regla(".wishlist-title a")
+        assert enlace["text-decoration"] == "underline"
+
+    def test_el_enlace_de_la_fila_alcanza_24_px_en_el_bloque_u16(self):
+        reglas = [d for s, d in _reglas() if ".wishlist-title a" in s]
+        assert any(d.get("min-height") == "24px" for d in reglas), reglas

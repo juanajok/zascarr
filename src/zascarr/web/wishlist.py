@@ -30,6 +30,7 @@ from zascarr.services.orchestrator import (
 )
 from zascarr.services.transmission import TransmissionClient
 from zascarr.services.wishlist import WishlistService
+from zascarr.web.retorno import url_de_ficha_desde_deseos
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
@@ -59,12 +60,17 @@ _EAGER = (selectinload(Wishlist.series), selectinload(Wishlist.issue).selectinlo
 
 def _row(item: Wishlist) -> dict:
     series = item.series or (item.issue.series if item.issue else None)
-    titulo = series.title if series else "?"
-    if item.issue and item.issue.issue_number:
-        titulo = f"{titulo} #{item.issue.issue_number}"
+    referencia = ((getattr(series, "reference_name", None) or series.title)
+                  if series else "?")
+    if item.issue:
+        numero = item.issue.number_key or item.issue.issue_number
+        if numero:
+            referencia = f"{referencia} #{numero}"
     return {
         "item": item,
-        "titulo": titulo,
+        "referencia": referencia,
+        "enlace_ficha": (url_de_ficha_desde_deseos(series.id)
+                         if series is not None else None),
         "estado": _ESTADO_LABEL.get(item.status, item.status.value),
         "aspecto": aspecto_de_deseo(item.status),      # aspecto de `ui.chip`, no una clase CSS
         "puede_reintentar": item.status == WishlistStatus.FAILED,
@@ -198,7 +204,7 @@ async def progreso(request: Request, db: AsyncSession = Depends(get_db)) -> HTML
             detalle = "aMule (sin progreso por aquí)"
         filas.append({
             "item_id": item.id,
-            "titulo": row["titulo"],
+            "referencia": row["referencia"],
             "backend": backend,
             "pct": pct,
             "detalle": detalle,
