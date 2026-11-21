@@ -126,8 +126,11 @@ def _bloque(fuente, destino):
     from jinja2 import Environment
     leer = fuente[fuente.index("{% if destino_lectura %}"):]
     leer = leer[:leer.index("{% endif %}\n    {#- «Completa»") + len("{% endif %}")]
-    acciones = fuente[fuente.index('<p class="series-acciones">'):]
-    acciones = acciones[:acciones.index("</p>") + 4]
+    # La fila de acciones de la cabecera (revisión del 2026-11-21), sin el include de la favorita.
+    acciones = fuente[fuente.index('<div class="series-acciones">'):]
+    acciones = acciones[:acciones.index("</div>") + 6]
+    favorita = '{% set compacto = false %}{% include "_favorito_boton.html" %}'
+    acciones = acciones.replace(favorita, "")
     return Environment(autoescape=True).from_string(leer + acciones).render(
         series=type("S", (), {"id": "sid"})(), destino_lectura=destino)
 
@@ -147,14 +150,14 @@ def test_plantilla_pinta_el_boton_segun_el_destino(destino, esperado, no_esperad
     html = _bloque(fuente, destino)
     assert esperado in html, html
     assert no_esperado not in html, html
-    assert len(re.findall(r'class="btn primary"', html)) == 1
+    assert len(re.findall(r'class="btn (?:sm )?primary"', html)) == 1
 
 
 def test_sin_destino_el_principal_es_anadir_numeros_del_disco():
     from pathlib import Path
     fuente = Path("src/zascarr/web/templates/series_detail.html").read_text()
     html = _bloque(fuente, None)
-    assert 'class="btn primary" href="/ui/pendientes/carpetas?serie=sid">Añadir números' in html
+    assert 'class="btn sm primary" href="/ui/pendientes/carpetas?serie=sid"' in html
 
 
 # ── Postgres real: la consulta del servicio y la ficha completa ───────────────────────────
@@ -210,4 +213,4 @@ async def test_pg_destino_y_ficha_de_serie(entorno):
         sin = await c.get(f"/ui/series/{vacia}")
         assert sin.status_code == 200
         assert "/ui/leer/" not in sin.text
-        assert 'class="btn primary" href="/ui/pendientes/carpetas?serie=' in sin.text
+        assert 'class="btn sm primary" href="/ui/pendientes/carpetas?serie=' in sin.text

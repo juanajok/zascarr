@@ -273,11 +273,13 @@ def test_cabecera_accion_es_boton_y_no_enlace_subrayado():
     html = _index()
     assert 'class="biblioteca-acciones"' in html
     # Tres enlaces y «Actualizar la biblioteca» (#1160).
-    assert html.count('class="btn ghost sm biblioteca-accion"') == 4
+    # Botón neutro del sistema de diseño (`.btn.sm`: borde, papel y sombra), no un `ghost` repintado.
+    assert html.count('class="btn sm biblioteca-accion"') == 4
+    assert "ghost" not in html.split('class="biblioteca-acciones"', 1)[1].split("</div>", 1)[0]
     assert 'href="/ui/mejoras"' in html
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     assert ".biblioteca-acciones {" in css
-    assert ".biblioteca-acciones .biblioteca-accion {" in css
+    assert ".biblioteca-acciones .biblioteca-accion {" not in css
     assert "display: flex;" in css.split(".biblioteca-acciones {", 1)[1].split("}", 1)[0]
     assert "text-decoration: none;" in css
     assert "grid-template-areas: \"titulo accion\" \"subtitulo subtitulo\";" in css

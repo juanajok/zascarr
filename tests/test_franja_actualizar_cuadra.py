@@ -38,7 +38,7 @@ def test_el_boton_va_con_las_demas_acciones():
 def test_el_boton_tiene_el_aspecto_de_sus_vecinos():
     for fuente in (AUXILIAR, PLANTILLA):
         boton = fuente.split('id="actualizar-boton"', 1)[1].split(">", 1)[0]
-        assert 'class="btn ghost sm biblioteca-accion"' in boton
+        assert 'class="btn sm biblioteca-accion"' in boton
 
 
 def test_la_linea_de_estado_va_justo_bajo_las_acciones():

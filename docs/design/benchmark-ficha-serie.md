@@ -4,6 +4,9 @@
 > **Método:** lectura de plantilla/CSS, medición de la biblioteca real, revisión contra el
 > sistema de diseño y benchmark de referencias. **NOT RUN:** navegador real, tableta/móvil
 > físico, lector de pantalla y validación con personas. Los PASS son de plantilla/CSS/pruebas.
+>
+> **Revisión posterior (2026-11-21):** maquetación de la cabecera, viñetas y archivos plegados en
+> `benchmark-ficha-serie-maquetacion.md`; cambia la portada del móvil y el sitio de «Elegir portada».
 
 ## 1. Problema local
 
