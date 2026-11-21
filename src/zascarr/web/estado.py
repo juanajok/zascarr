@@ -48,7 +48,9 @@ async def estado_version() -> JSONResponse:
 @router.get("/estado", response_class=HTMLResponse)
 async def estado(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     contexto: dict = {"disponibilidad_error": False, "d": None, "no_disponibles": 0,
-                      "cobertura": None, "cobertura_error": False}
+                      "cobertura": None, "cobertura_error": False,
+                      "actualizacion_habilitada": getattr(
+                          get_settings(), "ops4_actualizacion_habilitada", False)}
     # §6.3: el mismo snapshot que el endpoint, pintado en servidor (sin JS nuevo).
     contexto["cortesia"] = filas_cortesia(snapshot_publico(get_settings()), get_settings())
     contexto["aviso_version"] = aviso_version.estado()

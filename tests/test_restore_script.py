@@ -100,7 +100,11 @@ def _sql_fixture() -> str:
 def _preparar(tmp_path: Path) -> dict:
     repo = tmp_path / "repo"
     (repo / "scripts").mkdir(parents=True)
-    for nombre in ("probar_restauracion.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh", "_cerrojo.sh"):
+    scripts = (
+        "probar_restauracion.sh", "_comun.sh", "_credenciales.sh",
+        "_espacio.sh", "_cerrojo.sh",
+    )
+    for nombre in scripts:
         shutil.copy2(SCRIPTS / nombre, repo / "scripts" / nombre)
     (repo / "docker-compose.yml").write_text("", encoding="utf-8")
 
@@ -247,10 +251,36 @@ def _reescribir_bytes(ctx: dict, datos: bytes) -> None:
     dump.with_name(f"{dump.name}.sha256").write_text(f"{sha}  {dump.name}\n", encoding="utf-8")
 
 
+def _solo_bases_temporales(stub: str, ctx: dict) -> bool:
+    """Excluye solo rutas conocidas; conserva la guardia de BD/app de producción."""
+    for path in (ctx["repo"] / "docker-compose.yml", ctx["root"] / ".env"):
+        stub = stub.replace(str(path), "<archivo-configuracion>")
+    return "zascarr" not in stub.replace("zascarr_restore_", "")
+
+
+@pytest.mark.parametrize("command", [
+    "createdb -U comics_admin zascarr",
+    "dropdb -U comics_admin zascarr",
+    "psql -U comics_admin -d zascarr -c SELECT",
+    "stop zascarr",
+])
+def test_guardia_no_oculta_destino_produccion_al_excluir_rutas(
+    tmp_path: Path, command: str,
+) -> None:
+    ctx = {"repo": tmp_path / "zascarr-en-ruta" / "repo",
+           "root": tmp_path / "zascarr-en-ruta" / "root"}
+    stub = (f"docker compose -f {ctx['repo'] / 'docker-compose.yml'} "
+            f"--env-file {ctx['root'] / '.env'} exec -T postgres {command}")
+    assert not _solo_bases_temporales(stub, ctx)
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="scripts de shell POSIX")
 class TestRestoreScript:
-    def test_restaura_y_comprueba_recuentos(self, tmp_path):
-        ctx = _preparar(tmp_path)
+    @pytest.mark.parametrize("folder", ["normal", "zascarr-en-ruta"])
+    def test_restaura_y_comprueba_recuentos(self, tmp_path, folder: str):
+        directory = tmp_path / folder
+        directory.mkdir()
+        ctx = _preparar(directory)
         r = _ejecutar(ctx, dump=ctx["dump"], manifest=ctx["manifest"])
         assert r.returncode == 0, r.stdout + r.stderr
 
@@ -267,7 +297,7 @@ class TestRestoreScript:
         assert "createdb" in db and "dropdb" in db
         assert "zascarr_restore_" in db
         stub = ctx["stub"].read_text(encoding="utf-8")
-        assert "zascarr" not in stub.replace("zascarr_restore_", "")
+        assert _solo_bases_temporales(stub, ctx)
         assert ctx["restore"].read_text(encoding="utf-8")
 
     def test_dump_grande_no_muere_por_sigpipe(self, tmp_path):

@@ -6,8 +6,8 @@ instalación que ya está en B; la contraseña que vale es la de AHORA (`max(vig
 la `secret_key`, el `base_url` y los interruptores son los vigentes y las claves de integración son las de la copia.
 
 No usa `TEST_DATABASE_URL` (no hay cliente `psql` en el host): levanta un proyecto Compose aislado con
-`postgres:16-alpine` y ejecuta el script REAL, con renombrado real de bases. Se salta si no hay Docker; no toca
-producción ni la Pi.
+`postgres:16-alpine` y ejecuta el script REAL, con renombrado real de bases. Requiere opt-in mediante
+`TEST_DATABASE_URL` o `ZASCARR_PG_IT`; sin él ni siquiera sondea Docker. No toca producción ni la Pi.
 """
 from __future__ import annotations
 
@@ -15,8 +15,6 @@ import gzip
 import hashlib
 import json
 import os
-import shutil
-import socket
 import subprocess
 import sys
 import threading
@@ -30,7 +28,8 @@ RAIZ = Path(__file__).resolve().parents[1]
 SCRIPT = RAIZ / "scripts" / "restaurar_datos.sh"
 TS = "20260101_120000"
 
-pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="scripts de shell POSIX")
+_POSIX = sys.platform != "win32"
+_PG_OPT_IN = bool(os.environ.get("TEST_DATABASE_URL") or os.environ.get("ZASCARR_PG_IT"))
 
 
 def _docker_ok() -> bool:
@@ -40,10 +39,13 @@ def _docker_ok() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("TEST_DATABASE_URL") and not os.environ.get("ZASCARR_PG_IT"),
-    reason="requiere el job de PostgreSQL o ZASCARR_PG_IT=1")
-pytestmark = pytest.mark.skipif(not _docker_ok(), reason="requiere Docker arrancado")
+# El cortocircuito es importante: recoger la suite normal no debe invocar Docker.
+_DOCKER_OK = _POSIX and _PG_OPT_IN and _docker_ok()
+pytestmark = [
+    pytest.mark.skipif(not _POSIX, reason="scripts de shell POSIX"),
+    pytest.mark.skipif(not _PG_OPT_IN, reason="requiere el job de PostgreSQL o ZASCARR_PG_IT=1"),
+    pytest.mark.skipif(not _DOCKER_OK, reason="requiere Docker arrancado"),
+]
 
 
 class _Salud(BaseHTTPRequestHandler):
@@ -115,9 +117,18 @@ services:
     def esperar_postgres(self) -> None:
         limite = time.monotonic() + 90
         while time.monotonic() < limite:
-            if self._compose("exec", "-T", "postgres", "pg_isready", "-U", "comics_admin",
-                             "-d", "zascarr").returncode == 0:
-                return
+            # El servidor temporal de initdb solo abre el socket Unix. Exigimos el
+            # servidor final por TCP y una consulta válida antes de crear datos.
+            ready = self._compose("exec", "-T", "postgres", "pg_isready", "-h", "127.0.0.1",
+                                  "-p", "5432", "-U", "comics_admin", "-d", "zascarr")
+            if ready.returncode == 0:
+                query = self._compose(
+                    "exec", "-T", "-e", "PGPASSWORD=test", "-e", "PGCONNECT_TIMEOUT=2",
+                    "postgres", "psql", "-h", "127.0.0.1", "-p", "5432", "-U", "comics_admin",
+                    "-d", "zascarr", "-v", "ON_ERROR_STOP=1", "-At", "-c", "SELECT 1",
+                )
+                if query.returncode == 0 and query.stdout.strip() == "1":
+                    return
             time.sleep(0.5)
         raise AssertionError("PostgreSQL de pruebas no arrancó")
 

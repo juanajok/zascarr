@@ -1,0 +1,34 @@
+# Solo laboratorio en VM desechable; no instalar con scripts/instalar_ops.sh.
+# No es una unidad actualizadora: las capacidades y restricciones no sirven
+# como contrato para update.sh ni para Docker.
+[Unit]
+Description=OPS4 sondeo sintetico de timeout y cgroup
+
+[Service]
+Type=exec
+User=nobody
+Group=nogroup
+ExecStart=/usr/bin/python3 /usr/local/lib/ops4-lab/timeout-probe.py
+RuntimeDirectory=ops4-lab-timeout
+RuntimeDirectoryMode=0700
+# Solo en el sondeo: conservar PID para verificar que ya no están activos.
+RuntimeDirectoryPreserve=yes
+RuntimeMaxSec=2s
+TimeoutStartSec=10s
+TimeoutStopSec=1s
+KillMode=control-group
+SendSIGKILL=yes
+Restart=no
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX
+UMask=0077

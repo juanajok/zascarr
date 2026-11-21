@@ -1,0 +1,90 @@
+# OPS4: plan de validación aislada (#443)
+
+La actualización desde la interfaz continúa **deshabilitada**. Este plan no es una
+aprobación de diseño, instalación, prueba en producción ni ejecución como root.
+Las pruebas aisladas son evidencia limitada, no sustituyen las puertas de la
+[especificación OPS4](especificacion-BL-OPS4.md).
+
+| Riesgo | Observable que se necesita | Estado |
+|---|---|---|
+| Aprobación repetida | Con N procesos e intentos distintos se acepta como máximo una reserva durable de la misma aprobación. | Pendiente; el modelo puro puede bifurcarse. |
+| Interrupción de escritura | Ante caída en cada escritura, `fsync` y renombrado, ningún reinicio acepta una aprobación de resultado ambiguo como libre. | Pendiente; un error tras `rename` no demuestra qué sobrevivirá. |
+| Identidad y tiempo | La unidad revalida intento, SHA completo, host, origen, manifiesto y vigencia real antes de efectos. | Modelo puro parcial; no acredita origen, reloj fiable ni unidad. |
+| Ruta hostil | Enlaces, padres reemplazables o permisos inseguros no permiten leer/escribir fuera del directorio anclado. | Pendiente de política y pruebas de descriptores y ancestros. |
+| Referencia mutable | El flujo usa el SHA aprobado, o se detiene ante ref cambiada; no instala otro. | Arnés Git local reproduce el cambio de ref; el ejecutor aún no existe. |
+| Árbol Git | Cada objeto y entrada del árbol se verifica, sin checkout, hooks ni filtros; el resultado se ancla al commit y a la política host. | Lector puro experimental con pruebas de objetos sintéticos; pendientes autenticidad, ascendencia, anclaje de P y entrega inmutable a root. No es autorización. |
+| Inicio ambiguo | Si `systemctl start` falla o se pierde la respuesta tras un posible efecto, no se reintenta y se exige reconciliación. | Pendiente de unidad y arnés real. |
+| Runtime | La imagen, el contenedor, la salud y la BD corresponden a la versión exacta aprobada. | NOT RUN: Docker, PostgreSQL, systemd y host aislado. |
+| Aislamiento de producción | Ninguna prueba usa la Pi, datos reales, sistema de ficheros de producción ni root. | Obligatorio en este tramo. |
+
+## Límite del lector Git experimental
+
+El lector procesa objetos suministrados por un proveedor inyectado, no hace
+`fetch` ni genera un snapshot materializado. SHA-1 no acredita autoría ni
+resistencia suficiente a colisiones; no se verifican firmas ni ascendencia, y
+los árboles vacíos no figuran en el inventario de blobs. Los límites se aplican
+tras recibir cada objeto, por lo que no acotan la memoria del proveedor ni
+constituyen un límite de RAM del proceso. El presupuesto agregado de rutas
+reduce la amplificación por prefijos repetidos; no mide el coste de objetos Python. Un resultado correcto solo vale dentro de estas
+hipótesis; no prueba procedencia, integridad de P ni transferencia segura a root.
+
+## Hipótesis a revisar: cierre preventivo y capacidad efímera
+
+La revisión propone estudiar un cierre global persistente por instalación que
+se confirma durable **antes de cualquier efecto** y permanece cerrado durante
+todo el intento. Una capacidad efímera, vinculada a una instancia coordinadora
+y a un solo intento, sería necesaria además para arrancar la unidad; al perder
+la instancia o reiniciar no podría recrearse automáticamente desde el disco.
+La ausencia o corrupción del estado, el arranque y cualquier resultado
+incierto deben denegar. Una nueva generación exigiría reconciliación explícita
+en el host antes de una nueva aprobación.
+
+Esto es **una hipótesis de diseño, no una solución aprobada**. Hay que definir
+y revisar el canal de capacidad, la identidad de procesos, la concurrencia y
+el comportamiento ante parada del coordinador. Un `fsync` fallido después de
+`rename` puede dejar el estado anterior visible tras un corte; no se puede
+deducir seguridad de intentar escribir un aviso de incertidumbre en el mismo
+medio averiado. El diseño no puede interpretar un estado anterior como permiso
+para reintentar automáticamente. La evaluación debe explorar ambos resultados
+del renombrado, fallos en cada escritura y `fsync`, reinicios, unidad invocada
+sin capacidad y respuesta de `start` perdida; sin evidencia, no se habilita.
+Incluso un `fsync` exitoso supone filesystem y hardware que respeten flush.
+
+La revisión adversarial señala que «capacidad efímera» no identifica por sí
+sola un mecanismo seguro: un PID se reutiliza, un descriptor puede haberse
+transferido y matar el coordinador no detiene necesariamente una unidad ya
+iniciada. Hay que demostrar entrega, autenticación, consumo único y el gate
+dentro de la unidad, además de evitar activaciones por dependencias o
+reintentos. Un cierre global no sustituye la aprobación A durable, el cerrojo
+común, la revalidación ni el estado informativo exigidos por la SPEC. Se debe
+resolver el orden de admisión para que una petición ocupada no consuma otra A;
+la reconciliación debe inspeccionar trabajos, procesos, HEAD, imagen, contenedor
+y BD antes de permitir otra aprobación. Todo ello sigue **NOT RUN**.
+
+## Ensayo descartado: registro append-only
+
+Se ensayó un registro append-only con cerrojo, marca de arranque y `fsync`.
+La revisión adversarial encontró fallos que impiden considerarlo una base
+segura: tras un `fsync` fallido del cierre, los bytes podían quedar visibles y
+un proceso nuevo leer el intento como cerrado; un truncado en frontera de línea
+no se detectaba; la marca de arranque no era una barrera de fencing; y una
+reserva podía cruzar el límite de tamaño y dejar el registro ilegible. Los tests
+solo cubrían parte de esos estados y se ejecutaban en tmpfs. **El prototipo se
+retiró**: no se incorpora ni se conecta al auxiliar. La prueba negativa confirma
+que un log local sin ancla externa y sin reconciliación no basta para demostrar
+durabilidad ni exclusión ante fallos.
+
+## Resultado del experimento de persistencia
+
+Se ensayó un prototipo desechable con `flock`, marcador de reserva y escrituras
+con `fsync`. **No se incorpora como almacén**: la revisión identificó que un
+fallo de `fsync` seguido de corte puede hacer desaparecer el marcador y dejar
+aparentemente libre la aprobación; un cerrojo abierto por ruta puede ser
+sustituido, y no hay transferencia segura al ejecutor separado. Reabrir el
+objeto en la misma máquina no simula un reinicio ni demuestra durabilidad. La
+reconciliación externa y la cadena de confianza de rutas siguen pendientes.
+
+Las pruebas de funciones puras y simulaciones no prueban persistencia frente a
+toda avería física, seguridad de ruta en el host, ni ejecución privilegiada.
+El criterio de salida continúa siendo la SPEC y la revisión independiente del
+SHA final; para activar o desplegar hace falta autorización separada.

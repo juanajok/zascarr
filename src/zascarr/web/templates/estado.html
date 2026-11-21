@@ -10,6 +10,22 @@
   </div>
 </section>
 
+<section id="actualizacion" aria-labelledby="actualizacion-titulo">
+  <h2 id="actualizacion-titulo" class="seccion">Actualizar ZascArr</h2>
+  {% if actualizacion_habilitada %}
+  <form method="post" action="/ui/actualizar">
+    <p>Se comprobará tu contraseña actual y se pedirá al host que prepare la actualización. No se instala nada hasta que el host la acepte.</p>
+    <label for="actualizacion-contrasena">Contraseña actual</label>
+    <input id="actualizacion-contrasena" type="password" name="contrasena" required maxlength="512" autocomplete="current-password">
+    <label><input type="checkbox" name="entiendo" value="si" required> Entiendo que la actualización modificará el código y la base de datos.</label>
+    <button type="submit">Actualizar ZascArr</button>
+  </form>
+  {% else %}
+  <p id="actualizacion-no-disponible">La actualización desde esta página aún no está disponible. No se instalará nada.</p>
+  <button type="button" disabled aria-describedby="actualizacion-no-disponible">Actualizar ZascArr</button>
+  {% endif %}
+</section>
+
 <div class="pending-card estado-summary">
   <div id="summary-dot" class="estado-dot estado-neutral"></div>
   <div>
