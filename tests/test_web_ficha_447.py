@@ -44,7 +44,6 @@ def test_ficha_de_numero_muestra_texto_plano_autores_y_archivos():
         r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
     assert r.status_code == 200
     assert "Número 3" in r.text and "El país Qâ" in r.text
-    assert "Portada del número" in r.text
     assert f"/ui/series/{serie.id}/numero/{issue.id}/portada.jpg" in r.text
     assert f"/ui/series/{serie.id}/portada?v=2" not in r.text
     assert "Editorial" in r.text and "Norma" in r.text

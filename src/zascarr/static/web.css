@@ -2005,11 +2005,39 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .ficha-serie-meta > div, .ficha-autores > div { display: grid; grid-template-columns: minmax(8rem, 14rem) 1fr; gap: var(--space-2); }
 .ficha-serie-meta dt, .ficha-autores dt { font-weight: 700; }
 .ficha-serie-meta dd, .ficha-autores dd { margin: 0; overflow-wrap: anywhere; }
-.issue-header { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+/* Cabecera del número (2026-11-20): portada a la izquierda; a su lado, el título (arriba, a ras de la
+   portada) y una sola fila de acciones con el aspecto de las de Biblioteca. En el móvil la portada
+   encoge y se queda junto al título; las acciones bajan a todo el ancho. */
+.issue-header {
+  display: grid; grid-template-columns: 120px minmax(0, 1fr);
+  grid-template-areas: "portada titulos" "portada acciones";
+  gap: var(--space-3) var(--space-4); align-items: start;
+  margin-bottom: var(--space-4);
+}
 .issue-cover { width: 120px; max-width: 100%; }
-.issue-portada { min-width: 0; }
-/* Revisión 2026-11-19: el pie de la portada es un dato, no una caja de lectura amarilla. */
-.issue-portada-pie { margin: var(--space-1) 0 0; font-size: var(--text-secundario); }
+.issue-portada { grid-area: portada; min-width: 0; }
+.issue-titulos { grid-area: titulos; min-width: 0; }
+.issue-titulos h1 { margin-top: 0; }
+.issue-titulos > :last-child { margin-bottom: 0; }
+.issue-acciones { grid-area: acciones; display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2); }
+.issue-acciones form { margin: 0; }
+.issue-acciones .btn.ghost {
+  color: var(--ink); background: var(--paper); border-color: var(--ink); box-shadow: var(--shadow-ink-sm);
+  text-decoration: none;
+}
+.issue-acciones .btn.ghost:hover { background: var(--paper-2); color: var(--ink); transform: none; box-shadow: var(--shadow-ink); }
+/* «Añadir a una lista» abre su panel bajo la fila, a todo el ancho, sin desplazar los botones. */
+.issue-acciones .anadir-a-lista[open] > summary { background: var(--paper-2); }
+.issue-acciones .anadir-a-lista > #lista-opciones {
+  position: absolute; left: 0; right: 0; top: calc(100% + var(--space-2)); z-index: 5;
+  max-width: 28rem; padding: var(--space-3);
+  background: var(--paper); border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
+}
+.issue-acciones { position: relative; }
+@media (min-width: 861px) and (pointer: fine) {
+  /* Mismo alto que sus vecinos en escritorio; el alto táctil lo pone la regla general. */
+  .issue-acciones .anadir-a-lista > summary { min-height: 40px; }
+}
 .subtitulo-numero { margin: 2px 0 var(--space-2); font-weight: 700; overflow-wrap: anywhere; }
 .issue-archivos { margin: var(--space-2) 0 var(--space-2) 1.1rem; padding: 0; }
 .issue-archivos li { margin: 6px 0; overflow-wrap: anywhere; }
@@ -2017,7 +2045,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .archivos-numero-titulo a { display: inline-flex; align-items: center; min-height: 40px; padding: var(--space-1) 6px; }
 @media (max-width: 480px) {
   .ficha-serie-meta > div, .ficha-autores > div { grid-template-columns: 1fr; gap: 2px; }
-  .issue-header { grid-template-columns: 1fr; }
+  .issue-header { grid-template-columns: 88px minmax(0, 1fr); grid-template-areas: "portada titulos" "acciones acciones"; }
+  .issue-cover { width: 88px; }
 }
 
 /* #478: conversión CBR→CBZ (vista previa y resultado). */
@@ -2142,6 +2171,14 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .lectura-estados input { width: 24px; height: 24px; margin-right: var(--space-1); }
 .tu-lectura { margin-top: 18px; }
 @media (max-width: 480px) { .lectura-control form { align-items: stretch; } }
+/* En la ficha de número, un campo por fila (2026-11-20): la etiqueta «Nota corta» quedaba al final de la
+   fila de estados, lejos de su caja, y el límite de caracteres competía con el botón. */
+.lectura-bloque form { display: grid; justify-items: start; gap: var(--space-3); max-width: 36rem; }
+.lectura-bloque .lectura-puntuacion { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.lectura-bloque .lectura-campo-nota { display: grid; gap: var(--space-1); width: 100%; }
+.lectura-bloque .lectura-campo-nota label { font-weight: 700; }
+.lectura-bloque .lectura-campo-nota textarea { max-width: none; }
+.lectura-bloque .lectura-campo-nota .muted, .lectura-bloque form > .caption { margin: 0; }
 
 /* #449 BL-INF3: cobertura de la información de la biblioteca. */
 .cobertura { margin-top: 1.25rem; }
