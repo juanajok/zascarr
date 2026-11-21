@@ -162,8 +162,11 @@ controles; ocultar esa expectativa detrás de un asa de 44×44 vuelve a dejar un
 Límites de la decisión:
 
 - **En ratón/lápiz se conserva** la revelación existente al acercarse a la franja
-  (`pointermove` con `clientY <= 90`, [`lector.js:640`](../../src/zascarr/static/lector.js:640));
-  no compite con el toque y no se toca.
+  (`pointermove` con `clientY <= 90`, [`lector.js:640`](../../src/zascarr/static/lector.js:640)),
+  **solo cuando el asa está oculta** (barra ya revelada). Con el asa visible no se auto-revela:
+  en una trayectoria real (x=500, y=300→90→22) el primer evento bajo 90 revelaría y ocultaría el
+  asa antes de llegar al clic. El ratón pulsa el asa para revelar; después el hover de la franja
+  sigue disponible. No compite con el toque.
 - La franja **solo revela con la barra oculta**; con la barra visible, un toque en el borde no
   hace nada distinto de lo actual.
 - Las zonas de pase se calculan después de descartar la franja: un toque en la esquina superior
@@ -459,7 +462,7 @@ ruff check src/ tests/
 |---|---|---|
 | Asa | `#lector-asa` visible con barra oculta; `getBoundingClientRect()` ≥44×44; `hidden=false`; `aria-label`/`aria-controls` | AC-01 |
 | Primer fotograma | Cargar en modo pantalla; el asa no espera hover ni 3 s | AC-01 |
-| Toque/ratón en asa | `data-chrome=""`, página/imagen/modo sin cambios, foco en `Volver al número`; `pointermove` sobre el asa no la oculta antes del clic | AC-02 |
+| Toque/ratón en asa | `data-chrome=""`, página/imagen/modo sin cambios, foco en `Volver al número`; con ratón, la trayectoria y=300→90→22 no revela ni oculta el asa antes del clic | AC-02 |
 | Carga/Tab | `document.activeElement === document.body`; sin `:focus-visible` en la escena; Tab llega a `Volver al número`, la barra se ve; Tab desde el lienzo no sale del documento | AC-03 |
 | Opciones | Abrir, tocar el título/leyenda/párrafo (no se cierra, foco no va a `main`), «Cerrar» y Escape (foco al disparador, `aria-expanded=false`, página intacta) | AC-04 |
 | Volver al número | Rectángulo del enlace dentro del viewport; `scrollWidth <= innerWidth`; clic vuelve a `/ui/series/.../numero/...` | AC-05 |
@@ -486,7 +489,7 @@ Las capturas y la tabla final viven en `docs/design/uatp03/resultado-chrome.md`.
 
 | D | Recomendación | Motivo | Si el PO pide lo contrario |
 |---|---|---|---|
-| **D-1** | Asa 44×44 visible solo con chrome oculto; **sí** revela la franja superior de 44 px en táctil; ratón conserva `pointermove`; ayuda actualizada | Resuelve P-1 sin dejar el borde superior «muerto» y sin convertir el centro en el único gesto | Sin franja: solo asa; hay que aceptar que el borde superior siga pasando página y probarlo |
+| **D-1** | Asa 44×44 visible solo con chrome oculto; **sí** revela la franja superior de 44 px en táctil; con ratón y asa visible no hay auto-revelación (se pulsa el asa; el hover sigue tras revelar); ayuda actualizada | Resuelve P-1 sin dejar el borde superior «muerto» y sin convertir el centro en el único gesto | Sin franja: solo asa; hay que aceptar que el borde superior siga pasando página y probarlo |
 | **D-2** | Sin foco al lienzo en la carga; primer Tab a la barra; ciclo de foco dentro de la escena; Opciones no se cierra al tocar texto; Cerrar/Escape al disparador; página intacta | Corrige P-2/P-3 y conserva UXA-01 | Sin ciclo de foco: Tab puede salir; habría que declararlo limitación |
 | **D-3** | Comportamiento espejado + pruebas web y JS; «distinguible» = §5.3; sin insignia ni flechas nuevas en táctil | P-4 pide prueba, no UI nueva; a 320 px no cabe más cromo | Insignia/flechas: historia de diseño aparte con prueba a 320/390 |
 | **D-4** | Acotar a `[1,total]`, con la última si la guardada supera el total; prueba web de reapertura y acotado | «Reanudar» no debe reiniciar a 1; cierra el hueco de P-5 | Mantener el reinicio a 1: una línea y una prueba; documentar que no es «clamp» |

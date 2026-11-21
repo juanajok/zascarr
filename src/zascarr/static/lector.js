@@ -698,8 +698,11 @@
 
   document.addEventListener("pointermove", (evento) => {
     // Con la barra oculta, acercarse a la franja superior la muestra; en la página de fin
-    // no se muestra para no tapar su título (se sale con «Quedarme»/Esc). Sobre el asa no se
-    // revela: el ratón tiene que poder llegar al clic sin que desaparezca antes.
+    // no se muestra para no tapar su título (se sale con «Quedarme»/Esc). Con ratón y el asa
+    // ya visible no se auto-revela: en una trayectoria real (y=300→90→22) el primer evento bajo
+    // 90 revelaría y ocultaría el asa antes de llegar al clic. El ratón pulsa el asa; el hover de
+    // la franja sigue disponible en cuanto la barra está revelada.
+    if (evento.pointerType === "mouse" && asa && !asa.hidden) return;
     if (asa && evento.target && asa.contains(evento.target)) return;
     if (!finAbierto && raiz.dataset.chrome === "oculto" && evento.clientY <= 90) {
       despertarChrome();

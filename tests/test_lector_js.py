@@ -1029,6 +1029,20 @@ const asaSigueVisible = asaRaton.root.dataset.chrome === "oculto"
 asaRaton.fire(asaRaton.asa, "click", { target: asaRaton.asa });
 salida.asaRatonActiva = asaSigueVisible && asaRaton.root.dataset.chrome === ""
   && asaRaton.doc.activeElement === asaRaton.volver;
+const trayectoria = montar("ltr");
+const moverRaton = (y) => trayectoria.fire(trayectoria.doc, "pointermove", {
+  pointerType: "mouse", target: trayectoria.lienzo, clientY: y });
+moverRaton(300);
+const antesDeLlegar = trayectoria.root.dataset.chrome === "oculto"
+  && trayectoria.asa.hidden === false;
+moverRaton(90);
+moverRaton(22);
+const sigueVisibleAlLlegar = trayectoria.root.dataset.chrome === "oculto"
+  && trayectoria.asa.hidden === false;
+trayectoria.fire(trayectoria.asa, "click", { target: trayectoria.asa });
+salida.asaRatonTrayectoria = antesDeLlegar && sigueVisibleAlLlegar
+  && trayectoria.root.dataset.chrome === ""
+  && trayectoria.doc.activeElement === trayectoria.volver;
 process.stdout.write(JSON.stringify(salida));
 '''
 
@@ -1046,4 +1060,5 @@ def test_uatp03_asa_foco_tab_y_opciones(tmp_path):
         "franjaRevelaSinPagina": True, "rtlToca": True,
         "rtlDesliza": True, "rtlTeclas": True,
         "finTabNativo": True, "asaRatonActiva": True,
+        "asaRatonTrayectoria": True,
     }

@@ -786,6 +786,8 @@ sin overflow horizontal en móvil; tema oscuro aplica; el botón no permite dobl
    activeElement === body y ningún :focus-visible dentro de .lector-escena.
 2. Tocar el asa: data-chrome="", asa oculta, foco en «Volver al número»; página,
    imagen, modo y zoom sin cambios; sin POST /progreso ni /sentido.
+2b. Con ratón, mover x=500 y=300→90→22 sin revelar: el asa sigue visible; el clic
+   en el asa revela la barra y enfoca «Volver al número».
 3. Tocar la franja superior (<=44 px) con la barra oculta: revela y NO cambia de página.
 4. Tab desde body: entra en la barra y la revela; Tab desde el último enfocable vuelve
    al primero; Shift+Tab al revés; el foco no sale de .lector-escena. Con #fin abierto y
