@@ -1,13 +1,17 @@
-"""CCM-0 (#999): diagnóstico de cobertura de metadatos, solo lectura.
+"""CCM-0 (#999): diagnóstico de cobertura de metadatos; y backfill estricto.
 
-Este comando **no consulta fuentes externas, no escribe en la base de datos y no
-toca la biblioteca**. Sirve para fijar la línea base de la Capa de Consolidación
-de Metadatos (CCM) antes de activar el recolector:
+Por defecto **no escribe**: diagnostica la cobertura de la Capa de Consolidación
+de Metadatos (CCM). Con `--backfill` cuenta los campos cuyo valor actual coincide
+exactamente con el de su registro de fuente; con `--backfill --apply` escribe
+esas filas de `field_provenance` (solo la procedencia, nunca el valor).
 
     python -m zascarr.cli.consolidacion
     python -m zascarr.cli.consolidacion --json
+    python -m zascarr.cli.consolidacion --backfill --json
+    python -m zascarr.cli.consolidacion --backfill --apply
 
-En la Pi se ejecuta dentro del contenedor; no requiere Python en el host.
+No consulta fuentes externas ni toca la biblioteca. En la Pi se ejecuta dentro
+del contenedor; no requiere Python en el host.
 """
 from __future__ import annotations
 
@@ -29,6 +33,7 @@ from zascarr.models import (
     Issue,
     Series,
 )
+from zascarr.services.consolidacion.backfill import BackfillEstricto
 
 #: IDs externos que ya existen como columnas paralelas. El orden es el de la
 #: ficha de referencia normalizada; no implica prioridad.
@@ -194,10 +199,56 @@ def _parser() -> argparse.ArgumentParser:
         description="Diagnóstico de cobertura de metadatos de la CCM (solo lectura).",
     )
     p.add_argument("--json", action="store_true", help="salida JSON para automatizar")
+    p.add_argument(
+        "--backfill", action="store_true",
+        help="backfill estricto de field_provenance desde los registros de fuente",
+    )
+    p.add_argument(
+        "--apply", action="store_true",
+        help="con --backfill, escribe; sin ello solo cuenta (vista previa)",
+    )
+    p.add_argument(
+        "--limite", type=int, default=None,
+        help="máximo de series a revisar en el backfill",
+    )
     return p
 
 
+def _tabla_backfill(res: dict) -> str:
+    modo = "APLICADO" if not res["preview"] else "VISTA PREVIA (no escribe)"
+    lineas = [
+        f"CCM · backfill estricto de procedencia — {modo}",
+        f"  series revisadas: {res['series']}",
+        f"  campos que coinciden: {res['filas']}",
+        f"  campos con fuente pero sin coincidencia: {res['sin_coincidencia']}",
+        f"  por fuente: {res['por_fuente'] or '—'}",
+    ]
+    if res["preview"]:
+        lineas.append("  Para escribir: añade --apply.")
+    return "\n".join(lineas)
+
+
 async def _ejecutar(args: argparse.Namespace) -> int:
+    if args.apply and not args.backfill:
+        print("--apply solo tiene sentido con --backfill", file=sys.stderr)
+        return 2
+    if args.backfill:
+        async with async_session_factory() as db:
+            informe = await BackfillEstricto(db).ejecutar(
+                preview=not args.apply, limite=args.limite)
+            if args.apply:
+                await db.commit()
+        res = {
+            "modo": "backfill_estricto", "preview": informe.preview,
+            "series": informe.series, "filas": informe.filas,
+            "sin_coincidencia": informe.sin_coincidencia,
+            "por_fuente": informe.por_fuente,
+        }
+        if args.json:
+            print(json.dumps(res, ensure_ascii=False, indent=2, sort_keys=True))
+        else:
+            print(_tabla_backfill(res))
+        return 0
     async with async_session_factory() as db:
         informe = await diagnosticar(db)
     if args.json:
