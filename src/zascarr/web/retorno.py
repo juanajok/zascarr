@@ -14,11 +14,18 @@ from uuid import UUID
 #: Tope de longitud del `volver` ya codificado: una `q` canónica de 200
 #: caracteres no latinos puede superar 2000 al ir dentro de la query.
 MAX_VOLVER = 4096
+_RUTA_DE_DESEADOS = "/ui/wishlist"
 
 _UUID = (r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
          r"[0-9a-f]{4}-[0-9a-f]{12}")
 _ANCLA_DE_SERIE = re.compile(rf"^serie-({_UUID})$")
 _RUTA_DE_COLECCION = re.compile(rf"^/ui/colecciones/({_UUID})$")
+
+
+def url_de_ficha_desde_deseos(series_id: UUID | str) -> str:
+    """URL de la ficha que recuerda que se abrió desde Deseados (UATP-04)."""
+    sid = str(UUID(str(series_id)))
+    return f"/ui/series/{sid}?volver={quote(_RUTA_DE_DESEADOS, safe='')}"
 
 
 def url_de_ficha(series_id: UUID | str, url_biblioteca: str) -> str:
@@ -140,6 +147,9 @@ def volver_segura(valor: str | None, series_id: UUID | str | None = None) -> str
     if ("%" in ruta or "//" in ruta or ".." in ruta.split("/")
             or "." in ruta.split("/")):
         return None
+    if partes.path == _RUTA_DE_DESEADOS:
+        # UATP-04 D-5: solo la forma exacta; sin query, fragmento ni barra final.
+        return valor if valor == _RUTA_DE_DESEADOS else None
     if partes.path == "/ui/biblioteca":
         return _biblioteca(valor, partes, series_id)
     coleccion = _RUTA_DE_COLECCION.fullmatch(partes.path)

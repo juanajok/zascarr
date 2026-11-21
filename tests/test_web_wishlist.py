@@ -688,3 +688,118 @@ def test_buscar_ahora_no_accede_a_relaciones_sin_precargar(monkeypatch):
         r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
     assert r.status_code == 200
     assert "Resultados encontrados" in r.text
+
+
+class TestUatp04Referencias:
+    """UATP-04: referencia única, enlace a ficha y nombres accesibles."""
+
+    def _index(self, *items):
+        return FakeSession(exec_queue=[FakeExecResult(list(items)), _accepted()])
+
+    def test_row_usa_reference_name_con_fallback_title(self):
+        from zascarr.web.wishlist import _row
+
+        con_ref = Series(id=uuid4(), title="Flash", tradition=ComicTradition.AMERICAN)
+        con_ref.reference_name = "Flash (1987)"
+        item = make_wishlist_item(con_ref)
+        item.series = con_ref
+        item.issue = None
+        row = _row(item)
+        assert row["referencia"] == "Flash (1987)"
+        assert row["enlace_ficha"] == (
+            f"/ui/series/{con_ref.id}?volver=%2Fui%2Fwishlist")
+
+        sin_ref = Series(id=uuid4(), title="Flash", tradition=ComicTradition.AMERICAN)
+        sin_ref.reference_name = None
+        item2 = make_wishlist_item(sin_ref)
+        item2.series = sin_ref
+        item2.issue = None
+        row2 = _row(item2)
+        assert row2["referencia"] == "Flash"
+        assert "(1987)" not in row2["referencia"]
+
+    def test_row_anade_number_key_y_enlaza_a_la_serie(self):
+        from types import SimpleNamespace
+
+        from zascarr.web.wishlist import _row
+
+        series = Series(id=uuid4(), title="Flash", tradition=ComicTradition.AMERICAN)
+        series.reference_name = "Flash (1987)"
+        item = make_wishlist_item(series)
+        item.series = None
+        item.issue = SimpleNamespace(series=series, number_key="7", issue_number="7b")
+        row = _row(item)
+        assert row["referencia"] == "Flash (1987) #7"
+        assert row["enlace_ficha"].startswith(f"/ui/series/{series.id}?volver=")
+
+    def test_indice_distingue_dos_flash_y_enlaza(self):
+        uno = Series(id=uuid4(), title="Flash", tradition=ComicTradition.AMERICAN)
+        uno.reference_name = "Flash (1987)"
+        dos = Series(id=uuid4(), title="Flash", tradition=ComicTradition.AMERICAN)
+        dos.reference_name = "Flash (2011)"
+        items = []
+        for serie in (uno, dos):
+            item = make_wishlist_item(serie)
+            item.series = serie
+            item.issue = None
+            items.append(item)
+        with use_fake_session(self._index(*items)) as client:
+            r = client.get("/ui/wishlist")
+        assert "Flash (1987)" in r.text and "Flash (2011)" in r.text
+        assert f'href="/ui/series/{uno.id}?volver=%2Fui%2Fwishlist"' in r.text
+        assert f'href="/ui/series/{dos.id}?volver=%2Fui%2Fwishlist"' in r.text
+        for referencia in ("Flash (1987)", "Flash (2011)"):
+            assert f'aria-label="Seleccionar {referencia}"' in r.text
+            assert f'aria-label="Quitar {referencia} de Deseados"' in r.text
+
+    def test_anadir_devuelve_la_misma_referencia_y_enlace(self):
+        series = Series(id=uuid4(), title="Flash", tradition=ComicTradition.AMERICAN)
+        series.reference_name = "Flash (1987)"
+        item = make_wishlist_item(series)
+        item.series = series
+        item.issue = None
+        fila = FakeExecResult([item])
+        sesion = FakeSession(exec_queue=[_accepted(), fila])
+        with use_fake_session(sesion) as client:
+            r = client.post("/ui/wishlist/anadir", data={"series_id": str(series.id)})
+        assert r.status_code == 200
+        assert "Flash (1987)" in r.text
+        assert f'/ui/series/{series.id}?volver=%2Fui%2Fwishlist' in r.text
+
+    def test_selector_usa_referencia_y_boton_con_nombre_unico(self):
+        series = Series(id=uuid4(), title="Flash", tradition=ComicTradition.AMERICAN)
+        series.reference_name = "Flash (1987)"
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([series])])) as client:
+            r = client.get("/ui/wishlist/buscar-serie?q=flash")
+        assert "Flash (1987)" in r.text
+        assert '<span data-texto>Añadir a deseados</span>' in r.text
+        assert "Añadir a deseados</span><span class=\"sr\">: Flash (1987)" in r.text
+        assert "querySelector('[data-texto]')" in r.text
+        assert "this.textContent" not in r.text
+
+    def test_resultados_es_region_viva(self):
+        with use_fake_session(self._index()) as client:
+            r = client.get("/ui/wishlist")
+        assert 'id="resultados-wishlist" class="series-results" aria-live="polite"' in r.text
+        assert 'role="status"' in r.text  # el indicador existente, sin duplicar
+
+
+def test_progreso_usa_la_referencia(monkeypatch):
+    from zascarr.models import WishlistStatus
+
+    series = Series(id=uuid4(), title="Flash", tradition=ComicTradition.AMERICAN)
+    series.reference_name = "Flash (1987)"
+    item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+    item.series = series
+    item.issue = None
+    item.download_backend = "transmission"
+    item.download_ref = "ABC"
+    cliente = AsyncMock()
+    cliente.list_torrents.return_value = [{"hashString": "abc", "percentDone": 0.4}]
+    monkeypatch.setattr("zascarr.web.wishlist.TransmissionClient", lambda: cliente)
+    ajustes = get_settings().model_copy(update={"transmission_enabled": True})
+    monkeypatch.setattr("zascarr.web.wishlist.get_settings", lambda: ajustes)
+    with use_fake_session(FakeSession(exec_queue=[FakeExecResult([item])])) as client:
+        r = client.get("/ui/wishlist/progreso")
+    assert "Flash (1987)" in r.text
+    assert 'aria-label="Progreso de Flash (1987)"' in r.text

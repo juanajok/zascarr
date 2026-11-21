@@ -4,15 +4,16 @@
 <ul class="series-list">
   {% for s in series_list %}
   <li class="series-result-item">
-    <span class="series-name">{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</span>
+    {% set referencia = s.reference_name or s.title %}
+    <span class="series-name">{{ referencia }}</span>
     <button type="button"
             hx-post="/ui/wishlist/anadir"
             hx-vals='{"series_id": "{{ s.id }}"}'
             hx-target="#wishlist-list" hx-swap="beforeend"
             hx-disable="this"
-            hx-on::before-request="this.textContent='Añadiendo…'"
-            hx-on::after-request="if (event.detail.successful) { this.textContent='Añadido'; this.disabled = true; } else { this.textContent='No se pudo añadir'; this.disabled = false; }">
-      Añadir a deseados
+            hx-on::before-request="this.querySelector('[data-texto]').textContent='Añadiendo…'"
+            hx-on::after-request="if (event.detail.successful) { this.querySelector('[data-texto]').textContent='Añadido'; this.disabled = true; } else { this.querySelector('[data-texto]').textContent='No se pudo añadir'; this.disabled = false; }">
+      <span data-texto>Añadir a deseados</span><span class="sr">: {{ referencia }}</span>
     </button>
   </li>
   {% endfor %}
