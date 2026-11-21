@@ -6,6 +6,7 @@ import json
 import pytest
 
 from deploy.ops import protocolo_actualizar_v4_ops4 as protocolo
+from deploy.ops.escritor_estado_actualizar_ops4 import ResultadoEscritura
 from deploy.ops.zascarr_actualizar_aux import (
     UNIDAD,
     Respuesta,
@@ -31,7 +32,9 @@ def peticion(*, id_: str = ID, ahora: int = AHORA, token: bytes | None = None) -
 
 
 class Dobles:
-    def __init__(self, *, cerrojo=False, inicio=True) -> None:
+    def __init__(self, *, cerrojo=False, inicio=True, escribir=ResultadoEscritura.OK) -> None:
+        self.escritura = escribir
+        self.estados: list[dict] = []
         self.cerrojo = cerrojo
         self.inicio = inicio
         self.usados: set[str] = set()
@@ -48,6 +51,10 @@ class Dobles:
         self.llamadas.append(("iniciar", unidad))
         return self.inicio
 
+    def escribir(self, datos: dict):
+        self.estados.append(datos)
+        return self.escritura
+
     def ocupado(self) -> bool:
         self.llamadas.append(("cerrojo", ""))
         return self.cerrojo
@@ -57,6 +64,7 @@ def ejecutar(linea: bytes, dobles: Dobles) -> Respuesta:
     return procesar(
         linea, clave=CLAVE, ahora=AHORA, reclamar_uso=dobles.reclamar,
         iniciar=dobles.iniciar, cerrojo_ocupado=dobles.ocupado,
+        escribir=dobles.escribir,
     )
 
 
@@ -103,6 +111,7 @@ def test_firma_incorrecta_no_consume_ni_inicia() -> None:
     respuesta = procesar(
         linea, clave=CLAVE, ahora=AHORA, reclamar_uso=dobles.reclamar,
         iniciar=dobles.iniciar, cerrojo_ocupado=dobles.ocupado,
+        escribir=dobles.escribir,
     )
     assert respuesta.codigo == "firma_invalida"
     assert dobles.llamadas == []
@@ -122,6 +131,7 @@ def test_caducidad_y_ligadura_no_inician(linea, ahora, esperado) -> None:
     respuesta = procesar(
         linea, clave=CLAVE, ahora=ahora, reclamar_uso=dobles.reclamar,
         iniciar=dobles.iniciar, cerrojo_ocupado=dobles.ocupado,
+        escribir=dobles.escribir,
     )
     assert respuesta.codigo == esperado
     assert [x for x in dobles.llamadas if x[0] == "iniciar"] == []
@@ -147,6 +157,29 @@ def test_clave_invalida_no_consume() -> None:
     respuesta = procesar(
         peticion(), clave=b"x" * 31, ahora=AHORA, reclamar_uso=dobles.reclamar,
         iniciar=dobles.iniciar, cerrojo_ocupado=dobles.ocupado,
+        escribir=dobles.escribir,
     )
     assert respuesta.codigo == "no_disponible"
     assert dobles.llamadas == []
+
+
+def test_escribe_aceptada_antes_de_iniciar_y_en_curso_despues() -> None:
+    dobles = Dobles()
+    respuesta = ejecutar(peticion(), dobles)
+    assert respuesta.codigo == "aceptada"
+    assert [e["estado"] for e in dobles.estados] == ["aceptada", "en_curso"]
+    assert all(e["id"] == ID for e in dobles.estados)
+
+
+def test_si_no_puede_escribir_estado_no_inicia() -> None:
+    dobles = Dobles(escribir=ResultadoEscritura.INCIERTO)
+    respuesta = ejecutar(peticion(), dobles)
+    assert respuesta.codigo == "no_disponible"
+    assert [x for x in dobles.llamadas if x[0] == "iniciar"] == []
+
+
+def test_inicio_fallido_deja_estado_fallida() -> None:
+    dobles = Dobles(inicio=False)
+    respuesta = ejecutar(peticion(), dobles)
+    assert respuesta.codigo == "no_disponible"
+    assert [e["estado"] for e in dobles.estados] == ["aceptada", "fallida"]

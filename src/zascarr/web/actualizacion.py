@@ -8,12 +8,17 @@ la firma; `INCIERTA` no se presenta como éxito ni invita a reintentar.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from zascarr.config import get_settings
 from zascarr.services.clave_autorizacion import leer_clave_autorizacion
+from zascarr.services.estado_actualizacion import (
+    EstadoActualizacion,
+    leer_estado_actualizacion,
+)
 from zascarr.services.solicitud_actualizacion_v4 import (
     ResultadoSolicitudV4,
     solicitar_actualizacion_v4,
@@ -22,6 +27,14 @@ from zascarr.web.routes import crear_templates
 
 router = APIRouter(tags=["ui"])
 templates = crear_templates()
+
+_ESTADOS = {
+    EstadoActualizacion.ACEPTADA: "El host ha aceptado la solicitud.",
+    EstadoActualizacion.EN_CURSO: "La actualización está en curso.",
+    EstadoActualizacion.HECHA: "La actualización ha terminado.",
+    EstadoActualizacion.FALLIDA: "La actualización ha fallado.",
+    EstadoActualizacion.INCIERTA: "No se puede confirmar el estado de la actualización.",
+}
 
 _MENSAJES = {
     ResultadoSolicitudV4.NO_HABILITADA: "La actualización no está habilitada.",
@@ -43,12 +56,16 @@ _MENSAJES = {
 }
 
 
-def _respuesta(request: Request | None, mensaje: str, tipo: str, status_code: int) -> HTMLResponse:
+def _respuesta(
+    request: Request | None, mensaje: str, tipo: str, status_code: int,
+    estado_texto: str | None = None,
+) -> HTMLResponse:
     if request is None:
         return HTMLResponse(f"<p>{mensaje}</p>", status_code=status_code)
     return templates.TemplateResponse(
         request, "actualizacion_resultado.html",
-        {"mensaje": mensaje, "tipo": tipo}, status_code=status_code,
+        {"mensaje": mensaje, "tipo": tipo, "estado_texto": estado_texto},
+        status_code=status_code,
     )
 
 
@@ -83,4 +100,12 @@ async def actualizar(
         resultado.resultado, "No se pudo completar la solicitud.",
     )
     tipo = "ok" if resultado.resultado is ResultadoSolicitudV4.ACEPTADA else "warn"
-    return _respuesta(request, mensaje, tipo, 200)
+    estado_texto = None
+    ruta = getattr(settings, "ops4_estado_file", None)
+    if resultado.id and isinstance(ruta, str) and ruta:
+        estado = await asyncio.to_thread(
+            leer_estado_actualizacion, Path(ruta),
+            id_esperado=resultado.id, ahora_epoch=None,
+        )
+        estado_texto = _ESTADOS.get(estado)
+    return _respuesta(request, mensaje, tipo, 200, estado_texto=estado_texto)

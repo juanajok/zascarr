@@ -3,5 +3,6 @@
 {% block content %}
 <h1>Actualizar ZascArr</h1>
 {% call ui.aviso(tipo) %}{{ mensaje }}{% endcall %}
+{% if estado_texto %}<p class="caption">{{ estado_texto }}</p>{% endif %}
 <p><a class="btn" href="/ui/estado">Volver a Estado</a></p>
 {% endblock %}

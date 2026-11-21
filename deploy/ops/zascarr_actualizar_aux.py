@@ -20,6 +20,10 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 
+from escritor_estado_actualizar_ops4 import (  # noqa: E402
+    ResultadoEscritura,
+    escribir_estado,
+)
 from protocolo_actualizar_v4_ops4 import (  # noqa: E402
     decodificar_autorizacion,
     parsear,
@@ -61,7 +65,7 @@ def rechazo(codigo: str, id_: str | None = None) -> Respuesta:
 
 def procesar(
     linea: bytes, *, clave: bytes, ahora: int,
-    reclamar_uso, iniciar, cerrojo_ocupado,
+    reclamar_uso, iniciar, cerrojo_ocupado, escribir=None,
 ) -> Respuesta:
     """Orden: esquema → firma → frescura → cerrojo → testigo → consumo → inicio."""
     if type(clave) is not bytes or len(clave) != 32:
@@ -95,12 +99,22 @@ def procesar(
         return rechazo("no_disponible", id_)
     if resultado is not CodigoAutorizacion.ACEPTADA:
         return rechazo("autorizacion_invalida", id_)
+    inicial = {
+        "schema": 1, "id": id_, "estado": "aceptada",
+        "inicio_epoch": ahora, "actualizado_epoch": ahora,
+    }
+    if escribir is not None and escribir(inicial) != ResultadoEscritura.OK:
+        return rechazo("no_disponible", id_)
     try:
         iniciada = iniciar(UNIDAD)
     except Exception:  # noqa: BLE001
         return rechazo("no_disponible", id_)
     if iniciada is not True:
+        if escribir is not None:
+            escribir({**inicial, "estado": "fallida", "actualizado_epoch": ahora})
         return rechazo("no_disponible", id_)
+    if escribir is not None:
+        escribir({**inicial, "estado": "en_curso", "actualizado_epoch": ahora})
     return Respuesta("aceptada", "aceptada", id_)
 
 
@@ -192,6 +206,9 @@ def main() -> int:
         respuesta = procesar(
             linea, clave=clave or b"", ahora=int(time.time()),
             reclamar_uso=reclamar, iniciar=_iniciar, cerrojo_ocupado=_cerrojo_ocupado,
+            escribir=lambda datos: escribir_estado(
+                os.path.join(dir_ops, "actualizar-status.json"), datos,
+            ),
         )
     except Exception:  # noqa: BLE001 — nunca se devuelve un éxito dudoso
         respuesta = rechazo("no_disponible")

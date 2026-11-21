@@ -282,6 +282,7 @@ class Settings(BaseSettings):
     ops4_actualizacion_habilitada: bool = Field(default=False)
     ops4_autorizacion_key_file: str = Field(default="/run/zascarr-ops/actualizar.key")
     ops4_socket_file: str = Field(default="/run/zascarr-ops/actualizar.sock")
+    ops4_estado_file: str = Field(default="/run/zascarr-ops/actualizar-status.json")
 
     # ── Orquestador ────────────────────────────────────────────────
     scan_interval_minutes: int = 60

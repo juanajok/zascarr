@@ -119,7 +119,8 @@ if (( QUITAR )); then
         "${DEST_UNITS}/zascarr-actualizar.service" \
         "${DEST_AUX}" "${DEST_LIB}/protocolo_actualizar_v4_ops4.py" \
         "${DEST_LIB}/verificador_autorizacion_ops4.py" \
-        "${DEST_LIB}/registro_repeticiones_ops4.py"
+        "${DEST_LIB}/registro_repeticiones_ops4.py" \
+        "${DEST_LIB}/escritor_estado_actualizar_ops4.py"
     if (( ! SIN_SYSTEMD )); then run systemctl daemon-reload || true; fi
     if (( BORRAR_CLAVE )); then run rm -f "${OPS_DIR}/actualizar.key"; say "Clave borrada."; else
         say "Se conserva ${OPS_DIR}/actualizar.key."
@@ -139,7 +140,7 @@ crear_dirs
 crear_clave
 copiar "${REPO_DIR}/deploy/ops/zascarr_actualizar_aux.py" "${DEST_AUX}" 0755
 for modulo in protocolo_actualizar_v4_ops4.py verificador_autorizacion_ops4.py \
-              registro_repeticiones_ops4.py; do
+              registro_repeticiones_ops4.py escritor_estado_actualizar_ops4.py; do
     copiar "${REPO_DIR}/deploy/ops/${modulo}" "${DEST_LIB}/${modulo}" 0644
 done
 for unidad in zascarr-actualizar.socket zascarr-actualizar@.service \
