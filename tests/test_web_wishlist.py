@@ -707,7 +707,7 @@ class TestConsultaEnLaUrl:
         r = self._pagina(monkeypatch, "bat", [serie])
         assert r.status_code == 200
         assert 'id="q-deseados" value="bat"' in r.text
-        assert re.search(r'id="resultados-wishlist" class="series-results">\s*<ul', r.text)
+        assert re.search(r'id="resultados-wishlist" class="series-results" aria-live="polite">\s*<ul', r.text)
         assert "Batman" in r.text
 
     def test_q_sin_coincidencias_lo_dice(self, monkeypatch):
@@ -718,7 +718,7 @@ class TestConsultaEnLaUrl:
     def test_sin_consulta_es_la_pagina_de_siempre(self, monkeypatch, q):
         r = self._pagina(monkeypatch, q)
         assert r.status_code == 200
-        assert 'id="resultados-wishlist" class="series-results"></div>' in r.text
+        assert 'id="resultados-wishlist" class="series-results" aria-live="polite"></div>' in r.text
         assert "Sin coincidencias" not in r.text
 
     def test_q_de_201_caracteres_se_ignora(self, monkeypatch):
