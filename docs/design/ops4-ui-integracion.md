@@ -32,12 +32,12 @@ lenguaje llano de la pantalla. No hay JavaScript nuevo.
   a reintentar.
 - [test_ops4_ui_gate.py](../../tests/test_ops4_ui_gate.py): la ruta solo está
   activa tras la puerta; sin habilitar responde 404.
-- **897 pruebas OPS4/paridad** y suite completa **8887 passed / 2431 skipped /
+- **897 pruebas OPS4/paridad** y suite completa **8905 passed / 2431 skipped /
   0 failed** verdes.
 
 ## Límites
 
-- El auxiliar y la unidad de host **no están integrados todavía**; habilitar
+- El auxiliar y las unidades ya están en la rama, pero **no instalados**; habilitar
   la UI contra un host sin ese servicio devolverá «no disponible». No se ha
   probado en la VM con el auxiliar real.
 - Falta provisionar la clave/directorio, instalar la unidad endurecida y

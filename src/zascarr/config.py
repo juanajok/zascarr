@@ -280,7 +280,7 @@ class Settings(BaseSettings):
     # OPS4 (#443 B): actualización manual. Apagada por defecto; la clave y el
     # socket son dedicados y no se reutilizan los de copia/restauración.
     ops4_actualizacion_habilitada: bool = Field(default=False)
-    ops4_autorizacion_key_file: str = Field(default="/var/lib/zascarr/ops4/autorizacion.key")
+    ops4_autorizacion_key_file: str = Field(default="/run/zascarr-ops/actualizar.key")
     ops4_socket_file: str = Field(default="/run/zascarr-ops/actualizar.sock")
 
     # ── Orquestador ────────────────────────────────────────────────

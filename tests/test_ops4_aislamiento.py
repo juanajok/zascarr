@@ -245,3 +245,15 @@ def test_el_servicio_v4_no_esta_conectado() -> None:
         RAIZ / "src" / "zascarr" / "main.py",
     ):
         assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+
+
+def test_el_auxiliar_de_actualizacion_no_esta_conectado() -> None:
+    nombre = "zascarr_actualizar_aux"
+    for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+        assert nombre not in ruta.read_text(encoding="utf-8"), ruta
+    for ruta in (
+        RAIZ / "deploy" / "ops" / "zascarr_ops.py",
+        RAIZ / "scripts" / "instalar_ops.sh",
+        RAIZ / "src" / "zascarr" / "main.py",
+    ):
+        assert nombre not in ruta.read_text(encoding="utf-8"), ruta
