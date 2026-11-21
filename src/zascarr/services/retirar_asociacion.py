@@ -2,8 +2,10 @@
 """Retirar SOLO la identidad de una fuente, con historial y sin tocar nada más (#129 C).
 
 La columna es la autoridad; la entrada activa de `metadata.asociaciones` pasa a
-`metadata.asociaciones_historial` con `previo` y `deshecho`. No se consulta ninguna fuente, no se
-tocan números, archivos, otras fuentes, `metadata_source` ni `locked_fields`.
+`metadata.asociaciones_historial` con `previo` y `deshecho`. Además, los ids de número de esa
+fuente se retiran y se conservan en `metadata.ids_numero_retirados` (nunca quedan huérfanos en
+silencio). No se consulta ninguna fuente, no se tocan archivos, otras fuentes, `metadata_source`
+ni `locked_fields`.
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.models import MetadataSource, Series, VinculacionOperacion
+from zascarr.models import Issue, MetadataSource, Series, VinculacionOperacion
 from zascarr.services.asociacion_fuente import (
     _CLAVES_ENTRADA,
     _columna,
@@ -293,6 +295,12 @@ class RetirarAsociacionDeFuente:
             return self._omitida(firmada, "propuesta_desactualizada")
 
         fecha = self._fecha()
+        col_issues = _columna(firmada.fuente)
+        filas_ids = (await db.execute(
+            select(Issue.id, getattr(Issue, col_issues)).where(
+                Issue.series_id == sid, getattr(Issue, col_issues).is_not(None))
+        )).all()
+        numeros = [{"issue_id": str(iid), "id": valor} for iid, valor in filas_ids]
         activa = next((e for e in activas if e.get("fuente") == firmada.fuente), None)
         if activa is not None:
             previo_dato = dict(activa)
@@ -315,7 +323,14 @@ class RetirarAsociacionDeFuente:
         nueva = copy.deepcopy(meta)
         nueva["asociaciones"] = [e for e in activas if e.get("fuente") != firmada.fuente]
         nueva["asociaciones_historial"] = [*historial, entrada]
-        informe = self._informe(firmada, fecha, "retirada", False, activa is not None)
+        if numeros:
+            previos = nueva.get("ids_numero_retirados")
+            previos = list(previos) if isinstance(previos, list) else []
+            nueva["ids_numero_retirados"] = [*previos, {
+                "version": 1, "fuente": firmada.fuente, "operacion_id": firmada.operacion,
+                "fecha": fecha, "ids": numeros}]
+        informe = self._informe(firmada, fecha, "retirada", False, activa is not None,
+                                numeros=len(numeros))
         try:
             resultado = await db.execute(
                 update(Series).where(
@@ -327,6 +342,10 @@ class RetirarAsociacionDeFuente:
             if resultado.rowcount != 1:
                 await db.rollback()
                 return self._omitida(firmada, "propuesta_desactualizada")
+            if numeros:
+                await db.execute(update(Issue).where(
+                    Issue.series_id == sid, getattr(Issue, col_issues).is_not(None)
+                ).values({col_issues: None}).execution_options(synchronize_session=False))
             db.add(VinculacionOperacion(
                 operacion_id=UUID(firmada.operacion), series_id=sid, resultado=informe,
                 token_hasta=datetime.fromtimestamp(firmada.caduca, UTC)))
@@ -339,16 +358,21 @@ class RetirarAsociacionDeFuente:
         await db.commit()
         return ResultadoRetirarAsociacion(**{k: informe[k] for k in ResultadoRetirarAsociacion.__dataclass_fields__ if k in informe})
 
-    def _informe(self, firmada, fecha, resultado, repetida, tenia_procedencia):
+    def _informe(self, firmada, fecha, resultado, repetida, tenia_procedencia, *, numeros: int = 0):
+        mensaje = f"{_nombre(firmada.fuente)} ya no está asociada a esta serie. "
+        if numeros:
+            mensaje += ("También se han retirado los ids de número de ese volumen, con constancia; "
+                        "tus números y archivos siguen igual.")
+        else:
+            mensaje += "La serie, sus números y tus archivos siguen igual."
         return {
             "version": VERSION_RESULTADO, "tipo": TIPO_INFORME, "operacion_id": firmada.operacion,
             "series_id": firmada.serie_id, "resultado": resultado, "motivo": None,
-            "mensaje": f"{_nombre(firmada.fuente)} ya no está asociada a esta serie. La serie, sus "
-                       "números y tus archivos siguen igual.",
+            "mensaje": mensaje,
             "repetida": repetida, "fuente": firmada.fuente, "id_externo": firmada.id_externo,
             "titulo": None, "fecha": fecha,
             "efectos": {"campos_serie": 1, "asociaciones": 1, "comprobantes": 1,
-                        "numeros": 0, "archivos": 0, "metadatos_aplicados": 0},
+                        "numeros": numeros, "archivos": 0, "metadatos_aplicados": 0},
         }
 
     def _omitida(self, firmada, motivo, *, mensaje=None):
