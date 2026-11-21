@@ -61,7 +61,7 @@ No hay cambios en `scripts/**`, `deploy/systemd/**`, `Dockerfile`,
 consecuencia, este incremento **no puede ejecutar la actualización desde la UI**
 y la mantiene deshabilitada.
 
-Evidencia de esta cabeza: suite completa **8878 passed, 2431 skipped, 0 failed,
+Evidencia de esta cabeza: suite completa **8880 passed, 2431 skipped, 0 failed,
 7 warnings**; 670 pruebas OPS4/paridad; Ruff limpio en módulos aislados, tests
 OPS4 y arnés de restauración. El caso PostgreSQL real con Docker quedó omitido
 sin opt-in. Persisten M3 (concordancia efectiva de seguridad app/host), la

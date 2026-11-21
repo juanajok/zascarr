@@ -15,6 +15,7 @@ from enum import StrEnum
 from zascarr.config import Settings
 from zascarr.services.actualizacion_transporte_v4 import (
     CodigoTransporteV4,
+    IntercambioInciertoError,
     pedir_actualizacion_v4,
 )
 from zascarr.services.autorizacion_actualizacion import (
@@ -119,8 +120,10 @@ async def solicitar_actualizacion_v4(
             codigo = await enviar(
                 settings, peticion, id_=preparacion.id, conversar=conversar,
             )
-    except Exception:  # noqa: BLE001 — el transporte no autoriza por sí solo
-        return SolicitudV4(ResultadoSolicitudV4.NO_DISPONIBLE)
+    except (IntercambioInciertoError, TimeoutError):
+        return SolicitudV4(ResultadoSolicitudV4.INCIERTA, id=preparacion.id)
+    except Exception:  # noqa: BLE001 — fallo previo al envío
+        return SolicitudV4(ResultadoSolicitudV4.NO_DISPONIBLE, id=preparacion.id)
     resultado = _MAPA_TRANSPORTE.get(
         codigo, SolicitudV4(ResultadoSolicitudV4.NO_DISPONIBLE),
     )

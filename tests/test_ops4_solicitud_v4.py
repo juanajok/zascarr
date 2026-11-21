@@ -6,7 +6,10 @@ from types import SimpleNamespace
 import pytest
 
 from deploy.ops import protocolo_actualizar_v4_ops4 as protocolo
-from zascarr.services.actualizacion_transporte_v4 import CodigoTransporteV4
+from zascarr.services.actualizacion_transporte_v4 import (
+    CodigoTransporteV4,
+    IntercambioInciertoError,
+)
 from zascarr.services.autorizacion_actualizacion import (
     PreparacionAutorizacion,
     ResultadoAutorizacion,
@@ -196,3 +199,28 @@ async def test_resultado_no_expone_la_contrasena_ni_el_testigo() -> None:
     texto = repr(resultado)
     assert "secreto-sintetico" not in texto
     assert "pbkdf2" not in texto
+
+
+@pytest.mark.asyncio
+async def test_excepcion_incierta_del_transporte_es_incierta() -> None:
+    async def enviar(*_args, **_kwargs):
+        raise IntercambioInciertoError
+
+    resultado = await solicitar_actualizacion_v4(
+        SETTINGS, clave=CLAVE, contrasena="clave", entiendo=True,
+        habilitada=True, ahora=AHORA, comprobar=ok, enviar=enviar,
+    )
+    assert resultado.resultado is ResultadoSolicitudV4.INCIERTA
+    assert resultado.id is not None
+
+
+@pytest.mark.asyncio
+async def test_timeout_del_transporte_es_incierto() -> None:
+    async def enviar(*_args, **_kwargs):
+        raise TimeoutError
+
+    resultado = await solicitar_actualizacion_v4(
+        SETTINGS, clave=CLAVE, contrasena="clave", entiendo=True,
+        habilitada=True, ahora=AHORA, comprobar=ok, enviar=enviar,
+    )
+    assert resultado.resultado is ResultadoSolicitudV4.INCIERTA
