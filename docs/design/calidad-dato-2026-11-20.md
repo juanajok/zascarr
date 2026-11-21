@@ -10,10 +10,12 @@
 > comprobaciones: 29 con casos, 34 con población y 0 casos (PASS), 17 sin
 > población (NOT RUN) y 2 no ejecutables (NOT RUN).
 >
-> **Actualización 2026-11-21.** La Pi está en `a844cea4`; el enricher saneado
-> (#1191) y el servicio L1 (#1193) están desplegados. **L1 aplicado:** 622
-> sinopsis limpiadas, F4a **0/766**; ver §12. La medición de referencia sigue
-> siendo la del 2026-11-20.
+> **Actualización 2026-11-21.** La Pi está en `4e48fe5f`; el enricher saneado
+> (#1191), el servicio L1 (#1193) y el de lotes L2/L3/L4 (#1202) están
+> desplegados. **Aplicados:** L1 (622 sinopsis), L2 (26 vínculos), L3 (9
+> pendientes) y L4 (4 `locked_fields`). F4a **0/826**, A1a **0/1.424**, D6a
+> **0/606**, F5 **0/2.785**; A1b sube a 347 por el historial legítimo de L2. Ver
+> §12 y §13. La medición de referencia sigue siendo la del 2026-11-20.
 >
 > **Aviso de precisión.** El PO confirmó «todo como la hipótesis»: la columna
 > `etiqueta_esperada` se aceptó sin revisión fila a fila. Por tanto las
@@ -94,11 +96,11 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 | B1b | S1 | 29 | 1 | 1 | 1/0/0 | 100 % | 1 exacto → **0 tras L6** | FAIL → PASS | año de la fuente distinto para el id vigente |
 | D6b | S2 | 4.492 | 3.470 | 20 | 0/20/0 | 0 % | 0 [0–559] | LEGÍTIMO | convención: `match_status` no se actualiza al vincular |
 | C2c | S2 | 4.223 | 38 | 20 | 20/0/0 | 100 % | 38 [32–38] | FAIL | anual/decimal como grapa (dato) |
-| A1a | S2 | 1.450 | 26 | 20 | 20/0/0 | 100 % | 26 [22–26] | FAIL | `DELETE /api/series` heredado (vivo/heredado) |
+| A1a | S2 | 1.450 | 26 | 20 | 20/0/0 | 100 % | 26 [22–26] → **0 tras L2** | FAIL → PASS | `DELETE /api/series` heredado (vivo/heredado) |
 | C2b | S2 | 4.412 | 23 | 20 | 20/0/0 | 100 % | 23 [20–23] | FAIL | tomo/ómnibus como grapa (dato) |
 | C1 | S2 | 4.370 | 17 | 17 | 0/0/17 | — | sin medir | SIN MEDIR | proxy del parser |
 | B6c | S2 | 32 | 9 | 9 | 0/0/9 | — | sin medir | SIN MEDIR | ids sin sello de intento |
-| D6a | S2 | 606 | 9 | 9 | 9/0/0 | 100 % | 9 exacto | FAIL | `match_status` colgado tras borrado heredado |
+| D6a | S2 | 606 | 9 | 9 | 9/0/0 | 100 % | 9 exacto → **0 tras L3** | FAIL → PASS | `match_status` colgado tras borrado heredado |
 | B3b | S2 | 10 | 6 | 6 | 0/0/6 | — | sin medir | SIN MEDIR | Tebeosfera en americana |
 | C2a | S2 | 10 | 4 | 4 | 4/0/0 | 100 % | 4 exacto | FAIL | `single_issue` en `one_shot` (ADR 0022) |
 | C3a | S2 | 10 | 4 | 4 | 0/0/4 | — | sin medir | SIN MEDIR | `#1` en `one_shot` |
@@ -115,7 +117,7 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 | E1 | S3 | 57 | 16 | 16 | 0/0/16 | — | sin medir | SIN MEDIR | total sin unidad acreditada |
 | D5 | S3 | 5.098 | 15 | 15 | 0/15/0 | 0 % | 0 exacto | LEGÍTIMO | contrato #307: extensión declarada |
 | F4b | S3 | 258 | 12 | 12 | 0/0/12 | — | sin medir | SIN MEDIR | ruido de título |
-| F5 | S3 | 2.786 | 4 | 4 | 4/0/0 | 100 % | 4 exacto | FAIL | `locked_fields` inexistentes |
+| F5 | S3 | 2.786 | 4 | 4 | 4/0/0 | 100 % | 4 exacto → **0 tras L4** | FAIL → PASS | `locked_fields` inexistentes |
 | F1d | S3 | 3 | 3 | 3 | 3/0/0 | 100 % | 3 exacto | FAIL | `end_year` con serie en curso |
 | F2a | S3 | 46 | 1 | 1 | 0/0/1 | — | sin medir | SIN MEDIR | editorial española/americana |
 | I1 | S3 | 29 | 1 | 1 | 1/0/0 | 100 % | 1 exacto | FAIL | progreso incoherente |
@@ -124,7 +126,10 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 (F2a y B8 excluidos por quedar «sin medir»). Total **771 → 770** defectos estimados,
 intervalo aproximado **652–770**; las cifras se solapan entre comprobaciones y no
 corrigen la falta de etiquetado independiente. **Tras L1 (2026-11-21):** S3
-**591 → 8** (F5 4, F1d 3, I1 1); total **770 → 187**.
+**591 → 8** (F5 4, F1d 3, I1 1); total **770 → 187**. **Tras L2/L3/L4
+(2026-11-21):** S2 **104 → 69** (A1a y D6a resueltos); S3 **8 → 4** (F5
+resuelto); total **187 → 148**. A1b sube de 321 a 347 por las 26 entradas de
+historial de L2; es el comportamiento legítimo de ADR 0014.
 
 ### 4.2 PASS (población > 0 y 0 casos)
 
@@ -231,7 +236,7 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
   protegidas y 0 manuales. F4a pasó de 583 casos a **0/766**. La causa quedó
   cerrada con #1191 y la prevención con la issue #1186. Detalle en §12.
 
-### [A1a] Referencia vigente a una serie que ya no existe — S2 — VIVO/HEREDADO
+### [A1a] Referencia vigente a una serie que ya no existe — S2 — APLICADO
 
 - **Población:** 1.450 archivos con vínculo vigente o cobertura. **Casos:** 26
   (1,8 %); muestra 20/20 defecto.
@@ -244,7 +249,7 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
 - **Causa:** viva en el endpoint heredado (sin UI) + datos heredados.
 - **Propuesta:** lote L2 (26) + issue de prevención.
 
-### [D6a] Pendiente con un estado que no es `unsorted` — S2 — VIVO/HEREDADO
+### [D6a] Pendiente con un estado que no es `unsorted` — S2 — APLICADO
 
 - **Población:** 606 archivos sin número. **Casos:** 9 (1,5 %); muestra 9/9.
 - **Síntoma:** el archivo no aparece en «Por revisar» (`review.py` exige
@@ -293,7 +298,7 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
   la ficha no puede afirmar de dónde salió.
 - **Propuesta:** pregunta L8 (¿cuál es el valor correcto y quién lo cambió?).
 
-### [F5] `locked_fields` con nombres inexistentes — S3 — DATO
+### [F5] `locked_fields` con nombres inexistentes — S3 — APLICADO
 
 - **Casos:** 4 de 2.786; exactos.
 - **Síntoma:** la persona cree que un campo está protegido y el enricher lo pisa.
@@ -346,7 +351,7 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
 
 ## 7. Lotes propuestos (sin aplicar)
 
-> **L6 (B1b) y L1 (F4a) están aplicados** (§11 y §12). Los demás lotes no se han ejecutado.
+> **L6 (B1b), L1 (F4a), L2 (A1a), L3 (D6a) y L4 (F5) están aplicados** (§11–§13). Los demás lotes no se han ejecutado.
 > Cada uno exige copia de seguridad, transacción única, servicio del proyecto y
 > remedición. Las listas exactas de ids están en `.work/lotes/` (local, no
 > versionado). Las que necesitan criterio humano son **preguntas**, no lotes
@@ -372,40 +377,44 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
   `metadata_source='manual'`; no cambia identidad, número, formato ni archivos.
 - **Efecto:** la ficha enseña texto limpio; F4a **0/766**.
 
-### L2 — Retirar 26 vínculos huérfanos (A1a) · S2
+### L2 — Aplicado: 26 vínculos huérfanos (A1a) · S2
 
 - **Filas:** 26 archivos con `metadata.vinculo.serie_id` que ya no existe.
 - **Cambio:** quitar `metadata.vinculo` y añadir una entrada a
   `metadata.vinculo_historial` con `deshecho` y `previo` (la procedencia no se
   pierde).
-- **Servicio:** no existe para archivos ya desvinculados. Propuesta: un servicio
-  `limpiar_vinculo_huerfano` con vista previa y `--apply`.
+- **Servicio:** `services/limpieza_calidad.py` (`--lote l2`), con vista previa
+  y `--apply`; desplegado en #1202.
 - **Reversible:** sí, releyendo el historial; copia previa.
 - **Protecciones:** no tocar archivos con vínculo vigente válido; son 26
   archivos ya pendientes.
 - **Efecto:** dejan de afirmar un vínculo falso; siguen en Pendientes.
+- **Aplicado (2026-11-21):** 26 → 0; A1b sube a 347 por el historial
+  (legítimo); ver §13.
 - **Prevención:** issue para el `DELETE /api/series` heredado.
 
-### L3 — Devolver 9 archivos a «Por revisar» (D6a) · S2
+### L3 — Aplicado: 9 archivos a «Por revisar» (D6a) · S2
 
 - **Filas:** 9 archivos con `issue_id` NULL y `match_status` distinto de
   `unsorted`.
 - **Cambio:** `match_status='unsorted'` (y limpiar `review_motivo` si procede).
-- **Servicio:** no existe para un archivo ya desvinculado; propuesta de servicio
-  pequeño con vista previa.
+- **Servicio:** `services/limpieza_calidad.py` (`--lote l3`); guarda
+  `match_status_previo`; desplegado en #1202.
 - **Reversible:** guardar el valor anterior en `metadata["match_status_previo"]`.
 - **Protecciones:** no tocar `review_dismissed=true`.
 - **Efecto:** aparecen en «Por revisar» en vez de quedar invisibles.
+- **Aplicado (2026-11-21):** 9 → 0; D6a 0/606; ver §13.
 - **Prevención:** issue para el borrado heredado.
 
-### L4 — Quitar 4 nombres inválidos de `locked_fields` (F5) · S3
+### L4 — Aplicado: 4 nombres inválidos de `locked_fields` (F5) · S3
 
 - **Filas:** 4 (serie/número/creador/personaje con un campo que no existe).
 - **Cambio:** quitar solo esos nombres; el resto del array queda igual.
-- **Servicio:** `edicion_manual.desbloquear_serie`/`desbloquear_numero` si
-  aceptan el nombre; si no, un servicio pequeño de limpieza.
+- **Servicio:** `services/limpieza_calidad.py` (`--lote l4`); los nombres
+  válidos se leen de las columnas reales del modelo; desplegado en #1202.
 - **Reversible:** volver a añadirlos (no protegían nada); copia previa.
 - **Efecto:** desaparece una falsa sensación de protección.
+- **Aplicado (2026-11-21):** 4 → 0; F5 0/2.785; ver §13.
 - **Prevención:** validar los nombres contra el modelo en el servicio/UI.
 
 ### L5 — Pregunta: 75 números con id de Comic Vine sin volumen (B5a) · S1
@@ -597,10 +606,37 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
   vivo; I1 mantiene 1 caso. No hay efecto atribuible al lote.
 - **Reversible:** sí, restaurando `sinopsis_original` en las 622 filas o la
   copia previa.
-- **Qué queda:** L2 (26 vínculos), L3 (9 pendientes invisibles), L4 (4
-  `locked_fields`), L7/L8 (preguntas) y H1 (proceso CCM). S3 restante: 8
-  (F5 4, F1d 3, I1 1). B5a sigue en 75 por decisión del PO.
+- **Qué queda:** L7/L8 (preguntas) y H1 (proceso CCM); L2/L3/L4 aplicados
+  (§13). S3 restante: 4 (F1d 3, I1 1). B5a sigue en 75 por decisión del PO.
+
+## 13. Aplicación de los lotes L2, L3 y L4
+
+- **Antes:** L3 **9**, L2 **26**, L4 **4** (vistas previas del 2026-11-21, sin
+  escritura). L2 y L3 pueden solaparse; cada lote es independiente.
+- **Copia previa:** dump de la actualización
+  `/var/backups/zascarr/postgres/update_20261121_144410.sql.gz`, SHA-256
+  `3fff8a4c3b2886ff2be33e56958a7342b03124f78d13b26a1df176f9ec925a9f`
+  (restore-status ok, 47 tablas).
+- **Cambio:** `python -m zascarr.cli.limpieza_calidad <lote> --apply --limite 100`
+  (servicio de #1202), un `commit` por lote:
+  - **L3:** 9 → 0; `match_status='unsorted'` y `match_status_previo` guardado.
+  - **L2:** 26 → 0; `vinculo` retirado y conservado en `vinculo_historial` con
+    `deshecho`; las demás claves de `metadata` intactas.
+  - **L4:** 4 → 0; retirados los nombres que no son columnas del modelo; los
+    válidos intactos.
+- **Después:** D6a **0/606**, A1a **0/1.424**, F5 **0/2.785**; F4a 0/826; B1b
+  0/29; **A1b 347**, las 26 nuevas entradas de historial de L2 (comportamiento
+  legítimo de ADR 0014). Censo completo: 82 comprobaciones, huella
+  `6e0816bde0967a33`.
+- **Otras comprobaciones:** solo cambiaron de casos A1a, D6a, F5 y A1b; el resto
+  de cambios son poblaciones que crecieron por el ciclo vivo (B5a, B6a, D4b,
+  F1c, F4a). No hay efecto atribuible a los lotes fuera de los objetivos.
+- **Reversible:** L2 por el historial; L3 por `match_status_previo`; L4
+  volviendo a añadir los nombres (no protegían nada); y la copia previa.
+- **Qué queda:** L7/L8 (preguntas de formato/número y F1d/H2/I1), H1 (proceso
+  CCM), B5a (75, decisión del PO) y la prevención de código (#1185, #1187,
+  #1188, #1189, #1190).
 
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
-L1 y L6 están aplicados; los lotes L2–L4 y las preguntas L7/L8 siguen pendientes
-de aprobación.*
+L6, L1, L2, L3 y L4 están aplicados; las preguntas L7/L8 siguen pendientes de
+aprobación.*
