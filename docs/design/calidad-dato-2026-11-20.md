@@ -10,6 +10,11 @@
 > comprobaciones: 29 con casos, 34 con población y 0 casos (PASS), 17 sin
 > población (NOT RUN) y 2 no ejecutables (NOT RUN).
 >
+> **Actualización 2026-11-21.** La Pi está en `a844cea4`; el enricher saneado
+> (#1191) y el servicio L1 (#1193) están desplegados. **L1 aplicado:** 622
+> sinopsis limpiadas, F4a **0/766**; ver §12. La medición de referencia sigue
+> siendo la del 2026-11-20.
+>
 > **Aviso de precisión.** El PO confirmó «todo como la hipótesis»: la columna
 > `etiqueta_esperada` se aceptó sin revisión fila a fila. Por tanto las
 > precisiones de §6 son **declaradas**, no medidas con etiquetado independiente.
@@ -103,7 +108,7 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 | B8 | S3 | 50 | 10 | 10 | 0/0/10 | — | sin medir | SIN MEDIR | evidencia de un id no vigente (explica 8 de los 9 B1b) |
 | G1 | S2 | 258 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | pareja de series duplicadas |
 | H2 | S2 | 1 | 1 | 1 | 1/0/0 | 100 % | 1 exacto | FAIL | procedencia contradice la fila |
-| F4a | S3 | 593 | 583 | 20 | 20/0/0 | 100 % | 583 [489–583] | FAIL | enricher guarda HTML (vivo) |
+| F4a | S3 | 593 | 583 | 20 | 20/0/0 | 100 % | 583 [489–583] → **0 tras L1** | FAIL → PASS | enricher guarda HTML (vivo; corregido) |
 | A1b | S3 | 322 | 321 | 20 | 0/20/0 | 0 % | 0 [0–52] | LEGÍTIMO | historial append-only (ADR 0014) |
 | H1 | S3 | 245 | 244 | 20 | 0/0/20 | — | sin medir | SIN MEDIR | CCM apenas ejecutado |
 | C4b | S3 | 4.256 | 78 | 20 | 0/0/20 | — | sin medir | SIN MEDIR | formatos de número |
@@ -117,9 +122,9 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 
 **Estimación puntual:** S1 76 antes de L6 y **75 después** (B5a) · S2 104 · S3 591
 (F2a y B8 excluidos por quedar «sin medir»). Total **771 → 770** defectos estimados,
-intervalo aproximado **652–770**; las
-cifras se solapan entre comprobaciones y no corrigen la falta de etiquetado
-independiente.
+intervalo aproximado **652–770**; las cifras se solapan entre comprobaciones y no
+corrigen la falta de etiquetado independiente. **Tras L1 (2026-11-21):** S3
+**591 → 8** (F5 4, F1d 3, I1 1); total **770 → 187**.
 
 ### 4.2 PASS (población > 0 y 0 casos)
 
@@ -210,7 +215,7 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
   copia diaria de las 22:22 (`backup_20261120_222250.sql.gz`, SHA-256
   `3cff3d22f4502d8c91ed89bc4af6894f9e845fe70d6937673da0e6c9acb45b2a`).
 
-### [F4a] Sinopsis con HTML o entidades — S3 — VIVO
+### [F4a] Sinopsis con HTML o entidades — S3 — APLICADO
 
 - **Población:** 593 números con sinopsis. **Casos:** 583 (98,3 %); muestra
   20/20 defecto.
@@ -221,7 +226,10 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
 - **Causa:** viva en el enricher; los 583 son datos ya guardados.
 - **Falsos positivos:** una sinopsis con marcado intencionado; el campo es texto
   plano y la muestra es homogénea.
-- **Propuesta:** lote L1 (limpiar 583) + issue de prevención.
+- **Aplicado (2026-11-21):** L1 limpió **622** sinopsis (la medición del 20 era
+  583; el enricher antiguo sumó 39 más hasta el despliegue de #1191), 0
+  protegidas y 0 manuales. F4a pasó de 583 casos a **0/766**. La causa quedó
+  cerrada con #1191 y la prevención con la issue #1186. Detalle en §12.
 
 ### [A1a] Referencia vigente a una serie que ya no existe — S2 — VIVO/HEREDADO
 
@@ -338,29 +346,31 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
 
 ## 7. Lotes propuestos (sin aplicar)
 
-> **L6 (B1b) ya está aplicado** (§11). Los demás lotes no se han ejecutado.
+> **L6 (B1b) y L1 (F4a) están aplicados** (§11 y §12). Los demás lotes no se han ejecutado.
 > Cada uno exige copia de seguridad, transacción única, servicio del proyecto y
 > remedición. Las listas exactas de ids están en `.work/lotes/` (local, no
 > versionado). Las que necesitan criterio humano son **preguntas**, no lotes
 > cerrados.
 
-### L1 — Limpiar el HTML de 583 sinopsis (F4a) · S3
+### L1 — Aplicado: limpiar el HTML de 622 sinopsis (F4a) · S3
 
-- **Filas:** 583 números con `synopsis` que contiene marcado o entidades. Para
-  la vista previa se proponen tandas de ≤100; la transacción puede ser única.
+- **Antes:** 622 sinopsis con HTML (la medición del 20 era 583; el enricher
+  antiguo añadió 39 hasta el despliegue de #1191). 0 protegidas, 0 manuales.
 - **Cambio:** `<p>`, `<br>`, `&amp;`… → texto plano (quitar etiquetas, deshacer
   entidades, colapsar espacios).
-- **Servicio:** no existe uno de limpieza masiva. Propuesta: un servicio
-  `limpiar_sinopsis` con vista previa y `--apply`, que guarde el original en
-  `issues.metadata["sinopsis_original"]` para poder revertir. **No** usar
-  `edicion_manual.guardar_numero` 583 veces: marcaría los campos como manuales y
-  bloquearía el enriquecimiento.
-- **Reversible:** sí, restaurando `sinopsis_original`; copia previa.
-- **Protecciones:** excluir `locked_fields` con `synopsis` y
-  `metadata_source='manual'`.
-- **Efecto:** la ficha enseña texto limpio; no cambia identidad, número ni
-  archivos.
-- **Prevención:** issue para que el enricher limpie antes de guardar.
+- **Servicio:** `services/limpiar_sinopsis.py` + CLI
+  (`python -m zascarr.cli.limpiar_sinopsis`), con vista previa y `--apply`;
+  guarda el original en `issues.metadata["sinopsis_original"]`. Desplegado en
+  #1193.
+- **Aplicación:** 7 tandas de ≤100 (6×100 + 22); **622 limpiadas**, 0 sin
+  cambio, 0 cambiadas por otro proceso; `pendientes` 622 → 0.
+- **Copia previa:** `update_20261121_124634.sql.gz`, SHA-256
+  `c7b5e3ff4c3ac48db4992bb4068d09c781ffe69b832b4e552e9ad0346a1d909e`; copia
+  diaria `backup_20261121_041148.sql.gz`, SHA-256 `d4f8eaa9…`.
+- **Reversible:** sí, restaurando `sinopsis_original` o la copia.
+- **Protecciones:** no toca `locked_fields` con `synopsis` ni
+  `metadata_source='manual'`; no cambia identidad, número, formato ni archivos.
+- **Efecto:** la ficha enseña texto limpio; F4a **0/766**.
 
 ### L2 — Retirar 26 vínculos huérfanos (A1a) · S2
 
@@ -548,8 +558,49 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
   fueron tocados después de las 22:45). No es efecto del lote; no hay otra
   comprobación atribuible al cambio. No se revierte.
 - **Qué queda pendiente:** B5a (75, el PO decidió dejarlo con prevención), los
-  lotes L1–L4 (sin aprobar) y las preguntas L7/L8. La fase 6 está hecha:
-  issues #1185–#1190 en el Kanban (Estado Backlog).
+  lotes L2–L4 (sin aprobar) y las preguntas L7/L8. L1 está aplicado (§12). La
+  fase 6 está hecha: issues #1185–#1190 en el Kanban (Estado Backlog).
+
+## 12. Aplicación del lote L1 (F4a)
+
+- **Antes:** 622 sinopsis con HTML, 0 protegidas y 0 manuales (vista previa del
+  2026-11-21 12:50). La medición del 2026-11-20 era 583; el enricher antiguo
+  añadió 39 más hasta el despliegue de #1191.
+- **Copia previa:** dump de la actualización
+  `/var/backups/zascarr/postgres/update_20261121_124634.sql.gz`, SHA-256
+  `c7b5e3ff4c3ac48db4992bb4068d09c781ffe69b832b4e552e9ad0346a1d909e`
+  (restore-status ok, 47 tablas). Copia diaria adicional:
+  `backup_20261121_041148.sql.gz`, SHA-256
+  `d4f8eaa918f9fda2197fb079a157774d876b35ca1788837b98e8436eccd0b63a`.
+- **Cambio:** `services/limpiar_sinopsis.py` (desplegado en #1193),
+  `python -m zascarr.cli.limpiar_sinopsis --apply --limite 100`, 7 tandas:
+
+  | tanda | pendientes antes | limpiadas | pendientes después |
+  |---:|---:|---:|---:|
+  | 1 | 622 | 100 | 522 |
+  | 2 | 522 | 100 | 422 |
+  | 3 | 422 | 100 | 322 |
+  | 4 | 322 | 100 | 222 |
+  | 5 | 222 | 100 | 122 |
+  | 6 | 122 | 100 | 22 |
+  | 7 | 22 | 22 | 0 |
+
+- **Guardado:** `issues.metadata["sinopsis_original"]` en **622** filas; el
+  resto de claves de `metadata` se conserva. No se tocó identidad, número,
+  formato ni archivos.
+- **Después:** F4a **0/766** (766 números con sinopsis; los demás siguen sin
+  sinopsis o ya estaban limpios); `limpiar_sinopsis` en vista previa: 0
+  pendientes; B1b 0/29; `sinopsis_original` 622. Censo completo: 82
+  comprobaciones, huella `9c29c370b5d389a7`.
+- **Otras comprobaciones:** ninguna cambió de casos por L1. Las poblaciones de
+  A2, B5a, B6a, D4b y F1c crecieron por el ciclo de importación/enriquecimiento
+  vivo; I1 mantiene 1 caso. No hay efecto atribuible al lote.
+- **Reversible:** sí, restaurando `sinopsis_original` en las 622 filas o la
+  copia previa.
+- **Qué queda:** L2 (26 vínculos), L3 (9 pendientes invisibles), L4 (4
+  `locked_fields`), L7/L8 (preguntas) y H1 (proceso CCM). S3 restante: 8
+  (F5 4, F1d 3, I1 1). B5a sigue en 75 por decisión del PO.
 
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
-Los lotes L1–L4 y las preguntas L7/L8 siguen pendientes de aprobación.*
+L1 y L6 están aplicados; los lotes L2–L4 y las preguntas L7/L8 siguen pendientes
+de aprobación.*
