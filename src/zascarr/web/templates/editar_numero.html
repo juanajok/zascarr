@@ -5,33 +5,34 @@
 <h1>Editar el número</h1>
 <p class="subtitle">Corrige número, título, fecha, formato o sinopsis. Los campos que cambies quedarán como manuales y protegidos.</p>
 {% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
+{% set orden_campos = ["issue_number", "title", "release_date", "format", "synopsis"] %}
 <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar" class="edicion-form">
   <label>Número
-    <input type="text" name="issue_number" value="{{ valores.issue_number }}" maxlength="20" required>
-    {% if errores.issue_number %}<span class="campo-error">{{ errores.issue_number }}</span>{% endif %}
+    <input type="text" name="issue_number"{{ ui.invalido(errores, "issue_number", orden_campos) }} value="{{ valores.issue_number }}" maxlength="20" required>
+    {% if errores.issue_number %}<span class="campo-error" id="error-issue_number">{{ errores.issue_number }}</span>{% endif %}
     {% if "issue_number" in campos_manuales %}{{ ui.chip("info", "Manual") }}{% endif %}
   </label>
   <label>Título
-    <input type="text" name="title" value="{{ valores.title }}" maxlength="500">
-    {% if errores.title %}<span class="campo-error">{{ errores.title }}</span>{% endif %}
+    <input type="text" name="title"{{ ui.invalido(errores, "title", orden_campos) }} value="{{ valores.title }}" maxlength="500">
+    {% if errores.title %}<span class="campo-error" id="error-title">{{ errores.title }}</span>{% endif %}
   </label>
   <div class="edicion-dos">
     <label>Fecha de publicación
-      <input type="date" name="release_date" value="{{ valores.release_date }}">
-      {% if errores.release_date %}<span class="campo-error">{{ errores.release_date }}</span>{% endif %}
+      <input type="date" name="release_date"{{ ui.invalido(errores, "release_date", orden_campos) }} value="{{ valores.release_date }}">
+      {% if errores.release_date %}<span class="campo-error" id="error-release_date">{{ errores.release_date }}</span>{% endif %}
     </label>
     <label>Formato
-      <select name="format">
+      <select name="format"{{ ui.invalido(errores, "format", orden_campos) }}>
         {% for valor, etiqueta in formatos.items() %}
         <option value="{{ valor }}" {% if valores.format == valor %}selected{% endif %}>{{ etiqueta }}</option>
         {% endfor %}
       </select>
-      {% if errores.format %}<span class="campo-error">{{ errores.format }}</span>{% endif %}
+      {% if errores.format %}<span class="campo-error" id="error-format">{{ errores.format }}</span>{% endif %}
     </label>
   </div>
   <label>Sinopsis
-    <textarea name="synopsis" rows="6" maxlength="10000">{{ valores.synopsis }}</textarea>
-    {% if errores.synopsis %}<span class="campo-error">{{ errores.synopsis }}</span>{% endif %}
+    <textarea name="synopsis"{{ ui.invalido(errores, "synopsis", orden_campos) }} rows="6" maxlength="10000">{{ valores.synopsis }}</textarea>
+    {% if errores.synopsis %}<span class="campo-error" id="error-synopsis">{{ errores.synopsis }}</span>{% endif %}
   </label>
   <p class="caption">Solo cambia lo que ves en ZascArr; tus archivos no se tocan. Los campos editados quedan protegidos frente al enriquecimiento.</p>
   <div class="edicion-acciones">

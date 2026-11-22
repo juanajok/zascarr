@@ -33,7 +33,7 @@
   <button class="btn primary" type="submit">Importar saga</button>
 </form>
 {% else %}
-{{ ui.estado_vacio("Este arco no declara números", "No hay nada que enlazar en tu biblioteca.") }}
+{{ ui.estado_vacio("Este arco no declara números", "No hay nada que enlazar en tu biblioteca.", nivel=3) }}
 {% endif %}
 {% endif %}
 {% endblock %}

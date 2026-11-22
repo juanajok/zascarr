@@ -45,11 +45,21 @@
 </div>
 {%- endmacro %}
 
-{#- estado_vacio(titulo, texto, accion): `accion` opcional = (etiqueta, url), un enlace con aspecto
-    de botón principal. -#}
-{% macro estado_vacio(titulo, texto=none, accion=none) -%}
+{#- invalido(errores, campo, orden): atributos del control de un campo con error (Primer «Forms»;
+    docs/design/benchmark-calidad-front.md, hallazgo 3). `aria-invalid` y `aria-describedby` hacia el
+    texto del error (`id="error-<campo>"`), y `autofocus` en el primero con error según `orden`, para que
+    el foco no se quede arriba tras un envío fallido. -#}
+{% macro invalido(errores, campo, orden) -%}
+{%- if errores and errores.get(campo) %} aria-invalid="true" aria-describedby="error-{{ campo }}"
+{%- if (orden | select("in", errores) | first) == campo %} autofocus{% endif %}{% endif -%}
+{%- endmacro %}
+
+{#- estado_vacio(titulo, texto, accion, nivel): `accion` opcional = (etiqueta, url), un enlace con
+    aspecto de botón principal. `nivel` es el del título: 2 bajo el `h1` de la pantalla (por defecto) y 3
+    dentro de una sección con `h2`, para no saltar niveles. -#}
+{% macro estado_vacio(titulo, texto=none, accion=none, nivel=2) -%}
 <div class="empty-state">
-  <h3>{{ titulo }}</h3>
+  <h{{ nivel }}>{{ titulo }}</h{{ nivel }}>
   {%- if texto is not none %}
   <p>{{ texto }}</p>
   {%- endif %}

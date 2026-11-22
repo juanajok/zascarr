@@ -5,14 +5,15 @@
 <h1>{% if arco %}Editar la saga{% else %}Nueva saga{% endif %}</h1>
 <p class="subtitle">Una saga puede reunir números de varias series y tiene un orden de lectura.</p>
 {% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
+{% set orden_campos = ["title", "description"] %}
 <form method="post" action="{{ accion }}" class="edicion-form">
   <label>Título
-    <input type="text" name="title" value="{{ valores.title }}" maxlength="500" required>
-    {% if errores.title %}<span class="campo-error">{{ errores.title }}</span>{% endif %}
+    <input type="text" name="title"{{ ui.invalido(errores, "title", orden_campos) }} value="{{ valores.title }}" maxlength="500" required>
+    {% if errores.title %}<span class="campo-error" id="error-title">{{ errores.title }}</span>{% endif %}
   </label>
   <label>Descripción
-    <textarea name="description" rows="5" maxlength="10000">{{ valores.description }}</textarea>
-    {% if errores.description %}<span class="campo-error">{{ errores.description }}</span>{% endif %}
+    <textarea name="description"{{ ui.invalido(errores, "description", orden_campos) }} rows="5" maxlength="10000">{{ valores.description }}</textarea>
+    {% if errores.description %}<span class="campo-error" id="error-description">{{ errores.description }}</span>{% endif %}
   </label>
   <label class="legal-checkbox">
     <input type="checkbox" name="is_crossover" value="true" {% if valores.is_crossover %}checked{% endif %}>

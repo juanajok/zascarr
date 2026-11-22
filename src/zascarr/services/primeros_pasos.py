@@ -195,7 +195,7 @@ def _paso_revisar(e: EstadoInicio) -> Paso:
     if e.archivos_registrados:
         return Paso(ClavePaso.REVISAR, "No tienes tebeos por clasificar",
                     "Todo lo registrado tiene ya su serie o lo has descartado.",
-                    EstadoPaso.HECHO, True, "/ui/pendientes", "Ver")
+                    EstadoPaso.HECHO, True, "/ui/pendientes", "Ver Por revisar")
     return Paso(ClavePaso.REVISAR, "Revisa lo que no sepamos clasificar",
                 "Aún no hay tebeos registrados: los que no sepamos clasificar aparecerán aquí.",
                 EstadoPaso.BLOQUEADO, True)

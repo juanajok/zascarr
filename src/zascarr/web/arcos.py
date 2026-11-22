@@ -504,8 +504,10 @@ async def editar_arco_guardar(arco_id: UUID, request: Request,
         db, arco_id, title=title, description=description, is_crossover=is_crossover)
     if not resultado.ok:
         await db.rollback()
+        # Tras el rollback el arco del resultado caduca y la plantilla lo leía fuera del contexto
+        # asíncrono (500 en cualquier error): se vuelve a leer, como en el formulario.
         return _respuesta(request, "editar_arco.html", {
-            "arco": resultado.arco,
+            "arco": await detalle_arco(db, arco_id),
             "valores": {"title": title, "description": description,
                         "is_crossover": is_crossover},
             "errores": resultado.errores, "accion": f"/ui/arcos/{arco_id}/editar",

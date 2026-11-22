@@ -46,22 +46,23 @@
 <section class="edicion-manuales" aria-labelledby="arco-anadir-titulo">
   <h2 id="arco-anadir-titulo" class="titulo-frase">Añadir un número</h2>
   {% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
-  <form method="post" action="/ui/arcos/{{ arco.id }}/numeros" class="edicion-form">
+  {% set orden_campos = ["serie", "numero", "orden"] %}
+<form method="post" action="/ui/arcos/{{ arco.id }}/numeros" class="edicion-form">
     <div class="edicion-dos">
       <label>Serie
-        <input type="text" name="serie" value="{{ valores.serie }}" maxlength="500" required
+        <input type="text" name="serie"{{ ui.invalido(errores, "serie", orden_campos) }} value="{{ valores.serie }}" maxlength="500" required
                placeholder="Tal como aparece en tu biblioteca"
                aria-describedby="arco-anadir-ayuda">
-        {% if errores.serie %}<span class="campo-error">{{ errores.serie }}</span>{% endif %}
+        {% if errores.serie %}<span class="campo-error" id="error-serie">{{ errores.serie }}</span>{% endif %}
       </label>
       <label>Número
-        <input type="text" name="numero" value="{{ valores.numero }}" maxlength="20" required>
-        {% if errores.numero %}<span class="campo-error">{{ errores.numero }}</span>{% endif %}
+        <input type="text" name="numero"{{ ui.invalido(errores, "numero", orden_campos) }} value="{{ valores.numero }}" maxlength="20" required>
+        {% if errores.numero %}<span class="campo-error" id="error-numero">{{ errores.numero }}</span>{% endif %}
       </label>
       <label>Posición
-        <input type="number" name="orden" value="{{ valores.orden }}" min="1" max="1000"
+        <input type="number" name="orden"{{ ui.invalido(errores, "orden", orden_campos) }} value="{{ valores.orden }}" min="1" max="1000"
                inputmode="numeric" placeholder="Vacía = al final">
-        {% if errores.orden %}<span class="campo-error">{{ errores.orden }}</span>{% endif %}
+        {% if errores.orden %}<span class="campo-error" id="error-orden">{{ errores.orden }}</span>{% endif %}
       </label>
     </div>
     <p class="muted" id="arco-anadir-ayuda">Escribe el título tal como aparece en tu biblioteca. La posición es opcional: si la dejas vacía, el número va al final.</p>

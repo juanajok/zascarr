@@ -125,7 +125,13 @@ def test_la_ficha_de_serie_no_muestra_el_estado_de_lectura():
 def test_control_de_fila_pinta_el_radio_concreto_del_numero_leido():
     html = _render_control(None, lectura=_estado(ReadingStatus.READING, rating=None, nota=None))
     radio = _radio(html, "reading")
-    assert "checked" in radio and "autofocus" in radio
+    # Al cargar la página no se lleva el foco al radio (la página saltaba hasta «Tu lectura»);
+    # solo al repintarlo tras guardar con HTMX (benchmark-calidad-front, hallazgo 9).
+    assert "checked" in radio and "autofocus" not in radio
+    htmx = SimpleNamespace(headers={"HX-Request": "true"})
+    tras_guardar = _render_control(None, request=htmx,
+                                   lectura=_estado(ReadingStatus.READING, rating=None, nota=None))
+    assert "autofocus" in _radio(tras_guardar, "reading")
     assert "checked" not in _radio(html, "unread")
     assert "Leyendo" in html
 

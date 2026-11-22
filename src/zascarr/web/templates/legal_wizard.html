@@ -30,7 +30,7 @@
   <label class="legal-checkbox">
     <input type="checkbox" name="acepto_3" value="true" required>
     {#- En un solo <span>: la etiqueta es flex y cada trozo de texto y el enlace eran columnas distintas. -#}
-    <span>Acepto los términos del <a href="/legal" target="_blank">aviso legal completo</a> (versión {{ legal_version }}).</span>
+    <span>Acepto los términos del <a href="/legal" target="_blank" rel="noopener noreferrer">aviso legal completo<span class="sr"> (se abre en otra pestaña)</span></a> (versión {{ legal_version }}).</span>
   </label>
   <button type="submit" class="primary">Aceptar y continuar</button>
 </form>
