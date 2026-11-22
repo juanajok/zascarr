@@ -1353,11 +1353,13 @@ async def aplicar_enriquecimiento(
 @router.get("/{series_id}/sagas", response_class=HTMLResponse)
 async def panel_sagas(series_id: UUID, request: Request,
                       db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    """Fragmento perezoso: sagas en las que participa la serie y su posición."""
+    """Fragmento perezoso: sagas en las que participa la serie y su posición.
+
+    Sin sagas también se pinta, con su estado vacío: la barra de la ficha enlaza a `#sagas-serie`
+    y, si la sección desaparecía, el enlace no llevaba a ninguna parte (revisión del 2026-11-22).
+    """
     series = await _serie_o_404(db, series_id)
     sagas = await sagas_de_serie(db, series.id)
-    if not sagas:
-        return HTMLResponse("", headers={"Cache-Control": "no-store"})
     respuesta = templates.TemplateResponse(
         request, "_sagas_serie.html", {"series": series, "sagas": sagas})
     respuesta.headers["Cache-Control"] = "no-store"

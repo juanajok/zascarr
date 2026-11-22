@@ -1,6 +1,8 @@
-{% if sagas %}
+{#- Siempre se pinta, como «Colecciones»: la barra de la ficha enlaza aquí. Sin sagas, el estado vacío
+    dice dónde se crean (sin botón principal: la ficha ya tiene el suyo). -#}
 <section id="sagas-serie" class="series-sagas card ficha-bloque" aria-label="Sagas de la serie">
   <h2>Sagas</h2>
+  {% if sagas %}
   <ul class="series-sagas-lista">
     {% for s in sagas %}
     <li>
@@ -10,5 +12,7 @@
     </li>
     {% endfor %}
   </ul>
+  {% else %}
+  <p class="muted">Esta serie no está en ninguna saga. Las sagas se crean en <a href="/ui/arcos">Sagas en orden</a>.</p>
+  {% endif %}
 </section>
-{% endif %}

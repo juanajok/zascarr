@@ -1355,7 +1355,7 @@ class TestAtribucionFandomVisible:
         assert "Creative Commons BY-SA 3.0" in fuera
 
 
-def test_panel_sagas_muestra_posicion_y_no_pinta_si_no_hay_sagas():
+def test_panel_sagas_muestra_posicion_y_sin_sagas_pinta_su_estado_vacio():
     from unittest.mock import AsyncMock, patch
 
     from zascarr.services.arcos import SagaDeSerie
@@ -1375,7 +1375,10 @@ def test_panel_sagas_muestra_posicion_y_no_pinta_si_no_hay_sagas():
     with patch("zascarr.web.series.sagas_de_serie", AsyncMock(return_value=[])), \
             use_fake_session(session2) as client:
         vacio = client.get(f"/ui/series/{series.id}/sagas")
-    assert vacio.status_code == 200 and vacio.text == ""
+    # La barra de la ficha enlaza a `#sagas-serie`: sin sagas la sección sigue ahí, con su estado vacío.
+    assert vacio.status_code == 200
+    assert 'id="sagas-serie"' in vacio.text and "Esta serie no está en ninguna saga." in vacio.text
+    assert 'href="/ui/arcos"' in vacio.text and "primary" not in vacio.text
     assert vacio.headers["cache-control"] == "no-store"
 
 
