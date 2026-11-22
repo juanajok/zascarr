@@ -1,0 +1,9 @@
+# UAT-31 — Identidad y versiones (UATP-08)
+# Generado: 2026-11-22T17:22:31+01:00
+# Entorno: E-UAT31 (alias; host local aislado; sin hostname, IP ni ruta)
+CANDIDATA tag=uat-candidata-20261122b tag_tipo=tag tag_commit=a6849c2cd5c31e0d192c79fff66b45c3f13eddff head=a6849c2cd5c31e0d192c79fff66b45c3f13eddff build_sha=a6849c2cd5c31e0d192c79fff66b45c3f13eddff app_version=1.15.1 alembic=0052 image_id=sha256:c8366cf052888aa3e6bca8a177f66de30ad29bd115373cbd9e598d611076c163
+B0 copia=backup-20261122_172016 sha256=ca6fa36b5feb2334c49a0f3b3c151a943013dbe60edcb72eb6a154044ef4f12b bytes=17733 manifest_sha256=65e68d8108009bea6109d173f47762a6a938f3647f7c79f52fa71072f85ad2ed
+B0 version_de_la_copia=head:a6849c2cd5c31e0d192c79fff66b45c3f13eddff build_sha:a6849c2cd5c31e0d192c79fff66b45c3f13eddff app_version:1.15.1 alembic:0052
+ENTORNO docker=29.10.0 compose=5.8.0 chrome=158.0.8127.36 
+SEMILLA series=2 issues=2 files=2 library_roots=1
+FILA_POSTERIOR id=b7000000-0000-4000-8000-000000000099 tipo=series

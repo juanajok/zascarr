@@ -1,0 +1,46 @@
+# UAT-31 — UATP-08 (#1146) ejecución real — PASADA 3 (3a FAIL → 3b PASS)
+# Generado: 2026-11-22T17:40:24+01:00
+# Entorno E-UAT31b (alias; host local aislado; sin hostname, IP ni ruta; nunca la Pi ni datos reales)
+# Candidata: tag=uat-candidata-20261122c tag_commit=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4
+#            app_version=1.15.1 alembic=0052 image_id=sha256:92e5c1c8328a42ba010876a2bc7c4e600dd728822418a0fde8e3212527ae70a6
+# Copia B0: backup-20261122_173819 sha256=475f463f78dff8738271340a8dc89cb830043789defd7ef0f85be419f4d1dd8f bytes=17726 manifest_sha256=dfd70981209e94cf98b510b87717be24c30265ae6eada818b6636e261bfaa533
+# Fila añadida DESPUÉS de B0: 1 fila en `series` (id fijo c8000000-0000-4000-8000-000000000099)
+# Resultado global: PASS (A/B/C/D/E)
+#
+# Historial:
+#   3a (a6849c2c, tag uat-candidata-20261122b): FAIL B — la UI mostraba «Versión no consta.»
+#      porque el script escribía {version, build_sha} y la UI esperaba app_version/alembic.
+#      Se conserva en este directorio (defecto-version.txt, ops-restaurar-uat31.json, capturas).
+#   3b (ab81b6bb, tag uat-candidata-20261122c): el fix alinea el esquema
+#      {head, build_sha, app_version, alembic} y añade `.resumen-tecnico` con overflow-wrap.
+#      Reejecutado de cero en un entorno nuevo: PASS.
+#
+# Resumen de la pasada 3b:
+#   - Antes de restaurar: series=3 issues=2 files=2 (fila añadida después de la copia).
+#   - B0 restaurada: series=2 issues=2 files=2.
+#   - recuentos_previos=3/2/2 · recuentos=2/2/2 · fuera=1/0/0.
+#   - UI: «Antes de restaurar había 3 series, 2 números y 2 archivos anotados. Esta copia trae
+#     2, 2 y 2…» y «Quedan fuera 1 serie, 0 números y 0 archivos…».  → PASS A.
+#   - «Versión que arrancó»: «Versión 1.15.1 · revisión 0052.»; identidad:
+#     head=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 · build=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 · app=1.15.1 · alembic=0052.  → PASS B.
+#   - Comprobaciones: 14 visibles (existencia_copia..health; codigo_manifest=no_ejecutada). → PASS C.
+#   - Capturas Chrome real 1280x1100, 390x844 y 320x568; scrollWidth==innerWidth en 320 y 390;
+#     confirmación a 320 sin desbordar. → PASS D.
+#   - /api/health build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4; resumen Cache-Control: no-store; lista y confirmación con
+#     fecha absoluta y «Versión 1.15.1 · revisión 0052». → PASS E.
+#   - Suite de la rama (test_web_uatp08.py + test_restauracion_estado.py + test_restaurar_produccion.py
+#     afectados por el fix): ver nota del PR. La forma real ya está cubierta por el test PG del flujo.
+
+## Comprobaciones
+CHECK UAT-31-A PASS explicacion_fila_fuera=true recuentos_previos=3/2/2 recuperado=2/2/2 fuera=1/0/0
+CHECK UAT-31-B PASS version_llana="Versión 1.15.1 · revisión 0052" app_version=1.15.1 alembic=0052 sin_no_consta=true
+CHECK UAT-31-C PASS comprobaciones=14 incluye_no_ejecutada=codigo_manifest
+CHECK UAT-31-D PASS capturas=5 viewports=1280x1100,390x844,320x568 overflow_320=false overflow_390=false
+CHECK UAT-31-E PASS health_build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 resumen_no_store=true lista_version=true confirmar_version=true
+
+## Evidencia adicional de esta pasada
+# - versiones-uat31b.txt · ops-restaurar-uat31b.json · resumen-texto-uat31b.txt
+# - comprobaciones-uat31b.txt · overflow-320.txt · comandos-uat31b.txt
+# - capturas/resumen-escritorio.png, resumen-390.png, resumen-320.png,
+#   capturas/confirmar-320.png, capturas/confirmar-escritorio.png
+# - Histórico del FAIL corregido: defecto-version.txt (pasada 3a) y pasada3b-ab81b6bb/.

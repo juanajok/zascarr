@@ -1,0 +1,43 @@
+<div id="copia-estado" data-estado="diario"
+     
+     >
+  
+  
+    <div class="aviso warn"><span class="aviso-icono" aria-hidden="true">!</span><div>La copia falló. El disco de respaldo no está conectado. Conéctalo y vuelve a pedir la copia.</div></div>
+  
+  
+  
+  <div id="restauracion-estado" data-estado="hecha">
+    <div class="aviso ok"><span class="aviso-icono" aria-hidden="true">✓</span><div>Copia del 22 de noviembre restaurada: 2 series, 2 números y 2 archivos anotados. Entra con tu contraseña de siempre.</div></div>
+    
+    <p><a class="btn ghost sm" href="/ui/copias/restauracion">Ver el resumen de la restauración</a></p>
+    
+  </div>
+  
+</div>
+<div id="copia-accion" hx-swap-oob="outerHTML">
+  
+  <form hx-post="/ui/copias/pedir" hx-target="#copia-estado" hx-swap="outerHTML">
+    <button id="boton-copia" type="submit" class="btn"
+            aria-describedby="copia-garantia"
+            >Hacer una copia ahora</button>
+    <span id="copia-garantia" class="muted">No toca tus tebeos: solo copia lo que ZascArr tiene anotado.</span>
+  </form>
+  
+</div>
+<span id="copias-n" hx-swap-oob="outerHTML">(1)</span><div id="copias-items" hx-swap-oob="outerHTML">
+  
+    <p class="caption">Las horas son del servidor.</p>
+    <ul>
+      
+      <li>22/11/2026 a las 17:20 · 17,3 KB · también en el disco de respaldo: no
+        <p class="caption">Versión 1.15.1 · revisión 0052</p>
+        
+          <a class="btn ghost sm" href="/ui/copias/restaurar/backup-20261122_172016">Restaurar…</a>
+          
+        
+      </li>
+      
+    </ul>
+  
+</div>

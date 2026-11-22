@@ -1,0 +1,17 @@
+# UAT-31 pasada 3b — comandos (saneados)
+# Candidata tag=uat-candidata-20261122c build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 (fix B de a6849c2c).
+# Entorno E-UAT31b (alias; proyecto zascarr-uat31b; puertos <loopback>:15432 y :18000; sin Pi ni producción).
+# Variables: A6=<repo candidato>; RT=<entorno UAT-31b>; APP_URL=http://<loopback>:18000; COOKIE=<cookie>.
+git -C "$A6" tag -a uat-candidata-20261122c -m "UAT-31 UATP-08 candidata 2026-11-22c (fix B)" ab81b6bb549665b56a3da65204c4e9b9e325dcd4
+git -C "$A6" rev-parse 'uat-candidata-20261122c^{commit}'   # ab81b6bb549665b56a3da65204c4e9b9e325dcd4
+git -C "$A6" cat-file -t uat-candidata-20261122c            # tag
+docker compose ... exec -T zascarr printenv BUILD_SHA        # ab81b6bb549665b56a3da65204c4e9b9e325dcd4
+curl -fsS "$APP_URL/api/health" | jq -r '.version, .build_sha'   # 1.15.1 / ab81b6bb549665b56a3da65204c4e9b9e325dcd4
+python3 docs/uat/A6/fixture/sembrar.py
+bash "$A6/scripts/backup.sh"    # offsite_mount_missing; B0 local válida
+jq -c .version_de_la_copia "$RT/backups/MANIFIESTO-backup_20261122_173819.json"
+psql -c "insert into series (...) values ('c8000000-0000-4000-8000-000000000099','...')"   # 3/2/2
+bash "$A6/scripts/restaurar_datos.sh" --produccion --copia 20261122_173819
+jq -c '{resultado,recuentos,recuentos_previos,fuera,version_arrancada}' "$RT/data/backup-status/ops-restaurar.json"
+curl -fsS -b "$COOKIE" "$APP_URL/ui/copias/restauracion" | grep -o 'Versión 1.15.1 · revisión 0052'
+PYTHONPATH="$RT/pylib" python3 capturas_uat31b.py   # Chrome real 1280/390/320 y confirmación; overflow medido
