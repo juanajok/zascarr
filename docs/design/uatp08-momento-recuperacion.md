@@ -2,10 +2,10 @@
 
 > **Estado:** implementada y validada (task-70/71/76, 2026-11-22). `restaurar_datos.sh` persiste
 > `recuentos_previos`, `fuera`, `comprobaciones` y `version_arrancada`; `copias.json` y la UI
-> exponen versión, alcance y resumen. **UAT-31 real PASS** en la candidata `ab81b6bb` (tag
-> `uat-candidata-20261122c`) en Docker aislado: fila fuera explicada, versión 1.15.1/revisión 0052,
-> 14 comprobaciones y 320/390/escritorio sin desbordar. Evidencia:
-> [`docs/uat/A6/evidencia/uat31/`](../uat/A6/evidencia/uat31/pasada3b-ab81b6bb/).
+> exponen versión, alcance y resumen. **UAT-31 real PASS** en la candidata `9dbff819` (tag
+> `uat-candidata-20261122d`) en Docker aislado: fila fuera explicada, versión 1.15.1/revisión 0052,
+> 14 comprobaciones en orden fijo, terminales de fallo y 320/390/escritorio sin desbordar. Evidencia:
+> [`docs/uat/A6/evidencia/uat31/`](../uat/A6/evidencia/uat31/pasada3c-9dbff819/).
 >
 > **Decisiones:** D-1…D-5 de §3 **ratificadas por el PO** al autorizar candidata/tag y A6 real
 > (2026-11-22).
