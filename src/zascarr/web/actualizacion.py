@@ -108,4 +108,16 @@ async def actualizar(
             id_esperado=resultado.id, ahora_epoch=None,
         )
         estado_texto = _ESTADOS.get(estado)
+        if estado is EstadoActualizacion.FALLIDA:
+            tipo = "warn"
+            mensaje = (
+                "La actualización no terminó bien. Revisa el estado del host "
+                "antes de reintentar."
+            )
+        elif estado is EstadoActualizacion.INCIERTA:
+            tipo = "warn"
+            mensaje = (
+                "No se pudo confirmar el resultado. No vuelvas a intentarlo: "
+                "revisa el estado del host antes de actuar."
+            )
     return _respuesta(request, mensaje, tipo, 200, estado_texto=estado_texto)

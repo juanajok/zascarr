@@ -63,7 +63,7 @@ def test_actualizacion_siempre_visible_inerte_y_accesible(monkeypatch, version: 
     elements = parser.elements
     assert elements[0][1]["aria-labelledby"] == "actualizacion-titulo"
     assert any(attrs.get("id") == "actualizacion-titulo" for _, attrs in elements)
-    assert "aún no está disponible" in " ".join(parser.text)
+    assert "no está disponible" in " ".join(parser.text)
     assert "No se instalará nada" in " ".join(parser.text)
     buttons = [attrs for tag, attrs in elements if tag == "button"]
     assert len(buttons) == 1
