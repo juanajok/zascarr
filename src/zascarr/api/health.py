@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
+from zascarr.services import salud_resumen
 from zascarr.services.seguridad import aviso_de_exposicion, estado_de_seguridad
 from zascarr.utils import lector_rar
 
@@ -430,6 +431,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         and disk_ok
     )
     status_str = "healthy" if all_ok else ("degraded" if core_ok else "unhealthy")
+    # UXA-08d (#1219): el menú lee este veredicto (sin sondear nada por su cuenta).
+    salud_resumen.registrar(status_str)
 
     # Si la VPN está en warning/stale, no baja el status global pero
     # añade "warnings" al payload para que sea VISIBLE (no silencioso).

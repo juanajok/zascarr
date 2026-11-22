@@ -35,6 +35,7 @@ from fastapi.responses import HTMLResponse
 from zascarr.config import get_settings
 from zascarr.database import async_session_factory
 from zascarr.services.navegacion import contadores
+from zascarr.services.salud_resumen import requiere_atencion
 from zascarr.services.seguridad import estado_de_seguridad
 from zascarr.web.menu import mas_tiene_aviso
 from zascarr.web.routes import crear_templates
@@ -56,10 +57,11 @@ _calculo_en_curso: asyncio.Task | None = None
 
 async def _datos() -> tuple:
     """Lo que se hace con la BD: abrir, consultar, LIBERAR. Si falla al cerrar, no se sirven números
-    de una sesión en estado dudoso. Más el estado de seguridad (sin E/S)."""
+    de una sesión en estado dudoso. Más el aviso (sin E/S): seguridad, o la última comprobación de
+    salud si dijo «Atención» o «Error» (UXA-08d; nunca sondea, solo lee el resumen cacheado)."""
     async with async_session_factory() as db:
         cuentas = await contadores(db)
-    return cuentas, bool(estado_de_seguridad()["atencion"])
+    return cuentas, bool(estado_de_seguridad()["atencion"]) or requiere_atencion()
 
 
 def _recoger(tarea: asyncio.Task) -> None:

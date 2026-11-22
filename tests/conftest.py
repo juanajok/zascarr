@@ -25,6 +25,15 @@ def _limpiar_cortesia():
 
 
 @pytest.fixture(autouse=True)
+def _limpiar_resumen_de_salud():
+    """El resumen de salud del menú (UXA-08d) es estado de módulo: no debe filtrarse entre tests."""
+    from zascarr.services import salud_resumen
+    salud_resumen.olvidar()
+    yield
+    salud_resumen.olvidar()
+
+
+@pytest.fixture(autouse=True)
 def _limpiar_cache_gcd():
     """La caché de búsquedas GCD es estado de módulo: no debe filtrarse entre tests."""
     from zascarr.services.gcd import limpiar_cache_busquedas
