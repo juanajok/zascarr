@@ -60,6 +60,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from zascarr.models import EDITION_KIND_A_FORMAT, File, Issue, IssueFormat, MetadataSource, Series
 from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.importer import build_library_path
+from zascarr.services.obra_unica import numero_y_formato_de_alta
 from zascarr.services.raices import (
     FotoDeRaices,
     RaizNoDisponibleError,
@@ -785,8 +786,11 @@ class AsignacionService:
                     return await self._abandonar(op, prop, Resultado(
                         EstadoResultado.COLISION_EDICION, "Ese número apareció como otra edición mientras se copiaba"))
                 if issue is None:
-                    issue = Issue(series_id=serie.id, issue_number=op["issue_number"],
-                                  locked_fields=["series_id", "issue_number"], format=IssueFormat(op["formato"]))
+                    numero_alta, formato_alta = numero_y_formato_de_alta(
+                        serie, op["issue_number"], IssueFormat(op["formato"]))
+                    issue = Issue(series_id=serie.id, issue_number=numero_alta,
+                                  locked_fields=["series_id", "issue_number"],
+                                  format=formato_alta)
                     s.add(issue)
                     await s.flush()
                 nombre_original = file.file_name

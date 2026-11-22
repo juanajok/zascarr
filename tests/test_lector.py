@@ -71,6 +71,43 @@ async def test_archivos_legibles_por_db(tmp_path):
     assert [a.id for a in filas] == [str(f.id), str(cbr.id)]
 
 
+def test_el_lector_reabre_en_la_pagina_guardada_tras_restaurar(tmp_path, monkeypatch):
+    """T-07-05/R-02: tras restaurar catálogo + archivos, el lector abre en la página guardada.
+
+    `reading_progress.current_page=3` no es un dato de pantalla que se pueda inventar: la ruta
+    lo lee de la base y lo pinta en `data-pagina`, en el contador y en el `src` de la imagen.
+    Es la comprobación de que la reapertura sobrevive al backup y a la restauración.
+    """
+    from zascarr.services.lector import SIN_SIGUIENTE, Siguiente
+    from zascarr.web import lector as wlector
+
+    async def _sin(*_a, **_k):
+        return Siguiente(SIN_SIGUIENTE)
+
+    async def _ack(*_a, **_k):
+        return True
+
+    monkeypatch.setattr(wlector, "siguiente_numero", _sin)
+    monkeypatch.setattr(wlector, "is_acknowledged", _ack)
+    f = _file(tmp_path)
+    issue = SimpleNamespace(id=f.issue_id, issue_number="1", series_id=uuid4())
+    serie = SimpleNamespace(id=issue.series_id, title="Serie", metadata_={},
+                            tradition=SimpleNamespace(value="american"))
+    progreso = SimpleNamespace(current_page=3, status=ReadingStatus.READING)
+    db = FakeSession(get_map={(File, f.id): f, (Issue, issue.id): issue,
+                              (Series, serie.id): serie},
+                     exec_queue=[FakeExecResult([progreso])])
+    with use_fake_session(db) as client:
+        r = client.get(f"/ui/leer/{f.id}")
+        assert r.status_code == 200
+        assert 'data-pagina="3"' in r.text and 'data-total="3"' in r.text
+        assert f'src="/ui/leer/{f.id}/pagina/3"' in r.text
+        assert "Página 3 de 3" in r.text
+        # La página guardada se sirve de verdad, no solo se anuncia en el HTML.
+        p = client.get(f"/ui/leer/{f.id}/pagina/3")
+        assert p.status_code == 200 and p.headers["content-type"].startswith("image/jpeg")
+
+
 def test_pantalla_y_pagina(tmp_path, monkeypatch):
     from zascarr.services.lector import SIN_SIGUIENTE, Siguiente
     from zascarr.web import lector as wlector

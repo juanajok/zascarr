@@ -1,0 +1,241 @@
+{
+  "generado": "2026-11-22T13:12:37+01:00",
+  "S0": {
+    "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+    "tree_clean": true,
+    "alembic": "0052",
+    "counts": {
+      "series": 2,
+      "issues": 2,
+      "files": 2,
+      "reading_progress": 1,
+      "runtime_settings": 1,
+      "library_roots": 1
+    },
+    "testigo": {
+      "file_size_bytes": 2812,
+      "file_mtime_ns": 1795349115750528900,
+      "sha256_hash": "9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44",
+      "issue_id": "a6000000-0000-4000-8000-000000000011"
+    },
+    "progreso": {
+      "current_page": 3,
+      "status": "reading",
+      "file_id": "a6000000-0000-4000-8000-000000000021",
+      "last_read_at_epoch": 1795349136
+    },
+    "b0": {
+      "sha256": "974d82c1d673760b2455bcd12a2e6d14519a058fd3c3ed33a1342318966829b1",
+      "manifest_sha256": "24500fb9273337a636d271356600c024d4a6be29e08acd99c1649731623cb7f3",
+      "status_json_sha256": "88323a7880cf3ada81d912112caffb989719d56586e7a8b15e6f6d58222a94d6",
+      "copias_json_sha256": "61facd4e0c1a42309f40819bc09462075d5659fc7100f97211a71e9e7b526ac3",
+      "copias_ofrece_b0": 1
+    },
+    "cbz": {
+      "sha256": "9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44",
+      "mtime_ns": 1795349115750528900,
+      "size": 2812
+    },
+    "health": {
+      "status": "degraded",
+      "version": "1.15.1",
+      "checks": {
+        "database": "ok",
+        "transmission": "disabled",
+        "amule": "disabled",
+        "vpn": "unknown",
+        "backup": "error",
+        "restore": "error",
+        "disk": "ok"
+      }
+    },
+    "containers": {
+      "zascarr": "running|0|2026-11-22T12:08:19.535094959Z",
+      "postgres": "running|0|2026-11-22T12:03:44.98966641Z"
+    }
+  },
+  "S1": {
+    "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+    "tree_clean": true,
+    "alembic": "0052",
+    "counts": {
+      "series": 2,
+      "issues": 2,
+      "files": 2,
+      "reading_progress": 1,
+      "runtime_settings": 1,
+      "library_roots": 1
+    },
+    "testigo": {
+      "file_size_bytes": 2812,
+      "file_mtime_ns": 1795349115750528900,
+      "sha256_hash": "9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44",
+      "issue_id": "a6000000-0000-4000-8000-000000000011"
+    },
+    "progreso": {
+      "current_page": 3,
+      "status": "reading",
+      "file_id": "a6000000-0000-4000-8000-000000000021",
+      "last_read_at_epoch": 1795349136
+    },
+    "b0": {
+      "sha256": "974d82c1d673760b2455bcd12a2e6d14519a058fd3c3ed33a1342318966829b1",
+      "manifest_sha256": "24500fb9273337a636d271356600c024d4a6be29e08acd99c1649731623cb7f3",
+      "status_json_sha256": "88323a7880cf3ada81d912112caffb989719d56586e7a8b15e6f6d58222a94d6",
+      "copias_json_sha256": "61facd4e0c1a42309f40819bc09462075d5659fc7100f97211a71e9e7b526ac3",
+      "copias_ofrece_b0": 1
+    },
+    "cbz": {
+      "sha256": "9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44",
+      "mtime_ns": 1795349115750528900,
+      "size": 2812
+    },
+    "health": {
+      "status": "degraded",
+      "version": "1.15.1",
+      "checks": {
+        "database": "ok",
+        "transmission": "disabled",
+        "amule": "disabled",
+        "vpn": "unknown",
+        "backup": "error",
+        "restore": "error",
+        "disk": "ok"
+      }
+    },
+    "containers": {
+      "zascarr": "running|0|2026-11-22T12:08:19.535094959Z",
+      "postgres": "running|0|2026-11-22T12:03:44.98966641Z"
+    }
+  },
+  "S2": {
+    "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+    "tree_clean": true,
+    "alembic": "0052",
+    "counts": {
+      "series": 2,
+      "issues": 2,
+      "files": 2,
+      "reading_progress": 1,
+      "runtime_settings": 1,
+      "library_roots": 1
+    },
+    "testigo": {
+      "file_size_bytes": 2812,
+      "file_mtime_ns": 1795349115750528900,
+      "sha256_hash": "9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44",
+      "issue_id": "a6000000-0000-4000-8000-000000000011"
+    },
+    "progreso": {
+      "current_page": 3,
+      "status": "reading",
+      "file_id": "a6000000-0000-4000-8000-000000000021",
+      "last_read_at_epoch": 1795349136
+    },
+    "b0": {
+      "sha256": "974d82c1d673760b2455bcd12a2e6d14519a058fd3c3ed33a1342318966829b1",
+      "manifest_sha256": "24500fb9273337a636d271356600c024d4a6be29e08acd99c1649731623cb7f3",
+      "status_json_sha256": "88323a7880cf3ada81d912112caffb989719d56586e7a8b15e6f6d58222a94d6",
+      "copias_json_sha256": "61facd4e0c1a42309f40819bc09462075d5659fc7100f97211a71e9e7b526ac3",
+      "copias_ofrece_b0": 1
+    },
+    "cbz": {
+      "sha256": "9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44",
+      "mtime_ns": 1795349115750528900,
+      "size": 2812
+    },
+    "health": {
+      "status": "degraded",
+      "version": "1.15.1",
+      "checks": {
+        "database": "ok",
+        "transmission": "disabled",
+        "amule": "disabled",
+        "vpn": "unknown",
+        "backup": "error",
+        "restore": "error",
+        "disk": "ok"
+      }
+    },
+    "containers": {
+      "zascarr": "running|0|2026-11-22T12:09:12.010132684Z",
+      "postgres": "running|0|2026-11-22T12:03:44.98966641Z"
+    }
+  },
+  "S3": {
+    "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+    "tree_clean": true,
+    "alembic": "0052",
+    "counts": {
+      "series": 2,
+      "issues": 2,
+      "files": 2,
+      "reading_progress": 1,
+      "runtime_settings": 1,
+      "library_roots": 1
+    },
+    "testigo": {
+      "file_size_bytes": 2812,
+      "file_mtime_ns": 1795349115750528900,
+      "sha256_hash": "9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44",
+      "issue_id": "a6000000-0000-4000-8000-000000000011"
+    },
+    "progreso": {
+      "current_page": 3,
+      "status": "reading",
+      "file_id": "a6000000-0000-4000-8000-000000000021",
+      "last_read_at_epoch": 1795349136
+    },
+    "b0": {
+      "sha256": "974d82c1d673760b2455bcd12a2e6d14519a058fd3c3ed33a1342318966829b1",
+      "manifest_sha256": "24500fb9273337a636d271356600c024d4a6be29e08acd99c1649731623cb7f3",
+      "status_json_sha256": "88323a7880cf3ada81d912112caffb989719d56586e7a8b15e6f6d58222a94d6",
+      "copias_json_sha256": "61facd4e0c1a42309f40819bc09462075d5659fc7100f97211a71e9e7b526ac3",
+      "copias_ofrece_b0": 1
+    },
+    "cbz": {
+      "sha256": "9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44",
+      "mtime_ns": 1795349115750528900,
+      "size": 2812
+    },
+    "health": {
+      "status": "degraded",
+      "version": "1.15.1",
+      "checks": {
+        "database": "ok",
+        "transmission": "disabled",
+        "amule": "disabled",
+        "vpn": "unknown",
+        "backup": "error",
+        "restore": "error",
+        "disk": "ok"
+      }
+    },
+    "containers": {
+      "zascarr": "running|0|2026-11-22T12:09:34.499441422Z",
+      "postgres": "running|0|2026-11-22T12:03:44.98966641Z"
+    }
+  },
+  "comparaciones": {
+    "S0_vs_S1": {
+      "codigo": true,
+      "bd": true,
+      "testigo": true,
+      "progreso": true,
+      "salud": true,
+      "copia": true,
+      "archivo": true,
+      "contenedores": true
+    },
+    "S2_vs_S3": {
+      "codigo": true,
+      "bd": true,
+      "testigo": true,
+      "progreso": true,
+      "salud": true,
+      "copia": true,
+      "archivo": true,
+      "contenedores": false
+    }
+  }
+}

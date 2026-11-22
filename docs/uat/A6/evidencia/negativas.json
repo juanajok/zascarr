@@ -1,0 +1,177 @@
+{
+  "filas": [
+    {
+      "id": "N-01",
+      "ts": "20261122_130801",
+      "rc": 1,
+      "eventos_raw": 2,
+      "eventos_latido": 2,
+      "eventos_propios": 0,
+      "resultado": "fallida",
+      "error": "copia_no_valida",
+      "comprobacion": "sha256_copia",
+      "base_en_su_sitio": true,
+      "intento_json": "50be24773dfc345d",
+      "copia_version": {
+        "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "app_version": "1.15.1",
+        "alembic": "0052"
+      }
+    },
+    {
+      "id": "N-02",
+      "ts": "20261122_130802",
+      "rc": 1,
+      "eventos_raw": 0,
+      "eventos_latido": 0,
+      "eventos_propios": 0,
+      "resultado": "fallida",
+      "error": "copia_no_valida",
+      "comprobacion": "gzip_cabecera",
+      "base_en_su_sitio": true,
+      "intento_json": "bcd5d5bff5837431",
+      "copia_version": {
+        "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "app_version": "1.15.1",
+        "alembic": "0052"
+      }
+    },
+    {
+      "id": "N-03a",
+      "ts": "20261122_130803",
+      "rc": 1,
+      "eventos_raw": 0,
+      "eventos_latido": 0,
+      "eventos_propios": 0,
+      "resultado": "fallida",
+      "error": "copia_no_valida",
+      "comprobacion": "tablas_dump",
+      "base_en_su_sitio": true,
+      "intento_json": "225bfb9ad5497a5a",
+      "copia_version": {
+        "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "app_version": "1.15.1",
+        "alembic": "0052"
+      }
+    },
+    {
+      "id": "N-03b",
+      "ts": "20261122_130804",
+      "rc": 1,
+      "eventos_raw": 0,
+      "eventos_latido": 0,
+      "eventos_propios": 0,
+      "resultado": "fallida",
+      "error": "copia_no_valida",
+      "comprobacion": "tablas_dump",
+      "base_en_su_sitio": true,
+      "intento_json": "7403de33598e09da",
+      "copia_version": {
+        "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "app_version": "1.15.1",
+        "alembic": "0052"
+      }
+    }
+  ],
+  "intentos_jsonl": [
+    {
+      "schema": 1,
+      "intento": "50be24773dfc345d",
+      "copia": "backup-20261122_130801",
+      "copia_epoch": 1795349281,
+      "copia_version": {
+        "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "app_version": "1.15.1",
+        "alembic": "0052"
+      },
+      "inicio_epoch": 1795349307,
+      "fin_epoch": 1795349307,
+      "fase": "verificando",
+      "resultado": "fallida",
+      "error": "copia_no_valida",
+      "comprobacion": "sha256_copia",
+      "base_en_su_sitio": true
+    },
+    {
+      "schema": 1,
+      "intento": "bcd5d5bff5837431",
+      "copia": "backup-20261122_130802",
+      "copia_epoch": 1795349282,
+      "copia_version": {
+        "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "app_version": "1.15.1",
+        "alembic": "0052"
+      },
+      "inicio_epoch": 1795349309,
+      "fin_epoch": 1795349310,
+      "fase": "verificando",
+      "resultado": "fallida",
+      "error": "copia_no_valida",
+      "comprobacion": "gzip_cabecera",
+      "base_en_su_sitio": true
+    },
+    {
+      "schema": 1,
+      "intento": "225bfb9ad5497a5a",
+      "copia": "backup-20261122_130803",
+      "copia_epoch": 1795349283,
+      "copia_version": {
+        "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "app_version": "1.15.1",
+        "alembic": "0052"
+      },
+      "inicio_epoch": 1795349312,
+      "fin_epoch": 1795349312,
+      "fase": "verificando",
+      "resultado": "fallida",
+      "error": "copia_no_valida",
+      "comprobacion": "tablas_dump",
+      "base_en_su_sitio": true
+    },
+    {
+      "schema": 1,
+      "intento": "7403de33598e09da",
+      "copia": "backup-20261122_130804",
+      "copia_epoch": 1795349284,
+      "copia_version": {
+        "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "app_version": "1.15.1",
+        "alembic": "0052"
+      },
+      "inicio_epoch": 1795349314,
+      "fin_epoch": 1795349314,
+      "fase": "verificando",
+      "resultado": "fallida",
+      "error": "copia_no_valida",
+      "comprobacion": "tablas_dump",
+      "base_en_su_sitio": true
+    },
+    {
+      "schema": 1,
+      "intento": "b728b7c350e0d35c",
+      "copia": "backup-20261122_130727",
+      "copia_epoch": 1795349247,
+      "copia_version": {
+        "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+        "app_version": "1.15.1",
+        "alembic": "0052"
+      },
+      "inicio_epoch": 1795349360,
+      "fin_epoch": 1795349379,
+      "fase": "arrancando",
+      "resultado": "hecha",
+      "error": null,
+      "comprobacion": null,
+      "base_en_su_sitio": true
+    }
+  ]
+}

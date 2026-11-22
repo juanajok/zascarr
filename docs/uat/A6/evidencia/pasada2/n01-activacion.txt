@@ -1,0 +1,1 @@
+activado_desde_app=True True

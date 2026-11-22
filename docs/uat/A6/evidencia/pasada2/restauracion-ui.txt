@@ -1,0 +1,4 @@
+ZASCARR_PRUEBAS activo: el cerrojo no es el de producción.
+ERROR: El SHA-256 del dump no coincide con el manifiesto.
+ZASCARR_PRUEBAS activo: el cerrojo no es el de producción.
+ERROR: El SHA-256 del dump no coincide con el manifiesto.

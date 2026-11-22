@@ -129,7 +129,7 @@ def _primarios_dentro_y_fuera_de_details(html: str) -> tuple[list[str], list[str
 def vista(*, adopcion=EstadoAdopcion.SIN_TEBEOS, registrados=0, sin_clasificar=0, seguidas=0,
           informe=None, legal=False, fuente=False, series=0, con_archivos=0, con_recuento=0,
           huecos=0, completitud=None, ultimas=(), desglose=None, copias=0,
-          continuar=None) -> VistaInicio:
+          continuar=None, copias_registradas=True) -> VistaInicio:
     """`desglose` por defecto: lo registrado que no está por revisar, clasificado."""
     if desglose is None:
         desglose = Desglose(total=registrados, clasificados=max(registrados - sin_clasificar, 0),
@@ -137,7 +137,7 @@ def vista(*, adopcion=EstadoAdopcion.SIN_TEBEOS, registrados=0, sin_clasificar=0
     pasos = calcular_primeros_pasos(EstadoInicio(
         adopcion=adopcion, archivos_registrados=registrados, archivos_sin_clasificar=sin_clasificar,
         series_seguidas=seguidas, informe=informe, aviso_legal_aceptado=legal,
-        hay_fuente_de_busqueda=fuente))
+        hay_fuente_de_busqueda=fuente, copias_registradas=copias_registradas))
     resumen = ResumenBiblioteca(
         total_series=series, series_con_archivos=con_archivos, archivos_registrados=registrados,
         series_con_recuento=con_recuento, huecos_pendientes=huecos, completitud=completitud,
@@ -473,3 +473,36 @@ class TestUltimasSeries:
 
     def test_sin_series_explica_cuando_apareceran(self):
         assert "Aún no hay series con archivos" in pagina(vista())
+
+
+# ── UXA-08e (#1224): paso «Configura las copias de seguridad» ───────────────────────────────
+
+
+def test_sin_registro_de_copias_el_inicio_ofrece_configurarlas():
+    html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=10, copias_registradas=False))
+    assert "Configura las copias de seguridad" in html
+    assert 'href="/estado#copias"' in html
+    assert "en Estado te decimos cómo" in html
+
+
+def test_con_registro_de_copias_el_paso_no_aparece():
+    html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=10, copias_registradas=True))
+    assert "Configura las copias de seguridad" not in html
+    assert "/estado#copias" not in html
+
+
+def test_el_paso_de_copias_no_crea_un_segundo_boton_principal():
+    """Con lo demás hecho, el paso opcional de copias es el principal: sigue habiendo uno solo."""
+    html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=10, seguidas=2, legal=True,
+                        fuente=True, informe=InformeDisco(FECHA, 10, 10),
+                        copias_registradas=False))
+    dentro, fuera = _primarios_dentro_y_fuera_de_details(html)
+    assert (dentro + fuera).count("/estado#copias") == 1
+    assert len(dentro + fuera) == 1
+
+
+def test_con_tebeos_por_clasificar_el_paso_de_copias_no_se_lleva_el_boton_principal():
+    html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=10, sin_clasificar=3,
+                        copias_registradas=False))
+    dentro, fuera = _primarios_dentro_y_fuera_de_details(html)
+    assert "/estado#copias" not in dentro + fuera

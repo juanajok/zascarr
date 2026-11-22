@@ -29,6 +29,18 @@ CAMPOS_SERIE = (
     "language", "edition_kind",
 )
 CAMPOS_NUMERO = ("issue_number", "title", "release_date", "format", "synopsis")
+# #1189: un lock solo tiene sentido si el nombre existe de verdad. Se admite
+# cualquier columna del modelo (incluidas `genres`, `tags`, `characters` y
+# `credits`, que el enricher respeta) y los nombres virtuales de la edición
+# (`publisher`), que no son columna pero sí los usa el formulario.
+CAMPOS_VIRTUALES_SERIE = frozenset({"genres", "tags", "characters"})
+CAMPOS_VIRTUALES_NUMERO = frozenset({"characters", "tags", "credits"})
+CAMPOS_BLOQUEABLES_SERIE = (
+    frozenset(Series.__table__.columns.keys()) | CAMPOS_VIRTUALES_SERIE | frozenset(CAMPOS_SERIE)
+)
+CAMPOS_BLOQUEABLES_NUMERO = (
+    frozenset(Issue.__table__.columns.keys()) | CAMPOS_VIRTUALES_NUMERO | frozenset(CAMPOS_NUMERO)
+)
 
 MAX_TITULO = 500
 MAX_TEXTO = 10_000
@@ -223,7 +235,7 @@ async def guardar_serie(
 
 
 async def desbloquear_serie(db: AsyncSession, series_id: UUID, campo: str) -> bool:
-    if campo not in CAMPOS_SERIE:
+    if campo not in CAMPOS_BLOQUEABLES_SERIE:
         return False
     serie = (await db.execute(select(Series).where(Series.id == series_id))).scalar_one_or_none()
     if serie is None:
@@ -307,7 +319,7 @@ async def guardar_numero(
 
 
 async def desbloquear_numero(db: AsyncSession, series_id: UUID, issue_id: UUID, campo: str) -> bool:
-    if campo not in CAMPOS_NUMERO:
+    if campo not in CAMPOS_BLOQUEABLES_NUMERO:
         return False
     issue = (await db.execute(
         select(Issue).where(Issue.id == issue_id, Issue.series_id == series_id)

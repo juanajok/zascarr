@@ -41,6 +41,15 @@ if [[ "$*" == *"pg_database_size"* ]]; then
     echo "${FAKE_DB_SIZE_KB:-1024}"
     exit 0
 fi
+if [[ "$*" == *"printenv BUILD_SHA"* ]]; then
+    # Identidad de la imagen (Dockerfile, ADR 0025) para `version_de_la_copia` (D-2). Sin valor
+    # o con un valor hostil, el script debe escribir `null` y no fallar la copia.
+    if [[ -n "${FAKE_BUILD_SHA:-}" ]]; then
+        echo "${FAKE_BUILD_SHA}"
+        exit 0
+    fi
+    exit 1
+fi
 if [[ "$*" == *"psql"* ]]; then
     # Como `docker compose exec`: consume stdin. Sin esto, el stub no reproduce
     # el bucle que pierde nombres al llamar a escribir_manifiesto.
@@ -116,6 +125,9 @@ def _preparar(tmp_path: Path) -> dict:
     for nombre in ("backup.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh", "_cerrojo.sh"):
         shutil.copy2(SCRIPTS / nombre, repo / "scripts" / nombre)
     (repo / "docker-compose.yml").write_text("", encoding="utf-8")
+    # Fuente de `app_version` en `version_de_la_copia` (D-2): la del paquete, no el literal de la app.
+    (repo / "pyproject.toml").write_text(
+        '[project]\nname = "zascarr"\nversion = "1.15.1"\n', encoding="utf-8")
     _git(repo, "init", "-q")
     _git(repo, "add", ".")
     _git(repo, "-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "init")
@@ -224,6 +236,54 @@ class TestBackupScript:
         assert estado["offsite"] is True
         assert estado["sha256"] == datos["sha256"]
         assert (ctx["status"] / "status.json").stat().st_mode & 0o777 == 0o644
+
+    def test_el_manifiesto_declara_la_version_de_la_copia(self, tmp_path):
+        """T-07-01/D-2: tupla {head, build_sha, app_version, alembic}, coherente con los campos planos."""
+        ctx = _preparar(tmp_path)
+        build = "a" * 40
+        r = _ejecutar(ctx, extra_env={"FAKE_BUILD_SHA": build})
+        assert r.returncode == 0, r.stdout + r.stderr
+        locales = list(ctx["backup"].glob("backup_*.sql.gz"))
+        assert len(locales) == 1
+        manifiesto = ctx["backup"] / f"MANIFIESTO-{locales[0].name.removesuffix('.sql.gz')}.json"
+        datos = json.loads(manifiesto.read_text(encoding="utf-8"))
+        head = _git(ctx["repo"], "rev-parse", "HEAD").stdout.strip()
+        assert datos["version_de_la_copia"] == {
+            "head": head, "build_sha": build, "app_version": "1.15.1", "alembic": "0020",
+        }
+        # Duplicidad controlada (§4.1): los campos planos no se eliminan y no pueden divergir.
+        assert datos["version_de_la_copia"]["head"] == datos["codigo_desplegado_sha_completo"]
+        assert datos["version_de_la_copia"]["alembic"] == datos["alembic"]
+        # Y el offsite lleva el mismo manifiesto: la versión no se pierde fuera del disco.
+        fuera = ctx["offsite"] / manifiesto.name
+        assert json.loads(fuera.read_text(encoding="utf-8"))["version_de_la_copia"] == \
+            datos["version_de_la_copia"]
+
+    def test_sin_build_sha_la_version_es_null_y_la_copia_no_falla(self, tmp_path):
+        """D-2/R-04: sin BUILD_SHA (app parada o build manual) ⇒ null; la copia no se aborta."""
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx)
+        assert r.returncode == 0, r.stdout + r.stderr
+        locales = list(ctx["backup"].glob("backup_*.sql.gz"))
+        datos = json.loads(
+            (ctx["backup"] / f"MANIFIESTO-{locales[0].name.removesuffix('.sql.gz')}.json")
+            .read_text(encoding="utf-8"))
+        version = datos["version_de_la_copia"]
+        assert version["build_sha"] is None
+        assert version["head"]
+        assert version["alembic"] == "0020" and version["app_version"] == "1.15.1"
+
+    def test_un_build_sha_hostil_no_llega_al_manifiesto(self, tmp_path):
+        """D-2: cada valor se valida con su regex; lo que no cumple se escribe como `null`."""
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_BUILD_SHA": 'no-es-un-sha"; rm -rf /'})
+        assert r.returncode == 0, r.stdout + r.stderr
+        locales = list(ctx["backup"].glob("backup_*.sql.gz"))
+        datos = json.loads(
+            (ctx["backup"] / f"MANIFIESTO-{locales[0].name.removesuffix('.sql.gz')}.json")
+            .read_text(encoding="utf-8"))
+        assert datos["version_de_la_copia"]["build_sha"] is None
+        assert "rm -rf" not in json.dumps(datos)
 
     def test_pg_dump_falla_no_publica_copia(self, tmp_path):
         ctx = _preparar(tmp_path)

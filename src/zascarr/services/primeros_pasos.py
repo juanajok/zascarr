@@ -85,6 +85,7 @@ class ClavePaso(StrEnum):
     REVISAR = "revisar"
     SERIES = "series"
     DESCARGAS = "descargas"
+    COPIAS = "copias"
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,9 @@ class EstadoInicio:
     informe: InformeDisco | None
     aviso_legal_aceptado: bool
     hay_fuente_de_busqueda: bool
+    #: ¿Existe el registro que escribe la copia de seguridad del host? (UXA-08e, #1224). Por defecto
+    #: sí: quien no lo informa no ve el paso.
+    copias_registradas: bool = True
 
 
 @dataclass(frozen=True)
@@ -229,10 +233,25 @@ def _paso_descargas(e: EstadoInicio) -> Paso:
                 EstadoPaso.OPCIONAL, False, "/ui/ajustes", "Configurar")
 
 
+def _paso_copias(e: EstadoInicio) -> Paso | None:
+    """UXA-08e (#1224): mientras el host no haya escrito ningún registro de copias, se ofrece activarlas.
+
+    Es un paso de puesta en marcha **opcional** (no bloquea «lo básico»): no se resuelve desde la
+    app, así que no es un aviso ni mueve el punto del menú. Desaparece solo cuando el registro
+    existe; si luego una copia falla, lo dicen el punto del menú y Estado, no este paso. El cómo
+    vive solo en Estado (`#copias`), para que no haya dos textos que se desincronicen."""
+    if e.copias_registradas:
+        return None
+    return Paso(ClavePaso.COPIAS, "Configura las copias de seguridad",
+                "Aún no hay copias de tus datos. Se activan una sola vez, en el equipo donde corre "
+                "ZascArr: en Estado te decimos cómo. No cambia tus tebeos.",
+                EstadoPaso.OPCIONAL, False, "/estado#copias", "Ver cómo →")
+
+
 def calcular_primeros_pasos(estado: EstadoInicio) -> PrimerosPasos:
     """Pasos con su estado y el paso principal. Pura: mismos datos, mismo resultado."""
     crudos = [_paso_biblioteca(estado), _paso_revisar(estado),
-              _paso_series(estado), _paso_descargas(estado)]
+              _paso_series(estado), _paso_descargas(estado), _paso_copias(estado)]
     pasos: list[Paso] = []
     ya_hay_siguiente = False
     for paso in crudos:
