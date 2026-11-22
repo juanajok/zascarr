@@ -52,7 +52,7 @@ def fila(uuid: str, issue: str, raiz: pathlib.Path, nombre: str) -> str:
     archivo = raiz / nombre
     st = archivo.stat()
     ruta = f"{LIBRARY_PATH}/{raiz.name}/{nombre}"
-    return (f"('{uuid}','{issue}',{root_id},'{ruta}','{nombre}','cbz',"
+    return (f"('{uuid}','{issue}','{root_id}','{ruta}','{nombre}','cbz',"
             f"{st.st_size},{st.st_mtime_ns},'{sha256(archivo)}')")
 
 

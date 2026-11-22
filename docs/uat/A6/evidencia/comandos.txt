@@ -118,3 +118,23 @@ PYTHONPATH="$RT/pylib" python3 "$RT/capturas.py"
 # docs/design/uatp06-07-recuperacion.md §7.6; se omite el literal aquí para que la propia
 # comprobación no se autoincida).
 #   Resultado: 0 coincidencias.
+
+## 15. Pasada 2 (task-68): T1 baseline (V-03) y N-01 por interfaz
+# T1 (D-3 aprobada por el PO): main previo a #1221, con lector y restauración.
+git -C "$A6" tag -a uat-base-20261122 -m "A6 baseline T1 2026-11-22 (D-3)" ab33c14737a6cdb204c6b989705306303de75c91
+git -C "$A6" rev-parse 'uat-base-20261122^{commit}'      # ab33c14737a6cdb204c6b989705306303de75c91
+git -C "$A6" cat-file -t uat-base-20261122                 # tag
+git -C "$A6" worktree add --detach "$WT_T1" ab33c14737a6cdb204c6b989705306303de75c91
+docker build -f "$WT_T1/Dockerfile" --build-arg ZASCARR_BUILD_SHA=ab33c14737a6cdb204c6b989705306303de75c91 -t zascarr-a6-t1:latest "$WT_T1"
+# Restaurar B0' con la candidata (hecha, 2/2/2) y arrancar T1 sobre el catálogo restaurado:
+docker compose -f "$RT/docker-compose.t1.yml" --env-file "$RT/.env" up -d --force-recreate zascarr
+docker compose ... exec -T zascarr printenv BUILD_SHA      # ab33c14737a6cdb204c6b989705306303de75c91
+docker compose ... exec -T postgres psql ... -At -F'|' -c "select ..."   # 2|2|2|1|1
+# N-01 por la interfaz con el auxiliar ops real (arnés de 3 costuras: systemctl, nombre del
+# contenedor del verificador y lista de copias; ver evidencia/pasada2/n01-ui-resumen.txt):
+python3 "$RT/ops_runner.py" &                                # socket real + zascarr_ops.procesar
+curl -b "$COOKIE" -o confirmar.html -w '%{http_code}' "$APP_URL/ui/copias/restaurar/backup-20261122_131744"   # 200
+curl -b "$COOKIE" -H "Origin: $APP_URL" -X POST "$APP_URL/ui/copias/restaurar" \
+  --data-urlencode "copia=backup-20261122_131744" --data-urlencode "contrasena=<secreto>" --data-urlencode "entiendo=si"
+curl -b "$COOKIE" "$APP_URL/ui/copias/estado" | grep -o 'Esa copia está dañada[^<]*'
+diff -u "$RT/evidencia/n01-antes.txt" "$RT/evidencia/n01-despues.txt" && echo SIN CAMBIOS

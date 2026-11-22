@@ -2,11 +2,12 @@
 # Generado: 2026-11-22T13:13:29+01:00
 # Entorno: E-A6 (alias; sin hostname, IP ni ruta)
 # Candidata: tag=uat-candidata-20261122 tag_commit=2c773e53c235812adabc76e76cd3b111d04d4026 build_sha=2c773e53c235812adabc76e76cd3b111d04d4026 app_version=1.15.1 alembic=0052
-# Baseline: tag=no_definido motivo=pendiente_po (decisión D-3 no aprobada por el PO)
+# Baseline: tag=uat-base-20261122 tag_commit=ab33c14737a6cdb204c6b989705306303de75c91 build_sha=ab33c14737a6cdb204c6b989705306303de75c91 app_version=1.15.1 alembic=0052 (D-3 aprobada por el PO; pasada 2)
 # Tag antiguo: v1.15.1 (sin lector ni restauración; alembic_max=0016)
 # Variables saneadas: A6=<repo candidato>; RT=<entorno E-A6>; APP_URL=http://<loopback>:18000; COOKIE=<cookie de sesión, no publicada>
 # Aislamiento: proyecto Compose=zascarr-a6; puertos=<loopback>:15432 y :18000; datos/volúmenes bajo RT; instalación real y Pi no tocadas.
 # Cuerpo: comandos con rutas saneadas y salida saneada; no se publican secretos, rutas absolutas del host ni nombres reales.
+# Pasada 2 (task-68): V-03 ejecutado; N-01 por interfaz ejecutado con el auxiliar ops real y 3 costuras de arnés.
 
 ## 0. Entorno y aislamiento
 $ docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" config --format json | jq -r '.name, (.services.postgres.ports[0].published), (.services.zascarr.ports[0].published), .services.postgres.container_name, .services.zascarr.container_name'
@@ -189,11 +190,55 @@ ok
 # OK: 25 comprobaciones obligatorias del catálogo con CHECK (V-03 incluida, como NOT RUN);
 # N-01-interfaz es una línea extra declarada NOT RUN.
 
+## Ampliación (pasada 2, task-68) — V-03 y N-01 por interfaz
+$ git -C "$A6" tag -a uat-base-20261122 -m "A6 baseline T1 2026-11-22 (D-3)" ab33c14737a6cdb204c6b989705306303de75c91
+$ git -C "$A6" rev-parse 'uat-base-20261122^{commit}'
+ab33c14737a6cdb204c6b989705306303de75c91
+$ git -C "$A6" cat-file -t uat-base-20261122
+tag
+$ docker build --build-arg ZASCARR_BUILD_SHA=ab33c14737a6cdb204c6b989705306303de75c91 -t zascarr-a6-t1:latest "$WT_T1"
+# (imagen construida desde el árbol de trabajo T1 en ab33c14737a6…)
+$ docker compose -f "$RT/docker-compose.t1.yml" --env-file "$RT/.env" up -d --force-recreate zascarr
+$ docker compose ... exec -T zascarr printenv BUILD_SHA
+ab33c14737a6cdb204c6b989705306303de75c91
+$ docker compose ... exec -T postgres psql ... -At -c "select version_num from alembic_version"
+0052
+$ docker compose ... exec -T postgres psql ... -At -F'|' -c "select (select count(*) from series),(select count(*) from issues),(select count(*) from files),(select count(*) from reading_progress),(select count(*) from library_roots)"
+2|2|2|1|1
+$ docker compose ... exec -T postgres psql ... -At -F'|' -c "select file_size_bytes,file_mtime_ns,sha256_hash from files where id='<FILE>'"
+2812|1795349854081043900|9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44
+$ docker compose ... exec -T postgres psql ... -At -F'|' -c "select file_id,current_page,status from reading_progress where issue_id='<NUMERO>'"
+<FILE>|3|reading
+$ curl -fsS -b "$COOKIE" "$APP_URL/ui/series/<SERIE>/numero/<NUMERO>" | grep -o 'Continuar (pág\. 3)'
+Continuar (pág. 3)
+$ curl -fsS -b "$COOKIE" "$APP_URL/ui/leer/<FILE>" | grep -o 'data-total="6" data-pagina="3"'
+data-total="6" data-pagina="3"
+$ curl -fsS -b "$COOKIE" "$APP_URL/ui/leer/<FILE>/pagina/3" | sha256sum
+5dea59a8fe6656de00e063399166d3f83a5d0987a232da857dc10b738ddb261e  -
+# N-01 por la interfaz (arnés con el auxiliar ops real; 3 costuras por no haber systemd/root):
+$ curl -b "$COOKIE" -o confirmar.html -w '%{http_code}' "$APP_URL/ui/copias/restaurar/backup-20261122_131744"
+200
+$ curl -b "$COOKIE" -H "Origin: $APP_URL" -X POST "$APP_URL/ui/copias/restaurar" --data-urlencode "copia=backup-20261122_131744" --data-urlencode "contrasena=<secreto>" --data-urlencode "entiendo=si"
+# → 200 «Restauración en marcha. ZascArr se reiniciará en uno o dos minutos.»
+$ jq -c '{resultado,error,comprobacion,base_en_su_sitio,intento}' "$RT/data/backup-status/ops-restaurar.json"
+{"resultado":"fallida","error":"copia_no_valida","comprobacion":"sha256_copia","base_en_su_sitio":true,"intento":"03475cfb45683898"}
+$ curl -b "$COOKIE" "$APP_URL/ui/copias/estado" | grep -o 'Esa copia está dañada[^<]*'
+Esa copia está dañada, así que no se ha usado. Elige otra.
+$ diff -u "$RT/evidencia/n01-antes.txt" "$RT/evidencia/n01-despues.txt" && echo SIN CAMBIOS
+SIN CAMBIOS
+$ wc -l < "$RT/evidencia/eventos-N01-ui.txt"
+2
+# 2 eventos crudos = exec_create/exec_start de psql (verificación de contraseña, solo lectura);
+# eventos del script de restauración = 0. El host aislado no tiene systemd/root: el arnés sustituye
+# systemctl por un lanzador, el contenedor del verificador y la lista de copias (documentado en
+# evidencia/pasada2/n01-ui-resumen.txt).
+
 ## Catálogo de comprobaciones (formato §7.3)
 CHECK V-01 PASS tag=uat-candidata-20261122 tag_commit=2c773e53c235812adabc76e76cd3b111d04d4026 head=2c773e53c235812adabc76e76cd3b111d04d4026 build_sha=2c773e53c235812adabc76e76cd3b111d04d4026 app_version=1.15.1 alembic=0052
 CHECK V-02 PASS tag=v1.15.1 tag_commit=4f6ccdd310f5a644d19bdc1293327ac60d531b00 lector=ausente ops_host=ausente alembic_max=0016
-CHECK V-03 NOT RUN motivo=pendiente_po
-CHECK N-01-interfaz NOT RUN motivo=no_aplica
+CHECK V-03 PASS tag=uat-base-20261122 tag_commit=ab33c14737a6cdb204c6b989705306303de75c91 build_sha=ab33c14737a6cdb204c6b989705306303de75c91 app_version=1.15.1 alembic=0052 series=2 issues=2 files=2 reading_progress=1
+CHECK N-01-interfaz PASS confirmar=200 post=aceptada resultado=fallida error=copia_no_valida comprobacion=sha256_copia base_en_su_sitio=true eventos_script=0 auxiliar_ops=real costuras_arnes=3
+CHECK N-01-systemd-host NOT RUN motivo=sin_root_systemd
 CHECK N-01 PASS rc=1 error=copia_no_valida comprobacion=sha256_copia base_en_su_sitio=true eventos_intento=0
 CHECK N-02 PASS rc=1 error=copia_no_valida comprobacion=gzip_cabecera base_en_su_sitio=true eventos_intento=0
 CHECK N-03a PASS rc=1 error=copia_no_valida comprobacion=tablas_dump base_en_su_sitio=true eventos_intento=0

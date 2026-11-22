@@ -3,13 +3,13 @@
 | Campo | Valor |
 |---|---|
 | Historias | UATP-06 [#1144](https://github.com/juanajok/zascarr/issues/1144), UATP-07 [#1145](https://github.com/juanajok/zascarr/issues/1145), épica [#1141](https://github.com/juanajok/zascarr/issues/1141) |
-| Fecha/hora | 2026-11-22T13:13:39+01:00 |
+| Fecha/hora | 2026-11-22T13:13:39+01:00 (pasada 1); 2026-11-22T13:23:06+01:00 (pasada 2) |
 | Entorno | E-A6 (alias; host local aislado; sin hostname, IP ni ruta). **No** se usó la Pi ni datos reales. |
 | Candidata | tag `uat-candidata-20261122`, tag_commit `2c773e53c235812adabc76e76cd3b111d04d4026`, head `2c773e53c235812adabc76e76cd3b111d04d4026`, BUILD_SHA `2c773e53c235812adabc76e76cd3b111d04d4026`, `app_version=1.15.1`, alembic `0052`, image_id `sha256:7be671c1a4dae062db856b70f2f1a457f494cff2624e4f6388796f86864d82b2` |
-| Baseline | **no definido**: D-3 sigue pendiente del PO; no se declara tag T1 |
+| Baseline | T1 `uat-base-20261122`, tag_commit `ab33c14737a6cdb204c6b989705306303de75c91`, head `ab33c14737a6cdb204c6b989705306303de75c91`, BUILD_SHA `ab33c14737a6cdb204c6b989705306303de75c91`, app_version `1.15.1`, alembic `0052`, image_id `sha256:9bcda20caae3467dc8681420594f2e82fd697d4a6d7ae9e949ee31fa5401e504` (definido en la pasada 2 con autorización del PO) |
 | Tag antiguo | `v1.15.1` (`4f6ccdd310f5a644d19bdc1293327ac60d531b00`): sin lector ni restauración; Alembic llega a `0016` |
-| Decisión D-3 | **No aprobada por el PO**. V-03 queda NOT RUN; no se inventa T1. |
-| Resultado global | **NOT RUN (parcial honesto).** 24 comprobaciones PASS; V-03 NOT RUN por D-3 y N-01-interfaz NOT RUN por indicación del PO de usar el script. Por §7.7 esto **no** acredita UATP-07 como cumplida. |
+| Decisión D-3 | **Aprobada por el PO** (task-68): T1 = main previo a #1221, con lector y restauración. V-03 ejecutado. |
+| Resultado global | **PASS de las 25 comprobaciones obligatorias del catálogo §7.4.** UATP-06 acreditable; UATP-07: R-01…R-05 y V-03 PASS, y N-01 por interfaz PASS en ensayo con las costuras documentadas. `N-01-systemd-host` NOT RUN (`sin_root_systemd`). |
 
 ## Resumen
 
@@ -22,10 +22,13 @@ las cuatro filas salieron con `rc=1`, `copia_no_valida`, la `comprobacion` corre
 manifiesto, `copias.json`, la base viva, las filas testigo y el CBZ quedaron idénticos. Después se
 restauró B0 (control positivo: `hecha`, recuentos 2/2/2) y se comprobó la ficha y el lector en la
 página guardada (P=3 de 6) con Chrome real. La copia manual de la biblioteca a un volumen Docker
-vacío en otro sistema de archivos conservó inventario, mtime con nanosegundos y SHA-256. Queda
-**NOT RUN** solo V-03 (falta la decisión D-3 del PO sobre el tag baseline) y la ejecución de N-01
-desde la interfaz (el PO pidió el camino del script; el auxiliar ops del host no está instalado en
-E-A6). Nada NOT RUN se convierte en PASS.
+vacío en otro sistema de archivos conservó inventario, mtime con nanosegundos y SHA-256. En la **pasada 2 (task-68)**, con autorización del PO, se definió el baseline T1 `uat-base-20261122`
+sobre `ab33c147` (main previo a #1221, con lector y restauración) y se ejecutó V-03: T1 arrancó con
+el catálogo restaurado conservando recuentos, testigo, progreso y la reapertura en la página 3.
+También se ejecutó N-01 desde la interfaz con el auxiliar ops real (tres costuras de arnés por no
+haber systemd/root): la persona ve «Esa copia está dañada… Elige otra.» y la base/copia quedan
+intactas. Con eso las 25 comprobaciones obligatorias del catálogo quedan en PASS. La única pieza
+**NOT RUN** es el arranque real de la unidad systemd del host (`N-01-systemd-host`, `motivo=sin_root_systemd`), que no se puede ejecutar en este host aislado.
 
 ## Tabla de comprobaciones
 
@@ -37,8 +40,8 @@ Evidencia canónica: [`evidencia/resultado.txt`](evidencia/resultado.txt); datos
 |---|---|---|---|---|---|
 | V-01 | Identidad de C | tag_commit == head == BUILD_SHA; app_version coincide; alembic coincide | Las cuatro igualdades se cumplen; image_id registrado | **PASS** | `resultado.txt` §V |
 | V-02 | T0 `v1.15.1` sin lector ni restore | ausencia verificada | `web/lector.py` y `services/ops_host.py` ausentes; Alembic máx. `0016` | **PASS** | `resultado.txt` §V |
-| V-03 | T1 arranca con el catálogo restaurado | T1 definido por el PO (D-3) | No hay T1: D-3 pendiente | **NOT RUN** (`motivo=pendiente_po`) | `resultado.txt` §V |
-| N-01-interfaz | N-01 desde la acción «Restaurar…» | acción de interfaz | No ejecutada: el PO pidió `--produccion`; auxiliar ops no instalado | **NOT RUN** (`motivo=no_aplica`) | este documento |
+| V-03 | T1 arranca con el catálogo restaurado | T1 definido por el PO (D-3) | `uat-base-20261122` en `ab33c147`: arranca con B0' y conserva recuentos 2/2/2, testigo, progreso pág. 3, ficha y lector | **PASS** | [`evidencia/pasada2/t1-arranque.txt`](evidencia/pasada2/t1-arranque.txt) |
+| N-01-interfaz | N-01 desde la acción «Restaurar…» | acción de interfaz | confirmar=200; POST aceptado; `copia_no_valida/sha256_copia`; base y B0' intactas; UI «Esa copia está dañada… Elige otra.» | **PASS (ensayo)** | [`evidencia/pasada2/n01-ui-resumen.txt`](evidencia/pasada2/n01-ui-resumen.txt) |
 | N-01 | SHA incorrecto | `copia_no_valida`/`sha256_copia`/base `true`/0 eventos | rc=1; estado correcto; eventos del intento=0 | **PASS** | `evidencia/negativas.json`, `eventos-resumen.txt` |
 | N-02 | gzip truncado | `copia_no_valida`/`gzip_cabecera`/base `true`/0 eventos | rc=1; estado correcto; eventos del intento=0 | **PASS** | `evidencia/negativas.json` |
 | N-03a | Falta `series` | `copia_no_valida`/`tablas_dump`/base `true`/0 eventos | rc=1; estado correcto; eventos del intento=0 | **PASS** | `evidencia/negativas.json` |
@@ -125,13 +128,56 @@ progreso (`current_page=3`, `status=reading`) sobrevive a la restauración. Capt
 
 | Qué | Estado | Motivo / qué falta |
 |---|---|---|
-| V-03 (T1 baseline) | NOT RUN | `pendiente_po`: D-3 sin aprobar; no se define T1 ni se inventa su arranque |
-| N-01 desde la interfaz | NOT RUN | `no_aplica`: el PO pidió el camino `restaurar_datos.sh --produccion`; el auxiliar ops del host no está instalado en E-A6 |
+| V-03 (T1 baseline) | PASS (pasada 2) | `uat-base-20261122` en `ab33c147`; T1 arranca con B0' y conserva recuentos/testigo/progreso |
+| N-01 desde la interfaz | PASS (ensayo, pasada 2) | auxiliar ops real con 3 costuras de arnés (sin systemd/root); la persona ve la causa y la base/copia no cambian |
+| N-01 en systemd real del host | NOT RUN | `sin_root_systemd`: no hay root ni systemd en el host aislado para instalar/arrancar la unidad |
 | Health `backup`/`restore` = `error` | esperado en E-A6 | no hay timer de copias ni dispatcher de restauración; `checks.database=ok` |
 | Offsite de `backup.sh` | `offsite_mount_missing` | E-A6 no monta disco offsite; la copia local B0 quedó válida |
 
-Nada de lo NOT RUN se convierte en PASS; por la regla §7.7 la historia UATP-07 no se declara
-cumplida mientras V-03 siga pendiente de la decisión D-3.
+El único NOT RUN (`N-01-systemd-host`) es una pieza de infraestructura del host, no una
+comprobación del catálogo §7.4: las 25 obligatorias están en PASS. Nada NOT RUN se convierte en
+PASS: la sustitución de las tres costuras del arnés queda declarada y no se oculta.
+
+## Ampliación (pasada 2, task-68): V-03 y N-01 por interfaz
+
+Con autorización del PO se cierra el hueco de **D-3** y se ejecutan las dos comprobaciones que
+faltaban. Entorno E-A6 nuevo y aislado (mismo proyecto `zascarr-a6`, misma disciplina: nunca la Pi
+ni datos reales), con B0' propia `backup-20261122_131744` (`sha256 3e4de7c3a3cf6b59…`, manifiesto `6de889a2b615a7eb…`) y
+la misma semilla sintética.
+
+### T1 baseline y V-03 (PASS)
+
+- Tag anotado **`uat-base-20261122`** en `ab33c14737a6cdb204c6b989705306303de75c91` (main previo a #1221, **con** lector y
+  restauración). `build_sha = head = tag_commit = ab33c14737a6cdb204c6b989705306303de75c91`, `app_version=1.15.1`, `alembic=0052`,
+  `image_id=sha256:9bcda20caae3467dc8681420594f2e82fd697d4a6d7ae9e949ee31fa5401e504`.
+- Condición de V-03: T1 y C comparten revisión de Alembic (`0052`).
+- Se restauró B0' con la candidata (`hecha`, 2/2/2) y se arrancó T1 sobre ese catálogo. T1 conserva
+  los recuentos (2/2/2/1 + 1 raíz), la fila testigo (`2812|1795349854081043900|9a6edec4…`), el
+  progreso (`página 3`, `reading`), la ficha («Continuar (pág. 3)») y el lector
+  (`data-pagina="3"`, página 3 `5dea59a8…`). T1 montó R1 (la raíz de biblioteca del ensayo): V-03 es
+  sobre el catálogo restaurado y su estado; la copia de archivos a D1 ya se acreditó en la pasada 1.
+  Evidencia: [`evidencia/pasada2/t1-arranque.txt`](evidencia/pasada2/t1-arranque.txt) y
+  [`evidencia/pasada2/versiones-t1.txt`](evidencia/pasada2/versiones-t1.txt).
+
+### N-01 desde la interfaz (PASS de ensayo; `N-01-systemd-host` NOT RUN)
+
+- Flujo real: la app (cliente `services/ops_host.py`) envía la petición firmada al socket; el
+  auxiliar `deploy/ops/zascarr_ops.py` real valida esquema, firma HMAC, caducidad, topes, cerrojo y
+  contraseña (PBKDF2) y **acepta**; se ejecuta el wrapper real `restaurar-produccion.sh` y el script
+  real `restaurar_datos.sh --produccion`, que rechaza.
+- Obtenido: confirmación de la interfaz 200; POST 200 «Restauración en marcha»; resultado
+  `fallida / copia_no_valida / sha256_copia`, `base_en_su_sitio=true`; la persona ve en Estado
+  **«Esa copia está dañada, así que no se ha usado. Elige otra.»**; antes/después idénticos (base,
+  B0', `copias.json`, testigo, progreso, contenedores); el script no genera eventos de contenedor
+  (los 2 crudos son la verificación de contraseña del auxiliar, `psql` de solo lectura).
+- **Limitación documentada:** el host aislado no tiene systemd/root, así que el arnés sustituye tres
+  costuras: `systemctl` por un lanzador que ejecuta el wrapper; el nombre del contenedor del
+  verificador `zascarr-db` por `zascarr-a6-db`; y la lista de copias (el auxiliar real exige ficheros
+  de root) por la lista del ensayo. **No** se sustituyen la app, el socket, la firma, el auxiliar
+  (`procesar`/`EstadoOps`/PBKDF2), el wrapper ni el script. Evidencia:
+  [`evidencia/pasada2/n01-ui-resumen.txt`](evidencia/pasada2/n01-ui-resumen.txt).
+- `N-01-systemd-host` (arranque real de la unidad `zascarr-restaurar@…`): **NOT RUN**
+  (`motivo=sin_root_systemd`).
 
 ## Enlaces
 
