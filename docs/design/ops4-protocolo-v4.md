@@ -38,7 +38,7 @@ autoriza efectos: faltan instalación, cerrojo, estado, unidad y SHA.
 - Paridad app/host, petición sin `prueba`/`password`/`pbkdf2`, replay,
   testigo de otro ID, caducidad, firma/clave/reloj inválidos, CRLF, campos
   extra, base64 canónico, límites y E2E con directorio durable real.
-- **853 pruebas OPS4/paridad** verdes; falta repetir la suite completa en este
+- **389 pruebas OPS4/instalador** verdes; falta repetir la suite completa en este
   árbol. No hay socket, ruta web, auxiliar ni unidad de actualización.
 
 ## Límites y pendientes

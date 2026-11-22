@@ -49,3 +49,11 @@ binding del socket.
 - [Autorización app-host](../design/ops4-autorizacion-app-host.md)
 - [Auxiliar y unidad](../design/ops4-auxiliar-unidad.md)
 - [Informe SecOps final](../design/secops-ops4-verificacion-final-2026-11-21.md)
+
+
+## Desviación de Compose
+
+`docker-compose.yml` pasa `OPS4_ACTUALIZACION_HABILITADA` (default `false`),
+`OPS4_AUTORIZACION_KEY_FILE` y `OPS4_SOCKET_FILE`/`OPS4_ESTADO_FILE`. No activa
+nada por sí mismo: sin clave, socket y unidades la ruta responde 404 o
+`no_disponible`; el socket solo lo arranca root con el instalador.

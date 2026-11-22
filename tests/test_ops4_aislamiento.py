@@ -61,3 +61,31 @@ def test_la_unidad_no_esta_en_el_instalador_de_copias() -> None:
     texto = (RAIZ / "scripts" / "instalar_ops.sh").read_text(encoding="utf-8")
     assert "zascarr-actualizar" not in texto
     assert "actualizar.key" not in texto
+
+
+def test_la_app_no_importa_el_codigo_privilegiado_del_host() -> None:
+    for ruta in (RAIZ / "src" / "zascarr").rglob("*.py"):
+        texto = ruta.read_text(encoding="utf-8")
+        assert "deploy.ops" not in texto, ruta
+        assert "from deploy" not in texto, ruta
+
+
+def test_el_instalador_copia_todo_lo_que_importa_el_auxiliar() -> None:
+    aux = (RAIZ / "deploy" / "ops" / "zascarr_actualizar_aux.py").read_text(encoding="utf-8")
+    instalador = (RAIZ / "scripts" / "instalar_actualizacion_ops4.sh").read_text(encoding="utf-8")
+    for modulo in (
+        "protocolo_actualizar_v4_ops4",
+        "verificador_autorizacion_ops4",
+        "registro_repeticiones_ops4",
+        "escritor_estado_actualizar_ops4",
+    ):
+        assert f"from {modulo} import" in aux, modulo
+        assert modulo in instalador, modulo
+    assert "zascarr-estado-actualizar-ops4" in instalador
+
+
+def test_el_auxiliar_y_la_unidad_usan_python_aislado() -> None:
+    unidad = (RAIZ / "deploy" / "systemd" / "zascarr-actualizar@.service").read_text(encoding="utf-8")
+    assert "/usr/bin/python3 -I" in unidad
+    assert "Environment=PYTHONPATH=" not in unidad
+    assert "ReadWritePaths=@ZASCARR_DATA_DIR@/ops4 @ZASCARR_DATA_DIR@/ops" in unidad

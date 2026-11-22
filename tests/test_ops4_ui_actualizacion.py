@@ -117,12 +117,12 @@ async def test_ruta_hasta_socket_real_con_consumo_durable(tmp_path, monkeypatch)
     import json
     import os
 
-    from deploy.ops.admision_v4_actualizar_ops4 import CodigoV4, admitir_v4
     from deploy.ops.escritor_estado_actualizar_ops4 import escribir_estado
     from deploy.ops.registro_repeticiones_ops4 import (
         abrir_directorio_autorizaciones,
         crear_reclamador_durable,
     )
+    from tests._host_v4 import CodigoV4, admitir_v4
     from zascarr.config import get_settings
     from zascarr.services.auth import hash_password
     from zascarr.services.clave_autorizacion import leer_clave_autorizacion

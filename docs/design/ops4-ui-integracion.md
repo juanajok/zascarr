@@ -32,7 +32,7 @@ lenguaje llano de la pantalla. No hay JavaScript nuevo.
   a reintentar.
 - [test_ops4_ui_gate.py](../../tests/test_ops4_ui_gate.py): la ruta solo está
   activa tras la puerta; sin habilitar responde 404.
-- **916 pruebas OPS4/paridad** y suite completa **8906 passed / 2431 skipped /
+- **389 pruebas OPS4/instalador** y suite completa **8947 passed / 2454 skipped /
   0 failed** verdes. Incluye un E2E local ruta→servicio→socket Unix temporal→
   admisión→consumo durable.
 

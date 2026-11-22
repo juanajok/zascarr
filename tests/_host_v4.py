@@ -1,4 +1,6 @@
-"""Admisión v4 aislada: firma de petición y autorización con consumo único.
+"""Doble de host para tests; no se instala.
+
+Admisión v4 aislada: firma de petición y autorización con consumo único.
 
 No ejecuta, no lee hashes ni BD, no abre sockets y no persiste. La petición
 v4 no contiene contraseña; el host verifica el testigo emitido por la app y

@@ -8,11 +8,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from deploy.ops.admision_v4_actualizar_ops4 import CodigoV4, admitir_v4
 from deploy.ops.registro_repeticiones_ops4 import (
     abrir_directorio_autorizaciones,
     crear_reclamador_durable,
 )
+from tests._host_v4 import CodigoV4, admitir_v4
 from zascarr.services.actualizacion_transporte_v4 import (
     CodigoTransporteV4,
     IntercambioInciertoError,
