@@ -1,0 +1,17 @@
+# V-03 — T1 arranca con el catálogo restaurado y conserva el estado
+# Comandos (saneados):
+#   git -C "$A6" rev-parse 'uat-base-20261122^{commit}'   -> ab33c14737a6cdb204c6b989705306303de75c91
+#   docker compose -f "$RT/docker-compose.t1.yml" --env-file "$RT/.env" up -d --force-recreate zascarr
+#   docker compose ... exec -T zascarr printenv BUILD_SHA
+#   docker compose ... exec -T postgres psql ... -At -F'|' -c "select ..."
+#   curl -b "$COOKIE" "$APP_URL/ui/series/<SERIE>/numero/<NUMERO>"
+#   curl -b "$COOKIE" "$APP_URL/ui/leer/<FILE>" y .../pagina/3
+tag=uat-base-20261122 tag_tipo=tag tag_commit=ab33c14737a6cdb204c6b989705306303de75c91 head=ab33c14737a6cdb204c6b989705306303de75c91
+build_sha=ab33c14737a6cdb204c6b989705306303de75c91 app_version=1.15.1 alembic=0052 image_id=sha256:9bcda20caae3467dc8681420594f2e82fd697d4a6d7ae9e949ee31fa5401e504
+health_database=ok
+counts_series_issues_files_progreso_roots=2|2|2|1|1
+testigo_size_mtime_sha=2812|1795349854081043900|9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44
+progreso_file_pagina_estado=a6000000-0000-4000-8000-000000000021|3|reading
+ficha_continuar=Continuar (pág. 3)
+lector=data-total="6" data-pagina="3"
+pagina3_sha256=5dea59a8fe6656de00e063399166d3f83a5d0987a232da857dc10b738ddb261e

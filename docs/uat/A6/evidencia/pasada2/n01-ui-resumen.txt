@@ -1,0 +1,18 @@
+# N-01 por la interfaz — resumen saneado (pasada 2)
+# Flujo: app real (cliente services/ops_host.py) -> socket Unix -> zascarr_ops.py REAL
+#   (parseo, firma HMAC, caducidad, topes, cerrojo, PBKDF2) -> wrapper real restaurar-produccion.sh
+#   -> script real restaurar_datos.sh --produccion.
+# Costuras del arnés (documentadas; el host aislado no tiene systemd/root):
+#   (1) systemctl -> lanzador que ejecuta el wrapper; (2) verificador docker exec
+#       'zascarr-db' -> 'zascarr-a6-db'; (3) listar_copias root -> lista blanca del ensayo.
+# Resultado: confirmar=200; POST=200 'Restauración en marcha'; outcome fallida.
+# Proyecto: zascarr-a6; activación vista por la app: True True.
+confirmar_http=200
+post_http=200
+post_mensaje=Restauración en marcha. ZascArr se reiniciará en uno o dos minutos.
+resultado=fallida error=copia_no_valida comprobacion=sha256_copia base_en_su_sitio=true
+intento=03475cfb45683898
+ui_causa=Esa copia está dañada, así que no se ha usado. Elige otra.
+antes_y_despues=SIN CAMBIOS
+eventos_crudos=2 eventos_sonda_healthcheck_o_verificador=2 eventos_del_script_restaurar=0
+eventos_tipo=exec_create/exec_start de psql (verificación de contraseña, solo lectura)

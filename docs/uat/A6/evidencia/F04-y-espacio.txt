@@ -1,0 +1,6 @@
+R1_full_sha256=b0a892374b76a3a7aab4bd5ea2c600ee848438b8ebee3427e7431f5a4519db1d
+D1_full_sha256=b0a892374b76a3a7aab4bd5ea2c600ee848438b8ebee3427e7431f5a4519db1d
+D1_libre_bytes=11236184064
+R1_bytes=4229
+R1_ficheros=2
+D1_ficheros=2
