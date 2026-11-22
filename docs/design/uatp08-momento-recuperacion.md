@@ -1,11 +1,10 @@
 # Entender a qué momento vuelve la recuperación (UATP-08 / #1146)
 
-> **Estado:** implementación TDD parcial (task-70, 2026-11-22). Se aplican D-1 (versión en
-> `copias.json`), D-4 (alcance y recuentos si constan) y D-5 (resumen estable) de forma aditiva;
-> **D-2/D-3 quedan NOT RUN**: `restaurar_datos.sh` todavía no persiste `comprobaciones`,
-> `version_arrancada` ni `recuentos_previos`. La UI los muestra si un estado futuro los trae, pero
-> no se inventan. Este documento no declara la historia cumplida sin esa parte y sin la evidencia
-> de navegador.
+> **Estado:** implementación TDD (task-70/71, 2026-11-22). `restaurar_datos.sh` persiste de forma
+> aditiva `recuentos_previos`, `fuera` (solo diferencias no negativas), `comprobaciones` cerradas y
+> `version_arrancada` (leída de `/api/health` tras el arranque); `copias.json` y la UI exponen la
+> versión, el alcance y el resumen estable. Queda **NOT RUN** la evidencia real de navegador y
+> restauración sobre una instalación; no se declara la historia cumplida sin ella.
 >
 > **Decisiones:** D-1…D-5 de §3 son **recomendaciones de SPEC.writer**. No están aprobadas por el PO
 > y no autorizan implementar por sí solas. La opción recomendada va primero en cada decisión.

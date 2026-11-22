@@ -68,6 +68,12 @@ CODIGO_DIE="precondition_failed"
 BASE_DIE="true"
 COMPROBACION=""
 COPIA_VERSION_JSON="null"
+# UATP-08: campos aditivos del resumen; ninguno cambia el orden ni la seguridad.
+RECUENTOS_PREVIOS_JSON="null"
+FUERA_JSON="null"
+COMPROBACIONES_JSON="[]"
+VERSION_ARRANCADA_JSON="null"
+HEALTH_JSON=""
 INTENTO_REGISTRADO=0
 INTENTO=""
 
@@ -152,9 +158,10 @@ estado_restaurar() {
     ahora="$(date +%s)"
     install -d -m 755 "$dir" 2>/dev/null || return 0
     tmp="${dir}/.ops-restaurar.json.tmp.$$"
-    if printf '{"schema":1,"intento":%s,"copia":"%s","copia_epoch":%s,"inicio_epoch":%s,"actualizado_epoch":%s,"fase":"%s","resultado":"%s","error":%s,"comprobacion":%s,"base_en_su_sitio":%s,"copia_version":%s,"recuentos":%s}\n' \
+    if printf '{"schema":1,"intento":%s,"copia":"%s","copia_epoch":%s,"inicio_epoch":%s,"actualizado_epoch":%s,"fase":"%s","resultado":"%s","error":%s,"comprobacion":%s,"base_en_su_sitio":%s,"copia_version":%s,"recuentos":%s,"recuentos_previos":%s,"fuera":%s,"comprobaciones":%s,"version_arrancada":%s}\n' \
             "${intento_json}" "${COPIA_ID}" "${COPIA_EPOCH}" "${INICIO_EPOCH}" "$ahora" "$fase" "$resultado" \
-            "$err_json" "${comprobacion_json}" "$base_json" "${COPIA_VERSION_JSON}" "$recuentos" >"${tmp}" 2>/dev/null \
+            "$err_json" "${comprobacion_json}" "$base_json" "${COPIA_VERSION_JSON}" "$recuentos" \
+            "${RECUENTOS_PREVIOS_JSON}" "${FUERA_JSON}" "${COMPROBACIONES_JSON}" "${VERSION_ARRANCADA_JSON}" >"${tmp}" 2>/dev/null \
             && chmod 644 "${tmp}" 2>/dev/null \
             && mv "${tmp}" "${dir}/ops-restaurar.json" 2>/dev/null; then
         case "$resultado" in
@@ -527,11 +534,42 @@ esperar_health() {
         intentos=$((intentos + 1))
         if salud="$(curl -sf --max-time 2 "$HEALTH_URL" 2>/dev/null)" && \
            printf '%s' "$salud" | jq -e '.checks.database == "ok"' >/dev/null 2>&1; then
+            HEALTH_JSON="$salud"
             return 0
         fi
         sleep "$HEALTH_INTERVAL"
     done
     return 1
+}
+
+leer_recuentos_previos() {
+    # UATP-08 D-4: recuentos de la base viva ANTES del cambio, con la app aún sirviendo.
+    local series issues files
+    series="$(psql_en "$DB_NAME" "select count(*) from series" 2>/dev/null | tr -d '[:space:]')" || return 1
+    issues="$(psql_en "$DB_NAME" "select count(*) from issues" 2>/dev/null | tr -d '[:space:]')" || return 1
+    files="$(psql_en "$DB_NAME" "select count(*) from files" 2>/dev/null | tr -d '[:space:]')" || return 1
+    [[ "$series" =~ ^[0-9]+$ && "$issues" =~ ^[0-9]+$ && "$files" =~ ^[0-9]+$ ]] || return 1
+    RECUENTOS_PREVIOS_JSON="{\"series\":${series},\"issues\":${issues},\"files\":${files}}"
+}
+
+leer_version_arrancada() {
+    # UATP-08 D-3: versión que arrancó, leída del health ya conforme; null si no consta.
+    [[ -n "${HEALTH_JSON}" ]] || { VERSION_ARRANCADA_JSON="null"; return 0; }
+    VERSION_ARRANCADA_JSON="$(printf '%s' "${HEALTH_JSON}" | jq -c '
+        {version: (if (.version | type) == "string" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) then .version else null end),
+         build_sha: (if (.build_sha | type) == "string" and (.build_sha | test("^[0-9a-f]{40}$")) then .build_sha else null end)}
+        | if (.version == null and .build_sha == null) then null else . end' 2>/dev/null || printf 'null')"
+    [[ -n "${VERSION_ARRANCADA_JSON}" ]] || VERSION_ARRANCADA_JSON="null"
+}
+
+calcular_fuera() {
+    # UATP-08 D-4: solo diferencias no negativas; si no se puede, null (no se inventa).
+    [[ "${RECUENTOS_PREVIOS_JSON}" != "null" && -n "$1" ]] || { FUERA_JSON="null"; return 0; }
+    FUERA_JSON="$(jq -cn --argjson p "${RECUENTOS_PREVIOS_JSON}" --argjson r "$1" '
+        if ([($p.series - $r.series), ($p.issues - $r.issues), ($p.files - $r.files)] | all(. >= 0))
+        then {series: ($p.series - $r.series), issues: ($p.issues - $r.issues), files: ($p.files - $r.files)}
+        else null end' 2>/dev/null || printf 'null')"
+    [[ -n "${FUERA_JSON}" ]] || FUERA_JSON="null"
 }
 
 leer_fila_seguridad() { # $1 base, $2 fichero destino
@@ -703,6 +741,9 @@ ejecutar_produccion() {
         die "La seguridad vigente no está activada o está incompleta. No se ha tocado la BD."
     fi
 
+    # (UATP-08) Recuentos de la base viva antes del cambio; best-effort, nunca falla la restauración.
+    leer_recuentos_previos || RECUENTOS_PREVIOS_JSON="null"
+
     # (2) Restos de una restauración anterior y base nueva huérfana (FR-19.2). Nunca se borran solas las previas.
     FASE_STATUS="preparando"
     estado_restaurar "preparando" "en_curso" "" "true"
@@ -819,8 +860,12 @@ ejecutar_produccion() {
     fi
     borrar_db "$PREVIA_DB" || warn "No pude borrar ${PREVIA_DB}; la siguiente restauración se negará hasta retirarla."
     limpiar_temporales
+    RECUENTOS_REST_JSON="{\"series\":${CONTEO_REST[series]:-0},\"issues\":${CONTEO_REST[issues]:-0},\"files\":${CONTEO_REST[files]:-0}}"
+    leer_version_arrancada
+    calcular_fuera "${RECUENTOS_REST_JSON}"
+    COMPROBACIONES_JSON='[{"codigo":"existencia_copia","estado":"ok"},{"codigo":"manifiesto","estado":"ok"},{"codigo":"sha256_copia","estado":"ok"},{"codigo":"bytes_copia","estado":"ok"},{"codigo":"codigo_manifest","estado":"no_ejecutada"},{"codigo":"gzip_cabecera","estado":"ok"},{"codigo":"cabecera_pg_dump","estado":"ok"},{"codigo":"tablas_dump","estado":"ok"},{"codigo":"alembic_revision","estado":"ok"},{"codigo":"recuentos_nueva","estado":"ok"},{"codigo":"vinculos_huerfanos","estado":"ok"},{"codigo":"copia_previa","estado":"ok"},{"codigo":"seguridad_conservada","estado":"ok"},{"codigo":"health","estado":"ok"}]'
     estado_restaurar "arrancando" "hecha" "" "true" \
-        "{\"series\":${CONTEO_REST[series]:-0},\"issues\":${CONTEO_REST[issues]:-0},\"files\":${CONTEO_REST[files]:-0}}"
+        "${RECUENTOS_REST_JSON}"
     ok "Copia restaurada. La base de datos de antes se guardó como $(basename "$SEGURIDAD")."
     printf '  Recuentos:         series=%s issues=%s files=%s\n' \
         "${CONTEO_REST[series]:-0}" "${CONTEO_REST[issues]:-0}" "${CONTEO_REST[files]:-0}"

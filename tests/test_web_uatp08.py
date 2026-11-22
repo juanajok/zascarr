@@ -82,6 +82,7 @@ def test_resumen_hecho_muestra_recuentos_fuera_version_y_comprobaciones(tmp_path
         "schema": 1, "copia": TS, "copia_epoch": EPOCH, "resultado": "hecha",
         "actualizado_epoch": 1_800_000_000, "recuentos": {"series": 2, "issues": 3, "files": 4},
         "recuentos_previos": {"series": 3, "issues": 3, "files": 4},
+        "fuera": {"series": 1, "issues": 0, "files": 0},
         "version_arrancada": VERSION, "intento": "a1b2c3d4e5f60718",
         "comprobaciones": [{"codigo": "health", "estado": "ok"},
                            {"codigo": "sha256_copia", "estado": "ok"}],
@@ -91,6 +92,7 @@ def test_resumen_hecho_muestra_recuentos_fuera_version_y_comprobaciones(tmp_path
     assert r.status_code == 200
     assert "Copia restaurada" in r.text and "2 series, 3 números y 4 archivos" in r.text
     assert "Antes de restaurar había 3 series" in r.text
+    assert "Quedan fuera 1 series" in r.text
     assert "Versión 1.15.1" in r.text
     assert "Queda fuera de la copia" in r.text and "Comprobaciones" in r.text
     assert "a1b2c3d4e5f60718" in r.text and "health: ok" in r.text

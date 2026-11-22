@@ -326,6 +326,28 @@ def test_el_contexto_solo_conserva_las_copias_restaurables():
     assert [c["id"] for c in contexto["copias"]] == ["backup-1"]
 
 
+def test_lee_los_campos_aditivos_de_uatp08_y_descarta_codigos_desconocidos(ajustes):
+    """UATP-08: previos/fuera/comprobaciones/version_arrancada saneados; un código raro no pinta."""
+    _escribir(ajustes, "ops-restaurar.json", {
+        "schema": 1, "copia": TS_COPIA, "copia_epoch": COPIA_DATE, "resultado": "hecha",
+        "actualizado_epoch": AHORA - 5, "recuentos": {"series": 2, "issues": 1, "files": 3},
+        "recuentos_previos": {"series": 3, "issues": 2, "files": 3},
+        "fuera": {"series": 1, "issues": 1, "files": 0},
+        "version_arrancada": {"head": "a" * 40, "build_sha": None,
+                              "app_version": "1.15.1", "alembic": "0052"},
+        "comprobaciones": [{"codigo": "health", "estado": "ok"},
+                           {"codigo": "inventado", "estado": "ok"},
+                           {"codigo": "sha256_copia", "estado": "raro"}],
+        "intento": "a1b2c3d4e5f60718",
+    })
+    v = ops_host.resolver_restauracion(ajustes.s, AHORA)
+    assert v.recuentos_previos == {"series": 3, "issues": 2, "files": 3}
+    assert v.fuera == {"series": 1, "issues": 1, "files": 0}
+    assert v.version_arrancada["app_version"] == "1.15.1" and v.version_arrancada["head"] == "a" * 40
+    assert v.comprobaciones == ({"codigo": "health", "estado": "ok"},)
+    assert v.intento == "a1b2c3d4e5f60718"
+
+
 # ── UATP-06 D-5: claves nuevas del intento (T-06-06) ───────────────────────────────────────────
 def test_las_claves_nuevas_del_intento_no_cambian_la_causa_ni_se_pintan(ajustes):
     """`intento`/`comprobacion`/`copia_version` son aditivas: el lector las ignora (FR-24, D-5)."""

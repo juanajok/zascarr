@@ -884,9 +884,9 @@ pantalla real, Safari/iOS y dispositivo físico: **NOT RUN**.
 5. 320/390/escritorio: sin scroll horizontal; textos legibles; no-store.
 ```
 
-**Criterio:** PASS solo con restauración real y captura; si `recuentos_previos`,
-`version_arrancada` o `comprobaciones` no están en el estado, la UI dice «no consta» y la fila
-correspondiente queda **NOT RUN**, no verde por omisión.
+**Criterio:** PASS solo con restauración real y captura. `restaurar_datos.sh` escribe
+`recuentos_previos`, `fuera` no negativo, `comprobaciones` y `version_arrancada`; si una ejecución
+antigua no los trae, la UI dice «no consta» y esa fila queda **NOT RUN**, no verde por omisión.
 
 ---
 

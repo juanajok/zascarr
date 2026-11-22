@@ -548,6 +548,7 @@ class VistaRestaurar:
     copia: str | None = None
     copia_version: dict | None = None
     recuentos_previos: dict | None = None
+    fuera: dict | None = None
     version_arrancada: dict | None = None
     intento: str | None = None
     comprobacion: str | None = None
@@ -609,6 +610,7 @@ def resolver_restauracion(settings: Settings, ahora: int | None = None) -> Vista
     copia = copia if isinstance(copia, str) and _RE_COPIA.fullmatch(copia) else None
     copia_version = _version_copia(datos.get("copia_version"))
     recuentos_previos = _recuentos_restaurar(datos.get("recuentos_previos"))
+    fuera = _recuentos_restaurar(datos.get("fuera"))
     version_arrancada = _version_copia(datos.get("version_arrancada"))
     intento = datos.get("intento")
     intento = intento if isinstance(intento, str) and _RE_INTENTO.fullmatch(intento) else None
@@ -617,7 +619,7 @@ def resolver_restauracion(settings: Settings, ahora: int | None = None) -> Vista
                     and comprobacion in CODS_COMPROBACION else None)
     comprobaciones = _comprobaciones(datos.get("comprobaciones"))
     extras = dict(copia=copia, copia_version=copia_version,
-                  recuentos_previos=recuentos_previos,
+                  recuentos_previos=recuentos_previos, fuera=fuera,
                   version_arrancada=version_arrancada, intento=intento,
                   comprobacion=comprobacion, comprobaciones=comprobaciones)
     ops = _leer_json(settings.ops_status_file) or {}

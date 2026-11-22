@@ -28,6 +28,9 @@
   {% if vr.recuentos_previos and vr.recuentos %}
   <p>Antes de restaurar había {{ vr.recuentos_previos.series }} series, {{ vr.recuentos_previos.issues }} números y {{ vr.recuentos_previos.files }} archivos anotados. Esta copia trae {{ vr.recuentos.series }}, {{ vr.recuentos.issues }} y {{ vr.recuentos.files }}: lo anotado después de la copia no vuelve.</p>
   {% else %}<p>No consta cuánto había antes de restaurar.</p>{% endif %}
+  {% if vr.fuera %}
+  <p>Quedan fuera {{ vr.fuera.series }} series, {{ vr.fuera.issues }} números y {{ vr.fuera.files }} archivos anotados después de la copia.</p>
+  {% endif %}
   <p class="caption">Las cifras son registros anotados; no dicen qué fila cambió.</p>
   <h2>Comprobaciones</h2>
   {% if vr.comprobaciones %}

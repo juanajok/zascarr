@@ -189,6 +189,27 @@ def test_restaura_en_base_nueva_y_cambia_por_renombrado(tmp_path):
     assert not list(ctx["status"].glob(".ops-restaurar-intentos.jsonl.tmp*"))
 
 
+def test_el_resumen_persiste_previos_fuera_comprobaciones_y_version(tmp_path):
+    """UATP-08: el estado final lleva lo que la UI necesita, sin inventar ni tocar el orden."""
+    ctx = preparar(tmp_path)
+    r = ejecutar(ctx, extra_env={"FAKE_ENFORCE_STOP": "1"})
+    assert r.returncode == 0, r.stdout + r.stderr
+    estado = estado_restaurar(ctx)
+    assert estado["resultado"] == "hecha"
+    assert estado["recuentos_previos"] == {
+        clave: ctx["counts"][clave] for clave in ("series", "issues", "files")}
+    assert estado["fuera"] == {"series": 0, "issues": 0, "files": 0}
+    codigos = [fila["codigo"] for fila in estado["comprobaciones"]]
+    assert codigos[0] == "existencia_copia" and codigos[-1] == "health"
+    assert len(codigos) == len(set(codigos)) == 14
+    por_codigo = {fila["codigo"]: fila["estado"] for fila in estado["comprobaciones"]}
+    assert por_codigo["codigo_manifest"] == "no_ejecutada"
+    assert por_codigo["health"] == "ok"
+    assert set(por_codigo.values()) <= {"ok", "fallo", "no_ejecutada"}
+    # El arnés de health no publica versión: no se inventa.
+    assert estado["version_arrancada"] is None
+
+
 def test_copia_previa_y_seguridad_exigen_la_app_parada(tmp_path):
     """F-04/FR-20.6/FR-21: si la app sigue sirviendo, el propio falso aborta con una violación de orden."""
     ctx = preparar(tmp_path)
