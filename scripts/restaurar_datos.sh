@@ -10,8 +10,10 @@
 #   - ENV_FILE, COMPOSE_FILE, BACKUP_DIR, DB_NAME y DB_USER explícitos;
 #   - `docker compose config` con el proyecto esperado (nunca `zascarr`);
 #   - manifiesto con SHA-256, bytes y revisión coherentes;
-#   - gzip, cabecera de pg_dump y las cuatro tablas que exige el rollback;
-#   - revisión Alembic del dump y de la BD actual contra --alembic-esperada.
+#   - gzip, cabecera de pg_dump y las cinco tablas que exige el rollback (incluida `issues`);
+#   - revisión Alembic del dump y de la BD actual contra --alembic-esperada;
+#   - el id de intento, la comprobación que falló y la versión de la copia quedan en
+#     `ops-restaurar.json` y, por intento terminado, en `ops-restaurar-intentos.jsonl` (máx. 20).
 #
 # Después: copia de seguridad `rollback-safety_<TS>.sql.gz` verificada, parada
 # de la app, dropdb --force, createdb, psql ON_ERROR_STOP, `up -d` sin build,
@@ -55,6 +57,8 @@ warn() { printf '⚠ %s\n' "$*" >&2; }
 # ── BL-OPS2: estado de la restauración (`ops-restaurar.json`, FR-24) ────────
 # Lo escribe SOLO este script, con `printf`, temporal en el mismo directorio y `mv` atómico, 0644 y sin fallar la
 # operación. Solo códigos y números: nunca la salida de un comando, mensajes de `die`, rutas ni valores de seguridad.
+# UATP-06/07 (D-2/D-5): añade `intento` (16 hex), `comprobacion` (código cerrado de §4.4) y `copia_version`
+# (tupla del manifiesto o null) y deja una línea por intento terminado en `ops-restaurar-intentos.jsonl`.
 ESTADO_ON=0
 INICIO_EPOCH="$(date +%s)"
 COPIA_ID=""
@@ -62,22 +66,100 @@ COPIA_EPOCH=0
 FASE_STATUS="verificando"
 CODIGO_DIE="precondition_failed"
 BASE_DIE="true"
+COMPROBACION=""
+COPIA_VERSION_JSON="null"
+INTENTO_REGISTRADO=0
+INTENTO=""
+
+# 16 hex minúsculas, una vez por ejecución (D-5). Sin `od` (coreutils) se deriva de la hora y el PID con
+# `sha256sum`, ya exigido por el preflight: el formato no cambia y no se aborta por no poder generar el id.
+generar_intento() {
+    local hex=""
+    if command -v od >/dev/null 2>&1; then
+        hex="$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d '[:space:]' || true)"
+    fi
+    if [[ ! "${hex}" =~ ^[0-9a-f]{16}$ ]]; then
+        hex="$(printf '%s%s' "$(date +%s%N)" "$$" 2>/dev/null | sha256sum 2>/dev/null | cut -c1-16 || true)"
+    fi
+    [[ "${hex}" =~ ^[0-9a-f]{16}$ ]] || hex=""
+    printf '%s' "${hex}"
+}
+
+json_str_o_null() {
+    if [[ -n "$1" ]]; then printf '"%s"' "$1"; else printf 'null'; fi
+}
+
+# `copia_version`: solo las cuatro claves de D-2 y cada una con su regex; si el objeto no es válido, `null`.
+# Se calcula en bash (sin interpolar el fichero en SQL ni en la UI) y nunca bloquea la restauración.
+sanear_copia_version() {
+    local crudo="$1" head build app alembic
+    [[ -n "${crudo}" ]] || { printf 'null'; return 0; }
+    printf '%s' "${crudo}" | jq -e 'type == "object"
+        and (keys - ["head", "build_sha", "app_version", "alembic"] | length) == 0
+        and (has("head") or has("build_sha") or has("app_version") or has("alembic"))' \
+        >/dev/null 2>&1 || { printf 'null'; return 0; }
+    head="$(printf '%s' "${crudo}" | jq -r '.head // "" | if type == "string" then . else "INVALIDO" end' 2>/dev/null || true)"
+    build="$(printf '%s' "${crudo}" | jq -r '.build_sha // "" | if type == "string" then . else "INVALIDO" end' 2>/dev/null || true)"
+    app="$(printf '%s' "${crudo}" | jq -r '.app_version // "" | if type == "string" then . else "INVALIDO" end' 2>/dev/null || true)"
+    alembic="$(printf '%s' "${crudo}" | jq -r '.alembic // "" | if type == "string" then . else "INVALIDO" end' 2>/dev/null || true)"
+    [[ -z "${head}" || "${head}" =~ ^[0-9a-f]{40}$ ]] || { printf 'null'; return 0; }
+    [[ -z "${build}" || "${build}" =~ ^[0-9a-f]{40}$ ]] || { printf 'null'; return 0; }
+    [[ -z "${app}" || "${app}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { printf 'null'; return 0; }
+    [[ -z "${alembic}" || "${alembic}" =~ ^[0-9]{4}$ ]] || { printf 'null'; return 0; }
+    printf '{"head":%s,"build_sha":%s,"app_version":%s,"alembic":%s}' \
+        "$(json_str_o_null "${head}")" "$(json_str_o_null "${build}")" \
+        "$(json_str_o_null "${app}")" "$(json_str_o_null "${alembic}")"
+}
+
+# `ops-restaurar-intentos.jsonl` (D-5): una línea por intento TERMINADO (`hecha`/`fallida`), como máximo 20
+# (las más recientes), 0644, reescritura atómica y sin fallar la restauración si no se puede escribir. Solo
+# códigos, números, booleanos, el id de intento y la tupla de versión: nunca rutas, hashes ni secretos (FR-24).
+registrar_intento_jsonl() {
+    local resultado="$1" error="$2" base_json="$3"
+    (( INTENTO_REGISTRADO )) && return 0
+    INTENTO_REGISTRADO=1
+    local dir="${BACKUP_STATUS_DIR:-/var/lib/zascarr/backup-status}"
+    local fichero="${dir}/ops-restaurar-intentos.jsonl" tmp linea fin_epoch
+    local intento_json err_json comprobacion_json
+    intento_json="$(json_str_o_null "${INTENTO}")"
+    err_json="$(json_str_o_null "${error}")"
+    comprobacion_json="$(json_str_o_null "${COMPROBACION}")"
+    fin_epoch="$(date +%s)"
+    linea="$(printf '{"schema":1,"intento":%s,"copia":"%s","copia_epoch":%s,"copia_version":%s,"inicio_epoch":%s,"fin_epoch":%s,"fase":"%s","resultado":"%s","error":%s,"comprobacion":%s,"base_en_su_sitio":%s}' \
+        "${intento_json}" "${COPIA_ID}" "${COPIA_EPOCH}" "${COPIA_VERSION_JSON}" "${INICIO_EPOCH}" \
+        "${fin_epoch}" "${FASE_STATUS}" "${resultado}" "${err_json}" "${comprobacion_json}" "${base_json}")"
+    install -d -m 755 "${dir}" 2>/dev/null || return 0
+    tmp="${dir}/.ops-restaurar-intentos.jsonl.tmp.$$"
+    if { if [[ -f "${fichero}" ]]; then tail -n 19 "${fichero}" 2>/dev/null; fi; printf '%s\n' "${linea}"; } \
+            >"${tmp}" 2>/dev/null \
+            && chmod 644 "${tmp}" 2>/dev/null \
+            && mv "${tmp}" "${fichero}" 2>/dev/null; then
+        return 0
+    fi
+    rm -f "${tmp}" 2>/dev/null || true
+    return 0
+}
 
 estado_restaurar() {
     local fase="$1" resultado="$2" error="${3:-}" base="${4:-null}" recuentos="${5:-null}"
     (( ESTADO_ON )) || return 0
     local dir="${BACKUP_STATUS_DIR:-/var/lib/zascarr/backup-status}"
-    local err_json="null" base_json="null" tmp ahora
+    local err_json="null" base_json="null" tmp ahora intento_json="null" comprobacion_json="null"
     [[ -n "$error" ]] && err_json="\"${error}\""
     case "$base" in true|false) base_json="$base" ;; esac
+    intento_json="$(json_str_o_null "${INTENTO}")"
+    comprobacion_json="$(json_str_o_null "${COMPROBACION}")"
     ahora="$(date +%s)"
     install -d -m 755 "$dir" 2>/dev/null || return 0
     tmp="${dir}/.ops-restaurar.json.tmp.$$"
-    if printf '{"schema":1,"copia":"%s","copia_epoch":%s,"inicio_epoch":%s,"actualizado_epoch":%s,"fase":"%s","resultado":"%s","error":%s,"base_en_su_sitio":%s,"recuentos":%s}\n' \
-            "$COPIA_ID" "$COPIA_EPOCH" "$INICIO_EPOCH" "$ahora" "$fase" "$resultado" \
-            "$err_json" "$base_json" "$recuentos" >"${tmp}" 2>/dev/null \
+    if printf '{"schema":1,"intento":%s,"copia":"%s","copia_epoch":%s,"inicio_epoch":%s,"actualizado_epoch":%s,"fase":"%s","resultado":"%s","error":%s,"comprobacion":%s,"base_en_su_sitio":%s,"copia_version":%s,"recuentos":%s}\n' \
+            "${intento_json}" "${COPIA_ID}" "${COPIA_EPOCH}" "${INICIO_EPOCH}" "$ahora" "$fase" "$resultado" \
+            "$err_json" "${comprobacion_json}" "$base_json" "${COPIA_VERSION_JSON}" "$recuentos" >"${tmp}" 2>/dev/null \
             && chmod 644 "${tmp}" 2>/dev/null \
             && mv "${tmp}" "${dir}/ops-restaurar.json" 2>/dev/null; then
+        case "$resultado" in
+            hecha|fallida) registrar_intento_jsonl "$resultado" "$error" "$base_json" ;;
+        esac
         return 0
     fi
     rm -f "${tmp}" 2>/dev/null || true
@@ -130,6 +212,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# D-5: el id del intento se genera una vez por ejecución, antes de escribir el primer estado.
+INTENTO="$(generar_intento)"
+
 if (( PRODUCCION )); then
     COPIA_ID="backup-${COPIA_TS}"
     COPIA_EPOCH="$(date -d "${COPIA_TS:0:8} ${COPIA_TS:9:2}:${COPIA_TS:11:2}:${COPIA_TS:13:2}" +%s 2>/dev/null || printf '0')"
@@ -177,6 +262,7 @@ fi
 [[ -f "$ENV_FILE" && -r "$ENV_FILE" ]] || die "ENV_FILE no existe o no se puede leer."
 [[ -f "$COMPOSE_FILE" ]] || die "COMPOSE_FILE no existe."
 CODIGO_DIE="copia_no_encontrada"
+COMPROBACION="existencia_copia"
 [[ -s "$DUMP" ]] || die "El dump no existe o está vacío: $(limpio "$(basename "${DUMP:-?}")")."
 
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:18000/api/health}"
@@ -235,8 +321,10 @@ if [[ -z "$MANIFEST" ]]; then
     MANIFEST="$(dirname "$DUMP")/MANIFIESTO-${STEM}.json"
 fi
 CODIGO_DIE="copia_no_encontrada"
+COMPROBACION="manifiesto"
 [[ -f "$MANIFEST" ]] || die "No encuentro el manifiesto: $(limpio "$(basename "$MANIFEST")")."
 CODIGO_DIE="copia_no_valida"
+COMPROBACION="manifiesto"
 jq -e . "$MANIFEST" >/dev/null 2>&1 || die "El manifiesto no es JSON válido."
 
 M_SHA="$(jq -r '.sha256 // empty' "$MANIFEST")"
@@ -245,9 +333,14 @@ M_SCHEMA="$(jq -r '.schema // empty' "$MANIFEST" | tr -d '[:space:]')"
 M_ALEMBIC="$(jq -r '.alembic // empty' "$MANIFEST" | tr -d '[:space:]')"
 M_DESTINO="$(jq -r '.codigo_destino_sha_completo // empty' "$MANIFEST")"
 M_DESPLEGADO="$(jq -r '.codigo_desplegado_sha_completo // empty' "$MANIFEST")"
+# D-2: la copia puede no declarar versión (copias antiguas); `null` significa «no consta» y NUNCA se infiere.
+M_VERSION="$(jq -c '.version_de_la_copia // empty' "$MANIFEST" 2>/dev/null || true)"
+COPIA_VERSION_JSON="$(sanear_copia_version "$M_VERSION")"
+[[ -n "$COPIA_VERSION_JSON" ]] || COPIA_VERSION_JSON="null"
 
 if [[ -n "$M_SCHEMA" && "$M_SCHEMA" != "1" ]]; then
     CODIGO_DIE="copia_no_valida"
+    COMPROBACION="manifiesto"
     die "El manifiesto declara schema '$(limpio "$M_SCHEMA")'; este script solo entiende el schema 1."
 fi
 if [[ -z "$M_SCHEMA" ]]; then
@@ -255,26 +348,34 @@ if [[ -z "$M_SCHEMA" ]]; then
 fi
 
 CODIGO_DIE="copia_no_valida"
+COMPROBACION="manifiesto"
 [[ -n "$M_SHA" ]] || die "El manifiesto no declara sha256."
 CODIGO_DIE="copia_no_valida"
+COMPROBACION="manifiesto"
 [[ -n "$M_BYTES" && "$M_BYTES" =~ ^[0-9]+$ ]] || die "El manifiesto no declara bytes válidos."
 SHA_REAL="$(sha256sum "$DUMP" | awk '{print $1}')"
 BYTES_REAL="$(stat -c %s "$DUMP")"
 CODIGO_DIE="copia_no_valida"
+COMPROBACION="sha256_copia"
 [[ "$SHA_REAL" == "$M_SHA" ]] || die "El SHA-256 del dump no coincide con el manifiesto."
+CODIGO_DIE="copia_no_valida"
+COMPROBACION="bytes_copia"
 [[ "$BYTES_REAL" == "$M_BYTES" ]] || die "El tamaño del dump no coincide con el manifiesto."
 if [[ -f "${DUMP}.sha256" ]]; then
     ( cd "$(dirname "$DUMP")" && sha256sum -c "$(basename "$DUMP").sha256" >/dev/null 2>&1 ) || {
         CODIGO_DIE="copia_no_valida"
+        COMPROBACION="sha256_copia"
         die "El sidecar .sha256 no coincide con el dump."
     }
 fi
 
 if [[ -n "$M_ALEMBIC" && -n "$ALEMBIC_ESPERADA" && "$M_ALEMBIC" != "$ALEMBIC_ESPERADA" ]]; then
     CODIGO_DIE="revision_distinta"
+    COMPROBACION="alembic_revision"
     die "El manifiesto declara Alembic '$(limpio "$M_ALEMBIC")'; se esperaba '$(limpio "$ALEMBIC_ESPERADA")'."
 fi
 if (( ! PRODUCCION )) && [[ "$M_DESTINO" != "$HEAD_ANTES" && "$M_DESPLEGADO" != "$HEAD_ANTES" ]]; then
+    COMPROBACION="codigo_manifest"
     die "El manifiesto no acredita el commit actual. No restauro datos de otro código."
 fi
 
@@ -311,27 +412,33 @@ inspeccionar() {
 
 gzip -t "$DUMP" 2>/dev/null || {
     CODIGO_DIE="copia_no_valida"
+    COMPROBACION="gzip_cabecera"
     die "gzip -t falla: el dump no es un gzip íntegro."
 }
 if ! INSPECCION="$(inspeccionar "$DUMP")"; then
     CODIGO_DIE="copia_no_valida"
+    COMPROBACION="gzip_cabecera"
     die "No pude descomprimir o leer el dump."
 fi
 IFS='|' read -r T_HEADER T_AV T_SERIES T_FILES T_WISH T_ISSUES VERSION_DUMP \
     N_SERIES N_ISSUES N_FILES N_OPS N_WISH <<< "$INSPECCION"
 VERSION_DUMP="$(printf '%s' "$VERSION_DUMP" | tr -d '[:space:]')"
 
-[[ "$T_HEADER" == "1" ]] || { CODIGO_DIE="copia_no_valida"; die "El dump no tiene la cabecera de pg_dump."; }
-for par in "alembic_version:$T_AV" "series:$T_SERIES" "files:$T_FILES" "wishlist:$T_WISH"; do
-    [[ "${par#*:}" == "1" ]] || { CODIGO_DIE="copia_no_valida"; die "El dump no contiene la tabla ${par%%:*}."; }
+[[ "$T_HEADER" == "1" ]] || { CODIGO_DIE="copia_no_valida"; COMPROBACION="cabecera_pg_dump"; die "El dump no tiene la cabecera de pg_dump."; }
+# D-6/FR-17(d): `issues` también es obligatoria. Un dump sin ella puede pasar el SHA y el gzip y fallar DESPUÉS de
+# createdb/carga (o completar con un catálogo incompleto); aquí se rechaza antes del primer evento de contenedor.
+for par in "alembic_version:$T_AV" "series:$T_SERIES" "issues:$T_ISSUES" "files:$T_FILES" "wishlist:$T_WISH"; do
+    [[ "${par#*:}" == "1" ]] || { CODIGO_DIE="copia_no_valida"; COMPROBACION="tablas_dump"; die "El dump no contiene la tabla ${par%%:*}."; }
 done
-[[ -n "$VERSION_DUMP" ]] || { CODIGO_DIE="copia_no_valida"; die "El dump no contiene version_num en alembic_version."; }
+[[ -n "$VERSION_DUMP" ]] || { CODIGO_DIE="copia_no_valida"; COMPROBACION="tablas_dump"; die "El dump no contiene version_num en alembic_version."; }
 
 if [[ -n "$M_ALEMBIC" && "$M_ALEMBIC" != "$VERSION_DUMP" ]]; then
     CODIGO_DIE="revision_distinta"
+    COMPROBACION="alembic_revision"
     die "El manifiesto declara Alembic '$(limpio "$M_ALEMBIC")' pero el dump trae '$(limpio "$VERSION_DUMP")'."
 fi
 
+COMPROBACION="alembic_revision"
 ACTUAL="$( "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -At \
     -c "select version_num from alembic_version" 2>/dev/null | tr -d '[:space:]' )" || \
     die "No pude leer la revisión de Alembic de la BD actual."
@@ -346,12 +453,18 @@ else
 fi
 if [[ "$VERSION_DUMP" != "$ESPERADA" ]]; then
     CODIGO_DIE="revision_distinta"
+    COMPROBACION="alembic_revision"
     die "Revisión incompatible: dump '$(limpio "$VERSION_DUMP")', esperada '$(limpio "$ESPERADA")'. No toco la BD."
 fi
 if [[ "$ACTUAL" != "$ESPERADA" ]]; then
     CODIGO_DIE="revision_distinta"
+    COMPROBACION="alembic_revision"
     die "La BD actual está en '$(limpio "$ACTUAL")' y se esperaba '$(limpio "$ESPERADA")'. No toco la BD."
 fi
+
+# A partir de aquí ya no hay comprobaciones de contenido: lo que falle es una fase de la restauración y
+# `comprobacion` vuelve a `null` (no se hereda el código de la última comprobación del preflight).
+COMPROBACION=""
 
 # ── BL-OPS2: restauración de producción (base nueva + cambio por renombrado) ──
 # Orden aprobado (FR-19…FR-23): verificar → cargar en `<DB>_restaurando` CON la app sirviendo → comprobar →
@@ -693,6 +806,16 @@ ejecutar_produccion() {
     fi
     if ! esperar_health; then
         deshacer_arranque
+    fi
+    # (9 bis) FR-17(d): el código NO puede haber cambiado durante la restauración. Se relee HEAD y el árbol
+    # al final, ya con la base nueva en su sitio y respondiendo; si algo cambió, se falla cerrado: no se
+    # declara la restauración terminada ni se borra la previa (sigue disponible para recuperar).
+    HEAD_DESPUES_FINAL="$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || true)"
+    if [[ "${HEAD_DESPUES_FINAL}" != "${HEAD_ANTES}" ]] \
+        || ! git -C "$REPO_DIR" diff --quiet 2>/dev/null \
+        || ! git -C "$REPO_DIR" diff --cached --quiet 2>/dev/null; then
+        CODIGO_DIE="unexpected"
+        die "El código cambió durante la restauración, así que no se declara terminada. La base restaurada sigue en su sitio y la previa se conserva."
     fi
     borrar_db "$PREVIA_DB" || warn "No pude borrar ${PREVIA_DB}; la siguiente restauración se negará hasta retirarla."
     limpiar_temporales

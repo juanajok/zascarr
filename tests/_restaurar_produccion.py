@@ -60,6 +60,9 @@ case "$sub" in
         if [[ " $* " == *" zascarr "* ]]; then
             rm -f "$FAKE_ESTADO_DIR/app_parada"
             evento "up zascarr"
+            # FR-17(d): el código cambia a mitad de la restauración, ya arrancada la app.
+            [[ "${FAKE_CAMBIA_HEAD:-0}" == "1" ]] && : > "$FAKE_ESTADO_DIR/cambia_head"
+            [[ "${FAKE_ARBOL_SUCIO:-0}" == "1" ]] && : > "$FAKE_ESTADO_DIR/arbol_sucio"
         fi
         exit 0 ;;
     exec) : ;;
@@ -224,6 +227,16 @@ exit 0
 GIT_FALSO = """#!/usr/bin/env bash
 set -uo pipefail
 printf '%s\n' "git $*" >> "$GIT_LOG"
+# Sólo miente DESPUÉS de que la app se haya arrancado: el arnés marca los ficheros
+# `cambia_head`/`arbol_sucio` desde el `up zascarr` del docker falso. Antes de ese punto,
+# todo pasa por el git real (HEAD, árbol limpio y rev-parse --verify).
+if [[ -f "$FAKE_ESTADO_DIR/cambia_head" && "$*" == *"rev-parse HEAD"* ]]; then
+    printf '%s\n' "${FAKE_HEAD_FALSO:?}"
+    exit 0
+fi
+if [[ -f "$FAKE_ESTADO_DIR/arbol_sucio" && "$*" == *" diff "* ]]; then
+    exit 1
+fi
 exec "${REAL_GIT:?}" "$@"
 """
 
@@ -266,6 +279,9 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True)
 
 
+_VERSION_POR_DEFECTO = object()
+
+
 def preparar(
     tmp_path: Path,
     *,
@@ -274,6 +290,7 @@ def preparar(
     seguridad_actual: dict | None = None,
     seguridad_copia: dict | None = None,
     counts: dict[str, int] | None = None,
+    version_copia: dict | None | object = _VERSION_POR_DEFECTO,
 ) -> dict:
     """Contexto de una restauración de producción: repo limpio, copia con manifiesto, proyecto Compose y bin falsos."""
     repo = tmp_path / "repo"
@@ -301,7 +318,7 @@ def preparar(
     dump = backup / f"backup_{ts}.sql.gz"
     dump.write_bytes(gzip.compress((sql or sql_dump()).encode("utf-8")))
     manifest = backup / f"MANIFIESTO-backup_{ts}.json"
-    manifest.write_text(json.dumps({
+    datos_manifiesto = {
         "schema": 1,
         "backup": dump.name,
         "sha256": hashlib.sha256(dump.read_bytes()).hexdigest(),
@@ -312,7 +329,15 @@ def preparar(
         "created_at": "2026-11-17T10:00:00+01:00",
         "origin": "test",
         "id": "test-1",
-    }), encoding="utf-8")
+    }
+    # D-2: las copias nuevas declaran la tupla; las viejas no la tienen y también se prueban.
+    if version_copia is _VERSION_POR_DEFECTO:
+        datos_manifiesto["version_de_la_copia"] = {
+            "head": head, "build_sha": "b" * 40, "app_version": "1.15.1", "alembic": "0020",
+        }
+    elif version_copia is not None:
+        datos_manifiesto["version_de_la_copia"] = version_copia
+    manifest.write_text(json.dumps(datos_manifiesto), encoding="utf-8")
 
     actual = seguridad_actual or {
         "auth_mode": "password", "auth_username": "ana", "auth_password_hash": "hash-nuevo",
@@ -445,3 +470,30 @@ def estado_restaurar(ctx: dict) -> dict | None:
 def plantilla_eventos(ctx: dict, *nombres: str) -> list[str]:
     """Solo los eventos cuyo prefijo está en `nombres`, en orden."""
     return [e for e in eventos(ctx) if e.split(" ", 1)[0] in nombres]
+
+
+def intentos_jsonl(ctx: dict) -> list[dict]:
+    """Las líneas de `ops-restaurar-intentos.jsonl` (D-5)."""
+    ruta = ctx["status"] / "ops-restaurar-intentos.jsonl"
+    if not ruta.exists():
+        return []
+    return [json.loads(linea) for linea in ruta.read_text(encoding="utf-8").splitlines() if linea.strip()]
+
+
+def leer_manifiesto(ctx: dict) -> dict:
+    return json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+
+
+def reescribir_manifiesto(ctx: dict, **cambios) -> None:
+    """Recalcula el manifiesto de laboratorio tras mutar el dump (N-02/N-03)."""
+    datos = leer_manifiesto(ctx)
+    datos.update(cambios)
+    ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+
+
+def recomputar_manifiesto(ctx: dict) -> None:
+    """SHA-256 y bytes del dump mutado, para que el preflight falle por la comprobación que se prueba."""
+    datos = leer_manifiesto(ctx)
+    datos["sha256"] = hashlib.sha256(ctx["dump"].read_bytes()).hexdigest()
+    datos["bytes"] = ctx["dump"].stat().st_size
+    ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
