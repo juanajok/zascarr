@@ -23,7 +23,7 @@
 </form>
 {% endif %}
 <details><summary>Para quien instaló ZascArr</summary>
-  <p>Identidad de la copia: {{ copia.id }}.
+  <p class="resumen-tecnico">Identidad de la copia: {{ copia.id }}.
     {% if copia.version %}
       head={{ copia.version.head or "no consta" }} · build={{ copia.version.build_sha or "no consta" }} ·
       app={{ copia.version.app_version or "no consta" }} · alembic={{ copia.version.alembic or "no consta" }}.</p>

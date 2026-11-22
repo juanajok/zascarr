@@ -26,9 +26,9 @@ import sys
 import pytest
 
 from tests._restaurar_produccion import (
+    ejecutar,
     estado_restaurar,
     eventos,
-    ejecutar,
     intentos_jsonl,
     preparar,
     recomputar_manifiesto,
@@ -206,8 +206,11 @@ def test_el_resumen_persiste_previos_fuera_comprobaciones_y_version(tmp_path):
     assert por_codigo["codigo_manifest"] == "no_ejecutada"
     assert por_codigo["health"] == "ok"
     assert set(por_codigo.values()) <= {"ok", "fallo", "no_ejecutada"}
-    # El arnés de health no publica versión: no se inventa.
-    assert estado["version_arrancada"] is None
+    # El arnés de health no publica versión, pero S-1 exige el mismo esquema:
+    # head (código que quedó puesto) y alembic sí constan; app/build son null.
+    assert estado["version_arrancada"] == {
+        "head": ctx["head"], "build_sha": None,
+        "app_version": None, "alembic": "0020"}
 
 
 def test_copia_previa_y_seguridad_exigen_la_app_parada(tmp_path):
@@ -549,3 +552,52 @@ def test_si_el_arbol_se_ensucia_al_final_se_falla_cerrado(tmp_path):
     assert estado["error"] == "unexpected"
     assert estado["base_en_su_sitio"] is True
     assert (ctx["estado_docker"] / "db.zascarr_previa").exists()
+
+
+def test_version_arrancada_sale_del_health_con_el_mismo_esquema(tmp_path, monkeypatch):
+    """S-1: `version_arrancada` tiene head/build_sha/app_version/alembic, no solo version."""
+    import tests._restaurar_produccion as arnes
+
+    monkeypatch.setattr(arnes, "CURL_FALSO", arnes.CURL_FALSO.replace(
+        'echo \'{"status":"healthy","checks":{"database":"ok"}}\'',
+        'echo \'{"status":"healthy","version":"1.15.1","build_sha":"'
+        + "b" * 40 + '","checks":{"database":"ok"}}\''))
+    ctx = preparar(tmp_path)
+    r = ejecutar(ctx, extra_env={"FAKE_ENFORCE_STOP": "1"})
+    assert r.returncode == 0, r.stdout + r.stderr
+    estado = estado_restaurar(ctx)
+    assert estado["version_arrancada"] == {
+        "head": ctx["head"], "build_sha": "b" * 40,
+        "app_version": "1.15.1", "alembic": "0020"}
+
+
+def test_la_ui_del_resumen_muestra_la_version_arrancada(tmp_path, monkeypatch):
+    """Integración health real del arnés → estado → lector de la UI."""
+    import tests._restaurar_produccion as arnes
+
+    monkeypatch.setattr(arnes, "CURL_FALSO", arnes.CURL_FALSO.replace(
+        'echo \'{"status":"healthy","checks":{"database":"ok"}}\'',
+        'echo \'{"status":"healthy","version":"1.15.1","build_sha":"'
+        + "b" * 40 + '","checks":{"database":"ok"}}\''))
+    ctx = preparar(tmp_path)
+    assert ejecutar(ctx, extra_env={"FAKE_ENFORCE_STOP": "1"}).returncode == 0
+    from fastapi.testclient import TestClient
+
+    from zascarr.config import get_settings
+    from zascarr.main import app
+    from zascarr.services import ops_host
+
+    estado = estado_restaurar(ctx)
+    s = get_settings()
+    object.__setattr__(s, "ops_restaurar_status_file",
+                       str(ctx["status"] / "ops-restaurar.json"))
+    object.__setattr__(s, "ops_status_file", str(ctx["status"] / "ops-status.json"))
+    object.__setattr__(s, "omitida_file", str(ctx["status"] / "omitida.json"))
+    object.__setattr__(s, "auth_mode", "none")
+    monkeypatch.setattr("zascarr.web.copias.get_settings", lambda: s)
+    vr = ops_host.resolver_restauracion(s, int(estado["actualizado_epoch"]))
+    assert vr.version_arrancada["app_version"] == "1.15.1"
+    assert ops_host.version_llana(vr.version_arrancada) == "Versión 1.15.1 · revisión 0020"
+    r = TestClient(app).get("/ui/copias/restauracion")
+    assert r.status_code == 200
+    assert "Versión 1.15.1 · revisión 0020" in r.text

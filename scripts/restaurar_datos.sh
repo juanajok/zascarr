@@ -553,12 +553,25 @@ leer_recuentos_previos() {
 }
 
 leer_version_arrancada() {
-    # UATP-08 D-3: versión que arrancó, leída del health ya conforme; null si no consta.
-    [[ -n "${HEALTH_JSON}" ]] || { VERSION_ARRANCADA_JSON="null"; return 0; }
-    VERSION_ARRANCADA_JSON="$(printf '%s' "${HEALTH_JSON}" | jq -c '
-        {version: (if (.version | type) == "string" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) then .version else null end),
-         build_sha: (if (.build_sha | type) == "string" and (.build_sha | test("^[0-9a-f]{40}$")) then .build_sha else null end)}
-        | if (.version == null and .build_sha == null) then null else . end' 2>/dev/null || printf 'null')"
+    # UATP-08 S-1: mismo esquema que `_version_copia` (head/build_sha/app_version/alembic).
+    # `head` es el código que quedó puesto (HEAD_ANTES), la app viene del health y la revisión
+    # es la restaurada; lo que no consta se declara null, nunca se omite la clave.
+    if [[ -z "${HEALTH_JSON}" ]]; then
+        VERSION_ARRANCADA_JSON="$(jq -cn --arg head "${HEAD_ANTES}" --arg alembic "${ESPERADA:-}" '
+            {head: (if ($head | test("^[0-9a-f]{40}$")) then $head else null end),
+             build_sha: null, app_version: null,
+             alembic: (if ($alembic | test("^[0-9]{4}$")) then $alembic else null end)}' 2>/dev/null || printf 'null')"
+        [[ -n "${VERSION_ARRANCADA_JSON}" ]] || VERSION_ARRANCADA_JSON="null"
+        return 0
+    fi
+    VERSION_ARRANCADA_JSON="$(printf '%s' "${HEALTH_JSON}" | jq -c --arg head "${HEAD_ANTES}" \
+        --arg alembic "${ESPERADA:-}" '
+        {head: (if ($head | test("^[0-9a-f]{40}$")) then $head else null end),
+         build_sha: (if (.build_sha | type) == "string" and (.build_sha | test("^[0-9a-f]{40}$")) then .build_sha else null end),
+         app_version: (if (.version | type) == "string" and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) then .version else null end),
+         alembic: (if ($alembic | test("^[0-9]{4}$")) then $alembic else null end)}
+        | if ([.head, .build_sha, .app_version, .alembic] | map(select(. != null)) | length) > 0 then . else null end' \
+        2>/dev/null || printf 'null')"
     [[ -n "${VERSION_ARRANCADA_JSON}" ]] || VERSION_ARRANCADA_JSON="null"
 }
 

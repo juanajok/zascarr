@@ -1639,6 +1639,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* Página de error propia (web/errores.py): una salida clara, la principal primero. */
 .error-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+/* UATP-08: las líneas técnicas (identidad de copia/versión) pueden llevar hashes
+   largos; en 320 px se parten sin generar scroll horizontal. */
+.resumen-tecnico { overflow-wrap: anywhere; }
 
 /* ── BL-R1b (#254): archivos por número y «Deshacer esta vinculación» ─────── */
 .archivos-numeros, .archivos-lista { list-style: none; margin: 0; padding: 0; }

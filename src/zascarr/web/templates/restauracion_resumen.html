@@ -7,14 +7,16 @@
   <h1>Copia restaurada</h1>
   <p class="subtitle">ZascArr volvió a los datos del {{ fecha_absoluta(vr.copia_epoch) }} (hora del servidor).</p>
   {% if vr.recuentos %}
-  <p>{{ vr.recuentos.series }} series, {{ vr.recuentos.issues }} números y {{ vr.recuentos.files }} archivos anotados.</p>
+  <p>{{ miles(vr.recuentos.series) }} {{ "serie" if vr.recuentos.series == 1 else "series" }},
+     {{ miles(vr.recuentos.issues) }} {{ "número" if vr.recuentos.issues == 1 else "números" }} y
+     {{ miles(vr.recuentos.files) }} {{ "archivo" if vr.recuentos.files == 1 else "archivos" }} anotados.</p>
   <p class="caption">Son registros de tu biblioteca, no archivos comprobados en el disco.</p>
   {% else %}<p>No consta el detalle de lo recuperado.</p>{% endif %}
   <h2>Versión que arrancó</h2>
   <p>{{ version_llana(vr.version_arrancada) }}.{% if not vr.version_arrancada %} La restauración es anterior a que ZascArr anotara esta versión.{% endif %}</p>
   {% if vr.version_arrancada %}
   <details><summary>Identidad de la versión</summary>
-    <p>head={{ vr.version_arrancada.head or "no consta" }} · build={{ vr.version_arrancada.build_sha or "no consta" }} · app={{ vr.version_arrancada.app_version or "no consta" }} · alembic={{ vr.version_arrancada.alembic or "no consta" }}</p>
+    <p class="resumen-tecnico">head={{ vr.version_arrancada.head or "no consta" }} · build={{ vr.version_arrancada.build_sha or "no consta" }} · app={{ vr.version_arrancada.app_version or "no consta" }} · alembic={{ vr.version_arrancada.alembic or "no consta" }}</p>
   </details>
   {% endif %}
   <h2>Queda fuera de la copia</h2>
@@ -26,10 +28,16 @@
   </ul>
   <h2>Cambios posteriores</h2>
   {% if vr.recuentos_previos and vr.recuentos %}
-  <p>Antes de restaurar había {{ vr.recuentos_previos.series }} series, {{ vr.recuentos_previos.issues }} números y {{ vr.recuentos_previos.files }} archivos anotados. Esta copia trae {{ vr.recuentos.series }}, {{ vr.recuentos.issues }} y {{ vr.recuentos.files }}: lo anotado después de la copia no vuelve.</p>
+  <p>Antes de restaurar había {{ miles(vr.recuentos_previos.series) }} {{ "serie" if vr.recuentos_previos.series == 1 else "series" }},
+     {{ miles(vr.recuentos_previos.issues) }} {{ "número" if vr.recuentos_previos.issues == 1 else "números" }} y
+     {{ miles(vr.recuentos_previos.files) }} {{ "archivo" if vr.recuentos_previos.files == 1 else "archivos" }} anotados.
+     Esta copia trae {{ miles(vr.recuentos.series) }}, {{ miles(vr.recuentos.issues) }} y {{ miles(vr.recuentos.files) }}:
+     lo anotado después de la copia no vuelve.</p>
   {% else %}<p>No consta cuánto había antes de restaurar.</p>{% endif %}
   {% if vr.fuera %}
-  <p>Quedan fuera {{ vr.fuera.series }} series, {{ vr.fuera.issues }} números y {{ vr.fuera.files }} archivos anotados después de la copia.</p>
+  <p>Quedan fuera {{ miles(vr.fuera.series) }} {{ "serie" if vr.fuera.series == 1 else "series" }},
+     {{ miles(vr.fuera.issues) }} {{ "número" if vr.fuera.issues == 1 else "números" }} y
+     {{ miles(vr.fuera.files) }} {{ "archivo" if vr.fuera.files == 1 else "archivos" }} anotados después de la copia.</p>
   {% endif %}
   <p class="caption">Las cifras son registros anotados; no dicen qué fila cambió.</p>
   <h2>Comprobaciones</h2>
@@ -40,8 +48,8 @@
   </details>
   {% else %}<p>No consta qué se comprobó.</p>{% endif %}
   <details><summary>Para quien instaló ZascArr</summary>
-    <p>copia={{ vr.copia or "no consta" }} · intento={{ vr.intento or "no consta" }} · comprobacion={{ vr.comprobacion or "no consta" }}</p>
-    <p>copia_version={{ version_llana(vr.copia_version) }}</p>
+    <p class="resumen-tecnico">copia={{ vr.copia or "no consta" }} · intento={{ vr.intento or "no consta" }} · comprobacion={{ vr.comprobacion or "no consta" }}</p>
+    <p class="resumen-tecnico">copia_version={{ version_llana(vr.copia_version) }}</p>
   </details>
   <p><a class="btn ghost sm" href="/estado">Volver a Estado</a></p>
 {% elif vr.estado == "fallo" %}
@@ -55,7 +63,7 @@
   <p><a class="btn primary" href="/estado#copias">Elige otra copia</a>
      <a class="btn ghost sm" href="/estado">Volver a Estado</a></p>
   <details><summary>Para quien instaló ZascArr</summary>
-    <p>copia={{ vr.copia or "no consta" }} · intento={{ vr.intento or "no consta" }} · error={{ vr.comprobacion or "no consta" }}</p>
+    <p class="resumen-tecnico">copia={{ vr.copia or "no consta" }} · intento={{ vr.intento or "no consta" }} · error={{ vr.comprobacion or "no consta" }}</p>
     {% if vr.comprobaciones %}<ul>{% for c in vr.comprobaciones %}<li>{{ c.codigo }}: {{ c.estado }}</li>{% endfor %}</ul>{% endif %}
   </details>
 {% else %}

@@ -90,9 +90,10 @@ def test_resumen_hecho_muestra_recuentos_fuera_version_y_comprobaciones(tmp_path
     monkeypatch.setattr("zascarr.web.copias.get_settings", lambda: s)
     r = c.get("/ui/copias/restauracion")
     assert r.status_code == 200
-    assert "Copia restaurada" in r.text and "2 series, 3 números y 4 archivos" in r.text
-    assert "Antes de restaurar había 3 series" in r.text
-    assert "Quedan fuera 1 series" in r.text
+    texto = " ".join(r.text.split())
+    assert "Copia restaurada" in texto and "2 series, 3 números y 4 archivos" in texto
+    assert "Antes de restaurar había 3 series" in texto
+    assert "Quedan fuera 1 serie, 0 números y 0 archivos" in texto
     assert "Versión 1.15.1" in r.text
     assert "Queda fuera de la copia" in r.text and "Comprobaciones" in r.text
     assert "a1b2c3d4e5f60718" in r.text and "health: ok" in r.text
@@ -134,3 +135,16 @@ def test_login_enlaza_al_resumen_y_el_health_publica_build_sha(tmp_path, monkeyp
     c = TestClient(app)
     r = c.get("/api/health")
     assert r.status_code == 200 and r.json()["build_sha"] == "b" * 40
+
+
+def test_las_lineas_tecnicas_se_parten_en_320():
+    from pathlib import Path
+
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert ".resumen-tecnico { overflow-wrap: anywhere; }" in css
+    resumen = Path("src/zascarr/web/templates/restauracion_resumen.html").read_text(
+        encoding="utf-8")
+    assert 'class="resumen-tecnico"' in resumen
+    confirmar = Path("src/zascarr/web/templates/_restaurar_confirmar.html").read_text(
+        encoding="utf-8")
+    assert 'class="resumen-tecnico"' in confirmar

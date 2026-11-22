@@ -181,8 +181,8 @@ def test_la_restauracion_en_marcha_no_es_una_copia_en_marcha(ajustes):
 # ── la interfaz ─────────────────────────────────────────────────────────────────────────────────
 @pytest.fixture()
 def cliente(ajustes, monkeypatch):
-    from zascarr.main import app
     from zascarr.database import get_db
+    from zascarr.main import app
 
     monkeypatch.setattr(ops_host, "auxiliar_disponible", lambda s: True)
 

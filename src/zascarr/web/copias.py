@@ -150,7 +150,7 @@ async def resumen_restauracion(request: Request) -> HTMLResponse:
     vr = await asyncio.to_thread(ops_host.resolver_restauracion, settings)
     respuesta = templates.TemplateResponse(request, "restauracion_resumen.html", {
         "vr": vr, "fecha_absoluta": ops_host.fecha_absoluta,
-        "version_llana": ops_host.version_llana,
+        "version_llana": ops_host.version_llana, "miles": ops_host.miles,
     })
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
