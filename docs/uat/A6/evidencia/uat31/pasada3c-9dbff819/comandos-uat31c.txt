@@ -1,0 +1,17 @@
+# UAT-31 pasada 3c — comandos (saneados)
+# Candidata tag=uat-candidata-20261122d build_sha=9dbff819e7981b9758c607a2415b69565a8d37e2 (fix comprobaciones terminales/orden).
+# Entorno E-UAT31c (alias; proyecto zascarr-uat31c; puertos <loopback>:15432 y :18000; sin Pi ni producción).
+git -C "$A6" tag -a uat-candidata-20261122d -m "UAT-31 UATP-08 candidata 2026-11-22d" 9dbff819e7981b9758c607a2415b69565a8d37e2
+git -C "$A6" rev-parse 'uat-candidata-20261122d^{commit}'   # 9dbff819e7981b9758c607a2415b69565a8d37e2
+git -C "$A6" cat-file -t uat-candidata-20261122d            # tag
+docker compose ... exec -T zascarr printenv BUILD_SHA        # 9dbff819e7981b9758c607a2415b69565a8d37e2
+curl -fsS "$APP_URL/api/health" | jq -r '.version, .build_sha'   # 1.15.1 / 9dbff819e7981b9758c607a2415b69565a8d37e2
+python3 docs/uat/A6/fixture/sembrar.py
+bash "$A6/scripts/backup.sh"    # offsite_mount_missing; B0 local válida
+psql -c "insert into series (...) values ('d9000000-...-0099','...')"   # 3/2/2
+bash "$A6/scripts/restaurar_datos.sh" --produccion --copia 20261122_180021
+jq -c '{resultado,recuentos,recuentos_previos,fuera,version_arrancada,comprobaciones}' "$RT/data/backup-status/ops-restaurar.json"
+# fallo terminal con una copia mutada (sha256 incorrecto):
+bash "$A6/scripts/restaurar_datos.sh" --produccion --copia 20261122_180101
+jq -c '{resultado,error,comprobacion,comprobaciones}' "$RT/data/backup-status/ops-restaurar.json"
+PYTHONPATH="$RT/pylib" python3 capturas_uat31c.py   # Chrome real 1280/390/320 y confirmación

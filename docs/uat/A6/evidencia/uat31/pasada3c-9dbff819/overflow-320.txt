@@ -1,0 +1,5 @@
+# UAT-31 pasada 3c — overflow horizontal (Chrome real)
+# viewport scrollWidth innerWidth bodyScrollWidth ok
+overflow_resumen-390.png: scrollWidth=390 innerWidth=390 bodyScrollWidth=390 ok=True
+overflow_resumen-320.png: scrollWidth=320 innerWidth=320 bodyScrollWidth=320 ok=True
+overflow_confirmar_320: scrollWidth=320 innerWidth=320 ok=True
