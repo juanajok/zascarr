@@ -60,6 +60,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from zascarr.models import EDITION_KIND_A_FORMAT, File, Issue, IssueFormat, MetadataSource, Series
 from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.importer import build_library_path
+from zascarr.services.obra_unica import numero_y_formato_de_alta
 from zascarr.services.raices import (
     FotoDeRaices,
     RaizNoDisponibleError,
@@ -78,7 +79,6 @@ from zascarr.utils.fs import (
     sanear_excepcion,
 )
 from zascarr.utils.naming import parse_comic_filename
-from zascarr.services.obra_unica import numero_y_formato_de_alta
 
 logger = structlog.get_logger()
 
