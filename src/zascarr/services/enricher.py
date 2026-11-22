@@ -975,12 +975,16 @@ class EnrichmentService:
         solo, ese; con varios, el año de nuestra Series desempata (±1)."""
         if not matches:
             return None
-        if len(matches) == 1 or not target_year:
+        if len(matches) == 1:
             return matches[0]
+        if not target_year:
+            # B1b/#1190: varios exactos y sin año propio: el ranking de la fuente
+            # es una caja negra; no se elige el primero.
+            return None
         by_year = [
             c for c in matches if year_of(c) and abs(year_of(c) - target_year) <= _YEAR_TOLERANCE
         ]
-        return by_year[0] if by_year else matches[0]
+        return by_year[0] if by_year else None
 
     # ── Issues (solo Comic Vine: ver docstring del módulo) ────────────────
 
