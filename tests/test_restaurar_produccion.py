@@ -200,8 +200,12 @@ def test_el_resumen_persiste_previos_fuera_comprobaciones_y_version(tmp_path):
         clave: ctx["counts"][clave] for clave in ("series", "issues", "files")}
     assert estado["fuera"] == {"series": 0, "issues": 0, "files": 0}
     codigos = [fila["codigo"] for fila in estado["comprobaciones"]]
-    assert codigos[0] == "existencia_copia" and codigos[-1] == "health"
-    assert len(codigos) == len(set(codigos)) == 14
+    assert codigos == [
+        "existencia_copia", "manifiesto", "sha256_copia", "bytes_copia", "codigo_manifest",
+        "gzip_cabecera", "cabecera_pg_dump", "tablas_dump", "alembic_revision",
+        "recuentos_nueva", "vinculos_huerfanos", "seguridad_conservada", "copia_previa",
+        "health"]
+    assert codigos.index("seguridad_conservada") < codigos.index("copia_previa")
     por_codigo = {fila["codigo"]: fila["estado"] for fila in estado["comprobaciones"]}
     assert por_codigo["codigo_manifest"] == "no_ejecutada"
     assert por_codigo["health"] == "ok"
@@ -601,3 +605,25 @@ def test_la_ui_del_resumen_muestra_la_version_arrancada(tmp_path, monkeypatch):
     r = TestClient(app).get("/ui/copias/restauracion")
     assert r.status_code == 200
     assert "Versión 1.15.1 · revisión 0020" in r.text
+
+
+def test_un_fallo_de_sha256_deja_comprobaciones_terminales(tmp_path):
+    """QA: el fallo no puede dejar `[]`; la comprobación rota es `fallo` y las posteriores
+    `no_ejecutada`, sin inventar comprobaciones posteriores."""
+    ctx = preparar(tmp_path)
+    _mutar_copia(ctx, "sha256")
+    r = ejecutar(ctx)
+    assert r.returncode != 0
+    estado = estado_restaurar(ctx)
+    assert estado["resultado"] == "fallida"
+    filas = estado["comprobaciones"]
+    assert [f["codigo"] for f in filas] == [
+        "existencia_copia", "manifiesto", "sha256_copia", "bytes_copia", "codigo_manifest",
+        "gzip_cabecera", "cabecera_pg_dump", "tablas_dump", "alembic_revision",
+        "recuentos_nueva", "vinculos_huerfanos", "seguridad_conservada", "copia_previa",
+        "health"]
+    estados = {f["codigo"]: f["estado"] for f in filas}
+    assert estados["sha256_copia"] == "fallo"
+    assert estados["existencia_copia"] == estados["manifiesto"] == "ok"
+    for codigo in ("bytes_copia", "codigo_manifest", "gzip_cabecera", "health"):
+        assert estados[codigo] == "no_ejecutada", codigo

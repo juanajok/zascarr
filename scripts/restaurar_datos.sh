@@ -146,6 +146,41 @@ registrar_intento_jsonl() {
     return 0
 }
 
+COMPROBACIONES_ORDEN=(existencia_copia manifiesto sha256_copia bytes_copia codigo_manifest
+    gzip_cabecera cabecera_pg_dump tablas_dump alembic_revision recuentos_nueva
+    vinculos_huerfanos seguridad_conservada copia_previa health)
+
+comprobaciones_terminales() {
+    # UATP-08/QA: array terminal en fallo; la comprobación que falló es `fallo` y las
+    # posteriores `no_ejecutada`. Si el fallo no corresponde a una comprobación, todas
+    # quedan `no_ejecutada` (nunca se inventa un ok).
+    local error="$1" fallo="$2" codigo encontrado=0 filas=() fila
+    if [[ -z "$fallo" ]]; then
+        case "$error" in
+            revision_distinta) fallo="alembic_revision" ;;
+            arranque_fallido) fallo="health" ;;
+            seguridad_ilegible|seguridad_no_aplicada) fallo="seguridad_conservada" ;;
+            copia_previa_fallida) fallo="copia_previa" ;;
+            verificacion_fallida|restauracion_fallida) fallo="recuentos_nueva" ;;
+            *) fallo="" ;;
+        esac
+    fi
+    for codigo in "${COMPROBACIONES_ORDEN[@]}"; do
+        if [[ -n "$fallo" && "$codigo" == "$fallo" ]]; then
+            fila="{\"codigo\":\"${codigo}\",\"estado\":\"fallo\"}"
+            encontrado=1
+        elif [[ -z "$fallo" || $encontrado -eq 0 ]]; then
+            fila="{\"codigo\":\"${codigo}\",\"estado\":\"ok\"}"
+            [[ -z "$fallo" ]] && fila="{\"codigo\":\"${codigo}\",\"estado\":\"no_ejecutada\"}"
+        else
+            fila="{\"codigo\":\"${codigo}\",\"estado\":\"no_ejecutada\"}"
+        fi
+        filas+=("$fila")
+    done
+    local IFS=","
+    COMPROBACIONES_JSON="[${filas[*]}]"
+}
+
 estado_restaurar() {
     local fase="$1" resultado="$2" error="${3:-}" base="${4:-null}" recuentos="${5:-null}"
     (( ESTADO_ON )) || return 0
@@ -156,6 +191,9 @@ estado_restaurar() {
     intento_json="$(json_str_o_null "${INTENTO}")"
     comprobacion_json="$(json_str_o_null "${COMPROBACION}")"
     ahora="$(date +%s)"
+    if [[ "$resultado" == "fallida" && "${COMPROBACIONES_JSON}" == "[]" ]]; then
+        comprobaciones_terminales "$error" "${COMPROBACION}"
+    fi
     install -d -m 755 "$dir" 2>/dev/null || return 0
     tmp="${dir}/.ops-restaurar.json.tmp.$$"
     if printf '{"schema":1,"intento":%s,"copia":"%s","copia_epoch":%s,"inicio_epoch":%s,"actualizado_epoch":%s,"fase":"%s","resultado":"%s","error":%s,"comprobacion":%s,"base_en_su_sitio":%s,"copia_version":%s,"recuentos":%s,"recuentos_previos":%s,"fuera":%s,"comprobaciones":%s,"version_arrancada":%s}\n' \
@@ -876,7 +914,7 @@ ejecutar_produccion() {
     RECUENTOS_REST_JSON="{\"series\":${CONTEO_REST[series]:-0},\"issues\":${CONTEO_REST[issues]:-0},\"files\":${CONTEO_REST[files]:-0}}"
     leer_version_arrancada
     calcular_fuera "${RECUENTOS_REST_JSON}"
-    COMPROBACIONES_JSON='[{"codigo":"existencia_copia","estado":"ok"},{"codigo":"manifiesto","estado":"ok"},{"codigo":"sha256_copia","estado":"ok"},{"codigo":"bytes_copia","estado":"ok"},{"codigo":"codigo_manifest","estado":"no_ejecutada"},{"codigo":"gzip_cabecera","estado":"ok"},{"codigo":"cabecera_pg_dump","estado":"ok"},{"codigo":"tablas_dump","estado":"ok"},{"codigo":"alembic_revision","estado":"ok"},{"codigo":"recuentos_nueva","estado":"ok"},{"codigo":"vinculos_huerfanos","estado":"ok"},{"codigo":"copia_previa","estado":"ok"},{"codigo":"seguridad_conservada","estado":"ok"},{"codigo":"health","estado":"ok"}]'
+    COMPROBACIONES_JSON='[{"codigo":"existencia_copia","estado":"ok"},{"codigo":"manifiesto","estado":"ok"},{"codigo":"sha256_copia","estado":"ok"},{"codigo":"bytes_copia","estado":"ok"},{"codigo":"codigo_manifest","estado":"no_ejecutada"},{"codigo":"gzip_cabecera","estado":"ok"},{"codigo":"cabecera_pg_dump","estado":"ok"},{"codigo":"tablas_dump","estado":"ok"},{"codigo":"alembic_revision","estado":"ok"},{"codigo":"recuentos_nueva","estado":"ok"},{"codigo":"vinculos_huerfanos","estado":"ok"},{"codigo":"seguridad_conservada","estado":"ok"},{"codigo":"copia_previa","estado":"ok"},{"codigo":"health","estado":"ok"}]'
     estado_restaurar "arrancando" "hecha" "" "true" \
         "${RECUENTOS_REST_JSON}"
     ok "Copia restaurada. La base de datos de antes se guardó como $(basename "$SEGURIDAD")."
