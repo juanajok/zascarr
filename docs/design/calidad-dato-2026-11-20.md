@@ -19,6 +19,13 @@
 > sin cambios; **I1 corregido (0/38)**. Total estimado **147**. Ver §14. La
 > medición de referencia sigue siendo la del 2026-11-20.
 >
+> **Actualización 2026-11-22.** La Pi está en `ce26086a`; el backfill estricto
+> de H1 (PR #1215) está desplegado. **Aplicado:** 4 filas de
+> `field_provenance` (Tebeosfera) en 58 series; **1 es un campo de H1** y las
+> otras 3 quedan fuera de H1. H1 **244 → 243**. Los 243 restantes no tienen un
+> valor de fuente que coincida y siguen «origen no registrado». Ver §15.
+> Total estimado sin cambios (H1 no entra en él).
+>
 > **Aviso de precisión.** El PO confirmó «todo como la hipótesis»: la columna
 > `etiqueta_esperada` se aceptó sin revisión fila a fila. Por tanto las
 > precisiones de §6 son **declaradas**, no medidas con etiquetado independiente.
@@ -114,7 +121,7 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 | H2 | S2 | 1 | 1 | 1 | 1/0/0 | 100 % | 1 exacto | FAIL | procedencia contradice la fila |
 | F4a | S3 | 593 | 583 | 20 | 20/0/0 | 100 % | 583 [489–583] → **0 tras L1** | FAIL → PASS | enricher guarda HTML (vivo; corregido) |
 | A1b | S3 | 322 | 321 | 20 | 0/20/0 | 0 % | 0 [0–52] | LEGÍTIMO | historial append-only (ADR 0014) |
-| H1 | S3 | 245 | 244 | 20 | 0/0/20 | — | sin medir | SIN MEDIR | CCM apenas ejecutado |
+| H1 | S3 | 245 | 244 → **243 tras backfill** | 20 | 0/0/20 | — | sin medir | SIN MEDIR | CCM apenas ejecutado |
 | C4b | S3 | 4.256 | 78 | 20 | 0/0/20 | — | sin medir | SIN MEDIR | formatos de número |
 | E1 | S3 | 57 | 16 | 16 | 0/0/16 | — | sin medir | SIN MEDIR | total sin unidad acreditada |
 | D5 | S3 | 5.098 | 15 | 15 | 0/15/0 | 0 % | 0 exacto | LEGÍTIMO | contrato #307: extensión declarada |
@@ -329,14 +336,16 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
 
 ### [H1] Campos con fuente y sin procedencia — S3 — PROCESO
 
-- **Casos:** 244 de 245; 20/20 «no sé».
+- **Casos:** 244 de 245; 20/20 «no sé». **Tras el backfill estricto
+  (2026-11-22): 243.**
 - **Síntoma:** la ficha no puede decir de dónde salió cada valor;
   `procedencia.py` lo llama «origen no registrado».
 - **Causa:** `field_provenance` tiene 2 filas en toda la base; el recolector CCM
   apenas se ha ejecutado. No es un lote de filas: es un proceso que falta.
-- **Propuesta:** decidir si se ejecuta el CCM/backfill (escribe; otra
-  aprobación) o se acepta «origen no registrado». No se atribuye a «manual» por
-  descarte.
+- **Aplicado (2026-11-22):** backfill estricto (§15). Escribió 4 filas de
+  procedencia (Tebeosfera) de 58 series; **1 es campo de H1**. Los 243
+  restantes no tienen un valor de fuente que coincida: siguen «origen no
+  registrado», sin atribuirlos a «manual» por descarte.
 
 ## 6. Precisión: qué se midió y qué no
 
@@ -663,10 +672,31 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
   **147** (S1 75, S2 69, S3 3: F1d).
 - **Copia:** `update_20261121_144410.sql.gz` (contiene la fila I1); las
   correcciones L2/L3/L4 posteriores están documentadas y son reversibles.
-- **Qué queda:** B5a (75, decisión del PO), H1 (proceso CCM), la prevención de
-  código (#1185, #1187, #1188, #1189, #1190) y los datos F1d/H2/F2a, que el PO
-  decidió no tocar.
+- **Qué queda:** B5a (75, decisión del PO), H1 (243, backfill estricto
+  aplicado en §15), la prevención de código (#1187, #1188, #1189, #1190; #1185
+  cerrada con #1208) y los datos F1d/H2/F2a, que el PO decidió no tocar.
+
+## 15. Backfill estricto de H1 (2026-11-22)
+
+- **Vista previa:** 58 series con `metadata_source` no manual; **4 coincidencias**
+  (todas Tebeosfera); 0 campos con candidato y sin coincidencia.
+- **Aplicado:** `python -m zascarr.cli.consolidacion --backfill --apply`;
+  **4 filas** de `field_provenance` con `confianza: fuente`. De ellas, **1 es
+  un campo de H1**; las otras 3 son `title`/`publisher_name`/`language`, que
+  H1 no cuenta. H1 **244 → 243**.
+- **Por qué tan pocas:** los 57 `entity_source_records` del CCM no contienen el
+  valor de los 244 campos de H1; el backfill estricto **no inventa** ni marca
+  `legado`. Además `cover_url` y `status` no están en `CAMPOS_SERIE`. Los 243
+  restantes siguen «origen no registrado».
+- **Copia:** `update_20261122_112631.sql.gz`, SHA-256
+  `6ddca96185ac950acc7ceb74a45b69ab4812bf07fe30033acd0bd494e7a3e355`; copia
+  diaria `backup_20261122_041330.sql.gz`, SHA-256 `776f7de2…`.
+- **Después:** H1 **243/245**; censo completo 82 comprobaciones, huella
+  `3201507c2eb6b3d2`; ninguna otra comprobación cambió de casos.
+- **Decisión:** aceptar los 243 como «origen no registrado» o esperar a que el
+  CCM recolecte/consolide esos campos. No se fuerza una procedencia que no
+  consta.
 
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
-L6, L1, L2, L3 y L4 están aplicados; L7/L8 revisados (I1 aplicado); F1d/H2/F2a
-se dejan como dato.*
+L6, L1, L2, L3 y L4 están aplicados; L7/L8 revisados (I1 aplicado); H1 con
+backfill estricto (243 restantes); F1d/H2/F2a se dejan como dato.*
