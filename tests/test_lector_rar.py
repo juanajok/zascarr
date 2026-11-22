@@ -53,6 +53,16 @@ def base(tmp_path):
     return tmp_path / "covers" / ".rar"
 
 
+def _sin_hijo(falso, limite_s: float = 3.0) -> bool:
+    """Espera acotada a que muera el nieto; no acepta un proceso vivo al final."""
+    final = time.monotonic() + limite_s
+    while time.monotonic() < final:
+        if not falso.hijo_vivo():
+            return True
+        time.sleep(0.02)
+    return not falso.hijo_vivo()
+
+
 def _listar(rar: Path, base: Path):
     with carpeta_temporal(base) as tmp:
         return listar(rar, temporal=tmp)
@@ -296,7 +306,7 @@ def test_cuelgue_mata_el_grupo_entero_y_el_motivo_es_tiempo(falso, rar, base):
     with pytest.raises(ErrorRar) as exc:
         _leer(rar, base, entrada(0, "01.jpg", len(JPEG), crc), timeout=0.6)
     assert exc.value.motivo is MotivoRar.TIEMPO
-    assert falso.hijo_vivo() is False
+    assert _sin_hijo(falso)
 
 
 def test_listar_que_se_cuelga_tambien_vence(falso, rar, base):
@@ -304,7 +314,7 @@ def test_listar_que_se_cuelga_tambien_vence(falso, rar, base):
     with pytest.raises(ErrorRar) as exc, carpeta_temporal(base) as tmp:
         listar(rar, temporal=tmp, timeout=0.6)
     assert exc.value.motivo is MotivoRar.TIEMPO
-    assert falso.hijo_vivo() is False
+    assert _sin_hijo(falso)
 
 
 def test_escribir_mas_del_tope_interrumpe_y_es_demasiado_grande(falso, rar, base):
@@ -394,7 +404,7 @@ def test_m1_la_memoria_del_lector_tiene_tope_y_se_mata_el_grupo(falso, rar, base
     with pytest.raises(ErrorRar) as exc:
         _leer(rar, base, entrada(0, "01.jpg", len(JPEG), crc), timeout=20)
     assert exc.value.motivo is MotivoRar.DEMASIADO_GRANDE
-    assert falso.hijo_vivo() is False
+    assert _sin_hijo(falso)
 
 
 def test_m1_el_rss_se_lee_de_proc_y_suma_descendientes():

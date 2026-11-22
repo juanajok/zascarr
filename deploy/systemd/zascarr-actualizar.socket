@@ -1,0 +1,16 @@
+[Unit]
+Description=Socket de actualización manual OPS4 (no habilitado por defecto)
+Documentation=https://github.com/juanajok/zascarr
+
+[Socket]
+ListenStream=@ZASCARR_DATA_DIR@/ops/actualizar.sock
+Accept=yes
+SocketUser=root
+SocketGroup=@GRUPO@
+SocketMode=0660
+DirectoryMode=0750
+MaxConnections=2
+TriggerLimitIntervalSec=10s
+TriggerLimitBurst=10
+
+# Sin [Install]: el instalador no lo habilita; se arranca solo en la VM de pruebas.
