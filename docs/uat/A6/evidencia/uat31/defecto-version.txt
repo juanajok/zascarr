@@ -1,0 +1,21 @@
+# UAT-31 — Defecto: «Versión que arrancó» no se pinta (FAIL)
+# Generado: 2026-11-22T17:22:31+01:00
+#
+# Datos reales tras la restauración (ops-restaurar-uat31.json):
+#   version_arrancada = {"version":"1.15.1","build_sha":"a6849c2cd5c31e0d192c79fff66b45c3f13eddff"}
+#
+# UI real (/ui/copias/restauracion, texto visible y HTML):
+#   «Versión no consta.»
+#   «head=no consta · build=a6849c2cd5c31e0d192c79fff66b45c3f13eddff · app=no consta · alembic=no consta»
+#
+# Causa (lectura del código de la candidata a6849c2cd5c31e0d192c79fff66b45c3f13eddff):
+#   - scripts/restaurar_datos.sh::leer_version_arrancada escribe las claves {version, build_sha}.
+#   - src/zascarr/services/ops_host.py::_version_copia sanea con {head, build_sha, app_version, alembic}
+#     y descarta la clave «version»; version_llana() exige app_version/alembic y devuelve «Versión no consta».
+#   - La prueba tests/test_web_uatp08.py usa un VERSION sintético con app_version/alembic y no cubre
+#     la forma que produce el script; tests/test_restaurar_produccion.py solo comprueba null en fallo.
+#   - Resultado de la suite ejecutada en la rama: 46 passed (tests/test_web_uatp08.py +
+#     tests/test_restauracion_estado.py), así que el hueco no lo detectan las pruebas actuales.
+#
+# No se corrige el código en esta tarea de evidencia: se reporta el FAIL para que lo arregle
+# el implementador (p. ej. que el script emita app_version/alembic, o que la UI acepte version).

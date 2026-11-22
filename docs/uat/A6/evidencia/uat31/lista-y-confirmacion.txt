@@ -1,0 +1,12 @@
+=== Lista de copias (/ui/copias/estado) ===
+backup-20261122_172016
+Las horas son del servidor
+Restaurar…
+Versión 1.15.1 · revisión 0052
+
+=== Confirmación (/ui/copias/restaurar/backup-'20261122_172016') ===
+Vas a volver a los datos del 22/11/2026 a las 17:20 (hora del servidor).
+Versión 1.15.1 · revisión 0052.
+archivos de tu biblioteca (CBZ, CBR, PDF o EPUB), las portadas ni la configuración del equipo; ZascArr no los toca al restaurar.
+cambios posteriores a esa copia: series, números, ediciones y progreso anotados después. Mover o renombrar archivos que haya hecho ZascArr no se deshace.
+cambios posteriores a esa copia.

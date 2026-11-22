@@ -179,6 +179,30 @@ la misma semilla sintética.
 - `N-01-systemd-host` (arranque real de la unidad `zascarr-restaurar@…`): **NOT RUN**
   (`motivo=sin_root_systemd`).
 
+## Anexo UAT-31 (UATP-08) — pasada 3: ejecución real (FAIL parcial)
+
+Ejecución de **UAT-31** sobre la rama `feat/uatp08-momento-recuperacion` (SHA `a6849c2cd5c31e0d192c79fff66b45c3f13eddff`), tag
+anotado **`uat-candidata-20261122b`**. Entorno E-UAT31 aislado (proyecto `zascarr-uat31`, puertos
+15432/18000, sin Pi ni datos reales). Semilla 2/2/2, B0 `backup-20261122_172016` y **una fila añadida
+después de la copia** (una `series`), de modo que antes de restaurar hay 3/2/2.
+
+| Comprobación | Resultado | Evidencia |
+|---|---|---|
+| A. El resumen explica que la fila añadida queda fuera (`recuentos_previos`/`fuera`) | **PASS**: «Antes de restaurar había 3 series, 2 números y 2 archivos anotados. Esta copia trae 2, 2 y 2…» y «Quedan fuera 1 series, 0 números y 0 archivos…» | [`uat31/uat31-resultado.txt`](evidencia/uat31/uat31-resultado.txt) |
+| B. Versión que arrancó | **FAIL**: la UI dice «Versión no consta.» aunque `ops-restaurar.json` lleva `version_arrancada={"version":"1.15.1","build_sha":"a6849c2cd5c31e0d192c79fff66b45c3f13eddff"}`; en la identidad solo se pinta `build=…` y `app=no consta` | [`uat31/defecto-version.txt`](evidencia/uat31/defecto-version.txt) |
+| C. Comprobaciones | **PASS**: 14 comprobaciones visibles (`existencia_copia`…`health`; `codigo_manifest` = `no_ejecutada`) | [`uat31/comprobaciones-uat31.txt`](evidencia/uat31/comprobaciones-uat31.txt) |
+| D. Captura de navegador | **PASS**: Chrome real a 1280×1100 y 390×844 (resumen con detalles abiertos) y confirmación previa | [`uat31/capturas/`](evidencia/uat31/capturas/) |
+| E. Soporte (13.10 1/2/4) | **PASS**: `/api/health` publica `build_sha`; resumen `no-store`; lista «Versión 1.15.1 · revisión 0052» y «Las horas son del servidor»; confirmación con fecha absoluta y alcance | [`uat31/lista-y-confirmacion.txt`](evidencia/uat31/lista-y-confirmacion.txt) |
+
+**Resultado:** **UAT-31 FAIL parcial**; UATP-08 **no acreditable** hasta corregir B. El defecto es
+una discrepancia de forma: `scripts/restaurar_datos.sh::leer_version_arrancada` escribe
+`{version, build_sha}`, mientras `src/zascarr/services/ops_host.py::_version_copia`/`version_llana`
+esperan `{head, build_sha, app_version, alembic}`; la prueba `tests/test_web_uatp08.py` usa una
+forma sintética con `app_version` y no cubre la real. La suite de la rama da **46 passed** y no lo
+detecta. **No se corrige código en esta tarea de evidencia.** No se fabrica PASS.
+
+![Resumen UAT-31 con la fila fuera y la versión no consta](evidencia/uat31/capturas/resumen-detalles-escritorio.png)
+
 ## Enlaces
 
 - Issues: [#1144](https://github.com/juanajok/zascarr/issues/1144), [#1145](https://github.com/juanajok/zascarr/issues/1145), [#1141](https://github.com/juanajok/zascarr/issues/1141).
