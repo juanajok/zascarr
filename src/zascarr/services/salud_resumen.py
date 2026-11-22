@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 #: el HEALTHCHECK corre cada 30 s: cuatro pasadas perdidas ya no es «lo último que sabemos».
 EDAD_MAXIMA_S = 120.0
@@ -29,6 +30,14 @@ class ResumenSalud:
 
 
 _ultimo: ResumenSalud | None = None
+
+
+def registro_ausente(ruta: str) -> bool:
+    """¿Falta el fichero de estado que escribe el host? (la copia o la restauración nunca corrió)
+
+    Lo usan la comprobación de salud (para no avisar de lo que nunca se configuró) y el Inicio
+    (para ofrecer configurarlo): una sola definición de «sin registro»."""
+    return not Path(ruta).exists()
 
 
 def registrar(estado: str, ahora: float | None = None) -> None:
