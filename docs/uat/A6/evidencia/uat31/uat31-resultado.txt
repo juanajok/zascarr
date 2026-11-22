@@ -1,71 +1,46 @@
-# UAT-31 — UATP-08 (#1146) ejecución real en candidata aislada
-# Generado: 2026-11-22T17:23:42+01:00
-# Entorno: E-UAT31 (alias; host local aislado; sin hostname, IP ni ruta; nunca la Pi ni datos reales)
-# Candidata: tag=uat-candidata-20261122b tag_commit=a6849c2cd5c31e0d192c79fff66b45c3f13eddff build_sha=a6849c2cd5c31e0d192c79fff66b45c3f13eddff app_version=1.15.1 alembic=0052
-# Copia B0: backup-20261122_172016 (manifiesto con version_de_la_copia completa)
-# Semilla: 2 series, 2 números, 2 archivos, 1 raíz de biblioteca
-# Fila añadida DESPUÉS de B0: 1 fila en `series` (id fijo b7000000-0000-4000-8000-000000000099)
-# Resultado global: FAIL parcial — A/C/D/E PASS; B (versión que arrancó) FAIL.
+# UAT-31 — UATP-08 (#1146) ejecución real — PASADA 3 (3a FAIL → 3b PASS)
+# Generado: 2026-11-22T17:40:24+01:00
+# Entorno E-UAT31b (alias; host local aislado; sin hostname, IP ni ruta; nunca la Pi ni datos reales)
+# Candidata: tag=uat-candidata-20261122c tag_commit=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4
+#            app_version=1.15.1 alembic=0052 image_id=sha256:92e5c1c8328a42ba010876a2bc7c4e600dd728822418a0fde8e3212527ae70a6
+# Copia B0: backup-20261122_173819 sha256=475f463f78dff8738271340a8dc89cb830043789defd7ef0f85be419f4d1dd8f bytes=17726 manifest_sha256=dfd70981209e94cf98b510b87717be24c30265ae6eada818b6636e261bfaa533
+# Fila añadida DESPUÉS de B0: 1 fila en `series` (id fijo c8000000-0000-4000-8000-000000000099)
+# Resultado global: PASS (A/B/C/D/E)
 #
-# Resumen de la ejecución:
-#   - Antes de restaurar: series=3 issues=2 files=2 (la fila añadida después de la copia).
+# Historial:
+#   3a (a6849c2c, tag uat-candidata-20261122b): FAIL B — la UI mostraba «Versión no consta.»
+#      porque el script escribía {version, build_sha} y la UI esperaba app_version/alembic.
+#      Se conserva en este directorio (defecto-version.txt, ops-restaurar-uat31.json, capturas).
+#   3b (ab81b6bb, tag uat-candidata-20261122c): el fix alinea el esquema
+#      {head, build_sha, app_version, alembic} y añade `.resumen-tecnico` con overflow-wrap.
+#      Reejecutado de cero en un entorno nuevo: PASS.
+#
+# Resumen de la pasada 3b:
+#   - Antes de restaurar: series=3 issues=2 files=2 (fila añadida después de la copia).
 #   - B0 restaurada: series=2 issues=2 files=2.
 #   - recuentos_previos=3/2/2 · recuentos=2/2/2 · fuera=1/0/0.
-#   - La UI /ui/copias/restauracion explica: «Antes de restaurar había 3 series, 2 números y
-#     2 archivos anotados. Esta copia trae 2, 2 y 2: lo anotado después de la copia no vuelve.»
-#     y «Quedan fuera 1 series, 0 números y 0 archivos anotados después de la copia.»  → PASS A.
-#   - «Versión que arrancó» muestra «Versión no consta.» aunque ops-restaurar.json lleva
-#     version_arrancada={"version":"1.15.1","build_sha":"a6849c2cd5c31e0d192c79fff66b45c3f13eddff"}.  → FAIL B.
-#   - Comprobaciones: 14 filas (existencia_copia..health) visibles en el resumen. → PASS C.
-#   - Capturas con Chrome real a 1280x1100 y 390x844, y confirmación previa. → PASS D.
-#   - /api/health publica build_sha; resumen con Cache-Control: no-store; lista y confirmación
-#     con fecha absoluta y versión de la copia. → PASS E (soporte de 13.10 1/2/4).
-#   - La suite de la rama (test_web_uatp08 + test_restauracion_estado) da 46 passed: usa una
-#     forma sintética de version_arrancada con app_version y NO cubre la que escribe el script.
+#   - UI: «Antes de restaurar había 3 series, 2 números y 2 archivos anotados. Esta copia trae
+#     2, 2 y 2…» y «Quedan fuera 1 serie, 0 números y 0 archivos…».  → PASS A.
+#   - «Versión que arrancó»: «Versión 1.15.1 · revisión 0052.»; identidad:
+#     head=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 · build=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 · app=1.15.1 · alembic=0052.  → PASS B.
+#   - Comprobaciones: 14 visibles (existencia_copia..health; codigo_manifest=no_ejecutada). → PASS C.
+#   - Capturas Chrome real 1280x1100, 390x844 y 320x568; scrollWidth==innerWidth en 320 y 390;
+#     confirmación a 320 sin desbordar. → PASS D.
+#   - /api/health build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4; resumen Cache-Control: no-store; lista y confirmación con
+#     fecha absoluta y «Versión 1.15.1 · revisión 0052». → PASS E.
+#   - Suite de la rama (test_web_uatp08.py + test_restauracion_estado.py + test_restaurar_produccion.py
+#     afectados por el fix): ver nota del PR. La forma real ya está cubierta por el test PG del flujo.
 
 ## Comprobaciones
 CHECK UAT-31-A PASS explicacion_fila_fuera=true recuentos_previos=3/2/2 recuperado=2/2/2 fuera=1/0/0
-CHECK UAT-31-B FAIL version_arrancada_ui=no_consta version_arrancada_json=1.15.1 causa=forma_version_vs_app_version
+CHECK UAT-31-B PASS version_llana="Versión 1.15.1 · revisión 0052" app_version=1.15.1 alembic=0052 sin_no_consta=true
 CHECK UAT-31-C PASS comprobaciones=14 incluye_no_ejecutada=codigo_manifest
-CHECK UAT-31-D PASS capturas=3 viewports=1280x1100,390x844
-CHECK UAT-31-E PASS health_build_sha=a6849c2cd5c31e0d192c79fff66b45c3f13eddff resumen_no_store=true lista_version=true confirmar_version=true
+CHECK UAT-31-D PASS capturas=5 viewports=1280x1100,390x844,320x568 overflow_320=false overflow_390=false
+CHECK UAT-31-E PASS health_build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 resumen_no_store=true lista_version=true confirmar_version=true
 
-## Comandos y salidas clave
-$ git -C "$A6" rev-parse 'uat-candidata-20261122b^{commit}'
-a6849c2cd5c31e0d192c79fff66b45c3f13eddff
-$ docker compose ... exec -T zascarr printenv BUILD_SHA
-a6849c2cd5c31e0d192c79fff66b45c3f13eddff
-$ curl -fsS "$APP_URL/api/health" | jq -r '.version, .build_sha'
-1.15.1
-a6849c2cd5c31e0d192c79fff66b45c3f13eddff
-$ bash "$A6/scripts/backup.sh"    # sin offsite: rc=1, B0 local válida
-$ jq -c .version_de_la_copia "$RT/backups/MANIFIESTO-backup_20261122_172016.json"
-{"head":"a6849c2cd5c31e0d192c79fff66b45c3f13eddff","build_sha":"a6849c2cd5c31e0d192c79fff66b45c3f13eddff","app_version":"1.15.1","alembic":"0052"}
-$ psql -c "insert into series (id,title,tradition,kind,wishlist_policy) values ('b7000000-0000-4000-8000-000000000099','Serie añadida después de la copia','american','regular','ninguno')"
-$ psql -At -F'|' -c "select (select count(*) from series),(select count(*) from issues),(select count(*) from files)"
-3|2|2
-$ bash "$A6/scripts/restaurar_datos.sh" --produccion --copia 20261122_172016
-# Copia restaurada. Recuentos: series=2 issues=2 files=2
-$ jq -c '{resultado,recuentos,recuentos_previos,fuera,version_arrancada,comprobaciones}' "$RT/data/backup-status/ops-restaurar.json"
-# (ver ops-restaurar-uat31.json; recuentos_previos 3/2/2, fuera 1/0/0, version_arrancada
-#  {"version":"1.15.1","build_sha":"a6849c2cd5c31e0d192c79fff66b45c3f13eddff"}, 14 comprobaciones)
-$ curl -b "$COOKIE" "$APP_URL/ui/copias/restauracion" | grep -o 'Quedan fuera [^<]*'
-Quedan fuera 1 series, 0 números y 0 archivos anotados después de la copia.
-$ curl -b "$COOKIE" "$APP_URL/ui/copias/restauracion" | grep -o 'Versión no consta.'
-Versión no consta.
-$ PYTHONPATH="$RT/pylib" python3 capturas.py    # Chrome del sistema; guarda evidencias/uat31/capturas/*
-login_url: http://<loopback>:18000/ui/
-confirmar_absoluta: True
-
-## Defecto B (versión que arrancó)
-# ops-restaurar.json:
-#   "version_arrancada": {"version":"1.15.1","build_sha":"a6849c2cd5c31e0d192c79fff66b45c3f13eddff"}
-# UI /ui/copias/restauracion:
-#   «Versión no consta.»
-#   «head=no consta · build=a6849c2cd5c31e0d192c79fff66b45c3f13eddff · app=no consta · alembic=no consta»
-# Causa: scripts/restaurar_datos.sh::leer_version_arrancada escribe {version, build_sha};
-#   src/zascarr/services/ops_host.py::_version_copia sanea {head, build_sha, app_version, alembic}
-#   y descarta «version»; version_llana() exige app_version/alembic y devuelve «Versión no consta».
-# Hueco de prueba: tests/test_web_uatp08.py usa VERSION sintético con app_version/alembic;
-#   tests/test_restaurar_produccion.py solo comprueba null en fallo. 46 passed en la rama.
-# No se corrige en esta tarea de evidencia: se reporta FAIL.
+## Evidencia adicional de esta pasada
+# - versiones-uat31b.txt · ops-restaurar-uat31b.json · resumen-texto-uat31b.txt
+# - comprobaciones-uat31b.txt · overflow-320.txt · comandos-uat31b.txt
+# - capturas/resumen-escritorio.png, resumen-390.png, resumen-320.png,
+#   capturas/confirmar-320.png, capturas/confirmar-escritorio.png
+# - Histórico del FAIL corregido: defecto-version.txt (pasada 3a) y pasada3b-ab81b6bb/.

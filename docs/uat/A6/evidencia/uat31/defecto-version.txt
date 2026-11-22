@@ -1,3 +1,5 @@
+# HISTÓRICO pasada 3a (a6849c2c): este defecto se corrigió en ab81b6bb y la pasada 3b
+# (tag uat-candidata-20261122c) reejecutó UAT-31 con PASS. Se conserva como evidencia del FAIL.
 # UAT-31 — Defecto: «Versión que arrancó» no se pinta (FAIL)
 # Generado: 2026-11-22T17:22:31+01:00
 #

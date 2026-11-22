@@ -15,6 +15,12 @@ PASADA2 B0 copia=backup-20261122_131744 sha256=3e4de7c3a3cf6b599a85d024a0a12fa51
 PASADA2 N01 copia=backup-20261122_140001 mutacion=sha256_manifiesto_incorrecto dump=B0_intacto
 PASADA2 SEMILLA series=2 issues=2 files=2 reading_progress=1 testigo_mtime_ns=1795349854081043900
 PASADA2 CONDICION_V03 T1_alembic=0052 C_alembic=0052 coinciden=true
-PASADA3 UAT-31 tag=uat-candidata-20261122b tag_commit=a6849c2cd5c31e0d192c79fff66b45c3f13eddff build_sha=a6849c2cd5c31e0d192c79fff66b45c3f13eddff app_version=1.15.1 alembic=0052
-PASADA3 B0 copia=backup-20261122_172016 sha256=ca6fa36b5feb2334c49a0f3b3c151a943013dbe60edcb72eb6a154044ef4f12b manifest_sha256=65e68d8108009bea6109d173f47762a6a938f3647f7c79f52fa71072f85ad2ed version_de_la_copia_completa
-PASADA3 FILA_POSTERIOR tipo=series antes=3/2/2 despues=2/2/2 fuera=1/0/0
+PASADA3A UAT-31 tag=uat-candidata-20261122b tag_commit=a6849c2cd5c31e0d192c79fff66b45c3f13eddff build_sha=a6849c2cd5c31e0d192c79fff66b45c3f13eddff app_version=1.15.1 alembic=0052
+PASADA3A B0 copia=backup-20261122_172016 sha256=ca6fa36b5feb2334c49a0f3b3c151a943013dbe60edcb72eb6a154044ef4f12b manifest_sha256=65e68d8108009bea6109d173f47762a6a938f3647f7c79f52fa71072f85ad2ed version_de_la_copia_completa
+PASADA3A FILA_POSTERIOR tipo=series antes=3/2/2 despues=2/2/2 fuera=1/0/0
+PASADA3B UAT-31 tag=uat-candidata-20261122c tag_commit=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 app_version=1.15.1 alembic=0052 resultado=PASS
+PASADA3B B0 copia=backup-20261122_173819 sha256=475f463f78dff8738271340a8dc89cb830043789defd7ef0f85be419f4d1dd8f manifest_sha256=dfd70981209e94cf98b510b87717be24c30265ae6eada818b6636e261bfaa533 version_de_la_copia_completa
+PASADA3B FILA_POSTERIOR tipo=series antes=3/2/2 despues=2/2/2 fuera=1/0/0
+PASADA3B VERSION_ARRANCADA head=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 app_version=1.15.1 alembic=0052
+PASADA3B OVERFLOW_320 scrollWidth=320 innerWidth=320 bodyScrollWidth=320 ok=true
+PASADA3B FIX correccion=ab81b6bb esquema_version_arrancada css_320=resumen-tecnico

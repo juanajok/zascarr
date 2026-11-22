@@ -1,0 +1,76 @@
+Saltar al contenido
+ZASCARR
+MI COLECCIÓN
+Inicio
+Por revisar
+Biblioteca
+Mejoras
+Colecciones
+Listas
+Duplicados
+AÑADIR
+Descubrir
+Novedades
+Deseados
+SISTEMA
+Estado
+necesita atención
+Ajustes
+Cerrar sesión
+COPIA RESTAURADA
+
+ZascArr volvió a los datos del 22/11/2026 a las 17:38 (hora del servidor).
+
+2 series, 2 números y 2 archivos anotados.
+
+Son registros de tu biblioteca, no archivos comprobados en el disco.
+
+VERSIÓN QUE ARRANCÓ
+
+Versión 1.15.1 · revisión 0052.
+
+Identidad de la versión
+
+head=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 · build=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 · app=1.15.1 · alembic=0052
+
+QUEDA FUERA DE LA COPIA
+Los archivos de tu biblioteca: CBZ, CBR, PDF o EPUB.
+Las portadas guardadas.
+La configuración del equipo: acceso, contraseña y exposición.
+Lo anotado después de la copia.
+CAMBIOS POSTERIORES
+
+Antes de restaurar había 3 series, 2 números y 2 archivos anotados. Esta copia trae 2, 2 y 2: lo anotado después de la copia no vuelve.
+
+Quedan fuera 1 serie, 0 números y 0 archivos anotados después de la copia.
+
+Las cifras son registros anotados; no dicen qué fila cambió.
+
+COMPROBACIONES
+
+Se comprobó la copia antes de usarla y la base restaurada antes de arrancar.
+
+Qué se comprobó
+existencia_copia: ok
+manifiesto: ok
+sha256_copia: ok
+bytes_copia: ok
+codigo_manifest: no_ejecutada
+gzip_cabecera: ok
+cabecera_pg_dump: ok
+tablas_dump: ok
+alembic_revision: ok
+recuentos_nueva: ok
+vinculos_huerfanos: ok
+copia_previa: ok
+seguridad_conservada: ok
+health: ok
+Para quien instaló ZascArr
+
+copia=backup-20261122_173819 · intento=e66c05b33c2b3dee · comprobacion=no consta
+
+copia_version=Versión 1.15.1 · revisión 0052
+
+Volver a Estado
+
+ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal.
