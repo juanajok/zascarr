@@ -1,16 +1,218 @@
-<frozen site>:107: RuntimeWarning: Unexpected value in sys.prefix, expected /mnt/Datos/Documentos/Repos/zascarr/.venv-test, got /mnt/Datos/Documentos/Repos/zascarr/.worktrees/uatp0607/../../.venv-test
-<frozen site>:107: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /mnt/Datos/Documentos/Repos/zascarr/.venv-test, got /mnt/Datos/Documentos/Repos/zascarr/.worktrees/uatp0607/../../.venv-test
-/mnt/Datos/Documentos/Repos/zascarr/.venv-test/lib/python3.14/site-packages/pytest_asyncio/plugin.py:300: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
-The event loop scope for asynchronous fixtures will default to the "fixture" caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+# A6 — Evidencia de recuperación (UATP-06/UATP-07)
+# Generado: 2026-11-22T13:13:29+01:00
+# Entorno: E-A6 (alias; sin hostname, IP ni ruta)
+# Candidata: tag=uat-candidata-20261122 tag_commit=2c773e53c235812adabc76e76cd3b111d04d4026 build_sha=2c773e53c235812adabc76e76cd3b111d04d4026 app_version=1.15.1 alembic=0052
+# Baseline: tag=no_definido motivo=pendiente_po (decisión D-3 no aprobada por el PO)
+# Tag antiguo: v1.15.1 (sin lector ni restauración; alembic_max=0016)
+# Variables saneadas: A6=<repo candidato>; RT=<entorno E-A6>; APP_URL=http://<loopback>:18000; COOKIE=<cookie de sesión, no publicada>
+# Aislamiento: proyecto Compose=zascarr-a6; puertos=<loopback>:15432 y :18000; datos/volúmenes bajo RT; instalación real y Pi no tocadas.
+# Cuerpo: comandos con rutas saneadas y salida saneada; no se publican secretos, rutas absolutas del host ni nombres reales.
 
-  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
-........................................................................ [ 34%]
-........................................................................ [ 69%]
-..............................................................           [100%]
-=============================== warnings summary ===============================
-../../.venv-test/lib/python3.14/site-packages/fastapi/testclient.py:1
-  /mnt/Datos/Documentos/Repos/zascarr/.venv-test/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
-    from starlette.testclient import TestClient as TestClient  # noqa
+## 0. Entorno y aislamiento
+$ docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" config --format json | jq -r '.name, (.services.postgres.ports[0].published), (.services.zascarr.ports[0].published), .services.postgres.container_name, .services.zascarr.container_name'
+zascarr-a6
+15432
+18000
+zascarr-a6-db
+zascarr-a6-orquestador
+# Compose generado desde el del candidato cambiando solo: name, container_name, puertos publicados,
+# contexto de build y destino del montaje de biblioteca (/biblioteca). No se modificó el repo.
 
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-206 passed, 1 warning in 71.33s (0:01:11)
+## V — identidad de la candidata y versión declarada
+$ git -C "$A6" rev-parse HEAD
+2c773e53c235812adabc76e76cd3b111d04d4026
+$ git -C "$A6" rev-parse 'uat-candidata-20261122^{commit}'
+2c773e53c235812adabc76e76cd3b111d04d4026
+$ git -C "$A6" cat-file -t uat-candidata-20261122
+tag
+$ docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T zascarr printenv BUILD_SHA
+2c773e53c235812adabc76e76cd3b111d04d4026
+$ docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T postgres psql -U comics_admin -d zascarr -At -c "select version_num from alembic_version"
+0052
+$ curl -fsS "$APP_URL/api/health" | jq -r .version
+1.15.1
+$ grep -m1 '^version' "$A6/pyproject.toml"
+version = "1.15.1"
+$ docker image inspect --format '{{.Id}}' zascarr-a6-zascarr:latest
+sha256:7be671c1a4dae062db856b70f2f1a457f494cff2624e4f6388796f86864d82b2
+# Tag antiguo (ausencia verificada; no se intenta abrir):
+$ git -C "$A6" ls-tree -r v1.15.1 --name-only | grep -E 'web/lector\.py|services/ops_host\.py' || true
+# (sin líneas)
+$ git -C "$A6" ls-tree --name-only v1.15.1 alembic/versions/ | sort | tail -2
+20260929_0015_politica_wishlist.py
+20260929_0016_original_sha256.py
+$ git -C "$A6" rev-parse 'v1.15.1^{commit}'
+4f6ccdd310f5a644d19bdc1293327ac60d531b00
+
+## N — matriz negativa por el camino de producción (restaurar_datos.sh --produccion)
+# Listener de eventos (create/start/stop/kill/die/destroy/exec_create/exec_start del proyecto aislado):
+$ docker events --filter label=com.docker.compose.project=zascarr-a6 --filter event=create --filter event=start --filter event=stop --filter event=kill --filter event=die --filter event=destroy --filter event=exec_create --filter event=exec_start > "$RT/eventos-<ID>.txt" &
+
+# N-01: copia_no_valida / sha256_copia
+$ bash "$A6/scripts/restaurar_datos.sh" --produccion --copia 20261122_130801
+# rc=1
+$ jq -c '{resultado,error,comprobacion,base_en_su_sitio,recuentos}' "$RT/evidencia/ops-restaurar-N-01.json"
+{"resultado":"fallida","error":"copia_no_valida","comprobacion":"sha256_copia","base_en_su_sitio":true,"recuentos":null}
+$ tail -n 1 "$RT/status/ops-restaurar-intentos.jsonl" | jq -c '{intento,resultado,error,comprobacion,copia_version}'
+{"intento":"50be24773dfc345d","resultado":"fallida","error":"copia_no_valida","comprobacion":"sha256_copia","copia_version":{"head":"2c773e53c235812adabc76e76cd3b111d04d4026","build_sha":"2c773e53c235812adabc76e76cd3b111d04d4026","app_version":"1.15.1","alembic":"0052"}}
+$ wc -l < "$RT/evidencia/eventos-N-01.txt"
+2
+# de los 2 eventos crudos, 2 son sondas de HEALTHCHECK del propio entorno
+# (pg_isready / health de la app, ajenas al intento); eventos provocados por el intento = 0.
+
+# N-02: copia_no_valida / gzip_cabecera
+$ bash "$A6/scripts/restaurar_datos.sh" --produccion --copia 20261122_130802
+# rc=1
+$ jq -c '{resultado,error,comprobacion,base_en_su_sitio,recuentos}' "$RT/evidencia/ops-restaurar-N-02.json"
+{"resultado":"fallida","error":"copia_no_valida","comprobacion":"gzip_cabecera","base_en_su_sitio":true,"recuentos":null}
+$ tail -n 1 "$RT/status/ops-restaurar-intentos.jsonl" | jq -c '{intento,resultado,error,comprobacion,copia_version}'
+{"intento":"bcd5d5bff5837431","resultado":"fallida","error":"copia_no_valida","comprobacion":"gzip_cabecera","copia_version":{"head":"2c773e53c235812adabc76e76cd3b111d04d4026","build_sha":"2c773e53c235812adabc76e76cd3b111d04d4026","app_version":"1.15.1","alembic":"0052"}}
+$ wc -l < "$RT/evidencia/eventos-N-02.txt"
+0
+# de los 0 eventos crudos, 0 son sondas de HEALTHCHECK del propio entorno
+# (pg_isready / health de la app, ajenas al intento); eventos provocados por el intento = 0.
+
+# N-03a: copia_no_valida / tablas_dump
+$ bash "$A6/scripts/restaurar_datos.sh" --produccion --copia 20261122_130803
+# rc=1
+$ jq -c '{resultado,error,comprobacion,base_en_su_sitio,recuentos}' "$RT/evidencia/ops-restaurar-N-03a.json"
+{"resultado":"fallida","error":"copia_no_valida","comprobacion":"tablas_dump","base_en_su_sitio":true,"recuentos":null}
+$ tail -n 1 "$RT/status/ops-restaurar-intentos.jsonl" | jq -c '{intento,resultado,error,comprobacion,copia_version}'
+{"intento":"225bfb9ad5497a5a","resultado":"fallida","error":"copia_no_valida","comprobacion":"tablas_dump","copia_version":{"head":"2c773e53c235812adabc76e76cd3b111d04d4026","build_sha":"2c773e53c235812adabc76e76cd3b111d04d4026","app_version":"1.15.1","alembic":"0052"}}
+$ wc -l < "$RT/evidencia/eventos-N-03a.txt"
+0
+# de los 0 eventos crudos, 0 son sondas de HEALTHCHECK del propio entorno
+# (pg_isready / health de la app, ajenas al intento); eventos provocados por el intento = 0.
+
+# N-03b: copia_no_valida / tablas_dump
+$ bash "$A6/scripts/restaurar_datos.sh" --produccion --copia 20261122_130804
+# rc=1
+$ jq -c '{resultado,error,comprobacion,base_en_su_sitio,recuentos}' "$RT/evidencia/ops-restaurar-N-03b.json"
+{"resultado":"fallida","error":"copia_no_valida","comprobacion":"tablas_dump","base_en_su_sitio":true,"recuentos":null}
+$ tail -n 1 "$RT/status/ops-restaurar-intentos.jsonl" | jq -c '{intento,resultado,error,comprobacion,copia_version}'
+{"intento":"7403de33598e09da","resultado":"fallida","error":"copia_no_valida","comprobacion":"tablas_dump","copia_version":{"head":"2c773e53c235812adabc76e76cd3b111d04d4026","build_sha":"2c773e53c235812adabc76e76cd3b111d04d4026","app_version":"1.15.1","alembic":"0052"}}
+$ wc -l < "$RT/evidencia/eventos-N-03b.txt"
+0
+# de los 0 eventos crudos, 0 son sondas de HEALTHCHECK del propio entorno
+# (pg_isready / health de la app, ajenas al intento); eventos provocados por el intento = 0.
+
+## S/D — instantánea canónica e integridad de B0
+$ bash "$RT/snapshot.sh" > "$RT/evidencia/snapshot-S0-final.json"
+$ bash "$RT/snapshot.sh" > "$RT/evidencia/snapshot-S1-final.json"
+$ python3 "$RT/comparar.py" "$RT/evidencia/snapshot-S0-final.json" "$RT/evidencia/snapshot-S1-final.json"
+
+{"grupo": "codigo", "que": "head/arbol", "resultado": "PASS"}
+{"grupo": "bd", "que": "alembic/recuentos", "resultado": "PASS"}
+{"grupo": "testigo", "que": "fila testigo", "resultado": "PASS"}
+{"grupo": "progreso", "que": "reading_progress", "resultado": "PASS"}
+{"grupo": "salud", "que": "status/version/checks salvo restore", "resultado": "PASS"}
+{"grupo": "copia", "que": "B0/manifiesto/status/copias", "resultado": "PASS"}
+{"grupo": "archivo", "que": "CBZ testigo", "resultado": "PASS"}
+{"grupo": "contenedores", "que": "inspect zascarr/postgres", "resultado": "PASS"}
+# B0 (sin mutar; las copias mutadas son duplicados de laboratorio):
+$ sha256sum "$RT/backups/backup_20261122_130727.sql.gz"
+974d82c1d673760b2455bcd12a2e6d14519a058fd3c3ed33a1342318966829b1  (B0)
+$ sha256sum "$RT/backups/MANIFIESTO-backup_20261122_130727.json"
+24500fb9273337a636d271356600c024d4a6be29e08acd99c1649731623cb7f3
+$ jq -c '.copias[] | select(.id=="backup-20261122_130727") | {id,verificada,revision}' "$RT/status/copias.json"
+{"id":"backup-20261122_130727","verificada":true,"revision":"0052"}
+$ jq -c '.version_de_la_copia' "$RT/backups/MANIFIESTO-backup_20261122_130727.json"
+{"head":"2c773e53c235812adabc76e76cd3b111d04d4026","build_sha":"2c773e53c235812adabc76e76cd3b111d04d4026","app_version":"1.15.1","alembic":"0052"}
+# health antes/después de la matriz: idéntico en status/version/checks, incluido checks.restore (que en esta
+# ejecución no cambió). checks.restore se declara volátil por diseño (el intento reescribe ops-restaurar.json);
+# checks.database=ok siempre.
+
+## F — copia manual de la biblioteca (UATP-07, D-1)
+# Origen R1 = raíz de biblioteca del ensayo; destino D1 = volumen Docker, destino VACÍO, en otro FS,
+# montado en la misma ruta de contenedor (/biblioteca). La copia se ejecutó en un contenedor auxiliar
+# (imagen alpine, solo rsync/findutils) porque el host no tiene un destino escribible en otro dispositivo.
+# destino vacío antes de copiar: confirmado (find sin salida)
+$ rsync -aH --numeric-ids --info=stats1 /origen/ /destino/
+# rsync_rc=0 (se usó -aH: el FS destino no admite los xattrs $LX* sintéticos del origen; la spec permite -aH)
+$ find /origen -type f -printf '%P\0%T@\0%s\0' | sort -z | sha256sum
+7bb7359ab423062840e4684d9ada3eca5434081b2a3356e04fc4fd952226c1bf  (R1)
+$ find /destino -type f -printf '%P\0%T@\0%s\0' | sort -z | sha256sum
+7bb7359ab423062840e4684d9ada3eca5434081b2a3356e04fc4fd952226c1bf  (D1)
+$ sha256sum /destino/<ARCHIVO-A>
+9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44
+$ stat -c '%s|%y' /destino/<ARCHIVO-A>
+2812|2026-11-22 12:05:15.750528900 +0000   # st_mtime_ns idéntico a R1 (1795349115750528900)
+# FS distintos: st_dev R1=66309; st_dev D1=66310 (volumen Docker bajo la raíz de Docker)
+# Espacio: bytes origen=4229; libre en D1=11236184064
+# Inventario completo sha256 (F-04): R1=D1=b0a892374b76a3a7aab4bd5ea2c600ee848438b8ebee3427e7431f5a4519db1d
+# Tras restaurar el catálogo, el inventario de D1 sigue siendo el mismo y el SHA del CBZ no cambia.
+$ docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T zascarr sh -c 'test -f /biblioteca/serie-a6-uno/ARCHIVO-A.cbz && sha256sum /biblioteca/serie-a6-uno/ARCHIVO-A.cbz'
+9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44
+
+## N-04 — control positivo (restaurar B0 y arrancar)
+$ bash "$A6/scripts/restaurar_datos.sh" --produccion --copia 20261122_130727
+# rc=0
+# Copia restaurada. Recuentos: series=2 issues=2 files=2
+$ jq -c '{fase,resultado,error,comprobacion,base_en_su_sitio,recuentos,copia_version}' "$RT/status/ops-restaurar.json"
+{"fase": "arrancando", "resultado": "hecha", "error": null, "comprobacion": null, "base_en_su_sitio": true, "recuentos": {"series": 2, "issues": 2, "files": 2}, "copia_version": {"head": "2c773e53c235812adabc76e76cd3b111d04d4026", "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026", "app_version": "1.15.1", "alembic": "0052"}}
+$ docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T postgres psql -U comics_admin -d zascarr -At -c "select version_num from alembic_version"
+0052
+$ curl -fsS "$APP_URL/api/health" | jq -c '{status,version,checks}'
+{"status": "degraded", "version": "1.15.1", "checks": {"database": "ok", "transmission": "disabled", "amule": "disabled", "vpn": "unknown", "backup": "error", "restore": "error", "disk": "ok"}}
+# health = degraded en E-A6 porque no hay timer de copias ni dispatcher de restauración (offsite/timers
+# no instalados en el entorno aislado); checks.database=ok, que es lo que exige el flujo de restauración.
+
+## R — reapertura en la página guardada (R-01…R-05)
+$ curl -fsS -b "$COOKIE" "$APP_URL/ui/series/a6000000-0000-4000-8000-000000000001/numero/a6000000-0000-4000-8000-000000000011" | grep -o 'Continuar (pág\. 3)'
+Continuar (pág. 3)
+$ curl -fsS -b "$COOKIE" "$APP_URL/ui/leer/a6000000-0000-4000-8000-000000000021" | grep -o 'data-total="6" data-pagina="3"'
+data-total="6" data-pagina="3"
+$ curl -fsS -b "$COOKIE" "$APP_URL/ui/leer/a6000000-0000-4000-8000-000000000021" | grep -o 'src="/ui/leer/a6000000-0000-4000-8000-000000000021/pagina/3"'
+src="/ui/leer/a6000000-0000-4000-8000-000000000021/pagina/3"
+$ curl -fsS -b "$COOKIE" "$APP_URL/ui/leer/a6000000-0000-4000-8000-000000000021/pagina/3" | sha256sum
+5dea59a8fe6656de00e063399166d3f83a5d0987a232da857dc10b738ddb261e  -
+$ docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T postgres psql -U comics_admin -d zascarr -At -F'|' -c "select file_size_bytes,file_mtime_ns,sha256_hash,issue_id from files where id='a6000000-0000-4000-8000-000000000021'"
+2812|1795349115750528900|9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44|a6000000-0000-4000-8000-000000000011
+$ docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T postgres psql -U comics_admin -d zascarr -At -F'|' -c "select issue_id,file_id,current_page,status from reading_progress where issue_id='a6000000-0000-4000-8000-000000000011'"
+a6000000-0000-4000-8000-000000000011|a6000000-0000-4000-8000-000000000021|3|reading
+$ docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T postgres psql -U comics_admin -d zascarr -At -c "select (select count(*) from files f left join issues i on i.id=f.issue_id where f.issue_id is not null and i.id is null)||'|'||(select count(*) from issues i left join series s on s.id=i.series_id where s.id is null)"
+0|0
+# Capturas en Chrome real (headless, Chrome del sistema) a 390x844 y escritorio:
+#   evidencia/capturas/captura-ficha-pag3-movil.png
+#   evidencia/capturas/captura-lector-pag3-movil.png
+#   evidencia/capturas/captura-lector-pag3-escritorio.png
+$ google-chrome --version
+Google Chrome 158.0.8127.36
+
+## A — existencia, saneado y catálogo
+$ test -s docs/uat/A6/resultado.md && test -s docs/uat/A6/evidencia/resultado.txt && echo ok
+ok
+# A-02: se ejecutó el grep de §7.6 (patrón literal omitido aquí para no autoincidir en la
+# comprobación; mismo patrón publicado en docs/design/uatp06-07-recuperacion.md §7.6).
+# Resultado: 0 coincidencias en docs/uat/A6/ (resultado.md, evidencia/*.txt|json|jsonl, fixture/*).
+# A-04: toda comprobación obligatoria del catálogo de §7.4 tiene su línea CHECK en este fichero.
+# OK: 25 comprobaciones obligatorias del catálogo con CHECK (V-03 incluida, como NOT RUN);
+# N-01-interfaz es una línea extra declarada NOT RUN.
+
+## Catálogo de comprobaciones (formato §7.3)
+CHECK V-01 PASS tag=uat-candidata-20261122 tag_commit=2c773e53c235812adabc76e76cd3b111d04d4026 head=2c773e53c235812adabc76e76cd3b111d04d4026 build_sha=2c773e53c235812adabc76e76cd3b111d04d4026 app_version=1.15.1 alembic=0052
+CHECK V-02 PASS tag=v1.15.1 tag_commit=4f6ccdd310f5a644d19bdc1293327ac60d531b00 lector=ausente ops_host=ausente alembic_max=0016
+CHECK V-03 NOT RUN motivo=pendiente_po
+CHECK N-01-interfaz NOT RUN motivo=no_aplica
+CHECK N-01 PASS rc=1 error=copia_no_valida comprobacion=sha256_copia base_en_su_sitio=true eventos_intento=0
+CHECK N-02 PASS rc=1 error=copia_no_valida comprobacion=gzip_cabecera base_en_su_sitio=true eventos_intento=0
+CHECK N-03a PASS rc=1 error=copia_no_valida comprobacion=tablas_dump base_en_su_sitio=true eventos_intento=0
+CHECK N-03b PASS rc=1 error=copia_no_valida comprobacion=tablas_dump base_en_su_sitio=true eventos_intento=0
+CHECK N-04 PASS rc=0 resultado=hecha base_en_su_sitio=true series=2 issues=2 files=2 eventos=flujo_aprobado
+CHECK S-01 PASS grupos=8/8
+CHECK S-02 PASS copias_ofrece_b0=1 b0_sha_igual=true
+CHECK S-03 PASS eventos_propios=0
+CHECK D-01 PASS b0_sha_igual=true manifiesto_sha_igual=true
+CHECK F-01 PASS raices=1 destino_vacio=true st_dev_distinto=true libre_bytes=11236184064
+CHECK F-02 PASS inventario_igual=true mtime_ns_igual=true
+CHECK F-03 PASS cbz_sha_igual=true pagina3_sha_igual=true
+CHECK F-04 PASS full_sha_igual=true
+CHECK R-01 PASS pagina=3
+CHECK R-02 PASS data_pagina=3 data_total=6 file_id=a6000000-0000-4000-8000-000000000021
+CHECK R-03 PASS pagina_sha256=5dea59a8fe6656de00e063399166d3f83a5d0987a232da857dc10b738ddb261e archivo_sha256=9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44
+CHECK R-04 PASS current_page=3 status=reading huerfanos=0
+CHECK R-05 PASS alembic=0052 series=2 issues=2 files=2 library_roots=1
+CHECK A-01 PASS
+CHECK A-02 PASS coincidencias=0
+CHECK A-03 PASS intentos_jsonl=5 campos=intento,comprobacion,copia_version
+CHECK A-04 PASS checks_obligatorios=25/25

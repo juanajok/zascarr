@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "intento": "b728b7c350e0d35c",
+  "copia": "backup-20261122_130727",
+  "copia_epoch": 1795349247,
+  "inicio_epoch": 1795349360,
+  "actualizado_epoch": 1795349379,
+  "fase": "arrancando",
+  "resultado": "hecha",
+  "error": null,
+  "comprobacion": null,
+  "base_en_su_sitio": true,
+  "copia_version": {
+    "head": "2c773e53c235812adabc76e76cd3b111d04d4026",
+    "build_sha": "2c773e53c235812adabc76e76cd3b111d04d4026",
+    "app_version": "1.15.1",
+    "alembic": "0052"
+  },
+  "recuentos": {
+    "series": 2,
+    "issues": 2,
+    "files": 2
+  }
+}

@@ -1,0 +1,11 @@
+# A6 — Eventos de contenedor durante la matriz negativa (resumen saneado)
+# Listener: docker events del proyecto zascarr-a6 con create/start/stop/kill/die/destroy/
+# exec_create/exec_start. Los eventos crudos NO se publican: sus etiquetas incluyen rutas del host.
+# Las «sondas» son exec_create/exec_start de HEALTHCHECK (pg_isready y health de la app), ajenas al intento.
+# ID	rc	eventos_crudos	sondas_healthcheck	eventos_del_intento
+N-01	1	2	2	0
+N-02	1	0	0	0
+N-03a	1	0	0	0
+N-03b	1	0	0	0
+# Conclusión: eventos provocados por el intento = 0 en las cuatro filas. N-01 crudo=2 y N-02 crudo=0
+# en esta ejecución concreta; la diferencia es el latido del HEALTHCHECK, no el intento.

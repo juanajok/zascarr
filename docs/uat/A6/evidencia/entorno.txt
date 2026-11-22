@@ -1,3 +1,20 @@
-SHA evaluado: 0a51bbda
-Comando: PYTHONPATH=<worktree>/src .venv-test/bin/python -m pytest -q tests/test_restaurar_produccion.py tests/test_backup_script.py tests/test_version_copia.py tests/test_restaurar_datos.py tests/test_restauracion_estado.py tests/test_lector.py
-Entorno: Linux; Docker falso de tests; sin candidata, sin PostgreSQL real, sin navegador.
+# A6 — Entorno del ensayo
+# Generado: 2026-11-22T13:12:37+01:00
+# Alias: E-A6 (host local aislado). Sin hostname, IP, usuario ni ruta absoluta.
+# No se usó la Pi ni datos reales. Proyecto Compose aislado: zascarr-a6.
+#
+# Aislamiento
+#   proyecto Compose: zascarr-a6 (contenedores zascarr-a6-db y zascarr-a6-orquestador)
+#   puertos publicados: <loopback>:15432 (PostgreSQL) y <loopback>:18000 (app)
+#   datos, copias y estado: bajo el directorio del entorno E-A6 (no /var/lib/zascarr)
+#   instalación real y Pi: no tocadas
+#   candidata: tag anotado uat-candidata-20261122 sobre 2c773e53c235812adabc76e76cd3b111d04d4026
+#   imagen: zascarr-a6-zascarr:latest, BUILD_SHA=2c773e53c235812adabc76e76cd3b111d04d4026
+#
+# Software (versiones declaradas en versiones.txt)
+#   Docker Engine 29.10.0; Docker Compose v5.8.0; PostgreSQL 15-alpine
+#   Chrome 158.0.8127.36 (headless, Playwright sobre el Chrome del sistema)
+#
+# Datos sintéticos
+#   2 series, 2 números, 2 archivos CBZ (6 y 3 páginas), 1 fila reading_progress (página 3)
+#   1 raíz de biblioteca (/biblioteca); B0 = backup-20261122_130727

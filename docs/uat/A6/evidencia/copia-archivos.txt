@@ -1,0 +1,29 @@
+# A6 — Copia manual de la biblioteca (UATP-07, D-1)
+# Generado: 2026-11-22T13:12:37+01:00
+# Origen R1: bind del host en /biblioteca (contenedor del ensayo)
+# Destino D1: volumen Docker aislado montado en /biblioteca (misma ruta de contenedor)
+# Etiquetas: R1 = raíz de biblioteca; D1 = destino vacío restaurado
+# FS: R1 st_dev=66309 (bind del host); D1 st_dev=66310 (volumen Docker, raíz Docker)
+# Comprobaciones: destino vacío antes de copiar -> confirmado; rsync_rc=0
+=== FS distintos (st_dev dentro del auxiliar) ===
+66309 /origen
+66310 /destino
+=== R1 antes (origen) ===
+7bb7359ab423062840e4684d9ada3eca5434081b2a3356e04fc4fd952226c1bf  -
+R1_ficheros=2 R1_bytes=4229
+=== rsync -aH --numeric-ids (FS destino sin soporte de * xattrs) ===
+rsync_rc=0
+=== D1 despues (destino) ===
+7bb7359ab423062840e4684d9ada3eca5434081b2a3356e04fc4fd952226c1bf  -
+D1_ficheros=2 D1_bytes=4229
+=== D1_vacio_antes=no (copia realizada) ===
+=== testigo CBZ en D1 ===
+9a6edec49594b4d20c902e9e0ba548a7fb1492cc676ab395bd13dd30e66f7c44  /destino/serie-a6-uno/ARCHIVO-A.cbz
+D1_cbz_size=2812 D1_cbz_mtime_epoch=1795349115 D1_cbz_mtime_ns=2026-11-22 12:05:15.750528900 +0000
+R1_full_sha256=b0a892374b76a3a7aab4bd5ea2c600ee848438b8ebee3427e7431f5a4519db1d
+D1_full_sha256=b0a892374b76a3a7aab4bd5ea2c600ee848438b8ebee3427e7431f5a4519db1d
+D1_libre_bytes=11236184064
+R1_bytes=4229
+R1_ficheros=2
+D1_ficheros=2
+resumen origen_bytes=4229 destino_libre_bytes=11236184064 inventario_identico=True full_sha_identico=True

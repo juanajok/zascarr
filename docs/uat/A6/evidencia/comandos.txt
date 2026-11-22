@@ -1,0 +1,120 @@
+# A6 — Comandos ejecutados (saneados)
+# Generado: 2026-11-22T13:12:37+01:00
+# Entorno: E-A6 (alias). Nunca la Pi ni datos reales.
+# Variables saneadas:
+#   A6=<repo del candidato (worktree docs/a6-recuperacion)>
+#   RT=<entorno E-A6: compose aislado, .env, datos, copias y evidencia>
+#   APP_URL=http://<loopback>:18000
+#   COOKIE=<fichero de cookie de sesión; no se publica>
+# Proyecto Compose aislado: zascarr-a6 (contenedores zascarr-a6-db / zascarr-a6-orquestador;
+# puertos publicados <loopback>:15432 y :18000; datos y volúmenes bajo RT).
+# Los nombres de serie/número/archivo son sintéticos; no hay datos reales.
+
+## 0. Tag candidato e identidad
+cd "$A6"
+git rev-parse HEAD                                   # 2c773e53c235812adabc76e76cd3b111d04d4026
+git tag -a uat-candidata-20261122 -m "A6 E-A6 candidata 2026-11-22: recuperación UATP-06/07" 2c773e53c235812adabc76e76cd3b111d04d4026
+git rev-parse 'uat-candidata-20261122^{commit}'      # 2c773e53c235812adabc76e76cd3b111d04d4026
+git cat-file -t uat-candidata-20261122               # tag (anotado)
+git status --short                                   # (vacío)
+
+## 1. Compose aislado (generado desde el del candidato; no se modifica el repo)
+#   name: zascarr-a6; container_name con prefijo -a6; puertos 15432/18000;
+#   build.context absoluto al worktree; LIBRARY_PATH=/biblioteca; biblioteca R1 por bind.
+python3 "$RT/preparar_compose.py" "$A6" "$RT" A
+docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" config --format json | jq -r '.name'
+
+## 2. Imagen candidata con BUILD_SHA
+ZASCARR_BUILD_SHA="$(git -C "$A6" rev-parse HEAD)"
+DOCKER_CONFIG="$RT/docker-config" docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" build zascarr
+docker image inspect --format '{{.Id}}' zascarr-a6-zascarr:latest
+
+## 3. Base, migraciones y arranque
+docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" up -d postgres
+docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" run --rm zascarr alembic upgrade head
+docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" up -d zascarr
+curl -fsS "$APP_URL/api/health" | jq -c '{status,version,checks}'
+docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T zascarr printenv BUILD_SHA
+
+## 4. Auth de E-A6 (auth_mode=password; la contraseña y el hash NO se publican)
+#   runtime_settings se actualiza con auth_mode, hash de contraseña (PBKDF2 del propio código),
+#   auth_session_version y las fuentes/integraciones apagadas. No se copia ningún secreto aquí.
+#   (Comando omitido a propósito: contiene el hash de contraseña.)
+
+## 5. Semilla sintética y progreso con el lector real
+python3 "$A6/docs/uat/A6/fixture/crear_cbz.py" "$RT/fixture/archivos"
+#   2 series, 2 números, 2 archivos con UUID fijos; root por defecto /biblioteca.
+#   Archivos en "$RT/library-origen/serie-a6-uno/" y "serie-a6-dos/" (montados en /biblioteca).
+curl -s -o /dev/null -c "$RT/cookies.txt" -X POST "$APP_URL/login" --data-urlencode "password=<secreto>" --data-urlencode "next=/"
+curl -s -o /dev/null -w '%{http_code}\n' -b "$RT/cookies.txt" -H "Origin: $APP_URL" \
+  -X POST "$APP_URL/ui/leer/a6000000-0000-4000-8000-000000000021/progreso" --data-urlencode "pagina=3"   # 204
+docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T postgres psql -U comics_admin -d zascarr -At \
+  -c "select issue_id,file_id,current_page,status from reading_progress"   # ...|3|reading
+
+## 6. Copia buena B0 con backup.sh (repo-shim para que use el compose aislado)
+export ZASCARR_REPO="$RT/shim" ZASCARR_ROOT="$RT" ENV_FILE="$RT/.env" BACKUP_DIR="$RT/backups" \
+       BACKUP_STATUS_DIR="$RT/status" BACKUP_OFFSITE_DIR="$RT/offsite" BACKUP_OFFSITE_MOUNT="$RT/offsite" \
+       DB_NAME=zascarr DB_USER=comics_admin HEALTH_URL="$APP_URL/api/health" \
+       ZASCARR_PRUEBAS=1 OPS_LOCK_FILE="$RT/zascarr-ops.lock"
+bash "$A6/scripts/backup.sh" || true     # sin offsite: rc=1 por offsite_mount_missing; B0 y manifiesto escritos
+jq -c '.version_de_la_copia' "$RT/backups/MANIFIESTO-backup_<TS>.json"
+# {"head":"2c773e53…","build_sha":"2c773e53…","app_version":"1.15.1","alembic":"0052"}
+
+## 7. Copias mutadas de laboratorio (B0 no se toca)
+python3 "$RT/mutar.py" "$RT"
+# N-01: manifiesto con sha256 alterado; N-02: gzip truncado y manifiesto recalculado;
+# N-03a: sin COPY public.series; N-03b: sin COPY public.issues (ambos recomprimidos y recalculados).
+./"$RT/regen_copias.sh"   # copias.json regenerado con escribir_copias_json del producto
+
+## 8. Matriz negativa (camino de producción) + eventos
+# Por cada <ID> y <TS>:
+docker events --filter label=com.docker.compose.project=zascarr-a6 \
+  --filter event=create --filter event=start --filter event=stop --filter event=kill \
+  --filter event=die --filter event=destroy --filter event=exec_create --filter event=exec_start \
+  > "$RT/evidencia/eventos-<ID>.txt" &
+export REPO_DIR="$A6" ENV_FILE="$RT/.env" COMPOSE_FILE="$RT/docker-compose.a6.yml" \
+       BACKUP_DIR="$RT/backups" BACKUP_STATUS_DIR="$RT/status" DB_NAME=zascarr DB_USER=comics_admin \
+       HEALTH_URL="$APP_URL/api/health" ZASCARR_PRUEBAS=1 PROYECTO_PRODUCCION=zascarr-a6 \
+       OPS_LOCK_FILE="$RT/zascarr-ops.lock"
+bash "$A6/scripts/restaurar_datos.sh" --produccion --copia <TS>
+jq -c '{resultado,error,comprobacion,base_en_su_sitio,recuentos}' "$RT/status/ops-restaurar.json"
+tail -n 1 "$RT/status/ops-restaurar-intentos.jsonl"
+wc -l < "$RT/evidencia/eventos-<ID>.txt"
+
+## 9. Instantáneas antes/después
+bash "$RT/snapshot.sh" > "$RT/evidencia/snapshot-S0-final.json"
+# ...matriz...
+bash "$RT/snapshot.sh" > "$RT/evidencia/snapshot-S1-final.json"
+python3 "$RT/comparar.py" "$RT/evidencia/snapshot-S0-final.json" "$RT/evidencia/snapshot-S1-final.json"
+
+## 10. Copia manual de la biblioteca a destino vacío (UATP-07)
+docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" stop zascarr
+docker volume create zascarr-a6-biblioteca
+docker run --rm -v zascarr-a6-biblioteca:/destino alpine:3.20 sh -c 'test -z "$(find /destino -mindepth 1 -maxdepth 1 -print -quit)"'
+docker run --rm -v "$RT/library-origen":/origen:ro -v zascarr-a6-biblioteca:/destino alpine:3.20 sh -c \
+  'apk add --no-cache rsync findutils coreutils >/dev/null && rsync -aH --numeric-ids --info=stats1 /origen/ /destino/'
+# inventario mtime+tamaño y sha256 completo idénticos R1/D1; st_dev del origen != st_dev del destino.
+# Después: montar D1 en /biblioteca (fase B del compose aislado) y recrear el contenedor de la app.
+python3 "$RT/preparar_compose.py" "$A6" "$RT" B
+docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" up -d --force-recreate zascarr
+
+## 11. Control positivo (N-04)
+bash "$A6/scripts/restaurar_datos.sh" --produccion --copia <TS_B0>
+jq -c '{fase,resultado,base_en_su_sitio,recuentos,copia_version}' "$RT/status/ops-restaurar.json"
+
+## 12. Reapertura R-01…R-05
+curl -fsS -b "$RT/cookies.txt" "$APP_URL/ui/series/<SERIE>/numero/<NUMERO>" | grep -o 'Continuar (pág\. 3)'
+curl -fsS -b "$RT/cookies.txt" "$APP_URL/ui/leer/<FILE>" | grep -o 'data-total="6" data-pagina="3"'
+curl -fsS -b "$RT/cookies.txt" "$APP_URL/ui/leer/<FILE>/pagina/3" | sha256sum
+docker compose -f "$RT/docker-compose.a6.yml" --env-file "$RT/.env" exec -T postgres psql -U comics_admin -d zascarr -At \
+  -c "select issue_id,file_id,current_page,status from reading_progress"
+
+## 13. Capturas con Chrome real (Playwright usando Chrome del sistema)
+PYTHONPATH="$RT/pylib" python3 "$RT/capturas.py"
+# Login real en /login, ficha y lector a 390x844 y escritorio; PNG en evidencia/capturas/.
+
+## 14. Saneado y cierre
+# A-02: se ejecuta el grep de §7.6 sobre docs/uat/A6/ (patrón idéntico al publicado en
+# docs/design/uatp06-07-recuperacion.md §7.6; se omite el literal aquí para que la propia
+# comprobación no se autoincida).
+#   Resultado: 0 coincidencias.

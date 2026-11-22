@@ -1,0 +1,13 @@
+# A6 — Identidad y versiones declaradas
+# Generado: 2026-11-22T13:12:37+01:00
+# Entorno: E-A6 (alias; sin hostname, IP ni ruta)
+# Entorno físico: host local aislado; no se usó la Pi ni datos reales
+CANDIDATA tag=uat-candidata-20261122 tag_tipo=tag tag_commit=2c773e53c235812adabc76e76cd3b111d04d4026
+CANDIDATA head=2c773e53c235812adabc76e76cd3b111d04d4026 build_sha=2c773e53c235812adabc76e76cd3b111d04d4026 app_version=1.15.1 alembic=0052
+CANDIDATA image_id=sha256:7be671c1a4dae062db856b70f2f1a457f494cff2624e4f6388796f86864d82b2
+BASELINE tag=no_definido motivo=pendiente_po
+TAG_ANTIGUO tag=v1.15.1 tag_commit=4f6ccdd310f5a644d19bdc1293327ac60d531b00 lector=ausente ops_host=ausente alembic_max=0016
+B0 copia=backup-20261122_130727 sha256=974d82c1d673760b2455bcd12a2e6d14519a058fd3c3ed33a1342318966829b1 bytes=17837 manifest_sha256=24500fb9273337a636d271356600c024d4a6be29e08acd99c1649731623cb7f3
+B0 version_de_la_copia=head:2c773e53c235812adabc76e76cd3b111d04d4026 build_sha:2c773e53c235812adabc76e76cd3b111d04d4026 app_version:1.15.1 alembic:0052
+ENTORNO docker_server=29.10.0 compose=5.8.0 postgres_image=postgres:15-alpine postgres_image_id=sha256:23799e521dee9265a8b388ecf3bc0f1eaa34b95be67f5a76af4f8f6adb44c720
+ENTORNO chrome=158.0.8127.36
