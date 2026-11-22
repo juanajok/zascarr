@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}ZascArr{% endblock %}</title>
+{#- Tras un envío con errores el título empieza por «Error: » (GOV.UK; benchmark-designsystems-surf, A2):
+    es lo primero que anuncia un lector de pantalla y lo que se ve en la pestaña. -#}
+<title>{% if errores is defined and errores %}Error: {% endif %}{% block title %}ZascArr{% endblock %}</title>
 <link rel="stylesheet" href="/static/web.css">
 <link rel="icon" href="/static/brand/zascarr-favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/static/brand/zascarr-favicon-32.png" type="image/png" sizes="32x32">

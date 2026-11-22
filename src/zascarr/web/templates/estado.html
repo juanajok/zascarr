@@ -195,7 +195,7 @@
 
   function warningText(key, checks, raw) {
     if (key === "vpn") return VPN_TEXT[checks.vpn] || raw;
-    if (key === "database") return "La base de datos tiene un problema: mira qué hacer en su fila, más abajo.";
+    if (key === "database") return "La base de datos tiene un problema: mira qué hacer en su fila, «Base de datos».";
     if (key === "backup") return "La copia de seguridad tiene un problema: revisa el aviso técnico y el disco de respaldo.";
     if (key === "restore") return "La restauración de la copia tiene un problema: revisa el aviso técnico.";
     if (key === "disk") return "El disco de datos tiene poco espacio: libera espacio o mueve la biblioteca a otro disco. ZascArr no ha borrado nada.";

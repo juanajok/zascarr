@@ -177,7 +177,7 @@ class TestVistaPrevia:
     async def test_la_pagina_completa_tiene_vuelta_a_la_serie_y_cancelar(self, ent):
         serie, _ = await serie_retirada(ent)
         t = (await get(RUTA.format(serie=serie))).text
-        assert "<html" in t and f'href="/ui/series/{serie}"' in t and "Cancelar" in visible(t)
+        assert "<html" in t and f'href="/ui/series/{serie}"' in t and "Volver sin retirar" in visible(t)
 
     async def test_serie_inexistente_es_404(self, ent):
         assert (await get(RUTA.format(serie=uuid4()))).status_code == 404

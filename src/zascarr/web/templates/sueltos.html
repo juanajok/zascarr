@@ -27,7 +27,7 @@ aquí no se asigna, crea, mueve ni ignora nada. Para ignorar un pendiente, ábre
   {% if siguiente %}<a rel="next" href="{{ siguiente }}">Siguientes →</a>{% endif %}
 </nav>
 {% endmacro %}
-{% if anterior or siguiente %}{{ paginas("pend-paginas-arriba", "Páginas de sueltos, arriba") }}{% endif %}
+{% if anterior or siguiente %}{{ paginas("pend-paginas-arriba", "Páginas de sueltos, al principio de la lista") }}{% endif %}
 
 <ol class="sueltos-lista">
   {% for c in sueltos %}
@@ -56,6 +56,6 @@ aquí no se asigna, crea, mueve ni ignora nada. Para ignorar un pendiente, ábre
   {% endfor %}
 </ol>
 
-{% if anterior or siguiente %}{{ paginas("pend-paginas-abajo", "Páginas de sueltos, abajo") }}{% endif %}
+{% if anterior or siguiente %}{{ paginas("pend-paginas-abajo", "Páginas de sueltos, al final de la lista") }}{% endif %}
 {% endif %}
 {% endblock %}

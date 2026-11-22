@@ -421,7 +421,7 @@ def test_hay_region_viva_estable_y_plantilla_del_aviso_de_fallo():
     assert re.search(r'<div id="busqueda-fallo" role="alert" aria-atomic="true"></div>', html)
     plantilla = html[html.index('<template id="busqueda-fallo-plantilla">'):html.index("</template>")]
     assert "data-consulta" in plantilla and "data-reintentar" in plantilla
-    assert "los anteriores" in plantilla
+    assert "búsqueda anterior" in plantilla
     assert 'role="' not in plantilla  # la región externa ya es la viva: sin alertas anidadas
     assert html.index('id="busqueda-fallo"') < html.index('id="rejilla"')
 

@@ -43,7 +43,8 @@ class TestConfirmacion:
         assert "no se mueve ni se borra" in r.text and "«Ignorados»" in r.text  # efecto y salida
         assert f'hx-post="/ui/pendientes/{f.id}/ignorar"' in r.text
         assert f'hx-get="/ui/pendientes/{f.id}/ignorar/cancelar"' in r.text
-        assert r.text.count("autofocus") == 1 and "autofocus" in r.text.split("Cancelar")[0][-200:]
+        antes_de_volver = r.text.split("Volver sin ignorar")[0][-200:]
+        assert r.text.count("autofocus") == 1 and "autofocus" in antes_de_volver
         # Pedir confirmación no escribe nada.
         assert f.review_dismissed is False and sesion.commit.await_count == 0
 

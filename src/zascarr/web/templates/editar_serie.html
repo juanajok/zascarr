@@ -6,6 +6,7 @@
 <p class="subtitle">Corrige lo que no cuadre. Los campos que cambies quedarán como manuales y protegidos.</p>
 {% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
 {% set orden_campos = ["title", "start_year", "end_year", "publisher", "language", "edition_kind", "description", "total_issues"] %}
+{{ ui.resumen_errores(errores, orden_campos) }}
 <form method="post" action="/ui/series/{{ series.id }}/editar" class="edicion-form">
   <label>Título
     <input type="text" name="title"{{ ui.invalido(errores, "title", orden_campos) }} value="{{ valores.title }}" maxlength="500" required>

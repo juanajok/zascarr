@@ -47,12 +47,12 @@
   <h2 id="arco-anadir-titulo" class="titulo-frase">Añadir un número</h2>
   {% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
   {% set orden_campos = ["serie", "numero", "orden"] %}
+{{ ui.resumen_errores(errores, orden_campos) }}
 <form method="post" action="/ui/arcos/{{ arco.id }}/numeros" class="edicion-form">
     <div class="edicion-dos">
       <label>Serie
-        <input type="text" name="serie"{{ ui.invalido(errores, "serie", orden_campos) }} value="{{ valores.serie }}" maxlength="500" required
-               placeholder="Tal como aparece en tu biblioteca"
-               aria-describedby="arco-anadir-ayuda">
+        <input type="text" name="serie"{{ ui.invalido(errores, "serie", orden_campos, "arco-anadir-ayuda") }} value="{{ valores.serie }}" maxlength="500" required
+               placeholder="Tal como aparece en tu biblioteca">
         {% if errores.serie %}<span class="campo-error" id="error-serie">{{ errores.serie }}</span>{% endif %}
       </label>
       <label>Número

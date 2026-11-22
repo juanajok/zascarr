@@ -300,9 +300,9 @@ class ResultadoArco:
 def _titulo(valor: str) -> tuple[str, str | None]:
     titulo = (valor or "").strip()
     if not titulo:
-        return "", "El título no puede estar vacío."
+        return "", "Escribe el título."
     if len(titulo) > 500:
-        return "", "El título no puede superar 500 caracteres."
+        return "", "El título tiene que tener como mucho 500 caracteres."
     return titulo, None
 
 
@@ -314,7 +314,7 @@ async def crear_arco(db: AsyncSession, *, title: str, description: str,
         errores["title"] = error
     descripcion = (description or "").strip()
     if len(descripcion) > 10_000:
-        errores["description"] = "La descripción no puede superar 10000 caracteres."
+        errores["description"] = "La descripción tiene que tener como mucho 10.000 caracteres."
     if errores:
         return ResultadoArco(False, errores)
     arco = StoryArc(title=titulo, description=descripcion or None,
@@ -335,7 +335,7 @@ async def editar_arco(db: AsyncSession, arco_id: UUID, *, title: str,
         errores["title"] = error
     descripcion = (description or "").strip()
     if len(descripcion) > 10_000:
-        errores["description"] = "La descripción no puede superar 10000 caracteres."
+        errores["description"] = "La descripción tiene que tener como mucho 10.000 caracteres."
     if errores:
         return ResultadoArco(False, errores, arco)
     arco.title = titulo

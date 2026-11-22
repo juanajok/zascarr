@@ -6,6 +6,7 @@
 <p class="subtitle">Corrige número, título, fecha, formato o sinopsis. Los campos que cambies quedarán como manuales y protegidos.</p>
 {% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
 {% set orden_campos = ["issue_number", "title", "release_date", "format", "synopsis"] %}
+{{ ui.resumen_errores(errores, orden_campos) }}
 <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue.id }}/editar" class="edicion-form">
   <label>Número
     <input type="text" name="issue_number"{{ ui.invalido(errores, "issue_number", orden_campos) }} value="{{ valores.issue_number }}" maxlength="20" required>

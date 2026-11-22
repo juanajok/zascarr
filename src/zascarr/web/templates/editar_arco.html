@@ -6,6 +6,7 @@
 <p class="subtitle">Una saga puede reunir números de varias series y tiene un orden de lectura.</p>
 {% if errores.general %}{{ ui.aviso("amber", errores.general) }}{% endif %}
 {% set orden_campos = ["title", "description"] %}
+{{ ui.resumen_errores(errores, orden_campos) }}
 <form method="post" action="{{ accion }}" class="edicion-form">
   <label>Título
     <input type="text" name="title"{{ ui.invalido(errores, "title", orden_campos) }} value="{{ valores.title }}" maxlength="500" required>

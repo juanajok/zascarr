@@ -168,6 +168,13 @@ async def test_un_error_de_validacion_se_muestra_y_no_da_500(entorno):  # noqa: 
         for ruta, datos, primero in casos:
             r = await c.post(ruta, data=datos)
             assert r.status_code == 200, (ruta, r.status_code)
-            assert (f'name="{primero}" aria-invalid="true" aria-describedby="error-{primero}" '
-                    "autofocus") in r.text, ruta
+            assert "<title>Error: " in r.text, ruta
+            assert f'name="{primero}" id="campo-{primero}" aria-invalid="true"' in r.text, ruta
             assert f'id="error-{primero}"' in r.text, ruta
+            if ruta.endswith(f"/series/{sid}/editar"):
+                # Dos errores: resumen con un enlace por campo y el foco en él, no en el campo.
+                assert "Hay un problema" in r.text and f'href="#campo-{primero}"' in r.text
+                assert r.text.count("autofocus") == 1
+            else:
+                assert "Hay un problema" not in r.text
+                assert (f'aria-describedby="error-{primero}" autofocus') in r.text, ruta

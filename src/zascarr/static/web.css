@@ -1469,6 +1469,10 @@ button[disabled], .btn[disabled] {
 .aviso.warn  { background: var(--warn-bg); }
 .aviso.amber { background: var(--amber-bg); }
 .aviso.info  { background: var(--info-bg); }
+/* Resumen de errores (GOV.UK; benchmark-designsystems-surf, A1): «Hay un problema» y un enlace por campo. */
+.resumen-errores-titulo { margin: 0 0 var(--space-1); font-size: var(--text-titulo-bloque); }
+.resumen-errores ul { margin: 0; padding-left: 1.2em; }
+.resumen-errores li + li { margin-top: var(--space-1); }
 
 /* Progreso: <progress class="progress"> nativo (rol y valor accesibles sin JS ni ARIA a mano). */
 progress.progress {
