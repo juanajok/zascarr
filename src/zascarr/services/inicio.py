@@ -19,6 +19,7 @@ Solo lee.
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -47,6 +48,7 @@ from zascarr.services.primeros_pasos import (
 )
 from zascarr.services.resumen import ResumenBiblioteca, resumen_biblioteca
 from zascarr.services.review import ReviewService
+from zascarr.services.salud_resumen import registro_ausente
 from zascarr.services.wishlist import WishlistService
 
 
@@ -187,6 +189,16 @@ async def continuar_leyendo(db: AsyncSession) -> ContinuarLeyendo | None:
         page_count=issue.page_count)
 
 
+async def _copias_registradas() -> bool:
+    """¿Existe el registro de copias del host? Sin ruta configurada no se ofrece el paso.
+
+    Un `stat` sobre una ruta montada del host: fuera del bucle de eventos (CLAUDE.md §4)."""
+    ruta = getattr(get_settings(), "backup_status_file", None)
+    if not ruta:
+        return True
+    return not await asyncio.to_thread(registro_ausente, ruta)
+
+
 async def cargar_inicio(db: AsyncSession) -> VistaInicio:
     resumen = await resumen_biblioteca(db)
     desglose = await desglose_registrados(db)
@@ -205,6 +217,7 @@ async def cargar_inicio(db: AsyncSession) -> VistaInicio:
         informe=informe,
         aviso_legal_aceptado=legal,
         hay_fuente_de_busqueda=hay_fuente_de_busqueda(get_settings()),
+        copias_registradas=await _copias_registradas(),
     ))
     ahora = datetime.now(UTC)
     return VistaInicio(resumen=resumen, pasos=pasos, informe=informe,

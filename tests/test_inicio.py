@@ -252,3 +252,35 @@ class TestDesglose:
         assert len(sesion.sql) == 1
         assert compilar(and_(*ReviewService._condiciones_pendientes())) in sesion.sql[0]
         assert "files.is_missing IS false" in sesion.sql[0]
+
+
+
+# ── UXA-08e (#1224): ¿existe el registro de copias del host? ──────────────────────────────
+
+
+class TestCopiasRegistradas:
+
+    async def test_sin_fichero_no_estan_registradas(self, monkeypatch, tmp_path):
+        from types import SimpleNamespace
+
+        from zascarr.services import inicio
+        monkeypatch.setattr(inicio, "get_settings", lambda: SimpleNamespace(
+            backup_status_file=str(tmp_path / "no-existe.json")))
+        assert await inicio._copias_registradas() is False
+
+    async def test_con_fichero_estan_registradas(self, monkeypatch, tmp_path):
+        from types import SimpleNamespace
+
+        from zascarr.services import inicio
+        fichero = tmp_path / "status.json"
+        fichero.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(inicio, "get_settings", lambda: SimpleNamespace(
+            backup_status_file=str(fichero)))
+        assert await inicio._copias_registradas() is True
+
+    async def test_sin_ruta_configurada_no_se_ofrece_el_paso(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from zascarr.services import inicio
+        monkeypatch.setattr(inicio, "get_settings", lambda: SimpleNamespace(backup_status_file=""))
+        assert await inicio._copias_registradas() is True

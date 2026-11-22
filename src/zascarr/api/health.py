@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.services import salud_resumen
+from zascarr.services.salud_resumen import registro_ausente
 from zascarr.services.seguridad import aviso_de_exposicion, estado_de_seguridad
 from zascarr.utils import lector_rar
 
@@ -140,11 +141,6 @@ def _check_vpn() -> tuple[str, str]:
 
     return "warning", (f"túnel {state.get('interface', 'wg0')} NO activo "
                        "— las descargas torrent irán en claro")
-
-
-def _registro_ausente(ruta: str) -> bool:
-    """¿Falta el fichero de estado que escribe el host? (la copia o la restauración nunca corrió)"""
-    return not Path(ruta).exists()
 
 
 def _backup_status() -> tuple[str, str]:
@@ -446,8 +442,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         core_ok
         and transmission in ("ok", "disabled")
         and amule in ("ok", "disabled")
-        and (backup_ok or _registro_ausente(settings.backup_status_file))
-        and (restore_ok or _registro_ausente(settings.restore_status_file))
+        and (backup_ok or registro_ausente(settings.backup_status_file))
+        and (restore_ok or registro_ausente(settings.restore_status_file))
         and disk_ok
     )
     salud_resumen.registrar("healthy" if menu_ok else ("degraded" if core_ok else "unhealthy"))

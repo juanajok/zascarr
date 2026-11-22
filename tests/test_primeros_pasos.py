@@ -277,3 +277,44 @@ def test_el_informe_es_viejo_a_partir_de_dos_semanas():
     mirada = datetime(2026, 9, 28, 18, 0, tzinfo=UTC)
     assert informe_antiguo(mirada, datetime(2026, 10, 20, 18, 0, tzinfo=UTC))
     assert not informe_antiguo(mirada, mirada + timedelta(days=13))
+
+
+class TestCopias:
+    """UXA-08e (#1224): paso opcional «Configura las copias de seguridad»."""
+
+    def test_sin_registro_de_copias_se_ofrece_un_paso_opcional_hacia_estado(self):
+        res = calcular_primeros_pasos(estado(copias_registradas=False))
+        p = paso(res, ClavePaso.COPIAS)
+        assert p.estado is EstadoPaso.OPCIONAL and not p.obligatorio
+        assert p.enlace == "/estado#copias"
+        assert "no cambia tus tebeos" in p.detalle.lower()
+
+    def test_con_registro_de_copias_no_hay_paso(self):
+        res = calcular_primeros_pasos(estado(copias_registradas=True))
+        assert paso(res, ClavePaso.COPIAS) is None
+
+    def test_por_defecto_no_se_ofrece(self):
+        """Quien no informa del registro no ve el paso."""
+        assert paso(calcular_primeros_pasos(estado()), ClavePaso.COPIAS) is None
+
+    def test_no_bloquea_lo_basico(self):
+        res = calcular_primeros_pasos(estado(
+            adopcion=EstadoAdopcion.HECHA, archivos_registrados=100, copias_registradas=False))
+        assert res.completo
+        assert res.total == 5 and res.hechos == 2
+
+    def test_no_se_lleva_el_principal_si_hay_algo_obligatorio_o_antes_en_la_lista(self):
+        res = calcular_primeros_pasos(estado(
+            adopcion=EstadoAdopcion.HECHA, archivos_registrados=100, archivos_sin_clasificar=2,
+            copias_registradas=False))
+        assert res.principal.clave is ClavePaso.REVISAR
+        res = calcular_primeros_pasos(estado(
+            adopcion=EstadoAdopcion.HECHA, archivos_registrados=100, copias_registradas=False))
+        assert res.principal.clave is ClavePaso.SERIES
+
+    def test_es_el_principal_cuando_es_lo_unico_que_queda(self):
+        res = calcular_primeros_pasos(estado(
+            adopcion=EstadoAdopcion.HECHA, archivos_registrados=100, series_seguidas=1,
+            informe=INFORME, aviso_legal_aceptado=True, hay_fuente_de_busqueda=True,
+            copias_registradas=False))
+        assert res.principal.clave is ClavePaso.COPIAS
