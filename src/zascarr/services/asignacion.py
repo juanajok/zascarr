@@ -78,6 +78,7 @@ from zascarr.utils.fs import (
     sanear_excepcion,
 )
 from zascarr.utils.naming import parse_comic_filename
+from zascarr.services.obra_unica import numero_y_formato_de_alta
 
 logger = structlog.get_logger()
 
@@ -785,8 +786,11 @@ class AsignacionService:
                     return await self._abandonar(op, prop, Resultado(
                         EstadoResultado.COLISION_EDICION, "Ese número apareció como otra edición mientras se copiaba"))
                 if issue is None:
-                    issue = Issue(series_id=serie.id, issue_number=op["issue_number"],
-                                  locked_fields=["series_id", "issue_number"], format=IssueFormat(op["formato"]))
+                    numero_alta, formato_alta = numero_y_formato_de_alta(
+                        serie, op["issue_number"], IssueFormat(op["formato"]))
+                    issue = Issue(series_id=serie.id, issue_number=numero_alta,
+                                  locked_fields=["series_id", "issue_number"],
+                                  format=formato_alta)
                     s.add(issue)
                     await s.flush()
                 nombre_original = file.file_name
