@@ -1078,7 +1078,7 @@ cd "$ROOT/zascarr"
 bash -n scripts/_comun.sh && bash -n scripts/restaurar_datos.sh
 pytest -q tests/test_restaurar_produccion.py tests/test_backup_script.py \
   tests/test_version_copia.py tests/test_restaurar_datos.py tests/test_restauracion_estado.py
-#  Criterio: exit 0. T-06-01…T-06-05, T-07-01…T-07-03 y T-07-05 en verde.
+#  Criterio: exit 0 para T-06-01…T-06-05 y T-07-01…T-07-03. T-07-05 (A6 real) queda NOT RUN hasta ejecutar candidata/copia/browser.
 ```
 
 ### 17.2 Semilla y copia buena B0
