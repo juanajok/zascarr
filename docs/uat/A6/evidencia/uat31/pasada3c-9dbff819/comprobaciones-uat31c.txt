@@ -1,0 +1,14 @@
+CHECK_COMPROBACION existencia_copia ok
+CHECK_COMPROBACION manifiesto ok
+CHECK_COMPROBACION sha256_copia ok
+CHECK_COMPROBACION bytes_copia ok
+CHECK_COMPROBACION codigo_manifest no_ejecutada
+CHECK_COMPROBACION gzip_cabecera ok
+CHECK_COMPROBACION cabecera_pg_dump ok
+CHECK_COMPROBACION tablas_dump ok
+CHECK_COMPROBACION alembic_revision ok
+CHECK_COMPROBACION recuentos_nueva ok
+CHECK_COMPROBACION vinculos_huerfanos ok
+CHECK_COMPROBACION seguridad_conservada ok
+CHECK_COMPROBACION copia_previa ok
+CHECK_COMPROBACION health ok

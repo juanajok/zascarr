@@ -474,6 +474,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     return {
         "status": status_str,
         "version": settings.app_version,
+        "build_sha": (settings.build_sha
+                      if re.fullmatch(r"[0-9a-f]{40}", settings.build_sha or "") else None),
         "checks": {
             "database":     db_status,
             "transmission": transmission,   # ok | unreachable | disabled

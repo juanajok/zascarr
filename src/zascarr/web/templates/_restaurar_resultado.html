@@ -3,5 +3,6 @@
 {% block content %}
 <h1>Restaurar una copia</h1>
 <p role="{{ 'status' if aceptada else 'alert' }}">{{ mensaje }}</p>
+{% if aceptada %}<p class="caption">Cuando vuelva, entra: el resumen te espera.</p>{% endif %}
 {% if not aceptada %}<p><a class="btn ghost sm" href="/estado">Volver a Estado</a></p>{% endif %}
 {% endblock %}

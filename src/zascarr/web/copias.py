@@ -46,7 +46,8 @@ def _contexto(vista: VistaCopias, copias: list[dict] | None, mensaje_pedir: str 
     if copias is not None:
         copias = [c for c in copias if c.get("restaurable") is True]
     return {"v": vista, "copias": copias, "mensaje_pedir": mensaje_pedir, "con_lista": con_lista,
-            "oob_accion": oob_accion, "foco": foco, "oob": False, "vr": vr, "restaurando": restaurando}
+            "oob_accion": oob_accion, "foco": foco, "oob": False, "vr": vr, "restaurando": restaurando,
+            "version_llana": ops_host.version_llana, "fecha_absoluta": ops_host.fecha_absoluta}
 
 
 async def contexto_bloque(settings=None, revision_actual: str | None = None) -> dict:
@@ -142,6 +143,19 @@ async def pedir_copia(request: Request) -> HTMLResponse:
                                    boton_cambia=False)
 
 
+@router.get("/ui/copias/restauracion", response_class=HTMLResponse)
+async def resumen_restauracion(request: Request) -> HTMLResponse:
+    """Resumen estable tras reiniciar (UATP-08 D-5): solo lectura de ops-restaurar.json."""
+    settings = get_settings()
+    vr = await asyncio.to_thread(ops_host.resolver_restauracion, settings)
+    respuesta = templates.TemplateResponse(request, "restauracion_resumen.html", {
+        "vr": vr, "fecha_absoluta": ops_host.fecha_absoluta,
+        "version_llana": ops_host.version_llana, "miles": ops_host.miles,
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
 @router.get("/ui/copias/restaurar/{copia}", response_class=HTMLResponse)
 async def restaurar_confirmar(copia: str, request: Request) -> HTMLResponse:
     """Pantalla de confirmación de BL-OPS2; solo lectura, sin tocar la BD."""
@@ -161,6 +175,8 @@ async def restaurar_confirmar(copia: str, request: Request) -> HTMLResponse:
     restaurando = ops_host.resolver_restauracion(settings).en_marcha
     respuesta = templates.TemplateResponse(request, "_restaurar_confirmar.html", {
         "copia": elegida, "error": None,
+        "version_llana": ops_host.version_llana,
+        "fecha_absoluta": ops_host.fecha_absoluta,
         "activa": settings.auth_mode != "none" and not restaurando,
         "restaurando": restaurando,
     })

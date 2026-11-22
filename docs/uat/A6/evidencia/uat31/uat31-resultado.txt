@@ -1,0 +1,48 @@
+# UAT-31 — UATP-08 (#1146) ejecución real — PASADA 3 (3a FAIL, 3b PASS, 3c PASS)
+# Generado: 2026-11-22T18:02:52+01:00
+# Entorno E-UAT31c (alias; host local aislado; sin hostname, IP ni ruta; nunca la Pi ni datos reales)
+# Candidata: tag=uat-candidata-20261122d tag_commit=9dbff819e7981b9758c607a2415b69565a8d37e2 build_sha=9dbff819e7981b9758c607a2415b69565a8d37e2
+#            app_version=1.15.1 alembic=0052 image_id=sha256:4a050ee522f4dcae6327bf83566556c9f45c24475345620fd552146cb08ef519
+# Copia B0: backup-20261122_180021 sha256=925f7de5cddb6302929b6806df6f40bc29e0077b68d4943ef4c3b2804d150209 bytes=17733 manifest_sha256=542a450a602b01d42000bafe7fe0afc131cc247f9491d2cb795fa082a664917f
+# Fila añadida DESPUÉS de B0: 1 fila en `series` (id fijo d9000000-0000-4000-8000-000000000099)
+# Resultado global: PASS (A/B/C/D/E/F)
+#
+# Historial:
+#   3a (a6849c2c, tag b): FAIL B («Versión no consta»; esquema version vs app_version).
+#       Corregido en ab81b6bb y conservado como evidencia histórica.
+#   3b (ab81b6bb, tag c): PASS A/B/C/D/E. Sin orden/terminales aún.
+#   3c (9dbff819, tag d): PASS A/B/C/D/E y además:
+#       - orden fijo de las 14 comprobaciones: ... vinculos_huerfanos, seguridad_conservada,
+#         copia_previa, health (seguridad_conservada ANTES de copia_previa);
+#       - comprobaciones terminales en fallo: la que falla es `fallo` y las posteriores
+#         `no_ejecutada` (nunca se inventa un ok);
+#       - 320 px sin desbordar.
+#
+# Resumen de la pasada 3c:
+#   - Antes de restaurar: series=3 issues=2 files=2; B0 restaurada: 2/2/2.
+#   - recuentos_previos=3/2/2 · recuentos=2/2/2 · fuera=1/0/0.
+#   - UI: «Antes de restaurar había 3 series, 2 números y 2 archivos anotados. Esta copia trae
+#     2, 2 y 2…» y «Quedan fuera 1 serie, 0 números y 0 archivos…».  → PASS A.
+#   - «Versión 1.15.1 · revisión 0052»; identidad head=build=9dbff819e7981b9758c607a2415b69565a8d37e2 · app=1.15.1 · alembic=0052. → PASS B.
+#   - Comprobaciones 14, en orden fijo; seguridad_conservada índice 11 < copia_previa 12. → PASS C.
+#   - Fallo terminal (copia mutada sha256): comprobaciones 14, sha256_copia=fallo y las 11
+#     posteriores no_ejecutada; existencia_copia/manifiesto=ok. → PASS F.
+#   - Capturas Chrome real 1280x1100, 390x844 y 320x568; scrollWidth==innerWidth (320/320,
+#     390/390; body igual) y confirmación a 320 (320/320). → PASS D.
+#   - /api/health build_sha=9dbff819e7981b9758c607a2415b69565a8d37e2; resumen Cache-Control: no-store; lista/confirmación con
+#     fecha absoluta y «Versión 1.15.1 · revisión 0052». → PASS E.
+
+## Comprobaciones
+CHECK UAT-31-A PASS explicacion_fila_fuera=true recuentos_previos=3/2/2 recuperado=2/2/2 fuera=1/0/0
+CHECK UAT-31-B PASS version_llana="Versión 1.15.1 · revisión 0052" app_version=1.15.1 alembic=0052 sin_no_consta=true
+CHECK UAT-31-C PASS comprobaciones=14 orden_fijo=true seguridad_conservada_antes_copia_previa=true
+CHECK UAT-31-D PASS capturas=5 viewports=1280x1100,390x844,320x568 overflow_320=false overflow_390=false
+CHECK UAT-31-E PASS health_build_sha=9dbff819e7981b9758c607a2415b69565a8d37e2 resumen_no_store=true lista_version=true confirmar_version=true
+CHECK UAT-31-F PASS fallo_terminal=sha256_copia:fallo posteriores=no_ejecutada total=14
+
+## Evidencia adicional de esta pasada
+# - versiones-uat31c.txt · ops-restaurar-uat31c-success.json · ops-restaurar-uat31c-fallo.json
+# - resumen-texto-uat31c.txt · comprobaciones-uat31c.txt · comprobaciones-fallo-uat31c.txt
+# - overflow-320.txt · comandos-uat31c.txt · capturas/resumen-{escritorio,390,320}.png,
+#   capturas/confirmar-{320,escritorio}.png
+# - Histórico: pasada3b-ab81b6bb/ (3b) y defecto-version.txt (3a).

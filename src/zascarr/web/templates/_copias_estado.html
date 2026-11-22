@@ -11,6 +11,9 @@
   {% if vr is defined and vr.estado != "sin_datos" %}
   <div id="restauracion-estado" data-estado="{{ vr.estado }}">
     {% if vr.nivel %}{{ ui.aviso(vr.nivel, vr.mensaje, rol="") }}{% else %}<p>{{ vr.mensaje }}</p>{% endif %}
+    {% if vr.estado in ("hecha", "fallo") %}
+    <p><a class="btn ghost sm" href="/ui/copias/restauracion">Ver el resumen de la restauración</a></p>
+    {% endif %}
   </div>
   {% endif %}
 </div>

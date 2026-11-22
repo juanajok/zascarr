@@ -867,6 +867,27 @@ sustituye a esta matriz.
 **Criterio:** PASS solo si se ejecutó en Chrome (registrar versión y viewports). Lector de
 pantalla real, Safari/iOS y dispositivo físico: **NOT RUN**.
 
+### 13.10 UATP-08 · a qué momento vuelve la recuperación
+
+> Requiere una copia con `version_de_la_copia` y una restauración real (A6). Sin navegador ni
+> restauración ejecutada, **NOT RUN**.
+
+```text
+1. Lista de copias: fecha/hora absolutas con año, tamaño y «Versión 1.15.1 · revisión 0052»
+   (o «Versión no consta»); el bloque dice «Las horas son del servidor.».
+2. Confirmación: «Vas a volver a los datos del dd/mm/aaaa a las HH:MM», versión principal,
+   alcance (catálogo sí; archivos, portadas y configuración no) y cambios posteriores.
+3. Tras restaurar, /ui/copias/restauracion: recuperado (series/números/archivos anotados),
+   «Queda fuera de la copia», versión que arrancó, comprobaciones y (fallo) copia/intento/error
+   y próximo paso. Sin hashes de contenido ni rutas.
+4. /api/health publica build_sha (o null); /login enlaza al resumen si hay aviso reciente.
+5. 320/390/escritorio: sin scroll horizontal; textos legibles; no-store.
+```
+
+**Criterio:** PASS solo con restauración real y captura. `restaurar_datos.sh` escribe
+`recuentos_previos`, `fuera` no negativo, `comprobaciones` y `version_arrancada`; si una ejecución
+antigua no los trae, la UI dice «no consta» y esa fila queda **NOT RUN**, no verde por omisión.
+
 ---
 
 ## 14. Casos de error / seguridad / regresión

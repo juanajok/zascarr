@@ -1,0 +1,26 @@
+# UAT-31 — Comandos ejecutados (saneados)
+# Entorno E-UAT31 (alias). Candidata tag=uat-candidata-20261122b build_sha=a6849c2cd5c31e0d192c79fff66b45c3f13eddff.
+# Variables: A6=<repo candidato>; RT=<entorno UAT-31>; APP_URL=http://<loopback>:18000; COOKIE=<cookie>.
+
+## 1. Tag candidato e identidad
+git -C "$A6" tag -a uat-candidata-20261122b -m "UAT-31 UATP-08 candidata 2026-11-22b" a6849c2cd5c31e0d192c79fff66b45c3f13eddff
+git -C "$A6" rev-parse 'uat-candidata-20261122b^{commit}'   # a6849c2cd5c31e0d192c79fff66b45c3f13eddff
+git -C "$A6" cat-file -t uat-candidata-20261122b            # tag
+docker compose ... exec -T zascarr printenv BUILD_SHA        # a6849c2cd5c31e0d192c79fff66b45c3f13eddff
+curl -fsS "$APP_URL/api/health" | jq -r '.version, .build_sha'   # 1.15.1 / a6849c2cd5c31e0d192c79fff66b45c3f13eddff
+
+## 2. Semilla y B0
+python3 docs/uat/A6/fixture/sembrar.py
+bash scripts/backup.sh   # offsite_mount_missing; B0 local válida
+jq -c .version_de_la_copia "$RT/backups/MANIFIESTO-backup-20261122_172016.json"
+
+## 3. Fila añadida DESPUÉS de la copia
+psql -c "insert into series (id,title,...) values ('b7000000-...-0099','...')"   # 3/2/2
+
+## 4. Restauración real
+bash scripts/restaurar_datos.sh --produccion --copia 20261122_172016
+jq -c '{resultado,recuentos,recuentos_previos,fuera,version_arrancada}' "$RT/data/backup-status/ops-restaurar.json"
+
+## 5. Resumen en navegador real
+PYTHONPATH="$RT/pylib" python3 capturas.py   # Chrome del sistema, 1280x1100 y 390x844
+curl -fsS -b "$COOKIE" "$APP_URL/ui/copias/restauracion" | grep -o 'Versión no consta.'

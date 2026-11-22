@@ -261,3 +261,13 @@ CHECK A-01 PASS
 CHECK A-02 PASS coincidencias=0
 CHECK A-03 PASS intentos_jsonl=5 campos=intento,comprobacion,copia_version
 CHECK A-04 PASS checks_obligatorios=25/25
+
+## Anexo UAT-31 (UATP-08) — pasada 3
+# 3a FAIL B; 3b PASS (ab81b6bb); 3c PASS (9dbff819, orden/terminales).
+# Evidencia completa: evidencia/uat31/uat31-resultado.txt y evidencia/uat31/pasada3c-9dbff819/
+CHECK UAT-31-A PASS recuentos_previos=3/2/2 recuperado=2/2/2 fuera=1/0/0
+CHECK UAT-31-B PASS version_llana="Versión 1.15.1 · revisión 0052" app=1.15.1 alembic=0052
+CHECK UAT-31-C PASS comprobaciones=14 orden_fijo=true seguridad_antes_copia_previa=true
+CHECK UAT-31-D PASS capturas=5 overflow_320=false overflow_390=false
+CHECK UAT-31-E PASS health_build_sha=9dbff819e7981b9758c607a2415b69565a8d37e2 resumen_no_store=true
+CHECK UAT-31-F PASS fallo_terminal=sha256_copia:fallo posteriores=no_ejecutada

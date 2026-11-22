@@ -432,10 +432,23 @@ escribir_copias_json() {
         fuera=false
         [[ -n "${offsite}" && -f "${offsite}/$(basename "${volcado}")" ]] && fuera=true
         verificada="$(jq -r '(.verificacion.sha256 // "") == "ok"' "${manifiesto}")"
+        # UATP-08 D-1: identidad del código de la copia, saneada; solo dentro de este objeto (sin hashes del dump).
+        version="$(jq -c '
+            .version_de_la_copia as $v
+            | if ($v | type) != "object" then null
+              else {
+                head: (if (($v.head | type) == "string") and ($v.head | test("^[0-9a-f]{40}$")) then $v.head else null end),
+                build_sha: (if (($v.build_sha | type) == "string") and ($v.build_sha | test("^[0-9a-f]{40}$")) then $v.build_sha else null end),
+                app_version: (if (($v.app_version | type) == "string") and ($v.app_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) then $v.app_version else null end),
+                alembic: (if (($v.alembic | type) == "string") and ($v.alembic | test("^[0-9]{4}$")) then $v.alembic else null end)
+              }
+              | if ([.head, .build_sha, .app_version, .alembic] | map(select(. != null)) | length) > 0 then . else null end
+            end' "${manifiesto}" 2>/dev/null)"
+        [[ -n "${version}" ]] || version="null"
         lineas+="$(jq -cn --arg id "${stem/backup_/backup-}" --argjson epoch "${epoch}" --argjson bytes "${bytes}" \
             --argjson fuera "${fuera}" --argjson ver "${verificada}" \
-            --arg rev "$(jq -r '.alembic // ""' "${manifiesto}")" \
-            '{id: $id, creada_epoch: $epoch, bytes: $bytes, fuera_del_disco: $fuera, verificada: $ver, revision: $rev}')"$'\n'
+            --arg rev "$(jq -r '.alembic // ""' "${manifiesto}")" --argjson version "${version}" \
+            '{id: $id, creada_epoch: $epoch, bytes: $bytes, fuera_del_disco: $fuera, verificada: $ver, revision: $rev, version_de_la_copia: $version}')"$'\n'
         n=$(( n + 1 ))
     done < <(find "${dir}" -maxdepth 1 -name 'backup_*.sql.gz' -type f 2>/dev/null | sort -r)
     tmp="${estado}/copias.json.tmp.$$"
