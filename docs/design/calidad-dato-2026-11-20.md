@@ -121,7 +121,7 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 | H2 | S2 | 1 | 1 | 1 | 1/0/0 | 100 % | 1 exacto | FAIL | procedencia contradice la fila |
 | F4a | S3 | 593 | 583 | 20 | 20/0/0 | 100 % | 583 [489–583] → **0 tras L1** | FAIL → PASS | enricher guarda HTML (vivo; corregido) |
 | A1b | S3 | 322 | 321 | 20 | 0/20/0 | 0 % | 0 [0–52] | LEGÍTIMO | historial append-only (ADR 0014) |
-| H1 | S3 | 245 | 244 → **243 tras backfill** | 20 | 0/0/20 | — | sin medir | SIN MEDIR | CCM apenas ejecutado |
+| H1 | S3 | 245 | 244 → **243 tras backfill** | 20 | 0/0/20 | — | sin medir | SIN MEDIR (aceptado) | CCM apenas ejecutado; 243 aceptados |
 | C4b | S3 | 4.256 | 78 | 20 | 0/0/20 | — | sin medir | SIN MEDIR | formatos de número |
 | E1 | S3 | 57 | 16 | 16 | 0/0/16 | — | sin medir | SIN MEDIR | total sin unidad acreditada |
 | D5 | S3 | 5.098 | 15 | 15 | 0/15/0 | 0 % | 0 exacto | LEGÍTIMO | contrato #307: extensión declarada |
@@ -345,7 +345,8 @@ instalación (B3a/B3c). Ninguna se cuenta como PASS.
 - **Aplicado (2026-11-22):** backfill estricto (§15). Escribió 4 filas de
   procedencia (Tebeosfera) de 58 series; **1 es campo de H1**. Los 243
   restantes no tienen un valor de fuente que coincida: siguen «origen no
-  registrado», sin atribuirlos a «manual» por descarte.
+  registrado», sin atribuirlos a «manual» por descarte. **El PO los acepta así
+  (2026-11-22).**
 
 ## 6. Precisión: qué se midió y qué no
 
@@ -672,9 +673,10 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
   **147** (S1 75, S2 69, S3 3: F1d).
 - **Copia:** `update_20261121_144410.sql.gz` (contiene la fila I1); las
   correcciones L2/L3/L4 posteriores están documentadas y son reversibles.
-- **Qué queda:** B5a (75, decisión del PO), H1 (243, backfill estricto
-  aplicado en §15), la prevención de código (#1187, #1188, #1189, #1190; #1185
-  cerrada con #1208) y los datos F1d/H2/F2a, que el PO decidió no tocar.
+- **Qué queda:** B5a (75, decisión del PO), H1 (243 aceptados como «origen no
+  registrado»; backfill estricto aplicado en §15), la prevención de código
+  (#1187, #1188, #1189, #1190; #1185 cerrada con #1208) y los datos
+  F1d/H2/F2a, que el PO decidió no tocar.
 
 ## 15. Backfill estricto de H1 (2026-11-22)
 
@@ -693,9 +695,11 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
   diaria `backup_20261122_041330.sql.gz`, SHA-256 `776f7de2…`.
 - **Después:** H1 **243/245**; censo completo 82 comprobaciones, huella
   `3201507c2eb6b3d2`; ninguna otra comprobación cambió de casos.
-- **Decisión:** aceptar los 243 como «origen no registrado» o esperar a que el
-  CCM recolecte/consolide esos campos. No se fuerza una procedencia que no
-  consta.
+- **Decisión del PO (2026-11-22): aceptar los 243 como «origen no registrado».**
+  No se fuerza la procedencia: los 57 registros del CCM no contienen esos
+  valores y atribuirlos sería inventar. El backfill estricto queda disponible
+  para cuando el recolector CCM traiga fichas nuevas y los valores coincidan; no
+  se usa el `legado` para maquillar H1.
 
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
 L6, L1, L2, L3 y L4 están aplicados; L7/L8 revisados (I1 aplicado); H1 con
