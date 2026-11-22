@@ -17,14 +17,13 @@ El interruptor es `NAV_MOVIL_VARIANTE` (`a` o `b`; cualquier otro valor impide a
 2. Para volver, quita la línea (o pon `a`) y recréalo otra vez.
 3. En local: `NAV_MOVIL_VARIANTE=b uvicorn zascarr.main:app …`. Dos instancias con la misma base, una por variante, permiten enseñar A y B a la vez.
 
-## Limitación que hay que conocer antes de probar
+## Qué enciende el punto de aviso (actualizado con #1219)
 
-El punto de aviso de Estado se enciende **solo por seguridad** (interfaz abierta a la red sin contraseña; `services/seguridad.py::estado_de_seguridad`). Los avisos de VPN, copias o restauración los calcula la propia pantalla Estado desde `/api/health`, en el navegador, y **no** encienden ningún punto, ni en A ni en B. Por eso:
+El punto (sobre «Estado» en A, sobre «Más» en B) se enciende cuando **la última comprobación de salud** (`GET /api/health`, la que llama el HEALTHCHECK de Docker cada 30 s) dijo «Atención» o «Error» —lo mismo que el resumen de la pantalla Estado— o cuando la interfaz está abierta a la red sin contraseña. Un servicio apagado en Ajustes no cuenta.
 
-- En B, un problema de VPN o copias **no se ve** desde la barra; hay que abrir «Más» → Estado. Es justo el riesgo que la simulación señaló (los dos agentes en B fueron a «Más» por descarte).
-- Hacer que el punto refleje la salud completa exige un resumen cacheado de `/api/health` (no se puede sondear cada 30 s desde el menú). Es trabajo aparte; **no está hecho**.
-
-La prueba mide el recorrido con lo que hay hoy. Si quieres ver el punto durante la sesión, expón la interfaz a la LAN sin contraseña **solo en una instancia de prueba**.
+- El menú **no sondea**: lee el veredicto guardado por esa comprobación. Si no hay veredicto o tiene más de 2 minutos (p. ej. justo tras reiniciar, o en local sin HEALTHCHECK), no se enciende nada.
+- Una instalación sin copias de seguridad configuradas da «Atención» (copia y restauración en error), así que el punto estará encendido hasta configurarlas. Es coherente con Estado, pero hay que saberlo al probar: **en A y en B el punto saldrá encendido en una instancia recién creada**. Para ver la barra sin aviso, configura las copias o comprueba con una instancia sana.
+- Para probar con un problema real: detén Transmission o aMule (si están activados en Ajustes) y espera a la siguiente pasada (≤ 30 s).
 
 ## Participantes
 
