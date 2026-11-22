@@ -88,8 +88,9 @@ Caso real: «100 Balas» en la Pi (100 números, 100 archivos), a 1280 px y a 37
 
 - «Aviso legal» y la caja de atribución siguen en la cabecera (#447; la atribución, visible sin
   desplegar, SCR2/SCR7): van al final de lo poco frecuente.
-- El fragmento de sagas sigue sin pintar nada cuando la serie no está en ninguna saga (prueba de
-  `test_web_series`); el enlace «Sagas» de la barra queda entonces sin destino. Se plantea al PO.
+- El fragmento de sagas no pintaba nada cuando la serie no estaba en ninguna saga, y el enlace «Sagas»
+  de la barra quedaba sin destino. Decisión del PO (2026-11-22): se pinta con su estado vacío, como
+  «Colecciones», con el enlace a «Sagas en orden» y sin botón principal.
 - «No se puede calcular» es el término del glosario (§14, estado de la serie) y del filtro de la
   Biblioteca: tiene cuatro palabras, pero se conserva para no tener dos nombres para un concepto.
 - Las didascalias de procedencia y garantía siguen en amarillo.
