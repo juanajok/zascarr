@@ -61,7 +61,9 @@ def test_lista_las_copias_con_manifiesto_sin_rutas_ni_hashes(tmp_path):
     assert datos["schema"] == 1
     assert [c["id"] for c in datos["copias"]] == ["backup-20261111_040000", "backup-20261110_040000"]
     assert datos["copias"][0]["fuera_del_disco"] is False and datos["copias"][1]["fuera_del_disco"] is True
-    assert all(set(c) == {"id", "creada_epoch", "bytes", "fuera_del_disco", "verificada", "revision"} for c in datos["copias"])
+    assert all(set(c) == {"id", "creada_epoch", "bytes", "fuera_del_disco", "verificada",
+                          "revision", "version_de_la_copia"} for c in datos["copias"])
+    assert all(c["version_de_la_copia"] is None for c in datos["copias"])  # manifiesto antiguo
     texto = (e["estado"] / "copias.json").read_text()
     assert "abab" not in texto and str(tmp_path) not in texto and ".sql.gz" not in texto
     assert oct((e["estado"] / "copias.json").stat().st_mode & 0o777) == "0o644"
@@ -95,3 +97,19 @@ def test_directorio_de_estado_inexistente_no_hace_fallar(tmp_path):
 def test_backup_llama_al_listado_despues_de_la_retencion():
     texto = (SCRIPTS / "backup.sh").read_text(encoding="utf-8")
     assert texto.index("aplicar_retencion \"${BACKUP_DIR}\"") < texto.index("escribir_copias_json")
+
+
+def test_version_de_la_copia_se_sanea_sin_hashes_del_dump(tmp_path):
+    e = _entorno(tmp_path)
+    version = {"head": "a" * 40, "build_sha": "b" * 40, "app_version": "1.15.1", "alembic": "0052"}
+    _copia(e, "20261113_040000", fuera=False, extra={"version_de_la_copia": version})
+    _copia(e, "20261114_040000", fuera=False,
+           extra={"version_de_la_copia": {"head": "<script>", "build_sha": 7,
+                                          "app_version": "1.15", "alembic": "52"}})
+    r = _correr(e, tmp_path)
+    assert r.returncode == 0, r.stderr
+    datos = json.loads((e["estado"] / "copias.json").read_text())["copias"]
+    assert datos[1]["version_de_la_copia"] == version
+    assert datos[0]["version_de_la_copia"] is None
+    texto = (e["estado"] / "copias.json").read_text()
+    assert "ab" * 32 not in texto and str(tmp_path) not in texto

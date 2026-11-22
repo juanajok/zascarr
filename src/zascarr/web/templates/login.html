@@ -12,7 +12,8 @@
 <body>
   <main class="content login-content">
     <h1>ZascArr</h1>
-    {% if aviso %}{{ ui.aviso("ok", aviso, rol="status") }}{% endif %}
+    {% if aviso %}{{ ui.aviso("ok", aviso, rol="status") }}
+    <p><a class="btn ghost sm" href="/login?next=%2Fui%2Fcopias%2Frestauracion">Entra y verás qué se restauró</a></p>{% endif %}
     <p class="subtitle">
       {% if pide_usuario %}Introduce tu usuario y tu contraseña para continuar.
       {% else %}Introduce tu contraseña para continuar.{% endif %}

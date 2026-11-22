@@ -2,8 +2,11 @@
 {% block title %}Restaurar una copia — ZascArr{% endblock %}
 {% block content %}
 <h1>Restaurar una copia</h1>
-<p class="subtitle">Vas a volver a los datos del {{ copia.fecha }}. Se perderán los cambios posteriores.</p>
+<p class="subtitle">Vas a volver a los datos del {{ fecha_absoluta(copia.creada_epoch) }} (hora del servidor).</p>
+<p>{{ version_llana(copia.version) }}.{% if not copia.version %} Esta copia es de antes de que ZascArr anotara la versión.{% endif %}</p>
 {{ ui.aviso("warn", "ZascArr se parará uno o dos minutos. Tu biblioteca, tus archivos y el acceso actual no cambian; la copia restaurada no puede traer contraseñas ni sesiones antiguas.") }}
+<p>Esta copia contiene lo que ZascArr tiene anotado: series, números, fichas y progreso de lectura. No contiene los archivos de tu biblioteca (CBZ, CBR, PDF o EPUB), las portadas ni la configuración del equipo; ZascArr no los toca al restaurar.</p>
+<p>Se pierden los cambios posteriores a esa copia: series, números, ediciones y progreso anotados después. Mover o renombrar archivos que haya hecho ZascArr no se deshace.</p>
 {% if restaurando %}
 <p class="caption">Hay una restauración en marcha. Espera a que termine para restaurar otra copia.</p>
 {% elif not activa %}
@@ -15,11 +18,18 @@
      <input id="contrasena" name="contrasena" type="password" autocomplete="current-password" required></p>
   <p><label><input type="checkbox" name="entiendo" value="si" required>
     Entiendo que se pierden los cambios posteriores a esa copia.</label></p>
-  <button type="submit">Restaurar esta copia</button>
+  <button type="submit" class="primary">Restaurar esta copia</button>
   <a class="btn ghost sm" href="/estado">No restaurar</a>
 </form>
+{% endif %}
 <details><summary>Para quien instaló ZascArr</summary>
+  <p>Identidad de la copia: {{ copia.id }}.
+    {% if copia.version %}
+      head={{ copia.version.head or "no consta" }} · build={{ copia.version.build_sha or "no consta" }} ·
+      app={{ copia.version.app_version or "no consta" }} · alembic={{ copia.version.alembic or "no consta" }}.</p>
+    {% else %}
+      No consta: copia anterior a que ZascArr anotara la versión.</p>
+    {% endif %}
   <p>La copia se verifica antes de tocar la base; la actual se guarda primero y se puede recuperar si falla. La operación la ejecuta el auxiliar del host, no la aplicación.</p>
 </details>
-{% endif %}
 {% endblock %}

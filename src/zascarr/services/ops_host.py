@@ -283,6 +283,17 @@ def hora_llana(epoch: int, ahora: int) -> str:
     return f"el {fecha.day} de {MESES[fecha.month - 1]} a las {hora}"
 
 
+def fecha_absoluta(epoch: int | None) -> str:
+    """`dd/mm/aaaa a las HH:MM` en la zona del servidor; `None`/ilegible → «fecha no disponible»."""
+    if epoch is None:
+        return "fecha no disponible"
+    try:
+        fecha = datetime.fromtimestamp(epoch).astimezone()
+    except (OverflowError, OSError, ValueError):
+        return "fecha no disponible"
+    return f"{fecha:%d/%m/%Y} a las {fecha:%H:%M}"
+
+
 def _dia_llano(epoch: int) -> str:
     try:
         fecha = datetime.fromtimestamp(epoch).astimezone()
@@ -398,6 +409,44 @@ def _resultado(estado: dict, pedida_hecha: bool, ahora: int) -> VistaCopias:
     return VistaCopias(EstadoCopia.DIARIO, "Todavía no hay ninguna copia anotada.")
 
 
+_RE_HEAD = re.compile(r"^[0-9a-f]{40}$")
+_RE_APP = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_RE_ALEMBIC = re.compile(r"^[0-9]{4}$")
+_RE_INTENTO = re.compile(r"^[0-9a-f]{16}$")
+_RE_COPIA = re.compile(r"^backup-[0-9]{8}_[0-9]{6}$")
+
+
+def _version_copia(valor: object) -> dict | None:
+    """Tupla de identidad del código saneada; cualquier desajuste → None («no consta»)."""
+    if not isinstance(valor, dict):
+        return None
+    claves = ("head", "build_sha", "app_version", "alembic")
+    salida: dict[str, str | None] = {}
+    for clave in claves:
+        dato = valor.get(clave)
+        if clave in ("head", "build_sha"):
+            salida[clave] = dato if isinstance(dato, str) and _RE_HEAD.fullmatch(dato) else None
+        elif clave == "app_version":
+            salida[clave] = dato if isinstance(dato, str) and _RE_APP.fullmatch(dato) else None
+        else:
+            salida[clave] = dato if isinstance(dato, str) and _RE_ALEMBIC.fullmatch(dato) else None
+    return salida if any(salida.values()) else None
+
+
+def version_llana(version: dict | None) -> str:
+    """Texto compacto de la versión de una copia (sin hashes)."""
+    if not isinstance(version, dict):
+        return "Versión no consta"
+    app, revision = version.get("app_version"), version.get("alembic")
+    if app and revision:
+        return f"Versión {app} · revisión {revision}"
+    if app:
+        return f"Versión {app}"
+    if revision:
+        return f"Revisión {revision}"
+    return "Versión no consta"
+
+
 def leer_copias(settings: Settings, ahora: int | None = None) -> list[dict] | None:
     """El listado de `copias.json` (hasta 30), o `None` si falta o no se puede leer. Solo pasan fecha, tamaño y si hay
     copia en el disco de respaldo: ni rutas, ni nombres, ni hashes aunque el fichero los trajera."""
@@ -417,6 +466,8 @@ def leer_copias(settings: Settings, ahora: int | None = None) -> list[dict] | No
             "revision": item.get("revision") if isinstance(item.get("revision"), str) else "",
             "verificada": item.get("verificada") is True,
             "creada_epoch": creada, "fecha": hora_llana(creada, ahora),
+            "fecha_absoluta": fecha_absoluta(creada),
+            "version": _version_copia(item.get("version_de_la_copia")),
             "tamano": tamano_llano(tamano),
             "fuera_del_disco": item.get("fuera_del_disco") is True,
         })
@@ -494,6 +545,13 @@ class VistaRestaurar:
     base_en_su_sitio: bool | None = None
     recuentos: dict | None = None
     copia_epoch: int | None = None
+    copia: str | None = None
+    copia_version: dict | None = None
+    recuentos_previos: dict | None = None
+    version_arrancada: dict | None = None
+    intento: str | None = None
+    comprobacion: str | None = None
+    comprobaciones: tuple[dict, ...] = ()
 
 
 def _recuentos_restaurar(valor: object) -> dict | None:
@@ -507,6 +565,28 @@ def _recuentos_restaurar(valor: object) -> dict | None:
             return None
         salida[clave] = n
     return salida
+
+
+CODS_COMPROBACION = frozenset({
+    "existencia_copia", "manifiesto", "sha256_copia", "bytes_copia", "codigo_manifest",
+    "gzip_cabecera", "cabecera_pg_dump", "tablas_dump", "alembic_revision",
+    "recuentos_nueva", "vinculos_huerfanos", "seguridad_conservada", "copia_previa", "health",
+})
+ESTADOS_COMPROBACION = frozenset({"ok", "fallo", "no_ejecutada"})
+
+
+def _comprobaciones(valor: object) -> tuple[dict, ...]:
+    if not isinstance(valor, list):
+        return ()
+    salida = []
+    for fila in valor[:14]:
+        if not isinstance(fila, dict):
+            continue
+        codigo, estado = fila.get("codigo"), fila.get("estado")
+        if (isinstance(codigo, str) and codigo in CODS_COMPROBACION
+                and isinstance(estado, str) and estado in ESTADOS_COMPROBACION):
+            salida.append({"codigo": codigo, "estado": estado})
+    return tuple(salida)
 
 
 def _mensaje_en_marcha(fase: object, copia_epoch: int | None) -> str:
@@ -525,6 +605,21 @@ def resolver_restauracion(settings: Settings, ahora: int | None = None) -> Vista
     actualizado = _epoch(datos.get("actualizado_epoch"))
     copia_epoch = _epoch(datos.get("copia_epoch"))
     fase = datos.get("fase")
+    copia = datos.get("copia")
+    copia = copia if isinstance(copia, str) and _RE_COPIA.fullmatch(copia) else None
+    copia_version = _version_copia(datos.get("copia_version"))
+    recuentos_previos = _recuentos_restaurar(datos.get("recuentos_previos"))
+    version_arrancada = _version_copia(datos.get("version_arrancada"))
+    intento = datos.get("intento")
+    intento = intento if isinstance(intento, str) and _RE_INTENTO.fullmatch(intento) else None
+    comprobacion = datos.get("comprobacion")
+    comprobacion = (comprobacion if isinstance(comprobacion, str)
+                    and comprobacion in CODS_COMPROBACION else None)
+    comprobaciones = _comprobaciones(datos.get("comprobaciones"))
+    extras = dict(copia=copia, copia_version=copia_version,
+                  recuentos_previos=recuentos_previos,
+                  version_arrancada=version_arrancada, intento=intento,
+                  comprobacion=comprobacion, comprobaciones=comprobaciones)
     ops = _leer_json(settings.ops_status_file) or {}
     pedida = _epoch(ops.get("pedida_epoch")) if ops.get("accion") == "restaurar" else None
 
@@ -535,35 +630,35 @@ def resolver_restauracion(settings: Settings, ahora: int | None = None) -> Vista
         if omitida_epoch is not None and (actualizado is None or actualizado < omitida_epoch) \
                 and (pedida is None or omitida_epoch >= pedida):
             return VistaRestaurar(EstadoRestaurar.NO_ARRANCO, MSG_REST_NO_ARRANCO,
-                                  nivel="amber", copia_epoch=copia_epoch)
+                                  nivel="amber", copia_epoch=copia_epoch, **extras)
 
     if not datos:
         # Entre la aceptación del auxiliar y la primera fase del script: `ops-status.json` ya lleva la petición.
         if pedida is not None and -TOLERANCIA_RELOJ_S <= ahora - pedida <= SIN_NOTICIAS_RESTAURAR_S:
             return VistaRestaurar(EstadoRestaurar.EN_MARCHA,
                                   MSG_REST_EN_MARCHA_SIRVIENDO.format(fecha="ahora"),
-                                  en_marcha=True, copia_epoch=None)
-        return VistaRestaurar(EstadoRestaurar.SIN_DATOS)
+                                  en_marcha=True, copia_epoch=None, **extras)
+        return VistaRestaurar(EstadoRestaurar.SIN_DATOS, **extras)
 
     # 2) En curso y reciente / obsoleto.
     if resultado == "en_curso":
         if actualizado is not None and ahora - actualizado > SIN_NOTICIAS_RESTAURAR_S:
             return VistaRestaurar(EstadoRestaurar.SIN_NOTICIAS, MSG_REST_SIN_NOTICIAS,
-                                  nivel="amber", copia_epoch=copia_epoch)
+                                  nivel="amber", copia_epoch=copia_epoch, **extras)
         return VistaRestaurar(EstadoRestaurar.EN_MARCHA, _mensaje_en_marcha(fase, copia_epoch),
-                              en_marcha=True, copia_epoch=copia_epoch)
+                              en_marcha=True, copia_epoch=copia_epoch, **extras)
 
     # 3) Hecha, con recuentos (solo números) y fecha de la copia.
     if resultado == "hecha":
         recuentos = _recuentos_restaurar(datos.get("recuentos"))
         if recuentos is None:
             return VistaRestaurar(EstadoRestaurar.HECHA, MSG_LOGIN_RESTAURADA, nivel="ok",
-                                  copia_epoch=copia_epoch)
+                                  copia_epoch=copia_epoch, **extras)
         plantilla = MSG_REST_HECHA if copia_epoch is not None else MSG_REST_HECHA_SIN_FECHA
         mensaje = plantilla.format(fecha=_dia_llano(copia_epoch), series=miles(recuentos["series"]),
                                    issues=miles(recuentos["issues"]), files=miles(recuentos["files"]))
         return VistaRestaurar(EstadoRestaurar.HECHA, mensaje, nivel="ok", recuentos=recuentos,
-                              copia_epoch=copia_epoch)
+                              copia_epoch=copia_epoch, **extras)
 
     # 4) Fallida: causa cerrada + acción; `base_en_su_sitio:false` añade el aviso de que puede no responder.
     if resultado == "fallida":
@@ -573,9 +668,9 @@ def resolver_restauracion(settings: Settings, ahora: int | None = None) -> Vista
         base_en_su_sitio = base if isinstance(base, bool) else None
         mensaje = causa + (MSG_REST_BASE_FUERA if base_en_su_sitio is False else "")
         return VistaRestaurar(EstadoRestaurar.FALLO, mensaje, nivel="warn",
-                              base_en_su_sitio=base_en_su_sitio, copia_epoch=copia_epoch)
+                              base_en_su_sitio=base_en_su_sitio, copia_epoch=copia_epoch, **extras)
 
-    return VistaRestaurar(EstadoRestaurar.SIN_DATOS)
+    return VistaRestaurar(EstadoRestaurar.SIN_DATOS, **extras)
 
 
 def aviso_de_login(settings: Settings, ahora: int | None = None) -> str | None:

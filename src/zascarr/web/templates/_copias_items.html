@@ -4,9 +4,11 @@
   {% elif not copias %}
     <p class="muted">No hay copias restaurables para esta versión.</p>
   {% else %}
+    <p class="caption">Las horas son del servidor.</p>
     <ul>
       {% for c in copias %}
-      <li>{{ c.fecha }} · {{ c.tamano }} · también en el disco de respaldo: {{ "sí" if c.fuera_del_disco else "no" }}
+      <li>{{ c.fecha_absoluta }} · {{ c.tamano }} · también en el disco de respaldo: {{ "sí" if c.fuera_del_disco else "no" }}
+        <p class="caption">{{ version_llana(c.version) }}</p>
         {% if c.id %}
           {% if c.restaurable and not restaurando %}<a class="btn ghost sm" href="/ui/copias/restaurar/{{ c.id }}">Restaurar…</a>
           {% elif c.restaurable and restaurando %}<span class="muted">Hay una restauración en marcha.</span>

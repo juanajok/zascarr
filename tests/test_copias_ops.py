@@ -124,7 +124,7 @@ def test_la_hora_se_pinta_en_la_zona_del_servidor(monkeypatch):
         assert ops_host.hora_llana(epoch - 86400, epoch).startswith("ayer a las ")
         assert ops_host.hora_llana(epoch - 5 * 86400, epoch).startswith("el ")
     finally:
-        monkeypatch.undo()
+        monkeypatch.delenv("TZ", raising=False)
         time.tzset()
 
 
@@ -135,7 +135,10 @@ def test_el_listado_trae_fecha_tamano_y_nada_mas(ajustes):
     _escribir(ajustes, "copias.json", {"schema": 1, "copias": copias})
     lista = ops_host.leer_copias(ajustes.s, AHORA)
     assert len(lista) == 30                                  # AC-21
-    assert set(lista[0]) == {"id", "revision", "verificada", "creada_epoch", "fecha", "tamano", "fuera_del_disco"}
+    assert set(lista[0]) == {"id", "revision", "verificada", "creada_epoch", "fecha",
+                             "fecha_absoluta", "version", "tamano", "fuera_del_disco"}
+    assert lista[0]["version"] is None
+    assert __import__("re").fullmatch(r"\d{2}/\d{2}/\d{4} a las \d{2}:\d{2}", lista[0]["fecha_absoluta"])
     assert "secreto" not in json.dumps(lista) and "ab" * 32 not in json.dumps(lista)
     (ajustes.dir / "copias.json").write_text("roto")
     assert ops_host.leer_copias(ajustes.s, AHORA) is None
@@ -476,3 +479,29 @@ def test_las_epocas_se_acotan_al_ano_2100():
     assert ops_host._epoch(10**20) is None and ops_host._epoch(ops_host.EPOCA_MAX + 1) is None
     assert ops_host._epoch(ops_host.EPOCA_MAX) == ops_host.EPOCA_MAX and ops_host._epoch(0) == 0
     assert ops_host._epoch(-1) is None and ops_host._epoch(True) is None and ops_host._epoch("5") is None
+
+
+def test_fecha_absoluta_y_version_saneada(ajustes, monkeypatch):
+    """UATP-08: fecha con año/hora y tupla de versión saneada (o «no consta»)."""
+    try:
+        monkeypatch.setenv("TZ", "Europe/Madrid")
+        time.tzset()
+        assert __import__("re").fullmatch(
+            r"01/01/2026 a las \d{2}:\d{2}", ops_host.fecha_absoluta(1_767_225_600))
+    finally:
+        monkeypatch.delenv("TZ", raising=False)
+        time.tzset()
+    assert ops_host.fecha_absoluta(None) == "fecha no disponible"
+    assert ops_host.fecha_absoluta(10**30) == "fecha no disponible"
+    valida = {"head": "a" * 40, "build_sha": "b" * 40, "app_version": "1.15.1", "alembic": "0052"}
+    copias = [
+        {"id": "backup-1", "creada_epoch": AHORA, "bytes": 1, "version_de_la_copia": valida},
+        {"id": "backup-2", "creada_epoch": AHORA - 1, "bytes": 1,
+         "version_de_la_copia": {"head": "NO", "build_sha": 3, "app_version": "1.15", "alembic": "52"}},
+    ]
+    _escribir(ajustes, "copias.json", {"schema": 1, "copias": copias})
+    lista = ops_host.leer_copias(ajustes.s, AHORA)
+    assert lista[0]["version"] == valida
+    assert lista[1]["version"] is None
+    assert ops_host.version_llana(valida) == "Versión 1.15.1 · revisión 0052"
+    assert ops_host.version_llana(None) == "Versión no consta"

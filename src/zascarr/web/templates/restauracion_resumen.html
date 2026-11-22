@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Restauración — ZascArr{% endblock %}
+{% block content %}
+{% if vr.estado == "sin_datos" %}
+  {{ ui.estado_vacio("No hay ninguna restauración que contar", "Cuando restaures una copia, aquí verás cómo fue.", ("Volver a Estado", "/estado")) }}
+{% elif vr.estado == "hecha" %}
+  <h1>Copia restaurada</h1>
+  <p class="subtitle">ZascArr volvió a los datos del {{ fecha_absoluta(vr.copia_epoch) }} (hora del servidor).</p>
+  {% if vr.recuentos %}
+  <p>{{ vr.recuentos.series }} series, {{ vr.recuentos.issues }} números y {{ vr.recuentos.files }} archivos anotados.</p>
+  <p class="caption">Son registros de tu biblioteca, no archivos comprobados en el disco.</p>
+  {% else %}<p>No consta el detalle de lo recuperado.</p>{% endif %}
+  <h2>Versión que arrancó</h2>
+  <p>{{ version_llana(vr.version_arrancada) }}.{% if not vr.version_arrancada %} La restauración es anterior a que ZascArr anotara esta versión.{% endif %}</p>
+  {% if vr.version_arrancada %}
+  <details><summary>Identidad de la versión</summary>
+    <p>head={{ vr.version_arrancada.head or "no consta" }} · build={{ vr.version_arrancada.build_sha or "no consta" }} · app={{ vr.version_arrancada.app_version or "no consta" }} · alembic={{ vr.version_arrancada.alembic or "no consta" }}</p>
+  </details>
+  {% endif %}
+  <h2>Queda fuera de la copia</h2>
+  <ul>
+    <li>Los archivos de tu biblioteca: CBZ, CBR, PDF o EPUB.</li>
+    <li>Las portadas guardadas.</li>
+    <li>La configuración del equipo: acceso, contraseña y exposición.</li>
+    <li>Lo anotado después de la copia.</li>
+  </ul>
+  <h2>Cambios posteriores</h2>
+  {% if vr.recuentos_previos and vr.recuentos %}
+  <p>Antes de restaurar había {{ vr.recuentos_previos.series }} series, {{ vr.recuentos_previos.issues }} números y {{ vr.recuentos_previos.files }} archivos anotados. Esta copia trae {{ vr.recuentos.series }}, {{ vr.recuentos.issues }} y {{ vr.recuentos.files }}: lo anotado después de la copia no vuelve.</p>
+  {% else %}<p>No consta cuánto había antes de restaurar.</p>{% endif %}
+  <p class="caption">Las cifras son registros anotados; no dicen qué fila cambió.</p>
+  <h2>Comprobaciones</h2>
+  {% if vr.comprobaciones %}
+  <p>Se comprobó la copia antes de usarla y la base restaurada antes de arrancar.</p>
+  <details><summary>Qué se comprobó</summary>
+    <ul>{% for c in vr.comprobaciones %}<li>{{ c.codigo }}: {{ c.estado }}</li>{% endfor %}</ul>
+  </details>
+  {% else %}<p>No consta qué se comprobó.</p>{% endif %}
+  <details><summary>Para quien instaló ZascArr</summary>
+    <p>copia={{ vr.copia or "no consta" }} · intento={{ vr.intento or "no consta" }} · comprobacion={{ vr.comprobacion or "no consta" }}</p>
+    <p>copia_version={{ version_llana(vr.copia_version) }}</p>
+  </details>
+  <p><a class="btn ghost sm" href="/estado">Volver a Estado</a></p>
+{% elif vr.estado == "fallo" %}
+  <h1>No se pudo restaurar la copia</h1>
+  {{ ui.aviso("warn", vr.mensaje) }}
+  <p>La restauración no se completó. Aunque el resto del sistema siga funcionando, esta copia no se ha aplicado.</p>
+  {% if vr.base_en_su_sitio is true %}<p>Tus datos siguen como estaban.</p>
+  {% elif vr.base_en_su_sitio is false %}<p>ZascArr no pudo volver atrás solo; los datos de antes están en la copia previa. Avisa a quien instaló ZascArr cuanto antes.</p>{% endif %}
+  <h2>La copia que se intentó</h2>
+  <p>Copia del {{ fecha_absoluta(vr.copia_epoch) }} · {{ version_llana(vr.copia_version) }}.</p>
+  <p><a class="btn primary" href="/estado#copias">Elige otra copia</a>
+     <a class="btn ghost sm" href="/estado">Volver a Estado</a></p>
+  <details><summary>Para quien instaló ZascArr</summary>
+    <p>copia={{ vr.copia or "no consta" }} · intento={{ vr.intento or "no consta" }} · error={{ vr.comprobacion or "no consta" }}</p>
+    {% if vr.comprobaciones %}<ul>{% for c in vr.comprobaciones %}<li>{{ c.codigo }}: {{ c.estado }}</li>{% endfor %}</ul>{% endif %}
+  </details>
+{% else %}
+  <h1>Restauración</h1>
+  {% if vr.nivel %}{{ ui.aviso(vr.nivel, vr.mensaje) }}{% else %}<p>{{ vr.mensaje or "No hay ninguna restauración que contar." }}</p>{% endif %}
+  <p><a class="btn ghost sm" href="/estado">Volver a Estado</a></p>
+{% endif %}
+{% endblock %}
