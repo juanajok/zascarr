@@ -48,7 +48,7 @@ binding del socket.
 - [Especificación main](../design/ops4-especificacion-main.md)
 - [Autorización app-host](../design/ops4-autorizacion-app-host.md)
 - [Auxiliar y unidad](../design/ops4-auxiliar-unidad.md)
-- [Informe SecOps final](../design/secops-ops4-verificacion-final-2026-11-21.md)
+- [Informe SecOps final](../design/secops-ops4-b-final-f34c30ba-2026-11-22.md)
 
 
 ## Desviación de Compose

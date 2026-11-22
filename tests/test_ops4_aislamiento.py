@@ -85,7 +85,9 @@ def test_el_instalador_copia_todo_lo_que_importa_el_auxiliar() -> None:
 
 
 def test_el_auxiliar_y_la_unidad_usan_python_aislado() -> None:
-    unidad = (RAIZ / "deploy" / "systemd" / "zascarr-actualizar@.service").read_text(encoding="utf-8")
+    unidad = (
+        RAIZ / "deploy" / "systemd" / "zascarr-actualizar@.service"
+    ).read_text(encoding="utf-8")
     assert "/usr/bin/python3 -I" in unidad
     assert "Environment=PYTHONPATH=" not in unidad
     assert "ReadWritePaths=@ZASCARR_DATA_DIR@/ops4 @ZASCARR_DATA_DIR@/ops" in unidad

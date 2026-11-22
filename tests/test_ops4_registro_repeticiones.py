@@ -214,3 +214,25 @@ def test_sin_fugas_en_exitos_repeticiones_y_fallos(directory_fd) -> None:
         with pytest.raises(registro.RegistroNoDisponibleError):
             registro.reclamar_id(f"{i + 100:032x}", directorio_fd=directory_fd, sincronizar=fail)
     assert len(os.listdir("/proc/self/fd")) == before
+
+
+def test_reclamar_autorizacion_usa_el_prefijo_v4_y_consume_una_vez(tmp_path: Path) -> None:
+    fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        assert registro.reclamar_autorizacion(ID, directorio_fd=fd) is True
+        assert (tmp_path / f"{registro.PREFIJO_AUTORIZACION}{ID}").exists()
+        assert not (tmp_path / f"{registro.PREFIJO_SOLICITUD_V3}{ID}").exists()
+        assert registro.reclamar_autorizacion(ID, directorio_fd=fd) is False
+    finally:
+        os.close(fd)
+
+
+def test_los_namespaces_de_solicitud_y_autorizacion_no_colisionan(tmp_path: Path) -> None:
+    fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        assert registro.reclamar_id(ID, directorio_fd=fd) is True
+        assert registro.reclamar_autorizacion(ID, directorio_fd=fd) is True
+        assert (tmp_path / f"{registro.PREFIJO_SOLICITUD_V3}{ID}").exists()
+        assert (tmp_path / f"{registro.PREFIJO_AUTORIZACION}{ID}").exists()
+    finally:
+        os.close(fd)

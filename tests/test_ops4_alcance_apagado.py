@@ -30,3 +30,9 @@ def test_las_unidades_no_se_habilitan_al_instalar() -> None:
                    "zascarr-actualizar@.service"):
         texto = (RAIZ / "deploy" / "systemd" / unidad).read_text(encoding="utf-8")
         assert not any(line.strip() == "[Install]" for line in texto.splitlines()), unidad
+
+
+def test_no_hay_migracion_ni_env_de_ops4() -> None:
+    assert not list((RAIZ / "alembic" / "versions").glob("*ops4*"))
+    for ruta in RAIZ.glob(".env*"):
+        assert "OPS4_" not in ruta.read_text(encoding="utf-8"), ruta

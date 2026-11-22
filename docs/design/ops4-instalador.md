@@ -21,7 +21,7 @@ provisiona OPS4 **sin habilitar la UI ni activar el socket por defecto**.
 
 ## Pruebas
 
-[test_instalar_ops4.py](../../tests/test_instalar_ops4.py): **8 casos** con
+[test_instalar_ops4.py](../../tests/test_instalar_ops4.py): **11 casos** con
 directorios temporales y `--sin-systemd`, sin tocar systemd, la Pi ni
 producción. Verifican clave/modo, directorios, módulos, unidades sustituidas,
 idempotencia, dry-run, retirada y argumentos inválidos.

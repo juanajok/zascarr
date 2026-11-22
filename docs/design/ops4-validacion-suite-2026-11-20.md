@@ -21,7 +21,7 @@ misma orden mediante la ampliación de permiso aprobada para escribir allí.
 Resultado del segundo intento (antes de corregir el arnés): **2 failed,
 8651 passed, 2429 skipped, 7 warnings**, código de salida 1, 502,99 segundos.
 La repetición tras las correcciones de tests, con temporales nuevos, terminó
-en **8947 passed, 2454 skipped, 7 warnings**, código de salida 0, 483,37
+en **8949 passed, 2454 skipped, 7 warnings**, código de salida 0, 483,37
 segundos. **La suite completa está verde en el árbol de trabajo actual.** Los
 avisos son de ZIP duplicado en un test y de AsyncMock no esperado en pruebas
 del importador; no se han corregido y no son fallos.
@@ -86,7 +86,7 @@ Cambios solo en tests:
 Resultados de las pruebas dirigidas: **90 passed, 2 skipped** al ejecutar
 `test_restore_script.py`, `test_restaurar_produccion_pg.py` (omitido sin
 opt-in) y `test_ops4_pg_optin.py`; Ruff limpio en esos ficheros. La selección
-OPS4/paridad pasó a **389 pruebas superadas**.
+OPS4/paridad pasó a **391 pruebas superadas**.
 
 La suite completa **se repitió después de esta corrección**: 8880 passed,
 2431 skipped, 0 failed. Los dos fallos históricos quedan cerrados a nivel de
@@ -95,7 +95,7 @@ suite. El caso PostgreSQL real sigue omitido sin `TEST_DATABASE_URL` o
 
 ## Evidencia complementaria
 
-- **389 pruebas seleccionadas de OPS4/paridad** superadas tras corregir el
+- **391 pruebas seleccionadas de OPS4/paridad** superadas tras corregir el
   arnés. El código de producto no cambió en esta corrección.
 - Ruff pasó sobre todos los módulos `deploy/ops`, tests OPS4, fixtures de VM y
   los cuatro servicios nuevos aislados de actualización.
@@ -114,5 +114,5 @@ reautenticación. La primera pasada completa dio 8881 passed y 1 fallo de
 temporización en `test_ensayo_f1bis_arnes` (umbral de 4 s y `pgrep -f` que se
 autocoincidía). Se estabilizó el test comprobando la ausencia del KILL de
 respaldo y procesos `sleep 61.37` exactos, sin subir el umbral para ocultar el
-comportamiento. La repetición completa terminó en **8947 passed, 2454 skipped,
-7 avisos, 0 failed**. Las **389 pruebas OPS4/instalador** y Ruff pasan.
+comportamiento. La repetición completa terminó en **8949 passed, 2454 skipped,
+7 avisos, 0 failed**. Las **391 pruebas OPS4/instalador** y Ruff pasan.

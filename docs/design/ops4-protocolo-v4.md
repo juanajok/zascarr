@@ -22,7 +22,9 @@ host exige que coincida con el `id` de la petición.
 
 ## Admisión
 
-[`admitir_v4`](../../deploy/ops/admision_v4_actualizar_ops4.py) ordena:
+El auxiliar ([`zascarr_actualizar_aux.py`](../../deploy/ops/zascarr_actualizar_aux.py))
+ordena la misma secuencia; el doble de host para tests vive en
+[`tests/_host_v4.py`](../../tests/_host_v4.py). Ordena:
 esquema → firma de petición → frescura (120 s) → decodificación del testigo →
 verificación del testigo → consumo único. El callback de consumo debe ser
 durable y separado de `solicitud-<id>` de v3; se prueba con
@@ -38,7 +40,7 @@ autoriza efectos: faltan instalación, cerrojo, estado, unidad y SHA.
 - Paridad app/host, petición sin `prueba`/`password`/`pbkdf2`, replay,
   testigo de otro ID, caducidad, firma/clave/reloj inválidos, CRLF, campos
   extra, base64 canónico, límites y E2E con directorio durable real.
-- **389 pruebas OPS4/instalador** verdes; falta repetir la suite completa en este
+- **391 pruebas OPS4/instalador** verdes; falta repetir la suite completa en este
   árbol. No hay socket, ruta web, auxiliar ni unidad de actualización.
 
 ## Límites y pendientes

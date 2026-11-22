@@ -26,7 +26,7 @@ unidad de actualización. `aceptada` solo acredita admisión, no éxito.
   incertidumbre, petición/ID inválidos y socket Unix temporal real.
 - E2E socket temporal: app construye el testigo v4, el host lo admite y consume
   el registro durable; la segunda petición se rechaza.
-- **389 pruebas OPS4/instalador** verdes. La suite completa debe repetirse tras
+- **391 pruebas OPS4/instalador** verdes. La suite completa debe repetirse tras
   este cambio.
 
 ## Límites
