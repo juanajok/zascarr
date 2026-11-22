@@ -87,8 +87,7 @@ escribir_estado() {
         LAST_LOCAL_SUCCESS_EPOCH="${now}"
     fi
     commit="$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || true)"
-    alembic="$("${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${DB_NAME}" -At \
-        -c "select version_num from alembic_version" 2>/dev/null | tr -d '[:space:]' || true)"
+    alembic="$(leer_revision_alembic)"
     protegidos="$(dumps_protegidos_por_ref | jq -R -s 'split("\n") | map(select(length > 0))')"
     last_success_iso=""
     if [[ -n "${LAST_SUCCESS_EPOCH}" && "${LAST_SUCCESS_EPOCH}" != "0" ]]; then

@@ -319,17 +319,32 @@ leer_app_version() {
     printf '%s' "${valor}"
 }
 
+# Lectura INFORMATIVA dentro de un contenedor: `compose_leer <segundos> <servicio> <orden...>`.
+# Nunca hereda la terminal ni se queda colgada. Causa real (Pi, 2026-11-22): `docker compose exec`
+# lee stdin aunque lleve `-T`; `timeout` lanza la orden en segundo plano, así que leer la terminal la
+# detenía (SIGTTIN), ignoraba el SIGTERM y `update.sh` quedaba parado sin decir nada. `</dev/null`
+# quita la lectura; `-k` remata con SIGKILL al grupo entero si el aviso no basta.
+compose_leer() {
+    local segundos="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout -k 5 "${segundos}" "${COMPOSE[@]}" exec -T "$@" </dev/null 2>/dev/null
+    else
+        "${COMPOSE[@]}" exec -T "$@" </dev/null 2>/dev/null
+    fi
+}
+
+# Revisión de Alembic de la base, o `""` si no se puede leer (dato informativo de copia y estado).
+leer_revision_alembic() {
+    compose_leer 15 postgres psql -U "${DB_USER}" -d "${DB_NAME}" -At \
+        -c "select version_num from alembic_version" | tr -d '[:space:]' || true
+}
+
 # Identidad de la imagen (Dockerfile, ADR 0025). Es un dato INFORMATIVO de la copia: si la app está
 # parada, el build fue manual o el contenedor no está, devuelve `""` y la copia sigue adelante.
 leer_build_sha() {
-    local sha=""
-    if command -v timeout >/dev/null 2>&1; then
-        sha="$(timeout 5 "${COMPOSE[@]}" exec -T zascarr printenv BUILD_SHA 2>/dev/null \
-            | tr -d '[:space:]' || true)"
-    else
-        sha="$("${COMPOSE[@]}" exec -T zascarr printenv BUILD_SHA 2>/dev/null \
-            | tr -d '[:space:]' || true)"
-    fi
+    local sha
+    sha="$(compose_leer 5 zascarr printenv BUILD_SHA | tr -d '[:space:]' || true)"
     [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || sha=""
     printf '%s' "${sha}"
 }
@@ -354,8 +369,7 @@ escribir_manifiesto() {
     bytes="$(stat -c %s "${dump}")" || return 1
     created="$(date -Iseconds)"
     commit="$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || true)"
-    alembic="$("${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${DB_NAME}" -At \
-        -c "select version_num from alembic_version" 2>/dev/null | tr -d '[:space:]' || true)"
+    alembic="$(leer_revision_alembic)"
     app_version="$(leer_app_version)"
     build_sha="$(leer_build_sha)"
     # Cada valor se valida con su regex; lo que no cumpla se declara `null` («no consta»), nunca se inventa.
