@@ -627,6 +627,10 @@ def create_app() -> FastAPI:
     # cualquier log de una petición lleva su request_id.
     from zascarr.middleware_contexto import ContextoPeticionMiddleware
     app.add_middleware(ContextoPeticionMiddleware)
+    # #1229: el ÚLTIMO en añadirse es el más externo, así que cubre también lo que responden los
+    # demás (401/403/404/413 y redirecciones) y `/static`.
+    from zascarr.middleware_cabeceras import CabecerasDeSeguridadMiddleware
+    app.add_middleware(CabecerasDeSeguridadMiddleware)
 
     app.include_router(health_router, prefix="/api")
     app.include_router(estado_cortesia_router, prefix="/api")
