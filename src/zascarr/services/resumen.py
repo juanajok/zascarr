@@ -28,8 +28,9 @@ from zascarr.services.series import (
     numeros_poseidos_por_serie,
 )
 
-# Cuántas series muestra «Últimas actualizaciones».
-ULTIMAS_SERIES = 10
+# Cuántas series muestra «Últimas actualizaciones»: una fila de seis a todo el ancho o dos de tres
+# a media fila (plantilla P1 del Inicio, docs/design/plantillas-de-pagina.md).
+ULTIMAS_SERIES = 6
 
 
 @dataclass(frozen=True)

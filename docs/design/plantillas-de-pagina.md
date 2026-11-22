@@ -1,6 +1,7 @@
 # Plantillas de página (propuesta, no adoptada)
 
-> Estado: **propuesta para decidir** (2026-11-22). No toca código. Maquetas en el lienzo
+> Estado: **propuesta para decidir** (2026-11-22). **P1 prototipada en el Inicio** (2026-11-22, a
+> petición del PO; ver «Prototipo de P1»): P2 y P3 siguen sin tocar. Maquetas en el lienzo
 > «Plantillas de página ZascArr» (artefacto privado del PO). Fuentes: sistema de diseño publicado
 > (manda sobre la copia `sistema-de-diseno-zascarr.md`), §«Composición de página, no de rejilla» y
 > `PropuestaInicio`; precedente en código: `.ajustes-pagina` (12 columnas, spans 8+4 · 4+4+4 · 6+6).
@@ -48,8 +49,10 @@ Otro reparto exige decidirlo antes (y añadirlo a esta tabla).
 1. **Orden del DOM = orden de lectura** (izquierda a derecha, arriba abajo). Sin `order` ni áreas que
    lo contradigan (WCAG 2.4.3). La barra de secciones sigue ese orden.
 2. **Reflujo:** ≥ 1100 px, 12 columnas; 860–1100, la losa a todo el ancho y lo demás en pares;
-   ≤ 860, dos carriles; ≤ 480, uno (las cifras siguen de dos en dos). Sin desplazamiento horizontal a
-   320 px (WCAG 1.4.10).
+   ≤ 860, una viñeta por fila (las cifras siguen de dos en dos hasta 320 px). Sin desplazamiento
+   horizontal a 320 px (WCAG 1.4.10). *Corregido con el prototipo:* la propuesta decía «dos carriles»
+   por debajo de 860 px, pero a media fila las portadas de «Últimas actualizaciones» quedaban por
+   debajo del mínimo de 130 px de P4.
 3. **Las viñetas de una fila igualan su alto;** el contenido empuja las acciones al pie. Coste
    aceptado: una sección que crece deja hueco en su pareja; por eso solo se emparejan secciones cortas.
 4. **Determinista:** una plantilla por tipo de pantalla; la misma pantalla siempre se compone igual.
@@ -63,3 +66,30 @@ Otro reparto exige decidirlo antes (y añadirlo a esta tabla).
 2. Prototipo de **una** pantalla (Inicio, P1), sin JavaScript, en una PR con sus pruebas: spans del
    vocabulario, medianil y orden del DOM.
 3. Si funciona, P2 y P3 en PR separadas; P4 no cambia.
+
+## Prototipo de P1 (Inicio, 2026-11-22)
+
+Decisiones del PO al encargarlo:
+
+1. **Orden:** la losa «Toca ahora» va primero y «Sigue leyendo» baja a media fila junto a «Últimas
+   actualizaciones» (antes la lectura en curso iba encima de los pasos; ninguna decisión ni prueba
+   fijaba ese orden: CUR5 solo pide la tarjeta).
+2. **Con lo básico hecho,** la losa muestra el paso recomendado con el único botón principal y los
+   pasos hechos plegados dentro.
+3. **«Últimas actualizaciones»** muestra 6 series (`services/resumen.py::ULTIMAS_SERIES`, antes 10):
+   una fila de seis a todo el ancho; a media fila, dos de tres.
+
+Cómo quedó: `dashboard.html` (clases `inicio-pagina`, `inicio-losa`, `inicio-cifras`, `inicio-par`,
+`inicio-ancha`) y el bloque 15c de `web.css`. Sin cifras que enseñar (instalación nueva) la losa ocupa
+las 12 columnas; sin lectura en curso, «Últimas actualizaciones» también. La sombra de «Continuar
+leyendo» y las de los pasos dentro de la losa se quitaron: la losa es la única viñeta con sombra.
+
+Coste visto en el navegador: con una lectura en curso, la fila 6 + 6 iguala su alto al de la rejilla de
+portadas (2 × 3), y la tarjeta de lectura queda con hueco entre el progreso y sus botones, que bajan al
+pie (regla 3). Si molesta, la alternativa es mostrar 3 portadas a media fila.
+
+Pruebas: `tests/test_inicio_plantilla_p1.py` (orden del HTML, repartos del catálogo, botón principal
+en la losa, sombra única y retícula sin reordenar; el estado «pasos a medias», solo en ellas).
+Verificado en el navegador con datos de prueba: «leyendo» a 1280, 375 y 320 px en tema oscuro y a
+1000 px en claro; «instalación nueva» y «con cifras» a 1280 px en claro. Sin desplazamiento
+horizontal en ninguno.

@@ -1097,11 +1097,11 @@ details.ficha-bloque:not([open]) { padding-block: var(--space-1); }
 /* ── 15b. PRIMEROS PASOS (V4) ────────────────────────────────────────────────
    Lista numerada; el estado se ve por TEXTO (chip) además de por color/forma. */
 .continuar-leyendo { margin: 18px 0 4px; }
-.continuar-card { padding: 18px 20px; border: var(--border-panel) solid var(--ink); background: var(--paper-2); box-shadow: var(--shadow-ink); }
+.continuar-card { padding: 18px 20px; border: var(--border-panel) solid var(--ink); background: var(--paper-2); }
 .continuar-card .rotulo { margin: 0 0 4px; }
 .continuar-card h2 { margin: 0 0 4px; }
 .continuar-numero { margin: 0 0 10px; color: var(--ink-soft); }
-.continuar-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.continuar-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto; padding-top: 12px; }
 .continuar-acciones .btn { min-height: 44px; }
 .primeros-pasos { margin: 22px 0 var(--space-2); }
 .row-pasos { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
@@ -1155,6 +1155,64 @@ details.ficha-bloque:not([open]) { padding-block: var(--space-1); }
   /* En un paso hecho el botón es secundario: alineado con el texto, no a todo el ancho. */
   .step.hecho .btn { grid-column: 2; justify-self: start; }
   .siguiente-paso { grid-template-columns: 1fr; }
+}
+
+/* ── 15c. INICIO: PLANTILLA P1 «LOSA Y SATÉLITES» ────────────────────────────
+   docs/design/plantillas-de-pagina.md. Retícula de 12 columnas con el medianil de las viñetas que se
+   tocan (--space-3) y solo los repartos del catálogo: losa 8 + cifras 4 (dos por dos), 6 + 6 y 12.
+   El orden del HTML es el de lectura: aquí no hay `order` ni áreas con nombre (WCAG 2.4.3). Las
+   viñetas de una fila igualan su alto y el contenido empuja las acciones al pie. */
+.inicio-pagina {
+  display: grid; grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-3); margin-top: var(--space-4);
+}
+.inicio-pagina > * { min-inline-size: 0; margin: 0; }
+.inicio-losa { grid-column: span 8; }
+.inicio-cifras { grid-column: span 4; display: flex; flex-direction: column; gap: var(--space-2); }
+.inicio-par { grid-column: span 6; }
+.inicio-ancha { grid-column: 1 / -1; }
+
+/* La losa es la tarea que manda: la única sombra de la página y el único botón principal. Lo que va
+   dentro se distingue por el fondo, no por una segunda sombra. */
+.inicio-losa {
+  padding: var(--space-4); background: var(--paper-2);
+  border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-ink);
+}
+.inicio-losa .siguiente-paso, .inicio-losa .step.siguiente { box-shadow: none; }
+
+.inicio-cifras .seccion { margin: 0; }
+.inicio-cifras .metrics-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin: 0; flex: 1;
+}
+.inicio-cifras .metric-card { overflow-wrap: anywhere; }
+
+.continuar-leyendo { display: flex; }
+.continuar-leyendo .continuar-card { flex: 1; display: flex; flex-direction: column; }
+
+.latest-updates {
+  padding: var(--space-4); background: var(--paper-2);
+  border: var(--border-panel) solid var(--ink); border-radius: var(--radius-panel);
+}
+.latest-updates.inicio-ancha .series-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.latest-updates.inicio-par .series-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* Reflujo: por debajo de 1100 px la losa y las cifras van a todo el ancho (las cifras, en una fila de
+   cuatro); por debajo de 860 px cada viñeta ocupa su fila (a media fila las portadas quedarían por
+   debajo del mínimo de 130 px de la plantilla P4) y las cifras siguen de dos en dos hasta 320 px. */
+@media (max-width: 1100px) {
+  .inicio-losa, .inicio-cifras { grid-column: 1 / -1; }
+  .inicio-cifras .metrics-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .inicio-par { grid-column: 1 / -1; }
+  .inicio-cifras .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .latest-updates.inicio-ancha .series-grid,
+  .latest-updates.inicio-par .series-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .latest-updates.inicio-ancha .series-grid,
+  .latest-updates.inicio-par .series-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ── 16. RESPONSIVE ──────────────────────────────────────────────────────── */
