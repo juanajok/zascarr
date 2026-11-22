@@ -12,9 +12,11 @@ Motivos, en este orden (el primero que se cumple es el que se informa):
 3. `tiene_numeros`: la serie tiene números registrados.
 4. `tiene_deseados`: tiene deseados o una política de búsqueda distinta de «ninguno».
 
-Los alias locales y los géneros de la serie **sí** se borran con ella (son correspondencias hacia esa serie y no tienen
-sentido sin ella). Los comprobantes de alta y los informes de vinculación no tienen clave foránea a `series`: se
-conservan.
+Los archivos con un `metadata.vinculo` hacia la serie se limpian: el vínculo pasa a
+`metadata.vinculo_historial` y el archivo vuelve a «Por revisar» (`match_status='unsorted'`). No se borra, mueve ni
+renombra ningún archivo. Los alias locales y los géneros de la serie **sí** se borran con ella (son correspondencias
+hacia esa serie y no tienen sentido sin ella). Los comprobantes de alta y los informes de vinculación no tienen clave
+foránea a `series`: se conservan.
 
 Bloqueos: la fila de la serie `FOR UPDATE`, el mismo orden que el «deshacer» del alta. Quien vincule archivos a números de
 la serie la toma `FOR SHARE` (2d) y quien inserte en `issues` toma `FOR KEY SHARE` por la clave foránea: ambos esperan a
@@ -22,7 +24,8 @@ este borrado, o lo hacen esperar, y las comprobaciones se hacen sobre lo que ya 
 """
 from __future__ import annotations
 
-from uuid import UUID
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -73,6 +76,26 @@ class BorradoDeSerie:
             await self._db.rollback()
             raise
 
+    async def _limpiar_vinculos(self, series_id: UUID) -> None:
+        """#1187: ningún archivo queda afirmando un vínculo a la serie borrada."""
+        filas = (await self._db.execute(
+            select(File).where(File.metadata_["vinculo"]["serie_id"].astext == str(series_id))
+        )).scalars().all()
+        ahora = datetime.now(UTC).isoformat()
+        for fila in filas:
+            meta = dict(fila.metadata_ or {})
+            vinculo = meta.pop("vinculo", None)
+            if not isinstance(vinculo, dict):
+                continue
+            historial = meta.get("vinculo_historial")
+            historial = list(historial) if isinstance(historial, list) else []
+            historial.append({**vinculo, "deshecho": {
+                "operacion_id": str(uuid4()), "fecha": ahora, "motivo": "serie_borrada"}})
+            meta["vinculo_historial"] = historial
+            meta["match_status_previo"] = meta.get("match_status")
+            meta["match_status"] = "unsorted"
+            fila.metadata_ = meta
+
     async def _borrar_en_transaccion(self, series_id: UUID) -> None:
         db = self._db
         serie = (await db.execute(select(Series).where(Series.id == series_id).with_for_update())).scalar_one_or_none()
@@ -97,6 +120,7 @@ class BorradoDeSerie:
         if motivo is not None:
             raise SerieNoBorrableError(motivo)
 
+        await self._limpiar_vinculos(series_id)
         try:
             await db.delete(serie)
             # `flush` AQUÍ: un fallo de integridad debe llegar antes de responder, no en el `commit` de `get_db`.
