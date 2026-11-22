@@ -17,7 +17,7 @@
       {% for valor, etiqueta in estados_lectura %}
       <label class="lectura-opcion">
         <input type="radio" name="estado" value="{{ valor.value }}"
-               {% if lectura and lectura.estado == valor %}checked autofocus{% elif not lectura and valor.value == "unread" %}checked{% endif %}>
+               {% if lectura and lectura.estado == valor %}checked{% if request and request.headers.get("HX-Request") == "true" %} autofocus{% endif %}{% elif not lectura and valor.value == "unread" %}checked{% endif %}>
         <span>{{ etiqueta }}</span>
       </label>
       {% endfor %}

@@ -6,9 +6,10 @@
   <section class="escaparate-bloque" aria-labelledby="escaparate-continuar">
     <h2 id="escaparate-continuar">Continuar leyendo</h2>
     <ul class="escaparate-lista" tabindex="0" aria-label="Continuar leyendo">
+      {#- Solo la primera fila se pide al abrir; el resto, al acercarse (benchmark-calidad-front, hallazgo 6). -#}
       {% for x in continuar %}
       <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}">
-        {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada") }}
+        {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada", carga="lazy" if loop.index > 6 else none) }}
         <span class="escaparate-titulo">{{ x.series_title }}</span>
         <span class="muted">#{{ x.numero }}{% if x.total_paginas %} · {{ x.pagina }} de {{ x.total_paginas }}{% endif %}</span>
       </a></li>
@@ -23,7 +24,7 @@
     <ul class="escaparate-lista" tabindex="0" aria-label="Vistos recientemente">
       {% for x in vistos %}
       <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}">
-        {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada") }}
+        {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada", carga="lazy") }}
         <span class="escaparate-titulo">{{ x.series_title }}</span></a></li>
       {% endfor %}
     </ul>
@@ -36,7 +37,7 @@
     <ul class="escaparate-lista" tabindex="0" aria-label="Recién incorporados">
       {% for x in recien %}
       <li><a class="escaparate-tarjeta" href="/ui/series/{{ x.series_id }}">
-        {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada") }}
+        {{ ui.portada(x.series_title, x.series_id, "/ui/series/%s/portada" % x.series_id, clase="escaparate-portada", carga="lazy") }}
         <span class="escaparate-titulo">{{ x.series_title }}</span>
         {{ ui.chip("info", "Serie nueva" if x.tipo == "serie_nueva" else "Número nuevo") }}
       </a></li>

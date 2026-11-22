@@ -201,7 +201,7 @@ class TestEstadoVacio:
         els = parsear(html).elementos
 
         assert "empty-state" in clases(els[0])
-        assert any(e[0] == "h3" for e in els)
+        assert any(e[0] == "h2" for e in els)
         enlace = next(e for e in els if e[0] == "a")
         assert enlace[1]["href"] == "/ui/" and {"btn", "primary"} <= clases(enlace)
         assert "Volver" in texto(html) and "No queda nada." in texto(html)
@@ -213,7 +213,12 @@ class TestEstadoVacio:
     def test_solo_titulo(self, env):
         html = render(env, '{{ ui.estado_vacio("Vacío") }}')
         els = parsear(html).elementos
-        assert [e[0] for e in els] == ["div", "h3"]
+        assert [e[0] for e in els] == ["div", "h2"]
+
+    def test_dentro_de_una_seccion_el_titulo_baja_de_nivel(self, env):
+        """Bajo el `h1` de la pantalla, `h2`; dentro de una sección con `h2`, `h3` (sin saltos)."""
+        html = render(env, '{{ ui.estado_vacio("Vacío", nivel=3) }}')
+        assert [e[0] for e in parsear(html).elementos] == ["div", "h3"]
 
     def test_la_url_se_escapa_en_el_atributo_y_no_inyecta_atributos(self, env):
         peligrosa = '/a?b=1&c="2" onclick="x()'

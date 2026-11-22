@@ -143,7 +143,9 @@
   {% for series in items %}
   <div class="library-card-wrap">
   <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}"{% if foco_objetivo and foco_objetivo == series.id|string %} autofocus{% endif %}>
-    {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id) }}
+    {#- Carga diferida salvo las dos primeras filas (benchmark-calidad-front, hallazgo 6): una página de
+        200 series pedía 200 portadas a la Pi de golpe. -#}
+    {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id, carga="lazy" if loop.index > 12 else none) }}
     {% set leidos = series.lectura_leidos|default(0, true) %}
     {% set total_lectura = series.lectura_total|default(0, true) %}
     {% if total_lectura %}

@@ -1248,6 +1248,11 @@ details.ficha-bloque:not([open]) { padding-block: var(--space-1); }
   box-shadow: var(--shadow-ink-sm);
   display: flex; flex-direction: column;
 }
+/* Reflujo a 320 px (WCAG 1.4.10; docs/design/benchmark-calidad-front.md, hallazgo 1): un `fieldset`
+   mide por defecto como su contenido más ancho (`min-inline-size: min-content`), así que un desplegable
+   largo o una ruta de carpeta sin cortes ensanchaban la tarjeta y Ajustes se salía 54 px. */
+.ajustes-card { min-inline-size: 0; overflow-wrap: anywhere; }
+.ajustes-card select { max-width: 100%; }
 .ajustes-card legend {
   font-family: var(--font-display); text-transform: uppercase; letter-spacing: .02em;
   background: var(--caption-bg); border: var(--border-chip) solid var(--ink); border-radius: 2px;
@@ -1446,7 +1451,9 @@ button[disabled], .btn[disabled] {
 .ghead h3 { flex: 1 1 14rem; margin: 0; }
 
 /* Estado vacío: reutiliza .empty-state (sección 15); solo se añade lo que le faltaba. */
-.empty-state h3 { margin: 0 0 6px; }
+/* El título del estado vacío es `h2` bajo el `h1` de la pantalla y `h3` dentro de una sección (la
+   macro recibe el nivel): se ve igual en los dos casos. */
+.empty-state :is(h2, h3) { margin: 0 0 6px; font-size: var(--text-titulo-bloque); }
 .empty-state p { margin: 0; }
 .empty-state .btn { margin-top: 14px; }
 

@@ -9,11 +9,11 @@
 <p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
 {% else %}
 <form method="post" action="/ui/series/{{ serie.id }}/asociar/buscar" class="asociar-form">
-  {% if error_fuente %}<p class="caption" role="alert">{{ error_fuente }}</p>{% endif %}
+  {% if error_fuente %}<p class="caption" role="alert" id="error-fuente">{{ error_fuente }}</p>{% endif %}
   <label for="q">Buscar por título</label>
   <input id="q" name="q" value="{{ q }}" maxlength="200" autocomplete="off">
   <p class="caption">Puedes cambiarlo para buscar con otro nombre.</p>
-  <fieldset>
+  <fieldset{% if error_fuente %} aria-describedby="error-fuente"{% endif %}>
     <legend>Web</legend>
     {% for o in opciones %}
     <label class="asociar-opcion{% if not o.disponible %} apagada{% endif %}">
@@ -24,16 +24,10 @@
     {% endfor %}
   </fieldset>
   {% if hay_disponibles %}
-  <button class="btn primary" id="buscar-asociar" type="submit" disabled>Buscar</button>
-  <script>
-    (function () {
-      var boton = document.getElementById("buscar-asociar");
-      var radios = document.querySelectorAll('input[name="fuente"]:not([disabled])');
-      radios.forEach(function (r) { r.addEventListener("change", function () {
-        boton.disabled = !document.querySelector('input[name="fuente"]:checked');
-      }); });
-    })();
-  </script>
+  {#- Sin desactivar (Primer, UNICEF; docs/design/benchmark-calidad-front.md, hallazgo 5): si no se
+      elige web, el servidor responde «Elige una web antes de buscar» en esta misma pantalla. Antes el
+      botón se activaba con un script en línea y, sin JavaScript, no se activaba nunca. -#}
+  <button class="btn primary" id="buscar-asociar" type="submit">Buscar</button>
   {% else %}
   <p class="caption">Ninguna web está encendida. Enciéndela en Ajustes si quieres buscar.</p>
   <a class="btn ghost" href="/ui/ajustes">Ir a Ajustes</a>

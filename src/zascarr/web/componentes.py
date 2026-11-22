@@ -77,7 +77,8 @@ def tipo_aviso(tipo: str) -> TipoAviso:
 
 
 #: macros de `_componentes.html`, disponibles en las plantillas como `ui.<macro>`.
-MACROS = ("chip", "aviso", "grupo", "estado_vacio", "progreso", "region_viva", "menu", "portada")
+MACROS = ("chip", "aviso", "grupo", "estado_vacio", "progreso", "region_viva", "menu", "portada",
+          "invalido")
 PLANTILLA = "_componentes.html"
 #: ÚNICO nombre que se añade al entorno de Jinja.
 ESPACIO_DE_NOMBRES = "ui"

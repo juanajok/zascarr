@@ -65,11 +65,18 @@
         </tbody>
       </table>
     </div>
+    {#- Sin nada que aplicar no hay botón desactivado: se dice por qué y se ofrece la salida (UNICEF,
+        «evita los botones desactivados; si no, explica al lado»; benchmark-calidad-front, hallazgo 5). -#}
+    {% if plan.aplicables %}
     <p class="series-acciones">
-      <button class="btn primary" type="submit" {% if not plan.aplicables %}disabled{% endif %}>Aplicar lo seleccionado</button>
+      <button class="btn primary" type="submit">Aplicar lo seleccionado</button>
       <a class="btn ghost" href="/ui/series/{{ series.id }}">Cancelar</a>
     </p>
     <p class="muted">Solo se aplican los campos marcados. Lo que no selecciones se queda como está.</p>
+    {% else %}
+    <p class="muted">No hay nada que aplicar: tu ficha ya tiene estos datos o los campos están protegidos.</p>
+    <p class="series-acciones"><a class="btn" href="/ui/series/{{ series.id }}">Volver a la ficha</a></p>
+    {% endif %}
   </form>
 {% endif %}
 {% endblock %}

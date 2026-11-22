@@ -1721,10 +1721,13 @@ async def editar_serie_guardar(
         db, series_id, title=title, start_year=start_year, end_year=end_year,
         publisher=publisher, description=description, total_issues=total_issues,
         language=language, edition_kind=edition_kind)
-    series = (await db.execute(select(Series).options(selectinload(Series.publisher))
-                               .where(Series.id == series_id))).scalar_one()
     if not resultado.ok:
+        # Primero el rollback y DESPUÉS la serie: tras el rollback los atributos caducan y la
+        # plantilla los pedía fuera del contexto asíncrono (MissingGreenlet → 500 en cualquier
+        # error de validación; hallado al probar el hallazgo 3 de benchmark-calidad-front).
         await db.rollback()
+        series = (await db.execute(select(Series).options(selectinload(Series.publisher))
+                                   .where(Series.id == series_id))).scalar_one()
         respuesta = templates.TemplateResponse(request, "editar_serie.html", {
             "series": series, "valores": {
                 "title": title, "start_year": start_year, "end_year": end_year,
@@ -1784,13 +1787,16 @@ async def editar_numero_guardar(
     resultado = await guardar_numero_manual(
         db, series_id, issue_id, issue_number=issue_number, title=title,
         release_date=release_date, format=format, synopsis=synopsis)
+    if not resultado.ok:
+        # Rollback ANTES de leer el número y la serie: después, sus atributos caducados se pedían
+        # desde la plantilla (MissingGreenlet → 500 en cualquier error), como en «Editar la ficha».
+        await db.rollback()
     fila = (await db.execute(select(Issue, Series).join(Series, Issue.series_id == Series.id)
                              .where(Issue.id == issue_id, Issue.series_id == series_id))).first()
     if fila is None:
         raise HTTPException(status_code=404, detail="Número no encontrado")
     issue, series = fila
     if not resultado.ok:
-        await db.rollback()
         respuesta = templates.TemplateResponse(request, "editar_numero.html", {
             "series": series, "issue": issue,
             "valores": {"issue_number": issue_number, "title": title,
