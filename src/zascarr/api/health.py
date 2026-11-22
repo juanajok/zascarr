@@ -142,6 +142,11 @@ def _check_vpn() -> tuple[str, str]:
                        "— las descargas torrent irán en claro")
 
 
+def _registro_ausente(ruta: str) -> bool:
+    """¿Falta el fichero de estado que escribe el host? (la copia o la restauración nunca corrió)"""
+    return not Path(ruta).exists()
+
+
 def _backup_status() -> tuple[str, str]:
     """Lee el estado que escribe scripts/backup.sh. Devuelve (status, detail).
 
@@ -431,8 +436,21 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         and disk_ok
     )
     status_str = "healthy" if all_ok else ("degraded" if core_ok else "unhealthy")
-    # UXA-08d (#1219): el menú lee este veredicto (sin sondear nada por su cuenta).
-    salud_resumen.registrar(status_str)
+    # UXA-08d (#1219): el menú lee este veredicto (sin sondear nada por su cuenta). Difiere del
+    # `status` en una cosa: copias o restauración que NUNCA se configuraron (sin fichero de
+    # registro) no cuentan. Es un paso de puesta en marcha que no se resuelve desde la app, no un
+    # fallo; si contara, el punto estaría siempre encendido en una instalación nueva y se
+    # aprendería a ignorarlo. Una copia que existió y falla o caduca sí cuenta, y Estado sigue
+    # diciendo «Atención» en ambos casos.
+    menu_ok = (
+        core_ok
+        and transmission in ("ok", "disabled")
+        and amule in ("ok", "disabled")
+        and (backup_ok or _registro_ausente(settings.backup_status_file))
+        and (restore_ok or _registro_ausente(settings.restore_status_file))
+        and disk_ok
+    )
+    salud_resumen.registrar("healthy" if menu_ok else ("degraded" if core_ok else "unhealthy"))
 
     # Si la VPN está en warning/stale, no baja el status global pero
     # añade "warnings" al payload para que sea VISIBLE (no silencioso).

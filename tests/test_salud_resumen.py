@@ -174,3 +174,54 @@ def test_el_menu_no_sondea_servicios(monkeypatch):
     registrar("degraded")
     _fragmento(monkeypatch)
     sonda.assert_not_called()
+
+
+# ── copias o restauración nunca configuradas no encienden el punto ────────────────────────
+
+
+def _con_registros(monkeypatch, tmp_path, *, copia: str | None, restauracion: str | None):
+    """Apunta los ficheros de estado del host a `tmp_path`; `None` = no existe (nunca corrió)."""
+    import json
+    import time
+
+    ajustes = get_settings()
+    for atributo, nombre, estado in (("backup_status_file", "copia.json", copia),
+                                     ("restore_status_file", "restauracion.json", restauracion)):
+        ruta = tmp_path / nombre
+        if estado is not None:
+            cuerpo = {"status": estado, "last_success_at_epoch": time.time(), "error": "x"}
+            ruta.write_text(json.dumps(cuerpo), encoding="utf-8")
+        monkeypatch.setattr(ajustes, atributo, str(ruta))
+
+
+def test_sin_registros_estado_dice_atencion_pero_el_menu_no_enciende(monkeypatch, tmp_path):
+    _con_registros(monkeypatch, tmp_path, copia=None, restauracion=None)
+    cuerpo = _health(monkeypatch, amule_ok=True, amule_on=False)
+    assert cuerpo["status"] == "degraded"          # Estado no cambia
+    assert cuerpo["checks"]["backup"] == "error" and cuerpo["checks"]["restore"] == "error"
+    assert requiere_atencion() is False            # pero el menú no avisa de lo que no se configuró
+
+
+def test_una_copia_que_existe_y_falla_enciende_el_punto(monkeypatch, tmp_path):
+    _con_registros(monkeypatch, tmp_path, copia="failed", restauracion=None)
+    assert _health(monkeypatch, amule_ok=True, amule_on=False)["checks"]["backup"] == "error"
+    assert requiere_atencion() is True
+
+
+def test_una_restauracion_que_existe_y_falla_enciende_el_punto(monkeypatch, tmp_path):
+    _con_registros(monkeypatch, tmp_path, copia="ok", restauracion="failed")
+    cuerpo = _health(monkeypatch, amule_ok=True, amule_on=False)
+    assert cuerpo["checks"]["restore"] == "error"
+    assert requiere_atencion() is True
+
+
+def test_copia_sana_y_restauracion_ausente_no_enciende(monkeypatch, tmp_path):
+    _con_registros(monkeypatch, tmp_path, copia="ok", restauracion=None)
+    _health(monkeypatch, amule_ok=True, amule_on=False)
+    assert requiere_atencion() is False
+
+
+def test_un_servicio_caido_enciende_aunque_las_copias_no_esten_configuradas(monkeypatch, tmp_path):
+    _con_registros(monkeypatch, tmp_path, copia=None, restauracion=None)
+    _health(monkeypatch, amule_ok=False)
+    assert requiere_atencion() is True
