@@ -17,7 +17,7 @@
 </ul>
 
 {% if con_error %}
-{{ ui.aviso("warn", "No han respondido: " ~ (con_error | map(attribute="nombre") | join(", ")) ~ "." ~ (" Lo que se muestra abajo viene solo de las fuentes que sí respondieron; eso no significa que en las otras no haya coincidencias." if respondieron else "")) }}
+{{ ui.aviso("warn", "No han respondido: " ~ (con_error | map(attribute="nombre") | join(", ")) ~ "." ~ (" Los resultados vienen solo de las fuentes que sí respondieron; eso no significa que en las otras no haya coincidencias." if respondieron else "")) }}
 {% endif %}
 {% if con_limite %}
 {{ ui.aviso("amber", ("Ha" if con_limite | length == 1 else "Han") ~ " pedido esperar: " ~ (con_limite | map(attribute="nombre") | join(", ")) ~ ". Espera antes de volver a buscar: insistir ahora solo añade tráfico.") }}
@@ -75,7 +75,7 @@
 {% elif con_error and not respondieron %}
 {{ ui.aviso("warn", "No se ha podido consultar ninguna fuente ahora mismo. No es que no haya coincidencias: vuelve a intentarlo en unos minutos o crea la serie a mano.") }}
 {% elif not hubo_consulta %}
-{{ ui.aviso("info", "No hay ninguna fuente activa (apagadas o sin clave): puedes crear la serie a mano, abajo.") }}
+{{ ui.aviso("info", "No hay ninguna fuente activa (apagadas o sin clave): puedes crear la serie a mano en «Crear la serie a mano».") }}
 {% else %}
 <p class="no-results">Ninguna fuente que ha respondido ha encontrado coincidencias con «{{ r.consulta }}». Prueba con otra búsqueda o crea la serie a mano.</p>
 {% endif %}

@@ -64,6 +64,19 @@ terminales.
   dónde salen estos datos?»). Nada de «token», «lote» ni códigos internos.
 - La garantía va junto a la acción con efecto («no se mueve ni se renombra nada»), no en la cabecera
   de una pantalla que no cambia nada.
+- **Errores de un formulario** (GOV.UK, Wikimedia; `benchmark-designsystems-surf.md`, A1–A7): el mensaje
+  reutiliza las palabras de la etiqueta; si el campo está vacío es una **instrucción** («Escribe el
+  título.»), si el formato no vale, una **descripción** («El año va en cifras, por ejemplo 1987.»). Con
+  dos o más errores, `ui.resumen_errores` («Hay un problema», un enlace por campo y el foco en él); con
+  uno, el foco al campo (`ui.invalido`). El título de la pestaña empieza por «Error: ». Se valida al
+  enviar y siempre en el servidor; lo escrito no se borra; el envío nunca se desactiva.
+- **Palabras vetadas** en la interfaz: «por favor», «lo sentimos», «válido/inválido», «ups», «vaya»,
+  «haz clic», «pulsa aquí» y los errores genéricos («Ha ocurrido un error», «Algo ha ido mal»). Lo
+  comprueba `test_igualar_referencias`. («Inténtalo de nuevo» se mantiene: es el ejemplo de este mismo
+  apartado; Wikimedia lo desaconseja y queda como decisión abierta.)
+- **Sin indicaciones de posición** («arriba», «más abajo», «a la derecha»): no sirven a un lector de
+  pantalla ni en el móvil. Se nombra el destino («en su fila, «Base de datos»», «con el buscador de
+  Deseados»). «La carpeta de arriba» no es una posición en la pantalla: es la que contiene a otra.
 
 ## Color
 
@@ -287,6 +300,10 @@ En la app van a 20 × 20 px: `ink-soft` en reposo, `ink` al pasar, `on-yellow` e
 - Movimiento mínimo: transiciones de 0,12–0,15 s en transformaciones y un toast que se desvanece en
   8 s solo con CSS. Con «reducir movimiento» se apaga todo y el toast se queda.
 - Un `<progress>` nativo para el progreso: rol y valor accesibles sin ARIA a mano.
+- **Cuánto se espera** (Cloudscape, Primer; C1): por debajo de 1 s, ningún indicador; de 1 a 10 s,
+  el indicador en el propio botón (`htmx-indicator`) y el botón sin repetir la acción mientras dura;
+  más de 10 s, una tarea en segundo plano con su progreso en el panel de tareas, y se puede seguir
+  trabajando. Al recargar datos, lo anterior sigue a la vista y se dice cuándo se actualizó.
 
 ## Cómo se usa
 
@@ -325,6 +342,9 @@ Un mensaje en bloque tras una acción o sobre el estado de una pantalla: caja co
 - **Lo que pones tú:** qué ha pasado y qué hacer, en frases completas. Di también lo que NO ha
   pasado cuando importa («no se ha repetido nada»).
 - **No hagas:** usar `warn` para algo que no exige atención, ni apilar varios avisos del mismo tipo.
+- **Uno por página** (GOV.UK, GitLab; D1): si hay varios, se juntan o va el más grave.
+- **Tres alturas** (GitLab; D3): global, bajo la cabecera de la app (servicio caído); de página, justo
+  bajo el `h1` (el resultado de una acción); en contexto, dentro de la sección a la que afecta.
 
 #### Chip
 
@@ -428,6 +448,9 @@ menos 40 px de alto (44 px en táctil).
 - **Lo que pones tú:** un verbo con su objeto («Buscar en las fuentes»), `<a class="btn">` para
   navegar y `<button>` para actuar.
 - **Heredado (V14):** `.btn-primary` y `button[type="submit"].neutro`. Usa `.btn.primary` y nada.
+- **Confirmación con efecto** (GitLab; F3): verbo y objeto en los dos lados. Confirmar: «Sí, retirar la
+  declaración»; volver: «Volver sin retirar». Nunca «Aceptar» y «Cancelar» a secas. Lo grave se
+  confirma en un paso visible de la página que dice qué se va a hacer, no en un diálogo.
 
 ### Formularios
 
@@ -493,6 +516,12 @@ con contraste alto) y, si hay salida, un botón principal.
 
 - **Uso:** `{{ ui.estado_vacio(titulo, texto, (etiqueta, url)) }}`. La acción es opcional.
 - **Lo que pones tú:** qué falta, por qué y el siguiente paso, de tú («Cuando revises tu disco…»).
+- **Medidas** (GitLab, Cloudscape; B2–B3): título de cinco palabras como mucho y sin punto; texto en
+  una frase completa que no repita el título ni lo que ya dice la pantalla; una sola acción, neutra
+  (`principal=false`) si la pantalla ya tiene su principal. No se usa para errores: un fallo es un
+  aviso con su forma de reintentar.
+- **«Sin resultados» no es «vacío»:** cuando un filtro no da nada, título «Sin resultados», una
+  instrucción y la misma acción que quita los filtros en la barra («Limpiar filtros»).
 
 #### Grupo
 

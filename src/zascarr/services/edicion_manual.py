@@ -104,7 +104,7 @@ def _entero(
         return None
     numero = int(texto)
     if maximo is not None and numero > maximo:
-        errores[etiqueta] = f"El valor no puede superar {maximo}."
+        errores[etiqueta] = f"Escribe un número igual o menor que {maximo}."
         return None
     return numero
 
@@ -177,22 +177,23 @@ async def guardar_serie(
     errores: dict[str, str] = {}
     titulo = (title or "").strip()
     if not titulo:
-        errores["title"] = "El título no puede estar vacío."
+        errores["title"] = "Escribe el título."
     elif len(titulo) > MAX_TITULO:
-        errores["title"] = f"El título no puede superar {MAX_TITULO} caracteres."
+        errores["title"] = f"El título tiene que tener como mucho {MAX_TITULO} caracteres."
     inicio = _anio(start_year, "start_year", errores)
     fin = _anio(end_year, "end_year", errores)
     if inicio is not None and fin is not None and inicio > fin:
-        errores["end_year"] = "El año de fin no puede ser anterior al de inicio."
+        errores["end_year"] = "El año de fin tiene que ser igual o posterior al de inicio."
     total = _entero(total_issues, "total_issues", errores, maximo=100_000)
     idioma = _idioma(language, errores)
     edicion = _edicion(edition_kind, errores)
     sinopsis = (description or "").strip()
     if len(sinopsis) > MAX_TEXTO:
-        errores["description"] = f"La sinopsis no puede superar {MAX_TEXTO} caracteres."
+        errores["description"] = f"La sinopsis tiene que tener como mucho {MAX_TEXTO} caracteres."
     editorial = (publisher or "").strip()
     if len(editorial) > MAX_EDITORIAL:
-        errores["publisher"] = f"La editorial no puede superar {MAX_EDITORIAL} caracteres."
+        errores["publisher"] = (
+            f"La editorial tiene que tener como mucho {MAX_EDITORIAL} caracteres.")
     if errores:
         return ResultadoEdicion(False, errores, {
             "title": title, "start_year": start_year, "end_year": end_year,
@@ -257,12 +258,12 @@ async def guardar_numero(
     errores: dict[str, str] = {}
     numero = (issue_number or "").strip()
     if not numero:
-        errores["issue_number"] = "El número no puede estar vacío."
+        errores["issue_number"] = "Escribe el número."
     elif len(numero) > MAX_NUMERO:
-        errores["issue_number"] = f"El número no puede superar {MAX_NUMERO} caracteres."
+        errores["issue_number"] = f"El número tiene que tener como mucho {MAX_NUMERO} caracteres."
     titulo = (title or "").strip()
     if len(titulo) > MAX_TITULO:
-        errores["title"] = f"El título no puede superar {MAX_TITULO} caracteres."
+        errores["title"] = f"El título tiene que tener como mucho {MAX_TITULO} caracteres."
     fecha_txt = (release_date or "").strip()
     fecha: date | None = None
     if fecha_txt:
@@ -278,7 +279,7 @@ async def guardar_numero(
         formato = IssueFormat.SINGLE_ISSUE
     sinopsis = (synopsis or "").strip()
     if len(sinopsis) > MAX_TEXTO:
-        errores["synopsis"] = f"La sinopsis no puede superar {MAX_TEXTO} caracteres."
+        errores["synopsis"] = f"La sinopsis tiene que tener como mucho {MAX_TEXTO} caracteres."
     if not errores and numero:
         colision = (await db.execute(
             select(Issue.id).where(

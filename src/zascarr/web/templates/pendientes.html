@@ -55,7 +55,7 @@
   {% if siguiente %}<a class="pend-siguiente" href="{{ siguiente }}">Siguientes →</a>{% endif %}
 </nav>
 {% endmacro %}
-{% if inicio or anterior or siguiente %}{{ paginas("pend-paginas-arriba", "Páginas de pendientes, arriba") }}{% endif %}
+{% if inicio or anterior or siguiente %}{{ paginas("pend-paginas-arriba", "Páginas de pendientes, al principio de la lista") }}{% endif %}
 {% endif %}
 
 <ul class="pending-grid" role="list">
@@ -63,5 +63,5 @@
   <li class="pending-item" id="item-{{ c.file.id }}">{% include "_tarjeta_pendiente.html" %}</li>
   {% endfor %}
 </ul>
-{% if cards and (inicio or anterior or siguiente) %}{{ paginas("pend-paginas-abajo", "Páginas de pendientes, abajo") }}{% endif %}
+{% if cards and (inicio or anterior or siguiente) %}{{ paginas("pend-paginas-abajo", "Páginas de pendientes, al final de la lista") }}{% endif %}
 {% endblock %}

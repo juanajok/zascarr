@@ -42,9 +42,11 @@ def test_3_el_campo_con_error_se_liga_a_su_mensaje_y_recibe_el_foco_el_primero()
               '<input name="b"{{ ui.invalido(errores, "b", orden_campos) }}>')
     html = _render(fuente, errores={"b": "Mal", "general": "x"})
     assert '<input name="a">' in html
-    assert '<input name="b" aria-invalid="true" aria-describedby="error-b" autofocus>' in html
+    assert ('<input name="b" id="campo-b" aria-invalid="true" aria-describedby="error-b" '
+            'autofocus>') in html
     dos = _render(fuente, errores={"a": "Mal", "b": "Mal"})
-    assert dos.count("aria-invalid") == 2 and dos.count("autofocus") == 1
+    # Con dos errores el foco va al resumen de errores (`ui.resumen_errores`), no a un campo.
+    assert dos.count("aria-invalid") == 2 and dos.count("autofocus") == 0
     assert _render(fuente, errores={}).count("aria-") == 0
 
 
@@ -55,7 +57,7 @@ def test_3_los_formularios_de_edicion_usan_la_macro_y_el_id_del_error():
         assert campos, nombre
         for campo in campos:
             assert f'id="error-{campo}"' in texto, (nombre, campo)
-            assert f'name="{campo}"{{{{ ui.invalido(errores, "{campo}", orden_campos) }}}}' in texto
+            assert f'name="{campo}"{{{{ ui.invalido(errores, "{campo}", orden_campos' in texto
 
 
 def test_5_sin_botones_desactivados_sin_explicacion():

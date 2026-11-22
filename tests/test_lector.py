@@ -801,7 +801,7 @@ class TestUatp03AsaYFoco:
         f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "sin_siguiente")
         with use_fake_session(db) as client:
             r = client.get(f"/ui/leer/{f.id}")
-        assert "toca la lengüeta de arriba o el centro de la página" in r.text
+        assert "toca la lengüeta «Mostrar los controles» o el centro de la página" in r.text
 
     def test_volver_al_numero_es_el_primer_control_y_no_desborda(self):
         from pathlib import Path

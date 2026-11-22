@@ -69,10 +69,10 @@
   {% else %}
   <p class="audit-why">Solo se ha mirado la lista de archivos de la carpeta (nombres y rutas): no se ha abierto ninguno ni se ha escrito
     nada, así que aún no se sabe si son tebeos distintos de los que ya tienes. Se buscan archivos .cbz, .cbr, .cb7, .pdf y .epub; los de
-    otros formatos (por ejemplo .rar) no se cuentan aquí: «Revisar mi biblioteca», más arriba, los enseña.</p>
+    otros formatos (por ejemplo .rar) no se cuentan aquí: «Revisar mi biblioteca», en esta misma pantalla, los enseña.</p>
   {% if inc.ilegibles %}
   {% call ui.aviso("amber") %}No se ha podido leer {{ inc.ilegibles }} {{ "carpeta o archivo" if inc.ilegibles == 1 else "carpetas o archivos" }}
-    de tu biblioteca (permisos o un fallo del disco). La lista de abajo puede estar incompleta, así que no se ofrece registrarla.
+    de tu biblioteca (permisos o un fallo del disco). La lista de archivos encontrados puede estar incompleta, así que no se ofrece registrarla.
     Arregla el acceso y busca de nuevo. No se da por perdido ningún archivo.{% endcall %}
   {% endif %}
   <ul class="audit-resumen">
@@ -139,7 +139,7 @@
   <ul class="audit-resumen">
     <li><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> archivos mirados</li>
     {% if reg.omitidos %}<li><strong>{{ reg.omitidos | length }}</strong> de la lista que confirmaste no se han tratado: ya no estaban pendientes
-      o desaparecieron antes de leerlos. No son un error, pero tampoco están registrados (abajo, cuáles y por qué)</li>{% endif %}
+      o desaparecieron antes de leerlos. No son un error, pero tampoco están registrados (la lista de detalle dice cuáles y por qué)</li>{% endif %}
     <li><strong>{{ reg.filas_nuevas }}</strong> filas nuevas en el catálogo:
       <strong>{{ reg.registrados - reg.reenlazados }}</strong> con serie sugerida (falta confirmar número y edición) y
       <strong>{{ reg.sin_identificar }}</strong> sin identificar, que te esperan en <a href="/ui/pendientes">Por revisar</a></li>
@@ -147,7 +147,7 @@
       (su serie, su historial y tus decisiones se conservan; no son filas nuevas)</li>{% endif %}
     <li><strong>{{ reg.repetidos }}</strong> repetidos (mismo contenido que otro que ya tienes registrado): no se añaden. No se ha borrado ni movido ninguna copia</li>
     {% if reg.ambiguos %}<li><strong>{{ reg.ambiguos | length }}</strong> que ZascArr no ha podido atribuir con seguridad a un archivo
-      que ya conocía: no se ha tocado ninguna ficha ni se ha creado otra (abajo, cuáles y por qué)</li>{% endif %}
+      que ya conocía: no se ha tocado ninguna ficha ni se ha creado otra (la lista de detalle dice cuáles y por qué)</li>{% endif %}
     {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
     {% if reg.ilegibles %}<li><strong>{{ reg.ilegibles }}</strong> {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} que no se
       {{ "ha" if reg.ilegibles == 1 else "han" }} podido leer: puede haber tebeos sin ver</li>{% endif %}

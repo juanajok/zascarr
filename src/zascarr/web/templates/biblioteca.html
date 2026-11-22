@@ -61,7 +61,7 @@
     que actualiza la rejilla (red caída o 4xx/5xx) y deja a la vista la lista anterior. -#}
 <div id="busqueda-fallo" role="alert" aria-atomic="true"></div>
 <template id="busqueda-fallo-plantilla">
-  {% call ui.aviso("warn", viva=false) %}<span>No se pudo aplicar la búsqueda<span data-consulta></span>. Los resultados de abajo son los anteriores.</span>
+  {% call ui.aviso("warn", viva=false) %}<span>No se pudo aplicar la búsqueda<span data-consulta></span>. Los resultados que ves son los de la búsqueda anterior.</span>
   <button type="button" class="btn" data-reintentar>Reintentar</button>{% endcall %}
 </template>
 <div id="anuncio-favorito" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>

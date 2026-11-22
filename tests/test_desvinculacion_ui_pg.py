@@ -252,7 +252,7 @@ class TestVistaPrevia:
     async def test_la_pagina_completa_tiene_menu_y_vuelta_a_la_serie(self, ent):
         serie, ids = await vinculado(ent, F1)
         t = (await get(ruta(serie, ids[F1]))).text
-        assert "<html" in t and f'href="/ui/series/{serie}"' in t and "Cancelar" in visible(t)
+        assert "<html" in t and f'href="/ui/series/{serie}"' in t and "Volver sin desvincular" in visible(t)
 
     async def test_archivo_o_serie_inexistente_es_404(self, ent):
         serie, ids = await vinculado(ent, F1)

@@ -94,10 +94,14 @@
 {#- El aviso y el reintento ya están arriba; no se pinta una rejilla vacía que
     parezca «no hay series» (criterio 5 del issue). -#}
 {% elif not items %}
+  {#- «Sin resultados» no es «vacío» (Cloudscape, GitLab; benchmark-designsystems-surf, B1): título fijo
+      y una sola acción, la misma «Limpiar filtros» de la barra. Neutra: el principal de Biblioteca es
+      el selector de modo. -#}
   {% if hay_filtros %}
-  <p class="empty">Prueba a quitar algún filtro de los de arriba.</p>
+  {{ ui.estado_vacio("Sin resultados", "Cambia la búsqueda o quita algún filtro.", ("Limpiar filtros", url_limpiar), principal=false) }}
   {% else %}
-  <p class="empty"><a href="/ui/pendientes">Añade lo que tengas en el disco desde Por revisar.</a></p>
+  {#- El contador ya dice que no hay series: el título es la tarea (GitLab, «blank content»). -#}
+  {{ ui.estado_vacio("Clasifica tus tebeos", "Las series aparecen aquí cuando clasificas los tebeos de tu disco.", ("Ir a Por revisar", "/ui/pendientes"), principal=false) }}
   {% endif %}
 {% else %}
 {% if vista == "lista" %}

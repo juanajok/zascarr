@@ -315,7 +315,10 @@ class TestFiltrosActivosYRecuento:
         assert "Ninguna serie coincide con estos filtros." in r.text
         # Los chips siguen ahí: la consulta no se ha perdido.
         assert "Tradición: Tebeo español" in r.text
-        assert "Prueba a quitar algún filtro" in r.text
+        # Estado «sin resultados» (benchmark-designsystems-surf, B1): título fijo y la misma
+        # acción que la barra, neutra; sin «prueba» ni indicaciones de posición.
+        assert "Sin resultados" in r.text and "Cambia la búsqueda o quita algún filtro." in r.text
+        assert ">Limpiar filtros</a>" in r.text and "de arriba" not in r.text
 
     def test_biblioteca_vacia_sin_filtros_no_culpa_a_los_filtros(self):
         session = FakeSession([FakeExecResult([]), FakeExecResult(0), FakeExecResult([])])
