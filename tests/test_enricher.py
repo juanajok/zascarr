@@ -1119,3 +1119,20 @@ async def test_un_arco_viejo_de_fandom_sin_origen_se_reutiliza_por_titulo():
 
     assert len(sesion.arcos) == 1
     assert viejo.metadata_["fandom_dc"] == "Batman: Year One"
+
+
+class TestHomonymosSinAnio:
+    """#1190: el ranking de la fuente no decide un homónimo sin año."""
+
+    @staticmethod
+    def _volumen(anio: int):
+        return SimpleNamespace(start_year=anio)
+
+    def test_enricher_no_elige_volumen_homonimo_sin_anio(self):
+        v = self._volumen
+        año = lambda x: x.start_year  # noqa: E731
+        assert EnrichmentService._pick_by_year([v(1990), v(1991)], None, año) is None
+        assert EnrichmentService._pick_by_year([v(1990)], None, año) is not None
+        elegido = EnrichmentService._pick_by_year([v(1990), v(2000)], 1991, año)
+        assert elegido is not None and elegido.start_year == 1990
+        assert EnrichmentService._pick_by_year([v(1990), v(2000)], 1980, año) is None

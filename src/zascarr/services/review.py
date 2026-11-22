@@ -43,6 +43,7 @@ from zascarr.models import (
 )
 from zascarr.services.alias_decisiones import aprender_alias
 from zascarr.services.importer import build_library_path
+from zascarr.services.obra_unica import numero_y_formato_de_alta
 from zascarr.services.raices import FotoDeRaices, RaizNoDisponibleError
 from zascarr.utils.fs import safe_move_en_raiz_async, sanear_excepcion
 from zascarr.utils.naming import parse_comic_filename
@@ -328,6 +329,8 @@ class ReviewService:
                 issue_number, (issue.format or IssueFormat.SINGLE_ISSUE).value, file.file_name
             )
 
+        numero_alta, formato_alta = numero_y_formato_de_alta(
+            series, issue_number, formato_esperado)
         if not issue:
             # H3 (peer review v2): antes se marcaba metadata_source='manual',
             # lo que bloqueaba TODO el issue para el enricher (sinopsis,
@@ -336,9 +339,9 @@ class ReviewService:
             # justo eso y deja que el resto se siga rellenando.
             issue = Issue(
                 series_id=series.id,
-                issue_number=issue_number,
+                issue_number=numero_alta,
                 locked_fields=["series_id", "issue_number"],
-                format=formato_esperado,
+                format=formato_alta,
             )
             self.db.add(issue)
             await self.db.flush()
