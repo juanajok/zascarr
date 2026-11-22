@@ -179,31 +179,30 @@ la misma semilla sintética.
 - `N-01-systemd-host` (arranque real de la unidad `zascarr-restaurar@…`): **NOT RUN**
   (`motivo=sin_root_systemd`).
 
-## Anexo UAT-31 (UATP-08) — pasada 3: 3a FAIL en `a6849c2c`, 3b PASS en `ab81b6bb`
+## Anexo UAT-31 (UATP-08) — pasada 3: 3a FAIL, 3b PASS y 3c PASS (`9dbff819`)
 
-**Historial.** La pasada 3a (tag `uat-candidata-20261122b`, SHA `a6849c2cd5c31e0d192c79fff66b45c3f13eddff`) ejecutó UAT-31 y
-encontró el defecto **B**: «Versión que arrancó» mostraba «Versión no consta.» porque el script
-escribía `{version, build_sha}` y la UI esperaba `{head, build_sha, app_version, alembic}`.
-El fix `ab81b6bb549665b56a3da65204c4e9b9e325dcd4` (`ab81b6bb`, rama `feat/uatp08-momento-recuperacion`) alinea el esquema y añade
-`.resumen-tecnico` con `overflow-wrap: anywhere` para 320 px.
+**Historial.** 3a (`a6849c2cd5c31e0d192c79fff66b45c3f13eddff`, tag b) encontró el defecto B («Versión no consta»; esquema de
+`version_arrancada`); 3b (`ab81b6bb549665b56a3da65204c4e9b9e325dcd4`, tag c) lo corrigió y pasó. La pasada **3c** (tag
+`uat-candidata-20261122d`, SHA `9dbff819e7981b9758c607a2415b69565a8d37e2`) reejecuta UAT-31 de cero con el fix de **comprobaciones
+terminales y orden fijo**.
 
-**Pasada 3b (candidata c, `ab81b6bb`).** Tag anotado **`uat-candidata-20261122c`**; entorno
-E-UAT31b aislado (proyecto `zascarr-uat31b`, puertos 15432/18000, sin Pi ni datos reales). Semilla
-2/2/2, B0 `backup-20261122_173819` (`sha256 475f463f78dff873…`) y **una fila añadida después de la copia** (una
-`series`): antes de restaurar 3/2/2; B0 restaurada 2/2/2.
+**Pasada 3c.** Entorno E-UAT31c aislado (proyecto `zascarr-uat31c`, puertos 15432/18000, sin Pi ni
+datos reales). Semilla 2/2/2, B0 `backup-20261122_180021` (`sha256 925f7de5cddb6302…`) y una fila `series`
+añadida después de la copia (3/2/2); restauración real (2/2/2).
 
 | Comprobación | Resultado | Evidencia |
 |---|---|---|
-| A. El resumen explica que la fila queda fuera (`recuentos_previos`/`fuera`) | **PASS**: «Antes de restaurar había 3 series, 2 números y 2 archivos anotados…» + «Quedan fuera 1 serie, 0 números y 0 archivos…»; `fuera=1/0/0` | [`pasada3b-ab81b6bb/resumen-texto-uat31b.txt`](evidencia/uat31/pasada3b-ab81b6bb/resumen-texto-uat31b.txt) |
-| B. Versión que arrancó | **PASS**: «Versión 1.15.1 · revisión 0052»; identidad `head=build=ab81b6bb5496… · app=1.15.1 · alembic=0052`; sin «Versión no consta» | [`pasada3b-ab81b6bb/ops-restaurar-uat31b.json`](evidencia/uat31/pasada3b-ab81b6bb/ops-restaurar-uat31b.json) |
-| C. Comprobaciones | **PASS**: 14 visibles (`existencia_copia`…`health`; `codigo_manifest` = `no_ejecutada`) | [`pasada3b-ab81b6bb/comprobaciones-uat31b.txt`](evidencia/uat31/pasada3b-ab81b6bb/comprobaciones-uat31b.txt) |
-| D. Capturas y 320 px | **PASS**: Chrome real; `scrollWidth == innerWidth` a 390 y 320 (`320/320`) y confirmación a 320; 5 capturas | [`pasada3b-ab81b6bb/overflow-320.txt`](evidencia/uat31/pasada3b-ab81b6bb/overflow-320.txt) |
-| E. Soporte (13.10 1/2/4) | **PASS**: `/api/health` `build_sha=ab81b6bb5496…`; resumen `no-store`; lista/confirmación con fecha absoluta y versión de la copia | [`pasada3b-ab81b6bb/capturas/`](evidencia/uat31/pasada3b-ab81b6bb/capturas/) |
+| A. Fila fuera (`recuentos_previos`/`fuera`) | **PASS**: «Antes de restaurar había 3 series, 2 números y 2 archivos anotados…» + «Quedan fuera 1 serie, 0 números y 0 archivos…»; `fuera=1/0/0` | [`pasada3c-9dbff819/resumen-texto-uat31c.txt`](evidencia/uat31/pasada3c-9dbff819/resumen-texto-uat31c.txt) |
+| B. Versión que arrancó | **PASS**: «Versión 1.15.1 · revisión 0052»; identidad `head=build=9dbff819e798… · app=1.15.1 · alembic=0052` | [`pasada3c-9dbff819/ops-restaurar-uat31c-success.json`](evidencia/uat31/pasada3c-9dbff819/ops-restaurar-uat31c-success.json) |
+| C. Orden de las 14 comprobaciones | **PASS**: `existencia_copia`…`vinculos_huerfanos`, **`seguridad_conservada`**, **`copia_previa`**, `health`; `seguridad_conservada` antes de `copia_previa` | [`pasada3c-9dbff819/comprobaciones-uat31c.txt`](evidencia/uat31/pasada3c-9dbff819/comprobaciones-uat31c.txt) |
+| D. Capturas y 320 px | **PASS**: Chrome real 1280/390/**320**; `scrollWidth == innerWidth` (320/320, 390/390) y confirmación 320 (320/320); 5 capturas | [`pasada3c-9dbff819/overflow-320.txt`](evidencia/uat31/pasada3c-9dbff819/overflow-320.txt) |
+| E. Soporte (13.10) | **PASS**: `/api/health` `build_sha=9dbff819e798…`; resumen `no-store`; lista/confirmación con fecha absoluta y versión | [`pasada3c-9dbff819/capturas/`](evidencia/uat31/pasada3c-9dbff819/capturas/) |
+| F. Terminales en fallo | **PASS**: con copia mutada (`sha256`), `sha256_copia=fallo` y las 11 posteriores `no_ejecutada`; las previas `ok`; 14 filas | [`pasada3c-9dbff819/comprobaciones-fallo-uat31c.txt`](evidencia/uat31/pasada3c-9dbff819/comprobaciones-fallo-uat31c.txt) |
 
-**Resultado de la pasada 3b: UAT-31 PASS.** El defecto B queda corregido y reejecutado. La
-evidencia de la 3a (FAIL) se conserva anotada como histórica en [`uat31/defecto-version.txt`](evidencia/uat31/defecto-version.txt).
+**Resultado de la pasada 3c: UAT-31 PASS** (A/B/C/D/E/F). Evidencia histórica de 3a/3b conservada y
+anotada. No se fabrica PASS.
 
-![Resumen UAT-31 a 320 px: fila fuera y versión 1.15.1](evidencia/uat31/pasada3b-ab81b6bb/capturas/resumen-320.png)
+![Resumen UAT-31 320 px: fila fuera, versión 1.15.1 y comprobaciones](evidencia/uat31/pasada3c-9dbff819/capturas/resumen-320.png)
 
 ## Enlaces
 

@@ -24,3 +24,9 @@ PASADA3B FILA_POSTERIOR tipo=series antes=3/2/2 despues=2/2/2 fuera=1/0/0
 PASADA3B VERSION_ARRANCADA head=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 build_sha=ab81b6bb549665b56a3da65204c4e9b9e325dcd4 app_version=1.15.1 alembic=0052
 PASADA3B OVERFLOW_320 scrollWidth=320 innerWidth=320 bodyScrollWidth=320 ok=true
 PASADA3B FIX correccion=ab81b6bb esquema_version_arrancada css_320=resumen-tecnico
+PASADA3C UAT-31 tag=uat-candidata-20261122d tag_commit=9dbff819e7981b9758c607a2415b69565a8d37e2 build_sha=9dbff819e7981b9758c607a2415b69565a8d37e2 app_version=1.15.1 alembic=0052 resultado=PASS
+PASADA3C B0 copia=backup-20261122_180021 sha256=925f7de5cddb6302929b6806df6f40bc29e0077b68d4943ef4c3b2804d150209 manifest_sha256=542a450a602b01d42000bafe7fe0afc131cc247f9491d2cb795fa082a664917f version_de_la_copia_completa
+PASADA3C FILA_POSTERIOR tipo=series antes=3/2/2 despues=2/2/2 fuera=1/0/0
+PASADA3C VERSION_ARRANCADA head=9dbff819e7981b9758c607a2415b69565a8d37e2 build_sha=9dbff819e7981b9758c607a2415b69565a8d37e2 app_version=1.15.1 alembic=0052
+PASADA3C COMPROBACIONES orden=14 seguridad_conservada_antes_copia_previa=true fallo_terminal=sha256_copia:fallo/posteriores_no_ejecutada
+PASADA3C OVERFLOW_320 scrollWidth=320 innerWidth=320 bodyScrollWidth=320 ok=true

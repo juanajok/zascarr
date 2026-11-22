@@ -1,0 +1,8 @@
+# UAT-31 (pasada 3c) — Identidad y versiones (UATP-08, 9dbff819)
+# Generado: 2026-11-22T18:01:46+01:00
+CANDIDATA tag=uat-candidata-20261122d tag_tipo=tag tag_commit=9dbff819e7981b9758c607a2415b69565a8d37e2 head=9dbff819e7981b9758c607a2415b69565a8d37e2 build_sha=9dbff819e7981b9758c607a2415b69565a8d37e2 app_version=1.15.1 alembic=0052 image_id=sha256:4a050ee522f4dcae6327bf83566556c9f45c24475345620fd552146cb08ef519
+B0 copia=backup-20261122_180021 sha256=925f7de5cddb6302929b6806df6f40bc29e0077b68d4943ef4c3b2804d150209 bytes=17733 manifest_sha256=542a450a602b01d42000bafe7fe0afc131cc247f9491d2cb795fa082a664917f
+B0 version_de_la_copia=head:9dbff819e7981b9758c607a2415b69565a8d37e2 build_sha:9dbff819e7981b9758c607a2415b69565a8d37e2 app_version:1.15.1 alembic:0052
+SEMILLA series=2 issues=2 files=2 library_roots=1
+FILA_POSTERIOR id=d9000000-0000-4000-8000-000000000099 tipo=series
+FIX correccion=9dbff819 comprobaciones_terminales=true orden_14=seguridad_conservada_antes_de_copia_previa

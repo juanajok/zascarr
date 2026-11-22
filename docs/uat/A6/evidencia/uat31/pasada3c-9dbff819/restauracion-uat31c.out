@@ -1,0 +1,12 @@
+ZASCARR_PRUEBAS activo: el cerrojo no es el de producción.
+
+Datos a restaurar (sin cambiar el código):
+  HEAD:              9dbff819e798…
+  Proyecto:          zascarr-uat31c
+  Dump:              backup_20261122_180021.sql.gz
+  Manifiesto:        MANIFIESTO-backup_20261122_180021.json
+  SHA-256:           925f7de5cddb…
+  Alembic esperado:  0052
+  Recuentos dump:    series=2 issues=2 files=2 operaciones=0 wishlist=0
+✓ Copia restaurada. La base de datos de antes se guardó como rollback-safety_20261122_180200.sql.gz.
+  Recuentos:         series=2 issues=2 files=2
