@@ -102,7 +102,10 @@ async def actualizar(
     tipo = "ok" if resultado.resultado is ResultadoSolicitudV4.ACEPTADA else "warn"
     estado_texto = None
     ruta = getattr(settings, "ops4_estado_file", None)
-    if resultado.id and isinstance(ruta, str) and ruta:
+    if (
+        resultado.resultado is ResultadoSolicitudV4.ACEPTADA
+        and resultado.id and isinstance(ruta, str) and ruta
+    ):
         estado = await asyncio.to_thread(
             leer_estado_actualizacion, Path(ruta),
             id_esperado=resultado.id, ahora_epoch=None,

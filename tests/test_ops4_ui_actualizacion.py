@@ -250,3 +250,29 @@ async def test_estado_fallido_no_se_pinta_como_exito(monkeypatch, tmp_path) -> N
     assert respuesta.status_code == 200
     assert b"no termin\xc3\xb3 bien" in respuesta.body
     assert b'href="/estado"' in respuesta.body
+
+
+@pytest.mark.asyncio
+async def test_ocupada_no_se_convierte_en_incierta_por_leer_estado(monkeypatch, tmp_path) -> None:
+    from starlette.requests import Request
+
+    monkeypatch.setattr(actualizacion, "get_settings", lambda: config(
+        ops4_actualizacion_habilitada=True,
+        ops4_estado_file=str(tmp_path / "no-existe.json"),
+    ))
+    monkeypatch.setattr(actualizacion, "leer_clave_autorizacion", lambda *a, **k: b"k" * 32)
+
+    async def ocupada(_settings, **_kwargs):
+        return SolicitudV4(ResultadoSolicitudV4.OCUPADA, id="a" * 32)
+
+    monkeypatch.setattr(actualizacion, "solicitar_actualizacion_v4", ocupada)
+    request = Request({
+        "type": "http", "http_version": "1.1", "method": "POST",
+        "path": "/ui/actualizar", "raw_path": b"/ui/actualizar",
+        "query_string": b"", "headers": [], "client": ("test", 1),
+        "server": ("test", 80), "scheme": "http", "root_path": "",
+    })
+    respuesta = await actualizacion.actualizar(request, "clave", "si")
+    assert respuesta.status_code == 200
+    assert b"otra comprobaci\xc3\xb3n en curso" in respuesta.body
+    assert b"No vuelvas a intentarlo" not in respuesta.body
