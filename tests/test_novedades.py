@@ -358,7 +358,10 @@ def test_si_la_serie_casa_pero_no_tiene_portada_no_se_pide_la_imagen(monkeypatch
 
 def test_la_rejilla_no_pasa_de_tres_columnas():
     from pathlib import Path
+    import re
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
-    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
-    assert "grid-template-columns: repeat(4" not in css
+    # Solo la rejilla de Novedades: otras pantallas pueden tener su propio reparto (las cifras del
+    # Inicio van en una fila de cuatro entre 860 y 1100 px, plantilla P1).
+    columnas = re.findall(r"\.novedades-dia \{[^}]*grid-template-columns: repeat\((\d+)", css)
+    assert columnas and max(int(n) for n in columnas) == 3
     assert ".novedad-portada a:focus-visible" in css
