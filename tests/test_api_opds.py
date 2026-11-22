@@ -87,7 +87,7 @@ def test_raiz_es_feed_de_navegacion_valido():
         r = c.get("/opds")
     assert r.status_code == 200
     assert r.headers["content-type"] == TIPO
-    assert r.headers["vary"] == "Authorization"
+    assert "Authorization" in r.headers["vary"].split(", ")
     feed = _parse(r)
     assert feed.tag == ATOM + "feed"
     titulos = [e.findtext(ATOM + "title") for e in feed.findall(ATOM + "entry")]
@@ -106,7 +106,7 @@ def test_series_paginadas_escapado_autores_y_sin_descargas():
     ])) as c:
         r = c.get("/opds/series?page=1")
     assert r.status_code == 200
-    assert r.headers["vary"] == "Authorization"
+    assert "Authorization" in r.headers["vary"].split(", ")
     assert "Batman &amp; Robin &lt;X&gt;" in r.text
     feed = _parse(r)
     entrada = feed.find(ATOM + "entry")
@@ -187,7 +187,7 @@ def test_etag_y_304():
         r2 = c.get("/opds/series", headers={"If-None-Match": etag})
     assert r2.status_code == 304
     assert r2.content == b""
-    assert r2.headers["vary"] == "Authorization"
+    assert "Authorization" in r2.headers["vary"].split(", ")
 
 
 def test_404_xml():
@@ -209,7 +209,7 @@ def test_auth_basic_401_y_200_sin_redireccion(monkeypatch):
     assert r.status_code == 401
     assert r.headers["www-authenticate"] == 'Basic realm="ZascArr"'
     assert r.headers["cache-control"] == "no-store"
-    assert r.headers["vary"] == "Authorization"
+    assert "Authorization" in r.headers["vary"].split(", ")
     assert "location" not in r.headers
     with use_fake_session(FakeSession([R(scalar=datetime(2026, 1, 2, tzinfo=UTC))])) as c:
         r = c.get("/opds", auth=("", "secreta"))
@@ -243,7 +243,7 @@ def test_429_de_opds_no_se_cachea_y_api_no_cambia(monkeypatch):
         api = c.get("/api/series", auth=("", "secreta"), follow_redirects=False)
     assert opds.status_code == 429
     assert opds.headers["cache-control"] == "no-store"
-    assert opds.headers["vary"] == "Authorization"
+    assert "Authorization" in opds.headers["vary"].split(", ")
     assert api.status_code == 429
     assert "no-store" not in api.headers.get("cache-control", "")
     assert "vary" not in api.headers

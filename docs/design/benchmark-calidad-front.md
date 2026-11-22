@@ -106,7 +106,7 @@ temas, teclado) / NOT RUN», el formato que ya siguen las PR de diseño.
 | 4 | «Ver» → «Ver Por revisar» | Prueba de estructura |
 | 5 | «Buscar» de Asociar fuente sin `disabled` ni script en línea (el servidor ya respondía «Elige una web antes de buscar»); sin nada aplicable, la previa de datos lo dice y ofrece volver, sin botón desactivado | Pruebas de plantilla |
 | 6 | `loading="lazy"` a partir de la fila 3 de la rejilla (12 portadas), de la 7.ª portada de «Sigue leyendo» y en el resto de filas del Escaparate, las sugerencias y el Inicio | Pruebas de plantilla |
-| 7 | **Pendiente de medir** el coste de CPU en la Pi antes de comprimir | — |
+| 7 | Medido en la Pi 5 (`ce26086a`, carga 0,2): `web.css` 176 KB → 39,5 KB con gzip 6 en 5,7 ms (nivel 1: 51,4 KB en 1,9 ms); `htmx.min.js` 36,7 → 13,1 KB en 1,5 ms. Decisión del PO: aplicar. `GZipMiddleware` de Starlette (sin dependencia nueva), nivel 6, mínimo 1 KB, sin recomprimir imágenes, fuentes, ZIP, PDF, EPUB ni `application/octet-stream`. `Vary` pasa a llevar `Accept-Encoding` (OPDS incluido) | `test_compresion_texto.py`: CSS comprimido y revalidable con 304, PNG sin tocar |
 | 8 | **Descartado tras probarlo** (ver la tabla) | 611 peticiones en 3 s con el filtro |
 | 9 | El radio de «Tu lectura» solo recibe el foco al repintarse tras guardar (HTMX), no al cargar la ficha de número | Prueba de plantilla |
 | 10 | `rel="noopener noreferrer"` y «(se abre en otra pestaña)» en el enlace del asistente legal; una prueba recorre todas las plantillas | Prueba de plantilla |

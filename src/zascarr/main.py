@@ -614,6 +614,15 @@ def create_app() -> FastAPI:
     # el proceso con un middleware distinto.
     app.add_middleware(AuthMiddleware)
     app.add_middleware(LimiteCuerpoMiddleware, max_bytes=settings.max_cuerpo_peticion_bytes)
+    # Compresión del TEXTO (HTML, CSS, JS, JSON, XML, CSV): `web.css` pasa de 176 KB a 39,5 KB y en
+    # la Pi 5 cuesta 5,7 ms de CPU, solo cuando se descarga entero (si no, 304 vacío por el ETag).
+    # Portadas, páginas del lector, fuentes y ficheros ya comprimidos se excluyen: no ganan nada y
+    # gastarían CPU (benchmark-calidad-front, hallazgo 7, medido el 2026-11-22).
+    from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
+    app.add_middleware(
+        GZipMiddleware, minimum_size=1024, compresslevel=6,
+        exclude_content_types=(*DEFAULT_EXCLUDED_CONTENT_TYPES, "application/octet-stream",
+                               "application/pdf", "application/epub+zip"))
     # El contexto se añade el último para envolver también auth y límite de cuerpo:
     # cualquier log de una petición lleva su request_id.
     from zascarr.middleware_contexto import ContextoPeticionMiddleware
