@@ -67,6 +67,15 @@ abierta por defecto.
   reconcilia y se comprueba. Detalle y verificación en
   `docs/design/benchmark-A11-exposicion.md`.
 
+- **Hecho (#1230, 2026-11-23): cookie de sesión `Secure` según `BASE_URL`.** La cookie lleva `Secure`
+  solo si `base_url` empieza por `https://` (`services/auth.py::atributos_cookie_sesion`, la misma
+  función para ponerla y para borrarla). No se deduce del esquema de la petición: el repo no configura
+  proxies de confianza. Con `base_url` vacío o `http://` (la instalación en la LAN) no cambia nada.
+  **Salvedad aceptada por el PO (opción A de SecOps):** con `BASE_URL` https, quien entre además por
+  `http://IP-LAN` hace que el navegador descarte la cookie y el inicio de sesión parezca fallar
+  (`localhost` sí la admite). Se explica en Ajustes. La opción B (`Secure` solo si el `Host` de la
+  petición coincide con el de `base_url`) se descartó por compleja.
+
 ## Referencias
 
 - `docker-compose.yml` — Postgres fijo en `127.0.0.1` y Redis sin publicar (enmienda de arriba); el de la

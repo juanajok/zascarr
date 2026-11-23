@@ -27,6 +27,7 @@
       <details class="ajustes-mas">
         <summary>Detalle técnico</summary>
         <p class="ajustes-hint">Detrás de un proxy inverso que no conserva el <code>Host</code> (nginx lo cambia por defecto), ZascArr necesita tu dominio público para validar el origen de los formularios; sin él responde 403. También se puede fijar con <code>BASE_URL</code> en el <code>.env</code>, útil si el 403 ya no te deja entrar a Ajustes.</p>
+        <p class="ajustes-hint">Si la dirección empieza por <code>https://</code>, la sesión solo viaja cifrada. Entra entonces siempre por esa dirección: por la IP de tu red con <code>http://</code> el navegador no guarda la sesión y parecerá que no entras.</p>
       </details>
       {% if hay_contrasena %}
       <label>Tu contraseña actual

@@ -45,6 +45,20 @@ COOKIE_NAME = "zascarr_session"
 # panel bancario — pedir la contraseña en cada visita sería fricción sin
 # beneficio real de seguridad aquí.
 SESSION_MAX_AGE = 30 * 24 * 3600
+
+
+def atributos_cookie_sesion(settings: Settings) -> dict[str, object]:
+    """Atributos de la cookie de sesión: UNA sola definición para poner y para borrar (#1230).
+
+    `Secure` solo si `base_url` empieza por `https://` (decisión de SecOps, opción A). NO se deduce
+    del esquema de la petición: el repo no configura proxies de confianza (`FORWARDED_ALLOW_IPS`).
+    Con `base_url` vacío o `http://` (instalación en la LAN, ADR 0004) la cookie queda como siempre.
+    Salvedad conocida: con `base_url` https, quien entre por `http://IP-LAN` hace que el navegador
+    descarte la cookie `Secure` y el inicio de sesión parezca fallar (`localhost` sí la admite).
+    El borrado debe llevar los MISMOS atributos, o el navegador no lo asocia con la cookie puesta.
+    """
+    base = (getattr(settings, "base_url", "") or "").strip().lower()
+    return {"httponly": True, "samesite": "lax", "secure": base.startswith("https://")}
 # 600.000, decidido por MEDICIÓN en una Raspberry Pi 5 real (2026-10-01), no solo
 # por la recomendación de OWASP: mediana individual 0,172 s y mediana de dos
 # verificaciones simultáneas 0,175 s — muy por debajo del umbral de 0,8 s. Se pudo
