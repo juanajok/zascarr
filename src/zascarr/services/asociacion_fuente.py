@@ -23,7 +23,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.models import MetadataSource, Series, VinculacionOperacion
-from zascarr.services.asociar_fuente import CandidataComparada, huella_de_asociacion
+from zascarr.services.asociar_fuente import (
+    CandidataComparada,
+    huella_de_asociacion,
+    tiene_identidad,
+)
 from zascarr.services.discovery import CAMPO_ID_EXTERNO, CAMPOS_ID_DE_TEXTO
 from zascarr.services.tokens_revision import (
     TTL_SEGUNDOS,
@@ -362,6 +366,11 @@ class AsociacionDeFuente:
         if huella_de_asociacion(serie, candidata) != firmada.huella:
             await db.commit()
             return self._omitida(firmada, "propuesta_desactualizada")
+        # 2026-11-23: alta de la PRIMERA fuente de una serie manual/sin fuente.
+        # La accion es explicita (token firmado) y la serie no tenia identidad.
+        primera_fuente = not tiene_identidad(serie)
+        if primera_fuente:
+            serie.metadata_source = firmada.fuente
         for e in activas:
             if e.get("fuente") == firmada.fuente:
                 await db.commit()
