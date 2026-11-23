@@ -59,6 +59,7 @@ class CandidataComparada:
     token: str | None = None
     puntuacion: float = 0.0
     motivos: tuple[str, ...] = ()
+    numeros_fuente: int | None = None
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,7 @@ class Comparacion:
     consulta: str
     estado: EstadoFuente
     primera_fuente: bool = False
+    numeros_local: int | None = None
     avisos: list[str] = field(default_factory=list)
     candidatas: list[CandidataComparada] = field(default_factory=list)
 
@@ -217,6 +219,7 @@ async def comparar(db: AsyncSession, series_id: UUID, fuente: MetadataSource,
             kind=r.kind, seleccionable=seleccionable,
             motivo_no_seleccionable=motivo, fuente=fuente.value,
             puntuacion=puntuacion.total, motivos=tuple(puntuacion.motivos),
+            numeros_fuente=getattr(r, "count_of_issues", None),
         )
         if seleccionable and normal is not None and secreto:
             huella = huella_de_asociacion(serie, candidata)
@@ -239,5 +242,6 @@ async def comparar(db: AsyncSession, series_id: UUID, fuente: MetadataSource,
         serie_id=str(serie.id), titulo_local=serie.title, anio_local=serie.start_year,
         editorial_local=editorial_local, pais_local=None, idioma_local=None,
         fuente=fuente, consulta=consulta, estado=estado, avisos=avisos,
+        numeros_local=len(serie.issues) if getattr(serie, "issues", None) is not None else None,
         candidatas=candidatas,
     )
