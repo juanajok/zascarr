@@ -73,7 +73,7 @@ pruebas de accesibilidad con personas reales**.
 
 - Proveedor **remoto** DeepSeek vía HTTPS `https://api.deepseek.com/chat/completions` con
   `deepseek-flash` (admite capturas e imágenes). El portátil **no ejecuta LLM local**.
-  Verificar modelo, visión y formato JSON en preflight; no degradar a solo texto.
+  Verificar modelo, visión y formato JSON con una petición multimodal real de arranque; no degradar a solo texto.
 - El navegador, PostgreSQL y ZascArr se mantienen en red Docker `internal`;
   únicamente el proceso orquestador tiene salida a Internet a través de otra red
   para llamar a DeepSeek. No habilitar herramientas web/URL del modelo.
@@ -168,8 +168,8 @@ porcentajes a usuarios reales. SSR y calibración humana se implementarán despu
 3. Se entregan realmente **captura, árbol accesible y URL** al modelo visual.
 4. No hay selectores, rutas internas ni respuestas correctas en prompts.
 5. P2 navega sin ratón ni clic; cualquier violación invalida la sesión.
-6. La whitelist impide código arbitrario y red externa; se registran intentos
-   de operación no permitida.
+6. La whitelist impide código arbitrario y peticiones externas **desde el navegador**;
+   solo el orquestador contacta HTTPS a DeepSeek y registra los bloqueos.
 7. Los oráculos verifican estados finales independientemente del agente.
 8. Se prueba con un caso forzado de **falso éxito** y queda contabilizado.
 9. El controlador termina por límites de tiempo, pasos y presupuesto.
@@ -184,9 +184,9 @@ imitar los caminos deterministas.
 
 ## 9. Entregable posterior, no incluido en esta SPEC
 
-Una PR futura incluirá orquestador, proveedor multimodal local, observador,
+Una PR posterior incluirá orquestador, cliente API de DeepSeek con capturas, observador,
 guardarraíl, perfiles P1/P2/P3, escenarios PILOT-01/PILOT-02, oráculos aparte,
-informe agregado y guía de preparación offline. Los otros cuatro escenarios
+informe agregado y guía de secreto API y ejecución controlada. Los otros cuatro escenarios
 de L1, SSR y usuarios humanos quedan **fuera de alcance**.
 
 **Decisión de secuencia:** validar y cerrar primero L1; revisar esta SPEC;
