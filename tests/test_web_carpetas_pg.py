@@ -1158,8 +1158,10 @@ class TestPropagacionDelContexto:
         assert vuelta3
         assert any(all(x in h for x in ("nombre=coincide", "limite=10",
                                         "desplazamiento=10")) for h in vuelta3)
-        # El formulario de buscar en el asistente lleva el contexto al POST.
-        assert any("nombre=coincide" in a for a in re.findall(r'hx-post="([^"]+)"', r3.text))
+        # El formulario de buscar del asistente lleva el contexto (UXA-11: sin fuentes encendidas el
+        # formulario principal es el local, un `hx-get`; con fuentes, el externo, un `hx-post`).
+        assert any("nombre=coincide" in a
+                   for a in re.findall(r'hx-(?:post|get)="([^"]+)"', r3.text))
 
     async def test_ac13_no_hay_parametro_de_retorno_en_la_lista_ni_en_el_asistente(self, banco):
         sid = await self._sembrar_120(banco)
