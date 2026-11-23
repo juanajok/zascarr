@@ -72,10 +72,8 @@ export async function act(page, raw, persona) {
     return 'press';
   }
   if (persona.mode === 'keyboard' && a.action === 'type') {
-    const focused = page.locator(':focus');
-    if (await focused.count() !== 1) throw Error('No hay campo enfocado');
-    const tag = await focused.evaluate(el=>el.tagName.toLowerCase());
-    if (!['input','textarea'].includes(tag)) throw Error('Foco actual no es campo editable');
+    const focused = page.locator('input:focus, textarea:focus');
+    if (await focused.count() !== 1) throw Error('Foco actual no es campo editable');
     await page.keyboard.insertText(a.value);
     await page.waitForTimeout(600);
     return 'type';
