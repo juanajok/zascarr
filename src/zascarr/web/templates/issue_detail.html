@@ -2,7 +2,7 @@
 {% block title %}{% if issue.issue_number %}Número {{ issue.issue_number }}{% else %}Número{% endif %} — {{ series.title }} — ZascArr{% endblock %}
 {% block content %}
 {% from "_atribucion_fandom.html" import aviso_de_atribucion %}
-<a class="back-link" href="/ui/series/{{ series.id }}">{{ textos.volver }}</a>
+<a class="back-link" href="{{ volver }}">{{ volver_etiqueta }}</a>
 <div class="issue-header">
   {#- Portada sin pie: es decorativa (`alt=""`) y el título de al lado ya dice de qué número es. -#}
   <div class="issue-portada">

@@ -857,3 +857,13 @@ class TestUatp03AsaYFoco:
         assert 'aria-label="Página siguiente"' in r.text or 'aria-label="Ver el final"' in r.text
         assert "Sentido: derecha a izquierda" in r.text
         assert "Sentido guardado para esta serie." in r.text
+
+
+def test_el_asa_dice_controles_y_la_barra_compacta_esconde_secundarios():
+    from pathlib import Path
+
+    html = Path("src/zascarr/web/templates/lector.html").read_text(encoding="utf-8")
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert "lector-asa-texto" in html and ">Controles</span>" in html
+    assert "@media (max-height: 420px)" in css
+    assert ".lector-identidad, .lector-zoom { display: none; }" in css

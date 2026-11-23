@@ -34,3 +34,11 @@ def test_los_resumenes_de_las_ayudas_de_ajustes_miden_40_px_tambien_en_escritori
     resumen = next(d for s, d in _reglas() if s == ".ajustes-mas summary" and "min-height" in d)
     minimo = float(re.match(r"(\d+(?:\.\d+)?)px", resumen["min-height"]).group(1))
     assert minimo >= 40
+
+
+def test_el_panel_de_filtros_no_queda_en_una_ventanita_de_40dvh():
+    from pathlib import Path
+
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert "max-height: 40dvh" not in css
+    assert "padding-bottom: calc(var(--space-3) + 52px)" in css

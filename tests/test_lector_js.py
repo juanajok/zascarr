@@ -214,6 +214,14 @@ escritorio.root.dataset.chrome = 'oculto';
 escritorio.fire(escritorio.doc, 'mousemove', {pointerType: 'mouse', target: escritorio.els['lector-lienzo']});
 escritorio.fire(escritorio.doc, 'keydown', {key: 'ArrowRight', target: escritorio.els['lector-lienzo'], preventDefault: () => {}});
 salida.ratonYTeclaSinBarras = escritorio.root.dataset.pagina === '2' && escritorio.root.dataset.chrome === 'oculto';
+const paginaBarra = teclado.root.dataset.pagina;
+salida.flechaEnBarra = tecla("ArrowRight", get("lector-menu-boton"))
+  && teclado.root.dataset.pagina !== paginaBarra;
+const paginaInput = teclado.root.dataset.pagina;
+const brillo = get("lector-brillo");
+brillo.interactivo = true; brillo.parent = get("lector-barra");
+salida.inputEnBarraNoAvanza = !tecla("ArrowRight", brillo)
+  && teclado.root.dataset.pagina === paginaInput;
 process.stdout.write(JSON.stringify(salida));
 '''
 
@@ -238,6 +246,7 @@ def test_lector_js_fullscreen_doble_y_teclado(tmp_path):
         "deslizarSinBarras": True, "ratonYTeclaSinBarras": True,
         "centroMuestra": True, "centroOculta": True,
         "controlesTactilesNativos": True, "clicCentralMuestra": True,
+        "flechaEnBarra": True, "inputEnBarraNoAvanza": True,
     }
 
 

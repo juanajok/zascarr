@@ -1492,3 +1492,26 @@ class TestAtribucionRellenoSinUrl:
         assert "Grand Comics Database" in fuera and "CC BY-SA 4.0" in fuera
         assert 'href="https://atacante.example/series/1/"' not in fuera
         assert 'href=""' not in fuera
+
+
+def test_el_numero_hereda_el_volver_valido_o_cae_a_la_serie():
+    """UATP-09 P1: ficha → número → ficha no pierde el contexto original."""
+    from zascarr.web.series import destino_de_volver_numero, etiqueta_de_volver_numero
+
+    sid = uuid4()
+    assert destino_de_volver_numero("/ui/wishlist", sid) == "/ui/wishlist"
+    assert destino_de_volver_numero("/ui/biblioteca", sid) == "/ui/biblioteca"
+    assert destino_de_volver_numero("//evil.example/x", sid) == f"/ui/series/{sid}"
+    assert etiqueta_de_volver_numero("/ui/wishlist") == "← Volver a Deseados"
+    assert etiqueta_de_volver_numero("/ui/biblioteca?q=x") == "← Volver a la biblioteca"
+    assert etiqueta_de_volver_numero(f"/ui/colecciones/{sid}") == "← Volver a la colección"
+    assert etiqueta_de_volver_numero(f"/ui/series/{sid}") == "← Volver a la serie"
+
+
+def test_los_enlaces_de_numero_propagan_el_volver_en_la_ficha():
+    from pathlib import Path
+
+    plantilla = Path("src/zascarr/web/templates/series_detail.html").read_text(encoding="utf-8")
+    assert '?volver={{ volver|urlencode }}' in plantilla
+    issue = Path("src/zascarr/web/templates/issue_detail.html").read_text(encoding="utf-8")
+    assert 'href="{{ volver }}"' in issue and "{{ volver_etiqueta }}" in issue
