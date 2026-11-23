@@ -111,6 +111,14 @@ _INTERRUPTOR = {
 }
 
 
+def fuentes_encendidas(settings) -> int:
+    """Cuántas fuentes de búsqueda están encendidas en Ajustes (UXA-11, #1128).
+
+    Solo lee los interruptores: no consulta ninguna fuente, no usa la red y no mira si tienen su
+    clave (eso lo dice la búsqueda misma). «0»: buscar en las fuentes no puede dar nada."""
+    return sum(1 for campo in _INTERRUPTOR.values() if getattr(settings, campo, False) is True)
+
+
 def _estado(fuente: MetadataSource, estado: str, motivo: str | None = None,
             reintentar_en: int | None = None) -> EstadoFuente:
     return EstadoFuente(fuente=fuente.value, capacidad=CAPACIDAD_BUSQUEDA, estado=estado,

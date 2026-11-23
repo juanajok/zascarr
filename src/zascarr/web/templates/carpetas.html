@@ -90,7 +90,7 @@
 {% endif %}
 
 {% if not hay_filtro and (total_visible or r.totales.candidata_inexistente) %}
-<p class="subtitle">{{ r.totales.sin_serie | miles }} por revisar: {{ r.totales.sin_serie_en_carpetas | miles }} en {{ r.totales.carpetas_utiles_sin_serie | miles }} carpeta{{ "s" if r.totales.carpetas_utiles_sin_serie != 1 }} + {% if r.totales.sin_serie_sueltos %}<a href="/ui/pendientes">{{ r.totales.sin_serie_sueltos | miles }} suelto{{ "s" if r.totales.sin_serie_sueltos != 1 }}</a>{% else %}{{ r.totales.sin_serie_sueltos | miles }} suelto{{ "s" if r.totales.sin_serie_sueltos != 1 }}{% endif %}. {{ r.totales.serie_sugerida | miles }} con serie sugerida, aparte. {{ total_visible | miles }} pendiente{{ "s" if total_visible != 1 }} visible{{ "s" if total_visible != 1 }}.</p>
+<p class="subtitle">{{ r.totales.sin_serie | miles }} por revisar: {{ r.totales.sin_serie_en_carpetas | miles }} en {{ r.totales.carpetas_utiles_sin_serie | miles }} carpeta{{ "s" if r.totales.carpetas_utiles_sin_serie != 1 }} + {% if r.totales.sin_serie_sueltos %}<a href="/ui/pendientes/sueltos">{{ r.totales.sin_serie_sueltos | miles }} suelto{{ "s" if r.totales.sin_serie_sueltos != 1 }}</a>{% else %}{{ r.totales.sin_serie_sueltos | miles }} suelto{{ "s" if r.totales.sin_serie_sueltos != 1 }}{% endif %}. {{ r.totales.serie_sugerida | miles }} con serie sugerida, aparte. {{ total_visible | miles }} pendiente{{ "s" if total_visible != 1 }} visible{{ "s" if total_visible != 1 }}.</p>
 {% endif %}
 
 <p><a class="back-link" href="/ui/pendientes">← Volver a «Por revisar»</a></p>

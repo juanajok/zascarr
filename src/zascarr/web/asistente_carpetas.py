@@ -42,6 +42,7 @@ from zascarr.services.discovery import (
     FUENTE_OK,
     FUENTE_SIN_RESULTADOS,
     EstadoFuente,
+    fuentes_encendidas,
 )
 from zascarr.services.review import ReviewService
 from zascarr.services.revision_carpetas import RevisionCarpetas
@@ -121,7 +122,12 @@ async def _pagina(request: Request, db: AsyncSession, clave: str, *, manual_abie
         resp = templates.TemplateResponse(
             request, "asistente_carpeta.html", {"apertura": None, "clave": clave}, status_code=404)
         return _sin_cache(resp)
+    # UXA-11 (#1128): sin fuentes encendidas, o sin título que proponer, buscar fuera no lleva a nada:
+    # la acción principal pasa a ser elegir una serie que ya está en la biblioteca.
+    n_fuentes = fuentes_encendidas(get_settings())
     return _sin_cache(templates.TemplateResponse(request, "asistente_carpeta.html", {
+        "n_fuentes": n_fuentes,
+        "local_primero": n_fuentes == 0 or not apertura.consulta_propuesta,
         "apertura": apertura, "clave": clave,
         "pista": _pista_de_carpeta(clave, apertura.tradiciones_de_la_carpeta),
         "manual_abierto": manual_abierto, "tradiciones": _tradiciones(),
