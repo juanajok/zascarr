@@ -106,3 +106,44 @@ Misma comparación, ya sobre el código fusionado (`NAV_MOVIL_VARIANTE`, #1218),
 **Límites añadidos:** el panel del navegador estuvo oculto durante la ronda; algunos toques fallaron por la herramienta y se cuentan aparte. Sigue siendo una simulación con agentes: n = 1 por celda y ronda, sin tiempos.
 
 **Qué sigue siendo verdad de la decisión:** B solo es defendible con un aviso de salud completo fuera de «Más» (#1219). La prueba con personas reales, con la anotación sobre «Más», sigue pendiente.
+
+## Ronda 3 (2026-11-23): consumidores sintéticos con la técnica SSR (Semantic Similarity Rating)
+
+A petición del PO se aplicó la técnica SSR: perfiles sintéticos → opinión abierta → vector → similitud con cinco frases de referencia → distribución de probabilidad sobre 1–5. Aquí **no se navega**: se muestra la barra (A o B, ya con el punto de salud de #1223/#1225) y se pide una opinión sobre tres situaciones («abrir Flash», «comprobar si algo falla», «qué hago ante el punto de aviso»).
+
+**Montaje.** 8 perfiles (edad 19–72, ingresos, ciudad, soltura tecnológica) × 2 variantes = 16 agentes independientes (modelo pequeño, sin herramientas salvo escribir su JSON), mismo perfil en A y en B (diseño pareado). Tres conjuntos de cinco frases de referencia; probabilidades por desplazamiento al mínimo y normalización, promediadas entre conjuntos; remuestreo (bootstrap, 4000) sobre perfiles. Script y respuestas: `docs/design/uxa08b-ssr/`.
+
+**Desviación importante: el «embedding» no es neuronal.** No hay modelo de embeddings instalado ni se descargó uno sin permiso. Se usó un TF-IDF de n-gramas de caracteres (biblioteca estándar): un proxy **léxico**, no semántico.
+
+### Resultado SSR (valoración de facilidad, 1 = muy difícil … 5 = muy fácil)
+
+| Situación | A: media (IC 95 %) | B: media (IC 95 %) | Δ B − A pareada (IC 95 %) | Perfiles con B > A |
+|---|---|---|---|---|
+| Abrir la serie «Flash» | 2,89 (2,66–3,10) | 2,81 (2,63–2,98) | −0,08 (−0,36 a +0,21) | 3/8 |
+| Comprobar si algo falla | 2,96 (2,82–3,10) | 2,93 (2,76–3,09) | −0,03 (−0,22 a +0,18) | 3/8 |
+| Qué hacer ante el punto de aviso | 3,12 (2,86–3,39) | 2,91 (2,69–3,14) | −0,20 (−0,57 a +0,19) | 3/8 |
+
+**Lectura: sin señal.** Las diferencias son minúsculas y sus intervalos incluyen el cero; las distribuciones por respuesta son casi uniformes. No se puede concluir nada de estas cifras.
+
+**Por qué no hay que fiarse de ellas (validez).**
+- La comprobación 15/15 («cada frase de referencia se reconoce a sí misma») es **trivial** con un método léxico.
+- Con paráfrasis sin palabras compartidas, el orden es el correcto pero muy comprimido: «Me pierdo por completo…» → 2,05 (esperado 1); «Está ahí mismo, un solo toque y listo» → 3,50 (esperado 5); una frase neutra → 3,40 (esperado 3).
+- Las respuestas de los agentes **describen el camino** («iría a Más y luego a Biblioteca») más que **valorar** el esfuerzo; SSR está pensado para valoraciones, así que la pregunta debería provocar una valoración explícita («¿te parecería fácil o difícil?») antes de volver a medir.
+
+### Lo que sí aporta: codificación por contenido (no es SSR)
+
+Número de respuestas (de 8) que describen el recorrido por cada ruta:
+
+| Situación | Variante | Pasa por «Más» | Menciona «Biblioteca» | Menciona «Estado» |
+|---|---|---|---|---|
+| Flash | A | 7 | 8 | 0 |
+| Flash | B | 0 | 8 | 0 |
+| Comprobar si algo falla | A | 0 | 0 | 8 |
+| Comprobar si algo falla | B | 6 | 0 | 8 |
+| Punto de aviso | A | 0 | 0 | 7 |
+| Punto de aviso | B | 8 | 1 | 7 |
+
+Esto **repite lo observado en las rondas 1 y 2 con navegación real**: A manda a Biblioteca por «Más»; B manda a Estado por «Más», y ante el punto de aviso B exige abrir «Más» primero (8/8), mientras que A va directo a Estado. El intercambio de costes es el mismo.
+
+### Conclusión de la ronda 3
+La técnica SSR, **tal como se ha podido ejecutar**, no desempata ni aporta cifras fiables; sirve como confirmación cualitativa de los recorridos. Para que SSR sea informativa hacen falta (1) embeddings neuronales multilingües (hay que bajar un modelo: **pendiente de permiso**) y (2) preguntas que provoquen una valoración. Siguen siendo imprescindibles las personas reales: nada de lo anterior sustituye la prueba de `uxa08b-prueba-con-personas.md`.
