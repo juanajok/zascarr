@@ -24,6 +24,7 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from zascarr.middleware_cabeceras import aplicar_a_respuesta
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -115,6 +116,8 @@ async def manejar_bd_no_disponible(
 
 async def manejar_inesperado(request: Request, exc: Exception) -> Response:
     """500. Starlette lo registra y lo vuelve a lanzar después: aquí solo se decide qué se ve."""
-    if not quiere_pagina(request):
-        return PlainTextResponse("Internal Server Error", status_code=500)
-    return pagina_error(request, 500)
+    respuesta = (PlainTextResponse("Internal Server Error", status_code=500)
+                 if not quiere_pagina(request) else pagina_error(request, 500))
+    # #1229: este 500 lo envía `ServerErrorMiddleware`, por fuera del middleware de cabeceras.
+    aplicar_a_respuesta(respuesta)
+    return respuesta
