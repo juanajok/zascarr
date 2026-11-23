@@ -21,7 +21,7 @@ misma orden mediante la ampliación de permiso aprobada para escribir allí.
 Resultado del segundo intento (antes de corregir el arnés): **2 failed,
 8651 passed, 2429 skipped, 7 warnings**, código de salida 1, 502,99 segundos.
 La repetición tras las correcciones de tests, con temporales nuevos, terminó
-en **8949 passed, 2454 skipped, 7 warnings**, código de salida 0, 483,37
+en **8950 passed, 2454 skipped, 7 warnings**, código de salida 0, 483,37
 segundos. **La suite completa está verde en el árbol de trabajo actual.** Los
 avisos son de ZIP duplicado en un test y de AsyncMock no esperado en pruebas
 del importador; no se han corregido y no son fallos.
@@ -114,5 +114,5 @@ reautenticación. La primera pasada completa dio 8881 passed y 1 fallo de
 temporización en `test_ensayo_f1bis_arnes` (umbral de 4 s y `pgrep -f` que se
 autocoincidía). Se estabilizó el test comprobando la ausencia del KILL de
 respaldo y procesos `sleep 61.37` exactos, sin subir el umbral para ocultar el
-comportamiento. La repetición completa terminó en **8949 passed, 2454 skipped,
+comportamiento. La repetición completa terminó en **8950 passed, 2454 skipped,
 7 avisos, 0 failed**. Las **391 pruebas OPS4/instalador** y Ruff pasan.

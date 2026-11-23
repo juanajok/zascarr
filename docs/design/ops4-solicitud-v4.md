@@ -27,7 +27,7 @@ Los resultados incluyen el ID solo cuando se llegó a emitir la petición.
   excepción, éxito con petición v4 verificable, clave inválida, fallo de
   construcción, preparación inesperada, `ahora` inválido, transporte incierto
   sin reintento, `conversar` inyectado y ausencia de secretos en `repr`.
-- **391 pruebas OPS4/instalador** verdes. La suite completa posterior quedó limpia: **8949 passed, 2454 skipped, 0 failed**.
+- **391 pruebas OPS4/instalador** verdes. La suite completa posterior quedó limpia: **8950 passed, 2454 skipped, 0 failed**.
 
 ## Límites
 
