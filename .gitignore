@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 *.pyo
@@ -9,6 +11,7 @@ dist/
 build/
 *.egg-info/
 .venv/
+.venv-*/
 venv/
 .claude/
 # Perfiles de Chrome sin cabeza que dejan las capturas de pantalla (no se versionan).
@@ -23,3 +26,28 @@ venv/
 *.log
 *.dump
 *.prof
+
+# Cobertura y resultados de pruebas
+.coverage
+coverage.xml
+htmlcov/
+*.junit
+suite.xml
+pg.xml
+
+# Checkouts y artefactos de agentes dentro del repo
+.worktrees/
+.agents/
+.codex/
+.squad/
+.bench-refs/
+.screenshots-*/
+chrome-profile/
+kanban-*.json
+.work/
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+*.swp
+*~

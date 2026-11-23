@@ -1,0 +1,37 @@
+# Normaliza los finales de línea en el repositorio. En Linux (el entorno de
+# referencia y la Pi) todo el texto va con LF; los binarios no se tocan.
+* text=auto
+
+*.py text diff=python
+*.sh text eol=lf
+*.bash text eol=lf
+Makefile text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+
+# Artefactos y fixtures binarios: nunca normalizar ni mostrar como texto.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.cbr binary
+*.cbz binary
+*.rar binary
+*.zip binary
+*.gz binary
+*.tar binary

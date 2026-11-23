@@ -1,0 +1,49 @@
+name: Propuesta de mejora
+description: Una idea, un cambio de comportamiento o una historia de usuario
+title: "[Mejora] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de abrir la propuesta, comprueba si ya está en
+        [`docs/BACKLOG.md`](https://github.com/juanajok/zascarr/blob/main/docs/BACKLOG.md)
+        o en un issue abierto.
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qué problema resuelve
+      description: Describe la necesidad desde el punto de vista de quien usa ZascArr.
+      placeholder: "Como coleccionista, cuando…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Propuesta
+      description: Qué debería hacer ZascArr. Si hay varias opciones, dilas.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
+      description: Qué has descartado y por qué.
+
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptación
+      description: Cómo sabremos que está hecho, en términos comprobables.
+      placeholder: |
+        - [ ] …
+        - [ ] …
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto adicional
+      description: Capturas, enlaces a ADR, medidas o ejemplos.
