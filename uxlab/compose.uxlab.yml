@@ -59,6 +59,9 @@ services:
     command: ["sh", "-ec", "python -m alembic upgrade head && python /uxlab/seed.py"]
 
   app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
     image: zascarr-uxlab-app:local
     restart: "no"
     networks: [test-only]
