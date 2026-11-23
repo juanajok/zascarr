@@ -57,3 +57,13 @@ def test_cada_probar_conexion_dice_que_usa_lo_que_se_ve_sin_guardar():
     macro = re.search(patron, AJUSTES, re.S).group(1)
     assert "usa lo que ves ahora en el formulario, aunque aún no lo hayas guardado" in macro
     assert "no guarda nada" in macro
+
+
+def test_los_destinos_de_las_causas_de_deseados_existen_en_ajustes():
+    """`causa_deseo` los arma por concatenación (el rastreo anterior no los ve): se importan."""
+    from zascarr.services import causa_deseo
+    destinos = [c.destino for c in causa_deseo._POR_MOTIVO.values() if c.destino]
+    anclas = {d.split("#", 1)[1] for d in destinos if d.startswith("/ui/ajustes#")}
+    esperadas = {"ajustes-descargas", "ajustes-prowlarr", "ajustes-transmission", "ajustes-amule"}
+    assert anclas >= esperadas
+    assert [a for a in anclas if a not in IDS] == []

@@ -881,7 +881,7 @@ class TestCausaYConfirmacion:
         from zascarr.services import orchestrator as o
         t = self._pagina_con_motivo(o.MOTIVO_SIN_FUENTE)
         assert 'data-causa="sin_configurar"' in t and "Sin configurar" in t
-        enlace = r'<a href="/ui/ajustes">Ir a Ajustes</a>'
+        enlace = r'<a href="/ui/ajustes#ajustes-descargas">Ir a Ajustes</a>'
         assert re.search(rf'wishlist-accion">[^<]*Enciende Prowlarr[^<]*{enlace}', t)
 
     def test_en_espera_no_pide_nada_ni_lleva_enlace(self):

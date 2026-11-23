@@ -17,6 +17,11 @@ from dataclasses import dataclass
 from zascarr.services import orchestrator as o
 
 AJUSTES = "/ui/ajustes"
+#: Destinos estables de Ajustes (UXA-14, #1131): el `id` de cada tarjeta; `test_ajustes_anclas` los comprueba.
+DESCARGAS = AJUSTES + "#ajustes-descargas"
+PROWLARR = AJUSTES + "#ajustes-prowlarr"
+TRANSMISSION = AJUSTES + "#ajustes-transmission"
+AMULE = AJUSTES + "#ajustes-amule"
 PENDIENTES = "/ui/pendientes"
 
 
@@ -30,8 +35,8 @@ class CausaDeDeseo:
     enlace: str | None = None    # texto del enlace al destino
 
 
-def _sin_configurar(accion: str) -> CausaDeDeseo:
-    return CausaDeDeseo("sin_configurar", "Sin configurar", "amber", accion, AJUSTES, "Ir a Ajustes")
+def _sin_configurar(accion: str, destino: str = DESCARGAS) -> CausaDeDeseo:
+    return CausaDeDeseo("sin_configurar", "Sin configurar", "amber", accion, destino, "Ir a Ajustes")
 
 
 def _en_espera(accion: str = "No hace falta hacer nada: se reintenta sola.") -> CausaDeDeseo:
@@ -50,24 +55,24 @@ _POR_MOTIVO: dict[str, CausaDeDeseo] = {
     o.MOTIVO_SIN_FUENTE: _sin_configurar(
         "Enciende Prowlarr, el foro o un blog/RSS para que pueda buscar."),
     o.MOTIVO_PROWlARR_CONFIGURACION: _sin_configurar(
-        "Completa la URL y la clave de Prowlarr."),
+        "Completa la URL y la clave de Prowlarr.", PROWLARR),
     o.MOTIVO_CANDIDATO_RECHAZADO: _sin_configurar(
         "Se encontró algo, pero falta un cliente de descarga: enciende Transmission o aMule."),
     o.MOTIVO_FORO_ESPERA: _en_espera(),
     o.MOTIVO_ESPERA_CON_DESCARTES: _en_espera(),
     o.MOTIVO_FUENTE_INACCESIBLE: _en_espera("No hace falta hacer nada: se reintenta sola."),
     o.MOTIVO_CLIENTE_INACCESIBLE: _fallo(
-        "Comprueba que tu cliente de descarga esté encendido y alcanzable.", AJUSTES, "Ir a Ajustes"),
+        "Comprueba que tu cliente de descarga esté encendido y alcanzable.", DESCARGAS, "Ir a Ajustes"),
     o.MOTIVO_TRANSMISSION_INACCESIBLE: _fallo(
         "Comprueba que Transmission esté encendido y que la URL de Ajustes sea correcta.",
-        AJUSTES, "Ir a Ajustes"),
+        TRANSMISSION, "Ir a Ajustes"),
     o.MOTIVO_AMULE_INACCESIBLE: _fallo(
         "Comprueba que aMule esté encendido y que la URL de Ajustes sea correcta.",
-        AJUSTES, "Ir a Ajustes"),
+        AMULE, "Ir a Ajustes"),
     o.MOTIVO_ERROR_INESPERADO: _fallo("Pulsa «Reintentar»; si se repite, mira Estado.", "/estado", "Ver Estado"),
     o.MOTIVO_CANDIDATO_INVALIDO: _fallo("Pulsa «Buscar ahora» y elige uno de la lista nueva."),
     o.MOTIVO_SIN_RESULTADOS: _sin_resultados(
-        "Prueba «Buscar ahora» para ver las opciones, o enciende otra fuente.", AJUSTES, "Ver las fuentes"),
+        "Prueba «Buscar ahora» para ver las opciones, o enciende otra fuente.", DESCARGAS, "Ver las fuentes"),
     o.MOTIVO_NUMERO_DISTINTO: _sin_resultados(
         "Si el release usa otro nombre para la serie, importa un fichero y asígnalo una vez.",
         PENDIENTES, "Ir a Por revisar"),
