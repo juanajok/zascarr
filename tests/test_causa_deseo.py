@@ -6,7 +6,10 @@ import pytest
 from zascarr.services import orchestrator as o
 from zascarr.services.causa_deseo import (
     _POR_MOTIVO,
-    AJUSTES,
+    AMULE,
+    DESCARGAS,
+    PROWLARR,
+    TRANSMISSION,
     causa_de_motivo,
     cliente_de_descarga,
 )
@@ -37,7 +40,7 @@ def test_sin_configurar_lleva_a_ajustes_y_lo_que_se_reintenta_sola_no_pide_nada(
     motivos = (o.MOTIVO_SIN_FUENTE, o.MOTIVO_PROWlARR_CONFIGURACION, o.MOTIVO_CANDIDATO_RECHAZADO)
     for motivo in motivos:
         c = causa_de_motivo(motivo)
-        assert c.destino == AJUSTES and c.enlace and c.accion
+        assert c.destino.startswith("/ui/ajustes#ajustes-") and c.enlace and c.accion
     espera = causa_de_motivo(o.MOTIVO_FORO_ESPERA)
     assert espera.destino is None and "No hace falta hacer nada" in espera.accion
 
@@ -72,3 +75,13 @@ def test_todo_motivo_del_orquestador_esta_clasificado():
 ])
 def test_el_cliente_se_dice_segun_el_enlace(url, cliente):
     assert cliente_de_descarga(url) == cliente
+
+
+def test_cada_causa_lleva_a_la_tarjeta_concreta_de_ajustes():
+    """UXA-14 (#1131): Prowlarr, Transmission y aMule llevan a su tarjeta; el resto, a Descargas."""
+    assert causa_de_motivo(o.MOTIVO_PROWlARR_CONFIGURACION).destino == PROWLARR
+    assert causa_de_motivo(o.MOTIVO_TRANSMISSION_INACCESIBLE).destino == TRANSMISSION
+    assert causa_de_motivo(o.MOTIVO_AMULE_INACCESIBLE).destino == AMULE
+    for motivo in (o.MOTIVO_SIN_FUENTE, o.MOTIVO_CANDIDATO_RECHAZADO, o.MOTIVO_CLIENTE_INACCESIBLE,
+                   o.MOTIVO_SIN_RESULTADOS):
+        assert causa_de_motivo(motivo).destino == DESCARGAS
