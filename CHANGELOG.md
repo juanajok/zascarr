@@ -5,6 +5,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Mantenimiento
+
+- **Metadatos de repositorio y automatización (2026-11-23).** Añadidos
+  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.editorconfig`, `.gitattributes`,
+  hooks de pre-commit, plantillas de issue y Dependabot para las acciones de
+  GitHub. La CI declara permisos de solo lectura, cancela ejecuciones obsoletas
+  de una misma PR y fija tiempos máximos por job.
+
 ### Cambiado
 
 - **Restaurar una copia desde la interfaz (BL-OPS2, #443).** Estado ofrece «Restaurar…» para
