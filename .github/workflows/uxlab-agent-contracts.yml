@@ -1,0 +1,26 @@
+name: UXLab agentes - contratos sin API
+on:
+  pull_request:
+    paths:
+      - 'uxlab/agents/**'
+      - 'uxlab/compose.agents.yml'
+      - 'uxlab/run-agents.sh'
+      - 'uxlab/.dockerignore'
+  workflow_dispatch:
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Comprobar barreras de seguridad y falsos éxitos (sin tokens API)
+        run: node --test uxlab/agents/contracts.test.mjs
+      - name: Validar sintaxis de scripts
+        run: |
+          bash -n uxlab/run-agents.sh
+          python3 -m py_compile uxlab/agents/report.py uxlab/agents/reset.py
