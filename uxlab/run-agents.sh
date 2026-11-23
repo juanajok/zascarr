@@ -45,6 +45,7 @@ trap cleanup EXIT
 
 dc down --volumes --remove-orphans
 dc up -d --build browser
+dc build agent
 # Contratos ejecutados antes de consumir un solo token de DeepSeek.
 dc run --rm --no-deps agent node --test agents/contracts.test.mjs
 # Seis sesiones SEPARADAS; entre cada una se restablece el fixture y se abre
