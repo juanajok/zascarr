@@ -61,7 +61,7 @@ export class DeepSeekFlash {
       'Elige UN solo paso usando CONTROLES REALMENTE VISIBLES en captura o árbol accesible.',
       'Cuando consideres terminada la tarea, devuelve action=finish con status=done.',
       'Si no puedes continuar, devuelve finish con status=blocked; si pedirías ayuda, status=help.',
-      'Tus respuestas deben ser un objeto JSON con SIEMPRE estas nueve claves de cadena:',
+      'Tus respuestas deben ser un objeto JSON con SIEMPRE estas ocho claves de cadena:',
       '{"action":"click","role":"link","name":"nombre exacto","value":"","context":"","direction":"","status":"","reason":"breve motivo"}',
       'Acciones permitidas: click, type, select, scroll, back, wait, press, finish.',
       'No inventes botones ni respondas en texto libre. No uses rutas ni valores ocultos.',
