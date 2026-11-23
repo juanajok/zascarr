@@ -2,6 +2,13 @@
   {% if row.motivo %}
   <span class="wishlist-motivo" title="{{ row.motivo }}">{{ row.motivo }}</span>
   {% endif %}
+  {% if row.causa %}
+  {#- UXA-13a (#1130): qué es (sin configurar / en espera / ha fallado / sin resultados), qué hacer y adónde ir. -#}
+  <span class="wishlist-causa" data-causa="{{ row.causa.tipo }}">
+    {{ ui.chip(row.causa.aspecto, row.causa.etiqueta) }}
+    <span class="wishlist-accion">{{ row.causa.accion }}{% if row.causa.destino %} <a href="{{ row.causa.destino }}">{{ row.causa.enlace }}</a>{% endif %}</span>
+  </span>
+  {% endif %}
   {% if row.puede_reintentar %}
   <button type="button" class="btn-reintentar"
           hx-post="/ui/wishlist/{{ row.item.id }}/reintentar"

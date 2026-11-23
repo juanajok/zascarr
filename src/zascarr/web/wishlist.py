@@ -21,6 +21,7 @@ from sqlalchemy.orm import selectinload
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import Issue, Wishlist, WishlistStatus
+from zascarr.services.causa_deseo import causa_de_motivo, cliente_de_descarga
 from zascarr.services.estado_deseo import aspecto_de_deseo
 from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
 from zascarr.services.orchestrator import (
@@ -89,6 +90,8 @@ def _row(item: Wishlist) -> dict:
         # aquí. "Sin resultados" en el badge de estado ya no es lo único
         # que ve el coleccionista cuando algo se estanca.
         "motivo": item.last_error,
+        # UXA-13a (#1130): la causa clasificada y qué hacer; `None` si el motivo no se reconoce.
+        "causa": causa_de_motivo(item.last_error),
     }
 
 
@@ -311,6 +314,7 @@ async def buscar_ahora(
             "c": c,
             "formato": _formato_de(c.title),
             "token": crear_token_candidato(item_id, c, secret),
+            "cliente": cliente_de_descarga(c.download_url),
         }
         for c in (resultado or [])
     ]
@@ -376,7 +380,8 @@ async def buscar_lote(
         resultado = await orquestador.preview_candidates(item)
         filas = [
             {"c": candidato, "formato": _formato_de(candidato.title),
-             "token": crear_token_candidato(ident, candidato, secret)}
+             "token": crear_token_candidato(ident, candidato, secret),
+             "cliente": cliente_de_descarga(candidato.download_url)}
             for candidato in (resultado or [])
         ]
         parcial = plantilla.render(

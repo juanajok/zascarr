@@ -14,14 +14,23 @@
         {{ fila.c.indexer }} · {{ fila.formato }} · {% if fila.c.size_bytes %}{{ fila.c.size_bytes | filesizeformat }}{% else %}tamaño desconocido{% endif %}
         {% if fila.c.seeders %}· {{ fila.c.seeders }} seeders{% endif %}
       </span>
-      <form hx-post="/ui/wishlist/{{ item_id }}/enviar-candidato"
-            hx-target="closest li" hx-swap="outerHTML"
-            hx-confirm="¿Descargar este candidato?">
-        <input type="hidden" name="token" value="{{ fila.token }}">
-        <input type="hidden" name="indice" value="{{ loop.index0 }}">
-        <button type="submit" class="btn-descargar-candidato" hx-disable="this"
-                aria-label="Descargar {{ fila.c.title }}">Descargar este</button>
-      </form>
+      {#- UXA-13a (#1130): confirmación VISIBLE antes de enviar: qué es, de dónde viene y qué pasará. Un paso en la
+          propia página (no un diálogo del navegador) y el envío solo ocurre con «Sí, descargar». -#}
+      <details class="candidato-confirmar">
+        <summary class="btn-descargar-candidato" aria-label="Descargar {{ fila.c.title }}">Descargar este…</summary>
+        <div class="candidato-aviso" role="group" aria-label="Confirmar la descarga">
+          <p><strong>Vas a enviar</strong> «{{ fila.c.title }}»
+            {% if fila.c.indexer %}(origen: {{ fila.c.indexer }}){% endif %} a <strong>{{ fila.cliente }}</strong>.</p>
+          <p class="caption">Empezará a descargarse y, cuando termine, ZascArr lo importará a tu biblioteca. Esto no se deshace desde aquí.</p>
+          <form hx-post="/ui/wishlist/{{ item_id }}/enviar-candidato"
+                hx-target="closest li" hx-swap="outerHTML">
+            <input type="hidden" name="token" value="{{ fila.token }}">
+            <input type="hidden" name="indice" value="{{ loop.index0 }}">
+            <button type="submit" class="btn btn-confirmar-candidato" hx-disable="this"
+                    aria-label="Sí, descargar {{ fila.c.title }}">Sí, descargar</button>
+          </form>
+        </div>
+      </details>
     </li>
     {% endfor %}
   </ul>

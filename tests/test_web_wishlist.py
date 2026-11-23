@@ -862,3 +862,65 @@ def test_progreso_usa_la_referencia(monkeypatch):
         r = client.get("/ui/wishlist/progreso")
     assert "Flash (1987)" in r.text
     assert 'aria-label="Progreso de Flash (1987)"' in r.text
+
+
+# ── UXA-13a (#1130): causa, qué hacer y confirmación visible antes de enviar ───────────────────
+
+
+class TestCausaYConfirmacion:
+
+    def _pagina_con_motivo(self, motivo, estado=WishlistStatus.FAILED):
+        series = Series(id=uuid4(), title="Sandman", tradition=ComicTradition.AMERICAN)
+        item = make_wishlist_item(series, status=estado)
+        item.series, item.issue, item.last_error = series, None, motivo
+        cola = [FakeExecResult([item]), _accepted()]
+        with use_fake_session(FakeSession(exec_queue=cola)) as client:
+            return client.get("/ui/wishlist").text
+
+    def test_sin_configurar_dice_que_hacer_y_enlaza_a_ajustes(self):
+        from zascarr.services import orchestrator as o
+        t = self._pagina_con_motivo(o.MOTIVO_SIN_FUENTE)
+        assert 'data-causa="sin_configurar"' in t and "Sin configurar" in t
+        enlace = r'<a href="/ui/ajustes">Ir a Ajustes</a>'
+        assert re.search(rf'wishlist-accion">[^<]*Enciende Prowlarr[^<]*{enlace}', t)
+
+    def test_en_espera_no_pide_nada_ni_lleva_enlace(self):
+        from zascarr.services import orchestrator as o
+        t = self._pagina_con_motivo(o.MOTIVO_FORO_ESPERA)
+        assert 'data-causa="en_espera"' in t and "No hace falta hacer nada" in t
+        assert not re.search(r'data-causa="en_espera".*?<a href="/ui/ajustes"', t, re.S)
+
+    def test_un_fallo_y_un_sin_resultados_se_distinguen(self):
+        from zascarr.services import orchestrator as o
+        assert 'data-causa="fallo"' in self._pagina_con_motivo(o.MOTIVO_TRANSMISSION_INACCESIBLE)
+        assert 'data-causa="sin_resultados"' in self._pagina_con_motivo(o.MOTIVO_SIN_RESULTADOS)
+
+    def test_un_motivo_desconocido_se_muestra_tal_cual_sin_inventar_una_causa(self):
+        t = self._pagina_con_motivo("Texto que ZascArr no conoce")
+        assert "Texto que ZascArr no conoce" in t and "data-causa=" not in t
+
+    def _candidatos(self, monkeypatch, url):
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        resultado = SearchResult(
+            title="Batman #1.cbz", indexer="MiIndexer", download_url=url,
+            size_bytes=52_428_800, seeders=12, category="comics")
+        monkeypatch.setattr(Orchestrator, "preview_candidates", AsyncMock(return_value=[resultado]))
+        session = FakeSession(get_map={(Wishlist, item.id): item}, exec_queue=[_accepted()])
+        with use_fake_session(session) as client:
+            return client.post(f"/ui/wishlist/{item.id}/buscar-ahora").text
+
+    def test_antes_de_enviar_se_ve_identidad_origen_y_efecto(self, monkeypatch):
+        t = self._candidatos(monkeypatch, "magnet:?xt=urn:btih:abc")
+        assert "Vas a enviar" in t and "«Batman #1.cbz»" in t and "origen: MiIndexer" in t
+        assert "<strong>Transmission</strong>" in t
+        assert "lo importará a tu biblioteca" in t and "no se deshace desde aquí" in t
+
+    def test_un_enlace_ed2k_se_envia_a_amule(self, monkeypatch):
+        t = self._candidatos(monkeypatch, "ed2k://|file|Batman 1.cbz|1234|HASH|/")
+        assert "<strong>aMule</strong>" in t
+
+    def test_el_envio_exige_el_segundo_paso_y_no_usa_dialogo_nativo(self, monkeypatch):
+        t = self._candidatos(monkeypatch, "magnet:?xt=urn:btih:abc")
+        assert "hx-confirm" not in t          # confirmación visible, no un diálogo
+        assert t.index('<details class="candidato-confirmar">') < t.index("enviar-candidato")
+        assert "Sí, descargar" in t and 'name="token"' in t
