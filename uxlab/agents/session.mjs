@@ -5,7 +5,11 @@ import { openBrowser, getObservation, act } from './browser.mjs';
 import { DeepSeekFlash } from './deepseek.mjs';
 import { checkGoal, classify } from './oracles.mjs';
 
-const SESSION_LIMIT_STEPS = 18;
+const DEFAULT_SESSION_LIMIT_STEPS = 18;
+const SESSION_LIMIT_STEPS = Number(process.env.UXLAB_MAX_STEPS || DEFAULT_SESSION_LIMIT_STEPS);
+if (!Number.isInteger(SESSION_LIMIT_STEPS) || SESSION_LIMIT_STEPS < 1 || SESSION_LIMIT_STEPS > 60) {
+  throw Error('UXLAB_MAX_STEPS debe ser un entero entre 1 y 60');
+}
 const SESSION_LIMIT_MS = 240_000;
 
 function getConfig() {
@@ -32,7 +36,7 @@ async function main() {
   const eventsFile = path.join(dir,'steps.jsonl');
   const baseUrl = process.env.BASE_URL || 'http://app:8000';
   if (baseUrl !== 'http://app:8000') throw Error('Origen app inesperado: solo UXLab');
-  const ds = new DeepSeekFlash({maxUSD:Number(process.env.DEEPSEEK_MAX_USD || '0.05')});
+  const ds = new DeepSeekFlash({maxUSD:Number(process.env.DEEPSEEK_MAX_USD || '0.05'), maxCalls:SESSION_LIMIT_STEPS, maxInputTokens:Number(process.env.UXLAB_MAX_INPUT_TOKENS || '60000')});
   let infraError = false, started = Date.now(), finished = false, declared = false;
   let reason='max_steps', invalids=0, repeated=0, backtracks=0;
   let blocked = [], history = [], steps=0, everAchieved=false, helpRequests=0;
@@ -111,7 +115,7 @@ async function main() {
       scenario_id:scenario.id,persona_id:persona.id,profile:persona.name,
       started_at:new Date(started).toISOString(),
       ...classify({agentSaidDone:declared,objectiveSuccess:finalSuccess}),
-      goal_reached_before_finish:everAchieved,steps,
+      goal_reached_before_finish:everAchieved,steps,max_steps:SESSION_LIMIT_STEPS,
       elapsed_ms:Date.now()-started,backtracks, repeated_states:repeated,
       invalid_actions:invalids,blocked_requests:blocked.length,
       blocked_paths:blocked.slice(0,20),help_requests:helpRequests,

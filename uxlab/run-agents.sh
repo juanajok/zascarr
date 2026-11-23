@@ -15,6 +15,16 @@ export UXLAB_DB_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_hex(
 export UXLAB_GIT_SHA="$(git -C "$ROOT" rev-parse HEAD)"
 export UXLAB_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 export DEEPSEEK_MAX_USD="${DEEPSEEK_MAX_USD:-0.05}"
+export UXLAB_MAX_STEPS="${UXLAB_MAX_STEPS:-18}"
+export UXLAB_MAX_INPUT_TOKENS="${UXLAB_MAX_INPUT_TOKENS:-60000}"
+
+SCENARIOS=( ${UXLAB_SCENARIOS:-PILOT-01 PILOT-02} )
+PERSONAS=( ${UXLAB_PERSONAS:-p1-movil p2-teclado p3-zoom} )
+for id in "${SCENARIOS[@]}" "${PERSONAS[@]}"; do
+  [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "Identificador de sesión inválido: $id" >&2; exit 2; }
+done
+[[ "$UXLAB_MAX_STEPS" =~ ^[0-9]+$ ]] && (( UXLAB_MAX_STEPS >= 1 && UXLAB_MAX_STEPS <= 60 )) || { echo "UXLAB_MAX_STEPS debe estar entre 1 y 60" >&2; exit 2; }
+[[ "$UXLAB_MAX_INPUT_TOKENS" =~ ^[0-9]+$ ]] && (( UXLAB_MAX_INPUT_TOKENS >= 10000 && UXLAB_MAX_INPUT_TOKENS <= 250000 )) || { echo "UXLAB_MAX_INPUT_TOKENS fuera de rango" >&2; exit 2; }
 OWNER_UID="$(id -u)"
 OWNER_GID="$(id -g)"
 mkdir -p "$RESULTS/agents/$UXLAB_RUN_ID"
@@ -50,8 +60,8 @@ dc build agent
 dc run --rm --no-deps agent node --test agents/contracts.test.mjs
 # Seis sesiones SEPARADAS; entre cada una se restablece el fixture y se abre
 # un contexto independiente. Solo el contenedor 'agent' tiene acceso DeepSeek.
-for scenario in PILOT-01 PILOT-02; do
-  for persona in p1-movil p2-teclado p3-zoom; do
+for scenario in "${SCENARIOS[@]}"; do
+  for persona in "${PERSONAS[@]}"; do
     export UXLAB_SCENARIO="$scenario"
     export UXLAB_PERSONA="$persona"
     echo "UXLab / DeepSeek: $scenario / $persona"
@@ -59,4 +69,4 @@ for scenario in PILOT-01 PILOT-02; do
     dc run --rm --no-deps agent
   done
 done
-echo "Seis sesiones terminadas. Informe en $RESULTS/agents/$UXLAB_RUN_ID/"
+echo "Sesiones terminadas: ${#SCENARIOS[@]} escenarios × ${#PERSONAS[@]} perfiles. Informe en $RESULTS/agents/$UXLAB_RUN_ID/"

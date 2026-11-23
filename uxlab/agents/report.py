@@ -22,6 +22,7 @@ def collect(root: Path) -> dict:
             "declared_success": data["declared_success"],
             "false_success": data["false_success"],
             "steps": data["steps"],
+            "max_steps": data.get("max_steps"),
             "duration_ms": data["elapsed_ms"],
             "stop_reason": data["stop_reason"],
             "model_calls": data["model"]["calls"],
@@ -64,7 +65,7 @@ def render(d: dict) -> str:
             f"| {row['scenario']} | {row['persona']} | "
             f"{'sí' if row['objective_success'] else 'no'} | "
             f"{'sí' if row['declared_success'] else 'no'} | "
-            f"{'sí' if row['false_success'] else 'no'} | {row['steps']} | "
+            f"{'sí' if row['false_success'] else 'no'} | {row['steps']}/{row['max_steps']} | "
             f"{row['stop_reason'].replace('|','/')} | "
             f"[JSON]({row['evidence']}) |"
         )
