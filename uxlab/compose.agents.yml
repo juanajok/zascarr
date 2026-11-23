@@ -1,0 +1,51 @@
+# Se combina ÚNICAMENTE con compose.uxlab.yml. Mantiene app/DB/browser en red interna.
+services:
+  browser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    init: true
+    shm_size: 1gb
+    networks: [test-only]
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["npx", "playwright", "run-server", "--host", "0.0.0.0", "--port", "3000"]
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: "no"
+    networks: [test-only, deepseek-egress]
+    secrets: [deepseek_api_key]
+    environment:
+      BASE_URL: http://app:8000
+      PLAYWRIGHT_WS: ws://browser:3000/
+      DEEPSEEK_MODEL: deepseek-flash
+      DEEPSEEK_MAX_USD: ${DEEPSEEK_MAX_USD:-0.15}
+      UXLAB_PERSONA: ${UXLAB_PERSONA:-p1-movil}
+      UXLAB_SCENARIO: ${UXLAB_SCENARIO:-PILOT-01}
+      UXLAB_RUN_ID: ${UXLAB_RUN_ID:-manual}
+    volumes:
+      - ./results:/work/results
+    command: ["node", "agents/session.mjs"]
+
+  reset-fixture:
+    image: zascarr-uxlab-app:local
+    networks: [test-only]
+    environment:
+      ZASCARR_DB_PASSWORD: ${UXLAB_DB_PASSWORD:?ejecuta uxlab/run-agents.sh}
+    volumes:
+      - ./agents/reset.py:/uxlab/reset.py:ro
+    command: ["python", "/uxlab/reset.py"]
+
+networks:
+  deepseek-egress:
+    driver: bridge
+
+secrets:
+  deepseek_api_key:
+    file: ./.secrets/deepseek_api_key
