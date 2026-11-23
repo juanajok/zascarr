@@ -126,7 +126,7 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 | B2b | S2 | 47 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | tradición no americana con CV |
 | B7 | S2 | 55 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | título de fuente distinto |
 | B8 | S3 | 50 | 10 | 10 | 0/0/10 | — | sin medir | SIN MEDIR | evidencia de un id no vigente (explica 8 de los 9 B1b) |
-| B9 | S2 | 58 | 19 | 19 | 0/0/19 | — | 19 sin medir | SIN MEDIR (no sé) | serie con fuente sin registro actual: id no verificable (19) |
+| B9 | S2 | 58 | 1 | 1 | 0/0/1 | — | 1 sin medir | SIN MEDIR (no sé) | serie con fuente sin registro actual: id no verificable (1) |
 | G1 | S2 | 258 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | pareja de series duplicadas |
 | H2 | S2 | 1 | 1 | 1 | 1/0/0 | 100 % | 1 exacto | FAIL | procedencia contradice la fila |
 | F4a | S3 | 593 | 583 | 20 | 20/0/0 | 100 % | 583 [489–583] → **0 tras L1** | FAIL → PASS | enricher guarda HTML (vivo; corregido) |
@@ -736,11 +736,17 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
 - **Después:** B9 **20 → 19/58** (las 2 variantes de Image no cuentan por
   contención); las 19 son las que no tienen registro actual y su id **no se
   puede afirmar** todavía. La huella del censo completo cambia por B9.
-- **Siguiente:** recolectar la ficha actual de las 19 (CCM) y volver a medir.
+- **Recolección (2026-11-23):** el CCM se ejecutó sobre las 19 con las fuentes
+  activas de Ajustes: **18 OK** (registro actual guardado; el id queda
+  verificado) y **1 NO_ENCONTRADO** (RUNAWAYS, `runaways_2003_vaughan_alphona`:
+  la ficha no existe en Tebeosfera). **B9 19 → 1/58**; el 1 es RUNAWAYS, cuyo id
+  no se puede verificar y no se toca.
+- **Siguiente:** decidir qué hacer con RUNAWAYS (slug muerto) y, si se quiere,
+  completar las editoriales de las 18 fichas nuevas que sigan vacías.
 
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
 L6, L1, L2, L3 y L4 están aplicados; L7/L8 revisados (I1 aplicado); H1 con
 backfill estricto (243 restantes); F1d/H2/F2a se dejan como dato. **B9 añadida
 el 2026-11-23** (83 comprobaciones); **12 editoriales aplicadas** (11 vacías +
-SUPERMAN) y **19 series con fuente pendientes de recolectar** para verificar su
-id.*
+SUPERMAN) y **18 de las 19 series con fuente recolectadas** (B9 **1/58**;
+RUNAWAYS sin ficha en Tebeosfera).*
