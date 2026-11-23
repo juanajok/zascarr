@@ -5,4 +5,6 @@ RUN npm ci --no-audit --no-fund
 COPY playwright.config.ts ./
 COPY tests ./tests
 COPY fixtures ./fixtures
+COPY agents ./agents
+COPY compose.agents.yml ./compose.agents.yml
 CMD ["npx", "playwright", "test"]

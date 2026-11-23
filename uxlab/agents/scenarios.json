@@ -1,0 +1,16 @@
+[
+  {
+    "id": "PILOT-01",
+    "name": "Encontrar ciencia ficción",
+    "start": "/ui/biblioteca?modo=gestion",
+    "objective": "Encuentra en tu biblioteca una serie de ciencia ficción y abre su ficha.",
+    "oracle": "genre"
+  },
+  {
+    "id": "PILOT-02",
+    "name": "Continuar lectura",
+    "start": "/ui/biblioteca?modo=escaparate",
+    "objective": "Tenías un cómic a medias. Continúa leyéndolo desde donde lo dejaste.",
+    "oracle": "resume"
+  }
+]

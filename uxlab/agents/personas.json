@@ -1,0 +1,38 @@
+[
+  {
+    "id": "p1-movil",
+    "name": "No técnico móvil",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "isMobile": true,
+    "touch": true,
+    "mode": "touch",
+    "description": "Nunca has usado ZascArr, manejas el móvil y no conoces nombres técnicos de filtros."
+  },
+  {
+    "id": "p2-teclado",
+    "name": "Solo teclado",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "isMobile": false,
+    "touch": false,
+    "mode": "keyboard",
+    "description": "Utilizas exclusivamente el teclado: Tab, Mayús+Tab, Intro, Espacio, Escape y flechas. Prohibidos ratón, clic y scroll por ratón."
+  },
+  {
+    "id": "p3-zoom",
+    "name": "Baja visión / reflow",
+    "viewport": {
+      "width": 640,
+      "height": 400
+    },
+    "isMobile": false,
+    "touch": false,
+    "mode": "mouse",
+    "description": "Necesitas texto claro y visibilidad a mayor tamaño. Se simula un viewport CSS reducido para evaluar reflow; no equivale a zoom de navegador real."
+  }
+]

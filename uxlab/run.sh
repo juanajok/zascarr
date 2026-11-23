@@ -34,8 +34,8 @@ restore_report_ownership() {
   # El runner usa root dentro del contenedor. Recuperar UID/GID reales del host
   # incluso al fallar Playwright o al interrumpirse la preparación.
   # Busybox ya es dependencia del Compose UXLab: sin red, sin nuevos privilegios.
-  if ! docker run --rm --network none --pull never --read-only \
-       --user 0:0 --cap-drop ALL --cap-add CHOWN \
+  if ! docker run --rm --network none --pull never \
+       --user 0:0 --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE \
        --mount "type=bind,source=$RESULTS,target=/reports" \
        busybox:1.36 chown -R "$HOST_UID:$HOST_GID" /reports; then
     echo "AVISO: no se pudo restaurar la propiedad de $RESULTS (¿Docker rootless/userns?)." >&2
