@@ -16,6 +16,7 @@ from zascarr.services.auth import (
     COOKIE_NAME,
     SESSION_MAX_AGE,
     ColaDeVerificacionLlenaError,
+    atributos_cookie_sesion,
     crear_cookie_sesion,
     hash_password_async,
     intentar_credenciales,
@@ -115,7 +116,7 @@ async def login_submit(
     respuesta.set_cookie(
         COOKIE_NAME,
         crear_cookie_sesion(settings.secret_key, version_validada),
-        max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
+        max_age=SESSION_MAX_AGE, **atributos_cookie_sesion(settings),
     )
     return respuesta
 
@@ -123,5 +124,5 @@ async def login_submit(
 @router.post("/logout")
 async def logout() -> RedirectResponse:
     respuesta = RedirectResponse("/login", status_code=303)
-    respuesta.delete_cookie(COOKIE_NAME)
+    respuesta.delete_cookie(COOKIE_NAME, **atributos_cookie_sesion(get_settings()))
     return respuesta

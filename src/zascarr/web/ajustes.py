@@ -29,6 +29,7 @@ from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import (
     COOKIE_NAME,
     SESSION_MAX_AGE,
+    atributos_cookie_sesion,
     crear_cookie_sesion,
 )
 from zascarr.services.blog_feed import estado_feed
@@ -889,7 +890,7 @@ async def guardar_seguridad(
     cookie = crear_cookie_sesion(settings.secret_key, settings.auth_session_version)
     respuesta.set_cookie(
         COOKIE_NAME, cookie,
-        max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
+        max_age=SESSION_MAX_AGE, **atributos_cookie_sesion(settings),
     )
     return respuesta
 
