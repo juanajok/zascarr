@@ -25,7 +25,7 @@ services:
       BASE_URL: http://app:8000
       PLAYWRIGHT_WS: ws://browser:3000/
       DEEPSEEK_MODEL: deepseek-flash
-      DEEPSEEK_MAX_USD: ${DEEPSEEK_MAX_USD:-0.15}
+      DEEPSEEK_MAX_USD: ${DEEPSEEK_MAX_USD:-0.05}
       UXLAB_PERSONA: ${UXLAB_PERSONA:-p1-movil}
       UXLAB_SCENARIO: ${UXLAB_SCENARIO:-PILOT-01}
       UXLAB_RUN_ID: ${UXLAB_RUN_ID:-manual}

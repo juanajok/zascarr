@@ -18,7 +18,8 @@ function costUSD(input, output) {
 export class DeepSeekFlash {
   constructor({maxUSD=0.05, maxCalls=18}) {
     this.key = null;
-    this.model = 'deepseek-flash';
+    this.model = process.env.DEEPSEEK_MODEL || 'deepseek-flash';
+    if (this.model !== 'deepseek-flash') throw Error('Modelo no permitido: usa deepseek-flash');
     this.maxUSD = maxUSD;
     this.maxCalls = maxCalls;
     this.calls = 0;

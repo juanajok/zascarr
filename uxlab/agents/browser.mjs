@@ -2,9 +2,20 @@ import { chromium } from '@playwright/test';
 import { accessibleText, allowedRequest, publicUrl, validateAction } from './guards.mjs';
 
 export async function openBrowser(persona, baseUrl, blocked) {
-  const browser = await chromium.connect(process.env.PLAYWRIGHT_WS || 'ws://browser:3000/', {
-    timeout:15000,
-  });
+  let browser;
+  let lastError;
+  for (let intento = 0; intento < 10; intento++) {
+    try {
+      browser = await chromium.connect(process.env.PLAYWRIGHT_WS || 'ws://browser:3000/', {
+        timeout:15000,
+      });
+      break;
+    } catch (error) {
+      lastError = error;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  if (!browser) throw lastError || new Error('No se pudo conectar con el servidor Playwright');
   const context = await browser.newContext({
     viewport:persona.viewport,
     isMobile:persona.isMobile,
