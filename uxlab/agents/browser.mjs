@@ -58,9 +58,9 @@ export async function getObservation(page) {
   };
 }
 async function findControl(page, a) {
-  const root = a.context
-    ? page.getByRole('listitem').filter({hasText:a.context})
-    : page.locator('body');
+  // `context` es una pista del modelo, no un selector: se busca en toda la página
+  // y solo se acepta si hay una coincidencia única por nombre visible/accesible.
+  const root = page.locator('body');
   const exact = root.getByRole(a.role, {name:a.name,exact:true});
   if (await exact.count() === 1) return exact;
   // El nombre accesible puede incluir un prefijo de estado (p. ej. «0 0% leído · …»).
