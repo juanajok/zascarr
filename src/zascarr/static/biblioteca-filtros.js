@@ -102,3 +102,35 @@
     mostrar();
   });
 })();
+
+/* UXA-08c (#1214): tras pulsar «Buscar», el resultado queda a la vista. En el móvil la lista empieza
+   bajo las acciones auxiliares y la persona creía que «Buscar» no había hecho nada hasta desplazarse.
+   Solo cuando la búsqueda se envía (botón o Intro): cambiar un filtro o el orden no mueve la página.
+   Solo se desplaza (sin mover el foco: la persona puede seguir afinando el título); el recuento ya se
+   anuncia en su región `role="status"`. */
+(() => {
+  const formulario = document.getElementById("filtros");
+  const rejilla = document.getElementById("rejilla");
+  if (!formulario || !rejilla || !window.htmx) return;
+
+  let buscando = false;
+  const esDeLaRejilla = (ctx) => {
+    if (!ctx) return false;
+    const destino = typeof ctx.target === "string" ? document.querySelector(ctx.target) : ctx.target;
+    return destino === rejilla;
+  };
+
+  formulario.addEventListener("submit", () => { buscando = true; });
+  document.addEventListener("htmx:after:swap", (evento) => {
+    if (!buscando || !esDeLaRejilla(evento.detail && evento.detail.ctx)) return;
+    const alto = window.innerHeight || document.documentElement.clientHeight;
+    if (rejilla.getBoundingClientRect().top < alto * 0.55) return;   // ya se ve
+    const sinMovimiento = window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    rejilla.scrollIntoView({ block: "start", behavior: sinMovimiento ? "auto" : "smooth" });
+  });
+  // Una búsqueda que falla o se cancela no debe dejar la marca puesta para el siguiente cambio de filtro.
+  document.addEventListener("htmx:finally:request", (evento) => {
+    if (esDeLaRejilla(evento.detail && evento.detail.ctx)) buscando = false;
+  });
+})();
