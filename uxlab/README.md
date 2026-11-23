@@ -23,6 +23,14 @@ El script inicializa una contraseña efímera, borra solo los volúmenes del pro
 
 **No mezclar** `docker-compose.yml` de producción con `uxlab/compose.uxlab.yml`. El laboratorio se inicia por separado.
 
+## Diagnóstico si falla la preparación
+
+Si el contenedor `seed` termina con código 1, no significa que falle Playwright ni que el portátil no sea apto. `uxlab/run.sh` recoge **antes de limpiar** los logs y el estado de los servicios en:
+
+- `uxlab/results/bootstrap.log` (errores y traceback de `seed`, PostgreSQL y app).
+- `uxlab/results/compose-ps.txt` (estado de los contenedores).
+
+Ejecutar de nuevo después de actualizar la rama y consultar `bootstrap.log`. El traceback indica si ha fallado Alembic, la inserción de fixtures o los permisos. No se recomienda inferir la causa solo a partir de `service "seed" didn't complete successfully: exit 1`.
 ## Escenarios y oráculos
 
 | ID | Comprobación determinista |
