@@ -107,6 +107,10 @@ class TestIndex:
         assert f'hx-get="/ui/series/{series.id}/previa?cerrar=1"' in envoltorio
         assert "keyup[key=='Escape']" in envoltorio
         assert "click from:'find .previa-numero'" in envoltorio
+        hueco = re.search(r'<span class="previa-numero"[^>]*>', html).group(0)
+        assert 'role="status"' in hueco
+        assert 'aria-live="polite"' in hueco and 'aria-atomic="true"' in hueco
+        assert 'aria-hidden="true"' not in hueco
         assert f'hx-target="#previa-l-{series.id}"' in envoltorio
         assert 'hx-sync="closest .chip-previa:replace"' in envoltorio
         enlace = re.search(

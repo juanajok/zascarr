@@ -1,5 +1,6 @@
 <span class="previa-card">
-  {{ ui.portada(serie.title, serie.id, portada_src, clase="previa-numero-img") }}
+  {{ ui.portada(serie.title, serie.id, portada_src, clase="previa-numero-img",
+                alt="Vista previa de la portada de " ~ serie.title) }}
   <span class="previa-pie"><strong>{{ serie.title }}</strong>{% if serie.start_year %} · {{ serie.start_year }}{% endif %}
     <span class="previa-pista">Vista previa · Esc o clic para apartarla</span></span>
 </span>

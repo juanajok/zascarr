@@ -90,7 +90,7 @@
                   hx-get="/ui/colecciones/{{ coleccion.id }}/previa/{{ s.id }}"
                   hx-target="next .previa-numero" hx-swap="innerHTML"
                   hx-trigger="click" hx-sync="closest .chip-previa:replace">Ver portada<span class="sr"> de {{ s.title }}</span></button>
-          <span class="previa-numero" id="previa-m-{{ s.id }}" aria-hidden="true"></span>
+          <span class="previa-numero" id="previa-m-{{ s.id }}" role="status" aria-live="polite" aria-atomic="true"></span>
         </span>
         <span class="muted">{{ s.start_year or "Año no consta" }} · Guardada: {{ s.wishlist_policy_label }} · Efectiva: {{ s.politica_efectiva_label }}</span>
       </div>
