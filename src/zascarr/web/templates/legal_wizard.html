@@ -17,7 +17,7 @@
   {{ ui.aviso("warn", texto_falta, foco=true) }}
 {% endif %}
 
-<form method="post" action="/ui/legal/accept" class="legal-form">
+<form method="post" action="/ui/legal/accept" class="legal-form" novalidate>
   <input type="hidden" name="volver" value="{{ volver }}">
   <label class="legal-checkbox">
     <input type="checkbox" name="acepto_1" value="true" required>
@@ -33,6 +33,7 @@
     <span>Acepto los términos del <a href="/legal" target="_blank" rel="noopener noreferrer">aviso legal completo<span class="sr"> (se abre en otra pestaña)</span></a> (versión {{ legal_version }}).</span>
   </label>
   <button type="submit" class="primary">Aceptar y continuar</button>
+  <a class="back-link" href="{{ volver }}">Volver sin aceptar</a>
 </form>
 {% endif %}
 {% endblock %}

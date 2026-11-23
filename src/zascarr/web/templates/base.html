@@ -42,6 +42,9 @@
       </div>
     </div>
     <main class="content" id="main" tabindex="-1" hx-history-elt>
+      {% if request.query_params.get("aviso_legal") == "aceptado" %}
+      {{ ui.aviso("ok", "Aviso legal aceptado. Tu acción no se ha ejecutado; vuelve a pulsarla.", rol="status", foco=true) }}
+      {% endif %}
       {% block content %}{% endblock %}
       <footer class="site-footer">
         {% from "_legal_disclaimer.html" import legal_disclaimer %}

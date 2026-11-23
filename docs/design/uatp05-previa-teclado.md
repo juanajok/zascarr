@@ -76,14 +76,14 @@ Colecciones es un riesgo real):
   atributos htmx (ADR 0001/0021). No se toca el lector.
 - **Un contenedor único de previa**, anclaje por *CSS anchor positioning*, *flip* automático,
   reposicionar la tarjeta, cambiar su tamaño (220/200 px) o el retardo de 150 ms.
-- **Convertir la tarjeta en enlace** o en diálogo: sigue siendo decorativa (`aria-hidden`) y sin
-  elementos enfocables; ver D-5.
+- **Convertir la tarjeta en enlace** o en diálogo: sigue sin elementos enfocables; el hueco es
+  una región viva pasiva (`role="status"`), no un control; ver D-5.
 - **Previa en ancho reducido o táctil para la variante anclada:** se conserva la ocultación de
   BL-INF4 (`≤860 px` o `pointer:coarse`); la fija de las listas sigue disponible con su botón.
   Cambiar el umbral es otra historia (D-6).
 - **Manipular la tarjeta con el puntero** más allá de recorrerla y descartarla; sin selección de
   texto, sin arrastrar, sin zoom.
-- **Ajuste global para desactivar previas**, `aria-live`/anuncios del lector de pantalla nuevo.
+- **Ajuste global para desactivar previas**; el anuncio de esta historia es la región viva de la tarjeta.
 - **Eliminar el CSS muerto** `.coleccion-check.chip-previa` ni otras deudas de UI.
 - **Safari/Firefox, lector de pantalla, móvil/táctil físico, Pi y `forced-colors` real**:
   **NOT RUN** declarado, nunca PASS. En navegador real solo se exige Chrome estable.
@@ -132,7 +132,7 @@ sustituye el enlace ni el botón, así que el foco no se mueve). Un solo `hx-get
      hx-get="…/previa" hx-trigger="mouseenter delay:150ms, focusin delay:150ms"
      hx-target="#previa-…" hx-swap="innerHTML"
      hx-sync="closest .chip-previa:replace">…</a>
-  <span class="previa-numero" id="previa-…" aria-hidden="true"></span>
+  <span class="previa-numero" id="previa-…" role="status" aria-live="polite" aria-atomic="true"></span>
 </span>
 ```
 
@@ -161,7 +161,8 @@ sustituye el enlace ni el botón, así que el foco no se mueve). Un solo `hx-get
 - El hueco queda con `:empty` y la tarjeta oculta (regla de D-3 aplicada a `:not(:empty)`).
 - `document.activeElement` es el mismo elemento de antes de Escape; el anillo `:focus-visible`
   sigue viéndose. No hay navegación, ni scroll, ni otra petición que el GET de cierre.
-- No se anuncia nada (la tarjeta es `aria-hidden`); no hay `aria-live` nuevo.
+- Se anuncia el contenido de la previa al insertarse en el hueco (`role="status"`, `aria-live="polite"`,
+  `aria-atomic="true"`); no se anuncia al cerrarla ni se mueve el foco.
 - El clic en la tarjeta también la vacía; en ese caso el navegador puede mover el foco, pero no
   activa nada de debajo (D-2).
 
@@ -288,24 +289,27 @@ lista de Colecciones.
 
 ### 7.2 ARIA y foco
 
-- La tarjeta sigue siendo **decorativa**: el contenedor vacío de las plantillas conserva
-  `aria-hidden="true"` ([`series_detail.html:17`](../../src/zascarr/web/templates/series_detail.html:17),
+- **El hueco es una región viva pasiva**, no un control: las cuatro plantillas
+  ([`series_detail.html:17`](../../src/zascarr/web/templates/series_detail.html:17),
   [`series_detail.html:411`](../../src/zascarr/web/templates/series_detail.html:411),
   [`_rejilla_biblioteca.html:127`](../../src/zascarr/web/templates/_rejilla_biblioteca.html:127),
-  [`coleccion_detalle.html:89`](../../src/zascarr/web/templates/coleccion_detalle.html:89)); todo su
-  subárbol, imagen incluida, queda fuera del árbol de accesibilidad (la del número lleva `alt=""`).
-- **Cero elementos enfocables** dentro de la tarjeta: sin enlaces, botones, `tabindex`, `role`,
-  `inert` ni `autofocus`. El nombre accesible del chip no cambia y el lector de pantalla no recibe
-  contenido nuevo.
+  [`coleccion_detalle.html:89`](../../src/zascarr/web/templates/coleccion_detalle.html:89)) quitan
+  `aria-hidden` y añaden `role="status" aria-live="polite" aria-atomic="true"`. Al insertarse la
+  tarjeta se anuncia el número/título y el pie; al cerrarla no se anuncia nada.
+- Las dos tarjetas llevan imagen con **alt descriptivo** (`Vista previa de la portada del número N ·
+  título` / `Vista previa de la portada de <serie>`), sin duplicar el enlace: la imagen no es
+  enfocable y el chip conserva su nombre.
+- **Cero elementos enfocables** dentro de la tarjeta: sin enlaces, botones, `tabindex`, `inert` ni
+  `autofocus`; el `role="status"` vive en el hueco, no en la tarjeta.
 - **Sin trampa:** Tab y Shift+Tab siguen su orden normal; Escape no mueve el foco ni llama a
   `preventDefault` sobre Tab; la tarjeta no atrapa ni redirige el foco. El clic en la tarjeta no
   es un control con foco (su equivalente de teclado es Escape).
 - **Enter abre:** el `<a href>` del chip no lleva `hx-trigger` de `click`; pulsar <kbd>Enter</kbd>
   navega a la ficha como hoy y no dispara ninguna petición htmx. El botón «Ver portada» responde a
   Enter con su propia acción (mostrar/refrescar la previa), como cualquier botón.
-- Si el PO quisiera que la tarjeta se anuncie o un botón «Cerrar» dentro, habría que sacarla de
-  `aria-hidden` y gestionar foco (historia aparte; no se recomienda: añade ruido y un control
-  extra para un contenido repetido).
+- El PO pidió que la previa sea **consultable con lector de pantalla** (UATP-09 P1-4): se anunció
+  como región viva pasiva, sin foco ni control «Cerrar» adicional; el cierre sigue siendo
+  Escape/clic y el foco no se mueve.
 
 ## 8. D-6 · Persistencia, umbral, evidencia y documentación
 
@@ -364,7 +368,8 @@ siguiente» → AC-02/AC-03; «puntero y WCAG 1.4.13» → AC-03/AC-04; «Enter 
   activa ningún enlace, botón ni formulario de debajo (comprobado sobre el «Quitar de la
   colección» de Colecciones) y la descarta. No se dispara el POST de baja ni una navegación.
 - **AC-05 · Enter, ARIA y sin trampa.** <kbd>Enter</kbd> en el chip abre la ficha con el `href`
-  (sin petición htmx). La tarjeta conserva `aria-hidden="true"` y no contiene nada enfocable;
+  (sin petición htmx). La tarjeta no contiene nada enfocable y el hueco es `role="status"`;
+
   Tab/Shift+Tab no se interceptan, Escape no mueve el foco y no hay bucle ni trampa. El pie dice
   «Vista previa · Esc o clic para apartarla».
 - **AC-06 · Una sola previa.** Con hover en A y foco en B hay exactamente una tarjeta visible (la
@@ -395,7 +400,7 @@ Nombres orientativos; lo exigible es el caso y su espera.
 | T1 | Web | `?cerrar=1` en las tres rutas de previa: 200 vacío + `no-store`; no llama a `db.get` ni a `ruta_previa` | `test_web_portada_numero.py` | AC-01 |
 | T2 | Web | Sin `cerrar` no cambia nada: fragmento con miniatura, sin portada → vacío, 404 ajeno, imagen 304/404 | `test_web_portada_numero.py` | AC-10 |
 | T3 | Estático | Los cuatro envoltorios llevan el cierre (`?cerrar=1`, `keyup[key=='Escape']`, `click from:find .previa-numero`, `hx-target` correcto, `hx-sync`); la anclada conserva `mouseenter`, la fija no; el enlace no lleva trigger de clic | `test_web_ficha_447.py`, `test_web_library.py`, `test_web_colecciones.py` | AC-01/05/07 |
-| T4 | Estático | La tarjeta no tiene enfocables y conserva `aria-hidden="true"`; el subárbol queda fuera del árbol de accesibilidad (imagen del número con `alt=""`); pie «Vista previa · Esc o clic para apartarla» en las dos tarjetas; 14 px y `tabular-nums` | `test_web_portada_numero.py` + plantillas | AC-05 |
+| T4 | Estático | La tarjeta no tiene enfocables; el hueco es `role="status" aria-live="polite" aria-atomic="true"` sin `aria-hidden`; imágenes con alt descriptivo; pie «Vista previa · Esc o clic para apartarla» en las dos tarjetas; 14 px y `tabular-nums` | `test_web_portada_numero.py` + plantillas | AC-05 |
 | T5 | CSS | Sin `pointer-events:none`; puente de 8 px; el recorte no oculta la flecha; regla `:has` de una sola previa con prioridad del foco; la fija no se pinta en `:hover`; botón visible con puntero fino; umbral 860/coarse intacto | `test_web_css_previa.py` | AC-02/03/06/07 |
 | T6 | Web | Render de ficha, Biblioteca lista y Colecciones: atributos nuevos, botón visible, objetivo de cada previa; sin 500/422 | `test_web_ficha_447.py`, `test_web_library.py`, `test_web_colecciones.py` | AC-01/07 |
 | T7 | Regresión | BL-INF4: imagen 240 px, ETag/304, 404 sin caché, fragmento vacío sin previa, 404 de número ajeno, no-store; contraste/tokens y 320 px | comandos §11 | AC-10 |
@@ -458,7 +463,7 @@ Chrome.
 | **D-2** | `pointer-events:auto` + puente de 8 px + recorte en la tarjeta interior; el clic descarta y no atraviesa | Cierra P-2/P-3 y hace la flecha visible (P-8) | Sin puente: el puntero no puede recorrerla; WCAG 1.4.13 Hoverable FAIL |
 | **D-3** | Una sola previa con prioridad del foco mediante `:has` | Cierra P-4 y deja ver el texto/anillo del siguiente | Sin prioridad: dos previas y foco tapado |
 | **D-4** | La fija solo con foco o botón (sin hover); botón visible también con puntero fino | Cierra P-6 y evita el POST accidental de Colecciones | Mantener hover: hay que mover la tarjeta fuera de las acciones y probarlo |
-| **D-5** | Tarjeta decorativa, sin enfocables; pie «Vista previa · Esc o clic para apartarla»; Enter nativo | Cierra P-5 y conserva la semántica de BL-INF4 | Hacerla enlace/región: nombre accesible, doble enlace y foco nuevos |
+| **D-5** | Región viva pasiva (`role="status"`) sin enfocables ni foco; alt descriptivo; pie «Vista previa · Esc o clic para apartarla»; Enter nativo | Hace consultable la previa y cierra P-5 sin añadir controles | Hacerla enlace/diálogo con foco o botón «Cerrar» |
 | **D-6** | Sin timeout; umbral 860/coarse intacto; E2E 1440, 1024/125 %, 720/200 % como límite y reduced-motion; docs + evidencia | Deja PASS/FAIL/NOT RUN separados y no amplía el alcance | Cambiar el umbral o el tamaño: otra historia con su prueba móvil |
 
 **Decisión del PO (2026-11-21):** se **aceptan D-1…D-6** tal como se recomiendan en la tabla. La
@@ -483,7 +488,7 @@ dependencias, sin migración y sin tocar `docs/BACKLOG.md`.
   en la anclada, `overflow:hidden` movido a `.previa-card` (la flecha y el puente ya no se
   recortan), `:has` para que mande la previa del foco y la fija sin `:hover`.
 - **Copy y ARIA.** Pie «Vista previa · Esc o clic para apartarla» en las dos tarjetas; la tarjeta
-  sigue `aria-hidden="true"`, sin enfocables ni roles, e imagen con `alt=""`.
+  es una región viva (`role="status"`), sin enfocables, e imágenes con alt descriptivo.
 - **Inventario de query.** `cerrar` se añade a `PARAMETROS_DE_QUERY` de `tests/test_log_acceso.py`
   con el motivo: es una orden de cierre sin datos de la persona (la prueba de inventario la exige).
 

@@ -46,6 +46,7 @@ def test_fragmento_devuelve_la_miniatura(tmp_path):
     assert f"/ui/series/{serie}/numero/{issue}/previa.jpg" in r.text
     assert 'class="previa-numero-img"' in r.text
     assert "Nº 1" in r.text and "El Día del Sol Negro" in r.text
+    assert 'alt="Vista previa de la portada del número 1 · El Día del Sol Negro"' in r.text
     # UATP-05 / D-5: el pie no promete una acción que la tarjeta no hace.
     assert "Vista previa · Esc o clic para apartarla" in r.text
     assert "Pulsa para abrir la ficha" not in r.text
@@ -201,14 +202,15 @@ def test_cerrar_numero_tambien_en_visita_directa():
     assert r.headers["Cache-Control"] == "no-store"
 
 
-def test_la_tarjeta_no_tiene_enfocables_y_su_pie_es_honesto():
+def test_la_tarjeta_se_anuncia_sin_enfocables_y_su_pie_es_honesto():
     plantillas = Path(__file__).resolve().parents[1] / "src/zascarr/web/templates"
     numero = (plantillas / "_previa_numero.html").read_text()
     serie = (plantillas / "_previa_serie.html").read_text()
     for texto in (numero, serie):
         assert "Vista previa · Esc o clic para apartarla" in texto
         assert "Pulsa para abrir la ficha" not in texto
-        # Decorativa y sin trampa: nada enfocable ni roles nuevos dentro de la tarjeta.
-        for etiqueta in ("<a ", "<button", "<input", "tabindex=", "role="):
+        # Sin trampa de foco: nada enfocable dentro de la tarjeta.
+        for etiqueta in ("<a ", "<button", "<input", "tabindex="):
             assert etiqueta not in texto
-    assert 'alt=""' in numero
+    assert 'alt="Vista previa de la portada del número' in numero
+    assert 'alt="Vista previa de la portada de ' in serie

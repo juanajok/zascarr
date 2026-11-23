@@ -2579,12 +2579,12 @@ body:has(.chip-previa:focus-within > .previa-numero:not(:empty))
     max-width: 100%;
     box-sizing: border-box;
     max-height: calc(100dvh - 8.5rem);
-    max-height: 40dvh;
     grid-template-columns: 1fr;
     overflow: auto;
     z-index: 60;
     border-radius: var(--radius-panel) var(--radius-panel) 0 0;
     box-shadow: var(--shadow-ink);
+    padding-bottom: calc(var(--space-3) + 52px);
   }
   .barra-panel-cerrar { width: 100%; }
 }
@@ -3087,7 +3087,13 @@ body:has(.lector-escena) .skip { display: none; }
   background: var(--paper); color: var(--ink); cursor: pointer;
 }
 .lector-escena[data-chrome="oculto"] .lector-asa:not([hidden]) { display: inline-flex; }
+.lector-asa { gap: 6px; padding: 0 var(--space-2); }
 .lector-asa svg { width: 20px; height: 20px; }
+.lector-asa-texto { font-weight: 800; white-space: nowrap; }
+@media (max-height: 420px) {
+  /* UATP-09 P1/QA: a poca altura se oculta solo la identidad; el zoom se conserva. */
+  .lector-identidad { display: none; }
+}
 .lector-asa:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 @media (forced-colors: active) {
   .lector-asa { border-color: CanvasText; }

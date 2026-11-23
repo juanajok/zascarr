@@ -229,6 +229,26 @@ class TestApiLegalAccept:
 
 class TestUiLegal:
 
+    def test_wizard_tiene_novalidate_y_volver_sin_aceptar(self):
+        with use_fake_session(FakeSession(rows=[])) as client:
+            r = client.get("/ui/legal?volver=%2Fui%2Fwishlist")
+        assert r.status_code == 200
+        assert "<form" in r.text and "novalidate" in r.text
+        assert "Volver sin aceptar" in r.text
+        assert 'href="/ui/wishlist"' in r.text
+
+    def test_el_aviso_de_falta_llega_del_servidor(self):
+        with use_fake_session(FakeSession(rows=[])) as client:
+            r = client.post("/ui/legal/accept", data={}, follow_redirects=True)
+        assert "Faltan casillas por marcar" in r.text
+
+    def test_el_aviso_aceptado_es_anunciable_en_el_destino(self):
+        with use_fake_session(FakeSession(rows=[])) as client:
+            r = client.get("/ui/legal?aviso_legal=aceptado")
+        assert "Aviso legal aceptado" in r.text
+        assert "Tu acción no se ha ejecutado; vuelve a pulsarla" in r.text
+        assert 'role="status"' in r.text
+
     def test_wizard_muestra_formulario_si_no_aceptado(self):
         with use_fake_session(FakeSession(rows=[])) as client:
             r = client.get("/ui/legal")
@@ -262,9 +282,21 @@ class TestUiLegal:
                 follow_redirects=False,
             )
         assert r.status_code == 303
-        assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO
+        assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO + "?aviso_legal=aceptado"
         assert r.headers["cache-control"] == "no-store"
         assert len(session.added) == 1
+
+    def test_accept_conserva_el_destino_y_anade_la_senal(self):
+        session = FakeSession()
+        with use_fake_session(session) as client:
+            r = client.post(
+                "/ui/legal/accept",
+                data={"acepto_1": "true", "acepto_2": "true", "acepto_3": "true",
+                      "volver": "/ui/wishlist?q=flash"},
+                follow_redirects=False,
+            )
+        assert r.status_code == 303
+        assert r.headers["location"] == "/ui/wishlist?q=flash&aviso_legal=aceptado"
 
     def test_legal_full_renderiza_markdown(self):
         with use_fake_session(FakeSession()) as client:
@@ -459,7 +491,7 @@ class TestUatp01RetornoDelAviso:
                 follow_redirects=False,
             )
         assert r.status_code == 303
-        assert r.headers["location"] == "/ui/mejoras?pagina=2"
+        assert r.headers["location"] == "/ui/mejoras?pagina=2&aviso_legal=aceptado"
         assert r.headers["cache-control"] == "no-store"
 
     @pytest.mark.parametrize("destino", [
@@ -483,9 +515,21 @@ class TestUatp01RetornoDelAviso:
                       "volver": destino},
                 follow_redirects=False,
             )
-        assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO
+        assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO + "?aviso_legal=aceptado"
         assert r.headers["cache-control"] == "no-store"
         assert len(session.added) == 1
+
+    def test_accept_conserva_el_destino_y_anade_la_senal(self):
+        session = FakeSession()
+        with use_fake_session(session) as client:
+            r = client.post(
+                "/ui/legal/accept",
+                data={"acepto_1": "true", "acepto_2": "true", "acepto_3": "true",
+                      "volver": "/ui/wishlist?q=flash"},
+                follow_redirects=False,
+            )
+        assert r.status_code == 303
+        assert r.headers["location"] == "/ui/wishlist?q=flash&aviso_legal=aceptado"
 
     @pytest.mark.parametrize("valor", ["²", "٣", "１２", "¹²"])
     def test_volver_con_pagina_unicode_no_da_500_y_cae_al_respaldo(self, valor):
@@ -500,7 +544,7 @@ class TestUatp01RetornoDelAviso:
                 follow_redirects=False,
             )
         assert r.status_code == 303
-        assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO
+        assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO + "?aviso_legal=aceptado"
         assert len(session.added) == 1
 
     def test_falta_conserva_el_destino_y_lo_explica(self):
@@ -546,7 +590,7 @@ class TestUatp01RetornoDelAviso:
                 data={"acepto_1": "true", "acepto_2": "true", "acepto_3": "true"},
                 follow_redirects=False,
             )
-        assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO
+        assert r.headers["location"] == RETORNO_LEGAL_POR_DEFECTO + "?aviso_legal=aceptado"
 
     def test_ya_aceptado_usa_el_volver_validado(self):
         """La rama «ya aceptado» enlazaba siempre a Biblioteca; debe usar el

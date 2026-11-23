@@ -1492,3 +1492,39 @@ class TestAtribucionRellenoSinUrl:
         assert "Grand Comics Database" in fuera and "CC BY-SA 4.0" in fuera
         assert 'href="https://atacante.example/series/1/"' not in fuera
         assert 'href=""' not in fuera
+
+
+def test_el_numero_hereda_el_volver_valido_o_cae_a_la_serie():
+    """UATP-09 P1: ficha → número → ficha no pierde el contexto original."""
+    from zascarr.web.series import destino_de_volver_numero, etiqueta_de_volver_numero
+
+    sid = uuid4()
+    assert destino_de_volver_numero("/ui/wishlist", sid) == "/ui/wishlist"
+    assert destino_de_volver_numero("/ui/biblioteca", sid) == "/ui/biblioteca"
+    assert destino_de_volver_numero("//evil.example/x", sid) == f"/ui/series/{sid}"
+    assert etiqueta_de_volver_numero("/ui/wishlist") == "← Volver a Deseados"
+    assert etiqueta_de_volver_numero("/ui/biblioteca?q=x") == "← Volver a la biblioteca"
+    assert etiqueta_de_volver_numero(f"/ui/colecciones/{sid}") == "← Volver a la colección"
+    assert etiqueta_de_volver_numero(f"/ui/series/{sid}") == "← Volver a la serie"
+
+
+def test_los_enlaces_de_numero_propagan_el_volver_en_la_ficha():
+    from pathlib import Path
+
+    plantilla = Path("src/zascarr/web/templates/series_detail.html").read_text(encoding="utf-8")
+    assert '?volver={{ volver|urlencode }}' in plantilla
+    issue = Path("src/zascarr/web/templates/issue_detail.html").read_text(encoding="utf-8")
+    assert 'href="{{ volver }}"' in issue and "{{ volver_etiqueta }}" in issue
+
+
+def test_cta_y_archivos_por_numero_conservan_el_volver():
+    """UIUX UATP-09: los otros dos enlaces al número también heredan el contexto."""
+    from pathlib import Path
+
+    plantilla = Path("src/zascarr/web/templates/series_detail.html").read_text(encoding="utf-8")
+    cta = plantilla.split('Elegir cómo leer', 1)[0].rsplit('<a ', 1)[1]
+    assert "?volver={{ volver|urlencode }}" in cta
+    archivos = plantilla.split('class="archivos-numero"', 1)[1]
+    enlace_archivo = archivos.split(
+        '<a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}', 1)[1].split('>', 1)[0]
+    assert "?volver={{ volver|urlencode }}" in enlace_archivo

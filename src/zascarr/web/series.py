@@ -1898,8 +1898,28 @@ async def elegir_archivo_lectura(series_id: UUID, issue_id: UUID, request: Reque
     return RedirectResponse(destino, status_code=303)
 
 
+def destino_de_volver_numero(volver: str, series_id: UUID) -> str:
+    """Destino de vuelta de la ficha de número, validado o la ficha de la serie."""
+    return volver_segura(volver, series_id) or f"/ui/series/{series_id}"
+
+
+def etiqueta_de_volver_numero(destino: str) -> str:
+    """Texto del enlace de vuelta según el contexto original (no siempre la serie)."""
+    from urllib.parse import urlsplit
+
+    ruta = urlsplit(destino).path
+    if ruta == "/ui/biblioteca":
+        return "← Volver a la biblioteca"
+    if ruta == "/ui/wishlist":
+        return "← Volver a Deseados"
+    if ruta.startswith("/ui/colecciones/"):
+        return "← Volver a la colección"
+    return "← Volver a la serie"
+
+
 @router.get("/{series_id}/numero/{issue_id}", response_class=HTMLResponse)
 async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
+                         volver: str = Query(default=""),
                          nota: str = Query(default=""),
                          guardado: str = Query(default=""),
                          db: AsyncSession = Depends(get_db)) -> HTMLResponse:
@@ -1925,8 +1945,11 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
                 db, UUID(lector_archivo.id)))
         except Exception:  # noqa: BLE001 — el botón no puede romper la ficha
             lector_pagina = 0
+    destino_volver = destino_de_volver_numero(volver, series_id)
     respuesta = templates.TemplateResponse(request, "issue_detail.html", {
         "series": ficha.serie, "issue": ficha.issue, "ficha": ficha,
+        "volver": destino_volver,
+        "volver_etiqueta": etiqueta_de_volver_numero(destino_volver),
         # SCR2: doble enlace visible (artículo + CC-BY-SA 3.0) si el número lo trajo Fandom.
         "atribucion_fandom": atribucion_fandom(ficha.issue),
         "autores": autores, "textos": TEXTOS_FICHA,

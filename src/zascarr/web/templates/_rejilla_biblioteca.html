@@ -132,7 +132,7 @@
                   hx-get="/ui/series/{{ series.id }}/previa"
                   hx-target="next .previa-numero" hx-swap="innerHTML"
                   hx-trigger="click" hx-sync="closest .chip-previa:replace">Ver portada<span class="sr"> de {{ series.title }}</span></button>
-          <span class="previa-numero" id="previa-l-{{ series.id }}" aria-hidden="true"></span>
+          <span class="previa-numero" id="previa-l-{{ series.id }}" role="status" aria-live="polite" aria-atomic="true"></span>
         </span>
       </td>
       <td data-label="Año">{% if series.start_year is not none %}{{ series.start_year }}{% else %}No consta{% endif %}</td>

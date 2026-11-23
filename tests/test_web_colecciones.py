@@ -100,6 +100,10 @@ def test_detalle_muestra_series_y_selector():
     assert 'hx-get="/ui/colecciones/c1/previa/s1?cerrar=1"' in envoltorio
     assert "keyup[key=='Escape']" in envoltorio
     assert "click from:'find .previa-numero'" in envoltorio
+    hueco = re.search(r'<span class="previa-numero"[^>]*>', html).group(0)
+    assert 'role="status"' in hueco
+    assert 'aria-live="polite"' in hueco and 'aria-atomic="true"' in hueco
+    assert 'aria-hidden="true"' not in hueco
     assert 'hx-target="#previa-m-s1"' in envoltorio
     assert 'hx-sync="closest .chip-previa:replace"' in envoltorio
     enlace = re.search(r'<a [^>]*hx-target="#previa-m-s1"[^>]*>', html).group(0)

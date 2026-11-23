@@ -786,7 +786,16 @@
       }
       return;
     }
-    if (!enLienzo && !enFlecha && target !== document.body) return;
+    // UATP-09 P1: con el foco en la barra las teclas de página siguen funcionando;
+    // solo se respetan los controles que usan flechas de forma nativa.
+    const enBarra = !!barra && (target === barra
+      || (typeof barra.contains === "function" && barra.contains(target)));
+    const controlDeTexto = target && typeof target.closest === "function"
+      && target.closest("input, select, textarea, summary");
+    const teclaDePagina = key === "ArrowLeft" || key === "ArrowRight"
+      || key === "PageUp" || key === "PageDown";
+    if (!enLienzo && !enFlecha && target !== document.body
+        && !(enBarra && !controlDeTexto && teclaDePagina)) return;
     const siguienteTecla = sentido === "rtl" ? "ArrowLeft" : "ArrowRight";
     const anteriorTecla = sentido === "rtl" ? "ArrowRight" : "ArrowLeft";
     if (key === siguienteTecla || key === "PageDown") { evento.preventDefault(); avanzar(); }

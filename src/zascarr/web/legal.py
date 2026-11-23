@@ -7,7 +7,7 @@ precisamente para poder aceptar el aviso o simplemente leerlo.
 from __future__ import annotations
 
 import re
-from urllib.parse import quote, urlsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -33,6 +33,16 @@ _UUID = (r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
 _RUTA_NUMERO = re.compile(rf"/ui/series/{_UUID}/numero/{_UUID}")
 _RUTA_SERIE = re.compile(rf"/ui/series/{_UUID}")
 _RUTA_LECTOR = re.compile(rf"/ui/leer/{_UUID}")
+
+
+def con_aviso_legal(destino: str) -> str:
+    """Destino local con la señal de un solo uso que pinta el aviso al llegar."""
+    partes = urlsplit(destino)
+    pares = [(clave, valor) for clave, valor in parse_qsl(
+        partes.query, keep_blank_values=True) if clave != "aviso_legal"]
+    pares.append(("aviso_legal", "aceptado"))
+    return urlunsplit((partes.scheme, partes.netloc, partes.path,
+                       urlencode(pares), partes.fragment))
 
 
 def etiqueta_de_vuelta(destino: str) -> str:
@@ -90,7 +100,8 @@ async def accept(
         return RedirectResponse(falta, status_code=303,
                                 headers={"Cache-Control": "no-store"})
     await acknowledge(db)
-    return RedirectResponse(destino or RETORNO_LEGAL_POR_DEFECTO, status_code=303,
+    llegada = con_aviso_legal(destino or RETORNO_LEGAL_POR_DEFECTO)
+    return RedirectResponse(llegada, status_code=303,
                             headers={"Cache-Control": "no-store"})
 
 

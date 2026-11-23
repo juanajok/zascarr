@@ -111,6 +111,7 @@ class NumeroEnlace:
     id: str
     numero: str
     tiene_archivos: bool
+    titulo: str = ""
 
 
 @dataclass
@@ -202,7 +203,8 @@ async def cargar_ficha_serie(db: AsyncSession, series_id: UUID) -> FichaSerie | 
         lista.sort(key=lambda a: (-a.numeros, natural_key(a.nombre)))
         autores[clave] = lista[:_TOPE_AUTORES]
     numeros = [NumeroEnlace(id=str(i.id), numero=i.issue_number or "(sin número)",
-                            tiene_archivos=bool(getattr(i, "files", None))) for i in issues]
+                            tiene_archivos=bool(getattr(i, "files", None)),
+                            titulo=(i.title or "")) for i in issues]
     if not autores or credito_sin_fuente:
         origen = "Origen no registrado"
     elif len(fuentes_creditos) == 1:

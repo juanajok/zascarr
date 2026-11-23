@@ -252,3 +252,12 @@ async def test_bl_r6_otras_publicaciones_con_el_mismo_numero_son_ediciones():
     assert len(ficha.otras_ediciones) == 1
     assert ficha.otras_ediciones[0].volumen == 2
     assert ficha.otras_ediciones[0].formato == "tomo en tapa dura"
+
+
+def test_los_enlaces_de_numero_llevan_el_titulo_para_el_nombre_accesible():
+    """UATP-09 P1: la previa sigue decorativa, pero el enlace dice número y título."""
+    from pathlib import Path
+
+    assert NumeroEnlace(id="x", numero="1", tiene_archivos=True, titulo="El país Qâ").titulo == "El país Qâ"
+    plantilla = Path("src/zascarr/web/templates/series_detail.html").read_text(encoding="utf-8")
+    assert "enlace.titulo" in plantilla

@@ -1,6 +1,7 @@
 {#- BL-INF4: tarjeta de previa de la portada del número (hover/foco en la ficha). -#}
 <span class="previa-card">
-  <img class="previa-numero-img" width="220" decoding="async" alt=""
+  <img class="previa-numero-img" width="220" decoding="async"
+       alt="Vista previa de la portada del número {{ numero }}{% if titulo %} · {{ titulo }}{% endif %}"
        src="/ui/series/{{ series_id }}/numero/{{ issue_id }}/previa.jpg">
   <span class="previa-pie"><strong>Nº {{ numero }}</strong>{% if titulo %} · {{ titulo }}{% endif %}
     <span class="previa-pista">Vista previa · Esc o clic para apartarla</span></span>
