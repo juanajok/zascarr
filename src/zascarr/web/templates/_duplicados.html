@@ -2,8 +2,9 @@
 <section class="audit-block duplicados-apartar" aria-labelledby="duplicados-apartar-titulo">
   <h2 id="duplicados-apartar-titulo" class="titulo-frase">Apartar copias idénticas</h2>
   <p class="audit-why">
-    Las copias de cada grupo tienen exactamente el mismo contenido. Elige <strong>una copia que se queda</strong>
-    en cada grupo: las demás se mueven a una cuarentena y se pueden devolver. <strong>No se borra nada.</strong>
+    <strong>Detectado, sin mover nada todavía.</strong> Las copias de cada grupo tienen exactamente el
+    mismo contenido. Elige <strong>una copia que se queda</strong>: las demás se pueden apartar a una
+    cuarentena y devolver después. <strong>No se borra nada.</strong>
   </p>
 
   {% if duplicados.grupos %}
@@ -35,9 +36,9 @@
       una copia de seguridad sin enlaces duros volverá a ocupar el doble y editar una copia cambia la otra.
     </p>
     <div class="duplicados-acciones">
-      <button type="submit" class="btn">Ver vista previa</button>
+      <button type="submit" class="btn">Revisar qué se apartará</button>
       {% if duplicados.enlace_disponible %}
-      <button type="submit" class="btn ghost" name="accion" value="enlazar">Unir con enlace duro</button>
+      <button type="submit" class="btn ghost" name="accion" value="enlazar">Preparar unión con enlace duro</button>
       {% else %}
       <p class="audit-detail" role="status">No se puede unir con enlace duro: {{ duplicados.enlace_motivo }}</p>
       {% endif %}
@@ -52,7 +53,7 @@
     Se guardan en <code>{{ duplicados.cuarentena.ruta | ruta_visible }}</code> y ocupan
     <strong>{{ duplicados.cuarentena.bytes | tamano }}</strong>
     ({{ duplicados.cuarentena.archivos }} archivo{{ 's' if duplicados.cuarentena.archivos != 1 }}).
-    No se borran automáticamente; puedes deshacer un apartado mientras siga ahí.
+    No se borran automáticamente; cada apartado se puede deshacer mientras siga ahí.
   </p>
   {% if duplicados.operaciones %}
   <ul class="duplicados-operaciones">

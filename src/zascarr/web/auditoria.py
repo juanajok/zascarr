@@ -805,14 +805,24 @@ async def confirmar_duplicados(request: Request, token: list[str] = Form(default
     """Confirma cada grupo previsualizado; un grupo rechazado no tumba los demás."""
     servicio = _servicio_enlace(db) if accion == "enlazar" else _servicio_apartado(db)
     resultados = []
+    detalles = []
     for token_firmado, crudo in zip(token, grupos, strict=False):
+        detalle = None
         try:
             datos = json.loads(crudo)
-            entrada = GrupoEntrada(datos["sha256"], tuple(datos["rutas"]), int(datos["keep_index"]))
+            rutas = [str(r) for r in datos["rutas"]]
+            keep = int(datos["keep_index"])
+            detalle = {
+                "ruta_keep": _ruta_relativa(rutas[keep]),
+                "rutas_apartadas": [_ruta_relativa(r) for i, r in enumerate(rutas) if i != keep],
+            }
+            entrada = GrupoEntrada(datos["sha256"], tuple(rutas), keep)
             resultados.append(await servicio.confirmar(token_firmado, [entrada]))
-        except (ApartadoError, TokenApartadoInvalido, ValueError, KeyError, TypeError) as exc:
+        except (ApartadoError, TokenApartadoInvalido, ValueError, KeyError, TypeError, IndexError) as exc:
             resultados.append({"error": str(exc)})
-    contexto = {"resultados": resultados, "operaciones": await _operaciones_apartadas(db),
+        detalles.append(detalle)
+    contexto = {"resultados": resultados, "detalles": detalles,
+                "operaciones": await _operaciones_apartadas(db),
                 "cuarentena": await asyncio.to_thread(_resumen_cuarentena)}
     contexto["modo"] = accion
     return _no_store(templates.TemplateResponse(request, "_duplicados_resultado.html", contexto))
