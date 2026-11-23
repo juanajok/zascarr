@@ -861,6 +861,8 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
 /* Cada sección de la ficha es una viñeta (`.card`, «la viñeta es la unidad»), con el mismo hueco entre
    ellas; el título arranca a ras del canto. */
 .ficha-bloque { margin: 0 0 var(--space-4); scroll-margin-top: var(--space-4); }
+/* UXA-08c: al desplazar los resultados a la vista tras «Buscar», que no queden pegados al borde. */
+#rejilla { scroll-margin-top: var(--space-3); }
 .ficha-bloque > h2:first-child, .ficha-bloque > summary:first-child { margin-top: 0; }
 .ficha-bloque > :last-child { margin-bottom: 0; }
 .ficha-bloque .elegir-portada[open] { background: var(--paper); }
