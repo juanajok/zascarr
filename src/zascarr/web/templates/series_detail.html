@@ -64,7 +64,7 @@
     {% set cual = (" el #" ~ d.numero) if d.numero else "" %}
     <p class="series-leer">
       {% if d.tipo == "elegir" %}
-      <a class="btn primary" href="/ui/series/{{ series.id }}/numero/{{ d.issue_id }}">Elegir cómo leer{{ cual }}</a>
+      <a class="btn primary" href="/ui/series/{{ series.id }}/numero/{{ d.issue_id }}{% if volver %}?volver={{ volver|urlencode }}{% endif %}">Elegir cómo leer{{ cual }}</a>
       {% elif d.tipo == "continuar" %}
       <a class="btn primary" href="/ui/leer/{{ d.archivo_id }}">Continuar{{ cual }}{% if d.pagina > 1 %} (pág. {{ d.pagina }}){% endif %}</a>
       {% elif d.tipo == "releer" %}
@@ -438,7 +438,7 @@
               hx-trigger="keyup[key=='Escape'], click from:'find .previa-numero'"
               hx-target="#previa-archivo-{{ n.issue_id }}" hx-swap="innerHTML"
               hx-sync="closest .chip-previa:replace">
-          <a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}"
+          <a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}{% if volver %}?volver={{ volver|urlencode }}{% endif %}"
              hx-get="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}/previa"
              hx-target="#previa-archivo-{{ n.issue_id }}" hx-swap="innerHTML"
              hx-trigger="focusin delay:150ms" hx-sync="closest .chip-previa:replace">{% if sin_numero %}Sin número{% if n.titulo %} · {{ n.titulo }}{% endif %}{% else %}#{{ n.numero }}{% if n.titulo %} · {{ n.titulo }}{% endif %}{% endif %}<span class="sr">{% if sin_numero %} ver información del especial{% else %} ver información del número {{ n.numero }}{% endif %}</span></a>

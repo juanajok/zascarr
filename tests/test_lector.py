@@ -866,4 +866,6 @@ def test_el_asa_dice_controles_y_la_barra_compacta_esconde_secundarios():
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
     assert "lector-asa-texto" in html and ">Controles</span>" in html
     assert "@media (max-height: 420px)" in css
-    assert ".lector-identidad, .lector-zoom { display: none; }" in css
+    assert ".lector-identidad { display: none; }" in css
+    assert ".lector-identidad, .lector-zoom" not in css
+    assert ".lector-zoom { display: none; }" not in css

@@ -1515,3 +1515,16 @@ def test_los_enlaces_de_numero_propagan_el_volver_en_la_ficha():
     assert '?volver={{ volver|urlencode }}' in plantilla
     issue = Path("src/zascarr/web/templates/issue_detail.html").read_text(encoding="utf-8")
     assert 'href="{{ volver }}"' in issue and "{{ volver_etiqueta }}" in issue
+
+
+def test_cta_y_archivos_por_numero_conservan_el_volver():
+    """UIUX UATP-09: los otros dos enlaces al número también heredan el contexto."""
+    from pathlib import Path
+
+    plantilla = Path("src/zascarr/web/templates/series_detail.html").read_text(encoding="utf-8")
+    cta = plantilla.split('Elegir cómo leer', 1)[0].rsplit('<a ', 1)[1]
+    assert "?volver={{ volver|urlencode }}" in cta
+    archivos = plantilla.split('class="archivos-numero"', 1)[1]
+    enlace_archivo = archivos.split(
+        '<a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}', 1)[1].split('>', 1)[0]
+    assert "?volver={{ volver|urlencode }}" in enlace_archivo

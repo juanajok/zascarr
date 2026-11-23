@@ -3091,8 +3091,8 @@ body:has(.lector-escena) .skip { display: none; }
 .lector-asa svg { width: 20px; height: 20px; }
 .lector-asa-texto { font-weight: 800; white-space: nowrap; }
 @media (max-height: 420px) {
-  /* UATP-09 P1: a poca altura la barra conserva Volver + Página + Opciones. */
-  .lector-identidad, .lector-zoom { display: none; }
+  /* UATP-09 P1/QA: a poca altura se oculta solo la identidad; el zoom se conserva. */
+  .lector-identidad { display: none; }
 }
 .lector-asa:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 @media (forced-colors: active) {
