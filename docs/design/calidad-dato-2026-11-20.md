@@ -28,6 +28,16 @@
 > de las 19** (la 19.ª, RUNAWAYS, no existe en Tebeosfera): B9 **1/58**; ver §16. La medición de referencia de las demás comprobaciones sigue siendo la del
 > 2026-11-20.
 >
+> **Actualización 2026-11-23 (tarde).** Aplicadas las **4 obras únicas**
+> Flashpoint (formato `graphic_novel`, número `NULL`): **C2a y C3a 0/23**; total
+> estimado **143**. Ver §17.
+>
+> **Actualización 2026-11-23 (cierre de lotes).** Retirados los **75 ids de
+> número** sin volumen de serie (B5a **0**) y corregidos los **23** de C2b (5
+> tomos de Saga y 18 «Vol 02» que no eran edición). C2c queda en **38**
+> decimales/Annual, que son dato legítimo (Villains Month y anuales). Total
+> estimado **147 → 45**. Ver §18.
+>
 > **Actualización 2026-11-22.** La Pi está en `ce26086a`; el backfill estricto
 > de H1 (PR #1215) está desplegado. **Aplicado:** 4 filas de
 > `field_provenance` (Tebeosfera) en 58 series; **1 es un campo de H1** y las
@@ -110,18 +120,18 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 
 | id | S | Población | Casos | Muestra | D/L/NS | Precisión | Estimación | Estado | Causa |
 |---|---|---:|---:|---:|---|---:|---|---|---|
-| B5a | S1 | 607 | 75 | 20 | 20/0/0 | 100 % | 75 [63–75] | FAIL | `retirar_asociacion` no limpia ids de número (vivo) |
+| B5a | S1 | 1.073 | 75 → **0** | 20 | 20/0/0 | 100 % | 75 [63–75] → **0** | FAIL → PASS | ids de número sin volumen de serie (75 retirados) |
 | B1b | S1 | 29 | 1 | 1 | 1/0/0 | 100 % | 1 exacto → **0 tras L6** | FAIL → PASS | año de la fuente distinto para el id vigente |
 | D6b | S2 | 4.492 | 3.470 | 20 | 0/20/0 | 0 % | 0 [0–559] | LEGÍTIMO | convención: `match_status` no se actualiza al vincular |
 | C2c | S2 | 4.223 | 38 | 20 | 20/0/0 | 100 % | 38 [32–38] | FAIL | anual/decimal como grapa (dato) |
 | A1a | S2 | 1.450 | 26 | 20 | 20/0/0 | 100 % | 26 [22–26] → **0 tras L2** | FAIL → PASS | `DELETE /api/series` heredado (vivo/heredado) |
-| C2b | S2 | 4.412 | 23 | 20 | 20/0/0 | 100 % | 23 [20–23] | FAIL | tomo/ómnibus como grapa (dato) |
+| C2b | S2 | 4.214 | 23 → **0** | 20 | 20/0/0 | 100 % | 23 [20–23] → **0** | FAIL → PASS | 5 tomos de Saga + 18 «Vol 02» mal marcados |
 | C1 | S2 | 4.370 | 17 | 17 | 0/0/17 | — | sin medir | SIN MEDIR | proxy del parser |
 | B6c | S2 | 32 | 9 | 9 | 0/0/9 | — | sin medir | SIN MEDIR | ids sin sello de intento |
 | D6a | S2 | 606 | 9 | 9 | 9/0/0 | 100 % | 9 exacto → **0 tras L3** | FAIL → PASS | `match_status` colgado tras borrado heredado |
 | B3b | S2 | 10 | 6 | 6 | 0/0/6 | — | sin medir | SIN MEDIR | Tebeosfera en americana |
-| C2a | S2 | 10 | 4 | 4 | 4/0/0 | 100 % | 4 exacto | FAIL | `single_issue` en `one_shot` (ADR 0022) |
-| C3a | S2 | 10 | 4 | 4 | 0/0/4 | — | sin medir | SIN MEDIR | `#1` en `one_shot` |
+| C2a | S2 | 23 | 4 → **0** | 4 | 4/0/0 | 100 % | 4 exacto → **0** | FAIL → PASS | `single_issue` en `one_shot` (ADR 0022) |
+| C3a | S2 | 23 | 4 → **0** | 4 | 0/0/4 | — | sin medir | PASS | `#1` en `one_shot` |
 | D4c | S2 | 4.297 | 3 | 3 | 3/0/0 | 100 % | 3 exacto | FAIL | número sin ningún archivo |
 | B2b | S2 | 47 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | tradición no americana con CV |
 | B7 | S2 | 55 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | título de fuente distinto |
@@ -743,6 +753,34 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
   no se puede verificar y no se toca.
 - **Siguiente:** decidir qué hacer con RUNAWAYS (slug muerto) y, si se quiere,
   completar las editoriales de las 18 fichas nuevas que sigan vacías.
+
+## 17. Las 4 obras únicas Flashpoint (2026-11-23)
+
+- **Qué:** las 4 Flashpoint (`Green Arrow Industries`, `Grodd of War`,
+  `Reverse-Flash`, `The Canterbury Cricket`) eran `one_shot` con
+  `format='single_issue'` y `issue_number='1'`.
+- **Aplicado (4 filas):** formato → `graphic_novel`; número → `NULL`. La
+  prevención #1188 (ADR 0022) ya cubre las altas nuevas.
+- **Después:** **C2a 0/23** y **C3a 0/23**; total estimado **147 → 143**. Copia:
+  `backup_20261123_1640.sql.gz`, SHA-256
+  `bdfe749424a6c5c7f29de7fd8096d8d7477ca89e1962f283a521951030b4f0ca`.
+
+## 18. Cierre de los lotes B5a y C2b (2026-11-23)
+
+- **B5a (75):** 75 números con `comic_vine_id` en 4 series sin volumen de CV
+  (Detective Comics 56, Death Note 13, DC K.O. 5, Marvel Gold 1). El id de
+  número no se puede comprobar sin el volumen de la serie: se retira el id
+  (75 filas). **B5a 0/1.073**.
+- **C2b (23):** 5 tomos de Saga (formato → `trade_paperback`) y 18 archivos de
+  Catwoman/Catwoman Annual cuyo `edicion='volumen'` salía de «Vol 02», que es
+  el volumen de la serie, no una edición (se quita esa clave del archivo).
+  **C2b 0/4.214**.
+- **C2c (38):** decimales/Annual de DC (Villains Month, `23.1`…) con
+  `single_issue`. Son números únicos legítimos; se dejan como **dato**, no como
+  defecto (ADR 0016/0022 sigue aplicando a las altas nuevas).
+- **Copias:** `backup_20261123_1645.sql.gz` (B5a), SHA-256 `7c53cf26…`;
+  `backup_20261123_1650.sql.gz` (C2b), SHA-256 `bd1c5d64…`.
+- **Después:** B5a 0, C2a/C3a 0, C2b 0, C2c 38 (dato); total estimado **45**.
 
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
 L6, L1, L2, L3 y L4 están aplicados; L7/L8 revisados (I1 aplicado); H1 con
