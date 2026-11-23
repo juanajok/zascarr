@@ -782,12 +782,15 @@ sin overflow horizontal en móvil; tema oscuro aplica; el botón no permite dobl
 
 ```text
 1. Abrir /ui/leer/<file_id> en modo pantalla. Con la barra oculta:
-   #lector-asa visible, getBoundingClientRect() >= 44x44, aria-label/aria-controls.
-   activeElement === body y ningún :focus-visible dentro de .lector-escena.
+   #lector-asa visible en la esquina superior derecha (fuera de la viñeta en escritorio; en
+   tableta vertical con la página a sangre queda el botón en la esquina),
+   getBoundingClientRect() >= 44x44, aria-label/aria-controls. El rótulo «Controles» se ve
+   al aparecer y, a los 6 s, se desvanece; vuelve al pasar el ratón o con el foco y la caja
+   sigue en 44x44. activeElement === body y ningún :focus-visible dentro de .lector-escena.
 2. Tocar el asa: data-chrome="", asa oculta, foco en «Volver al número»; página,
    imagen, modo y zoom sin cambios; sin POST /progreso ni /sentido.
-2b. Con ratón, mover x=500 y=300→90→22 sin revelar: el asa sigue visible; el clic
-   en el asa revela la barra y enfoca «Volver al número».
+2b. Con ratón, ir a la esquina superior derecha (sobre el asa) sin revelar: el asa sigue
+   visible y el rótulo vuelve; el clic en el asa revela la barra y enfoca «Volver al número».
 3. Tocar la franja superior (<=44 px) con la barra oculta: revela y NO cambia de página.
 4. Tab desde body: entra en la barra y la revela; Tab desde el último enfocable vuelve
    al primero; Shift+Tab al revés; el foco no sale de .lector-escena. Con #fin abierto y

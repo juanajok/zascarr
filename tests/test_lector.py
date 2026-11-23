@@ -801,7 +801,8 @@ class TestUatp03AsaYFoco:
         f, db = _pantalla_con_siguiente(tmp_path, monkeypatch, "sin_siguiente")
         with use_fake_session(db) as client:
             r = client.get(f"/ui/leer/{f.id}")
-        assert "toca la lengüeta «Mostrar los controles» o el centro de la página" in r.text
+        assert ("toca la lengüeta «Controles», arriba a la derecha, "
+                "o el centro de la página") in r.text
 
     def test_volver_al_numero_es_el_primer_control_y_no_desborda(self):
         from pathlib import Path
@@ -827,6 +828,31 @@ class TestUatp03AsaYFoco:
         assert '[data-chrome="oculto"] .lector-asa' in css
         assert "body:has(.lector-escena) .skip" in css
         assert "[data-chrome=\"oculto\"] .lector-asa" in css
+
+    def test_el_asa_sale_del_centro_y_el_rotulo_se_recoge(self):
+        """Regresión 2026-11-23: el rótulo «Controles» dejaba una caja de 117×44 sobre la
+        viñeta, en el centro del borde. La lengüeta va a la esquina y el rótulo —etiqueta
+        aparte, sin cambiar el tamaño del botón— se recoge; el control de 44×44 sigue visible
+        y el rótulo vuelve al pasar el ratón o al enfocar."""
+        from pathlib import Path
+
+        css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+        bloque = css.split(".lector-asa {", 1)[1].split("}", 1)[0]
+        assert "top: var(--space-2)" in bloque
+        assert "right: var(--space-2)" in bloque
+        assert "left: 50%" not in bloque
+        assert "color-mix(in srgb, var(--paper) 75%, transparent)" in bloque
+        rotulo = css.split(".lector-asa-texto {", 1)[1].split("}", 1)[0]
+        assert "position: absolute" in rotulo
+        assert "right: calc(100% + 6px)" in rotulo
+        assert "color-mix(in srgb, var(--paper) 75%, transparent)" in rotulo
+        assert "animation: lector-asa-rotulo 6s" in rotulo
+        assert "@keyframes lector-asa-rotulo" in css
+        assert ".lector-asa:hover .lector-asa-texto" in css
+        assert ".lector-asa:focus-visible .lector-asa-texto" in css
+        cierre = css.split("@keyframes lector-asa-rotulo {", 1)[1].split("@media", 1)[0]
+        assert "opacity: 0" in cierre and "visibility: hidden" in cierre
+        assert "animation-timing-function: step-end" in css
 
     @pytest.mark.parametrize(("guardada", "esperada"), [
         (None, "1"), (2, "2"), (99, "3"), (0, "1"), (-5, "1"),

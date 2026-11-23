@@ -190,6 +190,13 @@ USOS_DE_COLOR_MIX: dict[tuple[str, str], str] = {
     (".pagina-error h1", "text-shadow"):
         "desalineamiento de planchas (cian y magenta corridos) del rótulo de la página de error: el único "
         "sitio donde está permitido; se apaga con prefers-contrast y forced-colors",
+    (".lector-asa", "background"):
+        "velo de papel al 75 % de la lengüeta del lector: deja ver la viñeta de debajo; texto, icono y "
+        "borde van opacos y el peor caso (tinta clara sobre blanco) da 7,09:1, medido en "
+        "TestVeloDelLector; se apaga con prefers-contrast y forced-colors",
+    (".lector-asa-texto", "background"):
+        "el mismo velo de papel al 75 % para el rótulo «Controles» del lector, que solo vive 6 s; su "
+        "texto va en tinta opaca y el peor caso es el de la lengüeta",
 }
 
 
@@ -316,6 +323,12 @@ EXCLUSIONES: dict[tuple[str, str, str], str] = {
         "filete decorativo sin texto (content: '', no es contenido legible)",
     (".ajustes-acto::before", "var(--ink)", "var(--yellow)"):
         "viñeta decorativa sin texto (content: '', no es contenido legible)",
+    # El velo del lector no se resuelve porque deja ver la viñeta: el fondo real es desconocido.
+    # TestVeloDelLector mide los dos extremos posibles (negro y blanco) en los dos temas.
+    (".lector-asa", "var(--ink)", "color-mix(in srgb, var(--paper) 75%, transparent)"):
+        "velo sobre la viñeta: el peor caso se mide en TestVeloDelLector (7,09:1 en oscuro)",
+    (".lector-asa-texto", "var(--ink)", "color-mix(in srgb, var(--paper) 75%, transparent)"):
+        "velo del rótulo «Controles»: el mismo peor caso que la lengüeta",
 }
 
 
@@ -401,6 +414,45 @@ class TestParesDeLaHoja:
                              resolver("var(--yellow)", tema)) >= TEXTO, nombre
         regla = next(d for s, d in _reglas() if s.startswith('button.primary,'))
         assert regla["color"] == "var(--on-yellow)"
+
+
+class TestVeloDelLector:
+    """La lengüeta del lector flota sobre la viñeta: su fondo real es desconocido. El velo de
+    papel deja pasar el dibujo; se mide la tinta del control contra los dos extremos posibles
+    (negro y blanco) en los dos temas. La mezcla es lineal en luminancia, así que esos extremos
+    acotan cualquier dibujo que quede debajo."""
+
+    def _velo(self) -> tuple[float, str]:
+        css = _hoja()
+        m = re.search(
+            r"\.lector-asa\s*\{[^}]*color-mix\(in srgb, var\(--paper\) (\d+)%, transparent\)",
+            css)
+        assert m, "la lengüeta no lleva el velo de papel"
+        return int(m.group(1)) / 100, css
+
+    @staticmethod
+    def _sobre(paper: str, fondo: str, opacidad: float) -> str:
+        a, b = _rgb(paper), _rgb(fondo)
+        return _hex(tuple(opacidad * x + (1 - opacidad) * y
+                          for x, y in zip(a, b, strict=True)))
+
+    def test_el_velo_y_su_opacidad_son_los_declarados(self):
+        opacidad, css = self._velo()
+        assert 0.70 <= opacidad <= 0.85, f"velo del {opacidad:.0%}: fuera del rango medido"
+        velo = f"color-mix(in srgb, var(--paper) {opacidad:.0%}, transparent)"
+        assert css.count(velo) == 2, "la lengüeta y su rótulo deben llevar el mismo velo"
+        assert ".lector-asa, .lector-asa-texto { background: var(--paper); }" in css
+
+    @pytest.mark.parametrize("tema,fondo", [
+        ("claro", "#000000"), ("claro", "#ffffff"),
+        ("oscuro", "#000000"), ("oscuro", "#ffffff"),
+    ])
+    def test_la_tinta_del_control_pasa_sobre_el_peor_dibujo(self, tema, fondo):
+        opacidad, _ = self._velo()
+        t = _temas()[tema]
+        bg = self._sobre(resolver("var(--paper)", t), fondo, opacidad)
+        r = contraste(resolver("var(--ink)", t), bg)
+        assert r >= TEXTO, f"[{tema}] ink sobre velo ({bg}) sobre {fondo}: {r:.2f}:1"
 
 
 # ── 2. pares declarados a mano (tokens que aún no usa ninguna regla) ──────────────────────
@@ -692,10 +744,14 @@ class TestColorMixSoloDondeSeDeclara:
         problemas = problemas_de_color_mix(declaraciones())
         assert not problemas, "\n  ".join(problemas)
 
-    def test_los_usos_permitidos_son_los_tres_decorativos(self):
+    def test_los_usos_permitidos_son_los_declarados(self):
         assert sorted(USOS_DE_COLOR_MIX) == [
-            (".audit-item", "border-top"), (".pagina-error h1", "text-shadow"),
-            (".series-results li", "border-bottom")]
+            (".audit-item", "border-top"),
+            (".lector-asa", "background"),
+            (".lector-asa-texto", "background"),
+            (".pagina-error h1", "text-shadow"),
+            (".series-results li", "border-bottom"),
+        ]
 
     def test_los_estados_de_la_hoja_usan_su_token(self):
         """Los fondos que eran mezclas (`.suggestion`, `.aviso.ok`, `.legal-notice-info`)."""

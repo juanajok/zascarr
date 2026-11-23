@@ -7,6 +7,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Lector: la lengüeta «Controles» sale del centro de la viñeta (2026-11-23).** El rótulo
+  añadido en UATP-09 dejaba una caja de ~117×44 sobre el borde superior de la página. La
+  lengüeta pasa a la esquina superior derecha, donde cae en el margen en el caso normal (en
+  tableta vertical con la página a sangre queda el botón de 44×44 en la esquina), con un velo de
+  papel al 75 % que deja ver la viñeta y el rótulo se desvanece a los 6 s; vuelve al pasar el ratón o con el foco. El botón de 44×44 sigue
+  visible mientras la barra está oculta y la ayuda dice dónde encontrarlo.
 - **Restaurar una copia desde la interfaz (BL-OPS2, #443).** Estado ofrece «Restaurar…» para
   copias verificadas de la misma versión; la confirmación pide la contraseña actual y una
   casilla explícita, y la petición v2 firmada permite al auxiliar del host comprobar la

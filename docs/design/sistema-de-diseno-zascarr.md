@@ -84,9 +84,10 @@ Página y controles en `paper`; viñetas en `paper-2`; texto en `ink`, `ink-soft
 `ink-faint` (metadatos). Los tres textos pasan 4,5:1 sobre `paper` y `paper-2` en los dos temas.
 
 Para teñir un componente por estado usa `ok-bg`, `warn-bg`, `amber-bg` o `info-bg`. Nunca un
-`color-mix()`: la prueba de contraste solo admite los tres decorativos declarados (separadores y
-rótulo de error). Encima, el chip lleva el texto `-t` de su matiz; el aviso y el `hero-state` llevan
-`ink`.
+`color-mix()` para un estado: la prueba de contraste solo admite los tres decorativos declarados
+(separadores y rótulo de error) y el velo de la lengüeta del lector (papel al 75 %, con el peor
+caso medido y papel opaco con `prefers-contrast: more`). Encima, el chip lleva el texto `-t` de su
+matiz; el aviso y el `hero-state` llevan `ink`.
 
 La didascalia, el rótulo, el aviso legal, el toast y el paso «siguiente» usan `caption-bg` con texto
 `ink`.

@@ -4,6 +4,9 @@
 > continuar. **AC-09/T12 PASS** en Chrome 320×568, 390×844 y 568×320; evidencia en
 > [`uatp03/resultado-chrome.md`](uatp03/resultado-chrome.md). Firefox/Safari/iOS/Android físico y
 > lector de pantalla quedan **NOT RUN**.
+> **Revisión 2026-11-23 (UATP-09 P1):** la lengüeta pasa a la esquina superior derecha y su rótulo
+> «Controles» se desvanece a los 6 s; el control de 44×44 sigue visible y el rótulo vuelve al pasar el
+> ratón o con el foco. Motivo y detalle en §3.2.
 > El benchmark previo (**task-32**, 2026-11-21, solo lectura y no versionado) dictaminó NO PASA.
 >
 > **Insumos:** [#1127 · UXA-10](https://github.com/juanajok/zascarr/issues/1127) (ampliada por
@@ -93,12 +96,14 @@ la barra lo ocultaría), como hermano inmediatamente anterior a `.lector-lienzo`
 ```html
 <button type="button" class="lector-asa" id="lector-asa"
         aria-label="Mostrar los controles" aria-controls="lector-barra" hidden>
-  {{ icono("chevron_down") }}
+  {{ icono("chevron_down") }}<span class="lector-asa-texto">Controles</span>
 </button>
 ```
 
 - El icono se toma de [`web/iconos.py`](../../src/zascarr/web/iconos.py) (`chevron_down` ya existe,
   Lucide/ISC); es decorativo (`aria-hidden`) y el nombre accesible es el `aria-label`.
+- El rótulo «Controles» (UATP-09 P1) es **visual**: el nombre accesible sigue siendo el
+  `aria-label`, y el rótulo se desvanece a los 6 s (ver §3.2). No es un segundo control.
 - `aria-controls="lector-barra"` referencia el `id` real de la barra
   ([`lector.html:13`](../../src/zascarr/web/templates/lector.html:13)).
 - No lleva `aria-expanded`: el control solo existe cuando la barra está plegada; cuando se
@@ -120,17 +125,34 @@ pone `hidden = true`. No se acepta:
 - que siga visible con la barra abierta o sobre la página de fin;
 - que su ausencia se compense con un `title` (no existe en táctil).
 
-Geometría y contraste:
+Lo que sí se desvanece a los 6 s es **el rótulo**, no la caja: el control de 44×44 sigue visible
+mientras la barra esté oculta. El rótulo es una etiqueta a la izquierda del botón, fuera de su
+caja (no la ensancha), así que el icono no se mueve al recogerse. Vuelve entero al pasar el ratón o
+al enfocar, y se desvanece de nuevo al salir; con cada ocultación de la barra vuelve a mostrarse otros
+6 s. Es CSS (`@keyframes lector-asa-rotulo`) y no añade estado al JS.
 
-- caja táctil mínima **44×44 px CSS** (`min-width: 44px; min-height: 44px`), icono de ~20 px;
-- `position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 4` (debajo de la
-  barra, `z-index: 5`; encima de las flechas, `z-index: 3`);
-- fondo `var(--paper)`, tinta `var(--ink)`, borde `var(--border-panel) solid var(--ink)`, esquinas
-  inferiores redondeadas con `var(--radius-panel)`; contraste ≥ 3:1 en ambos temas; sin token,
-  color ni fuente nuevos;
+Geometría y contraste (revisión 2026-11-23):
+
+- caja táctil mínima **44×44 px CSS** (`min-width: 44px; min-height: 44px`), icono de ~20 px; el
+  rótulo es una etiqueta absoluta a su izquierda y no altera esa caja;
+- `position: absolute; top: var(--space-2); right: var(--space-2); z-index: 4` (debajo de la
+  barra, `z-index: 5`; encima de las flechas, `z-index: 3`). Con una página que no llena ambos
+  ejes cae en el margen superior o lateral y **no sobre la viñeta**; si la página llena la
+  pantalla (tableta vertical con página a sangre), no hay margen: queda el botón de 44×44 en la
+  esquina y el rótulo, que solo vive 6 s, es lo único que puede rozar el dibujo. El centro del
+  borde superior quedaba encima del dibujo y, con el rótulo, la caja medía ~117×44;
+- fondo: **velo de papel al 75 %** (`color-mix(in srgb, var(--paper) 75%, transparent)`) para que la
+  viñeta se transparente cuando el botón cae encima; tinta, icono y borde van **opacos**. En el
+  peor caso (tinta clara sobre una viñeta blanca) el texto/icono del control queda en 7,09:1, medido
+  en `TestVeloDelLector`; con `prefers-contrast: more` vuelve a papel opaco. Borde
+  `var(--border-panel) solid var(--ink)` en los cuatro lados y las cuatro esquinas con
+  `var(--radius-panel)`; el rótulo usa `--border-chip` y el mismo velo; sin token, color ni fuente
+  nuevos;
+- el rótulo se desvanece (`opacity`/`visibility`), sin animar anchura ni mover el botón; con
+  `prefers-reduced-motion: reduce` se recoge de golpe (`step-end`);
 - foco visible con el anillo existente (`outline: 3px solid var(--ink)`), también en
-  `forced-colors: active` (`CanvasText`); sin animación propia y sin transición que retrase su
-  aparición con `prefers-reduced-motion`.
+  `forced-colors: active` (`CanvasText`); sin animación propia que retrase la aparición del asa
+  (la animación es solo del rótulo y puede saltarse con el hover o el foco).
 
 ### 3.3 Activación
 
@@ -151,9 +173,10 @@ en `#lector-barra` o en el `body` de la escena, nunca en `main`.
 ### 3.4 ¿Revela todo el borde superior? Decisión
 
 **Sí, en táctil, como franja de 44 px de alto y todo el ancho, solo con la barra oculta.** El asa
-vive dentro de esa franja y es la señal visible; la franja es su ampliación táctil. Al tocar en
-ella se revela la barra **sin cambiar de página**. Fuera de la franja se mantienen las zonas
-actuales (izquierda/centro/derecha, [`lector.js:793`](../../src/zascarr/static/lector.js:793)).
+se apoya en esa franja (revisión 2026-11-23: empieza 8 px dentro) y es la señal visible; la franja
+es su ampliación táctil. Al tocar en ella se revela la barra **sin cambiar de página**. Fuera de la
+franja se mantienen las zonas actuales (izquierda/centro/derecha,
+[`lector.js:793`](../../src/zascarr/static/lector.js:793)).
 
 Motivo: el hallazgo P-1 es que el borde superior hacía pasar página cuando la persona esperaba
 controles; ocultar esa expectativa detrás de un asa de 44×44 vuelve a dejar una zona «muerta» de
@@ -182,7 +205,8 @@ En `<details class="lector-ayuda">` ([`lector.html:57`](../../src/zascarr/web/te
 después de la frase actual ([`lector.html:59`](../../src/zascarr/web/templates/lector.html:59)), se
 añade exactamente:
 
-> «Para volver a ver los controles, toca la lengüeta de arriba o el centro de la página.»
+> «Para volver a ver los controles, toca la lengüeta «Controles», arriba a la derecha, o el centro
+> de la página.»
 
 No se usan glifos de texto (⌄) ni jerga («asa», «chrome», «overlay»). La ayuda ya menciona
 <kbd>h</kbd> para teclado; no se duplica.
