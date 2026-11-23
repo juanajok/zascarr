@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "playwright test",
-    "test:ui": "playwright test --headed"
+    "test:ui": "playwright test --headed",
+    "test:agents": "node --test agents/contracts.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1"
