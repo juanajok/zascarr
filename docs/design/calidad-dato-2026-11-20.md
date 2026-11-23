@@ -19,6 +19,15 @@
 > sin cambios; **I1 corregido (0/38)**. Total estimado **147**. Ver §14. La
 > medición de referencia sigue siendo la del 2026-11-20.
 >
+> **Actualización 2026-11-23.** La Pi está en `0a58c9bd`; el censo pasa a **83
+> comprobaciones** con **B9** (identidad de la serie frente a su registro de
+> fuente actual). B9 mide 58 series no manuales: 39 con registro actual y **19
+> sin él** (10 con un registro de otro id y 9 sin ninguno); el título y los años
+> ±1 no se cuentan. De las 14 diferencias de editorial, se aplican **12** (11
+> vacías + SUPERMAN) y quedan 2 variantes de nombre sin tocar. B9 **19/58**; ver
+> §16. La medición de referencia de las demás comprobaciones sigue siendo la del
+> 2026-11-20.
+>
 > **Actualización 2026-11-22.** La Pi está en `ce26086a`; el backfill estricto
 > de H1 (PR #1215) está desplegado. **Aplicado:** 4 filas de
 > `field_provenance` (Tebeosfera) en 58 series; **1 es un campo de H1** y las
@@ -117,6 +126,7 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 | B2b | S2 | 47 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | tradición no americana con CV |
 | B7 | S2 | 55 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | título de fuente distinto |
 | B8 | S3 | 50 | 10 | 10 | 0/0/10 | — | sin medir | SIN MEDIR | evidencia de un id no vigente (explica 8 de los 9 B1b) |
+| B9 | S2 | 58 | 19 | 19 | 0/0/19 | — | 19 sin medir | SIN MEDIR (no sé) | serie con fuente sin registro actual: id no verificable (19) |
 | G1 | S2 | 258 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | pareja de series duplicadas |
 | H2 | S2 | 1 | 1 | 1 | 1/0/0 | 100 % | 1 exacto | FAIL | procedencia contradice la fila |
 | F4a | S3 | 593 | 583 | 20 | 20/0/0 | 100 % | 583 [489–583] → **0 tras L1** | FAIL → PASS | enricher guarda HTML (vivo; corregido) |
@@ -701,6 +711,36 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
   para cuando el recolector CCM traiga fichas nuevas y los valores coincidan; no
   se usa el `legado` para maquillar H1.
 
+## 16. Identidad de la serie frente a la fuente (2026-11-23)
+
+- **Qué se midió (B9, nueva):** para las 58 series no manuales, que el id vivo
+  (`comic_vine_id`, `tebeosfera_slug` o `gcd_id`) tenga un registro **actual** en
+  `entity_source_records` (mismo `source` y `external_id`) y que la editorial no
+  contradiga la edición del registro. El título puede diferir por la edición
+  (original frente a española) y **no se cuenta**; los años ±1 tampoco. Una
+  editorial vacía es completitud, no contradicción; «Image Comics» contiene
+  «Image».
+- **Cobertura:** **39** con registro actual; **19** sin él (10 con un registro de
+  otro id — B8 — y 9 sin ninguno). De las 39: 8 títulos distintos (edición o
+  puntuación), 2 años ±1, 0 totales y 14 diferencias de editorial.
+- **Las 14 editoriales, en detalle:** 11 series con editorial local **vacía**
+  (rellenadas desde la fuente), **2 variantes de nombre** (The Wicked + The
+  Divine y WildC.A.T.s: local «Image Comics», fuente «Image»; no se tocan) y **1
+  contradicción** (SUPERMAN: local DC Comics, fuente Tebeosfera-Zinco).
+- **Aplicado (12 filas):** las 11 editoriales vacías + SUPERMAN (título
+  `SUPERMAN EL HOMBRE DE ACERO` y editorial `Ediciones Zinco, S. A.`; el id
+  `superman_1987_zinco` se queda). El título se cambió por el servicio de
+  edición; las editoriales, por el mismo camino de datos con `Publisher`. Copia
+  previa: `backup_20261123_1235.sql.gz`, SHA-256
+  `cfcc26127c611fa639b75d508cccc9d040c5912623c698e396aea3d8fc4b8f14`.
+- **Después:** B9 **20 → 19/58** (las 2 variantes de Image no cuentan por
+  contención); las 19 son las que no tienen registro actual y su id **no se
+  puede afirmar** todavía. La huella del censo completo cambia por B9.
+- **Siguiente:** recolectar la ficha actual de las 19 (CCM) y volver a medir.
+
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
 L6, L1, L2, L3 y L4 están aplicados; L7/L8 revisados (I1 aplicado); H1 con
-backfill estricto (243 restantes); F1d/H2/F2a se dejan como dato.*
+backfill estricto (243 restantes); F1d/H2/F2a se dejan como dato. **B9 añadida
+el 2026-11-23** (83 comprobaciones); **12 editoriales aplicadas** (11 vacías +
+SUPERMAN) y **19 series con fuente pendientes de recolectar** para verificar su
+id.*
