@@ -25,7 +25,7 @@
 > sin él** (10 con un registro de otro id y 9 sin ninguno); el título y los años
 > ±1 no se cuentan. De las 14 diferencias de editorial, se aplican **12** (11
 > vacías + SUPERMAN) y quedan 2 variantes de nombre sin tocar. **Recolectadas 18
-> de las 19** (la 19.ª, RUNAWAYS, no existe en Tebeosfera): B9 **1/58**; ver §16. La medición de referencia de las demás comprobaciones sigue siendo la del
+> de las 19** (la 19.ª, RUNAWAYS, no existe en Tebeosfera): B9 **0/57** (slug y fuente de RUNAWAYS retirados); ver §16. La medición de referencia de las demás comprobaciones sigue siendo la del
 > 2026-11-20.
 >
 > **Actualización 2026-11-22.** La Pi está en `ce26086a`; el backfill estricto
@@ -126,12 +126,12 @@ la muestra es menor que los casos. «Exacto» = se etiquetaron todos los casos.
 | B2b | S2 | 47 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | tradición no americana con CV |
 | B7 | S2 | 55 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | título de fuente distinto |
 | B8 | S3 | 50 | 10 | 10 | 0/0/10 | — | sin medir | SIN MEDIR | evidencia de un id no vigente (explica 8 de los 9 B1b) |
-| B9 | S2 | 58 | 1 | 1 | 0/0/1 | — | 1 sin medir | SIN MEDIR (no sé) | serie con fuente sin registro actual: id no verificable (1) |
+| B9 | S2 | 57 | 0 | 0 | — | — | 0 exacto | PASS | 0 tras retirar la fuente de RUNAWAYS |
 | G1 | S2 | 258 | 2 | 2 | 0/0/2 | — | sin medir | SIN MEDIR | pareja de series duplicadas |
 | H2 | S2 | 1 | 1 | 1 | 1/0/0 | 100 % | 1 exacto | FAIL | procedencia contradice la fila |
 | F4a | S3 | 593 | 583 | 20 | 20/0/0 | 100 % | 583 [489–583] → **0 tras L1** | FAIL → PASS | enricher guarda HTML (vivo; corregido) |
 | A1b | S3 | 322 | 321 | 20 | 0/20/0 | 0 % | 0 [0–52] | LEGÍTIMO | historial append-only (ADR 0014) |
-| H1 | S3 | 245 | 244 → **243 tras backfill** | 20 | 0/0/20 | — | sin medir | SIN MEDIR (aceptado) | CCM apenas ejecutado; 243 aceptados |
+| H1 | S3 | 242 | 244 → **243 → 240** | 20 | 0/0/20 | — | sin medir | SIN MEDIR (aceptado) | CCM apenas ejecutado; 240 aceptados (3 salieron con RUNAWAYS) |
 | C4b | S3 | 4.256 | 78 | 20 | 0/0/20 | — | sin medir | SIN MEDIR | formatos de número |
 | E1 | S3 | 57 | 16 | 16 | 0/0/16 | — | sin medir | SIN MEDIR | total sin unidad acreditada |
 | D5 | S3 | 5.098 | 15 | 15 | 0/15/0 | 0 % | 0 exacto | LEGÍTIMO | contrato #307: extensión declarada |
@@ -695,7 +695,8 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
 - **Aplicado:** `python -m zascarr.cli.consolidacion --backfill --apply`;
   **4 filas** de `field_provenance` con `confianza: fuente`. De ellas, **1 es
   un campo de H1**; las otras 3 son `title`/`publisher_name`/`language`, que
-  H1 no cuenta. H1 **244 → 243**.
+  H1 no cuenta. H1 **244 → 243** → **240** tras retirar la fuente de RUNAWAYS
+  (sus 3 campos de H1 salieron con ella; ver §16).
 - **Por qué tan pocas:** los 57 `entity_source_records` del CCM no contienen el
   valor de los 244 campos de H1; el backfill estricto **no inventa** ni marca
   `legado`. Además `cover_url` y `status` no están en `CAMPOS_SERIE`. Los 243
@@ -703,9 +704,9 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
 - **Copia:** `update_20261122_112631.sql.gz`, SHA-256
   `6ddca96185ac950acc7ceb74a45b69ab4812bf07fe30033acd0bd494e7a3e355`; copia
   diaria `backup_20261122_041330.sql.gz`, SHA-256 `776f7de2…`.
-- **Después:** H1 **243/245**; censo completo 82 comprobaciones, huella
+- **Después:** H1 **243/245** → **240/242** el 2026-11-23; censo completo 82 comprobaciones, huella
   `3201507c2eb6b3d2`; ninguna otra comprobación cambió de casos.
-- **Decisión del PO (2026-11-22): aceptar los 243 como «origen no registrado».**
+- **Decisión del PO (2026-11-22): aceptar los 243 como «origen no registrado»** (240 tras retirar RUNAWAYS).
   No se fuerza la procedencia: los 57 registros del CCM no contienen esos
   valores y atribuirlos sería inventar. El backfill estricto queda disponible
   para cuando el recolector CCM traiga fichas nuevas y los valores coincidan; no
@@ -739,14 +740,19 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
 - **Recolección (2026-11-23):** el CCM se ejecutó sobre las 19 con las fuentes
   activas de Ajustes: **18 OK** (registro actual guardado; el id queda
   verificado) y **1 NO_ENCONTRADO** (RUNAWAYS, `runaways_2003_vaughan_alphona`:
-  la ficha no existe en Tebeosfera). **B9 19 → 1/58**; el 1 es RUNAWAYS, cuyo id
-  no se puede verificar y no se toca.
-- **Siguiente:** decidir qué hacer con RUNAWAYS (slug muerto) y, si se quiere,
-  completar las editoriales de las 18 fichas nuevas que sigan vacías.
+  la ficha no existe en Tebeosfera). **B9 19 → 1/58**; el 1 es RUNAWAYS.
+- **Retirada de RUNAWAYS (2026-11-23, orden del PO):** se quita el
+  `tebeosfera_slug` (muerto) y el `metadata_source` (no hay fuente que lo
+  sostenga); la serie y sus campos se conservan. **B9 1 → 0/57** y **H1 243 →
+  240/242** (los 3 campos de RUNAWAYS que contaba salen con la fuente). Copia
+  previa: `backup_20261123_1358.sql.gz`, SHA-256
+  `c6d19ad0f785be6e51949f9772c527f847e56d2ea1382e91257510b3df6b69c9`.
+- **Siguiente:** opcional, completar las editoriales de las 18 fichas nuevas que
+  sigan vacías.
 
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
 L6, L1, L2, L3 y L4 están aplicados; L7/L8 revisados (I1 aplicado); H1 con
 backfill estricto (243 restantes); F1d/H2/F2a se dejan como dato. **B9 añadida
 el 2026-11-23** (83 comprobaciones); **12 editoriales aplicadas** (11 vacías +
-SUPERMAN) y **18 de las 19 series con fuente recolectadas** (B9 **1/58**;
-RUNAWAYS sin ficha en Tebeosfera).*
+SUPERMAN) y **18 de las 19 series con fuente recolectadas**; **RUNAWAYS sin fuente** (slug
+retirado por orden del PO): **B9 0/57** y **H1 240/242**.*
