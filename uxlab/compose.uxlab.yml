@@ -56,7 +56,7 @@ services:
       - library-test:/media/library
       - ./seed.py:/uxlab/seed.py:ro
       - ./fixtures/catalog.json:/uxlab/catalog.json:ro
-    command: ["sh", "-ec", "python -m alembic upgrade head && python /uxlab/seed.py"]
+    command: ["sh", "-ec", "alembic upgrade head && python /uxlab/seed.py"]
 
   app:
     build:
