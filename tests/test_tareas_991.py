@@ -364,3 +364,9 @@ def test_uxa15_el_anuncio_de_fin_no_se_repite():
     segundo = tareas.snapshot(incluir_recientes=True, consumir_anuncio=True)["anuncio"]
     assert primero and "terminado" in primero
     assert segundo is None
+
+
+def test_uxa15_terminada_no_dice_que_sigue_trabajando():
+    _terminada()
+    html = _chip(TestClient(app))
+    assert "ZascArr está trabajando<" not in html
