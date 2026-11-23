@@ -7,7 +7,7 @@ async function openLibrary(page: Page) {
   const response = await page.goto('/ui/biblioteca?modo=gestion');
   expect(response?.status()).toBe(200);
   await expect(page.locator('#rejilla')).toBeVisible();
-  await expect(page.getByRole('link', { name: TITLE, exact: true })).toBeVisible();
+  await expect(page.locator('a.library-card').filter({ has: page.locator('.library-card-title', { hasText: TITLE }) })).toBeVisible();
 }
 
 async function openFilters(page: Page) {
@@ -100,7 +100,7 @@ test('UX-05: busca por autor y por personaje usando sugerencias', async ({ page 
 test('UX-06: favorita persiste tras recargar y permite deshacer', async ({ page }) => {
   await openLibrary(page);
   const favorite = page.locator('.library-card-wrap')
-    .filter({ has: page.getByRole('link', { name: TITLE, exact: true }) })
+    .filter({ has: page.locator('a.library-card').filter({ has: page.locator('.library-card-title', { hasText: TITLE }) }) })
     .locator('button.favorito-btn');
   await expect(favorite).toHaveAttribute('aria-pressed', 'false');
   await favorite.click();
