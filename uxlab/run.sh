@@ -30,5 +30,6 @@ trap cleanup EXIT
 # Volúmenes de uso EXCLUSIVO UXLab. Nunca emplear con el proyecto de producción.
 dc down --volumes --remove-orphans
 dc up -d --build app
-dc run --build --rm tests
+# La app y sus dependencias ya están arriba; no volver a ejecutar seed.
+dc run --build --rm --no-deps tests
 echo "Resultados Playwright: $RESULTS/"

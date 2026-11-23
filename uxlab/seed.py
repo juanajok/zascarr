@@ -18,6 +18,7 @@ from zascarr.models import (
     ReadingStatus, Series, Tag, issue_characters, series_genres,
     series_tags,
 )
+from zascarr.services.etiquetas import NAMESPACE, normalize_tag
 
 CATALOG = Path("/uxlab/catalog.json")
 LIBRARY = Path("/media/library")
@@ -41,6 +42,22 @@ def write_cbz(path, ix):
         for page in range(1, 7):
             archive.writestr(f"{page:03d}.png", png(color))
 
+async def _tag(session, name):
+    """Reutiliza el tag del pool inicial (migración 0039) si ya existe."""
+    normalizado = normalize_tag(name)
+    existente = await session.scalar(
+        select(Tag).where(
+            Tag.namespace == NAMESPACE, Tag.name_norm == normalizado
+        )
+    )
+    if existente is not None:
+        return existente
+    tag = Tag(name=name, namespace=NAMESPACE)
+    session.add(tag)
+    await session.flush()
+    return tag
+
+
 async def main():
     # Cerrojazo: las semillas exigen base local llamada exactamente zascarr
     # y nombre de host postgres (no URLs externas ni servidores ajenos).
@@ -61,10 +78,10 @@ async def main():
         for ix, item in enumerate(catalog["series"]):
             pub = Publisher(name=PREFIX + item["publisher"] + "-" + item["key"])
             genre = Genre(name=PREFIX + item["genre"] + "-" + item["key"])
-            tag = Tag(name=item["tag"], namespace="etiqueta")
+            tag = await _tag(session, item["tag"])
             author = Creator(name=item["creator"])
             character = Character(name=item["character"])
-            session.add_all([pub, genre, tag, author, character])
+            session.add_all([pub, genre, author, character])
             await session.flush()
             serie = Series(
                 title=PREFIX + item["title"],
