@@ -572,6 +572,15 @@ button.primary,
   font-style: italic;
 }
 
+/* UXA-13a: causa clasificada de un deseo (sin configurar / en espera / ha fallado / sin resultados) y qué hacer. */
+.wishlist-causa { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
+/* UXA-13a: confirmación inline antes de enviar un candidato (sin diálogo nativo). */
+.candidato-confirmar { flex: 1 1 100%; }
+.candidato-confirmar > summary { cursor: pointer; display: inline-block; min-height: 44px; }
+.candidato-aviso { margin: var(--space-1) 0 0; padding: var(--space-2); border: var(--border-chip) solid var(--ink); border-radius: var(--radius-panel); }
+.candidato-aviso p { margin: 0 0 var(--space-1); }
+.btn-confirmar-candidato { min-height: 44px; }
+
 /* Convención estándar de htmx: oculto hasta que la petición está en
    vuelo (htmx añade/quita .htmx-request ella sola, sin JS propio). U11: `visibility` lo saca
    también del árbol de accesibilidad. htmx 4 ya lo hace con su hoja adoptada
