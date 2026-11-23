@@ -35,6 +35,6 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 # El script necesita escribir el repo, datos, copias y cerrojo; no se amplía a más.
 # `-` en el cerrojo (H-7): un host sin OPS1 puede no tenerlo y el sandbox no debe
 # impedir el arranque de la unidad.
-ReadWritePaths=/opt/zascarr /var/lib/zascarr /var/backups/zascarr -/run/zascarr-ops.lock
+ReadWritePaths=/opt/zascarr /var/lib/zascarr /var/backups/zascarr /usr/local/lib/zascarr /etc/systemd/system /etc/tmpfiles.d -/run/zascarr-ops.lock
 CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID CAP_NET_BIND_SERVICE
 # Sin [Install]: no arranca al boot ni se activa solo.

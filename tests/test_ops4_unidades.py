@@ -30,6 +30,8 @@ def test_unidad_de_actualizacion_tiene_accion_fija_y_limites() -> None:
     assert servicio["SendSIGKILL"] == "yes"
     assert servicio["Restart"] == "no"
     assert "/opt/zascarr" in servicio["ReadWritePaths"]
+    assert "/usr/local/lib/zascarr" in servicio["ReadWritePaths"]
+    assert "/etc/systemd/system" in servicio["ReadWritePaths"]
     assert servicio["WorkingDirectory"] == "@REPO@"
     assert "AF_INET" in servicio["RestrictAddressFamilies"]
     assert "Install" not in config
