@@ -212,7 +212,9 @@ class TestT8VolverAntesDelAlta:
         assert (await get(V, clave=CLAVE, series_id=str(sid))).status_code == 200
         sin_fuentes()
 
-    async def test_t8d_la_consulta_se_precarga_pero_no_se_ejecuta(self, ent):
+    async def test_t8d_la_consulta_se_precarga_pero_no_se_ejecuta(self, ent, monkeypatch):
+        monkeypatch.setattr(asistente_carpetas, "get_settings", lambda: SimpleNamespace(
+            secret_key=SECRETO, anilist_enabled=True))   # el campo de búsqueda externa exige una fuente
         await archivos(ent, UNO)
         r = await get(A, clave=CLAVE, consulta="Zzzz Mortadelo")
         assert r.status_code == 200

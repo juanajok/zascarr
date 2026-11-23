@@ -114,7 +114,7 @@ class TestSeleccionLocal:
     async def test_t1_una_serie_local_sin_identificadores_se_encuentra_y_se_elige_sin_alta(self, ent):
         await archivos(ent, UNO, DOS)
         sid = await serie_de_prueba(ent)                                          # sin comic_vine_id / anilist_id / slug
-        assert "¿Ya la tienes en tu biblioteca?" in visible((await get(A, clave=CLAVE)).text)
+        assert "Buscar en mi biblioteca" in visible((await get(A, clave=CLAVE)).text)
         antes, disco = await instantanea(ent.banco), huella_disco(ent.lib)
         r = await get(f"{A}/locales", clave=CLAVE, q="flash")
         assert r.status_code == 200

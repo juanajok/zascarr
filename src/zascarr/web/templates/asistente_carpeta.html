@@ -16,8 +16,17 @@
   <p class="caption">Abrir este asistente no consulta ninguna fuente: solo se busca cuando tú lo pides.</p>
 </section>
 
+{#- UXA-11 (#1128): una sola acción principal. Sin fuentes encendidas, o sin título que proponer, es «Buscar en mi
+    biblioteca»; si no, «Buscar en las fuentes». La otra sigue disponible, sin botón amarillo. -#}
+{% macro buscar_en_fuentes() -%}
 <section class="card" aria-labelledby="asistente-buscar">
   <h2 id="asistente-buscar" class="titulo-frase">Buscar en las fuentes</h2>
+  {% if n_fuentes == 0 %}
+  <p class="caption" id="estado-fuentes">Ahora mismo no hay ninguna fuente encendida, así que buscar aquí no daría resultados.
+    <a href="/ui/ajustes">Encenderlas en Ajustes</a>.</p>
+  {% else %}
+  <p class="caption" id="estado-fuentes">{{ n_fuentes }} {{ "fuente encendida" if n_fuentes == 1 else "fuentes encendidas" }}.
+    <a href="/ui/ajustes">Cambiarlas en Ajustes</a>.</p>
   <form class="asistente-form" hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/buscar') }}"
         hx-target="#asistente-resultados" hx-swap="innerHTML"
         hx-indicator="#buscando-fuentes" hx-disable="find button">
@@ -34,24 +43,41 @@
     {% else %}
     <p class="caption">No hemos podido proponer una búsqueda: escribe el título.</p>
     {% endif %}
-    <button type="submit" class="primary">Buscar en las fuentes</button>
+    <button type="submit"{% if not local_primero %} class="primary"{% endif %}>Buscar en las fuentes</button>
     <p id="buscando-fuentes" class="caption htmx-indicator" role="status">Buscando en las fuentes…</p>
   </form>
   <div id="asistente-resultados" class="series-results" aria-live="polite"></div>
+  {% endif %}
 </section>
+{%- endmacro %}
 
-<details class="card asistente-local">
-  <summary class="titulo-frase">¿Ya la tienes en tu biblioteca?</summary>
+{% macro buscar_en_mi_biblioteca() -%}
+<section class="card asistente-local" aria-labelledby="asistente-local-titulo">
+  <h2 id="asistente-local-titulo" class="titulo-frase">{% if local_primero %}Elegir una serie de tu biblioteca{% else %}¿Ya la tienes en tu biblioteca?{% endif %}</h2>
   <p>Busca entre tus series. No consulta fuentes ni crea nada.</p>
   <form class="asistente-form" hx-get="{{ con_contexto('/ui/pendientes/carpetas/asistente/locales') }}" hx-target="#asistente-locales" hx-swap="innerHTML">
     <input type="hidden" name="clave" value="{{ g.clave }}">
     {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <label for="asistente-local-q">Título de tu serie</label>
     <input id="asistente-local-q" type="search" name="q" maxlength="200" autocomplete="off" placeholder="Parte del título…">
-    <button type="submit">Buscar en mi biblioteca</button>
+    <button type="submit"{% if local_primero %} class="primary"{% endif %}>Buscar en mi biblioteca</button>
   </form>
   <div id="asistente-locales" class="series-results" aria-live="polite"></div>
+</section>
+{%- endmacro %}
+
+<details class="carpeta-explicacion">
+  <summary>¿Qué es una serie?</summary>
+  <p>Una <strong>serie</strong> es el conjunto de números de una misma publicación, por ejemplo «Flash». Una <strong>carpeta</strong> es el grupo de archivos que ZascArr cree que pertenecen a la misma serie. Elegir la serie dice a cuál se vinculan; el archivo no se mueve.</p>
 </details>
+
+{% if local_primero %}
+{{ buscar_en_mi_biblioteca() }}
+{{ buscar_en_fuentes() }}
+{% else %}
+{{ buscar_en_fuentes() }}
+{{ buscar_en_mi_biblioteca() }}
+{% endif %}
 
 <section class="card" aria-labelledby="asistente-manual-titulo">
   <h2 id="asistente-manual-titulo" class="titulo-frase">¿No aparece? Crear la serie a mano</h2>

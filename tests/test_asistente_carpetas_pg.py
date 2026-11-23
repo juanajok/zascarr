@@ -111,7 +111,10 @@ async def estado_de_la_base(banco) -> dict:
 
 class TestCriterio1Apertura:
 
-    async def test_la_busqueda_en_fuentes_es_la_accion_principal_y_avisa_de_la_espera(self, entorno):
+    async def test_la_busqueda_en_fuentes_es_la_accion_principal_y_avisa_de_la_espera(
+            self, entorno, monkeypatch):
+        monkeypatch.setattr(asistente_carpetas, "get_settings", lambda: SimpleNamespace(
+            secret_key=SECRETO, anilist_enabled=True))                     # hay una fuente encendida
         await sembrar_flash(entorno.banco, 3)
         t = (await abrir()).text
         assert t.index('id="asistente-buscar"') < t.index('asistente-local')
@@ -122,8 +125,9 @@ class TestCriterio1Apertura:
         buscar_local = t.index("Buscar en mi biblioteca")
         assert buscar_local > t.index('id="asistente-buscar"')   # la búsqueda local queda después
 
-
-    async def test_conserva_la_clave_enseña_el_numero_de_archivos_y_propone_una_consulta_editable(self, entorno):
+    async def test_conserva_la_clave_enseña_el_numero_de_archivos_y_propone_una_consulta_editable(self, entorno, monkeypatch):
+        monkeypatch.setattr(asistente_carpetas, "get_settings", lambda: SimpleNamespace(
+            secret_key=SECRETO, anilist_enabled=True))      # el campo de búsqueda externa exige una fuente
         await sembrar_flash(entorno.banco, 3)
         r = await abrir()
         t = r.text
@@ -148,7 +152,9 @@ class TestCriterio1Apertura:
         assert entorno.fuentes.llamadas == [] and reales == []
         assert await estado_de_la_base(entorno.banco) == antes
 
-    async def test_sin_nada_que_proponer_el_campo_va_vacio_y_se_dice(self, entorno):
+    async def test_sin_nada_que_proponer_el_campo_va_vacio_y_se_dice(self, entorno, monkeypatch):
+        monkeypatch.setattr(asistente_carpetas, "get_settings", lambda: SimpleNamespace(
+            secret_key=SECRETO, anilist_enabled=True))      # el campo de búsqueda externa exige una fuente
         await entorno.banco.sembrar(archivo("Comics/_Omnibus/001.cbz"))
         r = await abrir("Comics/_Omnibus")
         campo = re.search(r'<input[^>]*name="consulta"[^>]*>', r.text).group(0)
@@ -519,3 +525,37 @@ class TestTerminologiaPendientes:
         t = visible((await abrir("Comics/NoExiste")).text)
         assert "ya no tiene pendientes" in t
         assert "registros pendientes" not in t
+
+
+# ── UXA-11 (#1128): sin fuentes o sin propuesta, la acción principal es la serie local ──────────
+
+
+class TestUxa11AccionPrincipalContextual:
+
+    async def test_sin_fuentes_encendidas_lo_principal_es_elegir_una_serie_de_la_biblioteca(
+            self, entorno):
+        await sembrar_flash(entorno.banco, 3)      # el entorno deja todas las fuentes apagadas
+        t = (await abrir()).text
+        assert t.index("Elegir una serie de tu biblioteca") < t.index('id="asistente-buscar"')
+        assert 'class="primary">Buscar en mi biblioteca' in t
+        assert 'class="primary">Buscar en las fuentes' not in t
+        assert t.count('class="primary"') == 1                       # un solo botón principal
+        assert "ninguna fuente encendida" in visible(t) and 'href="/ui/ajustes"' in t
+        assert 'hx-indicator="#buscando-fuentes"' not in t           # no hay formulario que no daría nada
+        assert "Abrir el formulario a mano" in t                     # la alternativa manual sigue
+
+    async def test_con_fuentes_encendidas_se_ve_cuantas_y_lo_principal_son_las_fuentes(
+            self, entorno, monkeypatch):
+        monkeypatch.setattr(asistente_carpetas, "get_settings", lambda: SimpleNamespace(
+            secret_key=SECRETO, anilist_enabled=True, gcd_enabled=True))
+        await sembrar_flash(entorno.banco, 3)
+        t = (await abrir()).text
+        assert "2 fuentes encendidas" in visible(t) and 'href="/ui/ajustes"' in t
+        assert 'class="primary">Buscar en las fuentes' in t
+        assert 'class="primary">Buscar en mi biblioteca' not in t
+        assert t.count('class="primary"') == 1
+
+    async def test_explica_serie_y_carpeta_en_una_frase_breve(self, entorno):
+        await sembrar_flash(entorno.banco, 3)
+        v = visible((await abrir()).text)
+        assert "¿Qué es una serie?" in v and "el archivo no se mueve" in v

@@ -230,3 +230,11 @@ class TestPrivacidadDelRegistroDeAcceso:
         assert "CENTINELA-PRIV-9Q" not in registro.getMessage()
         assert "/ui/pendientes/carpetas" in registro.getMessage()
         assert registro.getMessage().endswith(MARCA_DE_QUERY_OMITIDA + ' HTTP/1.1" 200')
+
+
+def test_uxa11_el_contador_de_sueltos_enlaza_a_su_vista_especifica():
+    """UXA-11 (#1128): «N sueltos» lleva a `/ui/pendientes/sueltos`, no a la cola general."""
+    from pathlib import Path
+    plantilla = Path("src/zascarr/web/templates/carpetas.html").read_text(encoding="utf-8")
+    assert '<a href="/ui/pendientes/sueltos">{{ r.totales.sin_serie_sueltos' in plantilla
+    assert '<a href="/ui/pendientes">{{ r.totales.sin_serie_sueltos' not in plantilla
