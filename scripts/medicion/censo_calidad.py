@@ -1528,6 +1528,72 @@ CHECKS.extend([
 ])
 
 
+# ── B9. Identidad de la serie frente a la fuente ────────────────────────────
+
+CHECKS.extend([
+    Check(
+        "B9", "Serie con fuente sin identidad verificable o edición contradictoria", "S2",
+        poblacion="""
+        SELECT count(*)
+        FROM series s
+        WHERE s.metadata_source IS NOT NULL AND s.metadata_source <> 'manual'
+        """,
+        casos="""
+        WITH actuales AS (
+            SELECT s.id, s.metadata_source,
+                   CASE s.metadata_source
+                       WHEN 'comic_vine' THEN s.comic_vine_id::text
+                       WHEN 'tebeosfera' THEN s.tebeosfera_slug
+                       WHEN 'gcd' THEN s.gcd_id::text
+                   END AS id_actual,
+                   p.name AS editorial
+            FROM series s
+            LEFT JOIN publishers p ON p.id = s.publisher_id
+            WHERE s.metadata_source IS NOT NULL AND s.metadata_source <> 'manual'
+        )
+        SELECT a.id::text AS caso_id,
+               jsonb_build_object(
+                   'subtipo', 'sin_registro_actual',
+                   'fuente', a.metadata_source,
+                   'id_actual', a.id_actual,
+                   'registro_de_otro_id', EXISTS (
+                       SELECT 1 FROM entity_source_records e2
+                       WHERE e2.entity_type = 'series' AND e2.entity_id = a.id
+                         AND e2.source = a.metadata_source
+                         AND e2.external_id <> a.id_actual)
+               ) AS detalle
+        FROM actuales a
+        WHERE NOT EXISTS (
+            SELECT 1 FROM entity_source_records e
+            WHERE e.entity_type = 'series' AND e.entity_id = a.id
+              AND e.source = a.metadata_source AND e.external_id = a.id_actual)
+        UNION ALL
+        SELECT a.id::text,
+               jsonb_build_object(
+                   'subtipo', 'edicion_contradictoria',
+                   'editorial_local', a.editorial,
+                   'editorial_fuente',
+                   e.payload->'normalizado'->'edition_scope'->>'publisher_name') AS detalle
+        FROM actuales a
+        JOIN entity_source_records e
+          ON e.entity_type = 'series' AND e.entity_id = a.id
+         AND e.source = a.metadata_source AND e.external_id = a.id_actual
+        WHERE a.editorial IS NOT NULL
+          AND e.payload->'normalizado'->'edition_scope'->>'publisher_name' IS NOT NULL
+          AND lower(btrim(a.editorial)) NOT LIKE '%' || lower(btrim(
+              e.payload->'normalizado'->'edition_scope'->>'publisher_name')) || '%'
+          AND lower(btrim(
+              e.payload->'normalizado'->'edition_scope'->>'publisher_name'))
+              NOT LIKE '%' || lower(btrim(a.editorial)) || '%'
+        """,
+        nota="El título puede diferir por la edición (original frente a edición española) y no se "
+             "cuenta; los años ±1 tampoco. Se mide que el id vivo tenga registro de la fuente actual "
+             "(identidad verificable) y que la editorial no contradiga la edición del id; una editorial "
+             "vacía es completitud, no contradicción, y «Image Comics» contiene «Image».",
+    ),
+])
+
+
 # ── E. Totales, completitud y huecos ──────────────────────────────────────────
 
 #: Estados de un deseo que todavía puede disparar una búsqueda o una descarga.
@@ -2333,6 +2399,7 @@ _HIPOTESIS = {
     "B6c": "no sé",         # altas y asociaciones tienen otros caminos
     "B7": "no sé",          # variantes de título
     "B8": "no sé",          # evidencia histórica, no defecto
+    "B9": "no sé",          # el id puede ser correcto aunque no conste el registro
     "C1": "no sé",          # proxy del parser, no el parser
     "C2a": "defecto",
     "C2b": "defecto",
