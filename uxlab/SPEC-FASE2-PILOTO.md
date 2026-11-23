@@ -84,7 +84,10 @@ pruebas de accesibilidad con personas reales**.
 - No compartir secretos, carpetas de producción, discos del usuario ni
   configuraciones de servicios externos.
 - El modelo ve objetivo, perfil, captura, **árbol de accesibilidad y URL
-  relativa**; no HTML, JavaScript, CSS, IDs ni oráculos.
+  saneada**; no HTML, JavaScript, CSS, IDs ni oráculos. La URL observada
+  conserva solo la categoría de pantalla (p. ej. `/ui/biblioteca`,
+  `/ui/series/:serie`, `/ui/leer/:archivo`), sin UUIDs, query string ni
+  fragmentos. La URL real permanece exclusiva de Playwright y los oráculos.
 
 ## 5. Contrato de acciones permitido
 
