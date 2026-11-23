@@ -20,7 +20,6 @@ from zascarr.services.asociar_fuente import (
     SerieSinIdentidadError,
     comparar,
     normalizar_consulta,
-    tiene_identidad,
 )
 from zascarr.services.retirar_asociacion import (
     ResultadoRetirarAsociacion,
@@ -95,7 +94,7 @@ def _opciones() -> list[dict]:
 def _contexto(serie: Series, **extra) -> dict:
     return {"serie": serie, "opciones": _opciones(),
             "hay_disponibles": any(o["disponible"] for o in _opciones()),
-            "puede_asociar": tiene_identidad(serie), **extra}
+            "puede_asociar": True, **extra}
 
 
 @router.get("/asociar", response_class=HTMLResponse)
@@ -111,10 +110,6 @@ async def buscar(series_id: UUID, request: Request,
                  fuente: str = Form(default=""), q: str = Form(default="", max_length=MAX_CONSULTA),
                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     serie = await _serie(db, series_id)
-    if not tiene_identidad(serie):
-        return _sin_cache(templates.TemplateResponse(
-            request, "asociar_fuente.html",
-            {**_contexto(serie), "q": serie.title, "error_fuente": None}, status_code=409))
     if not fuente:
         # Sin fuente no se consulta ninguna: estado claro en la misma pantalla (no 422 crudo).
         return _sin_cache(templates.TemplateResponse(
@@ -129,7 +124,8 @@ async def buscar(series_id: UUID, request: Request,
         raise HTTPException(status_code=400, detail="Fuente no disponible")
     consulta = normalizar_consulta(q) or normalizar_consulta(serie.title)
     try:
-        comparacion: Comparacion = await comparar(db, series_id, elegida, consulta)
+        comparacion: Comparacion = await comparar(
+            db, series_id, elegida, consulta, permitir_sin_identidad=True)
     except SerieNoEncontradaError:
         raise HTTPException(status_code=404, detail="Serie no encontrada") from None
     except SerieSinIdentidadError:
@@ -160,7 +156,7 @@ async def previsualizar(series_id: UUID, request: Request,
     return _sin_cache(templates.TemplateResponse(
         request, "asociar_fuente_previsualizar.html",
         {**_contexto(serie), "firmada": firmada, "nombre_fuente": nombre,
-         "token": token, "puede_asociar": tiene_identidad(serie), "error": error},
+         "token": token, "puede_asociar": True, "error": error},
         status_code=400 if error else 200))
 
 

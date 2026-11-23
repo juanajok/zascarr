@@ -24,7 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from zascarr.config import get_settings
-from zascarr.models import MetadataSource, Series
+from zascarr.models import Issue, MetadataSource, Series
+from zascarr.services.asociacion_automatica import puntuar
 from zascarr.services.discovery import DiscoveryService
 from zascarr.services.estados_fuentes import (
     CAPACIDAD_BUSQUEDA,
@@ -56,6 +57,8 @@ class CandidataComparada:
     motivo_no_seleccionable: str | None = None
     fuente: str | None = None
     token: str | None = None
+    puntuacion: float = 0.0
+    motivos: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -69,6 +72,7 @@ class Comparacion:
     fuente: MetadataSource
     consulta: str
     estado: EstadoFuente
+    primera_fuente: bool = False
     avisos: list[str] = field(default_factory=list)
     candidatas: list[CandidataComparada] = field(default_factory=list)
 
@@ -157,15 +161,21 @@ def huella_de_asociacion(serie: Series, candidata: CandidataComparada) -> str:
 
 
 async def comparar(db: AsyncSession, series_id: UUID, fuente: MetadataSource,
-                   q: str | None = None) -> Comparacion:
+                   q: str | None = None, *,
+                   permitir_sin_identidad: bool = False) -> Comparacion:
     """Lee la serie, consulta UNA fuente y devuelve la comparación; cero escrituras."""
     serie = (await db.execute(
-        select(Series).options(selectinload(Series.publisher)).where(Series.id == series_id)
+        select(Series).options(
+            selectinload(Series.publisher),
+            selectinload(Series.issues).selectinload(Issue.files),
+        ).where(Series.id == series_id)
     )).scalar_one_or_none()
     if serie is None:
         raise SerieNoEncontradaError(str(series_id))
-    if not tiene_identidad(serie):
-        # D-A (2026-11-09): sin identidad no se consulta ni se ofrece asociar.
+    primera_fuente = not tiene_identidad(serie)
+    if primera_fuente and not permitir_sin_identidad:
+        # D-A (2026-11-09): sin identidad no se consulta salvo que sea el alta
+        # explícita de la primera fuente (2026-11-23).
         raise SerieSinIdentidadError(str(series_id))
     consulta = normalizar_consulta(q) or normalizar_consulta(serie.title)
     if not consulta:
@@ -187,6 +197,16 @@ async def comparar(db: AsyncSession, series_id: UUID, fuente: MetadataSource,
             motivo = "Es una ficha de saga (obra), no de colección."
         elif normal is None:
             motivo = "La ficha no tiene datos válidos para proponerla."
+        puntuacion = puntuar(
+            titulo_local=serie.title, anio_local=serie.start_year,
+            numeros_local=len(serie.issues) if getattr(serie, "issues", None) is not None else None,
+            editorial_local=(serie.publisher.name if getattr(serie, "publisher", None) else None),
+            titulo_fuente=r.title, anio_fuente=r.start_year,
+            numeros_fuente=getattr(r, "count_of_issues", None),
+            editorial_fuente=r.editorial,
+            archivos=[f.file_name for i in (getattr(serie, "issues", None) or [])
+                      for f in (getattr(i, "files", None) or [])][:40],
+        )
         candidata = CandidataComparada(
             titulo=normal["titulo"] if normal is not None else r.title,
             anio=normal["anio"] if normal is not None else r.start_year,
@@ -196,6 +216,7 @@ async def comparar(db: AsyncSession, series_id: UUID, fuente: MetadataSource,
             tradicion=(r.tradition_guess.value if r.tradition_guess is not None else None),
             kind=r.kind, seleccionable=seleccionable,
             motivo_no_seleccionable=motivo, fuente=fuente.value,
+            puntuacion=puntuacion.total, motivos=tuple(puntuacion.motivos),
         )
         if seleccionable and normal is not None and secreto:
             huella = huella_de_asociacion(serie, candidata)
