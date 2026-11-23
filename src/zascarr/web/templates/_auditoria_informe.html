@@ -48,7 +48,7 @@
   <h2 class="titulo-frase">El mismo tebeo, dos veces <span class="audit-count">{{ informe.mismo_contenido|length }}</span></h2>
   <p class="audit-why">Archivos idénticos en sitios distintos. <strong>Esto es solo la detección:
     no se ha movido ni borrado nada.</strong> Liberar {{ informe.bytes_recuperables | tamano }}
-    exige una acción aparte; abajo puedes revisarla antes de confirmar.</p>
+    exige una acción aparte; más adelante puedes revisarla antes de confirmar.</p>
   {% for d in informe.mismo_contenido %}
   <div class="audit-item">
     {% for r in d.rutas %}<div class="audit-path">{{ r | ruta_visible }}</div>{% endfor %}

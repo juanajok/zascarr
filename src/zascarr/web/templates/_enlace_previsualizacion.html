@@ -37,7 +37,7 @@
       <p><span class="duplicado-etiqueta">Disco</span>
         No se libera espacio hasta vaciar la cuarentena.</p>
       <p><span class="duplicado-etiqueta">Deshacer</span>
-        Sí, desde «Copias apartadas» mientras siga ahí.</p>
+        Se puede deshacer desde «Copias apartadas» mientras siga ahí.</p>
     </div>
     <p class="audit-detail">{{ item.catalogo_cambio }}</p>
     <input type="hidden" name="token" value="{{ item.token }}">
@@ -48,7 +48,7 @@
     pueden mostrarlas por separado; una copia de seguridad que no conserve enlaces duros volverá a
     ocupar el doble; cambiar el contenido de una cambia la otra.</p>
   <button type="submit" class="btn primary">Confirmar y unir</button>
-  <a class="btn ghost" href="/ui/auditoria">Cancelar</a>
+  <a class="btn ghost" href="/ui/auditoria">Volver sin unir</a>
 </form>
 {% else %}
 <p class="audit-why" role="alert">No queda ningún grupo válido para unir.</p>

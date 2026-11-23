@@ -36,7 +36,7 @@
       <p><span class="duplicado-etiqueta">Disco</span>
         Se liberan <strong>{{ item.bytes | tamano }}</strong>.</p>
       <p><span class="duplicado-etiqueta">Deshacer</span>
-        Sí, mientras la copia siga en la cuarentena.</p>
+        Se puede deshacer mientras la copia siga en la cuarentena.</p>
     </div>
     <p class="audit-detail">{{ item.catalogo_cambio }}</p>
     <input type="hidden" name="token" value="{{ item.token }}">
@@ -46,7 +46,7 @@
   <p class="audit-why"><strong>No se borra nada.</strong> Podrás deshacer el apartado desde
     «Copias apartadas» mientras siga en la cuarentena.</p>
   <button type="submit" class="btn primary">Confirmar y apartar</button>
-  <a class="btn ghost" href="/ui/auditoria">Cancelar</a>
+  <a class="btn ghost" href="/ui/auditoria">Volver sin apartar</a>
 </form>
 {% else %}
 <p class="audit-why" role="alert">No queda ningún grupo válido para apartar.</p>

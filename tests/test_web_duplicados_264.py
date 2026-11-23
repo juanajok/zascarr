@@ -154,7 +154,7 @@ def test_previsualizar_sin_escribir_y_confirmar_por_grupo(tmp_path, monkeypatch)
     assert "Destino" in r.text
     assert "Deshacer" in r.text
     assert "Se liberan" in r.text
-    assert "Cancelar" in r.text
+    assert "Volver sin apartar" in r.text
     m = re.search(r'name="token" value="([^"]+)"', r.text)
     assert m
     gjson = html.unescape(re.search(r'name="grupos" value="([^"]+)"', r.text).group(1))
