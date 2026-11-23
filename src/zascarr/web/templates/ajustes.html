@@ -1,8 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Ajustes — ZascArr{% endblock %}
 {% block content %}
+{% macro nota_probar() -%}
+<p class="ajustes-hint ajustes-alcance">«Guardar» aplica solo los cambios de esta tarjeta. «Probar conexión» usa lo que ves ahora en el formulario, aunque aún no lo hayas guardado; no guarda nada.</p>
+{%- endmacro %}
 <h1>Ajustes</h1>
 <p class="subtitle">Conecta ZascArr con las webs de datos y tus programas de descarga. Cada cambio se aplica al guardar.</p>
+
+{#- UXA-14 (#1131): índice de secciones. Los `id` de las tarjetas son DESTINOS ESTABLES: otras pantallas enlazan a
+    `/ui/ajustes#<id>` (Deseados, Inicio, el asistente); una prueba comprueba que cada uno existe. -#}
+<div class="ajustes-indice" role="group" aria-label="Secciones de Ajustes">
+  <p class="ajustes-indice-titulo">Ir a una sección</p>
+  <ul>
+    <li><a href="#ajustes-fuentes">Fuentes de datos</a>: <a href="#ajustes-metadatos">metadatos</a>, <a href="#ajustes-comic-vine">Comic Vine</a>, <a href="#ajustes-metron">Metron</a></li>
+    <li><a href="#ajustes-descargas">Descargas</a>: <a href="#ajustes-prowlarr">Prowlarr</a>, <a href="#ajustes-transmission">Transmission</a>, <a href="#ajustes-amule">aMule</a>, <a href="#ajustes-foro">foro</a>, <a href="#blog-rss">blog/RSS</a>, <a href="#calidad-ediciones">calidad</a></li>
+    <li><a href="#ajustes-propio">Tu ZascArr</a>: <a href="#actualizar-biblioteca">actualizar la biblioteca</a>, <a href="#discos-biblioteca">discos</a>, <a href="#nombres-archivo">nombres</a>, <a href="#importacion">importación</a>, <a href="#ajustes-avisos">avisos</a></li>
+  </ul>
+</div>
 
 {#- Tres grupos: fuentes de datos, descargas y lo propio de ZascArr. El pie de cada tarjeta no cambia:
     todo técnico va plegado en <details> para no tapar la tarea (presupuesto de texto, CLAUDE.md §6). -#}
@@ -10,7 +24,7 @@
   <h2 class="ajustes-acto" id="ajustes-fuentes">Fuentes de datos</h2>
 
 
-    <fieldset class="ajustes-card ajustes-card--ancha">
+    <fieldset class="ajustes-card ajustes-card--ancha" id="ajustes-metadatos">
       <legend>Fuentes de metadatos</legend>
       <p class="ajustes-desc">Webs de las que saca portadas, números y datos de tus series. Si enciendes una, se le envían tus títulos.</p>
       <form hx-post="/ui/ajustes/guardar/fuentes" hx-target="#resultado-fuentes" hx-swap="innerHTML">
@@ -91,7 +105,7 @@
       </details>
     </fieldset>
 
-    <fieldset class="ajustes-card ajustes-card--estrecha">
+    <fieldset class="ajustes-card ajustes-card--estrecha" id="ajustes-comic-vine">
       <legend>Comic Vine</legend>
       <p class="ajustes-desc">Datos de grapa americana y británica. Necesita una clave gratuita de Comic Vine.</p>
       <form hx-post="/ui/ajustes/guardar/comic-vine" hx-target="#resultado-comic-vine" hx-swap="innerHTML">
@@ -106,6 +120,7 @@
           <button type="button" hx-post="/ui/ajustes/probar/comic-vine" hx-include="closest form"
                   hx-target="#prueba-comic-vine" hx-swap="innerHTML">Probar conexión</button>
         </div>
+        {{ nota_probar() }}
       </form>
       <div id="resultado-comic-vine" aria-live="polite"></div>
       <div id="prueba-comic-vine" aria-live="polite"></div>
@@ -116,7 +131,7 @@
     </fieldset>
 
 
-    <fieldset class="ajustes-card ajustes-card--estrecha">
+    <fieldset class="ajustes-card ajustes-card--estrecha" id="ajustes-metron">
       <legend>Metron</legend>
       <p class="ajustes-desc">Cómic en inglés e italiano. Necesita un token propio de tu cuenta de Metron; sin él no se consulta.</p>
       <form hx-post="/ui/ajustes/guardar/metron" hx-target="#resultado-metron" hx-swap="innerHTML">
@@ -130,6 +145,7 @@
           <button type="button" hx-post="/ui/ajustes/probar/metron" hx-include="closest form"
                   hx-target="#prueba-metron" hx-swap="innerHTML">Probar conexión</button>
         </div>
+        {{ nota_probar() }}
       </form>
       <div id="resultado-metron" aria-live="polite"></div>
       <div id="prueba-metron" aria-live="polite"></div>
@@ -144,7 +160,7 @@
   <h2 class="ajustes-acto" id="ajustes-descargas">Descargas</h2>
 
 
-    <fieldset class="ajustes-card ajustes-card--tercio">
+    <fieldset class="ajustes-card ajustes-card--tercio" id="ajustes-prowlarr">
       <legend>Prowlarr</legend>
       <p class="ajustes-desc">Busca dónde descargar lo que tienes en Deseados.</p>
       <form hx-post="/ui/ajustes/guardar/prowlarr" hx-target="#resultado-prowlarr" hx-swap="innerHTML">
@@ -169,6 +185,7 @@
           <button type="button" hx-post="/ui/ajustes/probar/prowlarr" hx-include="closest form"
                   hx-target="#prueba-prowlarr" hx-swap="innerHTML">Probar conexión</button>
         </div>
+        {{ nota_probar() }}
       </form>
       <div id="resultado-prowlarr" aria-live="polite"></div>
       <div id="prueba-prowlarr" aria-live="polite"></div>
@@ -183,7 +200,7 @@
       </details>
     </fieldset>
 
-    <fieldset class="ajustes-card ajustes-card--tercio">
+    <fieldset class="ajustes-card ajustes-card--tercio" id="ajustes-transmission">
       <legend>Transmission</legend>
       <p class="ajustes-desc">Programa que descarga los torrents.</p>
       <form hx-post="/ui/ajustes/guardar/transmission" hx-target="#resultado-transmission" hx-swap="innerHTML">
@@ -217,12 +234,13 @@
           <button type="button" hx-post="/ui/ajustes/probar/transmission" hx-include="closest form"
                   hx-target="#prueba-transmission" hx-swap="innerHTML">Probar conexión</button>
         </div>
+        {{ nota_probar() }}
       </form>
       <div id="resultado-transmission" aria-live="polite"></div>
       <div id="prueba-transmission" aria-live="polite"></div>
     </fieldset>
 
-    <fieldset class="ajustes-card ajustes-card--tercio">
+    <fieldset class="ajustes-card ajustes-card--tercio" id="ajustes-amule">
       <legend>aMule</legend>
       <p class="ajustes-desc">Programa que descarga de la red de eMule, a través de su página web (amuleweb).</p>
       <form hx-post="/ui/ajustes/guardar/amule" hx-target="#resultado-amule" hx-swap="innerHTML">
@@ -247,6 +265,7 @@
           <button type="button" hx-post="/ui/ajustes/probar/amule" hx-include="closest form"
                   hx-target="#prueba-amule" hx-swap="innerHTML">Probar conexión</button>
         </div>
+        {{ nota_probar() }}
       </form>
       <div id="resultado-amule" aria-live="polite"></div>
       <div id="prueba-amule" aria-live="polite"></div>
@@ -281,6 +300,7 @@
                   hx-include="closest form" hx-target="#prueba-foro"
                   hx-swap="innerHTML" hx-indicator="#prueba-foro-espera">Probar conexión</button>
         </div>
+        {{ nota_probar() }}
       </form>
       <div id="resultado-foro" aria-live="polite"></div>
       <div id="prueba-foro" aria-live="polite"></div>
@@ -496,7 +516,7 @@
 
     {% include "_ajustes_seguridad.html" %}
 
-    <fieldset class="ajustes-card">
+    <fieldset class="ajustes-card" id="ajustes-avisos">
       <legend>Avisos</legend>
       <p class="ajustes-desc">Un aviso en el móvil cuando ZascArr importa tebeos nuevos (Gotify, ntfy, Telegram o tu dirección). Viene apagado.</p>
       <form hx-post="/ui/ajustes/guardar/avisos" hx-target="#resultado-avisos" hx-swap="innerHTML">
@@ -534,12 +554,13 @@
           <button type="button" hx-post="/ui/ajustes/probar/avisos" hx-include="closest form"
                   hx-target="#prueba-avisos" hx-swap="innerHTML">Enviar aviso de prueba</button>
         </div>
+        {{ nota_probar() }}
       </form>
       <div id="prueba-avisos" aria-live="polite"></div>
       <div id="resultado-avisos" aria-live="polite"></div>
     </fieldset>
 
-    <fieldset class="ajustes-card ajustes-card--ancha">
+    <fieldset class="ajustes-card ajustes-card--ancha" id="ajustes-exportar">
       <legend>Exportar mis datos</legend>
       <p class="ajustes-desc">Descarga tu colección y tus deseados como hoja de cálculo CSV. No es una copia de seguridad.</p>
       <p><a class="btn ghost" href="/ui/exportar">Ir a exportar</a></p>

@@ -23,10 +23,10 @@
   <h2 id="asistente-buscar" class="titulo-frase">Buscar en las fuentes</h2>
   {% if n_fuentes == 0 %}
   <p class="caption" id="estado-fuentes">Ahora mismo no hay ninguna fuente encendida, así que buscar aquí no daría resultados.
-    <a href="/ui/ajustes">Encenderlas en Ajustes</a>.</p>
+    <a href="/ui/ajustes#ajustes-metadatos">Encenderlas en Ajustes</a>.</p>
   {% else %}
   <p class="caption" id="estado-fuentes">{{ n_fuentes }} {{ "fuente encendida" if n_fuentes == 1 else "fuentes encendidas" }}.
-    <a href="/ui/ajustes">Cambiarlas en Ajustes</a>.</p>
+    <a href="/ui/ajustes#ajustes-metadatos">Cambiarlas en Ajustes</a>.</p>
   <form class="asistente-form" hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/buscar') }}"
         hx-target="#asistente-resultados" hx-swap="innerHTML"
         hx-indicator="#buscando-fuentes" hx-disable="find button">
