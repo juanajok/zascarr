@@ -69,13 +69,20 @@ pruebas de accesibilidad con personas reales**.
         │   ├── capturas de pantalla y ariaSnapshot
         │   ├── validador de acciones permitidas
         │   └── trazas, métricas, informes
-        └── servidor de inferencia multimodal LOCAL (modelo preinstalado)
+        └── API DeepSeek `deepseek-flash` (servicio remoto, solo vía orquestador)
 
-- Proveedor local de tipo Ollama o compatible, con **modelo visual** que procese
-  capturas y texto; revisar capacidad en preflight. No degradar silenciosamente
-  a solo texto si la visión no está disponible.
-- Descargar/prefijar modelo y dependencias **antes** de arrancar la red interna.
-  Durante las sesiones: **cero peticiones a Internet**, cero claves/API externas.
+- Proveedor **remoto** DeepSeek vía HTTPS `https://api.deepseek.com/chat/completions` con
+  `deepseek-flash` (admite capturas e imágenes). El portátil **no ejecuta LLM local**.
+  Verificar modelo, visión y formato JSON en preflight; no degradar a solo texto.
+- El navegador, PostgreSQL y ZascArr se mantienen en red Docker `internal`;
+  únicamente el proceso orquestador tiene salida a Internet a través de otra red
+  para llamar a DeepSeek. No habilitar herramientas web/URL del modelo.
+- La clave `DEEPSEEK_API_KEY` se entrega al orquestador mediante secreto de Docker
+  montado en `/run/secrets/deepseek_api_key`, nunca en argumentos de comando,
+  capturas, logs, git ni el entorno del navegador. Añadir `.secrets/` a `.gitignore`.
+- **Aviso de privacidad:** cada petición transmite una captura de la interfaz
+  ficticia y el árbol de accesibilidad a DeepSeek; la redacción de URLs no elimina
+  por sí sola contenido sensible si se probara sobre datos reales. Solo datos UXLab.
 - Navegador solo puede solicitar recursos del dominio interno de ZascArr.
   Bloquear CDN, analítica, proveedores de IA y todos los dominios ajenos.
 - Interceptar solicitudes de escritura: bloquear borrados, administración,
@@ -123,11 +130,16 @@ goal_reached_before_finish y help_requests/abandono por ayuda.
 - Máximo 3 acciones inválidas consecutivas, 3 errores de inferencia o 2
   estados repetidos sin avance antes de detener como bloqueo.
 - Hasta 60 000 tokens de entrada agregados por sesión y 512 tokens de salida
-  por decisión; registrar llamadas, tiempo de inferencia y tokens usados.
-- Versión y digest del modelo, temperatura, semilla si el proveedor la admite,
-  y commit SHA del producto fijados y almacenados.
-- **Coste API externa 0 €**; registrar consumo real de cómputo local y tiempo,
-  sin afirmar que la energía sea gratis.
+  por decisión; registrar llamadas, tiempo de respuesta y tokens facturados.
+- Modelo `deepseek-flash`, versión recibida/huella backend, temperatura,
+  parámetros y commit SHA registrados. No se puede fijar digest de servicio remoto.
+- **API DeepSeek facturable**, con límite global de sesiones, peticiones,
+  tokens y coste estimado en USD. Cada llamada comprueba presupuesto restante;
+  detener en cuanto se alcance el límite. Registrar tarifas y tokens reales;
+  la factura final puede variar por caché, horario y revisiones de precios.
+- Modelo inicial `deepseek-flash` (visión), con versión real `model` de cada
+  respuesta, huella backend `system_fingerprint` cuando exista, fecha y parámetros.
+  Un alias de API no equivale a un digest inmutable: registrarlo explícitamente.
 - Ante modelo no disponible, no multimodal o fuera de presupuesto, informar
   fallo de infraestructura; no inventar resultados de usuarios sintéticos.
 
@@ -136,7 +148,7 @@ goal_reached_before_finish y help_requests/abandono por ayuda.
 Por cada sesión registrar: scenario_id, persona_id, objective_success,
 declared_success, false_success, steps, elapsed_ms, backtracks, loops,
 invalid_actions, blocked_requests, help_requests, model_calls, input_tokens,
-output_tokens, model_digest, temperature, git_sha y fixture_version.
+output_tokens, model_id, system_fingerprint, estimated_usd, temperature, git_sha y fixture_version.
 
 - Registro JSONL por paso: estado accesible resumido, acción elegida, resultado
   del navegador, progreso y razón de bloqueo cuando proceda.
