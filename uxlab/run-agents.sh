@@ -45,6 +45,8 @@ trap cleanup EXIT
 
 dc down --volumes --remove-orphans
 dc up -d --build browser
+# Contratos ejecutados antes de consumir un solo token de DeepSeek.
+dc run --rm --no-deps agent node --test agents/contracts.test.mjs
 # Seis sesiones SEPARADAS; entre cada una se restablece el fixture y se abre
 # un contexto independiente. Solo el contenedor 'agent' tiene acceso DeepSeek.
 for scenario in PILOT-01 PILOT-02; do
