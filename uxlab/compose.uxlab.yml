@@ -1,0 +1,99 @@
+# Laboratorio AUTÓNOMO: NO combinar con docker-compose.yml de producción.
+name: zascarr-uxlab
+
+networks:
+  test-only:
+    internal: true
+
+volumes:
+  db-test:
+  library-test:
+  covers-test:
+
+services:
+  permissions:
+    image: busybox:1.36
+    restart: "no"
+    networks: [test-only]
+    user: "0:0"
+    volumes:
+      - library-test:/media/library
+      - covers-test:/config/covers
+    command: ["sh", "-c", "chown -R 1000:1000 /media/library /config/covers"]
+
+  postgres:
+    image: postgres:15-alpine
+    restart: "no"
+    networks: [test-only]
+    environment:
+      POSTGRES_USER: comics_admin
+      POSTGRES_DB: zascarr
+      POSTGRES_PASSWORD: ${UXLAB_DB_PASSWORD:?ejecuta ./uxlab/run.sh}
+    volumes:
+      - db-test:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U comics_admin -d zascarr"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  seed:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: zascarr-uxlab-app:local
+    restart: "no"
+    networks: [test-only]
+    depends_on:
+      permissions:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      ZASCARR_DB_PASSWORD: ${UXLAB_DB_PASSWORD:?ejecuta ./uxlab/run.sh}
+      LIBRARY_PATH: /media/library
+    volumes:
+      - library-test:/media/library
+      - ./seed.py:/uxlab/seed.py:ro
+      - ./fixtures/catalog.json:/uxlab/catalog.json:ro
+    command: ["sh", "-ec", "alembic upgrade head && python /uxlab/seed.py"]
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: zascarr-uxlab-app:local
+    restart: "no"
+    networks: [test-only]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      ZASCARR_DB_PASSWORD: ${UXLAB_DB_PASSWORD:?ejecuta ./uxlab/run.sh}
+      LIBRARY_PATH: /media/library
+      COVERS_CACHE_PATH: /config/covers
+      LECTOR_CACHE_PATH: /tmp/uxlab-lector
+      ALLOWED_HOSTS: app
+      RESCAN_INTERVAL_MINUTES: "0"
+      LOG_JSON: "false"
+    volumes:
+      - library-test:/media/library
+      - covers-test:/config/covers
+    # SIN ports: no se publica ni en la LAN ni en el host.
+
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    init: true
+    shm_size: 1gb
+    networks: [test-only]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://app:8000
+    volumes:
+      - ./results:/work/results
+    command: ["npx", "playwright", "test"]

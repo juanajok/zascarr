@@ -1,0 +1,49 @@
+{
+  "description": "Datos 100% sintéticos, sin colecciones ni portadas de terceros.",
+  "series": [
+    {
+      "key": "nebula",
+      "title": "Nebulosa de Papel",
+      "tradition": "american",
+      "publisher": "Editorial Horizonte",
+      "genre": "Ciencia ficción",
+      "tag": "cienciaficcion",
+      "creator": "Ada Solís",
+      "character": "Capitana Nébula",
+      "reading_page": 3
+    },
+    {
+      "key": "lince",
+      "title": "El Caso del Lince",
+      "tradition": "tebeo",
+      "publisher": "Editorial Sur",
+      "genre": "Misterio",
+      "tag": "misterio",
+      "creator": "Bruno Tinta",
+      "character": "Detective Lince",
+      "reading_page": null
+    },
+    {
+      "key": "bosque",
+      "title": "El Bosque de las Lunas",
+      "tradition": "franco_belgian",
+      "publisher": "Editorial Horizonte",
+      "genre": "Fantasía",
+      "tag": "fantasia",
+      "creator": "Clara Roble",
+      "character": "Guardiana Luna",
+      "reading_page": null
+    },
+    {
+      "key": "eclipse",
+      "title": "Eclipse de Tinta",
+      "tradition": "manga",
+      "publisher": "Editorial Oriente",
+      "genre": "Aventura",
+      "tag": "aventura",
+      "creator": "Dana Sato",
+      "character": "Aiko",
+      "reading_page": null
+    }
+  ]
+}
