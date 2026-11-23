@@ -29,6 +29,7 @@ services:
       UXLAB_PERSONA: ${UXLAB_PERSONA:-p1-movil}
       UXLAB_SCENARIO: ${UXLAB_SCENARIO:-PILOT-01}
       UXLAB_RUN_ID: ${UXLAB_RUN_ID:-manual}
+      UXLAB_GIT_SHA: ${UXLAB_GIT_SHA:-}
     volumes:
       - ./results:/work/results
     command: ["node", "agents/session.mjs"]
