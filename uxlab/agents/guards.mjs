@@ -29,12 +29,15 @@ export function allowedRequest(raw, method, appOrigin='http://app:8000') {
          /^\/ui\/leer\/[0-9a-f-]{36}\/(progreso|sentido)$/.test(path);
 }
 function short(v, max=140) { return typeof v === 'string' && v.length <= max; }
+function texto(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
 export function validateAction(a, mode) {
   if (a === null || typeof a !== 'object' || Array.isArray(a) || !TYPES.has(a.action)) {
     throw Error('Acción fuera de whitelist');
   }
-  const { action, role='', name='', value='', context='', direction='', status='', reason='' } = a;
-  if (![role,name,value,context,direction,status,reason].every(x=>short(x))) throw Error('Campos inválidos');
+  const { action, role='', name='', value='', direction='', status='' } = a;
+  if (![role,name,value,direction,status].every(x=>short(x))) throw Error('Campos inválidos');
+  const context = texto(a.context, 180);
+  const reason = texto(a.reason, 300);
   if (mode === 'keyboard' && !['press','type','wait','finish','back','scroll'].includes(action)) {
     throw Error('Perfil teclado: prohibida interacción con ratón o clic');
   }

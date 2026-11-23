@@ -77,6 +77,12 @@ async function findControl(page, a) {
     if (norm(label).includes(wanted)) matches.push(candidate);
   }
   if (matches.length === 1) return matches[0];
+  if (matches.length === 0) {
+    // Fallback final: controles nativos cuyo rol calculado no coincide con el
+    // que el modelo dedujo de la captura (p. ej. <summary> «Filtros»).
+    const porTexto = root.getByText(a.name, {exact:true});
+    if (await porTexto.count() === 1) return porTexto;
+  }
   throw Error('Control ausente o ambiguo: '+a.role+' «'+a.name+'» ('+matches.length+')');
 }
 export async function act(page, raw, persona) {

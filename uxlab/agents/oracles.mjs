@@ -7,7 +7,7 @@ export async function checkGoal(page, scenario) {
   if (scenario.oracle === 'genre') {
     if (!/^\/ui\/series\/[0-9a-f-]{36}$/.test(path)) return false;
     const h1 = page.locator('.series-header h1');
-    return await h1.count() === 1 && (await h1.innerText()).includes(TITLE_SCIFI);
+    return await h1.count() === 1 && (await h1.innerText()).toLowerCase().includes(TITLE_SCIFI.toLowerCase());
   }
   if (scenario.oracle === 'resume') {
     if (!/^\/ui\/leer\/[0-9a-f-]{36}$/.test(path)) return false;

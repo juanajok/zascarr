@@ -24,6 +24,7 @@ test('teclado rechaza clic y pulsaciones fuera de whitelist', () => {
   assert.throws(()=>validateAction({action:'press',value:'Control+L'},'keyboard'));
   assert.equal(validateAction({action:'press',value:'Tab'},'keyboard').action,'press');
   assert.throws(()=>validateAction({action:'goto',url:'/ui/leer/UUID'},'mouse'));
+  assert.equal(validateAction({action:'finish',status:'done',reason:'x'.repeat(300)},'mouse').reason.length,300);
 });
 
 test('el oráculo separa éxito declarado de objetivo y registra falso éxito', () => {
