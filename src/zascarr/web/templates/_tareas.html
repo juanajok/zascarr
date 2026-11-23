@@ -2,7 +2,7 @@
 <div id="tareas-cadencia" hx-swap-oob="outerHTML"
      hx-get="/ui/_tareas" hx-trigger="{% if t.hay_tareas %}every 2s{% else %}every 10s{% endif %}"
      hx-swap="none"></div>
-<span id="tareas-contador" hx-swap-oob="innerHTML">{% if t.errores %}<span class="tareas-chip error">Revisar</span>{% elif t.activas %}<span class="tareas-chip">{{ t.activas }} tarea{% if t.activas != 1 %}s{% endif %}</span>{% else %}<span class="tareas-chip">Listo</span>{% endif %}</span>
+<span id="tareas-contador" hx-swap-oob="innerHTML">{% if t.errores %}<span class="tareas-chip error">Revisar</span>{% elif t.activas %}<span class="tareas-chip">{{ t.activas }} tarea{% if t.activas != 1 %}s{% endif %}</span>{% else %}{% set fin = t.tareas | selectattr("estado", "equalto", "terminada") | list %}{% if fin %}<span class="tareas-chip">{% if fin | length == 1 %}Terminó: {{ fin[0].titulo }}{% else %}Terminaron {{ fin | length }} tareas{% endif %}</span>{% else %}<span class="tareas-chip">Sin tareas</span>{% endif %}{% endif %}</span>
 <span id="tareas-nombre" hx-swap-oob="innerHTML">{% if t.hay_tareas %}ZascArr está trabajando{% endif %}</span>
 <div id="tareas-lista" hx-swap-oob="innerHTML">
 <h2>Ahora</h2>
@@ -15,7 +15,7 @@
     <p class="caption">{{ x.iniciada_texto }}</p>
     {% if x.estado == "atascada" %}<p>Está tardando más de lo normal. Puedes seguir usando ZascArr.</p>{% endif %}
     {% if x.estado == "error" %}<button type="button" hx-post="/ui/_tareas/visto/{{ x.id }}" hx-swap="none">Revisar</button>{% endif %}
-    {% if x.enlace %}<a href="{{ x.enlace }}">Ver la tarea</a>{% endif %}
+    {% if x.enlace %}<a href="{{ x.enlace }}">{% if x.estado == "terminada" %}Ver el resultado<span class="sr"> de «{{ x.titulo }}»</span>{% else %}Ver la tarea<span class="sr"> «{{ x.titulo }}»</span>{% endif %}</a>{% endif %}
   </article>
 {% endfor %}
 </div>
