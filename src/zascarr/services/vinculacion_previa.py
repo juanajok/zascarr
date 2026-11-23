@@ -170,6 +170,14 @@ class CandidataPublicacion(BaseModel):
     nivel_editorial: str = "numero"
 
 
+class OcupanteDelNumero(BaseModel):
+    """UXA-12 (#1129): qué hay ya en el número que un archivo quiere ocupar (solo lectura)."""
+    issue_id: str
+    #: Nombres de los archivos ya vinculados a ese número (los primeros; el resto se cuenta).
+    nombres: list[str]
+    total: int
+
+
 class ArchivoVinculacion(BaseModel):
     id: str
     nombre: str
@@ -202,6 +210,8 @@ class ArchivoVinculacion(BaseModel):
     token_eleccion: str | None = None
     #: H2: publicación que el token de vinculación debe consumir.
     issue_id_elegida: str | None = None
+    #: UXA-12 (#1129): con `numero_ya_existe` o `colision_de_edicion`, el número ocupado y sus archivos.
+    ocupante: OcupanteDelNumero | None = None
 
 
 class PaginaOut(BaseModel):
@@ -452,6 +462,7 @@ class VistaPreviaDeVinculacion:
             propuesta[a.id] = (numero, del_nombre, formato, origen, p.is_pack, p.is_special)
 
         existentes = await self._issues_de_la_serie(serie.id, {n for n, *_ in propuesta.values() if n})
+        ocupantes = await self._ocupantes(serie.id, {n for n, *_ in propuesta.values() if n})
         origenes = await asyncio.to_thread(
             _comprobar_origenes, {a.id: rutas[a.id] for a in tratados if a.id in rutas},
             self._biblioteca, self._estadistica)
@@ -470,7 +481,7 @@ class VistaPreviaDeVinculacion:
                 fid=a.id, nombre=a.nombre, ruta=rutas.get(a.id), numero=numero, del_nombre=del_nombre, formato=formato,
                 origen_n=origen_n, origen=origenes.get(a.id), en_curso=a.id in en_curso,
                 es_pack=es_pack, es_especial=es_especial,
-                repetido_con=repetidos.get(a.id, []), existentes=existentes,
+                repetido_con=repetidos.get(a.id, []), existentes=existentes, ocupantes=ocupantes,
                 conflictos=[s for s in senales if a.id in s.archivos], marcado=a.id in marcados,
                 numero_del_nombre_descartado=a.id in descartados)
             salida.append(self._evaluar(**evaluar[a.id], repetido_en_seleccion=False))
@@ -617,6 +628,31 @@ class VistaPreviaDeVinculacion:
             salida[clave_de_numero(n)].append((fmt or IssueFormat.SINGLE_ISSUE, cuenta.get(iid, 0)))
         return dict(salida)
 
+    async def _ocupantes(self, series_id, numeros: set[str]) -> dict[str, OcupanteDelNumero]:
+        """clave de número → archivos ya vinculados al `Issue` de ese número (UXA-12, #1129).
+
+        Solo lectura y solo cuando hay UN `Issue` con esa clave (con varios es `numero_ambiguo` y se elige
+        entre candidatas). Dos consultas para todos los números de la página, no una por archivo."""
+        if not numeros:
+            return {}
+        claves = {clave_de_numero(n) for n in numeros}
+        issues = (await self._db.execute(select(Issue.id, Issue.issue_number).where(
+            Issue.series_id == series_id, func.lower(Issue.issue_number).in_(claves)))).all()
+        por_clave: dict[str, list] = defaultdict(list)
+        for iid, n in issues:
+            por_clave[clave_de_numero(n)].append(iid)
+        unicos = {c: ids[0] for c, ids in por_clave.items() if len(ids) == 1}
+        if not unicos:
+            return {}
+        filas = (await self._db.execute(
+            select(File.issue_id, File.file_name).where(File.issue_id.in_(list(unicos.values())))
+            .order_by(File.file_name))).all()
+        nombres: dict = defaultdict(list)
+        for iid, nombre in filas:
+            nombres[iid].append(nombre)
+        return {c: OcupanteDelNumero(issue_id=str(iid), nombres=nombres[iid][:3], total=len(nombres[iid]))
+                for c, iid in unicos.items() if nombres[iid]}
+
     @staticmethod
     def _repetidos(pares: list[tuple[str, str | None]]) -> dict[str, list[str]]:
         """id → ids de los OTROS archivos con el mismo número (sin distinguir mayúsculas). Solo los que se repiten."""
@@ -746,7 +782,8 @@ class VistaPreviaDeVinculacion:
     def _evaluar(self, fid, nombre, ruta, numero, del_nombre, formato, origen_n, origen: _Origen | None, en_curso: bool,
                  repetido_con: list[str], existentes, conflictos: list[Senal], marcado: bool,
                  repetido_en_seleccion: bool, numero_del_nombre_descartado: bool = False,
-                 es_pack: bool = False, es_especial: bool = False) -> ArchivoVinculacion:
+                 es_pack: bool = False, es_especial: bool = False,
+                 ocupantes: dict[str, OcupanteDelNumero] | None = None) -> ArchivoVinculacion:
         motivos: list[str] = []
         causa: str | None = None
         if en_curso:
@@ -804,11 +841,14 @@ class VistaPreviaDeVinculacion:
             if repetido_con:
                 texto += f" Comparte el número {numero} con otro archivo: se puede vincular uno, no los dos a la vez."
         marcable = not motivos
+        ocupante = (ocupantes or {}).get(clave_de_numero(numero)) if (
+            numero and estado in ("numero_ya_existe", "colision_de_edicion")) else None
         return ArchivoVinculacion(
             id=fid, nombre=nombre, **self._ruta(ruta), formato=formato, numero=numero, numero_del_nombre=del_nombre,
             numero_origen=origen_n, estado=estado, motivos=motivos, texto=texto, causa=causa, marcado=marcado,
             marcable=marcable, incluido_en_token=marcado and marcable,
-            issue_existente=bool(existente and not motivos), repetido_con=repetido_con, conflictos=conflictos)
+            issue_existente=bool(existente and not motivos), repetido_con=repetido_con, conflictos=conflictos,
+            ocupante=ocupante)
 
     def _fuera_de_la_pagina(self, fid, nombre, numero, del_nombre, formato, origen_n, marcado) -> ArchivoVinculacion:
         return ArchivoVinculacion(

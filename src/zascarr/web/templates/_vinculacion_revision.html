@@ -83,6 +83,11 @@
 
   {% if accion %}<div class="vinc-accion-resultado" tabindex="-1" autofocus data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto, viva=false) }}</div>{% endif %}
 
+  {% if r.archivos and not (hay_que_marcar or hay_marcados) %}
+  {#- UXA-12 (#1129): sin ningún archivo marcable, los botones masivos no pueden hacer nada: quedan deshabilitados
+      (contrato anterior) y se dice por qué, para que no parezcan rotos. -#}
+  <p class="caption vinc-sin-candidatos" id="vinc-sin-candidatos">Ahora mismo ninguno de los archivos de esta página se puede marcar: cada fila dice el motivo. Corrige lo que puedas, por ejemplo el número, o déjalos en Pendientes.</p>
+  {% endif %}
   {% if r.archivos %}
   <div class="vinc-masivo" role="group" aria-label="Marcar varios a la vez">
     <button type="submit" name="accion" value="marcar_todos" class="btn ghost sm"{% if not hay_que_marcar %} disabled{% endif %}>Marcar todos los que se pueden vincular</button>
@@ -127,6 +132,17 @@
       {% endif %}
 
       <p class="vinc-texto">{{ texto_legible(a.texto) }}</p>
+      {#- UXA-12 (#1129): el número ocupado deja de ser un callejón sin salida: se ve qué archivo lo ocupa, se puede
+          abrir ese número y se dicen las salidas. Solo lectura: no cambia nada hasta que la persona decide. -#}
+      {% if a.ocupante %}
+      <div class="vinc-ocupado" id="ocupado-{{ a.id }}">
+        <p>Ya está en este número: <span class="nombre-archivo">{{ a.ocupante.nombres[0] }}</span>{% if a.ocupante.total > 1 %} y {{ a.ocupante.total - 1 }} más{% endif %}.
+          <a href="/ui/series/{{ s.series_id }}/numero/{{ a.ocupante.issue_id }}">Ver ese número</a></p>
+        <p class="caption">Qué puedes hacer: <strong>corregir el número</strong> de este archivo (en su campo «Número») si no es el {{ a.numero }};
+          <strong>dejarlo en Pendientes</strong>, sin marcarlo, y no cambia nada; o abrir ese número y comparar los dos archivos antes de decidir.
+          Registrarlo como otra edición todavía no se puede hacer desde aquí.</p>
+      </div>
+      {% endif %}
 
       {% if a.candidatas %}
       <fieldset class="vinc-candidatas">
