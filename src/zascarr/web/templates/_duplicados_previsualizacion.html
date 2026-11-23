@@ -17,20 +17,34 @@
 </div>
 {% endif %}
 {% if p.entradas %}
-<p>Se apartarán <strong>{{ p.archivos }}</strong> archivos y se liberarán
+<p>Se queda <strong>una copia</strong> de cada grupo. Se apartarán
+  <strong>{{ p.archivos }}</strong> archivo{{ 's' if p.archivos != 1 }} y se liberarán
   <strong>{{ p.bytes | tamano }}</strong>.</p>
 <form method="post" action="/ui/auditoria/duplicados/confirmar">
   {% for item in p.entradas %}
   <section class="duplicado-preview">
     <h2>Grupo {{ loop.index }}</h2>
-    <p>Se apartan:</p>
-    <ul>{% for r in item.rutas_apartadas %}<li class="duplicado-ruta">{{ r }}</li>{% endfor %}</ul>
+    <div class="duplicado-cambio">
+      <p><span class="duplicado-etiqueta">Se queda</span>
+        <span class="duplicado-ruta">{{ item.ruta_keep }}</span></p>
+      <p><span class="duplicado-etiqueta">Se aparta</span>
+        <strong>{{ item.rutas_apartadas|length }}</strong> archivo{{ 's' if item.rutas_apartadas|length != 1 }}:
+      </p>
+      <ul>{% for r in item.rutas_apartadas %}<li class="duplicado-ruta">{{ r }}</li>{% endfor %}</ul>
+      <p><span class="duplicado-etiqueta">Destino</span>
+        <code>{{ p.cuarentena.ruta | ruta_visible }}</code>, conservando su ruta relativa.</p>
+      <p><span class="duplicado-etiqueta">Disco</span>
+        Se liberan <strong>{{ item.bytes | tamano }}</strong>.</p>
+      <p><span class="duplicado-etiqueta">Deshacer</span>
+        Sí, mientras la copia siga en la cuarentena.</p>
+    </div>
     <p class="audit-detail">{{ item.catalogo_cambio }}</p>
     <input type="hidden" name="token" value="{{ item.token }}">
     <input type="hidden" name="grupos" value="{{ item.grupo_json }}">
   </section>
   {% endfor %}
-  <p class="audit-why"><strong>No se borra nada.</strong> Si hace falta, podrás deshacer el apartado.</p>
+  <p class="audit-why"><strong>No se borra nada.</strong> Podrás deshacer el apartado desde
+    «Copias apartadas» mientras siga en la cuarentena.</p>
   <button type="submit" class="btn primary">Confirmar y apartar</button>
   <a class="btn ghost" href="/ui/auditoria">Cancelar</a>
 </form>

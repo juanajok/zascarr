@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -97,6 +98,8 @@ def test_pagina_no_prescosecha_y_muestra_hechos(tmp_path):
     assert 'type="radio"' in seccion
     assert "checked" not in seccion
     assert "Batman 001.cbz" in seccion
+    assert "Detectado, sin mover nada" in seccion
+    assert "Revisar qué se apartará" in seccion
     assert "No está en el catálogo" in seccion
     assert "Nombre:" in seccion and "Modificado:" in seccion
     assert "Copias apartadas" in seccion
@@ -147,6 +150,11 @@ def test_previsualizar_sin_escribir_y_confirmar_por_grupo(tmp_path, monkeypatch)
     assert r.status_code == 200
     assert "Confirmar y apartar" in r.text
     assert "Se apartarán" in r.text
+    assert "Se queda" in r.text
+    assert "Destino" in r.text
+    assert "Deshacer" in r.text
+    assert "Se liberan" in r.text
+    assert "Cancelar" in r.text
     m = re.search(r'name="token" value="([^"]+)"', r.text)
     assert m
     gjson = html.unescape(re.search(r'name="grupos" value="([^"]+)"', r.text).group(1))
@@ -160,6 +168,8 @@ def test_previsualizar_sin_escribir_y_confirmar_por_grupo(tmp_path, monkeypatch)
                    data={"token": "token-1", "grupos": gjson})
     assert r.status_code == 200
     assert "Apartado: 1 archivo" in r.text
+    assert "Se queda" in r.text
+    assert "Se apartan" in r.text
     assert "Deshacer el apartado" in r.text
 
 
@@ -176,6 +186,39 @@ def test_confirmar_rechazado_no_tumba_el_resto(tmp_path, monkeypatch):
     print("RESULTHTML", r.text[r.text.index("<main"):])
     assert "No se ha apartado" in r.text
     assert "El contenido de una copia cambió" in r.text
+
+
+def test_apartado_parcial_distingue_lo_hecho_y_lo_rechazado(monkeypatch):
+    """AC UXA-18: un grupo apartado y otro rechazado se leen por separado."""
+    async def confirmar(_self, _token, _grupos):
+        return ResultadoApartado("66666666-6666-6666-6666-666666666666", "confirmada",
+                                 [ResultadoGrupo("a" * 64, "movido", movidos=1, bytes=5),
+                                  ResultadoGrupo("b" * 64, "rechazado", motivo="contenido_cambiado")],
+                                 2, 1, 5)
+    monkeypatch.setattr(ApartadoDuplicadosService, "confirmar", confirmar)
+    grupos = [
+        json.dumps({"sha256": "a" * 64, "rutas": ["a", "b"], "keep_index": 0}),
+        json.dumps({"sha256": "b" * 64, "rutas": ["c", "d"], "keep_index": 1}),
+    ]
+    with use_fake_session(FakeSession([])) as c:
+        r = c.post("/ui/auditoria/duplicados/confirmar",
+                   data={"token": ["t1", "t2"], "grupos": grupos})
+    assert r.status_code == 200
+    assert "Apartado: 1 archivo" in r.text
+    assert "No se ha apartado" in r.text
+
+
+def test_cancelar_la_vista_previa_vuelve_sin_confirmar(tmp_path, monkeypatch):
+    g = grupo(tmp_path)
+    async def preview(_self, _sha, rutas, keep):
+        return VistaApartado("token-cancelar", "77777777-7777-7777-7777-777777777777",
+                             (Path(g["rutas"][0]), Path(g["rutas"][1])), keep, 5)
+    monkeypatch.setattr(ApartadoDuplicadosService, "previsualizar", preview)
+    with use_fake_session(FakeSession([FakeExecResult(informe_falso([g]))])) as c:
+        r = c.post("/ui/auditoria/duplicados/previsualizar",
+                   data={f"keep_{g['sha256']}": Path(g["rutas"][0]).name})
+    assert 'href="/ui/auditoria"' in r.text
+    assert "Confirmar y apartar" in r.text
 
 
 def test_deshacer_ocupado_se_explica_sin_sobrescribir(tmp_path, monkeypatch):
