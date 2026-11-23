@@ -1283,6 +1283,14 @@ details.ficha-bloque:not([open]) { padding-block: var(--space-1); }
   gap: var(--gutter);
   margin-top: 22px;
 }
+/* UXA-14 (#1131): índice de secciones y destinos de los enlaces directos. El destino se ve (contorno) y no
+   queda pegado al borde al llegar por un enlace. */
+.ajustes-indice { margin: 0 0 var(--space-3); }
+.ajustes-indice-titulo { margin: 0 0 var(--space-1); font-weight: 700; }
+.ajustes-indice ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-1); }
+.ajustes-indice a { display: inline-block; min-height: 24px; }
+.ajustes-pagina :is(h2, fieldset)[id] { scroll-margin-top: var(--space-4); }
+.ajustes-pagina fieldset[id]:target { outline: var(--border-panel) solid var(--ink); outline-offset: 2px; }
 .ajustes-card { grid-column: span 6; }
 .ajustes-card--ancha { grid-column: span 8; }
 .ajustes-card--estrecha { grid-column: span 4; }

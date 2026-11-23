@@ -178,10 +178,10 @@ class TestOpcionales:
         assert p.titulo == "Sigues 1 serie"
 
     @pytest.mark.parametrize("fuente,legal,esperado,enlace", [
-        (False, False, EstadoPaso.OPCIONAL, "/ui/ajustes"),
-        (False, True, EstadoPaso.OPCIONAL, "/ui/ajustes"),
+        (False, False, EstadoPaso.OPCIONAL, "/ui/ajustes#ajustes-descargas"),
+        (False, True, EstadoPaso.OPCIONAL, "/ui/ajustes#ajustes-descargas"),
         (True, False, EstadoPaso.OPCIONAL, "/ui/legal"),
-        (True, True, EstadoPaso.HECHO, "/ui/ajustes"),
+        (True, True, EstadoPaso.HECHO, "/ui/ajustes#ajustes-descargas"),
     ])
     def test_descargas_exige_fuente_activa_y_aviso_legal(self, fuente, legal, esperado, enlace):
         p = paso(calcular_primeros_pasos(

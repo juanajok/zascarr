@@ -11,7 +11,7 @@
 
 {% if error %}
   {% if apagada %}
-    {% call ui.aviso("nota") %}{{ error }} <a href="/ui/ajustes">Revisar fuentes en Ajustes</a>.{% endcall %}
+    {% call ui.aviso("nota") %}{{ error }} <a href="/ui/ajustes#ajustes-fuentes">Revisar fuentes en Ajustes</a>.{% endcall %}
   {% else %}
     {{ ui.aviso("amber", error) }}
   {% endif %}

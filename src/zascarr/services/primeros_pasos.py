@@ -222,7 +222,7 @@ def _paso_descargas(e: EstadoInicio) -> Paso:
                     "Hay una fuente activada y el aviso legal aceptado. "
                     "No comprobamos que conteste: "
                     "si una búsqueda falla, el motivo aparece en Deseados.",
-                    EstadoPaso.HECHO, False, "/ui/ajustes", "Ajustes")
+                    EstadoPaso.HECHO, False, "/ui/ajustes#ajustes-descargas", "Ajustes")
     if e.hay_fuente_de_busqueda:
         return Paso(ClavePaso.DESCARGAS, "Acepta el aviso legal para buscar descargas",
                     "Hay una fuente activada, pero sin el aviso legal aceptado no se busca nada.",
@@ -230,7 +230,7 @@ def _paso_descargas(e: EstadoInicio) -> Paso:
     return Paso(ClavePaso.DESCARGAS, "Conecta cómo descargar",
                 "Solo si quieres que ZascArr busque lo que te falta. "
                 "Viene desactivado: lo decides tú.",
-                EstadoPaso.OPCIONAL, False, "/ui/ajustes", "Configurar")
+                EstadoPaso.OPCIONAL, False, "/ui/ajustes#ajustes-descargas", "Configurar")
 
 
 def _paso_copias(e: EstadoInicio) -> Paso | None:
