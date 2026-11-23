@@ -4,15 +4,26 @@
 <p><a class="back-link" href="/ui/arcos">← Volver a sagas</a></p>
 <h1>Buscar sagas en fuentes</h1>
 <p class="subtitle">Busca un arco en DC Database y revisa qué números tienes antes de importarlo.</p>
-{% if errores.get("general") %}{{ ui.aviso("warn", errores.general, foco=true) }}{% endif %}
+{% macro salidas() %}
+<p class="arcos-acciones-secundarias">Sin fuentes también puedes <a href="/ui/arcos/nueva">crear una saga a mano</a> o <a href="/ui/arcos/importar-guia">importar una guía</a>.</p>
+{% endmacro %}
+{% if estado == "apagada" %}
+{{ ui.aviso("warn", "DC Database está apagada: ahora mismo no se puede buscar sagas en ella.", foco=true) }}
+<p><a class="btn primary" href="/ui/ajustes#ajustes-metadatos">Encender en Ajustes</a></p>
+{{ salidas() }}
+{% else %}
+{% if estado == "espera" %}{{ ui.aviso("info", "DC Database pide espaciar las consultas. No se ha perdido nada: vuelve a buscar en unos segundos.", foco=true) }}
+{% elif estado == "fallo" %}{{ ui.aviso("warn", "DC Database no ha respondido bien. Prueba de nuevo; si sigue igual, puede ser un fallo de la fuente.", foco=true) }}{% endif %}
 <form method="get" action="/ui/arcos/buscar" class="arcos-buscar-form">
   <label for="buscar-arco-q">Título del arco o de la serie</label>
   <input id="buscar-arco-q" type="search" name="q" value="{{ q }}" maxlength="200"
          placeholder="Por ejemplo: Batman: Year One" required>
-  <button class="btn primary" type="submit">Buscar</button>
+  <button class="btn primary" type="submit">{% if estado in ("espera", "fallo") %}Volver a buscar{% else %}Buscar{% endif %}</button>
 </form>
-{% if q and not resultados and not errores %}
-{{ ui.estado_vacio("No se encontraron sagas", "Prueba con otro título o revisa que la fuente esté encendida en Ajustes.") }}
+{% if estado in ("espera", "fallo") %}{{ salidas() }}
+{% elif estado == "vacio" %}
+{{ ui.estado_vacio("DC Database no tiene sagas con ese título", "La fuente funciona y no ha encontrado nada. Prueba con otro título.") }}
+{{ salidas() }}
 {% elif resultados %}
 <p class="caption" role="status" tabindex="-1" autofocus>{{ resultados|length }} {{ "resultado" if resultados|length == 1 else "resultados" }} en DC Database.</p>
 <ul class="arcos-lista">
@@ -24,5 +35,6 @@
   {% endfor %}
 </ul>
 <p class="caption">Solo se muestran títulos y un resumen de DC Database. Al importar no se crean series ni números: únicamente se enlazan los que ya tienes.</p>
+{% endif %}
 {% endif %}
 {% endblock %}

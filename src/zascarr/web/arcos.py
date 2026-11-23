@@ -327,21 +327,26 @@ async def _fuente_fandom_activa() -> bool:
 async def buscar_arcos(request: Request, q: str = Query(default=""),
                        db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     consulta = (q or "").strip()[:200]
-    contexto = {"q": consulta, "resultados": [], "errores": {}, "aviso": ""}
+    # UXA-17 (#1134): vacío, apagada, espera y fallo tienen cada uno su salida.
+    contexto = {"q": consulta, "resultados": [], "errores": {}, "aviso": "", "estado": ""}
     if not await _fuente_fandom_activa():
-        contexto["errores"] = {"general": "La fuente DC Database está apagada en Ajustes."}
+        contexto["estado"] = "apagada"
         return _respuesta(request, "buscar_arcos.html", contexto)
     if consulta:
         try:
             async with FandomClient(
                     "dc.fandom.com", cache=CacheHttp(async_session_factory)) as cliente:
                 contexto["resultados"] = await buscar_arcos_fandom(consulta, cliente)
-        except (CortesiaEnEspera, FuenteApagada, FandomMaxLagError,
-                FandomPayloadError, ErrorDePeticion):
-            contexto["errores"] = {"general": ERROR_FANDOM}
+            contexto["estado"] = "ok" if contexto["resultados"] else "vacio"
+        except CortesiaEnEspera:
+            contexto["estado"] = "espera"
+        except FuenteApagada:
+            contexto["estado"] = "apagada"
+        except (FandomMaxLagError, FandomPayloadError, ErrorDePeticion):
+            contexto["estado"] = "fallo"
         except Exception:
             logger.exception("arcos.buscar_fandom_failed")
-            contexto["errores"] = {"general": ERROR_FANDOM}
+            contexto["estado"] = "fallo"
     return _respuesta(request, "buscar_arcos.html", contexto)
 
 

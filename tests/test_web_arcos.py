@@ -680,3 +680,51 @@ def test_portada_de_saga_sin_miembros_responde_404_sin_cache():
         _cerrar()
     assert r.status_code == 404
     assert r.headers["cache-control"] == "no-store"
+
+
+# --- UXA-17 (#1134): vacío, apagada, espera y fallo con salida propia y un solo principal ---
+
+def _buscar(*, activa=True, buscar=None):
+    c = _cliente()
+    try:
+        with patch("zascarr.web.arcos.fuente_habilitada", return_value=activa), \
+             patch("zascarr.web.arcos.FandomClient", _FakeFandom), \
+             patch("zascarr.web.arcos.buscar_arcos_fandom", buscar or AsyncMock(return_value=[])):
+            return c.get("/ui/arcos/buscar?q=Batman").text
+    finally:
+        _cerrar()
+
+
+def _principales(html: str) -> int:
+    import re
+    return len(re.findall(r'class="btn primary"', html))
+
+
+def test_uxa17_apagada_lleva_a_ajustes_sin_formulario_de_busqueda():
+    html = _buscar(activa=False)
+    assert "/ui/ajustes#ajustes-metadatos" in html and "<form" not in html.split("<main")[-1]
+    assert _principales(html) == 1 and "crear una saga a mano" in html
+
+
+def test_uxa17_vacio_no_culpa_a_la_fuente_y_ofrece_crear_o_importar():
+    html = _buscar()
+    assert "La fuente funciona" in html and "apagada" not in html
+    assert "/ui/arcos/nueva" in html and "/ui/arcos/importar-guia" in html
+    assert _principales(html) == 1
+
+
+def test_uxa17_espera_se_distingue_del_fallo():
+    from zascarr.utils.cortesia import CortesiaEnEspera
+    espera = _buscar(buscar=AsyncMock(side_effect=CortesiaEnEspera("fandom", "dc", 9.0)))
+    fallo = _buscar(buscar=AsyncMock(side_effect=RuntimeError("x")))
+    assert "espaciar las consultas" in espera and "no ha respondido" not in espera
+    assert "no ha respondido" in fallo and "espaciar" not in fallo
+    for html in (espera, fallo):
+        assert "Volver a buscar" in html and _principales(html) == 1
+        assert "crear una saga a mano" in html
+
+
+def test_uxa17_con_resultados_no_aparece_ningun_aviso_de_fallo():
+    from zascarr.services.fandom import FandomSearchPage
+    html = _buscar(buscar=AsyncMock(return_value=[FandomSearchPage("Batman: Year One", "x")]))
+    assert "Batman: Year One" in html and "no ha respondido" not in html
