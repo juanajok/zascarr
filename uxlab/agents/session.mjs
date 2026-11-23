@@ -68,7 +68,7 @@ async function main() {
           outcome=await act(page,action,persona);
           invalids=0;
           const next = await getObservation(page);
-          const hash = digest(next.url+next.tree);
+          const hash = digest(next.url+next.tree+next.focus);
           repeated = lastHash && hash===lastHash ? repeated+1 : 0;
           lastHash=hash;
           if (await checkGoal(page,scenario)) everAchieved=true;

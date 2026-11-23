@@ -21,8 +21,8 @@ mkdir -p "$RESULTS/agents/$UXLAB_RUN_ID"
 dc() { docker compose -f "$BASE" -f "$OVERLAY" "$@"; }
 
 restore_owner() {
-  docker run --rm --pull never --network none --read-only \
-    --user 0:0 --cap-drop ALL --cap-add CHOWN \
+  docker run --rm --pull never --network none \
+    --user 0:0 --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE \
     --mount "type=bind,source=$RESULTS,target=/reports" \
     busybox:1.36 chown -R "$OWNER_UID:$OWNER_GID" /reports
 }

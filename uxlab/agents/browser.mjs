@@ -45,17 +45,37 @@ export async function openBrowser(persona, baseUrl, blocked) {
 
 export async function getObservation(page) {
   const tree = await page.locator('body').ariaSnapshot();
+  const focus = await page.evaluate(() => {
+    const el = document.activeElement;
+    if (!el) return '';
+    return (el.tagName + ':' + (el.getAttribute('aria-label') || el.innerText || el.getAttribute('name') || '')).slice(0,160);
+  });
   return {
     url:publicUrl(page.url()),
     tree:accessibleText(tree),
+    focus,
     screenshot:await page.screenshot({type:'jpeg',quality:55,fullPage:false,animations:'disabled'}),
   };
 }
-function findControl(page, a) {
+async function findControl(page, a) {
   const root = a.context
     ? page.getByRole('listitem').filter({hasText:a.context})
     : page.locator('body');
-  return root.getByRole(a.role, {name:a.name,exact:true});
+  const exact = root.getByRole(a.role, {name:a.name,exact:true});
+  if (await exact.count() === 1) return exact;
+  // El nombre accesible puede incluir un prefijo de estado (p. ej. «0 0% leído · …»).
+  // Aceptar el título visible sólo si hay una coincidencia única; nunca elegir al azar.
+  const all = root.getByRole(a.role);
+  const total = await all.count();
+  const matches = [];
+  for (let i = 0; i < total; i++) {
+    const candidate = all.nth(i);
+    const label = (await candidate.getAttribute('aria-label')) ||
+      (await candidate.innerText().catch(() => '')) || '';
+    if (label.toLowerCase().includes(a.name.toLowerCase())) matches.push(candidate);
+  }
+  if (matches.length === 1) return matches[0];
+  throw Error('Control ausente o ambiguo: '+a.role+' «'+a.name+'» ('+matches.length+')');
 }
 export async function act(page, raw, persona) {
   const a = validateAction(raw,persona.mode);
@@ -89,9 +109,7 @@ export async function act(page, raw, persona) {
     await page.waitForTimeout(600);
     return 'type';
   }
-  const target = findControl(page,a);
-  const count = await target.count();
-  if (count !== 1) throw Error('Control ausente o ambiguo: '+a.role+' «'+a.name+'» ('+count+')');
+  const target = await findControl(page,a);
   if (!(await target.isVisible())) throw Error('Control no visible');
   if (a.action === 'click') await target.click({timeout:3500});
   else if (a.action === 'type') await target.fill(a.value,{timeout:3500});
