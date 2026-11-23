@@ -24,8 +24,8 @@
 > fuente actual). B9 mide 58 series no manuales: 39 con registro actual y **19
 > sin él** (10 con un registro de otro id y 9 sin ninguno); el título y los años
 > ±1 no se cuentan. De las 14 diferencias de editorial, se aplican **12** (11
-> vacías + SUPERMAN) y quedan 2 variantes de nombre sin tocar. B9 **19/58**; ver
-> §16. La medición de referencia de las demás comprobaciones sigue siendo la del
+> vacías + SUPERMAN) y quedan 2 variantes de nombre sin tocar. **Recolectadas 18
+> de las 19** (la 19.ª, RUNAWAYS, no existe en Tebeosfera): B9 **1/58**; ver §16. La medición de referencia de las demás comprobaciones sigue siendo la del
 > 2026-11-20.
 >
 > **Actualización 2026-11-22.** La Pi está en `ce26086a`; el backfill estricto
