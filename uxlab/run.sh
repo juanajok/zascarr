@@ -8,6 +8,7 @@ command -v docker >/dev/null || { echo "Docker no instalado" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "Python 3 no instalado" >&2; exit 1; }
 export UXLAB_DB_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
 mkdir -p "$RESULTS"
+rm -f "$RESULTS/bootstrap.log" "$RESULTS/compose-ps.txt"
 dc() { docker compose -f "$COMPOSE" "$@"; }
 
 cleanup() {
