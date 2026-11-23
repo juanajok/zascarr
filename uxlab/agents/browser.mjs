@@ -67,12 +67,14 @@ async function findControl(page, a) {
   // Aceptar el título visible sólo si hay una coincidencia única; nunca elegir al azar.
   const all = root.getByRole(a.role);
   const total = await all.count();
+  const norm = (value) => String(value).replace(/\s+/g, ' ').trim().toLowerCase();
+  const wanted = norm(a.name);
   const matches = [];
   for (let i = 0; i < total; i++) {
     const candidate = all.nth(i);
     const label = (await candidate.getAttribute('aria-label')) ||
       (await candidate.innerText().catch(() => '')) || '';
-    if (label.toLowerCase().includes(a.name.toLowerCase())) matches.push(candidate);
+    if (norm(label).includes(wanted)) matches.push(candidate);
   }
   if (matches.length === 1) return matches[0];
   throw Error('Control ausente o ambiguo: '+a.role+' «'+a.name+'» ('+matches.length+')');
