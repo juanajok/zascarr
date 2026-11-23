@@ -138,7 +138,7 @@
       <div class="vinc-ocupado" id="ocupado-{{ a.id }}">
         <p>Ya está en este número: <span class="nombre-archivo">{{ a.ocupante.nombres[0] }}</span>{% if a.ocupante.total > 1 %} y {{ a.ocupante.total - 1 }} más{% endif %}.
           <a href="/ui/series/{{ s.series_id }}/numero/{{ a.ocupante.issue_id }}">Ver ese número</a></p>
-        <p class="caption">Qué puedes hacer: <strong>corregir el número</strong> de este archivo (en el campo de arriba) si no es el {{ a.numero }};
+        <p class="caption">Qué puedes hacer: <strong>corregir el número</strong> de este archivo (en su campo «Número») si no es el {{ a.numero }};
           <strong>dejarlo en Pendientes</strong>, sin marcarlo, y no cambia nada; o abrir ese número y comparar los dos archivos antes de decidir.
           Registrarlo como otra edición todavía no se puede hacer desde aquí.</p>
       </div>
