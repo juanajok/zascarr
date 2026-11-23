@@ -2914,6 +2914,7 @@ body:has(.chip-previa:focus-within > .previa-numero:not(:empty))
 .tarea h3 { margin: 0 0 var(--space-1); font-size: var(--text-boton); }
 .tarea p { margin: 0 0 var(--space-1); color: var(--ink-soft); font-size: var(--text-secundario); }
 .tarea progress { width: 100%; height: 8px; accent-color: var(--ink); }
+.tarea a { display: inline-flex; align-items: center; min-height: 44px; }
 .tarea.error { border-left: var(--border-panel) solid var(--ink); padding-left: var(--space-2); }
 .tareas-anuncio { font-size: var(--text-secundario); color: var(--ink-soft); }
 @media (max-width: 480px) {

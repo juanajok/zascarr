@@ -315,3 +315,58 @@ def test_indicador_en_flujo_y_carrusel_estable():
     assert ".tareas-panel { position: relative; right: auto; left: auto; top: auto;" in css
     assert ".tareas-fuera .tareas-panel { position: fixed;" not in css
     assert ".escaparate-lista > li { flex: 0 0 160px; width: 160px; max-width: 160px; }" in css
+
+
+# --- UXA-15 (#1132): el reposo dice qué terminó, sin repetir el anuncio ---
+
+def _terminada(tipo: str = "importar"):
+    """Una tarea que ya superó el umbral de 400 ms (las más rápidas no se publican)."""
+    t = tareas.iniciar(tipo, total=1, enlace="/ui/pendientes")
+    time.sleep(0.41)
+    tareas.terminar(t.id, resumen="Hecho")
+    return t
+
+
+def _chip(cliente: TestClient) -> str:
+    return cliente.get("/ui/_tareas").text
+
+
+def test_uxa15_tarea_unica_terminada_se_nombra_y_enlaza_al_resultado():
+    _terminada()
+    html = _chip(TestClient(app))
+    assert "Terminó: " in html and "Listo" not in html
+    assert "Ver el resultado" in html
+
+
+def test_uxa15_sin_tareas_no_dice_listo_aislado():
+    html = _chip(TestClient(app))
+    assert "Sin tareas" in html and "Listo" not in html
+
+
+def test_uxa15_varias_terminadas_se_cuentan():
+    _terminada()
+    _terminada("registrar")
+    assert "Terminaron 2 tareas" in _chip(TestClient(app))
+
+
+def test_uxa15_fallo_sigue_mandando_sobre_lo_terminado():
+    _terminada()
+    e = tareas.iniciar("registrar", total=1)
+    time.sleep(0.41)
+    tareas.error(e.id, tipo_error="desconocido")
+    html = _chip(TestClient(app))
+    assert "Terminó: " not in html
+
+
+def test_uxa15_el_anuncio_de_fin_no_se_repite():
+    _terminada()
+    primero = tareas.snapshot(incluir_recientes=True, consumir_anuncio=True)["anuncio"]
+    segundo = tareas.snapshot(incluir_recientes=True, consumir_anuncio=True)["anuncio"]
+    assert primero and "terminado" in primero
+    assert segundo is None
+
+
+def test_uxa15_terminada_no_dice_que_sigue_trabajando():
+    _terminada()
+    html = _chip(TestClient(app))
+    assert "ZascArr está trabajando<" not in html

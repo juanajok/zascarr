@@ -74,7 +74,7 @@ class Tarea:
 _lock = threading.RLock()
 _tareas: dict[str, Tarea] = {}
 _por_origen: dict[str, str] = {}
-_ultimo_anuncio: tuple[int, int] | None = None
+_ultimo_anuncio: tuple[int, int, int] | None = None
 
 
 def _ahora(ahora: float | None = None) -> float:
@@ -227,7 +227,8 @@ def snapshot(*, ahora: float | None = None, incluir_recientes: bool = False,
         activas = sum(1 for x in salida if x["estado"] in {"en_curso", "atascada"})
         errores = sum(1 for x in salida if x["estado"] == "error")
         global _ultimo_anuncio
-        firma = (activas, errores)
+        terminadas = sum(1 for x in salida if x["estado"] == "terminada")
+        firma = (activas, errores, terminadas)
         anuncio = None
         if consumir_anuncio and firma != _ultimo_anuncio:
             _ultimo_anuncio = firma
@@ -236,6 +237,14 @@ def snapshot(*, ahora: float | None = None, incluir_recientes: bool = False,
             elif activas:
                 plural = "" if activas == 1 else "s"
                 anuncio = f"ZascArr está trabajando en {activas} tarea{plural}."
+            else:
+                # UXA-15 (#1132): en reposo se nombra lo que acaba de terminar;
+                # solo si la firma cambia, así que no se repite en cada consulta.
+                fin = [x["titulo"] for x in salida if x["estado"] == "terminada"]
+                if len(fin) == 1:
+                    anuncio = f"{fin[0]}: terminado."
+                elif fin:
+                    anuncio = f"{len(fin)} tareas terminadas."
         return {"version": 1, "generado": datetime.now(UTC).isoformat(),
                 "tareas": salida, "activas": activas, "errores": errores,
                 "hay_tareas": bool(salida),
