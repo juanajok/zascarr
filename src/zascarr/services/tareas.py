@@ -238,8 +238,8 @@ def snapshot(*, ahora: float | None = None, incluir_recientes: bool = False,
                 plural = "" if activas == 1 else "s"
                 anuncio = f"ZascArr está trabajando en {activas} tarea{plural}."
             else:
-                # UXA-15 (#1132): «Listo» aislado no decía qué. Al quedar en reposo se nombra lo que acaba
-                # de terminar; solo cuando la firma cambia, así que no se repite en cada consulta.
+                # UXA-15 (#1132): en reposo se nombra lo que acaba de terminar;
+                # solo si la firma cambia, así que no se repite en cada consulta.
                 fin = [x["titulo"] for x in salida if x["estado"] == "terminada"]
                 if len(fin) == 1:
                     anuncio = f"{fin[0]}: terminado."
