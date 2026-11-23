@@ -30,7 +30,7 @@
     </tbody>
   </table>
   {% if comparacion.numeros_local and c.numeros_fuente and comparacion.numeros_local > c.numeros_fuente %}
-  <p class="aviso">Tu serie declara {{ comparacion.numeros_local }} números y esta ficha {{ c.numeros_fuente }}: revisa si es el volumen correcto o si tienes números de más.</p>
+  <p class="caption">Tu serie declara {{ comparacion.numeros_local }} números y esta ficha {{ c.numeros_fuente }}: revisa si es el volumen correcto o si tienes números de más.</p>
   {% endif %}
   {% if c.seleccionable and c.token %}
   <form method="post" action="/ui/series/{{ serie.id }}/asociar/previsualizar">
