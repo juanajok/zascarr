@@ -30,9 +30,10 @@
         role="status" aria-live="polite">
     Buscando en Prowlarr y en el foro… puede tardar hasta 2 minutos; no cierres la página.
     <button type="button" class="btn ghost sm"
+            hx-get="/ui/wishlist/aviso-cancelado"
+            hx-target="#aviso-cancelado-{{ row.item.id }}" hx-swap="innerHTML"
             hx-on::click="htmx.trigger('#boton-buscar-{{ row.item.id }}', 'htmx:abort')"
-            aria-label="Cancelar la búsqueda de {{ row.referencia }}">Cancelar búsqueda</button>
-    <span class="muted">La espera se cancela; lo ya enviado no se deshace.</span>
+            aria-label="Dejar de esperar la búsqueda de {{ row.referencia }}">Dejar de esperar</button>
   </span>
   {% endif %}
   {% if row.puede_marcar_conseguido %}
@@ -51,3 +52,4 @@
           aria-label="Quitar {{ row.referencia }} de Deseados">
     Quitar
   </button>
+<div id="aviso-cancelado-{{ row.item.id }}" class="wishlist-aviso-cancelado" aria-live="polite"></div>

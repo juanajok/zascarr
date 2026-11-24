@@ -25,6 +25,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Deseados: «Dejar de esperar» dice qué sigue y qué no (UXA-13b, #1254).** El botón de cancelar
+  de «Buscar ahora» y la nueva salida de «Buscar seleccionados» dejan de prometer una cancelación
+  que no ocurre: explican que el navegador deja de esperar, que ZascArr puede seguir, que
+  no se ha enviado nada al programa de descargas (solo al confirmar un candidato) y que los
+  resultados no se guardan. Sin cancelación cooperativa, migración, dependencias ni JavaScript nuevo.
 - **Ajustes: los errores se leen junto al campo (UXA-14b, #1257).** Las tarjetas de Avisos, Blog o
   RSS, Nombres de archivo, Transmission y Foro repintan solo su bloque de campos fuera de banda con
   el error en el control que lo causa (`aria-invalid`/`aria-describedby`) y, con dos o más, un

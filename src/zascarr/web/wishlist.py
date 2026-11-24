@@ -414,6 +414,22 @@ async def cancelar_busqueda(item_id: UUID) -> HTMLResponse:
     return HTMLResponse("")
 
 
+# UXA-13b (#1254): el botón «Dejar de esperar» aborta la petición htmx, pero el handler
+# del servidor sigue (uvicorn 0.54.0 no cancela la tarea al desconectar el cliente). El aviso
+# dice qué sigue en curso, que no se ha enviado nada al cliente de descargas y que los
+# candidatos del preview no se guardan. No hay cancelación cooperativa en el servidor.
+@router.get("/aviso-cancelado", response_class=HTMLResponse)
+async def aviso_cancelado(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request, "_aviso_cancelado.html", {"alcance": "busqueda"})
+
+
+@router.get("/aviso-cancelado-lote", response_class=HTMLResponse)
+async def aviso_cancelado_lote(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request, "_aviso_cancelado.html", {"alcance": "lote"})
+
+
 @router.post("/{item_id}/enviar-candidato", response_class=HTMLResponse,
              dependencies=[Depends(require_legal_acknowledgment)])
 async def enviar_candidato(

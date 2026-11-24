@@ -1,0 +1,17 @@
+{#- UXA-13b (#1254): tras dejar de esperar una búsqueda o una tanda. No promete cancelar el
+    servidor: htmx aborta la petición del navegador y uvicorn sigue el handler (medido 2026-11-24).
+    Los candidatos del preview no se persisten; la fila sí puede actualizarse. -#}
+<p class="caption" role="status">
+  {% if alcance == "lote" %}
+  Has dejado de esperar la tanda. ZascArr puede seguir buscando los deseos que ya había
+  empezado (hasta 8) y actualizar sus filas; los que no haya empezado no se buscan. No se ha enviado
+  nada a tu programa de descargas: eso solo ocurre al confirmar un candidato. Los resultados de esta
+  tanda no se guardan; <a href="/ui/wishlist">actualiza Deseados</a> y vuelve a buscar si quieres
+  verlos.
+  {% else %}
+  Has dejado de esperar la búsqueda. ZascArr puede seguir consultando las fuentes y
+  actualizar la fila; no se ha enviado nada a tu programa de descargas: eso solo ocurre al confirmar
+  un candidato. Los resultados de esta búsqueda no se guardan; <a href="/ui/wishlist">actualiza
+  Deseados</a> y vuelve a pulsar «Buscar ahora» si quieres verlos.
+  {% endif %}
+</p>
