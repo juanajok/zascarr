@@ -8,6 +8,7 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 ![Licencia](https://img.shields.io/badge/licencia-GPL--3.0--only-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Estado](https://img.shields.io/badge/estado-1.15.1-brightgreen.svg)
+[![CI](https://github.com/juanajok/zascarr/actions/workflows/ci.yml/badge.svg)](https://github.com/juanajok/zascarr/actions/workflows/ci.yml)
 
 > ⚠️ **Aviso legal (postura Sonarr-style).** ZascArr es una herramienta
 > **neutra** para gestionar tu biblioteca personal de tebeos: organiza,
@@ -490,6 +491,8 @@ Las tres causas, por si prefieres comprobarlas a mano:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
+python -m pip install pre-commit
+pre-commit install
 make test
 make lint
 make format
@@ -511,6 +514,12 @@ CI audita las dependencias de la imagen construida y verifica el arranque y
 la lectura de CBR en runners Linux x86-64 y ARM64. La validación en ARM64
 cubre la arquitectura de la Raspberry Pi. El comportamiento de discos y
 servicios del equipo se verifica en el dispositivo.
+
+## Contribuir
+
+Lee [`CONTRIBUTING.md`](CONTRIBUTING.md) antes de abrir una PR. El proyecto
+sigue el [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) y las vulnerabilidades se
+reportan en privado según [`SECURITY.md`](SECURITY.md).
 
 ## Estructura del repositorio
 
@@ -536,6 +545,8 @@ docker-compose.yml
 
 - [`CHANGELOG.md`](CHANGELOG.md) — qué trae cada release y qué queda pendiente.
 - [`SECURITY.md`](SECURITY.md) — postura de seguridad y cómo reportar una vulnerabilidad.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — entorno, ramas, pruebas y revisión.
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — normas de convivencia.
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — backlog canónico del producto.
 - [`docs/adr/`](docs/adr/) — decisiones de arquitectura registradas.
 - [Capturas actuales de la interfaz](docs/design/ui-actual/README.md) — foto de la UI al cerrar la migración V0–V14 (claro/oscuro, escritorio/móvil).

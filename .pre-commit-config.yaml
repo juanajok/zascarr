@@ -1,0 +1,31 @@
+# Hooks locales para no llegar a la CI con ruido evitable.
+#
+# Instalación (una vez por clon):
+#   python -m pip install pre-commit
+#   pre-commit install
+#
+# La CI sigue siendo la fuente de verdad: estos hooks no sustituyen a la suite,
+# a `ruff check src/` ni a las pruebas con PostgreSQL real.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=10240"]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^src/

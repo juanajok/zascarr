@@ -1,0 +1,76 @@
+name: Informe de fallo
+description: Algo no funciona como debería
+title: "[Fallo] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por el informe. No incluyas contraseñas, tokens, rutas privadas
+        ni datos de tu biblioteca. Para vulnerabilidades, usa el enlace privado
+        de la sección de seguridad.
+
+  - type: textarea
+    id: que-pasa
+    attributes:
+      label: Qué pasa
+      description: Describe el fallo en una o dos frases.
+      placeholder: "Al pulsar «Buscar» en Deseados, la página se queda cargando…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproducir
+    attributes:
+      label: Cómo reproducirlo
+      description: Pasos mínimos y deterministas.
+      placeholder: |
+        1. Abrir /ui/deseados
+        2. Pulsar «Buscar»
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué esperabas que pasara
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Versión o commit
+      description: La versión de Ajustes o la salida de `git rev-parse --short HEAD`.
+      placeholder: "1.15.1 / a56f2c60"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: entorno
+    attributes:
+      label: Entorno
+      options:
+        - Raspberry Pi 4
+        - Raspberry Pi 5
+        - Otro Linux
+        - Docker en otro sistema
+        - Desarrollo local
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs o capturas
+      description: Pega solo lo necesario y revisa que no haya secretos.
+      render: shell
+
+  - type: checkboxes
+    id: privacidad
+    attributes:
+      label: Privacidad
+      options:
+        - label: He revisado que no incluyo contraseñas, tokens ni datos personales.
+          required: true

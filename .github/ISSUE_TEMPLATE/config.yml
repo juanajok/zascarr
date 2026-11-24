@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/juanajok/zascarr/security/advisories/new
+    about: No abras un issue público para problemas de seguridad. Usa el aviso privado.
+  - name: Guía de contribución
+    url: https://github.com/juanajok/zascarr/blob/main/CONTRIBUTING.md
+    about: Entorno, ramas, pruebas y qué debe llevar una PR.
+  - name: Documentación y backlog
+    url: https://github.com/juanajok/zascarr/blob/main/docs/BACKLOG.md
+    about: Backlog canónico, ADR y documentos de diseño.
