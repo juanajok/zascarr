@@ -1,8 +1,8 @@
 # Hooks locales para no llegar a la CI con ruido evitable.
 #
 # Instalación (una vez por clon):
-#   python -m pip install pre-commit
-#   pre-commit install
+#   uv sync --extra dev
+#   uv run pre-commit install
 #
 # La CI sigue siendo la fuente de verdad: estos hooks no sustituyen a la suite,
 # a `ruff check src/` ni a las pruebas con PostgreSQL real.

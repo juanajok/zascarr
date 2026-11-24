@@ -1,8 +1,21 @@
 version: 2
-# Las dependencias de Python se actualizan a mano con `uv pip compile` para
-# conservar los hashes de `requirements-runtime.txt` (ver README). Dependabot
-# solo mantiene las acciones de GitHub, que no tienen lockfile propio.
+# Dependabot mantiene las dependencias de Python declaradas en
+# `pyproject.toml` (regenerando `uv.lock`) y las acciones de GitHub.
 updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

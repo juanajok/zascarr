@@ -487,28 +487,28 @@ Las tres causas, por si prefieres comprobarlas a mano:
 
 ## Desarrollo
 
+Con [uv](https://docs.astral.sh/uv/) instalado:
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[dev]"
-python -m pip install pre-commit
-pre-commit install
-make test
-make lint
-make format
+uv sync --extra dev
+uv run pre-commit install
+uv run make test
+uv run make lint
+uv run make format
 ```
 
-Los objetivos de desarrollo usan el Python del entorno activo. También puedes
-indicarlo con `make test PYTHON=.venv/bin/python`. Las pruebas de integración
-con PostgreSQL real requieren `TEST_DATABASE_URL`. Consulta [la guía de
+`uv sync` crea `.venv` con las versiones exactas de `uv.lock`. Los objetivos
+de desarrollo usan el Python del entorno activo; también puedes indicarlo con
+`make test PYTHON=.venv/bin/python`. Las pruebas de integración con PostgreSQL
+real requieren `TEST_DATABASE_URL`. Consulta [la guía de
 pruebas](docs/TESTING_E2E.md) para configurar las integraciones.
 
-La imagen instala las versiones y hashes de `requirements-runtime.txt`. Para
-actualizarlos, ejecuta este comando y comprueba la compilación de la imagen.
-
-```bash
-uv pip compile --universal --python-version 3.11 --generate-hashes --no-annotate pyproject.toml --output-file requirements-runtime.txt
-```
+La imagen instala las versiones y hashes fijados en `uv.lock`. Para
+actualizarlos, ejecuta `uv lock --upgrade` (o `uv lock --upgrade-package
+<paquete>` para una sola dependencia), revisa el diff de `uv.lock` y comprueba
+la compilación de la imagen. La CI usa `uv sync --locked` y falla si `uv.lock`
+no está sincronizado con `pyproject.toml`. Dependabot también mantiene las
+dependencias de Python.
 
 CI audita las dependencias de la imagen construida y verifica el arranque y
 la lectura de CBR en runners Linux x86-64 y ARM64. La validación en ARM64

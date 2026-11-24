@@ -7,6 +7,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Mantenimiento
 
+- **Dependencias de Python con `uv.lock` (2026-11-24).** `pyproject.toml` pasa a
+  ser la única declaración y `uv.lock` fija versiones y hashes para desarrollo,
+  CI e imagen. El Dockerfile exporta el lock con `uv export --locked` y sigue
+  instalando con `--require-hashes`; la CI usa `uv sync --locked`. Dependabot
+  mantiene también las dependencias de Python. Se retira
+  `requirements-runtime.txt`.
 - **Metadatos de repositorio y automatización (2026-11-23).** Añadidos
   `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.editorconfig`, `.gitattributes`,
   hooks de pre-commit, plantillas de issue y Dependabot para las acciones de
