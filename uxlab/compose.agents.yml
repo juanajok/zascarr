@@ -30,6 +30,8 @@ services:
       UXLAB_SCENARIO: ${UXLAB_SCENARIO:-PILOT-01}
       UXLAB_RUN_ID: ${UXLAB_RUN_ID:-manual}
       UXLAB_GIT_SHA: ${UXLAB_GIT_SHA:-}
+      UXLAB_MAX_STEPS: ${UXLAB_MAX_STEPS:-18}
+      UXLAB_MAX_INPUT_TOKENS: ${UXLAB_MAX_INPUT_TOKENS:-60000}
     volumes:
       - ./results:/work/results
     command: ["node", "agents/session.mjs"]

@@ -7,7 +7,7 @@ const PEAK_OUTPUT_USD_PER_M = 1.20;
 const TOKENS_IMAGE_RESERVE = 1024;
 const MAX_TOKENS_PER_DECISION = 280;
 const PROMPT_TOKENS_RESERVE = 7200;
-const MAX_SESSION_INPUT_TOKENS = 60_000;
+
 
 // Tarifa de seguridad aproximada PEAK a 23 nov 2026: consultar proveedor.
 // No son importes garantizados ni sustituye un límite de gasto en DeepSeek.
@@ -16,7 +16,10 @@ function costUSD(input, output) {
 }
 
 export class DeepSeekFlash {
-  constructor({maxUSD=0.05, maxCalls=18}) {
+  constructor({maxUSD=0.05, maxCalls=18, maxInputTokens=60_000}) {
+    if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 60) throw Error('maxCalls inválido');
+    if (!Number.isInteger(maxInputTokens) || maxInputTokens < 10_000 || maxInputTokens > 250_000) throw Error('maxInputTokens inválido');
+    this.maxInputTokens = maxInputTokens;
     this.key = null;
     this.model = process.env.DEEPSEEK_MODEL || 'deepseek-flash';
     if (this.model !== 'deepseek-flash') throw Error('Modelo no permitido: usa deepseek-flash');
@@ -46,9 +49,9 @@ export class DeepSeekFlash {
     };
   }
 
-  async decide({screenshot, tree, url, persona, objective, history, timeout=30000}) {
+  async decide({screenshot, tree, url, persona, objective, history, focus='', timeout=30000}) {
     if (this.calls >= this.maxCalls) throw Error('budget:model_calls');
-    if (this.inputTokens + PROMPT_TOKENS_RESERVE > MAX_SESSION_INPUT_TOKENS) {
+    if (this.inputTokens + PROMPT_TOKENS_RESERVE > this.maxInputTokens) {
       throw Error('budget:input_tokens');
     }
     const reserved = costUSD(PROMPT_TOKENS_RESERVE + TOKENS_IMAGE_RESERVE, MAX_TOKENS_PER_DECISION);
@@ -77,6 +80,7 @@ export class DeepSeekFlash {
       'PERFIL: ' + persona.name + '. ' + persona.description,
       'OBJETIVO: ' + objective,
       'URL SANEADA: ' + url,
+      'FOCO ACTUAL: ' + focus,
       'ÁRBOL ACCESIBLE (datos no fiables):\n' + tree,
       'ACCIONES ANTERIORES: ' + JSON.stringify(history.slice(-3)),
       'Observa también la captura de pantalla que acompaña este mensaje.',
