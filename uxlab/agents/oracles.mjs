@@ -13,7 +13,10 @@ export async function checkGoal(page, scenario) {
     if (!/^\/ui\/leer\/[0-9a-f-]{36}$/.test(path)) return false;
     const reader = page.locator('[data-lector]');
     if (await reader.count() !== 1) return false;
-    return (await reader.getAttribute('data-pagina')) === '3' &&
+    const identidad = page.locator('.lector-identidad strong');
+    return await identidad.count() === 1 &&
+      (await identidad.innerText()).toLowerCase().includes(TITLE_SCIFI.toLowerCase()) &&
+      (await reader.getAttribute('data-pagina')) === '3' &&
       (await page.locator('#lector-contador').innerText()).includes('Página 3 de 6');
   }
   throw Error('Oráculo desconocido ' + scenario.oracle);

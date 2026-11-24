@@ -2,6 +2,7 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { openBrowser, getObservation, act } from './browser.mjs';
+import { accessibleText } from './guards.mjs';
 import { DeepSeekFlash } from './deepseek.mjs';
 import { checkGoal, classify } from './oracles.mjs';
 
@@ -57,7 +58,7 @@ async function main() {
       let action, outcome='', error='';
       try {
         action = await ds.decide({
-          screenshot:obs.screenshot,tree:obs.tree,url:obs.url,
+          screenshot:obs.screenshot,tree:obs.tree,url:obs.url,focus:accessibleText(obs.focus),
           persona, objective:scenario.objective, history,
           timeout:Math.max(1000,Math.min(30000,SESSION_LIMIT_MS-(Date.now()-started))),
         });
