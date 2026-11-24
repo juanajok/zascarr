@@ -17,6 +17,8 @@ export UXLAB_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 export DEEPSEEK_MAX_USD="${DEEPSEEK_MAX_USD:-0.05}"
 export UXLAB_MAX_STEPS="${UXLAB_MAX_STEPS:-18}"
 export UXLAB_MAX_INPUT_TOKENS="${UXLAB_MAX_INPUT_TOKENS:-60000}"
+export UXLAB_IMAGE_DETAIL="${UXLAB_IMAGE_DETAIL:-low}"
+export DEEPSEEK_TOTAL_MAX_USD="${DEEPSEEK_TOTAL_MAX_USD:-0.30}"
 
 SCENARIOS=( ${UXLAB_SCENARIOS:-PILOT-01 PILOT-02} )
 PERSONAS=( ${UXLAB_PERSONAS:-p1-movil p2-teclado p3-zoom} )
@@ -25,6 +27,8 @@ for id in "${SCENARIOS[@]}" "${PERSONAS[@]}"; do
 done
 [[ "$UXLAB_MAX_STEPS" =~ ^[0-9]+$ ]] && (( UXLAB_MAX_STEPS >= 1 && UXLAB_MAX_STEPS <= 60 )) || { echo "UXLAB_MAX_STEPS debe estar entre 1 y 60" >&2; exit 2; }
 [[ "$UXLAB_MAX_INPUT_TOKENS" =~ ^[0-9]+$ ]] && (( UXLAB_MAX_INPUT_TOKENS >= 10000 && UXLAB_MAX_INPUT_TOKENS <= 250000 )) || { echo "UXLAB_MAX_INPUT_TOKENS fuera de rango" >&2; exit 2; }
+[[ "$UXLAB_IMAGE_DETAIL" =~ ^(low|high|original|auto)$ ]] || { echo "UXLAB_IMAGE_DETAIL inválido" >&2; exit 2; }
+python3 -c "import sys; sys.exit(0 if 0 < float(sys.argv[1]) <= 10 else 1)" "$DEEPSEEK_TOTAL_MAX_USD" || { echo "DEEPSEEK_TOTAL_MAX_USD inválido" >&2; exit 2; }
 OWNER_UID="$(id -u)"
 OWNER_GID="$(id -g)"
 mkdir -p "$RESULTS/agents/$UXLAB_RUN_ID"
@@ -60,13 +64,25 @@ dc build agent
 dc run --rm --no-deps agent node --test agents/contracts.test.mjs
 # Seis sesiones SEPARADAS; entre cada una se restablece el fixture y se abre
 # un contexto independiente. Solo el contenedor 'agent' tiene acceso DeepSeek.
+SESSION_STATUS=0
 for scenario in "${SCENARIOS[@]}"; do
   for persona in "${PERSONAS[@]}"; do
     export UXLAB_SCENARIO="$scenario"
     export UXLAB_PERSONA="$persona"
     echo "UXLab / DeepSeek: $scenario / $persona"
-    dc run --rm --no-deps reset-fixture
-    dc run --rm --no-deps agent
+    if ! dc run --rm --no-deps reset-fixture; then
+      echo "No se pudo restablecer el fixture; sesión omitida." >&2
+      SESSION_STATUS=1
+      continue
+    fi
+    dc run --rm --no-deps agent || SESSION_STATUS=1
+    TOTAL_USD="$(python3 -c 'import glob,json,sys; print(sum(json.load(open(p)).get("model",{}).get("estimatedUSD",0) for p in glob.glob(sys.argv[1]+"/*/session.json")))' "$RESULTS/agents/$UXLAB_RUN_ID")"
+    if python3 -c "import sys; sys.exit(0 if float('$TOTAL_USD') > float('$DEEPSEEK_TOTAL_MAX_USD') else 1)"; then
+      echo "Presupuesto global alcanzado (USD $TOTAL_USD > $DEEPSEEK_TOTAL_MAX_USD); se detiene el bucle." >&2
+      SESSION_STATUS=3
+      break 2
+    fi
   done
 done
 echo "Sesiones terminadas: ${#SCENARIOS[@]} escenarios × ${#PERSONAS[@]} perfiles. Informe en $RESULTS/agents/$UXLAB_RUN_ID/"
+exit "$SESSION_STATUS"

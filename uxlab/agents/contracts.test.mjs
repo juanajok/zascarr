@@ -45,3 +45,51 @@ test('presupuesto por defecto coherente y modelo permitido', () => {
   delete process.env.DEEPSEEK_MODEL;
   assert.equal(new DeepSeekFlash({maxUSD:0.05}).model, 'deepseek-flash');
 });
+
+
+test('diálogo DeepSeek simulado: imagen, foco, modelo y respuesta verificable', async () => {
+  const cliente = new DeepSeekFlash({
+    maxUSD: 0.05,
+    maxCalls: 2,
+    maxInputTokens: 60_000,
+    imageDetail: 'original',
+  });
+  cliente.key = 'clave-de-prueba';
+  const fetchOriginal = globalThis.fetch;
+  let peticion;
+  globalThis.fetch = async (url, opciones) => {
+    peticion = { url, body: JSON.parse(opciones.body) };
+    return new Response(JSON.stringify({
+      id: 'simulado-1',
+      model: 'deepseek-flash',
+      system_fingerprint: 'test',
+      choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+        action: 'finish', status: 'done', reason: 'simulado',
+        role: '', name: '', value: '', context: '', direction: '',
+      }) } }],
+      usage: { prompt_tokens: 120, completion_tokens: 12 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const accion = await cliente.decide({
+      screenshot: Buffer.from('jpeg-simulado'),
+      tree: 'link "Resultados"',
+      url: '/ui/biblioteca',
+      focus: 'A:Resultados',
+      persona: { name: 'Móvil', description: 'perfil de prueba', mode: 'touch' },
+      objective: 'Abrir los resultados',
+      history: [],
+    });
+    assert.equal(accion.action, 'finish');
+    assert.equal(peticion.url, 'https://api.deepseek.com/chat/completions');
+    assert.equal(peticion.body.model, 'deepseek-flash');
+    const partes = peticion.body.messages[1].content;
+    assert.equal(partes[1].image_url.detail, 'original');
+    assert.match(partes[0].text, /FOCO ACTUAL: A:Resultados/);
+    assert.equal(cliente.calls, 1);
+    assert.equal(cliente.inputTokens, 120);
+    assert.equal(cliente.outputTokens, 12);
+  } finally {
+    globalThis.fetch = fetchOriginal;
+  }
+});

@@ -47,7 +47,7 @@ Se restaura la propiedad de uxlab/results/ al UID/GID del host.
 
 Límite inicial de **0,05 USD estimados por sesión**, como máximo 0,30 USD estimados entre las seis. El cliente utiliza tarifas pico publicadas en noviembre de 2026: entrada sin caché de Flash 0,30 USD/1M tokens y salida 1,20 USD/1M tokens. El importe real puede variar según tarifas, caché, horario y facturación final. **No es un tope de gasto en la cuenta de DeepSeek.** Configura límites de crédito también en el proveedor si están disponibles.
 
-Máximo por sesión: 18 acciones por defecto (`UXLAB_MAX_STEPS`), 240 segundos, 60.000 tokens de entrada (`UXLAB_MAX_INPUT_TOKENS`), 280 tokens de salida por decisión, tres acciones inválidas consecutivas, una decisión por llamada. No reintenta automáticamente llamadas facturables. Si se agota el presupuesto, el experimento se detiene y guarda la evidencia.
+Máximo por sesión: 18 acciones por defecto (`UXLAB_MAX_STEPS`), 240 segundos, 60.000 tokens de entrada (`UXLAB_MAX_INPUT_TOKENS`), detalle de imagen `UXLAB_IMAGE_DETAIL` (`low` por defecto), 280 tokens de salida por decisión, tres acciones inválidas consecutivas, una decisión por llamada. No reintenta automáticamente llamadas facturables. Si se agota el presupuesto, el experimento se detiene y guarda la evidencia.
 
 Para repetir solo un perfil/escenario con otro presupuesto:
 
