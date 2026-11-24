@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { validateAction } from './guards.mjs';
 
 const ENDPOINT = 'https://api.deepseek.com/chat/completions';
+const IMAGE_DETAILS = new Set(['low','high','original','auto']);
 const PEAK_INPUT_USD_PER_M = 0.30;
 const PEAK_OUTPUT_USD_PER_M = 1.20;
 const TOKENS_IMAGE_RESERVE = 1024;
@@ -16,10 +17,12 @@ function costUSD(input, output) {
 }
 
 export class DeepSeekFlash {
-  constructor({maxUSD=0.05, maxCalls=18, maxInputTokens=60_000}) {
+  constructor({maxUSD=0.05, maxCalls=18, maxInputTokens=60_000, imageDetail=process.env.UXLAB_IMAGE_DETAIL || 'low'}) {
     if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 60) throw Error('maxCalls inválido');
     if (!Number.isInteger(maxInputTokens) || maxInputTokens < 10_000 || maxInputTokens > 250_000) throw Error('maxInputTokens inválido');
+    if (!IMAGE_DETAILS.has(imageDetail)) throw Error('UXLAB_IMAGE_DETAIL inválido');
     this.maxInputTokens = maxInputTokens;
+    this.imageDetail = imageDetail;
     this.key = null;
     this.model = process.env.DEEPSEEK_MODEL || 'deepseek-flash';
     if (this.model !== 'deepseek-flash') throw Error('Modelo no permitido: usa deepseek-flash');
@@ -104,7 +107,7 @@ export class DeepSeekFlash {
             {type:'text',text:userText},
             {type:'image_url', image_url:{
               url:'data:image/jpeg;base64,'+screenshot.toString('base64'),
-              detail:'low',
+              detail:this.imageDetail,
             }},
           ]},
         ],

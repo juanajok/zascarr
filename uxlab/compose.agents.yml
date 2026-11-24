@@ -32,6 +32,7 @@ services:
       UXLAB_GIT_SHA: ${UXLAB_GIT_SHA:-}
       UXLAB_MAX_STEPS: ${UXLAB_MAX_STEPS:-18}
       UXLAB_MAX_INPUT_TOKENS: ${UXLAB_MAX_INPUT_TOKENS:-60000}
+      UXLAB_IMAGE_DETAIL: ${UXLAB_IMAGE_DETAIL:-low}
     volumes:
       - ./results:/work/results
     command: ["node", "agents/session.mjs"]
