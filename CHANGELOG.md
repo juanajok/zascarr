@@ -13,6 +13,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   instalando con `--require-hashes`; la CI usa `uv sync --locked`. Dependabot
   mantiene también las dependencias de Python. Se retira
   `requirements-runtime.txt`.
+- **Cobertura completa de Dependabot (2026-11-24).** Añadidos los ecosistemas
+  `npm` para `uxlab/` y `pre-commit`; `uv` usa `lockfile-only` para actualizar
+  `uv.lock` sin elevar los mínimos de `pyproject.toml`. El workflow de UXLab
+  valida `npm ci` cuando cambian sus dependencias.
 - **Metadatos de repositorio y automatización (2026-11-23).** Añadidos
   `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `.editorconfig`, `.gitattributes`,
   hooks de pre-commit, plantillas de issue y Dependabot para las acciones de

@@ -1,6 +1,6 @@
 version: 2
-# Dependabot mantiene las dependencias de Python declaradas en
-# `pyproject.toml` (regenerando `uv.lock`) y las acciones de GitHub.
+# Dependabot mantiene las dependencias de Python (`uv.lock`), las de UXLab
+# (`uxlab/package-lock.json`), los hooks de pre-commit y las acciones de GitHub.
 updates:
   - package-ecosystem: "uv"
     directory: "/"
@@ -10,11 +10,39 @@ updates:
       time: "06:00"
       timezone: "Europe/Madrid"
     open-pull-requests-limit: 5
+    # Actualiza el lock sin elevar los mínimos de pyproject.toml: ZascArr es
+    # una aplicación, no una librería, y los rangos declaran compatibilidad.
+    versioning-strategy: "lockfile-only"
     commit-message:
       prefix: "chore"
     groups:
       python-dependencies:
         patterns: ["*"]
+
+  - package-ecosystem: "npm"
+    directory: "/uxlab"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+    groups:
+      uxlab-npm:
+        patterns: ["*"]
+
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
 
   - package-ecosystem: "github-actions"
     directory: "/"
