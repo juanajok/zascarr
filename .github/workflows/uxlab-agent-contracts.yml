@@ -6,6 +6,9 @@ on:
       - 'uxlab/compose.agents.yml'
       - 'uxlab/run-agents.sh'
       - 'uxlab/.dockerignore'
+      - 'uxlab/package.json'
+      - 'uxlab/package-lock.json'
+      - '.github/workflows/uxlab-agent-contracts.yml'
   workflow_dispatch:
 
 jobs:
@@ -18,6 +21,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+      - name: Instalar dependencias de UXLab
+        working-directory: uxlab
+        run: npm ci
       - name: Comprobar barreras de seguridad y falsos éxitos (sin tokens API)
         run: node --test uxlab/agents/contracts.test.mjs
       - name: Validar sintaxis de scripts
