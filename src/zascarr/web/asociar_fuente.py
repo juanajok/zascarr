@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
@@ -35,6 +36,7 @@ from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
 router = APIRouter(prefix="/ui/series/{series_id}", tags=["ui"])
+logger = structlog.get_logger(__name__)
 
 _FUENTES = (
     (MetadataSource.COMIC_VINE, "Comic Vine", "1 petición"),
@@ -179,6 +181,24 @@ async def confirmar(series_id: UUID, request: Request,
             request, "asociar_fuente_resultado.html",
             {**_contexto(serie), "resultado": None, "incierto": False, "token": token,
              "error": str(exc)}, status_code=400))
+    # Evidencia de la fuente en el mismo flujo (2026-11-24). Best-effort: la
+    # asociación ya está confirmada; si la fuente falla, B9 pedirá la ficha luego.
+    try:
+        from zascarr.services.consolidacion.adaptadores import abrir_adaptadores
+        from zascarr.services.consolidacion.recolector import Recolector
+
+        abierto = await abrir_adaptadores()
+        try:
+            if abierto["adaptadores"]:
+                actual = (await db.execute(
+                    select(Series).where(Series.id == series_id))).scalar_one_or_none()
+                if actual is not None:
+                    await Recolector(db, abierto["adaptadores"]).recolectar_serie(actual)
+                    await db.commit()
+        finally:
+            await abierto["pila"].aclose()
+    except Exception:  # noqa: BLE001 — la asociación no se cae por la evidencia
+        logger.warning("asociar.evidencia_fallida", series_id=str(series_id))
     return _sin_cache(templates.TemplateResponse(
         request, "asociar_fuente_resultado.html",
         {**_contexto(serie), "resultado": resultado, "incierto": False, "token": token,
