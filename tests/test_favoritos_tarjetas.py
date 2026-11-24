@@ -1,6 +1,7 @@
 """#1035: favorito en tarjetas y ficha."""
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -125,7 +126,9 @@ def test_el_cambio_se_anuncia_en_una_region_viva_que_ya_estaba_en_la_pagina():
     assert region in ficha
     # Fuera de `#rejilla` (que se sustituye entera al filtrar): si no, el anuncio se perdería.
     assert region in biblioteca
-    assert biblioteca.index(region) < biblioteca.index('<div id="rejilla">')
+    rejilla = re.search(r'<div id="rejilla"[^>]*>', biblioteca)
+    assert rejilla is not None
+    assert biblioteca.index(region) < rejilla.start()
     assert 'id="anuncio-favorito"' not in (plantillas / "_rejilla_biblioteca.html").read_text()
 
 
