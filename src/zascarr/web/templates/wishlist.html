@@ -47,16 +47,21 @@
 {% endif %}
 
 {% if rows %}
-<form class="wishlist-lote" hx-post="/ui/wishlist/buscar-lote"
+<form class="wishlist-lote" id="form-lote" hx-post="/ui/wishlist/buscar-lote"
       hx-include="#wishlist-list input[name='item_id']:checked"
       hx-target="#resultado-lote" hx-swap="innerHTML"
-      hx-indicator="#buscando-lote" hx-disable="find button">
-  <button type="submit" class="btn ghost">Buscar seleccionados</button>
+      hx-indicator="#buscando-lote" hx-disable="find #boton-buscar-lote">
+  <button type="submit" class="btn ghost" id="boton-buscar-lote">Buscar seleccionados</button>
   <span id="buscando-lote" class="htmx-indicator caption" role="status" aria-live="polite">
-    Buscando seleccionados… puede tardar hasta 2 minutos por deseo; no cierres la página.
+    Buscando seleccionados… puede tardar hasta 2 minutos por deseo; puedes dejar de esperar.
+    <button type="button" class="btn ghost sm" id="cancelar-lote"
+            hx-get="/ui/wishlist/aviso-cancelado-lote"
+            hx-target="#aviso-cancelado-lote" hx-swap="innerHTML"
+            hx-on::click="htmx.trigger('#form-lote', 'htmx:abort')">Dejar de esperar la tanda</button>
   </span>
 </form>
 <div id="resultado-lote" aria-live="polite"></div>
+<div id="aviso-cancelado-lote" class="wishlist-aviso-cancelado" aria-live="polite"></div>
 {% endif %}
 
 <div class="wishlist-list" id="wishlist-list">

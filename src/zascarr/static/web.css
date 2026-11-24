@@ -809,6 +809,9 @@ p.empty:has(+ #wishlist-list:not(:empty)) { display: none; }
   .candidato-fila .btn-descargar-candidato { width: 100%; }
 }
 
+/* UXA-13b: el aviso de «dejar de esperar» ocupa su propia línea, sin apretar la fila. */
+.wishlist-aviso-cancelado { flex: 1 1 100%; }
+.wishlist-aviso-cancelado:empty { display: none; }
 /* UX 2026-11-16: el aviso de «puede tardar» ocupa su propia línea, sin apretar la fila. */
 .wishlist-buscando {
   flex: 1 1 100%;

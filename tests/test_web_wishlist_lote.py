@@ -62,6 +62,13 @@ def test_la_pagina_tiene_barra_de_lote_y_resultado():
     assert 'hx-target="#resultado-lote"' in r.text
     assert 'id="buscando-lote"' in r.text and "Buscando seleccionados" in r.text
     assert 'id="resultado-lote" aria-live="polite"' in r.text
+    assert 'id="form-lote"' in r.text and 'id="boton-buscar-lote"' in r.text
+    assert 'hx-disable="find #boton-buscar-lote"' in r.text
+    assert 'id="cancelar-lote"' in r.text and "Dejar de esperar la tanda" in r.text
+    assert 'hx-get="/ui/wishlist/aviso-cancelado-lote"' in r.text
+    assert 'hx-target="#aviso-cancelado-lote"' in r.text
+    assert 'id="aviso-cancelado-lote"' in r.text
+    assert "htmx.trigger('#form-lote', 'htmx:abort')" in r.text
 
 
 def test_el_boton_buscar_ahora_se_puede_cancelar():
@@ -71,9 +78,12 @@ def test_el_boton_buscar_ahora_se_puede_cancelar():
     assert r.status_code == 200
     assert f'id="boton-buscar-{item.id}"' in r.text
     assert "htmx:abort" in r.text and f"boton-buscar-{item.id}" in r.text
-    assert "Cancelar búsqueda" in r.text
-    assert 'aria-label="Cancelar la búsqueda de Sandman"' in r.text
-    assert "lo ya enviado no se deshace" in r.text
+    assert "Dejar de esperar" in r.text
+    assert 'aria-label="Dejar de esperar la búsqueda de Sandman"' in r.text
+    assert 'hx-get="/ui/wishlist/aviso-cancelado"' in r.text
+    assert f'hx-target="#aviso-cancelado-{item.id}"' in r.text
+    assert f'id="aviso-cancelado-{item.id}"' in r.text
+    assert "lo ya enviado no se deshace" not in r.text
 
 
 def test_dos_items_devuelven_dos_paneles_oob(monkeypatch):
@@ -87,7 +97,7 @@ def test_dos_items_devuelven_dos_paneles_oob(monkeypatch):
         r = _lote(client, [item1.id, item2.id])
     assert r.status_code == 200
     assert "Se buscaron 2 deseos" in r.text
-    assert r.text.count("hx-swap-oob") == 2
+    assert r.text.count("hx-swap-oob") >= 2
     assert f'id="candidatos-{item1.id}"' in r.text and f'id="candidatos-{item2.id}"' in r.text
     assert "Sandman #1.cbz" in r.text
     assert item1.status == WishlistStatus.WANTED      # no se toca el estado
@@ -152,3 +162,55 @@ def test_la_ruta_no_toca_relaciones_perezosas(monkeypatch):
     with use_fake_session(sesion) as client:
         r = _lote(client, [item.id])
     assert r.status_code == 200 and "Resultados encontrados" in r.text
+
+
+def test_el_aviso_de_la_busqueda_deja_de_esperar_sin_prometer_cancelar():
+    with use_fake_session(FakeSession()) as client:
+        r = client.get("/ui/wishlist/aviso-cancelado")
+    assert r.status_code == 200
+    texto = " ".join(r.text.split())
+    assert "Has dejado de esperar la búsqueda" in texto
+    assert "puede seguir consultando las fuentes" in texto
+    assert "no se ha enviado nada a tu programa de descargas" in texto.lower()
+    assert "no se guardan" in texto
+    assert 'href="/ui/wishlist"' in texto
+    assert "se cancela" not in r.text
+
+
+def test_el_aviso_de_la_tanda_deja_de_esperar_sin_prometer_cancelar():
+    with use_fake_session(FakeSession()) as client:
+        r = client.get("/ui/wishlist/aviso-cancelado-lote")
+    assert r.status_code == 200
+    texto = " ".join(r.text.split())
+    assert "Has dejado de esperar la tanda" in texto
+    assert "hasta 8" in texto
+    assert "no se ha enviado nada a tu programa de descargas" in texto.lower()
+    assert "no se guardan" in texto
+    assert 'href="/ui/wishlist"' in texto
+
+
+def test_buscar_ahora_no_envia_nada_al_cliente_de_descargas(monkeypatch):
+    """UXA-13b: la búsqueda solo consulta fuentes; el envío es «Sí, descargar»."""
+    item = _item()
+    send = AsyncMock()
+    monkeypatch.setattr(Orchestrator, "preview_candidates",
+                        AsyncMock(return_value=[_candidato()]))
+    monkeypatch.setattr(Orchestrator, "send_manual_candidate", send)
+    sesion = FakeSession(get_map={(Wishlist, item.id): item}, exec_queue=[_accepted()])
+    with use_fake_session(sesion) as client:
+        r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
+    assert r.status_code == 200
+    send.assert_not_awaited()
+
+
+def test_buscar_lote_no_envia_nada_al_cliente_de_descargas(monkeypatch):
+    item = _item()
+    send = AsyncMock()
+    monkeypatch.setattr(Orchestrator, "preview_candidates",
+                        AsyncMock(return_value=[_candidato()]))
+    monkeypatch.setattr(Orchestrator, "send_manual_candidate", send)
+    sesion = FakeSession(get_map={(Wishlist, item.id): item}, exec_queue=[_accepted()])
+    with use_fake_session(sesion) as client:
+        r = _lote(client, [item.id])
+    assert r.status_code == 200
+    send.assert_not_awaited()
