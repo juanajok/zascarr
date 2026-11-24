@@ -98,6 +98,7 @@ class TestIndex:
             r = client.get("/ui/biblioteca")
         assert r.status_code == 200
         assert '<a class="skip" href="#rejilla">Saltar a los resultados</a>' in r.text
+        assert '<a class="enlace-resultados" href="#rejilla">Ir a los resultados</a>' in r.text
         assert re.search(r'<div id="rejilla" tabindex="-1"\s+role="region"', r.text)
 
     def test_lista_lleva_chip_previa(self):
