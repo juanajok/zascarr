@@ -2,6 +2,9 @@
 {% block title %}Biblioteca — ZascArr
 {% endblock %}
 {% block content %}
+{% if modo != "escaparate" %}
+<a class="skip" href="#rejilla">Saltar a los resultados</a>
+{% endif %}
 <header class="biblioteca-cabecera">
   <h1>Biblioteca</h1>
   <p class="subtitle">Busca por título y acota el resto desde «Filtros».</p>
@@ -66,11 +69,7 @@
 </template>
 <div id="anuncio-favorito" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
 <span class="sr" id="rejilla-titulo">Resultados de la biblioteca</span>
-{% if foco_ausente|default(false) %}
-<div id="rejilla" tabindex="-1" autofocus role="region" aria-labelledby="rejilla-titulo">
-{% else %}
-<div id="rejilla">
-{% endif %}
+<div id="rejilla" tabindex="-1"{% if foco_ausente|default(false) %} autofocus{% endif %} role="region" aria-labelledby="rejilla-titulo">
   {% include "_rejilla_biblioteca.html" %}
 </div>
 {% include "_visor_portada.html" %}

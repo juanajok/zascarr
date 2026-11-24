@@ -90,6 +90,16 @@ class TestIndex:
         assert r.status_code == 200
         assert "Batman" in r.text
 
+    def test_atajo_salta_a_los_resultados(self):
+        """#1273: el teclado no debe atravesar 22 controles para llegar a la rejilla."""
+        series = make_series("Batman")
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert r.status_code == 200
+        assert '<a class="skip" href="#rejilla">Saltar a los resultados</a>' in r.text
+        assert re.search(r'<div id="rejilla" tabindex="-1"\s+role="region"', r.text)
+
     def test_lista_lleva_chip_previa(self):
         series = make_series("Batman")
         session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
