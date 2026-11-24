@@ -59,8 +59,8 @@ def test_busqueda_muestra_tu_edicion_y_candidato_mejor():
     finally:
         _cerrar()
     assert r.status_code == 200
-    assert "Tu edición" in r.text and "Batman 001 (Digital)" in r.text
-    assert "Descargar esta edición" in r.text
+    assert "Tu copia" in r.text and "Batman 001 (Digital)" in r.text
+    assert "Descargar esta copia" in r.text
     assert buscar.call_args.kwargs["min_tier"] == 3
 
 

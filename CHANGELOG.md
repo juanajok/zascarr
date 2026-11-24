@@ -28,8 +28,8 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 - **Vinculación: otra edición es otra serie; una copia no es una edición (UXA-12b, #1250).** El panel
   del número ocupado distingue el formato distinto (otra línea: enlaza a elegir o crear su serie) de
   la copia o calidad distinta (otro archivo del mismo número). Sin migración ni cambios de modelo;
-  glosario actualizado a B/C. Los rótulos históricos «Otras ediciones»/«Mejores ediciones» quedan
-  pendientes de renombrar.
+  glosario actualizado a B/C. La ficha y Mejoras pasan a «Otros volúmenes de este número» y
+  «Mejores copias».
 - **Deseados: «Dejar de esperar» dice qué sigue y qué no (UXA-13b, #1254).** El botón de cancelar
   de «Buscar ahora» y la nueva salida de «Buscar seleccionados» dejan de prometer una cancelación
   que no ocurre: explican que el navegador deja de esperar, que ZascArr puede seguir, que
