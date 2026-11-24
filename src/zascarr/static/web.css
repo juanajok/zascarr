@@ -2522,7 +2522,7 @@ body:has(.chip-previa:focus-within > .previa-numero:not(:empty))
   overflow: auto;
 }
 .barra-panel-campos .filtro-campo { min-width: 0; }
-@media (min-width: 861px) {
+@media (min-width: 901px) {
   .barra-panel-campos { position: fixed; left: 50%; right: auto; top: var(--panel-filtros-top, 6.5rem); transform: translateX(-50%); }
 }
 .barra-panel-campos label { display: block; font-size: var(--text-secundario); font-weight: 800; margin-bottom: var(--space-1); }
@@ -2587,6 +2587,22 @@ body:has(.chip-previa:focus-within > .previa-numero:not(:empty))
 @media (max-width: 900px) {
   .barra-busqueda { flex: 1 1 100%; max-width: none; }
   .barra-acciones { width: 100%; margin-left: 0; }
+  /* En tablet el panel partía de la posición del botón «Filtros» y se salía por la
+     izquierda. Hasta 900 px se abre como hoja fija dentro del ancho de la pantalla. */
+  .barra-panel-campos {
+    position: fixed;
+    top: auto;
+    left: var(--space-2);
+    right: var(--space-2);
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-width: none;
+    box-sizing: border-box;
+    max-height: calc(100dvh - 8.5rem);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    z-index: 60;
+    overflow: auto;
+  }
 }
 @media (max-width: 640px) {
   .biblioteca-cabecera {

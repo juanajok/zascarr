@@ -170,6 +170,20 @@ def test_flujo_vista_lista_cambiar_orden_conserva_vista():
     assert '<input type="hidden" id="f-vista" name="vista" value="lista">' in pagina
 
 
+def test_css_panel_filtros_en_tablet_usa_hoja_dentro_de_la_pantalla():
+    """Regresión #1125: entre 641 y 900 px el panel no puede anclarse al botón y salirse por la izquierda."""
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert "@media (min-width: 901px) {\n  .barra-panel-campos" in css
+    bloque = css.split("@media (max-width: 900px)", 1)[1].split("@media (max-width: 640px)", 1)[0]
+    assert ".barra-panel-campos" in bloque
+    assert "position: fixed" in bloque
+    assert "left: var(--space-2)" in bloque and "right: var(--space-2)" in bloque
+    assert "bottom: calc(64px + env(safe-area-inset-bottom, 0px))" in bloque
+    assert "width: auto" in bloque and "max-width: none" in bloque
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in bloque
+
+
 def test_css_panel_absoluto_tambien_en_movil_y_tactil_ancho():
     from pathlib import Path
     css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
