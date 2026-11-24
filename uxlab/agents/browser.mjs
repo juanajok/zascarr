@@ -58,25 +58,34 @@ export async function getObservation(page) {
   };
 }
 async function findControl(page, a) {
-  // `context` es una pista del modelo, no un selector: se busca en toda la página
-  // y solo se acepta si hay una coincidencia única por nombre visible/accesible.
+  // `context` solo desambigua entre candidatos; nunca se usa como selector libre.
   const root = page.locator('body');
+  const norm = (value) => String(value).replace(/\s+/g, ' ').trim().toLowerCase();
+  const wanted = norm(a.name);
   const exact = root.getByRole(a.role, {name:a.name,exact:true});
   if (await exact.count() === 1) return exact;
   // El nombre accesible puede incluir un prefijo de estado (p. ej. «0 0% leído · …»).
-  // Aceptar el título visible sólo si hay una coincidencia única; nunca elegir al azar.
   const all = root.getByRole(a.role);
   const total = await all.count();
-  const norm = (value) => String(value).replace(/\s+/g, ' ').trim().toLowerCase();
-  const wanted = norm(a.name);
   const matches = [];
   for (let i = 0; i < total; i++) {
     const candidate = all.nth(i);
     const label = (await candidate.getAttribute('aria-label')) ||
       (await candidate.innerText().catch(() => '')) || '';
-    if (norm(label).includes(wanted)) matches.push(candidate);
+    if (norm(label).includes(wanted)) matches.push({candidate,label});
   }
-  if (matches.length === 1) return matches[0];
+  if (matches.length === 1) return matches[0].candidate;
+  if (matches.length > 1 && a.context) {
+    const cnorm = norm(a.context);
+    const contextual = [];
+    for (const {candidate,label} of matches) {
+      const row = await candidate.locator(
+        'xpath=ancestor::*[self::tr or self::li or self::article][1]'
+      ).innerText().catch(() => '');
+      if (norm(label).includes(cnorm) || norm(row).includes(cnorm)) contextual.push(candidate);
+    }
+    if (contextual.length === 1) return contextual[0];
+  }
   if (matches.length === 0) {
     // Fallback final: controles nativos cuyo rol calculado no coincide con el
     // que el modelo dedujo de la captura (p. ej. <summary> «Filtros»).
@@ -119,7 +128,10 @@ export async function act(page, raw, persona) {
   }
   const target = await findControl(page,a);
   if (!(await target.isVisible())) throw Error('Control no visible');
-  if (a.action === 'click') await target.click({timeout:3500});
+  if (a.action === 'click') {
+    if (persona.mode === 'touch') await target.tap({timeout:3500});
+    else await target.click({timeout:3500});
+  }
   else if (a.action === 'type') await target.fill(a.value,{timeout:3500});
   else if (a.action === 'select') {
     try { await target.selectOption({label:a.value},{timeout:3500}); }

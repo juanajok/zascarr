@@ -34,6 +34,11 @@ test('el oráculo separa éxito declarado de objetivo y registra falso éxito', 
   assert.equal(classify({agentSaidDone:false,objectiveSuccess:true}).false_success,false);
 });
 
+test('el foco se sanea y el contexto no se usa como selector', () => {
+  assert.equal(accessibleText('A:serie 123e4567-e89b-12d3-a456-426614174000'), 'A:serie [id]');
+  assert.equal(validateAction({action:'click',role:'link',name:'Abrir',context:'fila 2'},'mouse').context, 'fila 2');
+});
+
 test('presupuesto por defecto coherente y modelo permitido', () => {
   const compose = readFileSync(new URL('../compose.agents.yml', import.meta.url), 'utf8');
   assert.match(compose, /DEEPSEEK_MAX_USD: \$\{DEEPSEEK_MAX_USD:-0\.05\}/);
