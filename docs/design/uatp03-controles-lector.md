@@ -205,8 +205,7 @@ En `<details class="lector-ayuda">` ([`lector.html:57`](../../src/zascarr/web/te
 después de la frase actual ([`lector.html:59`](../../src/zascarr/web/templates/lector.html:59)), se
 añade exactamente:
 
-> «Para volver a ver los controles, toca la lengüeta «Controles», arriba a la derecha, o el centro
-> de la página.»
+> «Para volver a ver los controles, toca la lengüeta «Controles» o el centro de la página.»
 
 No se usan glifos de texto (⌄) ni jerga («asa», «chrome», «overlay»). La ayuda ya menciona
 <kbd>h</kbd> para teclado; no se duplica.
