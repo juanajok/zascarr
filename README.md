@@ -506,7 +506,7 @@ pruebas](docs/TESTING_E2E.md) para configurar las integraciones.
 La imagen instala las versiones y hashes fijados en `uv.lock`. Para
 actualizarlos, ejecuta `uv lock --upgrade` (o `uv lock --upgrade-package
 <paquete>` para una sola dependencia), revisa el diff de `uv.lock` y comprueba
-la compilación de la imagen. La CI usa `uv sync --frozen` y falla si `uv.lock`
+la compilación de la imagen. La CI usa `uv sync --locked` y falla si `uv.lock`
 no está sincronizado con `pyproject.toml`. Dependabot también mantiene las
 dependencias de Python.
 

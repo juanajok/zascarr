@@ -33,7 +33,7 @@ uv run pytest -q tests/test_mi_cambio.py
 ```
 
 Si cambias las dependencias en `pyproject.toml`, regenera `uv.lock` con
-`uv lock` y commitéalo en la misma PR. La CI instala con `uv sync --frozen`:
+`uv lock` y commitéalo en la misma PR. La CI instala con `uv sync --locked`:
 un lock desincronizado hace fallar la suite.
 
 Las pruebas que necesitan PostgreSQL real se saltan sin `TEST_DATABASE_URL`.

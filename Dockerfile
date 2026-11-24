@@ -26,7 +26,7 @@ WORKDIR /build
 # sin depender de un venv de uv dentro del contenedor.
 COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
-RUN uv export --frozen --no-dev --no-emit-project --quiet --output-file /tmp/requirements-runtime.txt \
+RUN uv export --locked --no-dev --no-emit-project --quiet --output-file /tmp/requirements-runtime.txt \
     && pip install --no-cache-dir --prefix=/install --require-hashes -r /tmp/requirements-runtime.txt
 COPY src ./src
 RUN pip install --no-cache-dir --prefix=/install --no-deps .
