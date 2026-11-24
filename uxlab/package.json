@@ -9,6 +9,6 @@
     "test:agents": "node --test agents/contracts.test.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.65.1"
+    "@playwright/test": "1.56.1"
   }
 }
