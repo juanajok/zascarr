@@ -132,15 +132,23 @@
       {% endif %}
 
       <p class="vinc-texto">{{ texto_legible(a.texto) }}</p>
-      {#- UXA-12 (#1129): el número ocupado deja de ser un callejón sin salida: se ve qué archivo lo ocupa, se puede
-          abrir ese número y se dicen las salidas. Solo lectura: no cambia nada hasta que la persona decide. -#}
+      {#- UXA-12 (#1129) y UXA-12b (B/C, #1250): el número ocupado dice qué archivo lo ocupa y qué puede hacer la persona.
+          Otra edición es otra serie (ADR 0020); otra copia o calidad distinta es otro archivo del mismo número.
+          Solo lectura: no cambia nada hasta que la persona decide. -#}
       {% if a.ocupante %}
       <div class="vinc-ocupado" id="ocupado-{{ a.id }}">
         <p>Ya está en este número: <span class="nombre-archivo">{{ a.ocupante.nombres[0] }}</span>{% if a.ocupante.total > 1 %} y {{ a.ocupante.total - 1 }} más{% endif %}.
           <a href="/ui/series/{{ s.series_id }}/numero/{{ a.ocupante.issue_id }}">Ver ese número</a></p>
         <p class="caption">Qué puedes hacer: <strong>corregir el número</strong> de este archivo (en su campo «Número») si no es el {{ a.numero }};
           <strong>dejarlo en Pendientes</strong>, sin marcarlo, y no cambia nada; o abrir ese número y comparar los dos archivos antes de decidir.
-          Registrarlo como otra edición todavía no se puede hacer desde aquí.</p>
+          {% if a.estado == "colision_de_edicion" %}
+          Si es <strong>otra edición</strong> (otra línea editorial), su serie es otra:
+          {% if clave %}<a href="{{ con_contexto('/ui/pendientes/carpetas/asistente?clave=' ~ (clave | urlencode)) }}">elige o crea la serie de esa edición</a>{% else %}elige o crea la serie de esa edición{% endif %}.
+          Este archivo se queda pendiente y no se mueve.
+          {% elif a.estado == "numero_ya_existe" %}
+          Si es <strong>otra copia o una calidad distinta</strong> del mismo número y formato, no es una edición nueva:
+          compárala al abrir ese número y déjala pendiente. No se mueve.
+          {% endif %}</p>
       </div>
       {% endif %}
 

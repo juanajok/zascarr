@@ -2,7 +2,7 @@
 
 **Historia:** [#1250](https://github.com/juanajok/zascarr/issues/1250) · **Origen:** UXA-12
 ([#1129](https://github.com/juanajok/zascarr/issues/1129), PR [#1252](https://github.com/juanajok/zascarr/pull/1252))
-· **Fecha:** 2026-11-24 · **Estado:** refinamiento; **no implementa**. Decide el PO.
+· **Fecha:** 2026-11-24 · **Estado:** **B/C decidido por el PO**; el panel de número ocupado ya lo implementa (PR #1285).
 
 ## 1. Qué pasa hoy
 
@@ -16,8 +16,9 @@
   - **varios** `Issue` con ese número (volúmenes distintos) → `numero_ambiguo`, con candidatas H1
     para que la persona elija; eso **ya** permite dos #12 de distinta edición/volumen.
 - UXA-12 (PR #1252) muestra el número ocupado, sus archivos y las salidas actuales (corregir el
-  número, dejarlo pendiente, abrir el número), y dice que **registrarlo como otra edición todavía
-  no se puede desde aquí**. Es solo lectura: no mueve ni borra nada.
+  número, dejarlo pendiente, abrir el número), y decía que **registrarlo como otra edición todavía
+  no se podía desde aquí**. La decisión B/C del 2026-11-24 sustituye ese aviso. Es solo lectura: no
+  mueve ni borra nada.
 
 **Datos reales** (ADR 0020, censo de la Pi del 2026-11-17): 228 series / 4.229 números; **0**
 números repetidos con formatos distintos en la misma serie; **0** series con `Issue.volume`
@@ -73,22 +74,25 @@ revisar el fichero y sus avisos).
 
 ## 5. Recomendación
 
-**B para «otra edición» y C para «otra copia/calidad».** Es lo que ya decidió el ADR 0020, lo que
-hacen las referencias y lo que no exige migración ni inventar una entidad. El caso «mismo número,
-mismo volumen, distinto formato» se trata como **otra línea/edición**: se crea o elige su serie. La
-calidad/origen de un archivo (digital, escaneo, CBZ/CBR) sigue siendo un `File` del mismo `Issue`
-(Mejoras/D3), no una edición nueva.
+**B para «otra edición» y C para «otra copia/calidad».** **Aceptada por el PO el 2026-11-24: B y
+C.** Es lo que ya decidió el ADR 0020, lo que hacen las referencias y lo que no exige migración ni
+inventar una entidad. El caso «mismo número, mismo volumen, distinto formato» se trata como **otra
+línea/edición**: se crea o elige su serie. La calidad/origen de un archivo (digital, escaneo,
+CBZ/CBR) sigue siendo un `File` del mismo `Issue` (Mejoras/D3), no una edición nueva.
 
 **No recomiendo A en este ciclo:** no hay ningún caso medido, las referencias no lo hacen, y cambiar
 la clave única toca ficha, Mejoras, huecos y la noción de «número» de toda la app. Si el PO quiere
 formatos conviviendo en la misma serie, A exige un ADR nuevo y una migración; se puede hacer, pero
 con esas condiciones y no como efecto colateral de UXA-12b.
 
-**El glosario queda desalineado** si se acepta B: «edición» pasaría a ser la serie/línea (ADR 0020)
-y el `IssueFormat` sería el formato de publicación; la copia/calidad sería el `File`. Hay que
-actualizar el glosario (U7) y el texto de la ficha, no solo el panel.
+**El glosario queda actualizado** a B/C: «edición» es la serie/línea (ADR 0020), el `IssueFormat`
+es el formato de publicación y la copia/calidad es el `File` (`CLAUDE.md` §14.1 y §14.2). Los
+rótulos históricos «Otras ediciones de este número» (ficha) y «Mejores ediciones» (Mejoras) quedan
+anotados como pendientes de renombrar; no se cambian en esta rebanada.
 
-## 6. Decisiones que debe tomar el PO
+## 6. Decisiones del PO (resueltas)
+
+**Decidido el 2026-11-24: 1 B; 2 C; 3 C (otro archivo); 4 la persona; 5 sí; 6 no A ahora.**
 
 1. **¿Qué es «otra edición»?** ¿Otra `Series`/línea (B) o otro `Issue` en la misma serie (A)?
    *Recomendación: B.*
@@ -103,15 +107,18 @@ actualizar el glosario (U7) y el texto de la ficha, no solo el panel.
 6. **Si A:** ¿se acepta un ADR nuevo y una migración de la clave única, con el coste de ficha,
    Mejoras y huecos? *Recomendación: no ahora.*
 
-## 7. Si el PO elige B: rebanada de implementación
+## 7. Implementación de B (hecha en esta rama)
 
-- Cambiar el bloque `a.ocupante` de [`_vinculacion_revision.html`](../../src/zascarr/web/templates/_vinculacion_revision.html):
-  quitar «Registrarlo como otra edición todavía no se puede…» y explicar la decisión: si es otra
-  edición/línea, **crea o elige su serie**; el archivo sigue pendiente y no se mueve. Enlace al alta
-  de serie y, si hay una serie candidata, a su ficha.
-- No cambiar `Issue`, la clave única, `vinculacion_previa.py` ni la base de datos.
-- Pruebas de contrato HTML del bloque y del enlace; sin Postgres nuevo.
-- Actualizar glosario y la ficha de la historia; no cerrar #1250 hasta el despliegue.
+- Bloque `a.ocupante` de [`_vinculacion_revision.html`](../../src/zascarr/web/templates/_vinculacion_revision.html)
+  actualizado: si el formato es distinto (`colision_de_edicion`), dice que otra edición es otra línea
+  y enlaza a **elegir o crear la serie de esa edición**; si el formato es el mismo
+  (`numero_ya_existe`), dice que una copia o calidad distinta **no es una edición nueva**. Conserva
+  corregir el número, dejar pendiente, abrir el número y la garantía de que no se mueve nada.
+- Sin cambios en `Issue`, la clave única, `vinculacion_previa.py` ni la base de datos.
+- `tests/test_vinculacion_ocupado_uxa12_pg.py` actualizado: copia ≠ edición y enlace a la serie en
+  la colisión; el CI lo ejecuta con Postgres real.
+- Glosario actualizado (B/C); los rótulos «Otras ediciones»/«Mejores ediciones» quedan anotados como
+  pendientes. No se cierra #1250 hasta el despliegue.
 
 ## 8. Si el PO elige A: lo que habría que hacer (no ahora)
 
@@ -123,7 +130,9 @@ actualizar el glosario (U7) y el texto de la ficha, no solo el panel.
 
 ## 9. Límites de esta ficha
 
-- No implementa ni migra nada; no cambia el tablero ni el modelo.
+- Implementa B/C en el panel; no migra ni cambia el modelo. La tarjeta pasa a «En revisión».
+- Los rótulos «Otras ediciones de este número» (ficha) y «Mejores ediciones» (Mejoras) siguen como
+  estaban: anotados en el glosario, pendientes de renombrar en otra rebanada.
 - El benchmark es lectura estática de las fichas ya cerradas (Kapowarr/Mylar3); no se ejecutaron
   ni se abrió su UI. No hay caso real en la biblioteca de la Pi (0 medidos).
 - No hay navegador, lector de pantalla ni prueba con personas: la decisión es de producto y de
