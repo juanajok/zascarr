@@ -1,0 +1,18 @@
+{#- UXA-14b (#1257): campos de Blog o RSS, repintados fuera de banda con el error junto al campo.
+    El resumen A1 solo aparece con dos o más errores; aquí solo hay una dirección. -#}
+{% set orden_campos = ["blog_feed_url"] %}
+{% set errores = errores|default({}, true) %}
+{{ ui.resumen_errores(errores, orden_campos, "resumen-errores-blog") }}
+        <label class="legal-checkbox">
+          <input type="checkbox" name="blog_feed_enabled" value="true" {% if blog_feed_enabled %}checked{% endif %}>
+          Usar este feed al buscar en Deseados
+        </label>
+        <label>Nombre
+          <input type="text" name="blog_feed_name" maxlength="120" value="{{ blog_feed_name }}" placeholder="Blog o RSS">
+        </label>
+        <label>Dirección del feed
+          <input type="url" name="blog_feed_url"{{ ui.invalido(errores, "blog_feed_url", orden_campos) }} value="{{ blog_feed_url }}" maxlength="500" placeholder="https://tu-blog.example/feed.xml">
+          {% if errores.blog_feed_url %}<span class="campo-error" id="error-blog_feed_url">{{ errores.blog_feed_url }}</span>{% endif %}
+        </label>
+        <p class="ajustes-hint">Sin dirección no hay ninguna fuente por defecto. Solo se aceptan enlaces magnet o ed2k que el feed ya incluya: no se abren los posts, no se sigue un .torrent y no se inventan enlaces.</p>
+        

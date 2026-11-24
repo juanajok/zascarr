@@ -204,31 +204,7 @@
       <legend>Transmission</legend>
       <p class="ajustes-desc">Programa que descarga los torrents.</p>
       <form hx-post="/ui/ajustes/guardar/transmission" hx-target="#resultado-transmission" hx-swap="innerHTML">
-        <label>Dirección
-          <input type="text" name="transmission_url" value="{{ transmission_url }}" placeholder="http://host.docker.internal:9091">
-        </label>
-        <p class="ajustes-hint">Si Transmission está en esta misma Raspberry Pi, la dirección es <code>http://host.docker.internal:9091</code>.</p>
-        <label>Carpeta de descargas (en la Pi)
-          <input type="text" name="transmission_download_dir" value="{{ transmission_download_dir }}"
-                 placeholder="/media/Descargas/torrents/completos">
-        </label>
-        <p class="ajustes-hint">La ruta tal como la ve Transmission en la Pi (no la del contenedor). ZascArr se la
-          pasa al enviar cada torrent; si no existe, el envío falla (lo avisamos al probar la conexión).</p>
-        <details class="ajustes-mas">
-          <summary>¿Por qué no <code>127.0.0.1</code>?</summary>
-          <p class="ajustes-hint">ZascArr funciona dentro de un contenedor de Docker, y para él <code>127.0.0.1</code> es el propio contenedor, no tu Pi. <code>host.docker.internal</code> es su forma de decir «la máquina que me aloja».</p>
-        </details>
-        <label>Usuario
-          <input type="text" name="transmission_username" value="{{ transmission_username }}" autocomplete="off">
-        </label>
-        <label>Contraseña
-          <input type="password" name="transmission_password" autocomplete="off"
-                 placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if transmission_password_configurada else 'sin configurar' }}">
-        </label>
-        <label class="legal-checkbox">
-          <input type="checkbox" name="transmission_enabled" value="true" {% if transmission_enabled %}checked{% endif %}>
-          Activar Transmission para descargas de Deseados
-        </label>
+        <div id="campos-transmission" class="ajustes-campos">{% include "_ajustes_campos_transmission.html" %}</div>
         <div class="ajustes-actions">
           <button type="submit">Guardar</button>
           <button type="button" hx-post="/ui/ajustes/probar/transmission" hx-include="closest form"
@@ -275,25 +251,7 @@
       <legend>Foro</legend>
       <p class="ajustes-desc">Busca enlaces de descarga en un foro IPB que configures tú.</p>
       <form hx-post="/ui/ajustes/guardar/foro" hx-target="#resultado-foro" hx-swap="innerHTML">
-        <label>Dirección del foro
-          <input type="text" name="forum_url" value="{{ forum_url }}" placeholder="http://tu-foro.example/forum" autocomplete="off">
-        </label>
-        <p class="ajustes-hint">Si empieza por <code>http://</code>, el usuario y la contraseña viajan sin cifrar: el foro no ofrece HTTPS y ZascArr te avisa, pero no lo evita. No reutilices una contraseña que uses en otro sitio.</p>
-        {% if forum_http_sin_tls %}
-        {{ ui.aviso("amber", "El foro usa HTTP sin cifrar: tu usuario y contraseña viajan sin protección. No reutilices una contraseña que uses en otro sitio; si puedes, usa un foro con HTTPS.") }}
-        {% endif %}
-        <label>Usuario
-          <input type="text" name="forum_username" value="{{ forum_username }}" autocomplete="off">
-        </label>
-        <label>Contraseña
-          <input type="password" name="forum_password" autocomplete="off"
-                 placeholder="{{ 'ya configurada (vacío = no cambiar)' if forum_password_configurada else 'sin configurar' }}">
-        </label>
-        <label class="legal-checkbox">
-          <input type="checkbox" name="forum_enabled" value="true" {% if forum_enabled %}checked{% endif %}>
-          Activar el foro para buscar enlaces de descarga
-        </label>
-        <p class="ajustes-hint">Solo se leen las referencias de los temas; ZascArr no descarga ni publica nada en el foro. La conexión puede ser HTTP: el foro decide si ofrece HTTPS.</p>
+        <div id="campos-foro" class="ajustes-campos">{% include "_ajustes_campos_foro.html" %}</div>
         <div class="ajustes-actions">
           <button type="submit">Guardar</button>
           <button type="button" hx-post="/ui/ajustes/probar/foro"
@@ -316,17 +274,7 @@
       <legend>Blog o RSS</legend>
       <p class="ajustes-desc">Un feed RSS o Atom que tú aportas. Solo enlaces directos del propio feed.</p>
       <form hx-post="/ui/ajustes/guardar/blog" hx-target="#resultado-blog" hx-swap="innerHTML">
-        <label class="legal-checkbox">
-          <input type="checkbox" name="blog_feed_enabled" value="true" {% if blog_feed_enabled %}checked{% endif %}>
-          Usar este feed al buscar en Deseados
-        </label>
-        <label>Nombre
-          <input type="text" name="blog_feed_name" maxlength="120" value="{{ blog_feed_name }}" placeholder="Blog o RSS">
-        </label>
-        <label>Dirección del feed
-          <input type="url" name="blog_feed_url" value="{{ blog_feed_url }}" maxlength="500" placeholder="https://tu-blog.example/feed.xml">
-        </label>
-        <p class="ajustes-hint">Sin dirección no hay ninguna fuente por defecto. Solo se aceptan enlaces magnet o ed2k que el feed ya incluya: no se abren los posts, no se sigue un .torrent y no se inventan enlaces.</p>
+        <div id="campos-blog" class="ajustes-campos">{% include "_ajustes_campos_blog.html" %}</div>
         <div class="ajustes-actions"><button type="submit">Guardar blog o RSS</button></div>
       </form>
       <div id="resultado-blog" aria-live="polite"></div>
@@ -472,25 +420,7 @@
       <legend>Nombres de archivo</legend>
       <p class="ajustes-desc">Cómo se llaman los archivos que organices a partir de ahora. La biblioteca que ya tienes no se renombra.</p>
       <form hx-post="/ui/ajustes/guardar/nombres" hx-target="#resultado-nombres" hx-swap="innerHTML">
-        <label class="legal-checkbox">
-          <input type="checkbox" name="naming_enabled" value="true" {% if naming_enabled %}checked{% endif %}>
-          Usar nombres nuevos al organizar
-        </label>
-        <label>Estilo
-          <select name="naming_preset">
-            <option value="clasico" {% if naming_preset == "clasico" %}selected{% endif %}>Clásico (Serie #003)</option>
-            <option value="compacto" {% if naming_preset == "compacto" %}selected{% endif %}>Compacto (Serie #03)</option>
-            <option value="tradicion" {% if naming_preset == "tradicion" %}selected{% endif %}>Según la tradición</option>
-            <option value="titulo" {% if naming_preset == "titulo" %}selected{% endif %}>Con el título del número</option>
-          </select>
-        </label>
-        <ul class="ajustes-hint nombres-ejemplos">
-          <li><strong>Clásico:</strong> La Patrulla #003</li>
-          <li><strong>Compacto:</strong> La Patrulla #03</li>
-          <li><strong>Tradición:</strong> La Patrulla #003 · Akira v01 · Thorgal T01 · Mortadelo nº 01</li>
-          <li><strong>Con título:</strong> La Patrulla #003 - Corte de los búhos</li>
-        </ul>
-        <p class="ajustes-hint">Solo afecta a archivos nuevos; los que ya están organizados conservan su nombre.</p>
+        <div id="campos-nombres" class="ajustes-campos">{% include "_ajustes_campos_nombres.html" %}</div>
         <div class="ajustes-actions"><button type="submit">Guardar nombres de archivo</button></div>
       </form>
       <div id="resultado-nombres" aria-live="polite"></div>
@@ -520,35 +450,7 @@
       <legend>Avisos</legend>
       <p class="ajustes-desc">Un aviso en el móvil cuando ZascArr importa tebeos nuevos (Gotify, ntfy, Telegram o tu dirección). Viene apagado.</p>
       <form hx-post="/ui/ajustes/guardar/avisos" hx-target="#resultado-avisos" hx-swap="innerHTML">
-        <label>Tipo
-          <select name="webhook_type">
-            <option value="generic" {% if webhook_type == "generic" %}selected{% endif %}>Dirección propia (JSON)</option>
-            <option value="gotify" {% if webhook_type == "gotify" %}selected{% endif %}>Gotify</option>
-            <option value="ntfy" {% if webhook_type == "ntfy" %}selected{% endif %}>ntfy</option>
-            <option value="telegram" {% if webhook_type == "telegram" %}selected{% endif %}>Telegram</option>
-          </select>
-        </label>
-        <label>Dirección (no hace falta con Telegram)
-          <input type="text" name="webhook_url" value="{{ webhook_url }}" placeholder="https://ntfy.sh/mi-tema">
-        </label>
-        <label>Clave o token (Gotify, ntfy o el bot de Telegram)
-          <input type="password" name="webhook_token" autocomplete="off"
-                 placeholder="{{ 'ya configurado — deja en blanco para no cambiarlo' if webhook_token_configurado else 'sin configurar' }}">
-        </label>
-        <label>Chat ID (solo Telegram)
-          <input type="text" name="webhook_chat_id" value="{{ webhook_chat_id }}" placeholder="123456789">
-        </label>
-        <p class="ajustes-hint">Con Telegram basta el token del bot y el chat ID: el campo «Dirección» no se usa.</p>
-        <label class="legal-checkbox">
-          <input type="checkbox" name="webhook_incluir_nombres" value="true" {% if webhook_incluir_nombres %}checked{% endif %}>
-          Incluir los nombres de los ficheros en el aviso
-        </label>
-        <p class="ajustes-hint">Sin marcar, el aviso solo dice cuántos. Márcalo solo si el destino es privado: en un tema público de ntfy, cualquiera podría leer los nombres.</p>
-        <label class="legal-checkbox">
-          <input type="checkbox" name="webhook_enabled" value="true" {% if webhook_enabled %}checked{% endif %}>
-          Activar avisos de importación
-        </label>
-        <p class="ajustes-hint">Si el aviso no llega, la importación sigue igual.</p>
+        <div id="campos-avisos" class="ajustes-campos">{% include "_ajustes_campos_avisos.html" %}</div>
         <div class="ajustes-actions">
           <button type="submit">Guardar</button>
           <button type="button" hx-post="/ui/ajustes/probar/avisos" hx-include="closest form"

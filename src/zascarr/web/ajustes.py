@@ -391,19 +391,28 @@ async def guardar_avisos(
     webhook_incluir_nombres: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    # Validación en el guardado: el tipo tiene que ser uno conocido y la URL, si
-    # se usa, http(s) con host. Un tipo raro ya no cae en «generic» en silencio.
+    # UXA-14b (#1257): cada error se pega a su campo (Tipo o Dirección) y, con dos, al resumen
+    # A1. El bloque de campos se repinta fuera de banda con los valores enviados; el token nunca
+    # vuelve a la respuesta (el campo va vacío y solo cambia su placeholder).
+    errores: dict[str, str] = {}
     if webhook_type not in TIPOS_CONOCIDOS:
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-            "nombre": "Avisos",
-            "error": f"Tipo de aviso no reconocido: «{webhook_type}». Elige uno de la lista.",
-        })
+        errores["webhook_type"] = (
+            f"Tipo de aviso no reconocido: «{webhook_type}». Elige uno de la lista."
+        )
     url_limpia = webhook_url.rstrip("/")
     if webhook_type != "telegram" and url_limpia and not url_valida(url_limpia):
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-            "nombre": "Avisos",
-            "error": "La URL del aviso tiene que empezar por http:// o https:// y llevar un host.",
-        })
+        errores["webhook_url"] = (
+            "La URL del aviso tiene que empezar por http:// o https:// y llevar un host."
+        )
+    if errores:
+        contexto = _contexto_avisos_campos(
+            webhook_type=webhook_type, webhook_url=webhook_url,
+            webhook_chat_id=webhook_chat_id,
+            webhook_incluir_nombres=webhook_incluir_nombres,
+            webhook_enabled=webhook_enabled, errores=errores,
+        )
+        contexto.update({"nombre": "Avisos", "error": next(iter(errores.values()))})
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
     await RuntimeSettingsService(db).save({
         "webhook_enabled": webhook_enabled,
         "webhook_type": webhook_type,
@@ -412,7 +421,33 @@ async def guardar_avisos(
         "webhook_chat_id": webhook_chat_id,
         "webhook_incluir_nombres": webhook_incluir_nombres,
     })
-    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Avisos"})
+    contexto = _contexto_avisos_campos(
+        webhook_type=webhook_type, webhook_url=url_limpia,
+        webhook_chat_id=webhook_chat_id,
+        webhook_incluir_nombres=webhook_incluir_nombres,
+        webhook_enabled=webhook_enabled, errores={},
+    )
+    contexto["nombre"] = "Avisos"
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
+
+
+def _contexto_avisos_campos(
+    *, webhook_type: str, webhook_url: str, webhook_chat_id: str,
+    webhook_incluir_nombres: bool, webhook_enabled: bool, errores: dict[str, str],
+) -> dict:
+    """Contexto del bloque OOB de Avisos: valores enviados (nunca el token) y errores por campo."""
+    s = get_settings()
+    return {
+        "webhook_type": webhook_type,
+        "webhook_url": webhook_url,
+        "webhook_token_configurado": bool(s.webhook_token),
+        "webhook_chat_id": webhook_chat_id,
+        "webhook_incluir_nombres": bool(webhook_incluir_nombres),
+        "webhook_enabled": bool(webhook_enabled),
+        "errores": errores,
+        "campos_oob": True,
+        "tarjeta": "avisos",
+    }
 
 
 @router.post("/probar/avisos", response_class=HTMLResponse)
@@ -517,28 +552,53 @@ async def guardar_blog(
     blog_feed_name: str = Form(default="Blog o RSS"),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """BLOG1: feed RSS/Atom genérico; el usuario aporta la URL."""
+    """BLOG1: feed RSS/Atom genérico; el usuario aporta la URL.
+
+    UXA-14b (#1257): el error de la dirección se pinta junto al campo y el bloque se repinta
+    fuera de banda con lo que se escribió; el servidor no sustituye el formulario ni pierde el foco.
+    """
     url = (blog_feed_url or "").strip()
     nombre = (blog_feed_name or "").strip()[:120] or "Blog o RSS"
+    errores: dict[str, str] = {}
     if url and not estado_feed(url):
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-            "nombre": "Blog o RSS",
-            "error": ("La dirección no es válida para el conector: usa un dominio público "
-                      "http:// o https://, sin IP, credenciales ni puerto."),
-        })
-    if blog_feed_enabled and not url:
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-            "nombre": "Blog o RSS",
-            "error": "Escribe la dirección del blog o RSS antes de activarlo.",
-        })
+        errores["blog_feed_url"] = (
+            "La dirección no es válida para el conector: usa un dominio público "
+            "http:// o https://, sin IP, credenciales ni puerto."
+        )
+    elif blog_feed_enabled and not url:
+        errores["blog_feed_url"] = "Escribe la dirección del blog o RSS antes de activarlo."
+    if errores:
+        contexto = _contexto_blog_campos(
+            blog_feed_enabled=blog_feed_enabled, blog_feed_name=blog_feed_name,
+            blog_feed_url=blog_feed_url, errores=errores,
+        )
+        contexto.update({"nombre": "Blog o RSS", "error": next(iter(errores.values()))})
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
     await RuntimeSettingsService(db).save({
         "blog_feed_enabled": bool(blog_feed_enabled),
         "blog_feed_url": url,
         "blog_feed_name": nombre,
     })
-    return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-        "nombre": "Blog o RSS",
-    })
+    contexto = _contexto_blog_campos(
+        blog_feed_enabled=blog_feed_enabled, blog_feed_name=nombre,
+        blog_feed_url=url, errores={},
+    )
+    contexto["nombre"] = "Blog o RSS"
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
+
+
+def _contexto_blog_campos(
+    *, blog_feed_enabled: bool, blog_feed_name: str, blog_feed_url: str,
+    errores: dict[str, str],
+) -> dict:
+    return {
+        "blog_feed_enabled": bool(blog_feed_enabled),
+        "blog_feed_name": blog_feed_name,
+        "blog_feed_url": blog_feed_url,
+        "errores": errores,
+        "campos_oob": True,
+        "tarjeta": "blog",
+    }
 
 
 @router.post("/guardar/nombres", response_class=HTMLResponse)
@@ -548,19 +608,39 @@ async def guardar_nombres(
     naming_preset: str = Form(default="clasico"),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """BL-B9: activa/desactiva nombres nuevos y elige su preset."""
+    """BL-B9: activa/desactiva nombres nuevos y elige su preset.
+
+    UXA-14b (#1257): un preset inexistente se marca en el propio selector y el bloque se
+    repinta fuera de banda con lo enviado; el resumen A1 solo aparece si hubiera más de un error.
+    """
+    errores: dict[str, str] = {}
     if naming_preset not in PRESETS:
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-            "nombre": "Nombres de archivo",
-            "error": "Ese estilo de nombre no existe. Elige uno de la lista.",
-        })
+        errores["naming_preset"] = "Ese estilo de nombre no existe. Elige uno de la lista."
+    if errores:
+        contexto = _contexto_nombres_campos(
+            naming_enabled=naming_enabled, naming_preset=naming_preset, errores=errores)
+        contexto.update({"nombre": "Nombres de archivo", "error": next(iter(errores.values()))})
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
     await RuntimeSettingsService(db).save({
         "naming_enabled": bool(naming_enabled),
         "naming_preset": naming_preset,
     })
-    return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-        "nombre": "Nombres de archivo",
-    })
+    contexto = _contexto_nombres_campos(
+        naming_enabled=naming_enabled, naming_preset=naming_preset, errores={})
+    contexto["nombre"] = "Nombres de archivo"
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
+
+
+def _contexto_nombres_campos(
+    *, naming_enabled: bool, naming_preset: str, errores: dict[str, str],
+) -> dict:
+    return {
+        "naming_enabled": bool(naming_enabled),
+        "naming_preset": naming_preset,
+        "errores": errores,
+        "campos_oob": True,
+        "tarjeta": "nombres",
+    }
 
 
 @router.post("/guardar/importacion", response_class=HTMLResponse)
@@ -700,13 +780,21 @@ async def guardar_transmission(
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     carpeta = (transmission_download_dir or "").strip()
+    errores: dict[str, str] = {}
     if carpeta and not _carpeta_de_descargas_valida(carpeta):
-        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
-            "ok": False,
-            "mensaje": "La carpeta de descargas debe ser una ruta absoluta del host "
-                       "(empieza por / y sin «..») — por ejemplo "
-                       "/media/Descargas/torrents/completos.",
-        })
+        errores["transmission_download_dir"] = (
+            "La carpeta de descargas debe ser una ruta absoluta del host "
+            "(empieza por / y sin «..») — por ejemplo "
+            "/media/Descargas/torrents/completos."
+        )
+    if errores:
+        contexto = _contexto_transmission_campos(
+            transmission_url=transmission_url, transmission_username=transmission_username,
+            transmission_download_dir=transmission_download_dir,
+            transmission_enabled=transmission_enabled, errores=errores,
+        )
+        contexto.update({"nombre": "Transmission", "error": next(iter(errores.values()))})
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
     await RuntimeSettingsService(db).save({
         "transmission_url": transmission_url.rstrip("/"),
         "transmission_username": transmission_username,
@@ -714,7 +802,29 @@ async def guardar_transmission(
         "transmission_download_dir": carpeta,
         "transmission_enabled": transmission_enabled,
     })
-    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Transmission"})
+    contexto = _contexto_transmission_campos(
+        transmission_url=transmission_url.rstrip("/"), transmission_username=transmission_username,
+        transmission_download_dir=carpeta, transmission_enabled=transmission_enabled, errores={},
+    )
+    contexto["nombre"] = "Transmission"
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
+
+
+def _contexto_transmission_campos(
+    *, transmission_url: str, transmission_username: str, transmission_download_dir: str,
+    transmission_enabled: bool, errores: dict[str, str],
+) -> dict:
+    s = get_settings()
+    return {
+        "transmission_url": transmission_url,
+        "transmission_download_dir": transmission_download_dir,
+        "transmission_username": transmission_username,
+        "transmission_password_configurada": bool(s.transmission_password),
+        "transmission_enabled": bool(transmission_enabled),
+        "errores": errores,
+        "campos_oob": True,
+        "tarjeta": "transmission",
+    }
 
 
 @router.post("/guardar/amule", response_class=HTMLResponse)
@@ -763,21 +873,54 @@ async def guardar_foro(
 
     La contraseña no se devuelve nunca a la plantilla; `RuntimeSettingsService.save` ignora
     un secreto vacío. `http://` se acepta (D-2) y la tarjeta avisa de que no hay TLS.
+
+    UXA-14b (#1257): la dirección inválida se marca junto al campo y el bloque se repinta
+    fuera de banda con lo enviado, sin credenciales ni query en la URL visible.
     """
     direccion = forum_url.strip().rstrip("/")
+    errores: dict[str, str] = {}
     if direccion and not _direccion_de_foro_valida(direccion):
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-            "nombre": "Foro",
-            "error": "La dirección del foro debe ser http o https, sin usuario, contraseña "
-                     "ni parámetros (como ?s=). Guarda solo la dirección base.",
-        })
+        errores["forum_url"] = (
+            "La dirección del foro debe ser http o https, sin usuario, contraseña "
+            "ni parámetros (como ?s=). Guarda solo la dirección base."
+        )
+    visible = url_de_foro_visible(direccion)
+    if errores:
+        contexto = _contexto_foro_campos(
+            forum_url=visible, forum_username=forum_username,
+            forum_enabled=forum_enabled, errores=errores,
+        )
+        contexto.update({"nombre": "Foro", "error": next(iter(errores.values()))})
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
     await RuntimeSettingsService(db).save({
-        "forum_url": url_de_foro_visible(direccion) if direccion else "",
+        "forum_url": visible if direccion else "",
         "forum_username": forum_username.strip(),
         "forum_password": forum_password,
         "forum_enabled": forum_enabled,
     })
-    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Foro"})
+    contexto = _contexto_foro_campos(
+        forum_url=visible, forum_username=forum_username.strip(),
+        forum_enabled=forum_enabled, errores={},
+    )
+    contexto["nombre"] = "Foro"
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", contexto)
+
+
+def _contexto_foro_campos(
+    *, forum_url: str, forum_username: str, forum_enabled: bool,
+    errores: dict[str, str],
+) -> dict:
+    s = get_settings()
+    return {
+        "forum_url": forum_url,
+        "forum_username": forum_username,
+        "forum_password_configurada": bool(getattr(s, "forum_password", "")),
+        "forum_enabled": bool(forum_enabled),
+        "forum_http_sin_tls": (forum_url or "").lower().startswith("http://"),
+        "errores": errores,
+        "campos_oob": True,
+        "tarjeta": "foro",
+    }
 
 
 @router.post("/guardar/compartidos", response_class=HTMLResponse)

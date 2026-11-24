@@ -779,3 +779,111 @@ class TestBlogRss:
         s = get_settings()
         assert s.import_create_missing_issue is True
         assert s.import_convert_cbr is True
+
+
+class TestUxa14bErroresJuntoAlCampo:
+    """UXA-14b (#1257): el error de validación vive junto a su campo, con el resumen A1 si hay
+    más de uno; el bloque de campos se repinta fuera de banda (OOB) sin sustituir el formulario
+    ni perder el foco del botón. Los valores válidos se conservan y los secretos no vuelven."""
+
+    def _post(self, ruta: str, data: dict):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            return TestClient(app).post(ruta, data=data)
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+    def test_las_cinco_tarjetas_tienen_su_bloque_de_campos(self):
+        r = TestClient(app).get("/ui/ajustes")
+        assert r.status_code == 200
+        for tarjeta in ("avisos", "blog", "nombres", "transmission", "foro"):
+            assert f'id="campos-{tarjeta}"' in r.text, tarjeta
+
+    def test_avisos_dos_errores_van_al_campo_y_al_resumen(self, restaurar_settings):
+        r = self._post("/ui/ajustes/guardar/avisos", {
+            "webhook_type": "ntfyy", "webhook_url": "file:///etc/passwd",
+            "webhook_chat_id": "123", "webhook_enabled": "true",
+        })
+        assert 'id="campos-avisos"' in r.text and 'hx-swap-oob="true"' in r.text
+        assert 'id="campo-webhook_type"' in r.text and 'aria-invalid="true"' in r.text
+        assert 'id="error-webhook_type"' in r.text
+        assert 'id="campo-webhook_url"' in r.text and 'id="error-webhook_url"' in r.text
+        assert 'id="resumen-errores-avisos"' in r.text
+        assert 'href="#campo-webhook_type"' in r.text
+        assert 'href="#campo-webhook_url"' in r.text
+        assert 'autofocus' in r.text
+        # Valores válidos enviados: el chat ID sigue en el bloque repintado.
+        assert 'value="123"' in r.text
+
+    def test_avisos_un_solo_error_enfoca_el_campo_sin_resumen(self, restaurar_settings):
+        r = self._post("/ui/ajustes/guardar/avisos", {
+            "webhook_type": "ntfyy", "webhook_url": "https://ntfy.sh/mi-tema",
+        })
+        assert 'id="campo-webhook_type"' in r.text
+        assert 'resumen-errores-avisos' not in r.text
+        assert 'aria-invalid="true"' in r.text
+        assert 'autofocus' in r.text
+
+    def test_avisos_no_devuelve_el_token(self, restaurar_settings):
+        r = self._post("/ui/ajustes/guardar/avisos", {
+            "webhook_type": "ntfyy", "webhook_url": "https://ntfy.sh/mi-tema",
+            "webhook_token": "TOKEN-QUE-NO-DEBE-VOLVER",
+        })
+        assert "TOKEN-QUE-NO-DEBE-VOLVER" not in r.text
+        bloque = r.text.split('id="campos-avisos"', 1)[1]
+        assert 'name="webhook_token"' in bloque
+        assert 'value="TOKEN-QUE-NO-DEBE-VOLVER"' not in bloque
+
+    def test_blog_error_junto_a_la_direccion_y_conserva_lo_valido(self, restaurar_settings):
+        r = self._post("/ui/ajustes/guardar/blog", {
+            "blog_feed_enabled": "true", "blog_feed_name": "Mi blog",
+            "blog_feed_url": "javascript:alert(1)",
+        })
+        assert 'id="campos-blog"' in r.text and 'hx-swap-oob="true"' in r.text
+        assert 'id="campo-blog_feed_url"' in r.text and 'aria-invalid="true"' in r.text
+        assert 'id="error-blog_feed_url"' in r.text
+        assert 'value="Mi blog"' in r.text
+        assert 'name="blog_feed_enabled" value="true" checked' in r.text
+
+    def test_nombres_error_en_el_selector(self, restaurar_settings):
+        r = self._post("/ui/ajustes/guardar/nombres", {
+            "naming_enabled": "true", "naming_preset": "inventado",
+        })
+        assert 'id="campos-nombres"' in r.text and 'hx-swap-oob="true"' in r.text
+        assert 'id="campo-naming_preset"' in r.text and 'aria-invalid="true"' in r.text
+        assert 'id="error-naming_preset"' in r.text
+        assert 'name="naming_enabled" value="true" checked' in r.text
+
+    def test_transmission_error_en_la_carpeta(self, restaurar_settings):
+        r = self._post("/ui/ajustes/guardar/transmission", {
+            "transmission_url": "http://transmission-test:9091",
+            "transmission_username": "usuario",
+            "transmission_download_dir": "media/Descargas",
+            "transmission_enabled": "true",
+        })
+        assert 'id="campos-transmission"' in r.text and 'hx-swap-oob="true"' in r.text
+        assert 'id="campo-transmission_download_dir"' in r.text
+        assert 'id="error-transmission_download_dir"' in r.text
+        assert 'value="http://transmission-test:9091"' in r.text
+        assert 'value="usuario"' in r.text
+
+    def test_foro_error_no_devuelve_credenciales_de_la_url(self, restaurar_settings):
+        r = self._post("/ui/ajustes/guardar/foro", {
+            "forum_url": "http://usuario:secreto@foro.example/forum?s=sesion",
+            "forum_username": "lector", "forum_enabled": "true",
+        })
+        assert 'id="campos-foro"' in r.text and 'hx-swap-oob="true"' in r.text
+        assert 'id="campo-forum_url"' in r.text
+        assert 'id="error-forum_url"' in r.text
+        assert "secreto" not in r.text and "sesion" not in r.text
+        assert 'value="lector"' in r.text
+
+    def test_un_guardado_valido_repinta_los_campos_sin_errores(self, restaurar_settings):
+        r = self._post("/ui/ajustes/guardar/avisos", {
+            "webhook_type": "ntfy", "webhook_url": "https://ntfy.sh/mi-tema",
+            "webhook_enabled": "true",
+        })
+        assert "guardado" in r.text.lower()
+        assert 'id="campos-avisos"' in r.text and 'hx-swap-oob="true"' in r.text
+        assert "aria-invalid" not in r.text
+        assert "resumen-errores-avisos" not in r.text

@@ -15,6 +15,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Ajustes: los errores se leen junto al campo (UXA-14b, #1257).** Las tarjetas de Avisos, Blog o
+  RSS, Nombres de archivo, Transmission y Foro repintan solo su bloque de campos fuera de banda con
+  el error en el control que lo causa (`aria-invalid`/`aria-describedby`) y, con dos o más, un
+  resumen enfocable al principio de la tarjeta. Los valores válidos se conservan y los secretos no
+  vuelven a pintarse. Sin migración, dependencias ni JavaScript nuevo; pendiente de SecOps.
 - **Lector: la lengüeta «Controles» sale del centro de la viñeta (2026-11-23).** El rótulo
   añadido en UATP-09 dejaba una caja de ~117×44 sobre el borde superior de la página. La
   lengüeta pasa a la esquina superior derecha, donde cae en el margen en el caso normal (en

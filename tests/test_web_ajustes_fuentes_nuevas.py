@@ -195,8 +195,9 @@ def test_guardar_fuentes_incluye_el_feed_de_herald(monkeypatch):
 def test_el_placeholder_del_foro_es_corto_y_el_aviso_http_es_estatico():
     from pathlib import Path
 
+    # UXA-14b: los campos del Foro viven en su parcial, que se repinta fuera de banda.
     plantilla = (Path(__file__).resolve().parents[1]
-                 / "src" / "zascarr" / "web" / "templates" / "ajustes.html")
+                 / "src" / "zascarr" / "web" / "templates" / "_ajustes_campos_foro.html")
     texto = plantilla.read_text(encoding="utf-8")
     assert "ya configurada (vacío = no cambiar)' if forum_password_configurada" in texto
     assert "viajan sin cifrar" in texto
