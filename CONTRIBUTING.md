@@ -15,25 +15,26 @@ Las reglas de producto, diseño, arquitectura y seguridad están en
 
 ## Entorno
 
-Requisitos: Python 3.11+ y, para las pruebas de integración, PostgreSQL 15 y
-Docker.
+Requisitos: [uv](https://docs.astral.sh/uv/) (gestiona también el Python 3.11)
+y, para las pruebas de integración, PostgreSQL 15 y Docker.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[dev]"
-python -m pip install pre-commit
-pre-commit install
+uv sync --extra dev
+uv run pre-commit install
 ```
 
 Comandos habituales:
 
 ```bash
-make test          # suite completa
-make lint          # ruff check src/
-make format        # ruff format src/
-pytest -q tests/test_mi_cambio.py
+uv run make test          # suite completa
+uv run make lint          # ruff check src/
+uv run make format        # ruff format src/
+uv run pytest -q tests/test_mi_cambio.py
 ```
+
+Si cambias las dependencias en `pyproject.toml`, regenera `uv.lock` con
+`uv lock` y commitéalo en la misma PR. La CI instala con `uv sync --frozen`:
+un lock desincronizado hace fallar la suite.
 
 Las pruebas que necesitan PostgreSQL real se saltan sin `TEST_DATABASE_URL`.
 No las des por pasadas: si no se ejecutan, dilo en la PR como **NOT RUN**.

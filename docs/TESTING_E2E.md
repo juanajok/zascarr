@@ -122,7 +122,7 @@ else
 fi
 
 # 2.4 Suite unitaria (no fijar un conteo: solo "sin failures/errors")
-python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" -q
+uv sync --extra dev -q
 .venv/bin/pytest -q --maxfail=1 | tee "$ROOT/pytest.log"
 #  Criterio: exit 0 (el tee propaga el exit de pytest); grep del resumen real:
 grep -E 'passed|failed|skipped|error' "$ROOT/pytest.log" || true

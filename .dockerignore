@@ -2,7 +2,7 @@
 **
 !Dockerfile
 !pyproject.toml
-!requirements-runtime.txt
+!uv.lock
 !src/
 !src/**
 !alembic.ini

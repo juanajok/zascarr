@@ -20,9 +20,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-COPY requirements-runtime.txt .
-RUN pip install --no-cache-dir --prefix=/install --require-hashes -r requirements-runtime.txt
-COPY pyproject.toml .
+# `uv.lock` es la única fuente de versiones y hashes. `uv export` genera el
+# requirements con hashes que consume pip; así la imagen conserva el mismo
+# layout (/usr/local) y las comprobaciones de CI (`pip check`, `pip-audit`)
+# sin depender de un venv de uv dentro del contenedor.
+COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /uvx /bin/
+COPY pyproject.toml uv.lock ./
+RUN uv export --frozen --no-dev --no-emit-project --quiet --output-file /tmp/requirements-runtime.txt \
+    && pip install --no-cache-dir --prefix=/install --require-hashes -r /tmp/requirements-runtime.txt
 COPY src ./src
 RUN pip install --no-cache-dir --prefix=/install --no-deps .
 
