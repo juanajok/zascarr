@@ -1,0 +1,39 @@
+{#- UXA-14b (#1257): campos de la tarjeta Avisos, aparte para poder repintarlos por htmx fuera de banda
+    (OOB) con el error junto al campo y el resumen A1. En la carga inicial los pinta `ajustes.html` con
+    el contexto de la página; en una respuesta, `_ajustes_guardado.html` con `errores` y los valores
+    enviados. Nunca se incluye el token: el campo de contraseña va vacío y solo cambia su placeholder. -#}
+{% set orden_campos = ["webhook_type", "webhook_url"] %}
+{% set errores = errores|default({}, true) %}
+{{ ui.resumen_errores(errores, orden_campos, "resumen-errores-avisos") }}
+<label>Tipo
+  <select name="webhook_type"{{ ui.invalido(errores, "webhook_type", orden_campos) }}>
+    <option value="generic" {% if webhook_type == "generic" %}selected{% endif %}>Dirección propia (JSON)</option>
+    <option value="gotify" {% if webhook_type == "gotify" %}selected{% endif %}>Gotify</option>
+    <option value="ntfy" {% if webhook_type == "ntfy" %}selected{% endif %}>ntfy</option>
+    <option value="telegram" {% if webhook_type == "telegram" %}selected{% endif %}>Telegram</option>
+  </select>
+  {% if errores.webhook_type %}<span class="campo-error" id="error-webhook_type">{{ errores.webhook_type }}</span>{% endif %}
+</label>
+<label>Dirección (no hace falta con Telegram)
+  <input type="text" name="webhook_url"{{ ui.invalido(errores, "webhook_url", orden_campos) }}
+         value="{{ webhook_url }}" placeholder="https://ntfy.sh/mi-tema">
+  {% if errores.webhook_url %}<span class="campo-error" id="error-webhook_url">{{ errores.webhook_url }}</span>{% endif %}
+</label>
+<label>Clave o token (Gotify, ntfy o el bot de Telegram)
+  <input type="password" name="webhook_token" autocomplete="off"
+         placeholder="{{ 'ya configurado — deja en blanco para no cambiarlo' if webhook_token_configurado else 'sin configurar' }}">
+</label>
+<label>Chat ID (solo Telegram)
+  <input type="text" name="webhook_chat_id" value="{{ webhook_chat_id }}" placeholder="123456789">
+</label>
+<p class="ajustes-hint">Con Telegram basta el token del bot y el chat ID: el campo «Dirección» no se usa.</p>
+<label class="legal-checkbox">
+  <input type="checkbox" name="webhook_incluir_nombres" value="true" {% if webhook_incluir_nombres %}checked{% endif %}>
+  Incluir los nombres de los ficheros en el aviso
+</label>
+<p class="ajustes-hint">Sin marcar, el aviso solo dice cuántos. Márcalo solo si el destino es privado: en un tema público de ntfy, cualquiera podría leer los nombres.</p>
+<label class="legal-checkbox">
+  <input type="checkbox" name="webhook_enabled" value="true" {% if webhook_enabled %}checked{% endif %}>
+  Activar avisos de importación
+</label>
+<p class="ajustes-hint">Si el aviso no llega, la importación sigue igual.</p>

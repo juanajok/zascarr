@@ -9,3 +9,9 @@
    incorrecta); las nuevas, solo si toca vaciarlas. Nunca se devuelve lo escrito. #}
 {% if vaciar_actual %}{{ campo_actual(invalido=actual_invalida, oob=True) }}{% endif %}
 {% if vaciar_nuevas %}{{ campo_nueva(auth_password_configurada, oob=True) }}{{ campo_repetida(oob=True) }}{% endif %}
+{# UXA-14b (#1257): el bloque de campos se repinta FUERA DE BANDA, con los valores enviados y
+   `errores`; así el error queda junto al campo y el resumen se enfoca sin sustituir el botón
+   (el foco del envío no se pierde). Solo lo usan las tarjetas con validación por campo. #}
+{% if campos_oob %}
+<div id="campos-{{ tarjeta }}" class="ajustes-campos" hx-swap-oob="true">{% include "_ajustes_campos_" ~ tarjeta ~ ".html" %}</div>
+{% endif %}

@@ -1370,6 +1370,8 @@ details.ficha-bloque:not([open]) { padding-block: var(--space-1); }
   overflow-wrap: anywhere;  /* #1121: una dirección larga no ensancha la tarjeta a 320 px */
 }
 .ajustes-card form { display: flex; flex-direction: column; gap: 10px; }
+/* UXA-14b: el bloque de campos que htmx repinta fuera de banda conserva el ritmo del formulario. */
+.ajustes-card form > .ajustes-campos { display: flex; flex-direction: column; gap: 10px; }
 .ajustes-card label {
   display: flex; flex-direction: column; gap: var(--space-1);
   font-size: var(--text-secundario); font-weight: 700;

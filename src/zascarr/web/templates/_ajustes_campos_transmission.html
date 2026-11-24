@@ -1,0 +1,32 @@
+{#- UXA-14b (#1257): campos de Transmission, repintados fuera de banda con el error junto al campo.
+    El resumen A1 solo aparece con dos o más errores; aquí solo se valida la carpeta de descargas. -#}
+{% set orden_campos = ["transmission_download_dir"] %}
+{% set errores = errores|default({}, true) %}
+{{ ui.resumen_errores(errores, orden_campos, "resumen-errores-transmission") }}
+        <label>Dirección
+          <input type="text" name="transmission_url" value="{{ transmission_url }}" placeholder="http://host.docker.internal:9091">
+        </label>
+        <p class="ajustes-hint">Si Transmission está en esta misma Raspberry Pi, la dirección es <code>http://host.docker.internal:9091</code>.</p>
+        <label>Carpeta de descargas (en la Pi)
+          <input type="text" name="transmission_download_dir"{{ ui.invalido(errores, "transmission_download_dir", orden_campos) }} value="{{ transmission_download_dir }}"
+                 placeholder="/media/Descargas/torrents/completos">
+          {% if errores.transmission_download_dir %}<span class="campo-error" id="error-transmission_download_dir">{{ errores.transmission_download_dir }}</span>{% endif %}
+        </label>
+        <p class="ajustes-hint">La ruta tal como la ve Transmission en la Pi (no la del contenedor). ZascArr se la
+          pasa al enviar cada torrent; si no existe, el envío falla (lo avisamos al probar la conexión).</p>
+        <details class="ajustes-mas">
+          <summary>¿Por qué no <code>127.0.0.1</code>?</summary>
+          <p class="ajustes-hint">ZascArr funciona dentro de un contenedor de Docker, y para él <code>127.0.0.1</code> es el propio contenedor, no tu Pi. <code>host.docker.internal</code> es su forma de decir «la máquina que me aloja».</p>
+        </details>
+        <label>Usuario
+          <input type="text" name="transmission_username" value="{{ transmission_username }}" autocomplete="off">
+        </label>
+        <label>Contraseña
+          <input type="password" name="transmission_password" autocomplete="off"
+                 placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if transmission_password_configurada else 'sin configurar' }}">
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="transmission_enabled" value="true" {% if transmission_enabled %}checked{% endif %}>
+          Activar Transmission para descargas de Deseados
+        </label>
+        

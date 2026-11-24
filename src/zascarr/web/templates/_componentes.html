@@ -63,14 +63,14 @@
     formulario, «Hay un problema», con un enlace a cada campo y el foco en él (GOV.UK «Error summary»;
     docs/design/benchmark-designsystems-surf.md, A1). Con uno solo, el foco va al campo (`invalido`).
     El texto de cada enlace es el mismo mensaje que va junto al campo. -#}
-{% macro resumen_errores(errores, orden) -%}
+{% macro resumen_errores(errores, orden, id_titulo="resumen-errores-titulo") -%}
 {%- set fallidos = orden | select("in", errores or {}) | list -%}
 {%- if fallidos | length >= 2 %}
 {%- set t = tipo_aviso("warn") %}
-<div class="{{ t.clase }} resumen-errores" role="alert" tabindex="-1" autofocus aria-labelledby="resumen-errores-titulo">
+<div class="{{ t.clase }} resumen-errores" role="alert" tabindex="-1" autofocus aria-labelledby="{{ id_titulo }}">
   <span class="aviso-icono" aria-hidden="true">{{ t.icono }}</span>
   <div>
-    <h2 id="resumen-errores-titulo" class="resumen-errores-titulo">Hay un problema</h2>
+    <h2 id="{{ id_titulo }}" class="resumen-errores-titulo">Hay un problema</h2>
     <ul>{% for campo in fallidos %}<li><a href="#campo-{{ campo }}">{{ errores[campo] }}</a></li>{% endfor %}</ul>
   </div>
 </div>
