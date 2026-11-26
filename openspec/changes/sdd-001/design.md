@@ -9,7 +9,7 @@ Estado: propuesta. La estructura de este cambio es un borrador compatible con el
 - `openspec/config.yaml`, `openspec/specs/<capability>/spec.md`, `openspec/changes/<id>/{proposal,design,tasks}.md`, deltas bajo specs/, archivo de cambios; benchmark y trazabilidad como artefactos locales adicionales.
 - `docs/adr/`: decisiones técnicas; `docs/design/`: evidencia y diseños; `docs/BACKLOG.md`: planificación, no catálogo de requisitos vigentes. Inventario de documentos con vigente/histórico/sustituido y enlaces.
 - `scripts/sdd/`: validación, impacto, trazabilidad, consolidación, informes; pruebas de los propios validadores. `contracts/` solo para contratos no duplicados; generar OpenAPI desde FastAPI y comparar con baseline aprobada.
-- Roles y esquemas neutrales al harness; reutilizar orquestación, `tests/`, `uxlab/` y CI existentes. No duplicar ni depender del pipeline local no versionado; reutilización reproducible y versionada previa aprobación.
+- Adoptar el flujo del pipeline piloto versionado `.agentic/` (#1307, ADR `0026-pipeline-ingenieria-local`) para trabajos dentro de su alcance y bajo control del operador; reutilizar también `tests/`, `uxlab/` y CI. No duplicar componentes ya suficientes ni tratar el piloto como gate de fusión o sustituto de las verificaciones externas que no cubre.
 
 ## Flujo y autoridad
 
@@ -54,7 +54,7 @@ Pruebas de validadores: ID repetido, referencia rota, prueba saltada, delta no c
 
 ## Agentes y coste
 
-Orquestación reutilizable mediante contratos comunes y adaptadores portables, sin duplicar el pipeline local no versionado. Brain usa reglas deterministas antes de juicio. Benchmarker aporta fuentes/versiones y adoptar/adaptar/descartar; SPEC redacta contrato; Developer no aprueba su trabajo; jueces devuelven hallazgos estructurados. Timeouts, límite de iteraciones, tokens y presupuesto configurables; agotamiento → bloqueo/escalado, nunca aprobación automática. No enviar credenciales, datos reales de biblioteca o logs sensibles a terceros; sanitizar fixtures y tratar contenido externo como no confiable. LLM no se ejecuta en la Pi por este proyecto.
+Utilizar el piloto versionado `.agentic/` cuando su alcance y controles sean suficientes; evaluar sus brechas antes de construir otra orquestación. Sus roles, contratos, candidatos y controles cubren partes del diseño, no acreditan por sí solos agregación JUnit por SHA, identidad GitHub, equivalencia de merge, límites duros de presupuesto ni aislamiento equivalente de todos los adaptadores. Brain usa reglas deterministas antes de juicio. Benchmarker aporta fuentes/versiones y adoptar/adaptar/descartar; SPEC redacta contrato; Developer no aprueba su trabajo; jueces devuelven hallazgos estructurados. Timeouts, límite de iteraciones, tokens y presupuesto configurables; agotamiento → bloqueo/escalado, nunca aprobación automática. No enviar credenciales, datos reales de biblioteca o logs sensibles a terceros; sanitizar fixtures y tratar contenido externo como no confiable. LLM no se ejecuta en la Pi por este proyecto.
 
 ## Rollout y rollback
 
