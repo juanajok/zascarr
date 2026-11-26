@@ -4,7 +4,8 @@
 > **Cambio aprobado por el PO (2026-11-26, tras desplegar #1328): R2b.** La
 > revisión de las 41 sugerencias reales (§6b) mostró que el 99,89 % medido sobre archivos ya vinculados
 > no se traslada a los pendientes.
-> **ID provisional:** `BL-PARSE3`, sin tarjeta todavía.
+> **Hecha:** fusionada en #1328 (`4e13dd8b`) y R2b en #1333 (`0bfebfb7`); **aceptada en la Pi el 2026-11-26**
+> con 18 sugerencias (resultado al final de §7). Tarjeta [#1331](https://github.com/juanajok/zascarr/issues/1331).
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familia F2, medida otra vez con
 > BL-PARSE2 desplegado (`eb9d8c4a`), y el experimento Fellegi-Sunter del mismo día (§6).
 > **Relación:** B14 está hecha (el asistente que vincula **desde** la carpeta, a mano). Esto no lo cambia:
@@ -149,10 +150,25 @@ coleccionista confirma.
 **Aceptación en datos reales** (tras desplegar, con tu autorización para la tanda en la Pi): un script de
 solo lectura que llama al servicio sobre los pendientes reales y cuenta:
 - ≥ 20 pendientes con sugerencia por la carpeta (con R2b; hoy, 22; antes de R2b el umbral era ≥ 40);
+  **corregido a 18 por el PO al aceptar** (ver el resultado);
 - ninguno que sea anual con serie no anual o al revés;
 
 y una revisión tuya en «Por revisar» de una muestra de 10, en el navegador, con el resultado en la tarjeta.
 No hay verdad de referencia para estos archivos: por eso la última palabra es tuya.
+
+**Resultado (2026-11-26, código `0bfebfb7` desplegado en la Pi, transacción `READ ONLY` con `ROLLBACK`,
+de 50 en 50 pendientes como «Por revisar»):**
+
+| Criterio | Resultado |
+|---|---|
+| Sugerencias por la carpeta (umbral ≥ 20) | **18** de 589 pendientes: 14 nuevas y 4 iguales a la del matcher, 0 distintas |
+| Anual con serie no anual, o al revés | **0** |
+| Cruce con las 22 previstas en §6b | las 18 son de esas 22; ninguna inesperada ni ninguna de las 13 malas |
+
+Las 4 que faltan son tomos de una misma serie de manga que ya no figuran como pendientes con su nombre
+(la cola bajó de 595 a 589 entre las dos mediciones): todo indica que se asignaron entre medias. No es
+efecto del código, y el PO aceptó con 18 en vez de 20. La revisión de 10 tarjetas en el navegador no se
+hizo antes de aceptar: queda a criterio del PO al trabajar la cola.
 
 ## 8. Orden de los commits (SDD + TDD)
 
