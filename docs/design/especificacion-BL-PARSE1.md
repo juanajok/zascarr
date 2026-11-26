@@ -1,7 +1,8 @@
 # Especificación BL-PARSE1 — números que el parser pierde o inventa (F3 + F4)
 
 > **Estado:** **aprobada por el PO el 2026-11-26**, con D1 = convención `E{N}` (propuesta de R4).
-> **ID provisional:** `BL-PARSE1`, pendiente de tarjeta en el Project 1.
+> **Hecha:** fusionada en #1309 (`d1062090`) y **aceptada en la Pi el 2026-11-26** (resultado en §8).
+> **Tarjeta:** [#1314](https://github.com/juanajok/zascarr/issues/1314) en el Project 1.
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familias F3 y F4.
 > **Código de referencia:** `main` en `4b5f9d7b` (el mismo que corre en la Pi).
 
@@ -175,6 +176,20 @@ embudo de solo lectura y comprobar:
 - **0** archivos que coincidían dejan de coincidir;
 - **0** enlaces nuevos a otra serie o a otro número;
 - los 8 `Especial N` no enlazan con la grapa #N.
+
+**Resultado (2026-11-26, código `d1062090` desplegado en la Pi, misma transacción `READ ONLY` con
+`ROLLBACK`, 5.096 archivos, 0 errores):**
+
+| Criterio | Medido | |
+|---|---|---|
+| ≥ 74 coincidencias más | **+74** (3.930 → 4.004 de 4.501 con vínculo; 87,3 % → 89,0 %) | PASS |
+| 0 que dejan de coincidir | 0 | PASS |
+| 0 enlaces nuevos a otra serie o número | 0 (los 10 enlaces a otro número de la foto previa siguen siendo los mismos 10) | PASS |
+| Especiales sin enlace a la grapa #N | 0 de 19 enlazados; uno sale con la nota de §7 | PASS |
+
+Los 8 `Especial N` de la foto previa eran un riesgo **latente** (no estaban enlazados): se habrían
+enlazado con la grapa al deshacer los empates de catálogo (F1). R4 cierra esa puerta antes de F1. En
+estados del matcher, 59 archivos pasan de `unsorted` a `direct` (1.092 → 1.033).
 
 ## 9. Orden de los commits (SDD + TDD)
 
