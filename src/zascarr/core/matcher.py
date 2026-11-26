@@ -544,13 +544,18 @@ class SeriesMatcher:
             # La carpeta solo desempata entre candidatos que ya han pasado el
             # umbral. Nunca convierte un desconocido en candidato.
             hit = _desempatar_por_carpeta(tied, triage.path.parent.name)
-            if hit is None:
-                return MatchResult(
-                    MatchStatus.UNSORTED,
-                    candidates=tied,
-                    notes=[f"empate ambiguo: {[h.title for h in tied]}"],
-                )
-            notas.append(f"desempatado por la carpeta: {hit.title}")
+            if hit is not None:
+                notas.append(f"desempatado por la carpeta: {hit.title}")
+            else:
+                hit, nota = await self._desempatar_por_numero(
+                    tied, number, triage.path.parent.name)
+                if hit is None:
+                    return MatchResult(
+                        MatchStatus.UNSORTED,
+                        candidates=tied,
+                        notes=[f"empate ambiguo: {[h.title for h in tied]}{nota}"],
+                    )
+                notas.append(nota)
         else:
             hit = good[0]
 
@@ -559,6 +564,39 @@ class SeriesMatcher:
             notas.append(f"desempatado por la carpeta: {hit.title}")
         return await self._resolve(hit, number, good, status, notas, formato_esperado,
                                    nombre=triage.path.name, especial=especial)
+
+    async def series_con_numero(self, series_ids: list[UUID], number: str) -> set[UUID]:
+        """De esas series, las que tienen ese número (BL-PARSE2 R1).
+
+        Una sola consulta para todas; misma semántica que `find_issue`: ceros a la izquierda
+        recortados y sin filas de número vacío (una novela gráfica sin número no es el «0»)."""
+        res = await self.db.execute(sa.text("""
+            SELECT DISTINCT series_id FROM issues
+            WHERE series_id = ANY(CAST(:sids AS uuid[]))
+              AND issue_number <> ''
+              AND ltrim(issue_number, '0') = ltrim(:num, '0')
+        """), {"sids": [str(s) for s in series_ids], "num": number})
+        return {UUID(str(r.series_id)) for r in res.fetchall()}
+
+    async def _desempatar_por_numero(
+        self, tied: list[SeriesHit], number: str, carpeta: str,
+    ) -> tuple[SeriesHit | None, str]:
+        """BL-PARSE2: entre ediciones empatadas, la única que tiene el número del archivo.
+
+        Devuelve la serie y la nota para el informe, o `(None, sufijo)` si no decide; el
+        sufijo explica la guarda de año (R2) y va detrás de «empate ambiguo: [...]». Un año
+        desconocido, en la carpeta o en la serie, no es una contradicción."""
+        con_numero = await self.series_con_numero([h.series_id for h in tied], number)
+        unicas = [h for h in tied if h.series_id in con_numero]
+        if len(unicas) != 1:
+            return None, ""
+        hit = unicas[0]
+        anio = _anio_de_carpeta(carpeta)
+        if anio is not None and hit.start_year is not None and abs(hit.start_year - anio) > 1:
+            return None, (f"; solo «{hit.title}» tiene el número «{number}», pero la carpeta "
+                          f"dice {anio} y la serie empieza en {hit.start_year}")
+        return hit, (f"desempatado por el número: «{hit.title}» es la única con el número "
+                     f"«{number}»")
 
     async def _resolve(self, hit: SeriesHit, number: str, candidates: list[SeriesHit],
                         status: MatchStatus, extra_notes: list[str],
@@ -623,6 +661,16 @@ class SeriesMatcher:
                 "posible hueco del enricher, encolar consulta a metadata.py"
             )
         return MatchResult(status, hit.series_id, issue_id, hit.score, candidates, notes)
+
+#: Año de la carpeta, suelto «(1987)» o como rango «(1987-96)», «(1986-1996)»: vale el primero.
+_ANIO_DE_CARPETA = re.compile(r"\((19|20)(\d{2})(?:\s*-\s*\d{2,4})?\)")
+
+
+def _anio_de_carpeta(carpeta: str) -> int | None:
+    """El año que afirma la carpeta (BL-PARSE2 R2), o None si no dice ninguno."""
+    m = _ANIO_DE_CARPETA.search(carpeta or "")
+    return int(m.group(1) + m.group(2)) if m else None
+
 
 _VOLUMEN_EN_CARPETA = re.compile(
     r"\b(?:vol(?:umen)?|v|tomo)\.?\s*(\d+)\b", re.IGNORECASE)
