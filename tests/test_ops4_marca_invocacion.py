@@ -28,7 +28,7 @@ def test_rechaza_directorio_intentos_con_permisos_inseguros(intentos):
     intentos.chmod(0o755)
     with pytest.raises(ValueError):
         entrada._marcar_intento(ID)
-    assert not (intentos / INVOCACION).exists()
+    assert not (intentos / f"inv-{INVOCACION}").exists()
 
 
 def test_rechaza_directorio_intentos_enlace(tmp_path, intentos):
@@ -37,7 +37,7 @@ def test_rechaza_directorio_intentos_enlace(tmp_path, intentos):
     intentos.symlink_to(real, target_is_directory=True)
     with pytest.raises(OSError):
         entrada._marcar_intento(ID)
-    assert not (real / INVOCACION).exists()
+    assert not (real / f"inv-{INVOCACION}").exists()
 
 
 def test_marca_escritura_parcial_y_fsync_de_fichero_y_directorio(intentos, monkeypatch):
@@ -55,10 +55,25 @@ def test_marca_escritura_parcial_y_fsync_de_fichero_y_directorio(intentos, monke
     monkeypatch.setattr(entrada.os, "write", escribir_parcial)
     monkeypatch.setattr(entrada.os, "fsync", registrar_fsync)
     entrada._marcar_intento(ID)
-    marca = intentos / INVOCACION
+    marca = intentos / f"inv-{INVOCACION}"
     assert marca.read_bytes() == (ID + "\n").encode("ascii")
     assert stat.S_IMODE(marca.stat().st_mode) == 0o600
     assert tipos == [stat.S_IFREG, stat.S_IFDIR]
+
+
+def test_igualdad_forzada_con_marca_historica_de_peticion(intentos, monkeypatch):
+    """Una petición histórica no colisiona ni se modifica al marcar la invocación."""
+    monkeypatch.setenv("INVOCATION_ID", ID)
+    historica = intentos / ID
+    historica.write_bytes(b"marca historica de replay\n")
+    antes = historica.stat()
+    entrada._marcar_intento(ID)
+    assert historica.read_bytes() == b"marca historica de replay\n"
+    assert historica.stat().st_ino == antes.st_ino
+    assert (intentos / f"inv-{ID}").read_bytes() == (ID + "\n").encode("ascii")
+    with pytest.raises(FileExistsError):
+        entrada._marcar_intento(ID)
+    assert historica.read_bytes() == b"marca historica de replay\n"
 
 
 def test_finalizador_rechaza_enlace_fifo_y_marca_excesiva(tmp_path):

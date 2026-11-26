@@ -71,7 +71,7 @@ def _ejecutar_stoppost(tmp_path: Path, resultado: str, exit_code: str,
     marca.mkdir(parents=True, exist_ok=True)
     estado = tmp_path / "ops" / "actualizar-status.json"
     id_ = json.loads(estado.read_text(encoding="utf-8")).get("id", ID) if estado.exists() else ID
-    (marca / invocacion).write_text((id_marca or id_) + "\n", encoding="utf-8")
+    (marca / f"inv-{invocacion}").write_text((id_marca or id_) + "\n", encoding="utf-8")
     entorno.update({
         "SERVICE_RESULT": resultado,
         "EXIT_CODE": exit_code,
@@ -124,6 +124,25 @@ def test_una_marca_de_otro_intento_no_cierra_el_estado(tmp_path) -> None:
         tmp_path, "success", "exited", "0", id_marca="b" * 32,
     )
     assert _leer(ruta) == antes
+
+
+def test_stoppost_no_confunde_marca_historica_de_peticion(tmp_path) -> None:
+    ruta = _estado(tmp_path, "en_curso")
+    antes = ruta.read_bytes()
+    directorio = tmp_path / "ops4" / "intentos"
+    directorio.mkdir(parents=True)
+    historica = directorio / ("b" * 32)
+    historica.write_text(ID + "\n", encoding="ascii")
+    entorno = os.environ.copy()
+    entorno.update(SERVICE_RESULT="success", EXIT_CODE="exited", EXIT_STATUS="0",
+                   INVOCATION_ID="b" * 32)
+    completado = subprocess.run(
+        ["/bin/sh", "-c", _comando_stoppost(tmp_path)], env=entorno,
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert completado.returncode == 0, completado.stderr
+    assert ruta.read_bytes() == antes
+    assert historica.read_text(encoding="ascii") == ID + "\n"
 
 
 # ── Cadena real de ExecStopPost ─────────────────────────────────────────────

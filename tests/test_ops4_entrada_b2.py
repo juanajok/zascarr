@@ -88,7 +88,7 @@ def test_toma_cerrojo_y_reserva_antes_de_update(tmp_path) -> None:
     assert "flock9=si" in marca
     assert "rama=main" in marca
     assert "lock_fds=1" in marca
-    assert (tmp_path / "ops4" / "intentos" / ("b" * 32)).read_text() == ID + "\n"
+    assert (tmp_path / "ops4" / "intentos" / ("inv-" + "b" * 32)).read_text() == ID + "\n"
     datos = json.loads(estado.read_text(encoding="utf-8"))
     assert (datos["estado"], datos["fase"]) == ("en_curso", "reservada")
     head = subprocess.check_output(

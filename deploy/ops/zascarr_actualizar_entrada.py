@@ -101,7 +101,7 @@ def _marcar_intento(id_: str) -> None:
         ):
             raise ValueError("directorio de intentos no seguro")
         fd = os.open(
-            invocacion,
+            "inv-" + invocacion,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
             0o600, dir_fd=fd_dir,
         )
