@@ -20,6 +20,7 @@ GUIDE = ROOT / "CLAUDE.md"
 REQUIRED = ("constitution.md", "product-vision.md", "glossary.md", "mapa-reglas.md")
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 RULE_ROW = re.compile(r"^\|\s*(PRE-[A-Z0-9]+)\s*\|", re.MULTILINE)
+SECTION = re.compile(r"^## (\d+)\.", re.MULTILINE)
 # Afirmaciones que solo serían válidas con una prueba de carga efectiva (T0.4).
 FORBIDDEN = re.compile(
     r"carga efectiva verificada|instrucciones cargadas correctamente|"
@@ -77,6 +78,26 @@ class GobernanzaTest(unittest.TestCase):
         self.assertEqual(
             len(origins), len(set(origins)), "hay orígenes repetidos en el mapa"
         )
+
+    def test_mapa_de_reglas_no_tiene_huecos(self) -> None:
+        text = read(GOVERNANCE / "mapa-reglas.md")
+        numbers = sorted(int(rule.split("-", 1)[1]) for rule in RULE_ROW.findall(text))
+        self.assertTrue(numbers, "el mapa de reglas no tiene filas PRE-*")
+        expected = list(range(numbers[0], numbers[-1] + 1))
+        self.assertEqual(numbers, expected, "faltan IDs intermedios en el mapa")
+
+    def test_mapa_cubre_todas_las_secciones_de_la_guia(self) -> None:
+        # Piso de cobertura, no prueba de cobertura: si la guía gana una
+        # sección y el mapa no la menciona, hay una omisión silenciosa.
+        sections = SECTION.findall(read(GUIDE))
+        self.assertTrue(sections, "no se encontraron secciones en la guía")
+        mapa = read(GOVERNANCE / "mapa-reglas.md")
+        missing = [
+            section
+            for section in sections
+            if not re.search(rf"§{section}(?!\d)", mapa)
+        ]
+        self.assertEqual(missing, [], f"secciones sin fila en el mapa: {missing}")
 
     def test_ningun_documento_afirma_carga_no_verificada(self) -> None:
         for path in markdown_files():
