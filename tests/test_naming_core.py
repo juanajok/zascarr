@@ -1905,3 +1905,104 @@ def test_bl_parse1_nombres_reales(nombre, carpeta, numero):
     """C14: nombres reales de la biblioteca, con su carpeta."""
     p = parse_comic_filename(nombre, carpeta=carpeta, contexto=f"Tebeos / {carpeta}")
     assert p.issue_number == numero
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BL-PARSE2 — desempatar dos ediciones por el número que existe (F1)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from zascarr.core.matcher import IssueConArchivos  # noqa: E402
+
+
+def _matcher_empate(hits: list[SeriesHit], con_numero: set, issue_id=None):
+    """Matcher con `hits` empatados y `series_con_numero` fijado a `con_numero`."""
+    matcher = SeriesMatcher(AsyncMock())
+    matcher.find_series = AsyncMock(return_value=hits)
+    matcher.find_alias = AsyncMock(return_value=None)
+    matcher.series_con_numero = AsyncMock(return_value=set(con_numero))
+    matcher.find_issue_con_archivos = AsyncMock(return_value=(
+        IssueConArchivos(issue_id or uuid4(), "single_issue", ()), False))
+    return matcher
+
+
+def _triage_en(carpeta: str, nombre: str = "Animal Man 05.cbz") -> TriageResult:
+    return TriageResult(path=Path("Tebeos") / carpeta / nombre)
+
+
+_ZINCO = SeriesHit(uuid4(), "ANIMAL MAN", 1989, 1.0)
+_DC = SeriesHit(uuid4(), "Animal Man", 2011, 1.0)
+
+
+class TestDesempatePorNumero:
+
+    @pytest.mark.asyncio
+    async def test_empate_lo_desempata_la_unica_serie_con_el_numero(self):
+        """C1: solo una de las empatadas tiene el número: se elige, con la nota de R3."""
+        iid = uuid4()
+        matcher = _matcher_empate([_ZINCO, _DC], {_ZINCO.series_id}, iid)
+        r = await matcher.decide(_triage_en("Animal Man - Saga de Grant Morrison (1988)"),
+                                 extractor=lambda _n: ("Animal Man", "05", None))
+        assert r.status is MatchStatus.DIRECT
+        assert r.series_id == _ZINCO.series_id
+        assert r.issue_id == iid
+        assert r.notes == [
+            "desempatado por el número: «ANIMAL MAN» es la única con el número «05»"]
+
+    @pytest.mark.asyncio
+    async def test_empate_con_el_numero_en_las_dos_sigue_ambiguo(self):
+        """C2: las dos tienen el número: como hoy."""
+        matcher = _matcher_empate([_ZINCO, _DC], {_ZINCO.series_id, _DC.series_id})
+        r = await matcher.decide(_triage_en("Animal Man"),
+                                 extractor=lambda _n: ("Animal Man", "2", None))
+        assert r.status is MatchStatus.UNSORTED
+        assert r.notes == ["empate ambiguo: ['ANIMAL MAN', 'Animal Man']"]
+        assert len(r.candidates) == 2
+
+    @pytest.mark.asyncio
+    async def test_empate_sin_el_numero_en_ninguna_sigue_ambiguo(self):
+        """C3: ninguna tiene el número: como hoy."""
+        matcher = _matcher_empate([_ZINCO, _DC], set())
+        r = await matcher.decide(_triage_en("Animal Man"),
+                                 extractor=lambda _n: ("Animal Man", "99", None))
+        assert r.status is MatchStatus.UNSORTED
+        assert r.notes == ["empate ambiguo: ['ANIMAL MAN', 'Animal Man']"]
+
+    @pytest.mark.asyncio
+    async def test_empate_por_numero_lo_frena_el_anio_de_la_carpeta(self):
+        """C4: caso real de Lemire: la carpeta dice 2012 y la única con el número empieza en 1989."""
+        matcher = _matcher_empate([_ZINCO, _DC], {_ZINCO.series_id})
+        r = await matcher.decide(_triage_en("Animal Man - Saga de Jeff Lemire (2012)"),
+                                 extractor=lambda _n: ("Animal Man", "5", None))
+        assert r.status is MatchStatus.UNSORTED
+        assert r.series_id is None
+        assert r.notes == [
+            "empate ambiguo: ['ANIMAL MAN', 'Animal Man']; solo «ANIMAL MAN» tiene el número "
+            "«5», pero la carpeta dice 2012 y la serie empieza en 1989"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("carpeta, inicio", [
+        ("Superman Vol2 (Ed.Zinco)(1987-96)", 1987),   # rango: cuenta el primer año
+        ("Superman (1986-1996)", 1987),                 # rango largo, a ±1
+        ("Coleccion DC", 1987),                         # la carpeta no dice año
+        ("Superman (2012)", None),                      # la serie no tiene año
+    ])
+    async def test_empate_por_numero_rango_de_anios_y_anio_desconocido(self, carpeta, inicio):
+        """C5: un rango vale por su primer año; un año desconocido no es contradicción."""
+        zinco = SeriesHit(uuid4(), "SUPERMAN EL HOMBRE DE ACERO", inicio, 1.0)
+        novela = SeriesHit(uuid4(), "SUPERMAN", None, 1.0)
+        matcher = _matcher_empate([zinco, novela], {zinco.series_id})
+        r = await matcher.decide(_triage_en(carpeta, "Superman 12.cbr"),
+                                 extractor=lambda _n: ("Superman", "12", None))
+        assert r.status is MatchStatus.DIRECT
+        assert r.series_id == zinco.series_id
+
+    @pytest.mark.asyncio
+    async def test_empate_la_carpeta_decide_antes_que_el_numero(self):
+        """C6: si `_desempatar_por_carpeta` ya decide, no se consulta el número."""
+        v1 = SeriesHit(uuid4(), "Batman Vol 1", 1940, 1.0)
+        v2 = SeriesHit(uuid4(), "Batman Vol 2", 2011, 1.0)
+        matcher = _matcher_empate([v1, v2], {v2.series_id})
+        r = await matcher.decide(_triage_en("Batman Vol 1", "Batman 12.cbz"),
+                                 extractor=lambda _n: ("Batman", "12", None))
+        assert r.series_id == v1.series_id
+        matcher.series_con_numero.assert_not_awaited()

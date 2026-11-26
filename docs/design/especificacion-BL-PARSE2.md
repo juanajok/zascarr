@@ -1,6 +1,6 @@
 # Especificación BL-PARSE2 — desempatar dos ediciones por el número que existe (F1)
 
-> **Estado:** **propuesta, pendiente de aprobación del PO.**
+> **Estado:** **aprobada por el PO el 2026-11-26.**
 > **ID provisional:** `BL-PARSE2`, sin tarjeta todavía.
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familia F1, medida otra vez
 > con BL-PARSE1 desplegado (`d1062090`).
