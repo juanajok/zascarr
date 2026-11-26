@@ -9,7 +9,11 @@ Requires=docker.service
 Type=exec
 User=root
 WorkingDirectory=@REPO@
-ExecStart=/bin/bash @REPO@/scripts/update.sh --rama main
+Environment=ZASCARR_ACTUALIZAR_UNIDAD=1
+Environment=ZASCARR_REPO=@REPO@
+Environment=ZASCARR_OPS_DIR=@ZASCARR_DATA_DIR@/ops
+Environment=ZASCARR_OPS4_DIR=@ZASCARR_DATA_DIR@/ops4
+ExecStart=/usr/local/lib/zascarr/zascarr-actualizar-entrada
 # A1: sin ExecStartPost. Un único cierre de último recurso, con `-`: un fallo
 # del finalizador no convierte en fallida una actualización correcta (T-10).
 # Solo `success:exited:0` es `hecha`; el 75 es el cerrojo ocupado, que por

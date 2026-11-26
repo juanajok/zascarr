@@ -51,6 +51,7 @@ UNIDAD = "zascarr-actualizar.service"
 #: contra `FASES` (o su índice) en lugar de repetir literales.
 FASES: tuple[str, ...] = (
     "aceptada",
+    "reservada",
     "preparacion",
     "copia",
     "git",

@@ -45,6 +45,7 @@ def test_instala_clave_dirs_modulos_y_unidades_sin_activar(tmp_path: Path) -> No
     assert stat.S_IMODE((tmp_path / "data" / "ops4" / "intentos").stat().st_mode) == 0o700
     assert (tmp_path / "bin" / "actualizar-aux").is_file()
     assert (tmp_path / "lib" / "zascarr-estado-actualizar-ops4").is_file()
+    assert (tmp_path / "lib" / "zascarr-actualizar-entrada").is_file()
     for modulo in ("protocolo_actualizar_v4_ops4.py",
                    "verificador_autorizacion_ops4.py",
                    "registro_repeticiones_ops4.py",

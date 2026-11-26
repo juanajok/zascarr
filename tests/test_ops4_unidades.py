@@ -22,9 +22,10 @@ def test_unidad_de_actualizacion_tiene_accion_fija_y_limites() -> None:
     config = _leer("zascarr-actualizar.service")
     servicio = config["Service"]
     assert servicio["Type"] == "exec"
-    assert servicio["ExecStart"] == (
-        "/bin/bash @REPO@/scripts/update.sh --rama main"
-    )
+    assert servicio["ExecStart"] == "/usr/local/lib/zascarr/zascarr-actualizar-entrada"
+    texto = _texto("zascarr-actualizar.service")
+    assert "ZASCARR_ACTUALIZAR_UNIDAD=1" in texto
+    assert "ZASCARR_REPO=@REPO@" in texto
     assert servicio["RuntimeMaxSec"] == "5400"
     assert servicio["KillMode"] == "control-group"
     assert servicio["SendSIGKILL"] == "yes"

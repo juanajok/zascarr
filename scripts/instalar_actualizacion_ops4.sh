@@ -125,6 +125,7 @@ if (( QUITAR )); then
         "${DEST_LIB}/verificador_autorizacion_ops4.py" \
         "${DEST_LIB}/registro_repeticiones_ops4.py" \
         "${DEST_LIB}/admision_ops4.py" \
+        "${DEST_LIB}/zascarr-actualizar-entrada" \
         "${DEST_LIB}/escritor_estado_actualizar_ops4.py" \
         "${DEST_LIB}/zascarr-estado-actualizar-ops4"
     if (( ! SIN_SYSTEMD )); then run systemctl daemon-reload || true; fi
@@ -147,6 +148,8 @@ crear_clave
 copiar "${REPO_DIR}/deploy/ops/zascarr_actualizar_aux.py" "${DEST_AUX}" 0755
 copiar "${REPO_DIR}/deploy/ops/estado_actualizar_ops4.py" \
     "${DEST_LIB}/zascarr-estado-actualizar-ops4" 0755
+copiar "${REPO_DIR}/deploy/ops/zascarr_actualizar_entrada.py" \
+    "${DEST_LIB}/zascarr-actualizar-entrada" 0755
 for modulo in protocolo_actualizar_v4_ops4.py verificador_autorizacion_ops4.py \
               registro_repeticiones_ops4.py admision_ops4.py \
               escritor_estado_actualizar_ops4.py; do

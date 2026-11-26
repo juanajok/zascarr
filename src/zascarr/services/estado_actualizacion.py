@@ -5,7 +5,7 @@ Contrato B1, solo lectura: un JSON UTF-8 de hasta 4096 bytes con esquema 1
 ``unidad``, ``estado``, ``fase``, ``inicio_epoch``, ``actualizado_epoch``,
 ``head0``, ``sha_destino``, ``sha_actual``, ``resultado`` y ``codigo``).
 ``estado`` pertenece a {aceptada, en_curso, hecha, fallida, incierta} y
-``fase`` al orden cerrado aceptada, preparacion, copia, git, build,
+``fase`` al orden cerrado aceptada, reservada, preparacion, copia, git, build,
 migracion, arranque y fin. Un intento activo sin noticias durante 7200
 segundos se interpreta incierto, nunca fallido; un terminal es terminal
 aunque sea antiguo.
@@ -47,6 +47,7 @@ CODIGOS: frozenset[str] = frozenset(
 _FASES: frozenset[str] = frozenset(
     {
         "aceptada",
+        "reservada",
         "preparacion",
         "copia",
         "git",
