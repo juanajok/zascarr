@@ -48,6 +48,16 @@
 | PRE-42 | §2 | Convenciones de lenguaje, tipos e imports; aclarar la tensión del ejemplo de nombres | Guía técnica | sin migrar |
 | PRE-43 | §2 | Justificar dependencias y centralizar enums del dominio | Guía técnica | sin migrar |
 
+## Cobertura incompleta: filas que agrupan sub-reglas
+
+Una fila puede resumir varias sub-reglas, y eso **no** cuenta como traslado completo. Hoy agrupan como mínimo:
+
+- **PRE-23**: los siete antipatrones de la sección 10, cada uno con su excepción.
+- **PRE-33 a PRE-36**: viñetas de interfaz, tipografía, tramas y presupuesto textual, con excepciones por tamaño y contraste.
+- **PRE-06 y PRE-12**: reglas de credenciales, privacidad y campos de formulario que se verifican por separado.
+
+Antes de marcar «migrada» una de estas filas hay que desglosarla en sub-reglas con su propia decisión. Mientras tanto, C01 sigue en PARCIAL.
+
 ## Fuera de este inventario
 
 - La regla SDD+TDD que aparece en el checkout principal **no** está en la baseline versionada inspeccionada; se conserva sin publicar ni atribuir hasta decisión expresa (T1.1-C08).
