@@ -55,3 +55,14 @@ Nombres y ubicación canónica únicamente: **no** se copian definiciones mientr
 
 - Tabla de cambios de vocabulario: [glosario-u7.md](../docs/design/ui-u7/glosario-u7.md).
 - Inventario y vigencia de textos: [vigencia-2026-11-14.md](../docs/design/ui-u18/vigencia-2026-11-14.md).
+
+## Reglas de contexto (migradas de PRE-39)
+
+- **Tebeo.** «Tebeo español» es la etiqueta de la tradición (`ComicTradition.TEBEO`), siempre con «español» y en mayúscula cuando encabeza. «Tebeo» a secas es el objeto o ejemplar: «El mismo tebeo, dos veces» o «En tu disco había 1.542 tebeos». No es «número» cuando se cuenta numeración ni «registro» cuando se habla de la fila.
+- **Pendiente no es archivo.** Un pendiente es un registro en un estado; el archivo es el fichero del disco. «Por revisar» lista pendientes, y algunos pueden apuntar a un archivo que ya no está: por eso el subtítulo no dice «archivos».
+- **Suelto = pendiente sin carpeta.** Un suelto es un pendiente cuya ruta no tiene carpeta de serie contextual; no es una categoría distinta.
+- **Registro = fila, no archivo.** El registro es la fila de `files`; el archivo es el fichero. La frase que lo explica se conserva en el desplegable de procedencia; fuera de ahí, «registro» no es unidad de contador.
+- **Biblioteca, tebeoteca, colección y catálogo.** Biblioteca es la pantalla `/ui/biblioteca` (y el conjunto en disco); tebeoteca es el conjunto entero del coleccionista; colección es un grupo con nombre de series; catálogo es el nombre interno de la base de datos. No se usan como sinónimos.
+- **Revisión (Duplicados) no es «Por revisar».** Por revisar es la cola de pendientes; Duplicados es la revisión del disco y su acción es «Revisar mi biblioteca».
+- **Número, tebeo, edición y publicación.** Número es la unidad bibliográfica; tebeo es el objeto o archivo; edición es una línea editorial (para el coleccionista, otra serie); formato es grapa, tomo u ómnibus; copia u origen distinto es un archivo del mismo número; publicación es la unidad de destino en una declaración de carpeta.
+- **Saga, arco, editorial y sello.** En superficie, «Saga»; «arco» y `StoryArc` son código. Editorial es `Publisher`; sello es `Imprint` y solo se usa cuando el dato distingue el sello.

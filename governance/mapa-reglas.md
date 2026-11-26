@@ -42,7 +42,7 @@
 | PRE-36 | §6 | Cifras coherentes y presupuesto textual con umbrales provisionales | Contratos de interfaz | sin migrar |
 | PRE-37 | §6 | El sistema de diseño se consulta antes de cambiar una pantalla | [Contrato de biblioteca](contrato-biblioteca.md#pre-37--el-sistema-de-diseño-se-consulta-y-su-deuda-no-se-copia) | migrada |
 | PRE-38 | §7 | Migraciones aplicadas inmutables y reglas de tipos Postgres | [Contrato de datos](contrato-datos.md#pre-38--migraciones-aplicadas-inmutables-y-tipos-postgres-explícitos) | migrada |
-| PRE-39 | §14 | Conceptos de superficie y reglas de contexto entre términos | Glosario | sin migrar |
+| PRE-39 | §14 | Conceptos de superficie y reglas de contexto entre términos | [Glosario](glossary.md#reglas-de-contexto-migradas-de-pre-39) | migrada |
 | PRE-40 | Cabecera | Toda decisión nueva sobre cómo se trabaja se registra el día que se decide | [Constitución](constitution.md#pre-40--registrar-las-decisiones-del-modo-de-trabajo) | migrada |
 | PRE-41 | §1 | Producto para el coleccionista y presupuesto de Raspberry Pi | [Visión](product-vision.md#pre-41--producto-persona-y-restricción-de-plataforma) | migrada |
 | PRE-42 | §2 | Convenciones de lenguaje, tipos e imports; aclarar la tensión del ejemplo de nombres | Guía técnica | sin migrar |
