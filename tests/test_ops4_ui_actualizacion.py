@@ -112,6 +112,24 @@ async def test_incierta_no_invita_a_reintentar(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_respuesta_invalida_advierte_que_pudo_empezar(monkeypatch) -> None:
+    monkeypatch.setattr(actualizacion, "get_settings", lambda: config(
+        ops4_actualizacion_habilitada=True,
+    ))
+    monkeypatch.setattr(actualizacion, "leer_clave_autorizacion", lambda *a, **k: b"k" * 32)
+
+    async def respuesta_invalida(_settings, **_kwargs):
+        return SolicitudV4(ResultadoSolicitudV4.RESPUESTA_INVALIDA)
+
+    monkeypatch.setattr(actualizacion, "solicitar_actualizacion_v4", respuesta_invalida)
+    respuesta = await actualizacion.actualizar(None, "clave", "si")
+    texto = respuesta.body.decode("utf-8")
+    assert "podría haber empezado" in texto
+    assert "No vuelvas a intentarlo" in texto
+    assert "revisa el estado del host" in texto
+
+
+@pytest.mark.asyncio
 async def test_ruta_hasta_socket_real_con_consumo_durable(tmp_path, monkeypatch) -> None:
     import asyncio
     import json

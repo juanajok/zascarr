@@ -72,6 +72,32 @@ async def test_incierta_del_auxiliar_es_incierta() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("resultado", ["aceptada", "rechazada", "incierta"])
+@pytest.mark.parametrize("codigo", [
+    "aceptada", "esquema_invalido", "firma_invalida", "caducada",
+    "autorizacion_invalida", "repetida", "operacion_en_curso", "no_disponible",
+    "incierta",
+])
+async def test_matriz_resultado_codigo_rechaza_combinaciones_incoherentes(
+    resultado, codigo,
+) -> None:
+    if resultado == "aceptada" and codigo == "aceptada":
+        esperado = CodigoTransporteV4.ACEPTADA
+    elif resultado == "incierta" and codigo == "incierta":
+        esperado = CodigoTransporteV4.INCIERTA
+    elif resultado == "rechazada" and codigo == "operacion_en_curso":
+        esperado = CodigoTransporteV4.OCUPADA
+    elif resultado == "rechazada" and codigo not in ("aceptada", "incierta"):
+        esperado = CodigoTransporteV4.RECHAZADA
+    else:
+        esperado = CodigoTransporteV4.RESPUESTA_INVALIDA
+    assert await pedir_actualizacion_v4(
+        SETTINGS, b"peticion\n", id_=ID,
+        conversar=conversar(respuesta(resultado=resultado, codigo=codigo)),
+    ) is esperado
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("valor", [
     b"", b"x" * 4097, bytearray(b"x"), b"{}\n", b"x\n",
     respuesta(v=3), respuesta(id="b" * 32), respuesta(resultado="otra"),
