@@ -1,0 +1,26 @@
+[
+  {
+    "id": "marta",
+    "name": "Marta",
+    "role": "reader",
+    "description": "58 años, coleccionista, no técnica. Lee su colección desde el móvil y no conoce nombres técnicos de filtros ni de menús.",
+    "viewport": {
+      "width": 320,
+      "height": 568
+    },
+    "isMobile": true,
+    "touch": true
+  },
+  {
+    "id": "dani",
+    "name": "Dani",
+    "role": "operator",
+    "description": "34 años, vigila el servidor. Conoce la app y busca el estado del sistema sin rodeos.",
+    "viewport": {
+      "width": 320,
+      "height": 568
+    },
+    "isMobile": true,
+    "touch": true
+  }
+]

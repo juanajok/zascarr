@@ -65,7 +65,7 @@ class TestJerarquiaDeTexto:
             "arco.html": "{{ arco.filas | length }}",
             "novedades.html": "{{ semana.total }}",
             "estado.html": "{{ cobertura.texto_fecha }}",
-            "mejoras.html": "Tu edición:",
+            "mejoras.html": "Tu copia:",
             "issue_detail.html": "{{ textos.portada_numero }}",
         }
         for nombre, marca in casos.items():

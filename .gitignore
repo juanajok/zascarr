@@ -20,6 +20,9 @@ venv/
 # Artefactos de revisión headless (perfiles de Chrome, capturas)
 .review*/
 
+# Ejecuciones locales del pipeline multiagente: estado, sobres y logs.
+.agentic-runs/
+
 # Artefactos locales de ejecución y diagnóstico (no se versionan; CI lo comprueba).
 .tmp-*
 .tmp/

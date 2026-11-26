@@ -27,7 +27,7 @@ Todas pendientes; no representan ejecución real. Una PR por historia, no cerrar
 - [ ] T3.5 Makefile y documentación; comprobar sin LLM, sin red salvo instalación fijada y sin runtime nuevo. (R008)
 
 ## 4. Multiagente (depende de H1 y contratos H3)
-- [ ] T4.1 Inventariar orquestación existente y definir roles y schemas reutilizables; Brain clasifica por reglas y aplica roles proporcionalmente, sin duplicar ni depender del pipeline local no versionado. (R003,R006,R008)
+- [ ] T4.1 Adoptar el flujo piloto versionado `.agentic/` dentro de sus capacidades; contrastar roles, schemas, garantías y brechas con SDD antes de añadir otra orquestación. Brain clasifica por reglas y aplica roles proporcionalmente. (R003,R006,R008)
 - [ ] T4.2 Orquestar gates, revisiones paralelas, SHA de aprobación de SPEC separado del candidato de merge, comprobación del árbol integrado o equivalencia para squash/cola, N/A, bloqueo y nueva revisión; pruebas de dictamen falso/obsoleto. (R006,R009)
 - [ ] T4.3 Presupuestos, límites, sanitización, proveedores/harnesses intercambiables; pruebas de recuperación y escalado. (R008,R009)
 

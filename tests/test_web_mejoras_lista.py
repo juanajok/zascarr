@@ -59,8 +59,8 @@ def test_lista_de_mejoras_y_estado_vacio():
     finally:
         _cerrar()
     assert r.status_code == 200
-    assert "Batman 001 (Digital)" in r.text and "Descargar esta edición" in r.text
-    assert "Tu edición: básica · propuesta: alta" in r.text
+    assert "Batman 001 (Digital)" in r.text and "Descargar esta copia" in r.text
+    assert "Tu copia: básica · propuesta: alta" in r.text
     assert vacia.status_code == 200 and "No hay mejoras pendientes" in vacia.text
 
 

@@ -1,6 +1,5 @@
 <p class="caption" role="status">{{ mensaje }}</p>
 {{ parciales | safe }}
-{% if parciales %}
-{# UXA-13b: una tanda nueva sustituye el aviso de «dejar de esperar la tanda». #}
+{# UXA-13b: cualquier tanda nueva sustituye el aviso de «dejar de esperar la tanda», también si
+   se rechaza por tamaño o no encuentra nada. #}
 <div id="aviso-cancelado-lote" class="wishlist-aviso-cancelado" hx-swap-oob="true"></div>
-{% endif %}

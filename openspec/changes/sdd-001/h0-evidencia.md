@@ -9,7 +9,9 @@
 
 - En la baseline existen dos ADR numerados `0020` y dos `0021`. Registrar ambos por nombre completo; no renumerar automáticamente ni alterar enlaces históricos.
 - La CI genera `suite.xml` y `pg.xml` en jobs separados; verificar su publicación, procedencia y agregación antes de exigir trazabilidad entre jobs. Existen `scripts/ci_postgres.py` y `scripts/ci_rar_real.py`; evaluar reutilización antes de escribir validadores nuevos.
-- El pipeline `.agentic/` observado en el checkout local no está en la baseline `main`; no tratarlo como herramienta integrada ni modificarlo.
+- En la baseline histórica `ea9bc603`, `.agentic/` aún no estaba en `main`. En el contraste posterior `c4a3420`, la PR #1307 ya integró el piloto versionado `.agentic/`, su ADR y CI. El mantenedor ha indicado adoptar ese flujo dentro de sus capacidades; no equivale por sí solo a un gate de fusión ni a cubrir pruebas externas.
+- En el checkout del piloto `5515e961`, `python3 -B -m unittest discover -s .agentic/tests -v` terminó OK: 47 tests descubiertos, tres canarios Docker omitidos. El ejemplo offline completó un flujo sintético con respuestas y dictámenes simulados; no es un dictamen de agentes reales ni valida cambios de SDD.
+- En `c4a3420` existen además dos ADR `0026`: `0026-actualizacion-manual-confianza-main.md` y `0026-pipeline-ingenieria-local.md`. No renumerar automáticamente.
 
 ### Inventario cuantitativo y límites
 

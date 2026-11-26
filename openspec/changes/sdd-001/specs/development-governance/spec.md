@@ -58,7 +58,7 @@ El Developer SHALL aplicar TDD a comportamiento nuevo o corregido y preservar la
 
 ### Requirement: SDD-R006 Revisiones independientes
 
-El Brain SHALL coordinar Benchmarker, SPEC, Developer, QA, SecOps y UI/UX según el riesgo. Los jueces aplicables no serán el Developer, emitirán dictámenes verificables sobre el mismo candidato inmutable, y los bloqueantes no podrán ser anulados por el Brain. Roles y controles serán proporcionales al riesgo, sin exigir el ciclo completo a cambios triviales; la orquestación reutiliza contratos y adaptadores portables sin duplicar el pipeline local no versionado.
+El Brain SHALL coordinar roles según riesgo. Los jueces aplicables serán independientes del Developer, revisarán el mismo candidato inmutable y sus bloqueantes no podrán ser anulados por el Brain. Se utilizará el pipeline piloto `.agentic/` dentro de sus capacidades y bajo control del operador, sin sustituir las revisiones o pruebas que no cubra.
 
 #### Scenario: SDD-R006-S01 Dictamen obsoleto
 

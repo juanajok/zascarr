@@ -3,15 +3,19 @@
     Los candidatos del preview no se persisten; la fila sí puede actualizarse. -#}
 <p class="caption" role="status">
   {% if alcance == "lote" %}
-  Has dejado de esperar la tanda. ZascArr puede seguir buscando los deseos que ya había
-  empezado (hasta 8) y actualizar sus filas; los que no haya empezado no se buscan. No se ha enviado
-  nada a tu programa de descargas: eso solo ocurre al confirmar un candidato. Los resultados de esta
-  tanda no se guardan; <a href="/ui/wishlist">actualiza Deseados</a> y vuelve a buscar si quieres
-  verlos.
+  Has dejado de esperar la tanda. ZascArr puede seguir buscando los deseos seleccionados (hasta 8),
+  incluidos los que aún no había empezado; el navegador ya no espera la respuesta. Esta tanda no
+  envía nada al programa de descargas: el envío manual solo ocurre al confirmar un candidato, y el
+  ciclo automático puede enviar por su cuenta. Los resultados de esta tanda no se guardan;
+  <a href="/ui/wishlist">actualiza Deseados</a> y vuelve a buscar si quieres verlos. Si aparece algo
+  nuevo en «Descargas en curso» o en Transmission/aMule, puede venir del ciclo automático.
   {% else %}
-  Has dejado de esperar la búsqueda. ZascArr puede seguir consultando las fuentes y
-  actualizar la fila; no se ha enviado nada a tu programa de descargas: eso solo ocurre al confirmar
-  un candidato. Los resultados de esta búsqueda no se guardan; <a href="/ui/wishlist">actualiza
-  Deseados</a> y vuelve a pulsar «Buscar ahora» si quieres verlos.
+  Has dejado de esperar la búsqueda. ZascArr puede seguir consultando las fuentes y actualizar el
+  estado del deseo; el navegador ya no espera la respuesta. Esta búsqueda no envía nada al programa
+  de descargas: el envío manual solo ocurre al confirmar un candidato, y el ciclo automático puede
+  enviar por su cuenta. Los resultados de esta búsqueda no se guardan;
+  <a href="/ui/wishlist">actualiza Deseados</a> y vuelve a pulsar «Buscar ahora» si quieres verlos.
+  Si aparece algo nuevo en «Descargas en curso» o en Transmission/aMule, puede venir del ciclo
+  automático.
   {% endif %}
 </p>

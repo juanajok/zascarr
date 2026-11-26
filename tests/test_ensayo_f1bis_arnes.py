@@ -215,16 +215,19 @@ class TestPresupuestoDeDescarga:
     def test_se_corta_mientras_se_descarga_y_mata_el_grupo_entero(self, tmp_path):
         """20 MiB cada 0,2 s (≈100 MiB/s): con tope 100 y margen 20 el corte es a 80 MiB, y el comando (y su hijo) mueren."""
         c = tmp_path / "rx"
-        t0 = time.time()
         r = _lib(f"""{GENERADOR}
+            kill() {{ [[ "${{1:-}}" == "-KILL" ]] && echo KILL_FALLBACK >&2; builtin kill "$@"; }}
             INTERVALO_S=0.1 con_limite_de_descarga 100 20 -- bash -c 'sleep 61.37 & wait'
             echo "rc=$?"
             kill $GEN 2>/dev/null
         """.replace('"$1"', f'"{c}"').replace('C="$1"', f'C="{c}"'))
         assert "rc=4" in r.stdout, r.stdout + r.stderr
         assert "SE CORTA" in r.stderr and "consumo tras el corte" in r.stderr
-        assert time.time() - t0 < 4, "el corte tardó: debe ser inmediato (TERM al grupo), no esperar al KILL de respaldo"
-        assert subprocess.run(["pgrep", "-f", "sleep 61.37"], capture_output=True).returncode != 0, "quedó vivo un hijo del comando cortado"
+        assert "KILL_FALLBACK" not in r.stderr, "se usó el KILL de respaldo en vez de TERM"
+        procesos = subprocess.run(
+            ["ps", "-eo", "args="], capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+        assert not any(line.strip() == "sleep 61.37" for line in procesos), "quedó vivo un hijo del comando cortado"
 
     def test_el_corte_es_al_umbral_y_no_al_tope(self, tmp_path):
         c = tmp_path / "rx"

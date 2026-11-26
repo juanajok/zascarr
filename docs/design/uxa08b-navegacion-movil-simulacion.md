@@ -1,6 +1,6 @@
 # UXA-08b · «Biblioteca directa» frente a «Más» en móvil (simulación con agentes)
 
-**Fecha:** 2026-11-21 · **Historia:** #1205 · **Origen:** #1125 (UXA-08) · **Estado:** simulación hecha; **la decisión del PO sigue abierta** y la medición con personas, pendiente.
+**Fecha:** 2026-11-21 (rondas 1–3); 2026-11-26 (ronda 4) · **Historia:** #1205 · **Origen:** #1125 (UXA-08) · **Estado:** simulaciones hechas (rondas 1–4); **la decisión del PO sigue abierta** y la medición con personas, pendiente.
 
 ## Qué se comparó
 
@@ -147,3 +147,56 @@ Esto **repite lo observado en las rondas 1 y 2 con navegación real**: A manda a
 
 ### Conclusión de la ronda 3
 La técnica SSR, **tal como se ha podido ejecutar**, no desempata ni aporta cifras fiables; sirve como confirmación cualitativa de los recorridos. Para que SSR sea informativa hacen falta (1) embeddings neuronales multilingües (hay que bajar un modelo: **pendiente de permiso**) y (2) preguntas que provoquen una valoración. Siguen siendo imprescindibles las personas reales: nada de lo anterior sustituye la prueba de `uxa08b-prueba-con-personas.md`.
+
+## Ronda 4 (2026-11-26): 320 px con agentes sintéticos deterministas
+
+La ronda 3 dejó 320 px fuera. Esta ronda mide ese ancho con dos agentes sintéticos **deterministas y sin LLM**: no había clave de DeepSeek en el entorno y no se quiso enviar nada a un proveedor externo. No son personas ni sustituyen la prueba de `uxa08b-prueba-con-personas.md`; sirven para comprobar etiquetas, recorrido mínimo y encaje de la barra.
+
+**Montaje.** Dos instancias aisladas de UXLab con el mismo Postgres y el mismo fixture (4 series; el objetivo es «Nebulosa de Papel», no «Flash», porque el fixture actual no la incluye), una con `NAV_MOVIL_VARIANTE=a` y otra con `b`. Ninguna publica puertos ni toca la Pi. Dos perfiles (Marta, lectora; Dani, operador) × 2 variantes × 2 tareas = 8 sesiones. Cada sesión parte de Inicio, con un contexto de navegador nuevo, viewport **320×568**, `isMobile` y táctil. El agente busca el rótulo en la barra; si no está, abre «Más» y lo busca en el panel. No hay errores de puntería ni tiempos humanos. Guion, perfiles y código: `uxlab/nav320/`; resultados y capturas: [`uxa08b-320/`](uxa08b-320/).
+
+### Resultados
+
+| Perfil · variante | Tarea | Primer toque | Toques hasta la sección | Toques totales | Éxito |
+|---|---|---|---:|---:|---|
+| Marta · A | Abrir «Nebulosa de Papel» | Más | 2 | 3 | Sí |
+| Marta · A | Estado | Estado | 1 | 1 | Sí |
+| Dani · A | Abrir «Nebulosa de Papel» | Más | 2 | 3 | Sí |
+| Dani · A | Estado | Estado | 1 | 1 | Sí |
+| Marta · B | Abrir «Nebulosa de Papel» | Biblioteca | 1 | 2 | Sí |
+| Marta · B | Estado | Más | 2 | 2 | Sí |
+| Dani · B | Abrir «Nebulosa de Papel» | Biblioteca | 1 | 2 | Sí |
+| Dani · B | Estado | Más | 2 | 2 | Sí |
+
+- **Éxito:** 8 de 8. «Toques totales» incluye abrir la ficha de la serie; «hasta la sección» es llegar a la lista de Biblioteca o a la pantalla Estado.
+- **Biblioteca:** A cuesta 2 toques (Más → Biblioteca), B cuesta 1.
+- **Estado:** A cuesta 1, B cuesta 2 (Más → Estado).
+- **El intercambio es el mismo de las rondas 1–3.** A 320 px no aparece un coste nuevo: el número de toques no cambia.
+
+### Lo que sí aporta la ronda 4: el encaje a 320 px
+
+| Variante | Barra | Desborde horizontal | Rótulos en 2 líneas | Panel «Más» |
+|---|---|---|---|---|
+| A | Inicio · Revisar · Deseados · Estado · Más | No | Ninguno | 220×390 px; cabe entero |
+| B | Inicio · Revisar · Biblioteca · Deseados · Más | No | Ninguno | 220×390 px; cabe entero |
+
+- La barra usa 5 columnas iguales de **64 px**; con la tipografía a **12 px**, «Biblioteca» entra en una línea, pero con poco margen. No hay desborde de la página (`scrollWidth = 320`).
+- El panel «Más» mide **220×390 px**, se ancla a la derecha y cabe entre la barra y el borde superior (deja 118 px arriba). En A lleva 8 entradas; en B, 8 con Estado y sin Biblioteca.
+- **No se probó** texto ampliado al 200 %, lector de pantalla, pulgar real ni móvil real. El encaje medido es solo el de este viewport.
+
+| A (320 px) | B (320 px) |
+|---|---|
+| ![Inicio A](uxa08b-320/capturas/inicio-a-marta.png) | ![Inicio B](uxa08b-320/capturas/inicio-b-marta.png) |
+| ![Más A](uxa08b-320/capturas/panel-a-biblioteca.png) | ![Más B](uxa08b-320/capturas/panel-b-estado.png) |
+
+### Dudas registradas (texto del agente sintético, no de una persona)
+
+- Marta en A: «No veo “Biblioteca” en la barra; tengo que abrir “Más” y buscarlo»; «Biblioteca, lo que más uso, no está en la barra».
+- Dani en A: «“Biblioteca” no está en la barra; lo busco en “Más”».
+- Marta y Dani en B: «“Estado” no está en la barra; lo busco en “Más”»; «No hay ninguna señal de Estado a la vista; “Más” no dice si algo falla».
+- En B, «Biblioteca» no se partió en dos líneas, pero el margen es estrecho.
+
+### Lectura y límites
+
+La ronda 4 **no desempata**: confirma que B es viable a 320 px y que el coste se desplaza entre Biblioteca y Estado, igual que en las rondas anteriores. La condición para que B sea defendible sigue siendo una señal de Estado visible fuera de «Más» (#1219), y la decisión sigue necesitando la prueba con personas reales de `uxa08b-prueba-con-personas.md`.
+
+**No vale para la aceptación de #1205.** Los agentes son deterministas y sin LLM; no son personas, no miden tiempos ni errores, y no se probó un móvil real. La navegación por defecto sigue siendo A y no se ha cambiado nada en la app. #1205 sigue abierto.

@@ -25,11 +25,18 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Vinculación: otra edición es otra serie; una copia no es una edición (UXA-12b, #1250).** El panel
+  del número ocupado distingue el formato distinto (otra línea: enlaza a elegir o crear su serie) de
+  la copia o calidad distinta (otro archivo del mismo número). Sin migración ni cambios de modelo;
+  glosario actualizado a B/C. La ficha y Mejoras pasan a «Otros volúmenes de este número» y
+  «Mejores copias».
 - **Deseados: «Dejar de esperar» dice qué sigue y qué no (UXA-13b, #1254).** El botón de cancelar
   de «Buscar ahora» y la nueva salida de «Buscar seleccionados» dejan de prometer una cancelación
-  que no ocurre: explican que el navegador deja de esperar, que ZascArr puede seguir, que
-  no se ha enviado nada al programa de descargas (solo al confirmar un candidato) y que los
-  resultados no se guardan. Sin cancelación cooperativa, migración, dependencias ni JavaScript nuevo.
+  que no ocurre: explican que el navegador deja de esperar, que ZascArr puede seguir con la búsqueda
+  o con la tanda completa (hasta 8, también los deseos que aún no había empezado), que esa
+  búsqueda/tanda no envía nada al programa de descargas (el envío manual solo ocurre al confirmar
+  un candidato; el ciclo automático puede enviar por su cuenta) y que los resultados no se guardan.
+  Sin cancelación cooperativa, migración, dependencias ni JavaScript nuevo.
 - **Ajustes: los errores se leen junto al campo (UXA-14b, #1257).** Las tarjetas de Avisos, Blog o
   RSS, Nombres de archivo, Transmission y Foro repintan solo su bloque de campos fuera de banda con
   el error en el control que lo causa (`aria-invalid`/`aria-describedby`) y, con dos o más, un
