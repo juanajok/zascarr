@@ -25,3 +25,22 @@ credenciales ni acceso al directorio personal y, cuando deba trabajar sin red,
 con aislamiento de red aplicado por el sistema operativo. Las variables de
 telemetría no son un cortafuegos. No ejecutar dependencias de terceros con
 secretos de CI o despliegue.
+
+## Verificación del lock exacto (2026-11-26)
+
+Instalación limpia desde este directorio, con caché nueva y configuración de usuario propia:
+
+```bash
+env HOME=<dir vacío> npm_config_cache=<dir vacío> npm_config_userconfig=<dir>/.npmrc \
+  npm ci --ignore-scripts --no-audit --no-fund
+```
+
+Resultado observado:
+
+- 66 paquetes instalados; `node node_modules/@fission-ai/openspec/bin/openspec.js --version` responde `2.2.0`.
+- SHA-256 del lock antes y después: `a952b8ddfc3dab97428a54c94e3d80c830cda7c1b90cda2076b4bd430d5103b7` (sin cambios).
+- 66 entradas con `integrity`; **0** con `hasInstallScript`.
+- `npm audit`: 0 vulnerabilidades (info/low/moderate/high/critical).
+- Licencias declaradas: 54 MIT, 7 ISC, 4 BlueOak-1.0.0, 1 BSD-3-Clause.
+
+Límites: la auditoría consulta la base pública de npm en el momento de la prueba y no autentica al proveedor ni inspecciona el contenido de los tarballs; no se ha revisado el aviso de terceros empaquetado dentro de `skills`. Una instalación limpia no demuestra reproducibilidad en otras plataformas ni ausencia de tráfico adicional.
