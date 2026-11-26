@@ -1,6 +1,6 @@
 # UXA-08b · Prueba con personas: barra inferior A frente a B
 
-**Historia:** #1205 · **Antecedente:** [`uxa08b-navegacion-movil-simulacion.md`](uxa08b-navegacion-movil-simulacion.md) (simulación con agentes; no decide) · **Estado:** preparada; falta hacerla y decidir.
+**Historia:** #1205 · **Antecedente:** [`uxa08b-navegacion-movil-simulacion.md`](uxa08b-navegacion-movil-simulacion.md) (simulaciones con agentes; no deciden) · **Estado:** preparada; la ronda 4 sintética a 320 px no la sustituye; falta hacerla y decidir.
 
 ## Qué se compara
 
@@ -8,6 +8,8 @@
 |---|---|---|---|
 | **A** (por defecto) | Inicio · Revisar · Deseados · Estado · Más | Biblioteca y el resto | Punto sobre «Estado» |
 | **B** | Inicio · Revisar · Biblioteca · Deseados · Más | Estado y el resto | Punto sobre «Más» (el de «Estado» sigue en la barra lateral del escritorio) |
+
+> La ronda 4 de la simulación midió el encaje a 320×568 con agentes sintéticos deterministas: no hay desborde y «Biblioteca» entra en una línea en B. Eso **no** es una prueba con personas; esta hoja sigue siendo la que decide.
 
 ## Cómo cambiar de variante
 
@@ -61,4 +63,4 @@ Con el resultado, la decisión y las filas anotadas se añade una sección «Res
 
 ## Qué no cubre
 
-Lector de pantalla, 320 px, tiempos fiables y una muestra estadística. Es una comprobación de orientación, no un experimento.
+Lector de pantalla, 320 px con personas reales (la ronda 4 sintética no cuenta), tiempos fiables y una muestra estadística. Es una comprobación de orientación, no un experimento.

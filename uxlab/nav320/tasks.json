@@ -1,0 +1,21 @@
+[
+  {
+    "id": "biblioteca",
+    "name": "Encontrar un tebeo",
+    "start": "/ui/",
+    "objective": "Abre la ficha de la serie «Nebulosa de Papel» de tu biblioteca.",
+    "target": "Biblioteca",
+    "targetHref": "/ui/biblioteca",
+    "sectionPath": "/ui/biblioteca",
+    "seriesTitle": "Nebulosa de Papel"
+  },
+  {
+    "id": "estado",
+    "name": "Comprobar si algo falla",
+    "start": "/ui/",
+    "objective": "Comprueba si el sistema tiene algún problema o aviso.",
+    "target": "Estado",
+    "targetHref": "/estado",
+    "sectionPath": "/estado"
+  }
+]
