@@ -21,6 +21,8 @@ REQUIRED = ("constitution.md", "product-vision.md", "glossary.md", "mapa-reglas.
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 RULE_ROW = re.compile(r"^\|\s*(PRE-[A-Z0-9]+)\s*\|", re.MULTILINE)
 SECTION = re.compile(r"^## (\d+)\.", re.MULTILINE)
+CONCEPTS_BLOCK = re.compile(r"^### 14\.1.*?$(.*?)^### 14\.2", re.MULTILINE | re.DOTALL)
+CONCEPT_ROW = re.compile(r"^\| \*\*(.+?)\*\* \|", re.MULTILINE)
 # Afirmaciones que solo serían válidas con una prueba de carga efectiva (T0.4).
 FORBIDDEN = re.compile(
     r"carga efectiva verificada|instrucciones cargadas correctamente|"
@@ -98,6 +100,21 @@ class GobernanzaTest(unittest.TestCase):
             if not re.search(rf"§{section}(?!\d)", mapa)
         ]
         self.assertEqual(missing, [], f"secciones sin fila en el mapa: {missing}")
+
+    def test_glosario_indexa_todos_los_conceptos_de_la_guia(self) -> None:
+        # Índice de nombres, no copia de definiciones: la fuente sigue siendo
+        # la guía hasta que se apruebe el traslado (T1.1-C04).
+        block = CONCEPTS_BLOCK.search(read(GUIDE))
+        self.assertIsNotNone(block, "no se encontró la sección de conceptos de la guía")
+        esperados = set(CONCEPT_ROW.findall(block.group(1)))
+        self.assertTrue(esperados, "la guía no define conceptos")
+        indexados = CONCEPT_ROW.findall(read(GOVERNANCE / "glossary.md"))
+        self.assertEqual(
+            len(indexados), len(set(indexados)), "hay conceptos repetidos en el índice"
+        )
+        self.assertEqual(
+            set(indexados), esperados, "el índice del glosario no coincide con la guía"
+        )
 
     def test_ningun_documento_afirma_carga_no_verificada(self) -> None:
         for path in markdown_files():
