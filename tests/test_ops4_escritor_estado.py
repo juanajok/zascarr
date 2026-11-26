@@ -7,25 +7,35 @@ leerlo, y la guarda de transición no puede pisar un terminal.
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
 import stat
 
 import pytest
 
 from deploy.ops.escritor_estado_actualizar_ops4 import (
+    CODIGO_EXITO,
+    FASES,
     MAX_BYTES,
     MODO_ESTADO,
+    UNIDAD,
     ResultadoEscritura,
     ResultadoLectura,
+    calcular_transicion,
     escribir_estado,
+    estado_inicial,
     leer_estado_estricto,
     propietario_servicio,
     publicar_transicion,
+    validar_estado,
 )
 
 ID = "a" * 32
 AHORA = 1_800_000_000
-ESTADO = {"schema": 1, "estado": "aceptada", "id": ID}
+ESTADO = {
+    "schema": 1, "id": ID, "estado": "aceptada",
+    "inicio_epoch": AHORA, "actualizado_epoch": AHORA,
+}
 
 
 def _inicial(tmp_path, *, estado="en_curso", inicio=AHORA - 5, actualizado=AHORA - 5):
@@ -48,7 +58,7 @@ def test_publica_json_canonico(tmp_path) -> None:
     destino = tmp_path / "estado.json"
     assert escribir_estado(destino, ESTADO) is ResultadoEscritura.OK
     assert json.loads(destino.read_text(encoding="utf-8")) == ESTADO
-    assert destino.read_text(encoding="utf-8").startswith('{"estado":')
+    assert destino.read_text(encoding="utf-8").startswith('{"actualizado_epoch":')
 
 
 def test_original_permanece_si_falla_fsync_del_archivo(tmp_path) -> None:
@@ -202,6 +212,7 @@ def test_transicion_conserva_id_e_inicio_y_actualiza_epoch(tmp_path) -> None:
     ruta = _inicial(tmp_path)
     assert publicar_transicion(
         ruta, "hecha", ahora=AHORA + 10, id_=ID, inicio_epoch=AHORA - 5,
+        fase="fin", codigo="success:exited:0",
     ) is ResultadoEscritura.OK
     datos = _leer(ruta)
     assert datos["estado"] == "hecha"
@@ -225,6 +236,7 @@ def test_no_baja_actualizado_epoch(tmp_path) -> None:
     ruta = _inicial(tmp_path, inicio=AHORA - 5, actualizado=AHORA)
     assert publicar_transicion(
         ruta, "hecha", ahora=AHORA - 1, id_=ID, inicio_epoch=AHORA - 5,
+        fase="fin", codigo="success:exited:0",
     ) is ResultadoEscritura.INVALIDO
     assert _leer(ruta)["estado"] == "en_curso"
 
@@ -236,7 +248,8 @@ def test_no_baja_actualizado_epoch(tmp_path) -> None:
 def test_rechaza_cambiar_id_o_inicio(tmp_path, cambios) -> None:
     ruta = _inicial(tmp_path)
     assert publicar_transicion(
-        ruta, "hecha", ahora=AHORA + 10, **cambios,
+        ruta, "hecha", ahora=AHORA + 10, fase="fin",
+        codigo="success:exited:0", **cambios,
     ) is ResultadoEscritura.INVALIDO
     assert _leer(ruta)["estado"] == "en_curso"
 
@@ -245,6 +258,7 @@ def test_reloj_invertido_no_escribe(tmp_path) -> None:
     ruta = _inicial(tmp_path, inicio=AHORA + 100, actualizado=AHORA + 100)
     assert publicar_transicion(
         ruta, "hecha", ahora=AHORA, id_=ID, inicio_epoch=AHORA + 100,
+        fase="fin", codigo="success:exited:0",
     ) is ResultadoEscritura.INVALIDO
     datos = _leer(ruta)
     assert datos["estado"] == "en_curso"
@@ -255,6 +269,7 @@ def test_sin_estado_no_crea_nada(tmp_path) -> None:
     ruta = tmp_path / "no-existe.json"
     assert publicar_transicion(
         ruta, "hecha", ahora=AHORA, id_=ID, inicio_epoch=AHORA - 5,
+        fase="fin", codigo="success:exited:0",
     ) is ResultadoEscritura.INVALIDO
     assert not ruta.exists()
 
@@ -267,7 +282,7 @@ def test_transicion_con_fallo_durable_es_incierta_y_no_pisa(tmp_path) -> None:
 
     assert publicar_transicion(
         ruta, "hecha", ahora=AHORA + 10, id_=ID, inicio_epoch=AHORA - 5,
-        fsync=fsync_falla,
+        fase="fin", codigo="success:exited:0", fsync=fsync_falla,
     ) is ResultadoEscritura.INCIERTO
     assert _leer(ruta)["estado"] == "en_curso"
 
@@ -276,3 +291,94 @@ def test_transicion_con_fallo_durable_es_incierta_y_no_pisa(tmp_path) -> None:
 def test_transicion_solo_acepta_estados_cerrados(tmp_path, estado) -> None:
     ruta = _inicial(tmp_path)
     assert publicar_transicion(ruta, estado, ahora=AHORA) is ResultadoEscritura.INVALIDO
+
+
+# ── Contrato v2 y cerrojo de publicación (B1) ───────────────────────────────
+
+
+def test_estado_inicial_v2_y_validacion_cerrada(tmp_path) -> None:
+    ini = estado_inicial(ID, AHORA)
+    assert set(ini) == {
+        "schema", "id", "unidad", "estado", "fase", "inicio_epoch",
+        "actualizado_epoch", "head0", "sha_destino", "sha_actual",
+        "resultado", "codigo",
+    }
+    assert (ini["schema"], ini["unidad"], ini["estado"]) == (2, UNIDAD, "aceptada")
+    assert ini["fase"] == FASES[0]
+    assert ini["head0"] is None and ini["resultado"] is None
+    assert validar_estado(ini) and validar_estado(ESTADO)
+    assert not validar_estado({**ini, "extra": 1})
+    assert not validar_estado({**ini, "fase": "fin"})
+    assert not validar_estado({**ini, "estado": "hecha", "fase": "git", "resultado": "hecha"})
+
+    ruta = tmp_path / "estado.json"
+    assert escribir_estado(ruta, ini) is ResultadoEscritura.OK
+    assert _leer(ruta) == ini
+
+
+def test_calcular_transicion_es_pura_y_monotona() -> None:
+    ini = estado_inicial(ID, AHORA)
+    antes = json.loads(json.dumps(ini))
+    transicion = calcular_transicion(
+        ini, "en_curso", ahora=AHORA + 10, fase="copia",
+        head0="a" * 40, sha_destino="b" * 40,
+    )
+    assert ini == antes, "calcular_transicion no puede mutar la entrada"
+    assert transicion is not None
+    assert (transicion["estado"], transicion["fase"]) == ("en_curso", "copia")
+    assert (transicion["head0"], transicion["sha_destino"]) == ("a" * 40, "b" * 40)
+    assert calcular_transicion(transicion, "en_curso", ahora=AHORA + 11, fase="preparacion") is None
+    assert calcular_transicion(
+        transicion, "en_curso", ahora=AHORA + 11, fase="git", head0="c" * 40,
+    ) is None
+    assert calcular_transicion(transicion, "en_curso", ahora=AHORA + 9, fase="git") is None
+    terminal = calcular_transicion(
+        transicion, "hecha", ahora=AHORA + 20, fase="fin", codigo=CODIGO_EXITO,
+    )
+    assert terminal is not None
+    assert (terminal["resultado"], terminal["codigo"]) == ("hecha", CODIGO_EXITO)
+    assert calcular_transicion(terminal, "en_curso", ahora=AHORA + 21, fase="git") is None
+    assert calcular_transicion(ESTADO, "en_curso", ahora=AHORA + 10, fase="preparacion") is not None
+
+
+def _transicionar_en_bucle(ruta, vueltas: int) -> None:
+    for _ in range(vueltas):
+        lectura, actual = leer_estado_estricto(ruta)
+        if lectura is not ResultadoLectura.OK or actual is None:
+            return
+        if actual["estado"] in {"hecha", "fallida", "incierta"}:
+            return
+        publicar_transicion(
+            ruta, "en_curso", ahora=actual["actualizado_epoch"] + 1, fase="git",
+        )
+
+
+def _cerrar_terminal(ruta) -> None:
+    for _ in range(2000):
+        lectura, actual = leer_estado_estricto(ruta)
+        if lectura is not ResultadoLectura.OK or actual is None:
+            return
+        if actual["estado"] == "hecha":
+            return
+        if publicar_transicion(
+            ruta, "hecha", ahora=actual["actualizado_epoch"] + 1,
+            fase="fin", codigo=CODIGO_EXITO,
+        ) is ResultadoEscritura.OK:
+            return
+
+
+def test_publicacion_concurrente_no_pierde_terminal(tmp_path) -> None:
+    """Dos procesos publican a la vez: el terminal nunca se pierde por la carrera."""
+    ruta = tmp_path / "estado.json"
+    assert escribir_estado(ruta, estado_inicial(ID, AHORA)) is ResultadoEscritura.OK
+    contexto = multiprocessing.get_context("fork")
+    fases = contexto.Process(target=_transicionar_en_bucle, args=(ruta, 400))
+    cierre = contexto.Process(target=_cerrar_terminal, args=(ruta,))
+    fases.start()
+    cierre.start()
+    fases.join(60)
+    cierre.join(60)
+    assert fases.exitcode == 0 and cierre.exitcode == 0
+    datos = _leer(ruta)
+    assert datos["estado"] == "hecha"
+    assert (datos["fase"], datos["resultado"], datos["codigo"]) == ("fin", "hecha", CODIGO_EXITO)

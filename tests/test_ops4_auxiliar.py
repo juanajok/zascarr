@@ -63,9 +63,13 @@ class Dobles:
         self.estados.append(datos)
         return self.escritura
 
-    def transicionar(self, datos: dict):
-        self.llamadas.append(("transicionar", datos["estado"]))
-        self.estados.append(datos)
+    def transicionar(self, estado: str, *, ahora: int, id_: str,
+                     inicio_epoch: int, fase: str, codigo: str):
+        self.llamadas.append(("transicionar", estado))
+        self.estados.append({
+            "estado": estado, "ahora": ahora, "id": id_,
+            "inicio_epoch": inicio_epoch, "fase": fase, "codigo": codigo,
+        })
         return self.transicion
 
     def ocupado(self) -> bool:
@@ -213,10 +217,11 @@ def _callbacks_reales(ruta):
     def escribir(datos: dict):
         return escribir_estado(ruta, datos)
 
-    def transicionar(datos: dict):
+    def transicionar(estado: str, *, ahora: int, id_: str,
+                     inicio_epoch: int, fase: str, codigo: str):
         return publicar_transicion(
-            ruta, datos["estado"], ahora=datos["actualizado_epoch"],
-            id_=datos["id"], inicio_epoch=datos["inicio_epoch"],
+            ruta, estado, ahora=ahora, id_=id_, inicio_epoch=inicio_epoch,
+            fase=fase, codigo=codigo,
         )
 
     return escribir, transicionar
@@ -230,9 +235,12 @@ def test_terminal_escrito_por_el_finalizador_no_se_pisa_tras_start_exitoso(tmp_p
     def iniciar(unidad: str) -> bool:
         # El finalizador cierra la unidad (terminal) antes de que el auxiliar vuelva.
         actual = json.loads(ruta.read_text(encoding="utf-8"))
-        actual["estado"] = "hecha"
-        assert escribir_estado(ruta, actual) is ResultadoEscritura.OK
-        estado_final["leido"] = actual["estado"]
+        assert publicar_transicion(
+            ruta, "hecha", ahora=actual["actualizado_epoch"] + 1,
+            id_=actual["id"], inicio_epoch=actual["inicio_epoch"],
+            fase="fin", codigo="success:exited:0",
+        ) is ResultadoEscritura.OK
+        estado_final["leido"] = "hecha"
         return True
 
     respuesta = procesar(
@@ -251,8 +259,11 @@ def test_terminal_escrito_por_el_finalizador_no_se_pisa_si_falla_el_start(tmp_pa
     def iniciar(unidad: str) -> bool:
         # Carrera T-17: el finalizador dejó terminal antes de que el auxiliar anote fallida.
         actual = json.loads(ruta.read_text(encoding="utf-8"))
-        actual["estado"] = "hecha"
-        assert escribir_estado(ruta, actual) is ResultadoEscritura.OK
+        assert publicar_transicion(
+            ruta, "hecha", ahora=actual["actualizado_epoch"] + 1,
+            id_=actual["id"], inicio_epoch=actual["inicio_epoch"],
+            fase="fin", codigo="success:exited:0",
+        ) is ResultadoEscritura.OK
         return False
 
     respuesta = procesar(

@@ -158,3 +158,88 @@ def test_lee_el_estado_0640_que_escribe_el_host(tmp_path: Path) -> None:
     assert escribir_estado(path, record(estado="hecha")) is ResultadoEscritura.OK
     assert stat.S_IMODE(path.stat().st_mode) == 0o640
     assert read(path) is EstadoActualizacion.HECHA
+
+
+# ── Último intento v2 y reconciliación (B1) ─────────────────────────────────
+
+
+def _escribir_v2(tmp_path, datos):
+    from deploy.ops.escritor_estado_actualizar_ops4 import (
+        ResultadoEscritura,
+        escribir_estado,
+    )
+    ruta = tmp_path / "actualizar-status.json"
+    assert escribir_estado(ruta, datos) is ResultadoEscritura.OK
+    return ruta
+
+
+def _inicial_v2():
+    from deploy.ops.escritor_estado_actualizar_ops4 import estado_inicial
+    return estado_inicial("b" * 32, 1_700_000_000)
+
+
+def test_ultimo_intento_v2_sin_id_y_terminal(tmp_path) -> None:
+    from deploy.ops.escritor_estado_actualizar_ops4 import CODIGO_EXITO, calcular_transicion
+    from zascarr.services.estado_actualizacion import (
+        EstadoActualizacion,
+        leer_ultimo_intento,
+    )
+
+    ini = _inicial_v2()
+    ruta = _escribir_v2(tmp_path, ini)
+    intento = leer_ultimo_intento(ruta, ahora_epoch=1_700_000_001)
+    assert intento is not None
+    assert intento.estado is EstadoActualizacion.ACEPTADA
+    assert intento.fase == "aceptada" and intento.sin_noticias is False
+    terminal = calcular_transicion(
+        ini, "hecha", ahora=1_700_000_100, fase="fin", codigo=CODIGO_EXITO,
+    )
+    assert terminal is not None
+    assert _escribir_v2(tmp_path, terminal) is not None
+    intento = leer_ultimo_intento(ruta, ahora_epoch=1_700_100_000)
+    assert intento is not None and intento.estado is EstadoActualizacion.HECHA
+    assert (intento.resultado, intento.codigo, intento.sin_noticias) == (
+        "hecha", CODIGO_EXITO, False,
+    )
+
+
+def test_ultimo_intento_reconcilia_activo_a_los_7200(tmp_path) -> None:
+    from zascarr.services.estado_actualizacion import (
+        EstadoActualizacion,
+        interpretar_ultimo_intento,
+    )
+    ini = _inicial_v2()
+    fresco = interpretar_ultimo_intento(ini, ahora_epoch=1_700_000_000 + 7199)
+    assert fresco is not None and fresco.estado is EstadoActualizacion.ACEPTADA
+    justo = interpretar_ultimo_intento(ini, ahora_epoch=1_700_000_000 + 7200)
+    assert justo is not None
+    assert justo.estado is EstadoActualizacion.INCIERTA and justo.sin_noticias is True
+
+
+def test_ultimo_intento_v1_compatible(tmp_path) -> None:
+    from zascarr.services.estado_actualizacion import (
+        EstadoActualizacion,
+        leer_ultimo_intento,
+    )
+    v1 = {"schema": 1, "id": "c" * 32, "estado": "en_curso",
+          "inicio_epoch": 1_700_000_000, "actualizado_epoch": 1_700_000_000}
+    with open(tmp_path / "v1.json", "w", encoding="utf-8") as salida:
+        json.dump(v1, salida)
+    os.chmod(tmp_path / "v1.json", 0o640)
+    intento = leer_ultimo_intento(tmp_path / "v1.json", ahora_epoch=1_700_000_001)
+    assert intento is not None
+    assert intento.estado is EstadoActualizacion.EN_CURSO
+    assert intento.fase == "aceptada" and intento.head0 is None
+
+
+def test_ultimo_intento_rechaza_invalido_y_futuro(tmp_path) -> None:
+    from zascarr.services.estado_actualizacion import (
+        interpretar_ultimo_intento,
+        leer_ultimo_intento,
+    )
+    ini = _inicial_v2()
+    assert interpretar_ultimo_intento({**ini, "extra": 1}, ahora_epoch=1_700_000_001) is None
+    assert interpretar_ultimo_intento({**ini, "fase": "fin"}, ahora_epoch=1_700_000_001) is None
+    assert interpretar_ultimo_intento({**ini, "head0": "corta"}, ahora_epoch=1_700_000_001) is None
+    assert interpretar_ultimo_intento(ini, ahora_epoch=1_699_999_999) is None
+    assert leer_ultimo_intento(tmp_path / "no-existe.json", ahora_epoch=1_700_000_001) is None

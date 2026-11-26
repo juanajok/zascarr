@@ -139,11 +139,17 @@ def test_cadena_real_conserva_id_e_inicio_y_actualiza_epoch(tmp_path) -> None:
     assert completado.returncode == 0, completado.stderr
     datos = _leer(ruta)
     assert set(datos) == {
-        "schema", "id", "estado", "inicio_epoch", "actualizado_epoch",
+        "schema", "id", "unidad", "estado", "fase", "inicio_epoch",
+        "actualizado_epoch", "head0", "sha_destino", "sha_actual",
+        "resultado", "codigo",
     }
+    assert datos["schema"] == 2
     assert datos["id"] == ID
     assert datos["inicio_epoch"] == AHORA - 5
     assert datos["actualizado_epoch"] >= datos["inicio_epoch"]
+    assert datos["fase"] == "fin"
+    assert (datos["estado"], datos["resultado"]) == ("hecha", "hecha")
+    assert datos["codigo"] == "success:exited:0"
 
 
 def test_cadena_real_sin_estado_no_crea_ni_falla(tmp_path) -> None:
@@ -215,3 +221,26 @@ def test_fichero_de_estado_no_sigue_enlaces(tmp_path) -> None:
     enlace.symlink_to(real)
     assert estado.main(["--ruta", str(enlace), "--resultado", "hecha"]) == 0
     assert _leer(real)["estado"] == "en_curso"
+
+
+@pytest.mark.parametrize("service_result,exit_code,exit_status,codigo", [
+    ("success", "exited", "0", "success:exited:0"),
+    ("exit-code", "exited", "75", "exit-code:exited:75"),
+    ("signal", "killed", "15", "otro"),
+])
+def test_cadena_real_escribe_codigo_cerrado(tmp_path, service_result, exit_code,
+                                            exit_status, codigo) -> None:
+    ruta = _estado(tmp_path)
+    completado = _ejecutar_stoppost(tmp_path, service_result, exit_code, exit_status)
+    assert completado.returncode == 0, completado.stderr
+    datos = _leer(ruta)
+    assert datos["fase"] == "fin"
+    assert datos["resultado"] == datos["estado"]
+    assert datos["codigo"] == codigo
+
+
+def test_modo_terminal_sin_codigo_usa_otro(tmp_path) -> None:
+    ruta = _estado(tmp_path)
+    assert estado.main(["--ruta", str(ruta), "--resultado", "hecha"]) == 0
+    datos = _leer(ruta)
+    assert (datos["estado"], datos["resultado"], datos["codigo"]) == ("hecha", "hecha", "otro")
