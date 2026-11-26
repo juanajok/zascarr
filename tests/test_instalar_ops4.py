@@ -41,11 +41,14 @@ def test_instala_clave_dirs_modulos_y_unidades_sin_activar(tmp_path: Path) -> No
     assert key.exists() and key.stat().st_size == 65
     assert key.stat().st_mode & 0o777 == 0o440
     assert (tmp_path / "data" / "ops4" / "consumidos").is_dir()
+    assert (tmp_path / "data" / "ops4" / "intentos").is_dir()
+    assert stat.S_IMODE((tmp_path / "data" / "ops4" / "intentos").stat().st_mode) == 0o700
     assert (tmp_path / "bin" / "actualizar-aux").is_file()
     assert (tmp_path / "lib" / "zascarr-estado-actualizar-ops4").is_file()
     for modulo in ("protocolo_actualizar_v4_ops4.py",
                    "verificador_autorizacion_ops4.py",
-                   "registro_repeticiones_ops4.py"):
+                   "registro_repeticiones_ops4.py",
+                   "admision_ops4.py"):
         assert (tmp_path / "lib" / modulo).is_file()
     for unidad in ("zascarr-actualizar.socket", "zascarr-actualizar@.service",
                    "zascarr-actualizar.service"):
@@ -61,6 +64,20 @@ def test_instala_clave_dirs_modulos_y_unidades_sin_activar(tmp_path: Path) -> No
     assert "@REPO@" not in unit_actualizar
     assert "systemd omitido" in r.stdout
     assert "OPS4_ACTUALIZACION_HABILITADA (por defecto false)" in r.stdout
+
+
+def test_unidad_instalada_sustituye_grupo_sin_activar(tmp_path: Path) -> None:
+    resultado = ejecutar(tmp_path, "--yes", "--sin-systemd")
+    assert resultado.returncode == 0, resultado.stderr
+    grupo = subprocess.check_output(["id", "-gn"], text=True).strip()
+    unidad = (tmp_path / "units" / "zascarr-actualizar@.service").read_text(
+        encoding="utf-8"
+    )
+    assert "User=root\n" in unidad
+    assert f"Group={grupo}\n" in unidad
+    assert "@GRUPO@" not in unidad
+    assert "CapabilityBoundingSet=\n" in unidad
+    assert "[Install]" not in unidad
 
 
 def test_idempotente_conserva_la_clave(tmp_path: Path) -> None:

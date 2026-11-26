@@ -84,6 +84,14 @@ def test_unidad_auxiliar_no_tiene_red_ni_capacidades() -> None:
     assert "ReadWritePaths" in servicio
 
 
+def test_unidad_auxiliar_usa_grupo_configurado_sin_cap_chown() -> None:
+    servicio = _leer("zascarr-actualizar@.service")["Service"]
+    assert servicio["User"] == "root"
+    assert servicio["Group"] == "@GRUPO@"
+    assert servicio["CapabilityBoundingSet"] == ""
+    assert servicio["NoNewPrivileges"] == "yes"
+
+
 def test_socket_es_propio_y_no_se_instala_solo() -> None:
     config = _leer("zascarr-actualizar.socket")
     socket = config["Socket"]
