@@ -34,9 +34,15 @@ Conclusión: el ciclo requiere completar y revisar `Purpose` antes de afirmar qu
 
 La reinstalación desde el lock local con `npm ci --offline --ignore-scripts --no-audit --no-fund` terminó con código 0 y 66 paquetes, usando una caché previamente poblada. El SHA-256 del lock antes y después fue `ebcc1e4ff2c56aa22ff1952f380a052b13f9491b6937db2d69b82cf7d6905fd0`. Esto solo acredita esta instalación en Node 24.22.3/npm 11.19.1 con esa caché y ese lock, no una instalación con caché vacía ni en otras plataformas. El primer intento falló por configuración npm de usuario/global duplicada; se corrigió antes de repetir.
 
+## Autoverificación del propio cambio
+
+La propuesta R004 exige ID estable y evidencia para cada escenario nuevo o modificado, pero los escenarios de este mismo delta todavía no tienen ID explícito y su manifiesto de trazabilidad solo declara comprobaciones planificadas. Registrar la deuda y definir un esquema de identificación y evidencia antes de exigir ese gate; la validación estructural de OpenSpec no la detecta. No afirmar cumplimiento de R004 por el PASS de la CLI.
+
 ## Licencias declaradas: inventario, no dictamen
 
 OpenSpec 2.2.0 declara MIT. El inventario de las 66 instalaciones en el lock local coincide con los paquetes instalados: 54 declaraciones MIT (incluido OpenSpec), 7 ISC, 4 BlueOak-1.0.0 y 1 BSD-3-Clause; sin licencias desconocidas en esos metadatos y con archivos de licencia presentes. Esto no audita código incorporado ni obligaciones de redistribución. El `package.json` del entorno de prueba usa `^2.2.0`: sin el lock no constituye un pin reproducible. No se ha aprobado una dependencia para el proyecto.
+
+A nivel general, [MIT](https://opensource.org/license/mit) e [ISC](https://www.isc.org/licenses/) exigen conservar avisos en las copias; [BSD-3-Clause](https://opensource.org/license/bsd-3-clause) añade condiciones para redistribuciones binarias y no respaldo; [BlueOak-1.0.0](https://blueoakcouncil.org/license/1.0.0) exige entregar el texto o enlace de la licencia a quien reciba una copia de cualquier parte. Usar una herramienta aislada no es por sí solo redistribuirla. Antes de distribuir paquetes, plantillas o fragmentos incorporados, hay que identificar el contenido realmente entregado, revisar avisos y obligaciones, y distinguir agregado de obra combinada. No se afirma compatibilidad legal definitiva ni se sustituye asesoría jurídica.
 
 ## Harnesses disponibles: verificación local sin inferencia
 
