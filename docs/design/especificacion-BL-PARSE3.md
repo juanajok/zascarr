@@ -1,6 +1,9 @@
 # Especificación BL-PARSE3 — la carpeta sugiere la serie en «Por revisar» (F2)
 
 > **Estado:** **aprobada por el PO el 2026-11-26**, con D1 fuera (el filtro «solo con sugerencia» no cambia).
+> **Cambio propuesto (2026-11-26, tras desplegar #1328): R2b**, pendiente de aprobación del PO. La
+> revisión de las 41 sugerencias reales (§6b) mostró que el 99,89 % medido sobre archivos ya vinculados
+> no se traslada a los pendientes.
 > **ID provisional:** `BL-PARSE3`, sin tarjeta todavía.
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familia F2, medida otra vez con
 > BL-PARSE2 desplegado (`eb9d8c4a`), y el experimento Fellegi-Sunter del mismo día (§6).
@@ -35,6 +38,16 @@ serie `S`. Cuentan todos los vínculos, sean manuales o no (§6 explica por qué
 
 No hay sugerencia si el nombre es de un anual (`parse_comic_filename(...).is_annual`) y `S` no lo es
 (`es_titulo_de_anual(S.title)`), ni al revés. Es la misma regla que ya aplica el matcher.
+
+### R2b. Solo con número y sin especial
+
+No hay sugerencia si el nombre no trae número (`parse_comic_filename(...).issue_number` vacío), si es un
+especial (`is_special`) o si el número tiene forma de año (`19xx`/`20xx`). Un pack (rango de capítulos
+dentro de un tomo con número) **sí** se sugiere.
+
+**Por qué:** en una carpeta homogénea, los archivos que se quedan sin vincular suelen ser justo los que no
+son de la serie: especiales, promocionales, historias sueltas u otras obras del mismo universo. Casi todos
+llegan sin número; los que traen un año como número (`… Century 1910`) son otras obras.
 
 ### R3. Qué enseña la tarjeta
 
@@ -103,6 +116,21 @@ sugiere.
 
 Donde la carpeta y el matcher discrepan, en los vinculados del embudo la carpeta acierta en 7 de 8.
 
+### 6b. Las 41 sugerencias reales (Pi, 2026-11-26, con #1328 desplegada)
+
+Revisadas una a una por su carpeta y su nombre (juicio provisional, a confirmar por el PO en la tarjeta):
+
+| Variante | Sugiere | Bien | Dudosas (otra edición o formato) | Mal (otra obra o especial) | Acierto en vinculados |
+|---|---:|---:|---:|---:|---:|
+| R1 + R2 (desplegada) | 41 | 19 + 1 probable | 8 | 13 | 99,89 % |
+| + con número y sin especial | 25 | 18 | 4 | 3 | 99,96 % |
+| **+ número que no parece año (R2b)** | **22** | **18** | **4** | **0** | **99,96 %** |
+
+Excluir también los packs se descartó: quitaba 9 tomos de manga que están bien. R2b pierde 2 buenas (un
+número `#Zero` que el parser no lee y una sin número) a cambio de quitar las 13 malas. Las 4 dudosas son
+tomos o recopilaciones frente a una serie de grapas: el formato lo vigila la asignación (B15) y el
+coleccionista confirma.
+
 ## 7. Criterios de aceptación y pruebas
 
 | CA | Criterio | Prueba |
@@ -116,10 +144,11 @@ Donde la carpeta y el matcher discrepan, en los vinculados del embudo la carpeta
 | C7 | La tarjeta con sugerencia por la carpeta: chip `Por la carpeta`, la línea de R3 y la serie en el campo oculto | `tests/test_pendientes_tarjeta.py::test_tarjeta_con_sugerencia_por_la_carpeta` |
 | C8 | Sin sugerencia por la carpeta, la tarjeta es idéntica a la de hoy | `tests/test_pendientes_tarjeta.py::test_tarjeta_sin_sugerencia_por_la_carpeta_no_cambia` |
 | C9 | La tarjeta que se vuelve a pintar sola (tras un error) también la lleva | `tests/test_pendientes_tarjeta.py::test_tarjeta_repintada_conserva_la_sugerencia_por_la_carpeta` |
+| C10 | R2b: sin número, especial o número con forma de año, no sugiere; un pack con número sí | `tests/test_sugerencia_carpeta.py::test_solo_sugiere_con_numero_y_sin_especial` (parametrizada) |
 
 **Aceptación en datos reales** (tras desplegar, con tu autorización para la tanda en la Pi): un script de
 solo lectura que llama al servicio sobre los pendientes reales y cuenta:
-- ≥ 40 pendientes con sugerencia por la carpeta (hoy, 42);
+- ≥ 20 pendientes con sugerencia por la carpeta (con R2b; hoy, 22; antes de R2b el umbral era ≥ 40);
 - ninguno que sea anual con serie no anual o al revés;
 
 y una revisión tuya en «Por revisar» de una muestra de 10, en el navegador, con el resultado en la tarjeta.
