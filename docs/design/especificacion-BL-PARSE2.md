@@ -1,7 +1,8 @@
 # Especificación BL-PARSE2 — desempatar dos ediciones por el número que existe (F1)
 
 > **Estado:** **aprobada por el PO el 2026-11-26.**
-> **ID provisional:** `BL-PARSE2`, sin tarjeta todavía.
+> **Hecha:** fusionada en #1318 (`eb9d8c4a`) y **aceptada en la Pi el 2026-11-26** (resultado en §6).
+> **Tarjeta:** [#1321](https://github.com/juanajok/zascarr/issues/1321) en el Project 1.
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familia F1, medida otra vez
 > con BL-PARSE1 desplegado (`d1062090`).
 > **Código de referencia:** `main` en `58197c04`.
@@ -115,6 +116,23 @@ embudo de solo lectura frente a la foto de BL-PARSE1:
 - **0** que dejan de coincidir;
 - **0** enlaces nuevos a otra serie o a otro número;
 - los 3 archivos de Lemire siguen sin enlazar.
+
+**Resultado (2026-11-26, código `eb9d8c4a` desplegado en la Pi, transacción `READ ONLY` con
+`ROLLBACK`, 5.096 archivos, 0 errores), frente a la foto de BL-PARSE1:**
+
+| Criterio | Medido | |
+|---|---|---|
+| ≥ 194 coincidencias más | **+194** (4.004 → 4.198 de 4.501 con vínculo; 89,0 % → 93,3 %) | PASS |
+| 0 que dejan de coincidir | 0 | PASS |
+| 0 enlaces nuevos a otra serie o número | 0 contra un vínculo; 1 enlace en un archivo sin vínculo (`Catwoman Vol. 4` #25, previsto en §5) | PASS |
+| Lemire sin enlazar | 3 de 3, con la nota de R3 | PASS |
+
+Desempatados por el número: 195. De los 208 empates quedan 11: 7 Monstress 1–7 (número en las dos
+ediciones), los 3 de Lemire y 1 Superman #0 que no está en ninguna. Otros 2 Superman #1 los elige R1 y los
+frena BL-INF11 (el número ya mezcla colecciones). `unsorted` baja de 1.033 a 838.
+
+**Para el PO, fuera de esta historia:** el #1 de `SUPERMAN EL HOMBRE DE ACERO` mezcla colecciones; los 3
+archivos de Lemire y los 8 de `Superman Vol. 3` siguen enlazados a la edición de Zinco.
 
 ## 7. Orden de los commits (SDD + TDD)
 
