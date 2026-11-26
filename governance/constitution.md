@@ -16,3 +16,11 @@
 - No crea gates, no modifica CI y no retira reglas.
 - No afirma carga efectiva de instrucciones en ningún harness: esa comprobación está pendiente (T0.4).
 - Las excepciones operativas vigentes (por ejemplo, la deuda del movimiento con sesión ORM abierta) se conservan tal como están en la guía; no se convierten en cumplimiento por aparecer aquí.
+
+## Reglas migradas
+
+Texto trasladado desde la guía vigente. La copia de la guía se conserva hasta la aprobación de la retirada; mientras exista, es duplicación declarada.
+
+### PRE-40 — Registrar las decisiones del modo de trabajo
+
+La guía es contexto operativo para agentes y personas que colaboren en el repositorio y debe leerse antes de tocar código. Toda decisión nueva sobre cómo se trabaja se registra el día que se decide, no cuando alguien la recuerde.

@@ -30,6 +30,10 @@ Este documento no describe arquitectura de módulos, contratos de API ni el deta
 
 Texto trasladado desde la guía vigente (sección 1). La copia de la guía se conserva hasta la aprobación de la retirada; mientras exista, esta sección es duplicación declarada, no autoridad nueva.
 
+### PRE-10 — El software gestiona, nunca facilita
+
+El software gestiona la biblioteca; no facilita el acceso a contenido. Sin URLs hardcodeadas de foros dispuestos a enlaces; el scraper IPB es genérico y la URL la aporta el usuario en runtime mediante `FORUM_URL`. El marco legal completo está en [LEGAL.md](../src/zascarr/LEGAL.md).
+
 ### PRE-41 — Producto, persona y restricción de plataforma
 
 ZascArr es un gestor self-hosted de tebeoteca (CBZ/CBR) tipo Sonarr/Radarr, optimizado para Raspberry Pi 4/5 y pensado para el público hispanohablante. Stack: FastAPI + SQLAlchemy async + PostgreSQL + Jinja2 + HTMX. Sin Redis (ADR-0011). Sin SPA, sin build de Node, htmx vendorizado en disco (ADR-0001).

@@ -13,7 +13,7 @@
 | PRE-07 | §3.2 | Integraciones P2P y fuentes de metadatos apagadas por defecto; una actualización no las apaga en silencio | Configuración | sin migrar |
 | PRE-08 | §3.2 | Healthcheck observacional y aviso de versión de solo lectura | Contratos de estado | sin migrar |
 | PRE-09 | §3.2 | Actualización manual: decisión de confianza no habilita la función ni su despliegue | ADR de actualización | sin migrar |
-| PRE-10 | §5 | El software gestiona, no facilita fuentes de contenido | Visión y marco legal | sin migrar |
+| PRE-10 | §5 | El software gestiona, no facilita fuentes de contenido | [Visión](product-vision.md#pre-10--el-software-gestiona-nunca-facilita) | migrada |
 | PRE-11 | §5 | La aceptación legal bloquea solo acciones de riesgo; nunca un middleware global | Contrato legal | sin migrar |
 | PRE-12 | §5 | Cero telemetría, logs sin datos sensibles y campos de formulario explícitos | Seguridad y privacidad | sin migrar |
 | PRE-13 | §5 | Interfaz en localhost por defecto; abrir exige decisión explícita y contraseña | ADR de exposición de red | sin migrar |
@@ -43,7 +43,7 @@
 | PRE-37 | §6 | El sistema de diseño se consulta antes de cambiar una pantalla | Índice de fuentes | sin migrar |
 | PRE-38 | §7 | Migraciones aplicadas inmutables y reglas de tipos Postgres | Guía de migraciones | sin migrar |
 | PRE-39 | §14 | Conceptos de superficie y reglas de contexto entre términos | Glosario | sin migrar |
-| PRE-40 | Cabecera | Toda decisión nueva sobre cómo se trabaja se registra el día que se decide | Constitución y guía | sin migrar |
+| PRE-40 | Cabecera | Toda decisión nueva sobre cómo se trabaja se registra el día que se decide | [Constitución](constitution.md#pre-40--registrar-las-decisiones-del-modo-de-trabajo) | migrada |
 | PRE-41 | §1 | Producto para el coleccionista y presupuesto de Raspberry Pi | [Visión](product-vision.md#pre-41--producto-persona-y-restricción-de-plataforma) | migrada |
 | PRE-42 | §2 | Convenciones de lenguaje, tipos e imports; aclarar la tensión del ejemplo de nombres | Guía técnica | sin migrar |
 | PRE-43 | §2 | Justificar dependencias y centralizar enums del dominio | Guía técnica | sin migrar |
