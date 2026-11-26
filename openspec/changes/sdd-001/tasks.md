@@ -3,14 +3,14 @@
 Todas pendientes; no representan ejecución real. Una PR por historia, no cerrar #1291 hasta H0–H5. IDs de requisitos del delta de development-governance.
 
 ## 0. Inventario y decisión
-- [ ] T0.1 Fijar baseline, inventariar capacidades/documentos y evidencias; detectar contradicciones e IDs duplicados. (R001,R002)
-- [ ] T0.2 Pin de OpenSpec, licencia, smoke en worktree: init, validate, sync/archive y casos negativos, verificar harnesses. Registrar versiones. (R007,R008)
+- [ ] T0.1 Fijar baseline, inventariar capacidades/documentos y evidencias; detectar contradicciones e IDs duplicados; proponer matriz de autoridad y mapa de migración sin retirar normas vigentes. (R001,R002)
+- [ ] T0.2 Bootstrap aislado: evaluar licencia y versión candidata de OpenSpec; smoke init, validate, sync/archive, negativos y harnesses; verificar tráfico/telemetría y desactivación efectiva, sin red cuando sea posible. Registrar resultados y fijar pin solo tras éxito; si falla o no es verificable, escalar sin iniciar H1. (R007,R008)
 - [ ] T0.3 Aprobar propuesta y resolver alcance con mantenedor. (R001,R009)
 
 ## 1. Infraestructura y gobierno (depende de H0)
 - [ ] T1.1 Constitución y glosario; mapa de reglas de CLAUDE.md a destino; AGENTS.md y adaptadores probados. (R001,R008)
 - [ ] T1.2 Inicializar OpenSpec sin pisar este cambio; plantillas de delta, benchmark, diseño, tareas, evidencia; IDs y DoR/DoD. (R001,R003,R007)
-- [ ] T1.3 Política de riesgo, excepciones y aprobación; adaptar CONTRIBUTING, backlog y plantillas GitHub. (R003,R009)
+- [ ] T1.3 Política proporcional de riesgo, excepción de discrepancia/hotfix (causa, alcance, riesgo, mitigaciones, responsable, caducidad y seguimiento) y aprobación; adaptar CONTRIBUTING, backlog y plantillas GitHub. (R003,R009)
 
 ## 2. Baseline crítica (depende de H1)
 - [ ] T2.1 Importación, movimiento, deduplicación e integridad; escenarios adversativos. (R002,R004)
@@ -20,14 +20,14 @@ Todas pendientes; no representan ejecución real. Una PR por historia, no cerrar
 
 ## 3. Validación y CI (depende de H1, coordinar H2)
 - [ ] T3.1 TDD de validadores de sintaxis, IDs, enlaces, impacto y riesgo, con casos de bypass. (R003,R004,R005)
-- [ ] T3.2 Trazabilidad y consumo de resultados reales pytest/JUnit, integración y evidencia manual; reportes JSON/Markdown. (R004,R005)
+- [ ] T3.2 Trazabilidad y resultados pytest/JUnit por run, job exigido y SHA exacto; fallo cerrado por job fallido/cancelado, informe ausente/malformado, SHA distinto, skip o xfail no aprobado; integración y evidencia manual; reportes JSON/Markdown. (R004,R005)
 - [ ] T3.3 Validar deltas/consolidación y contratos; pruebas de divergencia. (R007)
 - [ ] T3.4 Workflow SDD informativo, permisos mínimos, checks existentes intactos; verificar política confiable. (R009,R010)
 - [ ] T3.5 Makefile y documentación; comprobar sin LLM, sin red salvo instalación fijada y sin runtime nuevo. (R008)
 
 ## 4. Multiagente (depende de H1 y contratos H3)
-- [ ] T4.1 Definir siete roles y schemas de entrada/salida; Brain clasifica por reglas. (R003,R006,R008)
-- [ ] T4.2 Orquestar gates, revisiones paralelas, SHA candidato, N/A, bloqueo y nueva revisión; pruebas de dictamen falso/obsoleto. (R006,R009)
+- [ ] T4.1 Inventariar orquestación existente y definir roles y schemas reutilizables; Brain clasifica por reglas y aplica roles proporcionalmente, sin duplicar ni depender del pipeline local no versionado. (R003,R006,R008)
+- [ ] T4.2 Orquestar gates, revisiones paralelas, SHA de aprobación de SPEC separado del candidato de merge, comprobación del árbol integrado o equivalencia para squash/cola, N/A, bloqueo y nueva revisión; pruebas de dictamen falso/obsoleto. (R006,R009)
 - [ ] T4.3 Presupuestos, límites, sanitización, proveedores/harnesses intercambiables; pruebas de recuperación y escalado. (R008,R009)
 
 ## 5. Piloto y puesta en servicio (depende H2–H4)

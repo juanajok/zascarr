@@ -8,7 +8,13 @@ ZascArr SHALL disponer de una constitución aprobada, catálogo de requisitos vi
 
 - **GIVEN** una implementación que contradice un requisito aprobado
 - **WHEN** se evalúa el comportamiento
-- **THEN** se registra una discrepancia con fuentes y riesgo y se bloquea cualquier cambio afectado hasta resolverla
+- **THEN** se registra una discrepancia con fuentes y riesgo y se bloquea el ámbito afectado hasta resolverla, salvo excepción controlada autorizada previamente por el mantenedor
+
+#### Scenario: Hotfix urgente con discrepancia abierta
+
+- **GIVEN** una discrepancia sin resolver y un hotfix urgente en su ámbito
+- **WHEN** el mantenedor autoriza previamente una excepción con causa, alcance, riesgo, mitigaciones, responsable, caducidad y seguimiento con fecha de resolución
+- **THEN** procede solo el hotfix delimitado con controles de seguridad y aprobación de merge vigentes; la discrepancia sigue abierta y no se certifica
 
 ### Requirement: SDD-R002 Baseline brownfield verificable
 
@@ -32,7 +38,7 @@ Todo cambio SHALL clasificarse como trivial, bajo, medio o alto antes de su ejec
 
 ### Requirement: SDD-R004 Trazabilidad verificable
 
-Cada requisito y escenario nuevo o modificado SHALL tener ID estable y evidencia vinculada. Los checks verificarán existencia y ejecución de las pruebas; QA verificará su adecuación. Las excepciones manuales deberán registrar evidencia, responsable y aprobación.
+Cada requisito y escenario nuevo o modificado SHALL tener ID estable y evidencia vinculada. Los checks verificarán existencia y ejecución mediante JUnit de cada job exigido vinculado por metadatos confiables a run, job y SHA ejecutado y conclusión exitosa. Fallo, error, cancelación, informe ausente o malformado, SHA incorrecto, skip o xfail no aprobado cierran el gate por defecto; QA verificará adecuación. Las excepciones manuales deberán registrar evidencia, responsable y aprobación.
 
 #### Scenario: Prueba vinculada pero no ejecutada
 
@@ -52,13 +58,19 @@ El Developer SHALL aplicar TDD a comportamiento nuevo o corregido y preservar la
 
 ### Requirement: SDD-R006 Revisiones independientes
 
-El Brain SHALL coordinar Benchmarker, SPEC, Developer, QA, SecOps y UI/UX según el riesgo. Los jueces aplicables no serán el Developer, emitirán dictámenes verificables sobre el mismo candidato inmutable, y los bloqueantes no podrán ser anulados por el Brain.
+El Brain SHALL coordinar Benchmarker, SPEC, Developer, QA, SecOps y UI/UX según el riesgo. Los jueces aplicables no serán el Developer, emitirán dictámenes verificables sobre el mismo candidato inmutable, y los bloqueantes no podrán ser anulados por el Brain. Roles y controles serán proporcionales al riesgo, sin exigir el ciclo completo a cambios triviales; la orquestación reutiliza contratos y adaptadores portables sin duplicar el pipeline local no versionado.
 
 #### Scenario: Dictamen obsoleto
 
 - **GIVEN** una revisión favorable sobre un candidato
 - **WHEN** cambia su SHA o el contenido que constituye el candidato revisado
 - **THEN** se invalida el dictamen y se exige nueva revisión aplicable
+
+#### Scenario: SHA de aprobación y candidato de merge
+
+- **GIVEN** una SPEC aprobada y un candidato de merge con SHA distinto
+- **WHEN** se solicita la fusión
+- **THEN** se registran ambos SHA, se verifica el contrato aprobado y CI y jueces del candidato final; si cambia el contrato se renueva su aprobación, y si cambia el candidato sus revisiones. Para squash, merge commit o cola se verifica contenido integrado o equivalencia verificable, o se bloquea
 
 ### Requirement: SDD-R007 Consolidación atómica
 
@@ -92,7 +104,7 @@ El proceso SHALL preservar los checks existentes y la autorización humana de me
 
 ### Requirement: SDD-R010 Migración gradual y piloto
 
-La implantación SHALL registrar deuda histórica sin bloquear indiscriminadamente contribuciones, exigir conformidad a cambios nuevos tras la activación aprobada y completar un piloto de riesgo medio con métricas y evidencias.
+La implantación SHALL establecer en H0 matriz de autoridad y bootstrap que evalúe licencia, telemetría y smoke de OpenSpec antes de fijar su pin; si falla o no se verifica se escala sin activar H1. También deberá registrar deuda histórica sin bloquear indiscriminadamente contribuciones, exigir conformidad a cambios nuevos tras la activación aprobada y completar un piloto de riesgo medio con métricas y evidencias.
 
 #### Scenario: Activación de gates
 

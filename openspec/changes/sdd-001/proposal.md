@@ -1,7 +1,7 @@
 # SDD-001 — Transformación de ZascArr a Spec-Driven Development
 
 - Issue: [#1291](https://github.com/juanajok/zascarr/issues/1291)
-- Estado: PROPUESTA, pendiente de aprobación del mantenedor. No activa todavía reglas nuevas.
+- Estado: dirección de revisión aprobada; propuesta normativa pendiente de aprobación del mantenedor. No activa todavía reglas nuevas.
 - Línea base de auditoría: main @ ea9bc603eb2aa86265abd5b0697b3e03ef87e732
 - Fecha: 2026-11-26
 
@@ -15,6 +15,7 @@ Las decisiones normativas residen hoy en CLAUDE.md, backlog, ADR, diseños y pru
 - Incorporar gobierno, AGENTS.md como índice portátil, matriz de riesgo, DoR/DoD y plantillas.
 - Reconstruir requisitos históricos por dominios críticos, dejando discrepancias abiertas y evidencias de procedencia.
 - Añadir gates deterministas, trazabilidad y revisiones independientes sobre un candidato inmutable.
+- Bootstrap H0 antes de fijar el pin; matriz de autoridad y reutilización proporcional de orquestación, sin duplicar el pipeline local no versionado.
 - Piloto real de riesgo medio y activación gradual de checks requeridos tras autorización.
 
 ## Capabilities

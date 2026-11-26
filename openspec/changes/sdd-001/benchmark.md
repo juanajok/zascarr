@@ -1,6 +1,6 @@
 # Benchmark SDD-001
 
-Fecha de revisión documental: 2026-11-26. Base: ea9bc603eb2aa86265abd5b0697b3e03ef87e732. No se han instalado ni ejecutado los frameworks, ni auditado aquí su licencia transitiva o versiones. H0 debe fijar versiones/tags y ejecutar un piloto de CLI aislado.
+Fecha de revisión documental: 2026-11-26. Base: ea9bc603eb2aa86265abd5b0697b3e03ef87e732. H0 evalúa licencia, telemetría y smoke aislado antes de fijar versión; no se han auditado las licencias transitivas. Evidencia parcial: OpenSpec 2.2.0 instalado localmente desde npm con scripts de instalación desactivados; init y validate estricto de la propuesta pasan; el negativo sin escenario falla como esperado y archive sintético consolida. El validate estricto posterior de la spec falla por Purpose placeholder generado. Se aisló el entorno y se desactivó la telemetría mediante variables; se accedió al registro npm y no se verificó ausencia de otras conexiones. No hay aprobación semántica ni pin definitivo.
 
 ## Referencias y decisiones
 
@@ -25,4 +25,4 @@ Fecha de revisión documental: 2026-11-26. Base: ea9bc603eb2aa86265abd5b0697b3e0
 
 ## Decisión propuesta
 
-OpenSpec como único formato y CLI SDD, constitución y controles inspirados en Spec Kit, validadores Python pequeños y CI existente. No atribuir a OpenSpec gates que son responsabilidad de ZascArr. Validar licencias GPL-3.0-only, instalación reproducible y compatibilidad con CI antes de adoptar dependencias. Fuentes consultadas son documentación mutable; registrar versión y enlaces a commit en H0. Si la prueba falla, mantener Markdown compatible y volver al mantenedor con alternativas, no sustituir la decisión en silencio.
+OpenSpec como único formato y CLI SDD, constitución y controles inspirados en Spec Kit, validadores Python pequeños y CI existente. No atribuir a OpenSpec gates que son responsabilidad de ZascArr. Validar licencias GPL-3.0-only, instalación reproducible y compatibilidad con CI antes de adoptar dependencias. Fuentes consultadas son documentación mutable; registrar versión y enlaces a commit en H0. Si falla o no puede verificarse telemetría, instalación o smoke completo, no fijar pin ni activar H1; mantener Markdown compatible y volver al mantenedor con alternativas, no sustituir la decisión en silencio.
