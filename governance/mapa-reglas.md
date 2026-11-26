@@ -29,7 +29,7 @@
 | PRE-23 | §10 | Antipatrones explícitos del proyecto, con sus excepciones | Arquitectura y seguridad | sin migrar |
 | PRE-24 | §11 | Documentos vivos: consultar antes de tocar cada área | Índice de fuentes | sin migrar |
 | PRE-25 | §12 | Principios de modelo y datos ya validados por comparación | ADR y contratos | sin migrar |
-| PRE-26 | §13 | Benchmark proporcional antes de cambios grandes; la ficha informa, no aprueba | Procedimiento de benchmark | sin migrar |
+| PRE-26 | §13 | Benchmark proporcional antes de cambios grandes; la ficha informa, no aprueba | [Preparación](definition-of-ready.md#pre-26--benchmark-proporcional-antes-de-implementar) | migrada |
 | PRE-27 | §13 | Barrera legal por archivo antes de reutilizar una implementación | [Benchmark de referencias](../docs/design/benchmark-referencias.md#barrera-legal-de-reutilización-regla-migrada-pre-27) | migrada |
 | PRE-28 | §14 | El glosario fija superficie y no renombra datos persistidos | Glosario | sin migrar |
 | PRE-29 | §4 | Nada bloqueante en handlers asíncronos; descargas externas con semáforo | NFR de rendimiento | sin migrar |
@@ -167,3 +167,15 @@ Los destinos que faltaban ya existen, pero **en otra rama sin fusionar**: [#1320
 | Piloto `.agentic` | Ya vive en ADR 0027 | PRE-22: no se duplica aquí |
 
 Consecuencia: **4 reglas migradas** (PRE-05, PRE-10, PRE-40, PRE-41) y 39 pendientes. El siguiente lote se hace cuando ambas ramas estén integradas; hacerlo antes produciría enlaces rotos, que la propia guarda del repositorio rechaza.
+
+## Propuesta: destinos para los contratos de dominio
+
+Quedan 35 reglas sin destino. Las de contratos de dominio no pueden migrarse a un documento que no existe, y crearlos exige decidir su granularidad. Propongo **tres** documentos, no once:
+
+| Documento propuesto | Reglas que cubriría |
+|---|---|
+| `governance/contrato-datos.md` | PRE-01, PRE-02, PRE-38 (servicios, movimiento y sesión, migraciones) |
+| `governance/contrato-seguridad.md` | PRE-03, PRE-06, PRE-11, PRE-12, PRE-14, PRE-30 (API, credenciales, legal, red) |
+| `governance/contrato-biblioteca.md` | PRE-04, PRE-31, PRE-32, PRE-36-1, PRE-37 (portadas, caché, lectura de archivos, cifras del Inicio, sistema de diseño) |
+
+Cada uno se escribe leyendo el código vigente para confirmar el comportamiento, no copiando la guía. Sin tu decisión sobre esta agrupación no los creo: hacerlo por mi cuenta sería inventar autoridad nueva.
