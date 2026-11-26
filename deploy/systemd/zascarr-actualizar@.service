@@ -3,6 +3,8 @@ Description=Auxiliar de actualización manual OPS4 (una conexión)
 Documentation=https://github.com/juanajok/zascarr
 
 [Service]
+User=root
+Group=@GRUPO@
 Type=simple
 StandardInput=socket
 StandardOutput=socket
