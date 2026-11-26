@@ -13,6 +13,7 @@ archivos de una carpeta hace que el cuarto salga sugerido en la siguiente visita
 """
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -27,6 +28,9 @@ from zascarr.utils.naming import es_titulo_de_anual, parse_comic_filename
 
 #: Hermanos con número, todos en la misma serie, necesarios para sugerir (R1).
 MINIMO_HERMANOS = 3
+
+#: R2b: un «número» 19xx/20xx es un año (`… Century 1910`), no el de la grapa.
+_NUMERO_CON_FORMA_DE_ANIO = re.compile(r"(?:19|20)\d{2}")
 
 
 @dataclass(frozen=True)
@@ -75,8 +79,14 @@ async def sugerencias_por_carpeta(
         fila = unanimes.get(carpeta_de(f.file_path)) if f.file_path else None
         if fila is None:
             continue
+        parsed = parse_comic_filename(f.file_name)
         # R2: un anual solo con una serie anual, y al revés (la misma regla que el matcher).
-        if parse_comic_filename(f.file_name).is_annual != es_titulo_de_anual(fila.title):
+        if parsed.is_annual != es_titulo_de_anual(fila.title):
+            continue
+        # R2b: lo que queda pendiente en una carpeta homogénea suele ser lo que no encaja
+        # (especiales, promocionales, otras obras): sin número, especial o con un año por número.
+        if (not parsed.issue_number or parsed.is_special
+                or _NUMERO_CON_FORMA_DE_ANIO.fullmatch(parsed.issue_number)):
             continue
         sugerencias[f.id] = SugerenciaCarpeta(
             series_id=UUID(str(fila.series_id)), title=fila.title,
