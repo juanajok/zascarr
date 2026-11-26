@@ -1,6 +1,6 @@
 # Especificación SDD-T1.3: riesgo, preparación, cierre y excepciones
 
-**Estado:** propuesta para aprobación; **no aprobada** y no iniciada. No se ha ejecutado ni publicado más que este fichero. Depende de T1.2 para los destinos documentales y de tus decisiones de proporcionalidad: este documento propone criterios, no los impone.
+**Estado:** aprobada por el mantenedor el 2026-11-26. La aprobación del contrato no autoriza fusión ni despliegue. No se ha ejecutado ni publicado más que este fichero. Depende de T1.2 para los destinos documentales y de tus decisiones de proporcionalidad: este documento propone criterios, no los impone.
 
 ## Problema
 
