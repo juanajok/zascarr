@@ -1,4 +1,4 @@
-# ADR 0026 — Pipeline de ingeniería local y separado de ZascArr
+# ADR 0027 — Pipeline de ingeniería local y separado de ZascArr
 
 **Estado:** aceptado para piloto acotado; no sustituye las puertas de fusión o despliegue.
 **Contexto:** necesitamos comprobar de forma independiente propuestas de ingeniería, sin instalar un runtime de agentes en la Pi y sin hacer depender QA del proveedor de IA. Véase la [SPEC y comparación](<../design/agentic-mvp.md>).
