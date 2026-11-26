@@ -67,3 +67,21 @@ En un proyecto sintético nuevo, `openspec init --tools claude,codex,opencode,ag
 Con entorno mínimo, entrada cerrada y sin credenciales proporcionadas: `claude --version` devuelve `2.1.332` y `codex --version` devuelve `0.170.0`; sus ayudas responden correctamente. `opencode --version` y `--help` fallan con código 46: Snap no puede crear el ámbito transitorio DBus en este entorno. Son pruebas de disponibilidad y ayuda, **no** pruebas de carga real de instrucciones, funcionamiento autenticado o equivalencia entre harnesses. La versión anterior indicada para Claude en el pipeline local no versionado no corresponde al ejecutable observado en esta comprobación.
 
 Tras la autorización explícita para utilizar exclusivamente suscripciones, se comprobó el modo declarado por las herramientas: Claude informa `claude.ai`/Pro y Codex informa ChatGPT. No se ejecutó inferencia: estas declaraciones no demuestran por sí solas la ruta efectiva bajo toda la configuración ni el aislamiento de herramientas y políticas. Se intentó una única prueba sintética con `codex exec`, configuración de usuario omitida y autenticación ChatGPT declarada; terminó con código 1 por `Read-only file system (os error 30)` antes de iniciar el cliente; DSH informó denegación de acceso del sandbox y no se identificó la ruta concreta. No se reintentó ni se eludió esa política. No se enviaron datos a proveedores ni se verificó la lectura de `AGENTS.md`. El sandbox read-only restringe escritura, no garantiza aislamiento de lectura. Queda pendiente una prueba de carga efectiva con garantías suficientes de que no se usan APIs.
+
+## Cierre de H0 con excepciones explícitas (2026-11-26)
+
+Decisión del mantenedor en sesión: H0 se cierra para permitir el trabajo documental de H1, con las excepciones siguientes a la vista. El cierre **no** convierte en aprobado nada de lo que sigue pendiente y no autoriza fusiones, despliegues ni gates obligatorios.
+
+| Tarea | Estado al cerrar | Límite que se conserva |
+|---|---|---|
+| T0.1 baseline e inventario | Completada como registro: baseline fijada, capacidades y documentos inventariados, contradicciones y IDs duplicados detectados sin renumerar | El inventario cuantitativo no mide capacidades verificadas; los ADR `0020`/`0021` duplicados siguen sin resolver |
+| T0.2 bootstrap de OpenSpec | Evaluada: instalación, `init`, `validate` estricto, `archive`, negativos, telemetría instrumentada, inventario de licencias y suministro con límites declarados | El lock exacto de #1293 no tiene aún instalación limpia acreditada; no hay dictamen de licencias ni de suministro; no se acreditó ausencia universal de tráfico ni reproducibilidad en otras plataformas |
+| T0.3 aprobación de propuesta | Registrada la aprobación del mantenedor en la conversación, ligada al SHA de la propuesta revisada | No es una revisión de GitHub ni una aprobación de fusión; no cubre commits posteriores |
+| T0.4 carga efectiva de instructions | **NOT RUN**: Claude y Codex no llegaron a cargar instrucciones y OpenCode no arrancó en este entorno | Bloquea la activación de gates obligatorios; no es un PASS ni una validación de aislamiento |
+
+Consecuencias del cierre:
+
+- H1 puede comenzar **solo** con trabajo documental y de diseño revisable, sin gates obligatorios y sin sustituir normas vigentes.
+- El pin de OpenSpec sigue en estado **candidato** en #1293; su adopción requiere la evidencia pendiente.
+- El puente DSH no recibe código privado ni se presenta como garantía de contexto mínimo o de restricción de herramientas.
+- Fusión, despliegue, protección de rama y cualquier gate bloqueante continúan requiriendo decisión expresa y separada del mantenedor.

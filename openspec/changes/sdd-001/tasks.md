@@ -1,12 +1,12 @@
 # Tareas SDD-001
 
-Todas pendientes; no representan ejecución real. Una PR por historia, no cerrar #1291 hasta H0–H5. IDs de requisitos del delta de development-governance.
+Tareas de la propuesta. Una PR por historia, no cerrar #1291 hasta H0–H5. IDs de requisitos del delta de development-governance. Estado al 2026-11-26: H0 cerrado con excepciones explícitas (ver `h0-evidencia.md`); el resto sigue pendiente y las casillas marcan trabajo documental, no capacidades verificadas.
 
 ## 0. Inventario y decisión
-- [ ] T0.1 Fijar baseline, inventariar capacidades/documentos y evidencias; detectar contradicciones e IDs duplicados; proponer matriz de autoridad y mapa de migración sin retirar normas vigentes. (R001,R002)
-- [ ] T0.2 Bootstrap aislado: evaluar licencia y versión candidata de OpenSpec; smoke init, validate, sync/archive y negativos; verificar tráfico/telemetría y desactivación efectiva, sin red cuando sea posible. Fijar pin solo tras las comprobaciones correspondientes; si fallan o no son verificables, escalar. La carga efectiva de harnesses queda como deuda autorizada que no impide H1, pero bloquea la activación de gates obligatorios. (R007,R008,R010)
-- [ ] T0.4 Verificar carga efectiva de instrucciones en Claude Code, Codex y OpenCode en entorno autorizado, con datos sintéticos y suscripciones; registrar versiones, resultados y limitaciones antes de activar gates obligatorios. (R008,R010)
-- [ ] T0.3 Aprobar propuesta y resolver alcance con mantenedor. (R001,R009)
+- [x] T0.1 Fijar baseline, inventariar capacidades/documentos y evidencias; detectar contradicciones e IDs duplicados; proponer matriz de autoridad y mapa de migración sin retirar normas vigentes. (R001,R002)
+- [x] T0.2 Bootstrap aislado: evaluar licencia y versión candidata de OpenSpec; smoke init, validate, sync/archive y negativos; verificar tráfico/telemetría y desactivación efectiva, sin red cuando sea posible. Fijar pin solo tras las comprobaciones correspondientes; si fallan o no son verificables, escalar. La carga efectiva de harnesses queda como deuda autorizada que no impide H1, pero bloquea la activación de gates obligatorios. (R007,R008,R010) — evaluada y escalada: el pin sigue candidato en #1293 (instalación limpia del lock, licencias y suministro pendientes).
+- [ ] T0.4 Verificar carga efectiva de instrucciones en Claude Code, Codex y OpenCode en entorno autorizado, con datos sintéticos y suscripciones; registrar versiones, resultados y limitaciones antes de activar gates obligatorios. (R008,R010) — NOT RUN; bloquea gates obligatorios.
+- [x] T0.3 Aprobar propuesta y resolver alcance con mantenedor. (R001,R009) — aprobación conversacional registrada y ligada al SHA revisado; no es revisión de GitHub ni autoriza fusión.
 
 ## 1. Infraestructura y gobierno (depende de H0)
 - [ ] T1.1 Constitución y glosario; mapa de reglas de CLAUDE.md a destino; AGENTS.md y adaptadores probados. (R001,R008)
