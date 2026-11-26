@@ -64,7 +64,7 @@ La lectura, la decisión y el reemplazo del estado deben ser **una sola sección
 
 `main` conserva su comportamiento y gana un segundo modo, sin shell y con argumentos fijos:
 
-- `--ruta RUTA --resultado hecha|fallida|incierta [--codigo CÓDIGO]`: cierra el intento como hoy (tabla `SERVICE_RESULT` de `resultado_final`), ahora escribiendo v2 con `fase="fin"`, `resultado` y `codigo`. El código es opcional y, si falta, vale `otro`: así una invocación manual no deja el cierre a medias. La unidad `ExecStopPost` mapea `SERVICE_RESULT` y pasa el código explícito (`success:exited:0`, `exit-code:exited:75` u `otro`); el cierre de la unidad y el modo manual usan el mismo contrato.
+- `--ruta RUTA --resultado hecha|fallida|incierta --intento MARCA [--codigo CÓDIGO]`: exige la marca de la invocación; si falta es argumento inválido y si la marca no es válida no escribe. Publica con el id de la marca, que se compara atómicamente con el estado vigente. El código omitido vale `otro`; `ExecStopPost` pasa el código mapeado de `SERVICE_RESULT`. El modo de fase aún no está ligado a la invocación y no debe conectarse a `update.sh` sin cerrar esa garantía.
 - `--ruta RUTA --fase preparacion|copia|git|build|migracion|arranque [--head0 SHA] [--sha-destino SHA] [--sha-actual SHA]`: publica una fase intermedia del mismo intento (estado `en_curso`), conservando `id`/`inicio_epoch` y los hashes ya fijados. Valida que cada SHA sea 40 hex.
 - Sigue devolviendo 2 ante argumentos inválidos, 0 si no hay estado válido o ya es terminal, y 1 solo si la escritura durable quedó incierta.
 - Orden de claves y códigos cerrados; nunca imprime estado, rutas ni secretos.
