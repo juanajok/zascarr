@@ -1,6 +1,6 @@
 # Especificación BL-PARSE3 — la carpeta sugiere la serie en «Por revisar» (F2)
 
-> **Estado:** **propuesta, pendiente de aprobación del PO.**
+> **Estado:** **aprobada por el PO el 2026-11-26**, con D1 fuera (el filtro «solo con sugerencia» no cambia).
 > **ID provisional:** `BL-PARSE3`, sin tarjeta todavía.
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familia F2, medida otra vez con
 > BL-PARSE2 desplegado (`eb9d8c4a`), y el experimento Fellegi-Sunter del mismo día (§6).

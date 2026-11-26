@@ -220,3 +220,76 @@ def test_ignorar_deja_el_recuento_fuera_de_la_fila_que_se_sustituye():
     assert 'hx-target="#pend-recontar" hx-swap="innerHTML"' in confirmar
     pagina = (web / "pendientes.html").read_text("utf-8")
     assert 'id="pend-recontar"' in pagina
+
+
+# ── BL-PARSE3 (F2): la carpeta sugiere la serie ──────────────────────────────────────────────
+from types import SimpleNamespace  # noqa: E402
+from unittest.mock import AsyncMock  # noqa: E402
+
+from tests.test_pendientes import FakeSession as _FakeSession  # noqa: E402
+
+_CARPETA = "/lib/Comics/Flash (1987)"
+
+
+def _en_carpeta(nombre: str, **metadata) -> File:
+    return File(id=uuid4(), file_path=f"{_CARPETA}/{nombre}", file_name=nombre, file_format=FileFormat.CBZ,
+                metadata_={"match_status": "unsorted", **metadata})
+
+
+def _hermanos(sid, n=3):
+    return [SimpleNamespace(carpeta=_CARPETA, series_id=sid, title="Flash", start_year=1987, hermanos=n)]
+
+
+def _tarjeta(f: File, hermanos: list) -> str:
+    with use_fake_session(FakeSession(exec_queue=cola_de([f], hermanos=hermanos))) as client:
+        r = client.get("/ui/pendientes")
+    assert r.status_code == 200
+    m = re.search(rf'<div class="pending-card" id="card-{f.id}">(.*?)</li>', r.text, re.S)
+    assert m
+    return m.group(1)
+
+
+def test_tarjeta_con_sugerencia_por_la_carpeta():
+    """C7: el chip dice «Por la carpeta», la línea explica el motivo y el formulario lleva esa serie."""
+    sid = uuid4()
+    t = _tarjeta(_en_carpeta("Flash 12.cbz"), _hermanos(sid))
+    assert "Por la carpeta" in t
+    assert "Otros 3 archivos de esta carpeta ya están en esta serie." in t
+    assert f'name="series_id" value="{sid}"' in t
+    assert 'value="12"' in t                                   # el número sigue saliendo del nombre
+    assert "% de coincidencia" not in t
+
+
+def test_tarjeta_sin_sugerencia_por_la_carpeta_no_cambia():
+    """C8: sin hermanos unánimes manda la sugerencia del matcher, como hoy."""
+    sid = uuid4()
+    f = _en_carpeta("Flash 12.cbz", candidates=[
+        {"series_id": str(sid), "title": "Flash", "start_year": 1987, "score": 0.87}])
+    t = _tarjeta(f, [])
+    assert "87% de coincidencia" in t
+    assert f'name="series_id" value="{sid}"' in t
+    assert "Por la carpeta" not in t and "de esta carpeta" not in t
+
+
+def test_tarjeta_repintada_conserva_la_sugerencia_por_la_carpeta(monkeypatch):
+    """C9: la tarjeta que vuelve sola tras un error de «Vincular en su sitio» también la lleva."""
+    from zascarr.web import pendientes as web_pendientes
+    sid = uuid4()
+    f = _en_carpeta("Flash 12.cbz")
+    monkeypatch.setattr(web_pendientes, "vincular_en_sitio", AsyncMock(
+        return_value=SimpleNamespace(estado="sin_numero", texto="Ese número no existe todavía.")))
+    sesion = _FakeSession(get_map={(File, f.id): f}, exec_queue=[_ResultadoHermanos(_hermanos(sid))])
+    with use_fake_session(sesion) as client:
+        r = client.post(f"/ui/pendientes/{f.id}/vincular", data={"series_id": str(sid), "issue_number": "12"},
+                        headers={"HX-Request": "true"})
+    assert r.status_code == 409
+    assert "Por la carpeta" in r.text
+    assert "Otros 3 archivos de esta carpeta ya están en esta serie." in r.text
+
+
+class _ResultadoHermanos:
+    def __init__(self, filas):
+        self._filas = filas
+
+    def all(self):
+        return list(self._filas)

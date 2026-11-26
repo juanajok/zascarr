@@ -50,18 +50,25 @@ class FakeExecResult:
     def scalar_one(self):
         return self._rows if isinstance(self._rows, int) else self._rows[0]
 
+    def all(self):
+        return list(self._rows)
 
-def cola_de(files: list) -> list:
+
+def cola_de(files: list, hermanos: list | None = None) -> list:
     """Lo que consume `GET /ui/pendientes` (cursor, U12): el total, la lista y —si hay lista— cuántos van antes del
     primero. `imported_at` ADMITE NULL en la BD real (la migración inicial no pone NOT NULL); los archivos de
     estas pruebas no lo traen y se rellena para que el cursor tenga clave. El caso NULL real tiene su prueba
-    con Postgres en `test_pendientes_navegacion_pg.py::TestImportedAtNulo`."""
+    con Postgres en `test_pendientes_navegacion_pg.py::TestImportedAtNulo`.
+
+    BL-PARSE3: con lista, la página consulta además los hermanos de carpeta (`hermanos`, vacío por
+    defecto: sin sugerencia por la carpeta, la tarjeta es la de siempre)."""
     ahora = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
     for f in files:
         f.imported_at = f.imported_at or ahora
     if not files:
         return [FakeExecResult(0), FakeExecResult([])]
-    return [FakeExecResult(len(files)), FakeExecResult(files), FakeExecResult(0)]
+    return [FakeExecResult(len(files)), FakeExecResult(files), FakeExecResult(0),
+            FakeExecResult(hermanos or [])]
 
 
 class FakeSession:
