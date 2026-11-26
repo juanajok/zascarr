@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLING = ROOT / "tooling" / "sdd"
@@ -41,6 +42,20 @@ class SddToolingTest(unittest.TestCase):
                    ".env.example", "docker-entrypoint.sh", "scripts/",
                    "scripts/comprobar_imagen_rar.py"}
         self.assertTrue({line[1:] for line in lines if line.startswith("!")} <= allowed)
+
+    def _assert_docker_context_valid(self, content: str) -> None:
+        with patch.object(Path, "read_text", return_value=content):
+            self.test_docker_allowlist_does_not_include_tooling()
+
+    def test_docker_allowlist_rejects_whitespace_and_unknown_exceptions(self) -> None:
+        # Docker recorta espacios en los patrones: una excepción con espacio
+        # inicial no debe escapar del análisis de la lista de permitidos.
+        for line in (" !tooling/**", "!tooling/**", "!unexpected"):
+            with self.subTest(line=line), self.assertRaises(AssertionError):
+                self._assert_docker_context_valid(f"**\n{line}\n")
+
+    def test_docker_allowlist_accepts_comments_blank_lines_and_crlf(self) -> None:
+        self._assert_docker_context_valid("# comentario\r\n\r\n**\r\n!Dockerfile\r\n")
 
 
 if __name__ == "__main__":
