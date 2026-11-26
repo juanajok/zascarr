@@ -31,7 +31,7 @@ Todas pendientes; no representan ejecución real. Una PR por historia, no cerrar
 - [ ] T4.3 Presupuestos, límites, sanitización, proveedores/harnesses intercambiables; pruebas de recuperación y escalado. (R008,R009)
 
 ## 5. Piloto y puesta en servicio (depende H2–H4)
-- [ ] T5.1 Seleccionar historia de riesgo medio con mantenedor; ejecutar ciclo completo con SPEC y TDD, jueces y evidencias. (R004–R007,R010)
+- [ ] T5.1 Seleccionar historia de riesgo medio con mantenedor; ejecutar ciclo completo con SPEC y TDD, jueces y evidencias. (R004,R005,R006,R007,R010)
 - [ ] T5.2 Probar PR negativas y cambio trivial; medir falsos positivos, coste, tokens, tiempo, deuda y cobertura trazada. (R003,R008,R010)
 - [ ] T5.3 Aprobación humana de política; configurar required check si disponible, documentar limitaciones y rollback. (R009,R010)
 - [ ] T5.4 Consolidar SPEC de gobierno y archivar este cambio con evidencias; revisión final y cierre de épica. (R007,R010)
