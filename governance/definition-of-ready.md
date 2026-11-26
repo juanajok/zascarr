@@ -33,3 +33,9 @@ Cumplir el DoR **no** autoaprueba nada: es condición para empezar, no permiso d
 Antes de implementar una feature P0/P1 de comportamiento nuevo —o cualquier historia que toque modelo de datos, ficheros, seguridad o el ciclo de búsqueda y descarga— hay que fijar el problema local (historia, caso real, comportamiento actual en el código vigente y resultado deseado), consultar las referencias pertinentes y registrar por idea la decisión adoptar, adaptar, mejorar, construir sobre lo propio o descartar, con versión, commit y pruebas.
 
 No se infiere soporte de una función por su interfaz ni ausencia por no encontrarla. La ficha de benchmark es insumo para la especificación, **no aprobación**: decide el PO. El esfuerzo es proporcional al riesgo; un arreglo evidente de texto o CSS no requiere investigación.
+
+### PRE-21 — Flujo de trabajo y límite de trabajo en curso
+
+Se trabaja en Scrumban mientras no haya datos suficientes: sin sprints ni compromiso de puntos. El estado se toma del campo «Estado» del tablero (no del campo «Status»), con trabajo en curso máximo de dos; en revisión, dos; en refinamiento, cuatro; y aviso a partir de cinco fusionadas pendientes de despliegue.
+
+«Lista para desarrollar» exige la preparación completa y no estar bloqueada. Al entrar en curso se rellena el inicio; al llegar a fusionado, el fin. El sprint se fija con la mediana y el p85 del tiempo de ciclo cuando haya ocho historias terminadas o llegue la fecha acordada, lo que ocurra antes.
