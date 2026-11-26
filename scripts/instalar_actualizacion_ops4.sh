@@ -12,7 +12,8 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ZASCARR_ROOT="${ZASCARR_ROOT:-$(cd "${REPO_DIR}/.." && pwd)}"
 ENV_FILE="${ENV_FILE:-${ZASCARR_ROOT}/.env}"
 DATA_DIR="${OPS4_DATA_DIR:-${ZASCARR_DATA_DIR:-/var/lib/zascarr}}"
-BACKUP_DIR="${ZASCARR_BACKUP_DIR:-/var/backups/zascarr}"
+BACKUP_DIR="${ZASCARR_BACKUP_DIR:-/var/backups/zascarr/postgres}"
+DEST_TMPFILES="/etc/tmpfiles.d"
 OPS_DIR="${DATA_DIR}/ops"
 OPS4_DIR="${DATA_DIR}/ops4"
 DEST_AUX="/usr/local/lib/zascarr/zascarr-actualizar-aux"
@@ -36,6 +37,7 @@ if [[ "${ZASCARR_PRUEBAS:-}" == "1" ]]; then
     DEST_AUX="${OPS4_DEST_AUX:-${DEST_AUX}}"
     DEST_LIB="${OPS4_DEST_LIB:-${DEST_LIB}}"
     DEST_UNITS="${OPS4_DEST_UNIDADES:-${DEST_UNITS}}"
+    DEST_TMPFILES="${OPS4_DEST_TMPFILES:-${DEST_TMPFILES}}"
 fi
 
 DRY_RUN=0; YES=0; ACTIVAR=0; SIN_SYSTEMD=0; QUITAR=0; BORRAR_CLAVE=0
@@ -99,6 +101,7 @@ crear_dirs() {
     run install -d -m 0700 "${OPS4_DIR}"
     run install -d -m 0700 "${OPS4_DIR}/consumidos"
     run install -d -m 0700 "${OPS4_DIR}/intentos"
+    run install -d -m 0700 "${OPS_DIR}/home"
     # H-5: la app (PUID:PGID, montaje ro) debe leer el estado 0640 root:<grupo>;
     # el grupo del fichero lo toma el escritor del directorio. Si no se puede
     # fijar el dueño, se aborta: un estado ilegible es "sin noticias" permanente.
@@ -165,6 +168,14 @@ for unidad in zascarr-actualizar.socket zascarr-actualizar@.service \
               zascarr-actualizar.service; do
     copiar "${REPO_DIR}/deploy/systemd/${unidad}" "${DEST_UNITS}/${unidad}" 0644
 done
+if (( ! DRY_RUN )); then
+    run install -d -m 0755 "${DEST_TMPFILES}"
+    run install -m 0644 "${REPO_DIR}/deploy/systemd/zascarr-ops.tmpfiles.conf" \
+        "${DEST_TMPFILES}/zascarr-ops.conf"
+    if (( ! SIN_SYSTEMD )); then
+        run systemd-tmpfiles --create "${DEST_TMPFILES}/zascarr-ops.conf" || true
+    fi
+fi
 
 if (( ! SIN_SYSTEMD )); then
     run systemctl daemon-reload

@@ -13,6 +13,9 @@ Environment=ZASCARR_ACTUALIZAR_UNIDAD=1
 Environment=ZASCARR_REPO=@REPO@
 Environment=ZASCARR_OPS_DIR=@ZASCARR_DATA_DIR@/ops
 Environment=ZASCARR_OPS4_DIR=@ZASCARR_DATA_DIR@/ops4
+Environment=ZASCARR_OPS_GRUPO=@GRUPO@
+Environment=HOME=@ZASCARR_DATA_DIR@/ops/home
+Environment=DOCKER_CONFIG=/run/zascarr-ops/docker
 ExecStart=/usr/local/lib/zascarr/zascarr-actualizar-entrada
 # A1: sin ExecStartPost. Un único cierre de último recurso, con `-`: un fallo
 # del finalizador no convierte en fallida una actualización correcta (T-10).
@@ -22,7 +25,7 @@ ExecStart=/usr/local/lib/zascarr/zascarr-actualizar-entrada
 # manual) es `incierta` porque no se puede distinguir pre de post-efecto (H-13).
 ExecStopPost=-/bin/sh -c 'case "$SERVICE_RESULT:$EXIT_CODE:$EXIT_STATUS" in success:exited:0) r=hecha; c=success:exited:0;; exit-code:exited:75) r=fallida; c=exit-code:exited:75;; exit-code:exited:76) r=fallida; c=otro;; *) r=incierta; c=otro;; esac; exec /usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-estado-actualizar-ops4 --ruta @ZASCARR_DATA_DIR@/ops/actualizar-status.json --resultado "$r" --codigo "$c"'
 RuntimeMaxSec=5400
-TimeoutStopSec=60
+TimeoutStopSec=120
 KillMode=control-group
 SendSIGKILL=yes
 Restart=no
@@ -40,6 +43,6 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 # El script necesita escribir el repo, datos, copias y cerrojo; no se amplía a más.
 # `-` en el cerrojo (H-7): un host sin OPS1 puede no tenerlo y el sandbox no debe
 # impedir el arranque de la unidad.
-ReadWritePaths=@REPO@ @ZASCARR_DATA_DIR@ @BACKUP_DIR@ /usr/local/lib/zascarr /etc/systemd/system /etc/tmpfiles.d -/run/zascarr-ops.lock
+ReadWritePaths=@REPO@ @ZASCARR_DATA_DIR@ @BACKUP_DIR@ /usr/local/lib/zascarr /etc/systemd/system /etc/tmpfiles.d -/run/zascarr-ops.lock /run/zascarr-ops/docker @ZASCARR_DATA_DIR@/ops/home
 CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID CAP_NET_BIND_SERVICE
 # Sin [Install]: no arranca al boot ni se activa solo.

@@ -27,6 +27,7 @@ def test_unidad_de_actualizacion_tiene_accion_fija_y_limites() -> None:
     assert "ZASCARR_ACTUALIZAR_UNIDAD=1" in texto
     assert "ZASCARR_REPO=@REPO@" in texto
     assert servicio["RuntimeMaxSec"] == "5400"
+    assert servicio["TimeoutStopSec"] == "120"
     assert servicio["KillMode"] == "control-group"
     assert servicio["SendSIGKILL"] == "yes"
     assert servicio["Restart"] == "no"
@@ -84,6 +85,7 @@ def test_unidad_auxiliar_no_tiene_red_ni_capacidades() -> None:
     assert servicio["RestrictAddressFamilies"] == "AF_UNIX"
     assert servicio["CapabilityBoundingSet"] == ""
     assert servicio["RuntimeMaxSec"] == "45s"
+    assert "EnvironmentFile" not in servicio
     assert "ReadWritePaths" in servicio
 
 
