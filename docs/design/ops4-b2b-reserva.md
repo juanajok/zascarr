@@ -32,6 +32,10 @@ contrato de referencia es §B2 de
   configurado; antes estaba fijado a `/var/lib/zascarr`).
 - **Instalador**: copia la entrada y crea `ops4/intentos` (B2a); no activa
   nada.
+- **Reconciliación**: una reserva `aceptada` con más de 300 s sin avanzar (o un
+  `en_curso` con más de 7200 s) se marca `incierta` antes de admitir otra
+  petición; deja de bloquear para siempre. La salida 2 de la entrada (reserva
+  no vigente) la cierra el `ExecStopPost` como `fallida`, no como `incierta`.
 
 ## Evidencia VM (2026-11-26)
 
@@ -48,6 +52,7 @@ línea y duerme 3 s. `git` es un fixture que devuelve un SHA fijo para
 | Petición distinta durante la operación | `operacion_en_curso`; sin segunda ejecución |
 | Terminal del `ExecStopPost` | `hecha`, `resultado=hecha`, `codigo=success:exited:0` |
 | Cerrojo heredado | la entrada lo toma en fd 9 y `_cerrojo.sh` lo reconoce |
+| Reserva huérfana | se reconcilia a `incierta` a los 300 s (prueba unitaria); no se probó en VM |
 | Directorio de datos configurado | `ReadWritePaths=@ZASCARR_DATA_DIR@` permite la publicación |
 
 ## Límites (NOT RUN)

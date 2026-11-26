@@ -211,11 +211,25 @@ def _procesar_b2(
     escribir, transicionar, admitir, liberar, leer_estado, crear_intento,
     borrar_intento, reclamar_consumo, esperar,
 ) -> Respuesta:
-    """Flujo P3–P12 de B2: admisión, reserva, arranque y consumo confirmado."""
+    """Flujo P2–P12 de B2: validar, admitir, reservar, arrancar y consumir.
+
+    P2 (esquema, firma y frescura) ocurre **antes** de tomar la admisión; un
+    testigo inválido no ocupa el cerrojo. La confirmación solo es válida si el
+    estado del mismo `id` está `en_curso` o ya terminó `hecha`; un terminal
+    `fallida`/`incierta` no se presenta como aceptado.
+    """
     if type(clave) is not bytes or len(clave) != 32:
         return rechazo("no_disponible")
     if type(ahora) is not int or not 0 <= ahora < 2**63:
         return rechazo("no_disponible")
+    objeto = parsear(linea)
+    if objeto is None:
+        return rechazo("esquema_invalido")
+    id_ = objeto["id"]
+    if not verificar_firma(clave, objeto):
+        return rechazo("firma_invalida", id_)
+    if abs(objeto["creada"] - ahora) > TOLERANCIA_S:
+        return rechazo("caducada", id_)
     try:
         admision = admitir()
     except Exception:  # noqa: BLE001
@@ -223,14 +237,6 @@ def _procesar_b2(
     if admision is None:
         return rechazo("operacion_en_curso")
     try:
-        objeto = parsear(linea)
-        if objeto is None:
-            return rechazo("esquema_invalido")
-        id_ = objeto["id"]
-        if not verificar_firma(clave, objeto):
-            return rechazo("firma_invalida", id_)
-        if abs(objeto["creada"] - ahora) > TOLERANCIA_S:
-            return rechazo("caducada", id_)
         try:
             if cerrojo_ocupado():
                 return rechazo("operacion_en_curso", id_)
@@ -248,7 +254,24 @@ def _procesar_b2(
             if datos.get("id") == id_:
                 return rechazo("repetida", id_)
             if datos.get("estado") not in ESTADOS_TERMINALES:
-                return rechazo("operacion_en_curso", id_)
+                actualizado = datos.get("actualizado_epoch")
+                inicio = datos.get("inicio_epoch")
+                edad = (
+                    ahora - actualizado
+                    if type(actualizado) is int and actualizado <= ahora else None
+                )
+                limite = 300 if datos.get("estado") == "aceptada" else 7200
+                if (
+                    edad is None or edad <= limite
+                    or type(inicio) is not int
+                    or transicionar is None
+                ):
+                    return rechazo("operacion_en_curso", id_)
+                with contextlib.suppress(Exception):
+                    transicionar(
+                        "incierta", ahora=ahora, id_=datos["id"],
+                        inicio_epoch=inicio, fase=FASES[-1], codigo=CODIGO_OTRO,
+                    )
         testigo = decodificar_autorizacion(objeto["autorizacion"])
         if testigo is None:
             return rechazo("autorizacion_invalida", id_)
@@ -290,10 +313,10 @@ def _procesar_b2(
                     )
             return rechazo("no_disponible", id_)
         try:
-            confirmada = esperar(id_) is True
+            confirmacion = esperar(id_)
         except Exception:  # noqa: BLE001
-            confirmada = False
-        if confirmada:
+            confirmacion = "sin"
+        if confirmacion in ("confirmada", "hecha"):
             try:
                 consumida = (
                     reclamar_consumo(id_) if reclamar_consumo is not None else False
@@ -303,6 +326,11 @@ def _procesar_b2(
             if consumida is True:
                 return Respuesta("aceptada", "aceptada", id_)
             _marcar_incierta(transicionar, id_, inicial["inicio_epoch"], ahora)
+            return Respuesta("incierta", "incierta", id_)
+        if confirmacion in ("fallida", "incierta"):
+            if reclamar_consumo is not None:
+                with contextlib.suppress(Exception):
+                    reclamar_consumo(id_)
             return Respuesta("incierta", "incierta", id_)
         _marcar_incierta(transicionar, id_, inicial["inicio_epoch"], ahora)
         if reclamar_consumo is not None:
@@ -346,13 +374,18 @@ def _leer_clave(ruta: str) -> bytes | None:
 
 
 def _cerrojo_ocupado() -> bool:
+    ruta = RUTA_CERROJO
+    if os.environ.get("ZASCARR_PRUEBAS") == "1" and os.environ.get("OPS_LOCK_FILE"):
+        ruta = os.environ["OPS_LOCK_FILE"]
     try:
-        fd = os.open(RUTA_CERROJO, os.O_RDONLY)
+        fd = os.open(ruta, os.O_RDONLY | os.O_NOFOLLOW)
     except FileNotFoundError:
         return False
     except OSError:
         return True
     try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return True
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
@@ -447,25 +480,25 @@ def main() -> int:
                 raise ValueError("Estado no legible")
             return datos
 
-        def esperar(id_: str) -> bool:
-            limite = time.monotonic() + 5
+        def esperar(id_: str) -> str:
+            limite = time.monotonic() + 15
             while time.monotonic() < limite:
                 try:
                     lectura, datos = leer_estado_estricto(ruta_estado)
                 except Exception:  # noqa: BLE001
-                    return False
+                    return "sin"
                 if (
                     lectura is ResultadoLectura.OK
                     and isinstance(datos, dict)
                     and datos.get("id") == id_
-                    and (
-                        datos.get("estado") in ESTADOS_TERMINALES
-                        or datos.get("estado") == "en_curso"
-                    )
                 ):
-                    return True
+                    estado = datos.get("estado")
+                    if estado == "en_curso":
+                        return "confirmada"
+                    if estado in ESTADOS_TERMINALES:
+                        return estado
                 time.sleep(0.1)
-            return False
+            return "sin"
 
         def crear_intento(id_: str) -> bool:
             return reclamar_intento(id_, directorio_fd=fd_intentos)

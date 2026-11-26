@@ -24,7 +24,7 @@ def peticion(id_: str = ID) -> bytes:
 class Dobles:
     def __init__(self, *, admision=True, cerrojo=False, intento=True,
                  escribir=ResultadoEscritura.OK, inicio=True,
-                 confirmada=True, consumo=True, estado=None) -> None:
+                 confirmada="confirmada", consumo=True, estado=None) -> None:
         self.admision = admision
         self.cerrojo = cerrojo
         self.intento = intento
@@ -61,7 +61,7 @@ class Dobles:
         self.llamadas.append(("iniciar", unidad))
         return self.inicio
 
-    def esperar(self, id_: str) -> bool:
+    def esperar(self, id_: str) -> str:
         self.llamadas.append(("esperar", id_))
         return self.confirmada
 
@@ -137,6 +137,26 @@ def test_estado_activo_ajeno_es_ocupado() -> None:
     assert ("iniciar", UNIDAD) not in dobles.llamadas
 
 
+def test_reserva_huerfana_caducada_se_reconcilia() -> None:
+    dobles = Dobles(estado={
+        "id": "b" * 32, "estado": "aceptada",
+        "actualizado_epoch": AHORA - 301, "inicio_epoch": AHORA - 301,
+    })
+    respuesta = ejecutar(dobles)
+    assert respuesta.codigo == "aceptada"
+    assert ("transicionar", "incierta") in dobles.llamadas
+
+
+def test_reserva_aceptada_reciente_sigue_ocupada() -> None:
+    dobles = Dobles(estado={
+        "id": "b" * 32, "estado": "aceptada",
+        "actualizado_epoch": AHORA - 1, "inicio_epoch": AHORA - 1,
+    })
+    respuesta = ejecutar(dobles)
+    assert respuesta.codigo == "operacion_en_curso"
+    assert ("iniciar", UNIDAD) not in dobles.llamadas
+
+
 def test_intento_existente_no_arranca_ni_consume() -> None:
     dobles = Dobles(intento=False)
     respuesta = ejecutar(dobles)
@@ -163,10 +183,17 @@ def test_inicio_fallido_no_consume_y_marca_fallida() -> None:
 
 
 def test_sin_confirmacion_responde_incierta_y_consume() -> None:
-    dobles = Dobles(confirmada=False)
+    dobles = Dobles(confirmada="sin")
     respuesta = ejecutar(dobles)
     assert respuesta.codigo == "incierta"
     assert ("transicionar", "incierta") in dobles.llamadas
+    assert ("consumo", ID) in dobles.llamadas
+
+
+def test_terminal_fallida_no_se_presenta_como_aceptada() -> None:
+    dobles = Dobles(confirmada="fallida")
+    respuesta = ejecutar(dobles)
+    assert respuesta.codigo == "incierta"
     assert ("consumo", ID) in dobles.llamadas
 
 

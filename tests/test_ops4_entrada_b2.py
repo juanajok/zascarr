@@ -124,6 +124,43 @@ def test_reserva_caducada_sale_2_sin_efectos(tmp_path) -> None:
     assert not (tmp_path / "marca").exists()
 
 
+def test_segundo_update_sh_sale_75(tmp_path) -> None:
+    repo = _repo(tmp_path)
+    lento = repo / "scripts" / "lento.sh"
+    lento.write_text(
+        "#!/bin/bash\n"
+        "set -eu\n"
+        "source \"$(dirname \"$0\")/_cerrojo.sh\"\n"
+        "tomar_cerrojo_operaciones || exit $?\n"
+        "echo ok > \"$MARCA\"\n"
+        "sleep 2\n",
+        encoding="utf-8",
+    )
+    lento.chmod(0o755)
+    entorno = os.environ.copy()
+    entorno.update({
+        "ZASCARR_PRUEBAS": "1",
+        "OPS_LOCK_FILE": str(tmp_path / "ops.lock"),
+        "MARCA": str(tmp_path / "marca"),
+    })
+    primero = subprocess.Popen(
+        ["bash", str(lento)], env=entorno,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        for _ in range(50):
+            if (tmp_path / "marca").exists():
+                break
+            time.sleep(0.05)
+        segundo = subprocess.run(
+            ["bash", str(lento)], env=entorno,
+            capture_output=True, text=True, timeout=10,
+        )
+        assert segundo.returncode == 75, segundo.stderr
+    finally:
+        primero.wait(timeout=10)
+
+
 def test_sin_estado_sale_2(tmp_path) -> None:
     repo = _repo(tmp_path)
     ops = tmp_path / "ops"

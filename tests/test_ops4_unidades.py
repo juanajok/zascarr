@@ -58,6 +58,7 @@ def test_unico_execstoppost_con_prefijo_y_mapeo_de_systemd() -> None:
     # es pre-efecto por contrato; todo lo demás es incierta (H-13).
     assert 'success:exited:0) r=hecha' in valor
     assert 'exit-code:exited:75) r=fallida' in valor
+    assert 'exit-code:exited:2) r=fallida' in valor
     assert '*) r=incierta' in valor
     assert '--resultado "$r"' in valor
 
