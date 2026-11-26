@@ -153,3 +153,18 @@ Antes de marcar «migrada» una de estas filas hay que desglosarla en sub-reglas
 4. Solo entonces retirar la copia anterior y marcar aquí «migrada» con su SHA.
 
 Este documento no acredita ejecución: las filas describen intención de traslado, no capacidades verificadas.
+
+## Destinos que faltan antes de seguir migrando
+
+De las 43 reglas solo pueden trasladarse hoy las que tienen destino en `constitution.md`, `product-vision.md`, `glossary.md` o este mapa. El resto depende de documentos que **no existen todavía** y que no voy a inventar sin aprobación:
+
+| Documento de destino | Reglas afectadas | Por qué no se crea aún |
+|---|---|---|
+| Guía técnica de pruebas | PRE-16, PRE-17, PRE-18, PRE-19 | Debe fijar entornos y umbrales reales, no copiar el texto de la guía con otro formato |
+| Definición de hecho (DoD) | PRE-18, PRE-36-6, PRE-09 | Es T1.2/T1.3 y debe decidir el mantenedor qué es verificable |
+| Definición de preparación (DoR) | PRE-21, PRE-26 | Requiere acordar criterios de entrada por riesgo |
+| Clasificación de riesgo | PRE-03, PRE-15, PRE-27 | Debe decidir el mantenedor la proporcionalidad y quién revisa |
+| Contratos de dominio | PRE-01, PRE-02, PRE-06, PRE-11, PRE-12, PRE-14, PRE-30, PRE-31, PRE-32, PRE-38 | Cada uno exige leer el código vigente y confirmar comportamiento, no solo el texto de la guía |
+| Piloto `.agentic` | PRE-22 | Su autoridad ya vive en ADR 0027 y en su manual; duplicarla aquí crearía tercera fuente |
+
+Consecuencia: 4 reglas migradas (PRE-05, PRE-10, PRE-40, PRE-41) y 39 pendientes de destino. Seguir sin esos documentos produciría duplicación con apariencia de progreso.
