@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import stat
 import sys
 import time
 
@@ -102,10 +103,20 @@ def resultado_final(
 def _leer_intento(ruta: object) -> str | None:
     """Lee el id de la reserva ligado a esta invocación; `None` si no es válido."""
     try:
-        fd = os.open(os.fspath(ruta), os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        fd = os.open(
+            os.fspath(ruta),
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
+        )
     except (OSError, TypeError):
         return None
     try:
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or info.st_size > 33
+        ):
+            return None
         datos = os.read(fd, 33)
     except OSError:
         return None
@@ -157,6 +168,8 @@ def main(argv: list[str] | None = None) -> int:
             return _aviso("--codigo debe ser success:exited:0, exit-code:exited:75 u otro")
         if args.head0 is not None or args.sha_destino is not None or args.sha_actual is not None:
             return _aviso("el cierre terminal no acepta --head0, --sha-destino ni --sha-actual")
+        if args.intento is None:
+            return _aviso("el cierre terminal exige --intento")
     else:
         if args.fase not in _FASES_INTERMEDIAS:
             return _aviso(
@@ -168,11 +181,9 @@ def main(argv: list[str] | None = None) -> int:
         for sha in (args.head0, args.sha_destino, args.sha_actual):
             if not _sha_valido(sha):
                 return _aviso("cada SHA debe ser 40 hexadecimales minúsculas")
-    id_intento = None
-    if args.intento is not None:
-        id_intento = _leer_intento(args.intento)
-        if id_intento is None:
-            return 0
+    id_intento = _leer_intento(args.intento) if args.intento is not None else None
+    if args.fase is None and id_intento is None:
+        return 0
     lectura, datos = leer_estado_estricto(args.ruta)
     if lectura is not ResultadoLectura.OK or datos is None:
         return 0
@@ -213,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
             args.ruta,
             args.resultado,
             ahora=ahora,
-            id_=id_intento or datos["id"],
+            id_=id_intento,
             inicio_epoch=datos["inicio_epoch"],
             fase=_FASE_FINAL,
             codigo=args.codigo,

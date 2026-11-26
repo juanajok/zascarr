@@ -52,7 +52,8 @@ def _entorno(tmp_path: Path, repo: Path, *, inicio: int | None = None):
     ops = tmp_path / "ops"
     ops.mkdir()
     ops4 = tmp_path / "ops4"
-    (ops4 / "intentos").mkdir(parents=True)
+    (ops4 / "intentos").mkdir(parents=True, mode=0o700)
+    (ops4 / "intentos").chmod(0o700)
     estado = ops / "actualizar-status.json"
     assert escribir_estado(
         estado, estado_inicial(ID, int(time.time()) if inicio is None else inicio),

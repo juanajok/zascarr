@@ -212,6 +212,12 @@ def test_cadena_real_json_ajeno_no_se_toca(tmp_path) -> None:
 # ── CLI y fallos de escritura ───────────────────────────────────────────────
 
 
+def _intento(tmp_path: Path, id_: str = ID) -> list[str]:
+    ruta = tmp_path / "intento"
+    ruta.write_text(id_ + "\n", encoding="utf-8")
+    return ["--intento", str(ruta)]
+
+
 @pytest.mark.parametrize("resultado", ["", "ok", "en_curso", "hecha\n"])
 def test_resultado_cerrado(tmp_path, resultado) -> None:
     ruta = _estado(tmp_path)
@@ -221,6 +227,7 @@ def test_resultado_cerrado(tmp_path, resultado) -> None:
 def test_sin_estado_no_inventa_ni_falla(tmp_path) -> None:
     assert estado.main([
         "--ruta", str(tmp_path / "no-existe.json"), "--resultado", "hecha",
+        *_intento(tmp_path),
     ]) == 0
 
 
@@ -229,7 +236,9 @@ def test_fallo_durable_devuelve_1_pero_la_unidad_lo_ignora(tmp_path, monkeypatch
     monkeypatch.setattr(
         estado, "publicar_transicion", lambda *a, **k: ResultadoEscritura.INCIERTO,
     )
-    assert estado.main(["--ruta", str(ruta), "--resultado", "hecha"]) == 1
+    assert estado.main([
+        "--ruta", str(ruta), "--resultado", "hecha", *_intento(tmp_path),
+    ]) == 1
     assert _leer(ruta)["estado"] == "en_curso"
     # El prefijo - de la unidad ya está cubierto por _comando_stoppost (T-10).
 
@@ -238,7 +247,9 @@ def test_fichero_de_estado_no_sigue_enlaces(tmp_path) -> None:
     real = _estado(tmp_path)
     enlace = tmp_path / "ops" / "enlace.json"
     enlace.symlink_to(real)
-    assert estado.main(["--ruta", str(enlace), "--resultado", "hecha"]) == 0
+    assert estado.main([
+        "--ruta", str(enlace), "--resultado", "hecha", *_intento(tmp_path),
+    ]) == 0
     assert _leer(real)["estado"] == "en_curso"
 
 
@@ -260,6 +271,15 @@ def test_cadena_real_escribe_codigo_cerrado(tmp_path, service_result, exit_code,
 
 def test_modo_terminal_sin_codigo_usa_otro(tmp_path) -> None:
     ruta = _estado(tmp_path)
-    assert estado.main(["--ruta", str(ruta), "--resultado", "hecha"]) == 0
+    assert estado.main([
+        "--ruta", str(ruta), "--resultado", "hecha", *_intento(tmp_path),
+    ]) == 0
     datos = _leer(ruta)
     assert (datos["estado"], datos["resultado"], datos["codigo"]) == ("hecha", "hecha", "otro")
+
+
+def test_modo_terminal_sin_intento_se_rechaza(tmp_path) -> None:
+    ruta = _estado(tmp_path)
+    antes = _leer(ruta)
+    assert estado.main(["--ruta", str(ruta), "--resultado", "hecha"]) == 2
+    assert _leer(ruta) == antes

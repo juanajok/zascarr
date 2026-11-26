@@ -18,6 +18,7 @@ from __future__ import annotations
 import fcntl
 import os
 import re
+import stat
 import subprocess
 import sys
 import time
@@ -86,15 +87,37 @@ def _marcar_intento(id_: str) -> None:
     if not _INVOCACION.fullmatch(invocacion):
         raise ValueError("invocación no válida")
     ops4 = os.environ.get("ZASCARR_OPS4_DIR", "/var/lib/zascarr/ops4")
-    ruta = os.path.join(ops4, "intentos", invocacion)
-    fd = os.open(
-        ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600,
+    dir_intentos = os.path.join(ops4, "intentos")
+    fd_dir = os.open(
+        dir_intentos,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
     )
     try:
-        os.write(fd, (id_ + "\n").encode("ascii"))
-        os.fsync(fd)
+        info = os.fstat(fd_dir)
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or stat.S_IMODE(info.st_mode) != 0o700
+        ):
+            raise ValueError("directorio de intentos no seguro")
+        fd = os.open(
+            invocacion,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+            0o600, dir_fd=fd_dir,
+        )
+        try:
+            pendiente = (id_ + "\n").encode("ascii")
+            while pendiente:
+                escrito = os.write(fd, pendiente)
+                if escrito <= 0:
+                    raise OSError("escritura incompleta")
+                pendiente = pendiente[escrito:]
+            os.fsync(fd)
+            os.fsync(fd_dir)
+        finally:
+            os.close(fd)
     finally:
-        os.close(fd)
+        os.close(fd_dir)
 
 
 def _head0(repo: str) -> str | None:
