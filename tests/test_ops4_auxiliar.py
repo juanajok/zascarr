@@ -167,7 +167,7 @@ def test_id_de_testigo_ajeno_no_consume() -> None:
 def test_fallo_de_inicio_no_se_presenta_como_exito() -> None:
     dobles = Dobles(inicio=False)
     respuesta = ejecutar(peticion(), dobles)
-    assert respuesta.codigo == "no_disponible"
+    assert respuesta.codigo == "incierta"
     assert [x for x in dobles.llamadas if x[0] == "iniciar"] == [("iniciar", UNIDAD)]
 
 
@@ -238,12 +238,12 @@ def test_fchown_eperm_rechaza_sin_iniciar_unidad(tmp_path, monkeypatch) -> None:
     assert not list(tmp_path.glob(".estado.json.tmp-*"))
 
 
-def test_inicio_fallido_deja_estado_fallida() -> None:
+def test_inicio_no_confirmado_conserva_reserva() -> None:
     dobles = Dobles(inicio=False)
     respuesta = ejecutar(peticion(), dobles)
-    assert respuesta.codigo == "no_disponible"
-    assert [e["estado"] for e in dobles.estados] == ["aceptada", "fallida"]
-    assert ("transicionar", "fallida") in dobles.llamadas
+    assert respuesta.codigo == "incierta"
+    assert [e["estado"] for e in dobles.estados] == ["aceptada"]
+    assert not any(llamada[0] == "transicionar" for llamada in dobles.llamadas)
 
 
 def _ruta_estado(tmp_path):
@@ -308,5 +308,5 @@ def test_terminal_escrito_por_el_finalizador_no_se_pisa_si_falla_el_start(tmp_pa
         iniciar=iniciar, cerrojo_ocupado=lambda: False,
         escribir=escribir, transicionar=transicionar,
     )
-    assert respuesta.codigo == "no_disponible"
+    assert respuesta.codigo == "incierta"
     assert json.loads(ruta.read_text(encoding="utf-8"))["estado"] == "hecha"

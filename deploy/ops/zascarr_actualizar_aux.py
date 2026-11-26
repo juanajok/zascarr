@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Auxiliar privilegiado y separado de la actualización OPS4; no instalado.
+"""Auxiliar privilegiado y separado de la actualización OPS4.
 
 Socket-activado por `zascarr-actualizar.socket`, lee una línea v4, verifica
 firma, frescura, testigo y consumo durable, comprueba el cerrojo y ordena
 iniciar la unidad fija `zascarr-actualizar.service`. No recibe rama, rutas ni
-shell; no registra el testigo ni la contraseña. No se instala ni se habilita en
-producción desde este cambio.
+shell; no registra el testigo ni la contraseña. El instalador lo copia sin
+activarlo por defecto.
 
 La instantánea del intento es la v2 del contrato B1 (`estado_inicial`), se
 publica con `escribir_estado` bajo el cerrojo del directorio y, si esa
-escritura no confirma, no se inicia la unidad. Tras el start no se escribe
-`en_curso`: el finalizador cierra el intento, y un fallo del start se marca con
-`publicar_transicion` (fase `fin`, código cerrado), que no pisa un terminal.
+escritura no confirma, no se inicia la unidad. Un fallo o timeout del start no
+prueba que el trabajo no se haya encolado: se conserva la reserva y se responde
+incierta. Los estados activos no se reemplazan por antigüedad; pueden requerir
+recuperación manual segura aún pendiente de diseñar.
 """
 from __future__ import annotations
 
@@ -27,9 +28,7 @@ import time
 try:  # importado como paquete (pruebas): una sola identidad de módulo
     from .admision_ops4 import liberar_admision, tomar_admision  # noqa: E402
     from .escritor_estado_actualizar_ops4 import (  # noqa: E402
-        CODIGO_OTRO,
         ESTADOS_TERMINALES,
-        FASES,
         UNIDAD,
         ResultadoEscritura,
         ResultadoLectura,
@@ -59,9 +58,7 @@ except ImportError:  # instalado como script suelto en /usr/local/lib/zascarr
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     from admision_ops4 import liberar_admision, tomar_admision  # noqa: E402
     from escritor_estado_actualizar_ops4 import (  # noqa: E402
-        CODIGO_OTRO,
         ESTADOS_TERMINALES,
-        FASES,
         UNIDAD,
         ResultadoEscritura,
         ResultadoLectura,
@@ -123,9 +120,9 @@ def procesar(
 
     El flujo B2 (P3–P12) toma el cerrojo de admisión, comprueba el de
     operaciones, lee el estado, verifica el testigo **sin consumir**, crea la
-    marca de intento, escribe la reserva, arranca, espera la confirmación del
-    trabajador y solo entonces consume. El flujo legado se conserva para las
-    pruebas y llamadores antiguos; el auxiliar usa siempre B2.
+    marca de intento, escribe la reserva, arranca y espera la confirmación del
+    trabajador. Ante incertidumbre intenta consumir de forma conservadora. El
+    flujo legado se conserva para pruebas; el auxiliar usa siempre B2.
     """
     if admitir is not None:
         return _procesar_b2(
@@ -176,35 +173,13 @@ def procesar(
     try:
         iniciada = iniciar(UNIDAD)
     except Exception:  # noqa: BLE001
-        return rechazo("no_disponible", id_)
+        iniciada = False
     if iniciada is not True:
-        if transicionar is not None:
-            marca = transicionar(
-                "fallida",
-                ahora=ahora,
-                id_=id_,
-                inicio_epoch=inicial["inicio_epoch"],
-                fase=FASES[-1],
-                codigo=CODIGO_OTRO,
-            )
-            if marca is ResultadoEscritura.INCIERTO:
-                # La publicación durable no se pudo confirmar: no se anuncia
-                # aceptación ni se deja un estado parcial.
-                return rechazo("no_disponible", id_)
-        return rechazo("no_disponible", id_)
+        # El testigo ya se consumió, pero el arranque puede haber llegado al host.
+        return Respuesta("incierta", "incierta", id_)
     # T-17: no se escribe `en_curso` después del start. El finalizador cierra;
     # una instantánea posterior podría pisar un terminal si la unidad acaba antes.
     return Respuesta("aceptada", "aceptada", id_)
-
-
-def _marcar_incierta(transicionar, id_: str, inicio: int, ahora: int) -> None:
-    if transicionar is None:
-        return
-    with contextlib.suppress(Exception):
-        transicionar(
-            "incierta", ahora=ahora, id_=id_, inicio_epoch=inicio,
-            fase=FASES[-1], codigo=CODIGO_OTRO,
-        )
 
 
 def _procesar_b2(
@@ -255,24 +230,8 @@ def _procesar_b2(
             if datos.get("id") == id_:
                 return rechazo("repetida", id_)
             if datos.get("estado") not in ESTADOS_TERMINALES:
-                actualizado = datos.get("actualizado_epoch")
-                inicio = datos.get("inicio_epoch")
-                edad = (
-                    ahora - actualizado
-                    if type(actualizado) is int and actualizado <= ahora else None
-                )
-                limite = 300 if datos.get("estado") == "aceptada" else 7200
-                if (
-                    edad is None or edad <= limite
-                    or type(inicio) is not int
-                    or transicionar is None
-                ):
-                    return rechazo("operacion_en_curso", id_)
-                with contextlib.suppress(Exception):
-                    transicionar(
-                        "incierta", ahora=ahora, id_=datos["id"],
-                        inicio_epoch=inicio, fase=FASES[-1], codigo=CODIGO_OTRO,
-                    )
+                # La antigüedad no demuestra que el trabajador haya terminado.
+                return rechazo("operacion_en_curso", id_)
         if existe_intento is not None:
             try:
                 if existe_intento(id_):
@@ -311,14 +270,11 @@ def _procesar_b2(
         except Exception:  # noqa: BLE001
             iniciada = False
         if iniciada is not True:
-            if transicionar is not None:
+            # Un error de transporte no prueba que systemd no recibiera el start.
+            if reclamar_consumo is not None:
                 with contextlib.suppress(Exception):
-                    transicionar(
-                        "fallida", ahora=ahora, id_=id_,
-                        inicio_epoch=inicial["inicio_epoch"],
-                        fase=FASES[-1], codigo=CODIGO_OTRO,
-                    )
-            return rechazo("no_disponible", id_)
+                    reclamar_consumo(id_)
+            return Respuesta("incierta", "incierta", id_)
         try:
             confirmacion = esperar(id_)
         except Exception:  # noqa: BLE001
@@ -332,14 +288,12 @@ def _procesar_b2(
                 consumida = False
             if consumida is True:
                 return Respuesta("aceptada", "aceptada", id_)
-            _marcar_incierta(transicionar, id_, inicial["inicio_epoch"], ahora)
             return Respuesta("incierta", "incierta", id_)
         if confirmacion in ("fallida", "incierta"):
             if reclamar_consumo is not None:
                 with contextlib.suppress(Exception):
                     reclamar_consumo(id_)
             return Respuesta("incierta", "incierta", id_)
-        _marcar_incierta(transicionar, id_, inicial["inicio_epoch"], ahora)
         if reclamar_consumo is not None:
             with contextlib.suppress(Exception):
                 reclamar_consumo(id_)

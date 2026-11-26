@@ -149,14 +149,15 @@ def test_estado_activo_ajeno_es_ocupado() -> None:
     assert ("iniciar", UNIDAD) not in dobles.llamadas
 
 
-def test_reserva_huerfana_caducada_se_reconcilia() -> None:
+@pytest.mark.parametrize("estado", ["aceptada", "en_curso"])
+def test_estado_activo_antiguo_no_se_sustituye(estado) -> None:
     dobles = Dobles(estado={
-        "id": "b" * 32, "estado": "aceptada",
-        "actualizado_epoch": AHORA - 301, "inicio_epoch": AHORA - 301,
+        "id": "b" * 32, "estado": estado,
+        "actualizado_epoch": AHORA - 10000, "inicio_epoch": AHORA - 10000,
     })
     respuesta = ejecutar(dobles)
-    assert respuesta.codigo == "aceptada"
-    assert ("transicionar", "incierta") in dobles.llamadas
+    assert respuesta.codigo == "operacion_en_curso"
+    assert not any(n in {"transicionar", "escribir", "iniciar"} for n, _ in dobles.llamadas)
 
 
 def test_reserva_aceptada_reciente_sigue_ocupada() -> None:
@@ -213,20 +214,32 @@ def test_escritura_incierta_conserva_marca_real_y_bloquea_reintento(tmp_path) ->
         os.close(fd)
 
 
-def test_inicio_fallido_no_consume_y_marca_fallida() -> None:
+@pytest.mark.parametrize("resultado", [False, RuntimeError(), TimeoutError()])
+def test_inicio_no_confirmado_conserva_reserva_y_consume(resultado) -> None:
     dobles = Dobles(inicio=False)
-    respuesta = ejecutar(dobles)
-    assert respuesta.codigo == "no_disponible"
-    assert ("transicionar", "fallida") in dobles.llamadas
-    assert not any(n == "consumo" for n, _ in dobles.llamadas)
-
-
-def test_sin_confirmacion_responde_incierta_y_consume() -> None:
-    dobles = Dobles(confirmada="sin")
+    if isinstance(resultado, Exception):
+        def iniciar(_unidad):
+            raise resultado
+        dobles.iniciar = iniciar
     respuesta = ejecutar(dobles)
     assert respuesta.codigo == "incierta"
-    assert ("transicionar", "incierta") in dobles.llamadas
     assert ("consumo", ID) in dobles.llamadas
+    assert ("borrar_intento", ID) not in dobles.llamadas
+    assert not any(n == "transicionar" for n, _ in dobles.llamadas)
+
+
+@pytest.mark.parametrize("espera", ["sin", RuntimeError(), TimeoutError()])
+def test_sin_confirmacion_responde_incierta_y_consume(espera) -> None:
+    dobles = Dobles(confirmada="sin")
+    if isinstance(espera, Exception):
+        def esperar(_id):
+            raise espera
+        dobles.esperar = esperar
+    respuesta = ejecutar(dobles)
+    assert respuesta.codigo == "incierta"
+    assert not any(n == "transicionar" for n, _ in dobles.llamadas)
+    assert ("consumo", ID) in dobles.llamadas
+    assert ("borrar_intento", ID) not in dobles.llamadas
 
 
 def test_terminal_fallida_no_se_presenta_como_aceptada() -> None:
@@ -240,7 +253,7 @@ def test_consumo_fallido_tras_confirmar_responde_incierta() -> None:
     dobles = Dobles(consumo=False)
     respuesta = ejecutar(dobles)
     assert respuesta.codigo == "incierta"
-    assert ("transicionar", "incierta") in dobles.llamadas
+    assert not any(n == "transicionar" for n, _ in dobles.llamadas)
 
 
 def test_caducada_no_reserva_ni_consume() -> None:
