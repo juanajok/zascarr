@@ -1,0 +1,8 @@
+{
+  "request": "En este fixture sintético de una sola etiqueta, cambia Biblioteca por Tu tebeoteca. No hay interfaz ejecutable: la etiqueta de texto es todo el producto evaluado. No impongas requisitos fuera de ese único comportamiento.",
+  "risk": ["ui"],
+  "editable": ["label.txt"],
+  "context": ["label.txt"],
+  "checks": [{"id": "label", "kind": "equals", "path": "label.txt", "text": "Tu tebeoteca\n"}],
+  "red": "label"
+}
