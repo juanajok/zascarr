@@ -51,7 +51,7 @@ def read(path: Path) -> str:
 
 
 def markdown_files() -> list[Path]:
-    paths = [AGENTS, *(GOVERNANCE / name for name in REQUIRED)]
+    paths = [AGENTS, SPEC, EVIDENCIA, *(GOVERNANCE / name for name in REQUIRED)]
     return [path for path in paths if path.is_file()]
 
 
