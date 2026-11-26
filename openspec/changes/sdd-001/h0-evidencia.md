@@ -36,7 +36,7 @@ La reinstalación desde el lock local con `npm ci --offline --ignore-scripts --n
 
 ## Autoverificación del propio cambio
 
-La propuesta R004 exige ID estable y evidencia para cada escenario nuevo o modificado, pero los escenarios de este mismo delta todavía no tienen ID explícito y su manifiesto de trazabilidad solo declara comprobaciones planificadas. Registrar la deuda y definir un esquema de identificación y evidencia antes de exigir ese gate; la validación estructural de OpenSpec no la detecta. No afirmar cumplimiento de R004 por el PASS de la CLI.
+La propuesta R004 exige ID estable y evidencia para cada escenario nuevo o modificado. Tras detectar que faltaban IDs explícitos, se asignaron identificadores `SDD-Rnnn-Snn` a los 12 escenarios de este delta y se registraron en el manifiesto. Las comprobaciones siguen planificadas: los IDs no acreditan ejecución ni adecuación. La validación estructural de OpenSpec no detecta esa deuda; no afirmar cumplimiento de R004 por el PASS de la CLI.
 
 ## Licencias declaradas: inventario, no dictamen
 
@@ -51,3 +51,5 @@ En un proyecto sintético nuevo, `openspec init --tools claude,codex,opencode,ag
 ## Harnesses disponibles: verificación local sin inferencia
 
 Con entorno mínimo, entrada cerrada y sin credenciales proporcionadas: `claude --version` devuelve `2.1.332` y `codex --version` devuelve `0.170.0`; sus ayudas responden correctamente. `opencode --version` y `--help` fallan con código 46: Snap no puede crear el ámbito transitorio DBus en este entorno. Son pruebas de disponibilidad y ayuda, **no** pruebas de carga real de instrucciones, funcionamiento autenticado o equivalencia entre harnesses. La versión anterior indicada para Claude en el pipeline local no versionado no corresponde al ejecutable observado en esta comprobación.
+
+Tras la autorización explícita para utilizar exclusivamente suscripciones, se comprobó el modo declarado por las herramientas: Claude informa `claude.ai`/Pro y Codex informa ChatGPT. No se ejecutó inferencia: estas declaraciones no demuestran por sí solas la ruta efectiva bajo toda la configuración ni el aislamiento de herramientas y políticas. No se enviaron datos a proveedores. Queda pendiente una prueba de carga efectiva con garantías suficientes de que no se usan APIs.

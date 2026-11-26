@@ -5,32 +5,42 @@ baseline_sha: ea9bc603eb2aa86265abd5b0697b3e03ef87e732
 status: proposed
 requirements:
   - id: SDD-R001
+    scenarios: [SDD-R001-S01, SDD-R001-S02]
     tasks: [T0.1, T0.3, T1.1, T1.2]
     verification: {status: planned, method: "matriz de autoridad y migración, conflicto y excepción hotfix acotada"}
   - id: SDD-R002
+    scenarios: [SDD-R002-S01]
     tasks: [T0.1, T2.1, T2.2, T2.3, T2.4]
     verification: {status: planned, method: "muestreo de procedencia y prueba de discrepancia"}
   - id: SDD-R003
+    scenarios: [SDD-R003-S01]
     tasks: [T1.2, T1.3, T3.1, T4.1, T5.2]
     verification: {status: planned, method: "test de reclasificación y bypass"}
   - id: SDD-R004
+    scenarios: [SDD-R004-S01]
     tasks: [T2.1, T2.2, T2.3, T3.1, T3.2, T5.1]
     verification: {status: planned, method: "JUnit por run/job/SHA, fallo cerrado por ausencia, error, cancelación, skip y SHA distinto"}
   - id: SDD-R005
+    scenarios: [SDD-R005-S01]
     tasks: [T3.1, T3.2, T5.1]
     verification: {status: planned, method: "regresión y revisión de modificaciones de tests"}
   - id: SDD-R006
+    scenarios: [SDD-R006-S01, SDD-R006-S02]
     tasks: [T4.1, T4.2, T5.1]
     verification: {status: planned, method: "SHA de aprobación y candidato, merge integrado, revisión obsoleta y separación proporcional de roles"}
   - id: SDD-R007
+    scenarios: [SDD-R007-S01]
     tasks: [T0.2, T1.2, T3.3, T5.1, T5.4]
     verification: {status: planned, method: "test de delta divergente y consolidación"}
   - id: SDD-R008
+    scenarios: [SDD-R008-S01]
     tasks: [T0.2, T1.1, T3.5, T4.1, T4.3, T5.2]
     verification: {status: planned, method: "bootstrap H0, smoke multi-harness, telemetría, licencia, pin condicionado y orquestación reutilizable"}
   - id: SDD-R009
+    scenarios: [SDD-R009-S01]
     tasks: [T0.3, T1.3, T3.4, T4.2, T4.3, T5.3]
     verification: {status: planned, method: "PR negativa de gate y aprobación verificable"}
   - id: SDD-R010
+    scenarios: [SDD-R010-S01]
     tasks: [T2.4, T3.4, T5.1, T5.2, T5.3, T5.4]
     verification: {status: planned, method: "piloto y aprobación de activación"}
