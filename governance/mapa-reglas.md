@@ -1,6 +1,6 @@
 # Mapa de reglas durante la migración (propuesta)
 
-**Estado: sin migrar.** Inventario de trabajo de la historia T1.1. Su función es demostrar cobertura regla por regla, no crear normas: cada fila apunta a la guía vigente y a un destino **propuesto**. Ninguna regla se retira hasta que su traslado esté revisado y aprobado (criterio T1.1-C02). Origen fijado: `CLAUDE.md` de la rama de la propuesta; las líneas son orientativas y deben reverificarse si la guía cambia.
+**Estado: sin migrar.** Inventario de trabajo de la historia T1.1. Su función es demostrar cobertura regla por regla, no crear normas: cada fila apunta a la guía vigente y a un destino **propuesto**. Ninguna regla se retira hasta que su traslado esté revisado y aprobado (criterio T1.1-C02). Origen fijado: `CLAUDE.md` de la rama de la propuesta; la referencia de sección es orientativa y debe reverificarse si la guía cambia. La columna «Regla» es un resumen de trabajo, nunca el texto normativo.
 
 | ID | Origen | Regla o decisión a conservar | Destino propuesto | Estado |
 |---|---|---|---|---|
@@ -22,7 +22,7 @@
 | PRE-16 | §8 | Patrón de pruebas con sesión simulada es la referencia | Guía técnica de pruebas | sin migrar |
 | PRE-17 | §8 | La suite se ejecuta también con temporal en el dispositivo raíz | Guía de pruebas y CI | sin migrar |
 | PRE-18 | §8 | Sin dependencias nuevas por probar; cada bug real cierra con regresión nombrada | Definición de hecho | sin migrar |
-| PRE-19 | §8 | Pruebas con Postgres real: base con nombre de test, migrada a head, procesos aislados | Guía de Postgres | sin migrar |
+| PRE-19 | §8 | Pruebas con Postgres real: base cuyo nombre lleve test, migrada a head una vez; estado alternativo en base efímera y subprocesos de Alembic sin sombra del paquete | Guía de Postgres | sin migrar |
 | PRE-20 | §9 | Commits atómicos en español; el histórico explica el mecanismo de cada cierre | Guía de contribución | sin migrar |
 | PRE-21 | §9 | Flujo Scrumban con límites de trabajo en curso | Planificación | sin migrar |
 | PRE-22 | §9.1 | El piloto de ingeniería local queda fuera del runtime y no sustituye CI ni aprobaciones | Índice y ADR del piloto | sin migrar |
