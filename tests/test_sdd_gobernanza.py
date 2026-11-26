@@ -34,6 +34,8 @@ FORBIDDEN = re.compile(
     r"verificado en claude code|verificado en codex|verificado en opencode",
     re.IGNORECASE,
 )
+BREAKDOWN = re.compile(r"^### Desglose de (PRE-\d{2})\s*$", re.MULTILINE)
+SUB_RULE = re.compile(r"^\|\s*(PRE-\d{2}-\d+)\s*\|", re.MULTILINE)
 RULE_STATUS = re.compile(r"^\|\s*PRE-[A-Z0-9]+\s*\|.*\|\s*([^|]+?)\s*\|\s*$", re.MULTILINE)
 ALLOWED_STATUS = ("sin migrar", "migrada")
 # Frases que declararían una autoridad nueva sin aprobación del traslado.
@@ -145,6 +147,24 @@ class GobernanzaTest(unittest.TestCase):
         for criterio, estado in filas.items():
             with self.subTest(criterio=criterio):
                 self.assertIn(estado, EVIDENCE_STATES, f"estado no admitido: {estado}")
+
+    def test_desgloses_apuntan_a_filas_existentes_y_sin_saltos(self) -> None:
+        text = read(GOVERNANCE / "mapa-reglas.md")
+        principales = set(RULE_ROW.findall(text))
+        bloques = BREAKDOWN.findall(text)
+        self.assertTrue(bloques, "no hay bloques de desglose")
+        for padre in bloques:
+            with self.subTest(desglose=padre):
+                self.assertIn(padre, principales, f"{padre} no tiene fila principal")
+        sub = SUB_RULE.findall(text)
+        self.assertEqual(len(sub), len(set(sub)), "hay sub-reglas repetidas")
+        por_padre: dict[str, list[int]] = {}
+        for ident in sub:
+            padre, numero = ident.rsplit("-", 1)
+            por_padre.setdefault(padre, []).append(int(numero))
+        for padre, numeros in por_padre.items():
+            with self.subTest(padre=padre):
+                self.assertEqual(sorted(numeros), list(range(1, len(numeros) + 1)))
 
     def test_estados_del_mapa_son_de_lista_cerrada(self) -> None:
         text = read(GOVERNANCE / "mapa-reglas.md")
