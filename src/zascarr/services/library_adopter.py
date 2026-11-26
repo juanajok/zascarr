@@ -814,7 +814,7 @@ class LibraryAdopter:
                 .where(Issue.id == resultado.issue_id))).first()
         nombre = tr.path.name
         if pista is not None:
-            nombre = quitar_prefijo_de_cohorte(nombre, pista)
+            nombre = quitar_prefijo_de_cohorte(nombre, pista, carpeta=tr.path.parent.name)
         parsed = parse_comic_filename(nombre)
         return Propuesta(
             origen=ORIGEN_COMICINFO if tr.strong_candidate else ORIGEN_RESCAN,
