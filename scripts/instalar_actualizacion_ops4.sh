@@ -101,7 +101,9 @@ crear_dirs() {
     run install -d -m 0700 "${OPS4_DIR}"
     run install -d -m 0700 "${OPS4_DIR}/consumidos"
     run install -d -m 0700 "${OPS4_DIR}/intentos"
-    run install -d -m 0700 "${OPS_DIR}/home"
+    run install -d -m 0700 "${DATA_DIR}/update-home"
+    run install -d -m 0700 "${DATA_DIR}/update-docker"
+    run install -d -m 0700 "${BACKUP_DIR}"
     # H-5: la app (PUID:PGID, montaje ro) debe leer el estado 0640 root:<grupo>;
     # el grupo del fichero lo toma el escritor del directorio. Si no se puede
     # fijar el dueño, se aborta: un estado ilegible es "sin noticias" permanente.
@@ -173,7 +175,7 @@ if (( ! DRY_RUN )); then
     run install -m 0644 "${REPO_DIR}/deploy/systemd/zascarr-ops.tmpfiles.conf" \
         "${DEST_TMPFILES}/zascarr-ops.conf"
     if (( ! SIN_SYSTEMD )); then
-        run systemd-tmpfiles --create "${DEST_TMPFILES}/zascarr-ops.conf" || true
+        run systemd-tmpfiles --create "${DEST_TMPFILES}/zascarr-ops.conf"
     fi
 fi
 

@@ -23,6 +23,7 @@ def ejecutar(tmp_path: Path, *args: str, extra_env: dict | None = None,
         "OPS4_DEST_LIB": str(tmp_path / "lib"),
         "OPS4_DEST_UNIDADES": str(tmp_path / "units"),
         "OPS4_DEST_TMPFILES": str(tmp_path / "tmpfiles"),
+        "ZASCARR_BACKUP_DIR": str(tmp_path / "backups"),
         "OPS4_GROUP": subprocess.check_output(["id", "-gn"], text=True).strip(),
     })
     if sin_grupo:
@@ -43,7 +44,9 @@ def test_instala_clave_dirs_modulos_y_unidades_sin_activar(tmp_path: Path) -> No
     assert key.stat().st_mode & 0o777 == 0o440
     assert (tmp_path / "data" / "ops4" / "consumidos").is_dir()
     assert (tmp_path / "data" / "ops4" / "intentos").is_dir()
-    assert (tmp_path / "data" / "ops" / "home").is_dir()
+    assert (tmp_path / "data" / "update-home").is_dir()
+    assert (tmp_path / "data" / "update-docker").is_dir()
+    assert (tmp_path / "backups").is_dir()
     assert stat.S_IMODE((tmp_path / "data" / "ops4" / "intentos").stat().st_mode) == 0o700
     assert (tmp_path / "bin" / "actualizar-aux").is_file()
     assert (tmp_path / "lib" / "zascarr-estado-actualizar-ops4").is_file()

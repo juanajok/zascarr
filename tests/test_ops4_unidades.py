@@ -25,6 +25,9 @@ def test_unidad_de_actualizacion_tiene_accion_fija_y_limites() -> None:
     assert servicio["ExecStart"] == "/usr/local/lib/zascarr/zascarr-actualizar-entrada"
     texto = _texto("zascarr-actualizar.service")
     assert "ZASCARR_ACTUALIZAR_UNIDAD=1" in texto
+    assert "HOME=@ZASCARR_DATA_DIR@/update-home" in texto
+    assert "DOCKER_CONFIG=@ZASCARR_DATA_DIR@/update-docker" in texto
+    assert "ZASCARR_OPS_GRUPO=@GRUPO@" in texto
     assert "ZASCARR_REPO=@REPO@" in texto
     assert servicio["RuntimeMaxSec"] == "5400"
     assert servicio["TimeoutStopSec"] == "120"
