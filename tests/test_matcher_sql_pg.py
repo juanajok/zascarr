@@ -266,3 +266,58 @@ async def test_alias_de_catalogo_solo_mismo_espacio_de_numeracion():
             assert hit[0].score == 1.0
     finally:
         await engine.dispose()
+
+
+async def _matcher_superman(session, numeros: list[str]):
+    """Matcher con la serie fija «SUPERMAN EL HOMBRE DE ACERO» y esos números."""
+    await session.execute(text(_CREATE_TEMP_ISSUES))
+    await session.execute(text(_CREATE_TEMP_FILES))
+    sid = uuid4()
+    ids = {}
+    for numero in numeros:
+        ids[numero] = uuid4()
+        await session.execute(text(_INSERT_ISSUE), {
+            "id": str(ids[numero]), "sid": str(sid), "num": numero, "fmt": "single_issue"})
+    matcher = SeriesMatcher(session)
+
+    async def _find_series(*_a, **_k):
+        return [SeriesHit(sid, "SUPERMAN EL HOMBRE DE ACERO", 1987, 1.0)]
+
+    matcher.find_series = _find_series
+    matcher.find_alias = AsyncMock(return_value=None)
+    return matcher, ids
+
+
+@pytest.mark.asyncio
+async def test_especial_enlaza_con_su_numero_e():
+    """C11 (BL-PARSE1 R4, D1): el especial 2 es el número «E2» de la serie."""
+    engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            matcher, ids = await _matcher_superman(session, ["2", "E2"])
+            triage = TriageResult(path=Path("Superman Vol2 Especial 2 [SC][CRG].cbz"))
+            r = await matcher.decide(
+                triage, extractor=lambda _n: ("Superman", "02", None), especial=True)
+            assert r.issue_id == ids["E2"]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_especial_no_enlaza_con_la_grapa_del_mismo_numero():
+    """C12: sin «E2», el especial va a revisión; nunca a la grapa #2."""
+    engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            matcher, _ids = await _matcher_superman(session, ["2"])
+            triage = TriageResult(path=Path("Superman Vol2 Especial 2 [SC][CRG].cbz"))
+            r = await matcher.decide(
+                triage, extractor=lambda _n: ("Superman", "2", None), especial=True)
+            assert r.status is MatchStatus.UNSORTED
+            assert r.issue_id is None
+            assert r.candidates
+            assert r.notes == [
+                "parece un especial y la serie «SUPERMAN EL HOMBRE DE ACERO» no tiene "
+                "el número «E2»: no se enlaza a la grapa 2"]
+    finally:
+        await engine.dispose()
