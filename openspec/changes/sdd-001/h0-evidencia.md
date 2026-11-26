@@ -18,7 +18,7 @@
 
 ### Inventario cuantitativo y límites
 
-Sobre `git ls-tree -r --name-only ea9bc603`, contando archivos del nivel directo y no funcionalidades: 2.067 rutas rastreadas, 27 archivos ADR, 132 módulos Python en `services`, 10 en `api`, 45 en `web`, 552 archivos `tests/test_*.py` y 52 archivos de migración. Estas cifras no son números de endpoints, pruebas ejecutadas ni capacidades verificadas. El menú se documenta en `src/zascarr/web/menu.py`; el montaje de routers y bucles, en `src/zascarr/main.py`; las capacidades declaradas, en `README.md`.
+Sobre `git ls-tree -r --name-only ea9bc603`, contando archivos del nivel directo y no funcionalidades: 2.067 rutas rastreadas, 27 archivos ADR, 132 módulos Python en el nivel directo de `services` (147 contando sus dos subpaquetes), 10 en `api`, 45 en `web`, 552 archivos `tests/test_*.py` y 52 archivos de migración. Estas cifras no son números de endpoints, pruebas ejecutadas ni capacidades verificadas. El menú se documenta en `src/zascarr/web/menu.py`; el montaje de routers y bucles, en `src/zascarr/main.py`; las capacidades declaradas, en `README.md`.
 
 La CI de `main` define suite, Postgres real, lint y builds, además de un workflow de contratos UXLab condicionado por rutas. Son definiciones, no evidencia de una ejecución concreta ni de protección de rama. El benchmark histórico `docs/design/ficha-propuestas-desde-carpetas.md` menciona Redis, mientras `docs/adr/0011-retirar-redis.md` registra su retirada; `docs/adr/0004-exposicion-de-red.md` también conserva una referencia a Redis. No se reescriben documentos históricos ni se infiere que sigan vigentes sus descripciones de infraestructura.
 
@@ -77,7 +77,7 @@ Decisión del mantenedor en sesión: H0 se cierra para permitir el trabajo docum
 | T0.1 baseline e inventario | Completada como registro: baseline fijada, capacidades y documentos inventariados, contradicciones y IDs duplicados detectados sin renumerar | El inventario cuantitativo no mide capacidades verificadas; los ADR `0020`/`0021` duplicados siguen sin resolver |
 | T0.2 bootstrap de OpenSpec | Evaluada: instalación, `init`, `validate` estricto, `archive`, negativos, telemetría instrumentada, inventario de licencias y suministro con límites declarados | El lock exacto de #1293 no tiene aún instalación limpia acreditada; no hay dictamen de licencias ni de suministro; no se acreditó ausencia universal de tráfico ni reproducibilidad en otras plataformas |
 | T0.3 aprobación de propuesta | Registrada la aprobación del mantenedor en la conversación, ligada al SHA de la propuesta revisada | No es una revisión de GitHub ni una aprobación de fusión; no cubre commits posteriores |
-| T0.4 carga efectiva de instructions | **NOT RUN**: Claude y Codex no llegaron a cargar instrucciones y OpenCode no arrancó en este entorno | Bloquea la activación de gates obligatorios; no es un PASS ni una validación de aislamiento |
+| T0.4 carga efectiva de instrucciones | **NOT RUN**: Claude y Codex no llegaron a cargar instrucciones y OpenCode no arrancó en este entorno | Bloquea la activación de gates obligatorios; no es un PASS ni una validación de aislamiento |
 
 Consecuencias del cierre:
 
