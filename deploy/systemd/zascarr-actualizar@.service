@@ -1,0 +1,33 @@
+[Unit]
+Description=Auxiliar de actualización manual OPS4 (una conexión)
+Documentation=https://github.com/juanajok/zascarr
+
+[Service]
+Type=simple
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+EnvironmentFile=-/etc/default/zascarr
+Environment=ZASCARR_OPS_DIR=@ZASCARR_DATA_DIR@/ops
+Environment=ZASCARR_OPS4_DIR=@ZASCARR_DATA_DIR@/ops4
+ExecStart=/usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-actualizar-aux
+TimeoutStartSec=15s
+RuntimeMaxSec=45s
+MemoryMax=64M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=@ZASCARR_DATA_DIR@/ops4 @ZASCARR_DATA_DIR@/ops
+ProtectHome=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+UMask=0077
+PrivateTmp=yes
+# systemctl habla por /run/systemd/private (AF_UNIX); no necesita red.
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
