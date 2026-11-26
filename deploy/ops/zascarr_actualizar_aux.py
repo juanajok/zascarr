@@ -302,9 +302,9 @@ def _procesar_b2(
         except ValueError:
             return rechazo("no_disponible", id_)
         if escribir(inicial) != ResultadoEscritura.OK:
-            if borrar_intento is not None:
-                with contextlib.suppress(Exception):
-                    borrar_intento(id_)
+            # Incluso INCIERTO puede significar que el estado ya se publicó.
+            # Conservar siempre la marca evita reutilizar esta autorización tras
+            # una caída o una reconciliación cuyo resultado no conocemos.
             return rechazo("no_disponible", id_)
         try:
             iniciada = iniciar(UNIDAD)

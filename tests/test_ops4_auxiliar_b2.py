@@ -1,6 +1,10 @@
 """B2b: el auxiliar reserva, arranca y consume solo tras confirmar."""
 from __future__ import annotations
 
+import os
+
+import pytest
+
 from deploy.ops.escritor_estado_actualizar_ops4 import (
     UNIDAD,
     ResultadoEscritura,
@@ -182,13 +186,31 @@ def test_intento_existente_no_arranca_ni_consume() -> None:
     assert not any(n == "consumo" for n, _ in dobles.llamadas)
 
 
-def test_reserva_fallida_no_arranca_y_borra_intento() -> None:
-    dobles = Dobles(escribir=ResultadoEscritura.INCIERTO)
+@pytest.mark.parametrize("resultado", [ResultadoEscritura.INCIERTO, ResultadoEscritura.INVALIDO])
+def test_reserva_no_confirmada_conserva_intento_y_no_arranca(resultado) -> None:
+    dobles = Dobles(escribir=resultado)
     respuesta = ejecutar(dobles)
     assert respuesta.codigo == "no_disponible"
+    assert ("intento", ID) in dobles.llamadas
     assert ("iniciar", UNIDAD) not in dobles.llamadas
-    assert ("borrar_intento", ID) in dobles.llamadas
+    assert ("borrar_intento", ID) not in dobles.llamadas
     assert not any(n == "consumo" for n, _ in dobles.llamadas)
+
+
+def test_escritura_incierta_conserva_marca_real_y_bloquea_reintento(tmp_path) -> None:
+    from deploy.ops.registro_repeticiones_ops4 import reclamar_intento
+
+    fd = os.open(tmp_path, os.O_RDONLY | os.O_DIRECTORY)
+    dobles = Dobles(escribir=ResultadoEscritura.INCIERTO)
+    dobles.crear_intento = lambda id_: reclamar_intento(id_, directorio_fd=fd)
+    try:
+        assert ejecutar(dobles).codigo == "no_disponible"
+        assert (tmp_path / ID).is_file()
+        # Simula que la lectura del estado no encuentra la reserva tras caída.
+        assert ejecutar(dobles).codigo == "repetida"
+        assert ("iniciar", UNIDAD) not in dobles.llamadas
+    finally:
+        os.close(fd)
 
 
 def test_inicio_fallido_no_consume_y_marca_fallida() -> None:
