@@ -1,0 +1,36 @@
+# Borrador de manifiesto; las pruebas indicadas son criterios de trabajo, no tests existentes.
+change: sdd-001
+issue: 1291
+baseline_sha: ea9bc603eb2aa86265abd5b0697b3e03ef87e732
+status: proposed
+requirements:
+  - id: SDD-R001
+    tasks: [T0.1, T0.3, T1.1, T1.2]
+    verification: {status: planned, method: "inventario + aprobación de autoridad y prueba de conflicto"}
+  - id: SDD-R002
+    tasks: [T0.1, T2.1, T2.2, T2.3, T2.4]
+    verification: {status: planned, method: "muestreo de procedencia y prueba de discrepancia"}
+  - id: SDD-R003
+    tasks: [T1.2, T1.3, T3.1, T4.1, T5.2]
+    verification: {status: planned, method: "test de reclasificación y bypass"}
+  - id: SDD-R004
+    tasks: [T2.1, T2.2, T2.3, T3.1, T3.2, T5.1]
+    verification: {status: planned, method: "test de referencia rota, skip y evidencia"}
+  - id: SDD-R005
+    tasks: [T3.1, T3.2, T5.1]
+    verification: {status: planned, method: "regresión y revisión de modificaciones de tests"}
+  - id: SDD-R006
+    tasks: [T4.1, T4.2, T5.1]
+    verification: {status: planned, method: "test de revisión obsoleta y separación de roles"}
+  - id: SDD-R007
+    tasks: [T0.2, T1.2, T3.3, T5.1, T5.4]
+    verification: {status: planned, method: "test de delta divergente y consolidación"}
+  - id: SDD-R008
+    tasks: [T0.2, T1.1, T3.5, T4.1, T4.3, T5.2]
+    verification: {status: planned, method: "smoke multi-harness y comparación de dependencias"}
+  - id: SDD-R009
+    tasks: [T0.3, T1.3, T3.4, T4.2, T4.3, T5.3]
+    verification: {status: planned, method: "PR negativa de gate y aprobación verificable"}
+  - id: SDD-R010
+    tasks: [T2.4, T3.4, T5.1, T5.2, T5.3, T5.4]
+    verification: {status: planned, method: "piloto y aprobación de activación"}
