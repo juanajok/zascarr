@@ -92,6 +92,7 @@ crear_dirs() {
     run install -d -m 0750 "${OPS_DIR}"
     run install -d -m 0700 "${OPS4_DIR}"
     run install -d -m 0700 "${OPS4_DIR}/consumidos"
+    run install -d -m 0700 "${OPS4_DIR}/intentos"
     # H-5: la app (PUID:PGID, montaje ro) debe leer el estado 0640 root:<grupo>;
     # el grupo del fichero lo toma el escritor del directorio. Si no se puede
     # fijar el dueño, se aborta: un estado ilegible es "sin noticias" permanente.
@@ -123,6 +124,7 @@ if (( QUITAR )); then
         "${DEST_AUX}" "${DEST_LIB}/protocolo_actualizar_v4_ops4.py" \
         "${DEST_LIB}/verificador_autorizacion_ops4.py" \
         "${DEST_LIB}/registro_repeticiones_ops4.py" \
+        "${DEST_LIB}/admision_ops4.py" \
         "${DEST_LIB}/escritor_estado_actualizar_ops4.py" \
         "${DEST_LIB}/zascarr-estado-actualizar-ops4"
     if (( ! SIN_SYSTEMD )); then run systemctl daemon-reload || true; fi
@@ -146,7 +148,8 @@ copiar "${REPO_DIR}/deploy/ops/zascarr_actualizar_aux.py" "${DEST_AUX}" 0755
 copiar "${REPO_DIR}/deploy/ops/estado_actualizar_ops4.py" \
     "${DEST_LIB}/zascarr-estado-actualizar-ops4" 0755
 for modulo in protocolo_actualizar_v4_ops4.py verificador_autorizacion_ops4.py \
-              registro_repeticiones_ops4.py escritor_estado_actualizar_ops4.py; do
+              registro_repeticiones_ops4.py admision_ops4.py \
+              escritor_estado_actualizar_ops4.py; do
     copiar "${REPO_DIR}/deploy/ops/${modulo}" "${DEST_LIB}/${modulo}" 0644
 done
 for unidad in zascarr-actualizar.socket zascarr-actualizar@.service \

@@ -47,22 +47,20 @@ def _sin_duplicados(pares: list[tuple[str, object]]) -> dict[str, object]:
     return resultado
 
 
-def verificar_autorizacion(
+def verificar_testigo_sin_consumo(
     token: object,
     *,
     clave: object,
     ahora: object,
-    reclamar_uso: Callable[[str], bool],
     id_esperado: str,
 ) -> CodigoAutorizacion:
-    """Orden: formato/firma → campos → ligadura por ID → ventana → consumo único.
+    """Valida formato, firma, campos, ID y ventana **sin consumir**.
 
-    `id_esperado` es obligatorio: el ID de la petición autenticada, no el que
-    afirme el testigo. Si falta o no es un ID de 32 hex igual al del testigo, se
-    rechaza **sin llamar** al callback. No devuelve el token ni sus datos.
-    Cualquier excepción o callback que no devuelva exactamente `True` deniega.
-    Un token válido no autoriza por sí solo: el callback debe acreditar el consumo
-    durable (`O_EXCL` + dos `fsync`) antes de cualquier efecto.
+    Devuelve `ACEPTADA` si el testigo es válido; no crea marcas, no llama a
+    ningún callback y no devuelve el token. La ligadura por `id_esperado` es
+    obligatoria. El consumo es un paso separado del llamador (B2), después de
+    confirmar la reserva; esta función no acredita que la operación se haya
+    admitido.
     """
     if type(clave) is not bytes or len(clave) != 32:
         return CodigoAutorizacion.NO_DISPONIBLE
@@ -110,8 +108,31 @@ def verificar_autorizacion(
         return CodigoAutorizacion.CADUCADA
     if ahora < creada - TOLERANCIA_RELOJ_S:
         return CodigoAutorizacion.INVALIDA
+    return CodigoAutorizacion.ACEPTADA
+
+
+def verificar_autorizacion(
+    token: object,
+    *,
+    clave: object,
+    ahora: object,
+    reclamar_uso: Callable[[str], bool],
+    id_esperado: str,
+) -> CodigoAutorizacion:
+    """Compatibilidad: verifica y **consume en el mismo paso**.
+
+    Conserva la firma y el comportamiento anteriores (una sola llamada al
+    callback tras validar). B2 usa `verificar_testigo_sin_consumo` y consume
+    después de confirmar la reserva; no se debe usar esta variante en la ruta
+    nueva.
+    """
+    resultado = verificar_testigo_sin_consumo(
+        token, clave=clave, ahora=ahora, id_esperado=id_esperado,
+    )
+    if resultado is not CodigoAutorizacion.ACEPTADA:
+        return resultado
     try:
-        reclamada = reclamar_uso(datos["id"])
+        reclamada = reclamar_uso(id_esperado)
     except Exception:  # noqa: BLE001
         return CodigoAutorizacion.NO_DISPONIBLE
     if reclamada is True:
