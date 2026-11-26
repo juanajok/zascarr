@@ -1,6 +1,8 @@
 # OPS4 — Permisos del estado inicial (#443, SEC-B1-01)
 
-**Estado:** propuesta para revisión; no autoriza habilitar ni desplegar OPS4.
+**Estado:** aprobada e implementada; validada parcialmente en VM (socket y
+auxiliar). No autoriza habilitar ni desplegar OPS4. Evidencia:
+[`ops4-permisos-vm-2026-11-26.md`](ops4-permisos-vm-2026-11-26.md).
 **Base:** `c4a3420349153f2ac3185df3da46b37c8211aa3d`.
 
 ## Problema
@@ -13,7 +15,7 @@ auxiliar, `fchown` puede devolver `EPERM` sin `CAP_CHOWN`. En ese caso se devuel
 `INCIERTO`, se rechaza la solicitud y no se inicia la unidad. El fallo depende
 de la identidad y del sistema de ficheros; no se presume universal.
 
-## Solución propuesta, sujeta a revisión SecOps
+## Solución implementada, sujeta a revisión SecOps
 
 La unidad auxiliar fijará explícitamente `User=root` y `Group=@GRUPO@`. El
 instalador ya sustituye `@GRUPO@` con el grupo de servicio. El auxiliar conserva
@@ -51,6 +53,9 @@ historia. ACL, sistemas de ficheros y políticas LSM pueden alterar el resultado
   lectura de clave, publicación `root:<grupo>` `0640` y lectura desde la
   identidad de la app; también debe probar divergencia de grupo y fallo
   cerrado. No se arranca la actualización real ni se toca la Pi en este paso.
+  **Validado en VM el 2026-11-26** para el socket y el auxiliar reales, con una
+  unidad de destino inofensiva en lugar de `update.sh`; el recorrido completo de
+  la actualización real, Docker y PostgreSQL sigue pendiente.
 
 ## Límites y puertas
 
