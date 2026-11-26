@@ -128,7 +128,7 @@
 | PRE-23-6 | Credenciales o fuentes por defecto en configuración o bootstrap | Configuración y credenciales | sin migrar |
 | PRE-23-7 | Middleware global de aceptación legal; debe ser dependencia, no middleware | Contrato legal | sin migrar |
 
-Cada sub-regla necesita su propia decisión de traslado: desglosar la fila no la migra.
+Hoy hay 39 sub-reglas repartidas en ocho bloques. Cada sub-regla necesita su propia decisión de traslado: desglosar la fila no la migra.
 
 ## Cobertura incompleta: filas que agrupan sub-reglas
 
