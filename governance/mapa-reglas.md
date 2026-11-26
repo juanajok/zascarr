@@ -19,12 +19,12 @@
 | PRE-13 | §5 | Interfaz en localhost por defecto; abrir exige decisión explícita y contraseña | ADR de exposición de red | sin migrar |
 | PRE-14 | §5 | Toda URL variable pasa por la validación SSRF central | [Contrato de seguridad](contrato-seguridad.md#pre-14--toda-url-variable-pasa-por-la-validación-ssrf-central) | migrada |
 | PRE-15 | §5 | Un cambio sensible de contraseña espera dictamen de seguridad del SHA final | [Clasificación de riesgo](risk-classification.md#pre-15--cambio-sensible-de-contraseña-espera-seguridad-del-sha-final) | migrada |
-| PRE-16 | §8 | Patrón de pruebas con sesión simulada es la referencia | Guía técnica de pruebas | sin migrar |
-| PRE-17 | §8 | La suite se ejecuta también con temporal en el dispositivo raíz | Guía de pruebas y CI | sin migrar |
+| PRE-16 | §8 | Patrón de pruebas con sesión simulada es la referencia | [Definición de hecho](definition-of-done.md#pre-16--patrón-de-pruebas-con-sesión-simulada) | migrada |
+| PRE-17 | §8 | La suite se ejecuta también con temporal en el dispositivo raíz | [Definición de hecho](definition-of-done.md#pre-17--la-suite-también-con-temporal-en-el-dispositivo-raíz) | migrada |
 | PRE-18 | §8 | Sin dependencias nuevas por probar; cada bug real cierra con regresión nombrada | [Definición de hecho](definition-of-done.md#pre-18--regresión-nombrada-y-sin-dependencias-por-probar) | migrada |
-| PRE-19 | §8 | Pruebas con Postgres real: base cuyo nombre lleve test, migrada a head una vez; estado alternativo en base efímera y subprocesos de Alembic sin sombra del paquete | Guía de Postgres | sin migrar |
-| PRE-20 | §9 | Commits atómicos en español; el histórico explica el mecanismo de cada cierre | Guía de contribución | sin migrar |
-| PRE-21 | §9 | Flujo Scrumban con límites de trabajo en curso | Planificación | sin migrar |
+| PRE-19 | §8 | Pruebas con Postgres real: base cuyo nombre lleve test, migrada a head una vez; estado alternativo en base efímera y subprocesos de Alembic sin sombra del paquete | [Definición de hecho](definition-of-done.md#pre-19--pruebas-con-postgres-real) | migrada |
+| PRE-20 | §9 | Commits atómicos en español; el histórico explica el mecanismo de cada cierre | [Definición de hecho](definition-of-done.md#pre-20--git-como-documentación) | migrada |
+| PRE-21 | §9 | Flujo Scrumban con límites de trabajo en curso | [Preparación](definition-of-ready.md#pre-21--flujo-de-trabajo-y-límite-de-trabajo-en-curso) | migrada |
 | PRE-22 | §9.1 | El piloto de ingeniería local queda fuera del runtime y no sustituye CI ni aprobaciones | Índice y ADR del piloto | sin migrar |
 | PRE-23 | §10 | Antipatrones explícitos del proyecto, con sus excepciones | Arquitectura y seguridad | sin migrar |
 | PRE-24 | §11 | Documentos vivos: consultar antes de tocar cada área | Índice de fuentes | sin migrar |
