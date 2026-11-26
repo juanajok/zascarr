@@ -1,7 +1,7 @@
 # Especificación BL-PARSE3 — la carpeta sugiere la serie en «Por revisar» (F2)
 
 > **Estado:** **aprobada por el PO el 2026-11-26**, con D1 fuera (el filtro «solo con sugerencia» no cambia).
-> **Cambio propuesto (2026-11-26, tras desplegar #1328): R2b**, pendiente de aprobación del PO. La
+> **Cambio aprobado por el PO (2026-11-26, tras desplegar #1328): R2b.** La
 > revisión de las 41 sugerencias reales (§6b) mostró que el 99,89 % medido sobre archivos ya vinculados
 > no se traslada a los pendientes.
 > **ID provisional:** `BL-PARSE3`, sin tarjeta todavía.
