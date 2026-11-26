@@ -54,3 +54,5 @@ kanban-*.json
 Thumbs.db
 *.swp
 *~
+# Dependencias del tooling SDD: se instalan desde el lock, nunca se versionan.
+tooling/sdd/node_modules/
