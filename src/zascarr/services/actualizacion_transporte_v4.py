@@ -124,7 +124,7 @@ def _interpretar(respuesta: object, id_: object) -> CodigoTransporteV4:
         return CodigoTransporteV4.ACEPTADA
     if resultado == "rechazada" and cuerpo["codigo"] == "operacion_en_curso":
         return CodigoTransporteV4.OCUPADA
-    if resultado == "rechazada" and cuerpo["codigo"] != "aceptada":
+    if resultado == "rechazada" and cuerpo["codigo"] not in ("aceptada", "incierta"):
         return CodigoTransporteV4.RECHAZADA
     if resultado == "incierta" and cuerpo["codigo"] == "incierta":
         return CodigoTransporteV4.INCIERTA
