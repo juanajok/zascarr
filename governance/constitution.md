@@ -21,6 +21,10 @@
 
 Texto trasladado desde la guía vigente. La copia de la guía se conserva hasta la aprobación de la retirada; mientras exista, es duplicación declarada.
 
+### PRE-05 — Decisión de arquitectura requiere ADR
+
+Toda decisión de arquitectura nueva se registra como ADR en `docs/adr/`; existe desde el principio `0001-ui-stack.md`. Las decisiones anteriores a esa práctica —Postgres y el enrutado del enricher— quedaron sin ADR retroactivo y no se reconstruyen por conveniencia: las nuevas sí lo llevan.
+
 ### PRE-40 — Registrar las decisiones del modo de trabajo
 
 La guía es contexto operativo para agentes y personas que colaboren en el repositorio y debe leerse antes de tocar código. Toda decisión nueva sobre cómo se trabaja se registra el día que se decide, no cuando alguien la recuerde.

@@ -8,7 +8,7 @@
 | PRE-02 | §3.1 | No mover archivos con la sesión ORM viva; conservar la deuda declarada del código heredado | Arquitectura de dominio | sin migrar |
 | PRE-03 | §3.1 | Escritura con esquemas explícitos; prohibido el mass assignment | Arquitectura y seguridad | sin migrar |
 | PRE-04 | §3.1 | Sin hotlinking en la interfaz | Seguridad de interfaz | sin migrar |
-| PRE-05 | §3.1 | Toda decisión de arquitectura nueva requiere ADR | Gobierno de ADR | sin migrar |
+| PRE-05 | §3.1 | Toda decisión de arquitectura nueva requiere ADR | [Constitución](constitution.md#pre-05--decisión-de-arquitectura-requiere-adr) | migrada |
 | PRE-06 | §3.2 | Configuración centralizada; ninguna credencial utilizable por defecto; escritura atómica del entorno | Configuración y credenciales | sin migrar |
 | PRE-07 | §3.2 | Integraciones P2P y fuentes de metadatos apagadas por defecto; una actualización no las apaga en silencio | Configuración | sin migrar |
 | PRE-08 | §3.2 | Healthcheck observacional y aviso de versión de solo lectura | Contratos de estado | sin migrar |
