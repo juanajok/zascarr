@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "max_calls": 18,
+  "max_attempts": 2,
+  "max_rounds": 2,
+  "max_context_bytes": 20000,
+  "concurrency": 3,
+  "models": {
+    "BRAIN": "session-default",
+    "BENCHMARKER": "session-default",
+    "SPEC": "session-default",
+    "DEVELOPER": "session-default",
+    "QA": "session-default",
+    "SECOPS": "session-default",
+    "UI_UX": "session-default"
+  }
+}

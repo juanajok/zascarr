@@ -1,0 +1,58 @@
+name: Pipeline agentic (offline)
+
+on:
+  pull_request:
+    paths: ['.agentic/**', '.github/workflows/agentic.yml']
+  push:
+    branches: [main]
+    paths: ['.agentic/**', '.github/workflows/agentic.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PYTHONPATH: .agentic
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s .agentic/tests -v
+      - run: |
+          run=$(mktemp -d)/demo
+          python .agentic/examples/example.py "$run"
+          python -m pipeline --run "$run" delivery
+
+  canarios-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: .agentic
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHON_IMAGE: python@sha256:a83ba18aef0f865b1a4a611c2cf460fe446f2795673bbb9fe43be570439e3b39
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fijar la imagen de los canarios por digest
+        run: |
+          docker pull "$PYTHON_IMAGE"
+          image_id="$(docker image inspect --format '{{.Id}}' "$PYTHON_IMAGE")"
+          case "$image_id" in
+            sha256:????????????????????????????????????????????????????????????????) ;;
+            *) echo "::error::ID de imagen inesperado: $image_id"; exit 1 ;;
+          esac
+          echo "AGENTIC_DOCKER_TEST_IMAGE=$image_id" >> "$GITHUB_ENV"
+          echo "Imagen de canarios: $image_id"
+      - name: Canarios Docker aislados
+        run: python -m unittest discover -s .agentic/tests -p 'test_runner.py' -v

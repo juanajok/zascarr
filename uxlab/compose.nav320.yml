@@ -1,0 +1,82 @@
+# Ronda 4 de UXA-08b (#1205): dos instancias aisladas de la app a 320 px.
+# Usar SIEMPRE junto con compose.uxlab.yml; NUNCA con el Compose de producción.
+#
+#   export UXLAB_DB_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+#   docker compose -f uxlab/compose.uxlab.yml -f uxlab/compose.nav320.yml \
+#     up -d --wait app-a app-b
+#   docker compose -f uxlab/compose.uxlab.yml -f uxlab/compose.nav320.yml \
+#     run --rm --no-deps nav320
+#   docker compose -f uxlab/compose.uxlab.yml -f uxlab/compose.nav320.yml \
+#     down --volumes --remove-orphans
+name: zascarr-uxlab
+
+services:
+  app-a:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: zascarr-uxlab-app:local
+    restart: "no"
+    networks: [test-only]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      ZASCARR_DB_PASSWORD: ${UXLAB_DB_PASSWORD:?ejecuta ./uxlab/run.sh}
+      LIBRARY_PATH: /media/library
+      COVERS_CACHE_PATH: /config/covers
+      LECTOR_CACHE_PATH: /tmp/uxlab-lector
+      ALLOWED_HOSTS: app-a,app-b,app
+      RESCAN_INTERVAL_MINUTES: "0"
+      LOG_JSON: "false"
+      NAV_MOVIL_VARIANTE: a
+    volumes:
+      - library-test:/media/library
+      - covers-test:/config/covers
+
+  app-b:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: zascarr-uxlab-app:local
+    restart: "no"
+    networks: [test-only]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      ZASCARR_DB_PASSWORD: ${UXLAB_DB_PASSWORD:?ejecuta ./uxlab/run.sh}
+      LIBRARY_PATH: /media/library
+      COVERS_CACHE_PATH: /config/covers
+      LECTOR_CACHE_PATH: /tmp/uxlab-lector
+      ALLOWED_HOSTS: app-a,app-b,app
+      RESCAN_INTERVAL_MINUTES: "0"
+      LOG_JSON: "false"
+      NAV_MOVIL_VARIANTE: b
+    volumes:
+      - library-test:/media/library
+      - covers-test:/config/covers
+
+  nav320:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zascarr-uxlab-tests:latest
+    restart: "no"
+    init: true
+    shm_size: 1gb
+    networks: [test-only]
+    depends_on:
+      app-a:
+        condition: service_healthy
+      app-b:
+        condition: service_healthy
+    environment:
+      NAV320_A_URL: http://app-a:8000
+      NAV320_B_URL: http://app-b:8000
+      NAV320_OUT: /work/out
+      UXLAB_GIT_SHA: ${UXLAB_GIT_SHA:-}
+    volumes:
+      - ./nav320:/work/nav320:ro
+      - ../docs/design/uxa08b-320:/work/out
+    command: ["node", "/work/nav320/run.mjs"]

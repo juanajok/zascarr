@@ -1,0 +1,2281 @@
+{
+  "generated_at": "2026-11-26T09:39:46.803Z",
+  "git_sha": "ea9bc603eb2aa86265abd5b0697b3e03ef87e732",
+  "method": "Agentes sintéticos deterministas (sin LLM) con Playwright; no es una prueba con personas ni vale para la aceptación de #1205.",
+  "viewport": {
+    "width": 320,
+    "height": 568
+  },
+  "variants": {
+    "a": "http://app-a:8000",
+    "b": "http://app-b:8000"
+  },
+  "personas": [
+    {
+      "id": "marta",
+      "name": "Marta",
+      "role": "reader",
+      "description": "58 años, coleccionista, no técnica. Lee su colección desde el móvil y no conoce nombres técnicos de filtros ni de menús.",
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "isMobile": true,
+      "touch": true
+    },
+    {
+      "id": "dani",
+      "name": "Dani",
+      "role": "operator",
+      "description": "34 años, vigila el servidor. Conoce la app y busca el estado del sistema sin rodeos.",
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "isMobile": true,
+      "touch": true
+    }
+  ],
+  "tasks": [
+    {
+      "id": "biblioteca",
+      "name": "Encontrar un tebeo",
+      "start": "/ui/",
+      "objective": "Abre la ficha de la serie «Nebulosa de Papel» de tu biblioteca.",
+      "target": "Biblioteca",
+      "targetHref": "/ui/biblioteca",
+      "sectionPath": "/ui/biblioteca",
+      "seriesTitle": "Nebulosa de Papel"
+    },
+    {
+      "id": "estado",
+      "name": "Comprobar si algo falla",
+      "start": "/ui/",
+      "objective": "Comprueba si el sistema tiene algún problema o aviso.",
+      "target": "Estado",
+      "targetHref": "/estado",
+      "sectionPath": "/estado"
+    }
+  ],
+  "sessions": [
+    {
+      "variant": "a",
+      "persona": "marta",
+      "persona_name": "Marta",
+      "persona_role": "reader",
+      "task": "biblioteca",
+      "task_name": "Encontrar un tebeo",
+      "objective": "Abre la ficha de la serie «Nebulosa de Papel» de tu biblioteca.",
+      "start_url": "http://app-a:8000/ui/",
+      "first_click": "Más",
+      "target_visible_in_bar": false,
+      "clicks_to_section": 2,
+      "total_clicks": 3,
+      "success": true,
+      "stop_reason": null,
+      "doubts": [
+        "No veo «Biblioteca» en la barra; tengo que abrir «Más» y buscarlo.",
+        "Biblioteca, lo que más uso, no está en la barra."
+      ],
+      "layout_initial": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "layout_panel": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": true,
+        "panel": {
+          "left": 100,
+          "top": 118,
+          "right": 320,
+          "bottom": 508,
+          "width": 220,
+          "height": 390,
+          "fitsViewport": true
+        }
+      },
+      "layout_section": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "elapsed_ms": 2967,
+      "error": null
+    },
+    {
+      "variant": "a",
+      "persona": "marta",
+      "persona_name": "Marta",
+      "persona_role": "reader",
+      "task": "estado",
+      "task_name": "Comprobar si algo falla",
+      "objective": "Comprueba si el sistema tiene algún problema o aviso.",
+      "start_url": "http://app-a:8000/ui/",
+      "first_click": "Estado",
+      "target_visible_in_bar": true,
+      "clicks_to_section": 1,
+      "total_clicks": 1,
+      "success": true,
+      "stop_reason": null,
+      "doubts": [],
+      "layout_initial": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "layout_panel": null,
+      "layout_section": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "elapsed_ms": 649,
+      "error": null
+    },
+    {
+      "variant": "a",
+      "persona": "dani",
+      "persona_name": "Dani",
+      "persona_role": "operator",
+      "task": "biblioteca",
+      "task_name": "Encontrar un tebeo",
+      "objective": "Abre la ficha de la serie «Nebulosa de Papel» de tu biblioteca.",
+      "start_url": "http://app-a:8000/ui/",
+      "first_click": "Más",
+      "target_visible_in_bar": false,
+      "clicks_to_section": 2,
+      "total_clicks": 3,
+      "success": true,
+      "stop_reason": null,
+      "doubts": [
+        "«Biblioteca» no está en la barra; lo busco en «Más»."
+      ],
+      "layout_initial": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "layout_panel": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": true,
+        "panel": {
+          "left": 100,
+          "top": 118,
+          "right": 320,
+          "bottom": 508,
+          "width": 220,
+          "height": 390,
+          "fitsViewport": true
+        }
+      },
+      "layout_section": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "elapsed_ms": 1103,
+      "error": null
+    },
+    {
+      "variant": "a",
+      "persona": "dani",
+      "persona_name": "Dani",
+      "persona_role": "operator",
+      "task": "estado",
+      "task_name": "Comprobar si algo falla",
+      "objective": "Comprueba si el sistema tiene algún problema o aviso.",
+      "start_url": "http://app-a:8000/ui/",
+      "first_click": "Estado",
+      "target_visible_in_bar": true,
+      "clicks_to_section": 1,
+      "total_clicks": 1,
+      "success": true,
+      "stop_reason": null,
+      "doubts": [],
+      "layout_initial": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "layout_panel": null,
+      "layout_section": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/estado",
+            "label": "Estado",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "elapsed_ms": 629,
+      "error": null
+    },
+    {
+      "variant": "b",
+      "persona": "marta",
+      "persona_name": "Marta",
+      "persona_role": "reader",
+      "task": "biblioteca",
+      "task_name": "Encontrar un tebeo",
+      "objective": "Abre la ficha de la serie «Nebulosa de Papel» de tu biblioteca.",
+      "start_url": "http://app-b:8000/ui/",
+      "first_click": "Biblioteca",
+      "target_visible_in_bar": true,
+      "clicks_to_section": 1,
+      "total_clicks": 2,
+      "success": true,
+      "stop_reason": null,
+      "doubts": [],
+      "layout_initial": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "layout_panel": null,
+      "layout_section": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "elapsed_ms": 2993,
+      "error": null
+    },
+    {
+      "variant": "b",
+      "persona": "marta",
+      "persona_name": "Marta",
+      "persona_role": "reader",
+      "task": "estado",
+      "task_name": "Comprobar si algo falla",
+      "objective": "Comprueba si el sistema tiene algún problema o aviso.",
+      "start_url": "http://app-b:8000/ui/",
+      "first_click": "Más",
+      "target_visible_in_bar": false,
+      "clicks_to_section": 2,
+      "total_clicks": 2,
+      "success": true,
+      "stop_reason": null,
+      "doubts": [
+        "No veo «Estado» en la barra; tengo que abrir «Más» y buscarlo.",
+        "No hay ninguna señal de Estado a la vista; «Más» no dice si algo falla."
+      ],
+      "layout_initial": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "layout_panel": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": true,
+        "panel": {
+          "left": 100,
+          "top": 118,
+          "right": 320,
+          "bottom": 508,
+          "width": 220,
+          "height": 390,
+          "fitsViewport": true
+        }
+      },
+      "layout_section": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "elapsed_ms": 788,
+      "error": null
+    },
+    {
+      "variant": "b",
+      "persona": "dani",
+      "persona_name": "Dani",
+      "persona_role": "operator",
+      "task": "biblioteca",
+      "task_name": "Encontrar un tebeo",
+      "objective": "Abre la ficha de la serie «Nebulosa de Papel» de tu biblioteca.",
+      "start_url": "http://app-b:8000/ui/",
+      "first_click": "Biblioteca",
+      "target_visible_in_bar": true,
+      "clicks_to_section": 1,
+      "total_clicks": 2,
+      "success": true,
+      "stop_reason": null,
+      "doubts": [],
+      "layout_initial": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "layout_panel": null,
+      "layout_section": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "elapsed_ms": 940,
+      "error": null
+    },
+    {
+      "variant": "b",
+      "persona": "dani",
+      "persona_name": "Dani",
+      "persona_role": "operator",
+      "task": "estado",
+      "task_name": "Comprobar si algo falla",
+      "objective": "Comprueba si el sistema tiene algún problema o aviso.",
+      "start_url": "http://app-b:8000/ui/",
+      "first_click": "Más",
+      "target_visible_in_bar": false,
+      "clicks_to_section": 2,
+      "total_clicks": 2,
+      "success": true,
+      "stop_reason": null,
+      "doubts": [
+        "«Estado» no está en la barra; lo busco en «Más».",
+        "No hay ninguna señal de Estado a la vista; «Más» no dice si algo falla."
+      ],
+      "layout_initial": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "layout_panel": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": true,
+        "panel": {
+          "left": 100,
+          "top": 118,
+          "right": 320,
+          "bottom": 508,
+          "width": 220,
+          "height": 390,
+          "fitsViewport": true
+        }
+      },
+      "layout_section": {
+        "viewport": {
+          "width": 320,
+          "height": 568
+        },
+        "docScrollWidth": 320,
+        "bodyScrollWidth": 320,
+        "horizontalOverflow": false,
+        "navBox": {
+          "left": 0,
+          "top": 505,
+          "right": 320,
+          "bottom": 568,
+          "width": 320,
+          "height": 63
+        },
+        "items": [
+          {
+            "tag": "a",
+            "href": "/ui/",
+            "label": "Inicio",
+            "box": {
+              "left": 0,
+              "top": 508,
+              "right": 64,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/pendientes",
+            "label": "Revisar",
+            "box": {
+              "left": 64,
+              "top": 508,
+              "right": 128,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/biblioteca",
+            "label": "Biblioteca",
+            "box": {
+              "left": 128,
+              "top": 508,
+              "right": 192,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "a",
+            "href": "/ui/wishlist",
+            "label": "Deseados",
+            "box": {
+              "left": 192,
+              "top": 508,
+              "right": 256,
+              "bottom": 568,
+              "width": 64,
+              "height": 60
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          },
+          {
+            "tag": "summary",
+            "href": null,
+            "label": "Más",
+            "box": {
+              "left": 256,
+              "top": 508,
+              "right": 320,
+              "bottom": 560.59375,
+              "width": 64,
+              "height": 52.59375
+            },
+            "textLines": 1,
+            "textOverflow": false,
+            "fontSize": "12px"
+          }
+        ],
+        "panelOpen": false,
+        "panel": null
+      },
+      "elapsed_ms": 648,
+      "error": null
+    }
+  ]
+}

@@ -91,6 +91,18 @@ Sigue las guías oficiales con estas precisiones locales:
   SHA completo de la imagen y comparación de ascendencia con `main` en caché;
   sin identidad o sin verificación dice «No se puede comprobar». Nunca
   actualiza, ejecuta Git en la app ni bloquea la página por la red.
+- **Actualización manual desde UI (#443 B):** el PO eligió confiar en `main` y
+  permitir migraciones, sin aprobación por consola de cada SHA. Esta decisión
+  cambia la política propuesta C-12, pero **no habilita la función**: hacen
+  falta un auxiliar de acción fija, autenticación, revisión de privilegios,
+  estado fiable y pruebas aisladas. No conectar `update.sh` directamente a la
+  app ni desplegarlo sin las correspondientes verificaciones. Decisión de
+  autoridad (2026-11-20): la app reautentica y emite una autorización corta de
+  un solo uso; el host la verifica. La rama tiene la UI conectada solo detrás
+  de `OPS4_ACTUALIZACION_HABILITADA=false`, auxiliar/unidad separados y
+  instalador sin activación por defecto. No está habilitada ni desplegada.
+  La decisión de confianza en `main`, acción fija y riesgo residual de la clave
+  compartida está en [ADR 0026](docs/adr/0026-actualizacion-manual-confianza-main.md).
 
 ## 4. Rendimiento en Pi
 
@@ -307,6 +319,15 @@ como marco permanente.
   de ciclo cuando haya 8 historias terminadas o el 2026-11-12, lo que llegue
   antes (umbrales provisionales).
 
+### 9.1 Pipeline multiagente (piloto de desarrollo)
+
+La herramienta de [`.agentic/`](.agentic/README.md) queda fuera del runtime y no sustituye
+CI, UX Lab ni las aprobaciones de fusión. El operador fija ámbito y pruebas; el agente no
+puede escribir las políticas, activar Docker ni entregar a producción. Los dictámenes se
+ligan al SHA candidato, no a una rama. La integración DSH se ha probado con datos sintéticos:
+no pasarle código privado hasta verificar restricciones y autorizar la transferencia.
+Decisión: [ADR 0026](docs/adr/0026-pipeline-ingenieria-local.md).
+
 ## 10. Lo que NO se hace (anti-patrones del proyecto)
 
 - ❌ SPA / Node build / Alpine/Vue/React: ADR-0001, definitivo. **Única excepción:** el lector propio puede usar un único `static/lector.js` sin dependencias ni build, solo en su pantalla (ADR 0021); nada de Alpine/Vue/React.
@@ -335,6 +356,7 @@ como marco permanente.
 | `docs/design/registro-incremental-326.md` | **Registro incremental** (#326): buscar y registrar archivos nuevos de una biblioteca ya registrada, a mano y con confirmación; «nuevo» = ruta sin fila; sin automatismo. **Consultar antes de tocar `LibraryAdopter.adopt`, `registro_biblioteca` o el bloque «Registro» de la Auditoría** |
 | `docs/design/especificacion-BL-R9-rescan-biblioteca.md` | **Rescan de la biblioteca** (BL-R9): a demanda (Auditoría) y periódico (`rescan_interval_minutes`); registra lo nuevo, re-tría lo sustituido sobre la misma fila (`file_mtime_ns`, migración 0021), reenlaza movidos y marca/revierte desaparecidos, sin mover ni borrar. **Consultar antes de tocar `LibraryAdopter.rescanear`, `services/rescan_biblioteca.py`, el bloque «Reescanear la biblioteca» de Auditoría o el bucle `_rescan_loop` de `main`** |
 | `docs/design/especificacion-BL-OPS1.md` | **«Hacer una copia ahora»** (BL-OPS1, #443; ADR 0021): auxiliar del host activado por socket (`deploy/ops/zascarr_ops.py`, protocolo HMAC de lista cerrada), cerrojo único de operaciones (`scripts/_cerrojo.sh`), `scripts/instalar_ops.sh`, `services/ops_host.py` y `web/copias.py`. **Consultar antes de tocar cualquiera de ellos, `backup.sh` (`status.json`, `omitida.json`, `copias.json`) o el bloque «Copias de seguridad» de Estado** |
+| `docs/design/ops4-b1-contrato-estado.md` | **Estado durable de la actualización** (B1, #443): esquema v1/v2, fases, monotonía, cerrojo de publicación y reconciliación del último intento. **Consultar antes de tocar `deploy/ops/escritor_estado_actualizar_ops4.py`, `estado_actualizar_ops4.py`, el estado inicial del auxiliar o `services/estado_actualizacion.py`** |
 | `docs/design/disponibilidad-231.md` | **Disponibilidad de archivos** (#231): qué anota el ciclo del importador (`import_runs.details["comprobacion_biblioteca"]`), cómo se lee y la lista `/ui/no-disponibles`; solo lectura, sin tocar el disco al mostrarse. **Consultar antes de tocar `Importer._comprobar_biblioteca`, `services/disponibilidad.py` o el bloque «Tu biblioteca en disco» de Estado** |
 
 ## 12. Principios de arquitectura del propio código (confirmados por
@@ -410,8 +432,8 @@ comodidad, y un mismo concepto no cambia de nombre según la pantalla. La UI hab
 | **editorial** | Casa editorial de una serie (`Publisher`). El sello (`Imprint`) es otra cosa. | «Editorial» / «Editoriales»; «Todas las editoriales». | «Sello» como sinónimo; «colección». | `src/zascarr/models/__init__.py`, `_filtros_panel_campos.html`, `editar_serie.html` |
 | **tradición** | Tradición editorial de una serie (`ComicTradition`): grapa americana, tebeo español, manga… | «Tradición»; valores «Tebeo español», «Grapa americana», «Franco-belga (BD)», «Manga»… | El valor interno (`tebeo`, `franco_belgian`, `american`); «tebeo» a secas como etiqueta de tradición. | `src/zascarr/models/__init__.py`, `library.py`, `_filtros_panel_campos.html` |
 | **saga / arco** | Arco argumental o lista de lectura que puede cruzar series (`StoryArc`). | «Saga» / «Sagas»; «Sagas en orden», «Nueva saga». | «Arco» en superficie; «colección» para una saga. | `src/zascarr/models/__init__.py`, `arcos.html`, `_filtros_panel_campos.html` |
-| **edición** | Edición concreta de un número: formato, editorial, idioma, calidad (`IssueFormat` y filas de `Issue` distintas). | «Edición» / «Ediciones»; «Mejores ediciones», «Otras ediciones de este número». | «Número» o «publicación» para una edición. | `mejoras.html`, `_auditoria_informe.html`, `issue_detail.html` |
-| **mejora** | Edición mejor que la que ya tienes para un número; la propone ZascArr y el PO decide. | «Mejora» / «Mejoras»; «Mejoras» (pantalla), «Buscar mejoras ahora», «N pendientes» de mejoras. | «Mejoras de edición» como nombre de pantalla; «sugerencia» para la propuesta (la sugerencia es de la cola). | `mejoras.html`, `menu.py`, `web/mejoras.py` |
+| **edición** | Línea editorial con su propia numeración; para el coleccionista, cada edición es una **serie** distinta (ADR 0020). El **formato** de publicación (grapa, tomo, ómnibus) es `IssueFormat`; una **copia** u origen distinto (escaneo, digital, CBZ/CBR) es un archivo (`File`) del mismo número. | «Edición» / «Ediciones»; «Otros volúmenes de este número» en la ficha; «Formato» para la grapa/tomo; «Copia» para la calidad u origen; «Mejores copias» en Mejoras. | «Número» o «publicación» para una edición; «edición» para un archivo o una copia; «formato» como sinónimo de edición. | `issue_detail.html`, `mejoras.html`, `_auditoria_informe.html` |
+| **mejora** | Copia u origen mejor que el que ya tienes para un número; la propone ZascArr y el PO decide. | «Mejora» / «Mejoras»; «Mejoras» (pantalla), «Buscar mejoras ahora», «N pendientes» de mejoras; «Mejores copias» en la propuesta. | «Mejoras de edición» como nombre de pantalla; «sugerencia» para la propuesta; «edición» para la copia. | `mejoras.html`, `menu.py`, `web/mejoras.py` |
 | **publicación** | En declaraciones de carpeta y correspondencias, la unidad de destino: un número o un tomo de la biblioteca. En la ficha de número, la fecha de publicación es un dato de la edición. No es sinónimo general de número. | «Publicación» / «Publicaciones» solo en el flujo de correspondencias; «Una publicación es un número o tomo de tu biblioteca»; en la ficha, «Fecha de publicación». | Fuera de esos dos contextos; «Otras publicaciones con este número» cuando se habla de ediciones; «publicación» como sinónimo de número en la cola. | `crear_correspondencia.html`, `contexto_declarado.html`, `issue_detail.html` |
 | **catálogo** | Nombre interno del catálogo de la base de datos. No es un término de superficie. | — (usar «biblioteca»). | «Catálogo» en la superficie; se sustituye por «biblioteca» cuando se toque la pantalla (deuda de V11 en Auditoría). | `auditoria.html`, `_auditoria_registro.html` |
 
@@ -438,8 +460,10 @@ comodidad, y un mismo concepto no cambia de nombre según la pantalla. La UI hab
   (`/ui/pendientes`). **Duplicados** es la revisión del disco (`/ui/auditoria`); su acción es «Revisar
   mi biblioteca». «Revisión de mi biblioteca» y «Mi biblioteca» no son nombres de pantalla.
 - **Número, tebeo, edición y publicación.** **Número** es la unidad bibliográfica; **tebeo** es el
-  objeto o archivo; **edición** es una versión concreta de ese número; **publicación** es la unidad de
-  destino en una declaración de carpeta (un número o un tomo). No se intercambian al contar.
+  objeto o archivo; **edición** es una **línea editorial** (para el coleccionista, otra **serie**,
+  ADR 0020); el **formato** (grapa, tomo, ómnibus) es `IssueFormat`; una **copia u origen** distinto
+  es un **archivo** del mismo número; **publicación** es la unidad de destino en una declaración de
+  carpeta (un número o un tomo). No se intercambian al contar.
 - **Saga, arco, editorial y sello.** En superficie, «Saga»; «arco» y `StoryArc` son código. «Editorial»
   es `Publisher`; «sello» es `Imprint` y solo se usa cuando el dato distingue el sello.
 
