@@ -148,6 +148,27 @@ class GobernanzaTest(unittest.TestCase):
             with self.subTest(criterio=criterio):
                 self.assertIn(estado, EVIDENCE_STATES, f"estado no admitido: {estado}")
 
+    def test_filas_migradas_enlazan_a_un_destino_existente(self) -> None:
+        text = read(GOVERNANCE / "mapa-reglas.md")
+        migradas = [
+            line
+            for line in text.splitlines()
+            if line.startswith("| PRE-") and line.rstrip().endswith("| migrada |")
+        ]
+        self.assertTrue(migradas, "no hay ninguna fila migrada que comprobar")
+        for line in migradas:
+            cells = line.split("|")
+            ident = cells[1].strip()
+            destino = cells[4]
+            with self.subTest(fila=ident):
+                link = LINK.search(destino)
+                self.assertIsNotNone(link, f"{ident} está migrada sin enlace de destino")
+                target = link.group(1).split("#", 1)[0]
+                self.assertTrue(
+                    (GOVERNANCE / target).resolve().exists(),
+                    f"{ident} enlaza a {target}, que no existe",
+                )
+
     def test_desgloses_apuntan_a_filas_existentes_y_sin_saltos(self) -> None:
         text = read(GOVERNANCE / "mapa-reglas.md")
         principales = set(RULE_ROW.findall(text))

@@ -44,7 +44,7 @@
 | PRE-38 | §7 | Migraciones aplicadas inmutables y reglas de tipos Postgres | Guía de migraciones | sin migrar |
 | PRE-39 | §14 | Conceptos de superficie y reglas de contexto entre términos | Glosario | sin migrar |
 | PRE-40 | Cabecera | Toda decisión nueva sobre cómo se trabaja se registra el día que se decide | Constitución y guía | sin migrar |
-| PRE-41 | §1 | Producto para el coleccionista y presupuesto de Raspberry Pi | Visión | sin migrar |
+| PRE-41 | §1 | Producto para el coleccionista y presupuesto de Raspberry Pi | [Visión](product-vision.md#pre-41--producto-persona-y-restricción-de-plataforma) | migrada |
 | PRE-42 | §2 | Convenciones de lenguaje, tipos e imports; aclarar la tensión del ejemplo de nombres | Guía técnica | sin migrar |
 | PRE-43 | §2 | Justificar dependencias y centralizar enums del dominio | Guía técnica | sin migrar |
 

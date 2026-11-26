@@ -25,3 +25,15 @@ Este documento no describe arquitectura de módulos, contratos de API ni el deta
 
 - Criterios de diseño visual: [sistema-de-diseno-zascarr.md](../docs/design/sistema-de-diseno-zascarr.md).
 - Comparación con referencias antes de features grandes: [benchmark-referencias.md](../docs/design/benchmark-referencias.md).
+
+## Reglas migradas
+
+Texto trasladado desde la guía vigente (sección 1). La copia de la guía se conserva hasta la aprobación de la retirada; mientras exista, esta sección es duplicación declarada, no autoridad nueva.
+
+### PRE-41 — Producto, persona y restricción de plataforma
+
+ZascArr es un gestor self-hosted de tebeoteca (CBZ/CBR) tipo Sonarr/Radarr, optimizado para Raspberry Pi 4/5 y pensado para el público hispanohablante. Stack: FastAPI + SQLAlchemy async + PostgreSQL + Jinja2 + HTMX. Sin Redis (ADR-0011). Sin SPA, sin build de Node, htmx vendorizado en disco (ADR-0001).
+
+**Persona:** «El Coleccionista»: no técnico, no abre terminales ni JSON. Las decisiones de producto se miden contra él, no contra la experiencia del desarrollador.
+
+**Restricción dura que nunca se rompe:** corre dentro de una Pi compartida con Transmission, aMule, Prowlarr y Kavita. El presupuesto de RAM por contenedor está documentado en `docker-compose.yml` (512M). Todo lo «bonito» viene segundo; lo ligero y lo fiable, primero.
