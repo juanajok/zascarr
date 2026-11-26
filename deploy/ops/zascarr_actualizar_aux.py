@@ -6,6 +6,12 @@ firma, frescura, testigo y consumo durable, comprueba el cerrojo y ordena
 iniciar la unidad fija `zascarr-actualizar.service`. No recibe rama, rutas ni
 shell; no registra el testigo ni la contraseña. No se instala ni se habilita en
 producción desde este cambio.
+
+La instantánea del intento es la v2 del contrato B1 (`estado_inicial`), se
+publica con `escribir_estado` bajo el cerrojo del directorio y, si esa
+escritura no confirma, no se inicia la unidad. Tras el start no se escribe
+`en_curso`: el finalizador cierra el intento, y un fallo del start se marca con
+`publicar_transicion` (fase `fin`, código cerrado), que no pisa un terminal.
 """
 from __future__ import annotations
 
@@ -20,8 +26,12 @@ import time
 
 try:  # importado como paquete (pruebas): una sola identidad de módulo
     from .escritor_estado_actualizar_ops4 import (  # noqa: E402
+        CODIGO_OTRO,
+        FASES,
+        UNIDAD,
         ResultadoEscritura,
         escribir_estado,
+        estado_inicial,
         propietario_servicio,
         publicar_transicion,
     )
@@ -41,8 +51,12 @@ try:  # importado como paquete (pruebas): una sola identidad de módulo
 except ImportError:  # instalado como script suelto en /usr/local/lib/zascarr
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
     from escritor_estado_actualizar_ops4 import (  # noqa: E402
+        CODIGO_OTRO,
+        FASES,
+        UNIDAD,
         ResultadoEscritura,
         escribir_estado,
+        estado_inicial,
         propietario_servicio,
         publicar_transicion,
     )
@@ -60,7 +74,6 @@ except ImportError:  # instalado como script suelto en /usr/local/lib/zascarr
         verificar_autorizacion,
     )
 
-UNIDAD = "zascarr-actualizar.service"
 RUTA_CERROJO = "/run/zascarr-ops.lock"
 PATH_FIJO = "/usr/sbin:/usr/bin:/sbin:/bin"
 TIEMPO_SYSTEMCTL_S = 5
@@ -91,13 +104,14 @@ def procesar(
 ) -> Respuesta:
     """Orden: esquema → firma → frescura → cerrojo → testigo → consumo → estado → inicio.
 
-    T-17: solo se escribe `aceptada` (con el consumo durable ya reclamado);
-    tras `systemctl start` no se escribe ninguna instantánea más. Si el start
-    falla se intenta `fallida` por la guarda de monotonía, que no pisa un
-    terminal escrito por el finalizador.
+    T-17: solo se escribe la instantánea inicial (v2, `aceptada`) con el
+    consumo durable ya reclamado; tras `systemctl start` no se escribe ninguna
+    instantánea más. Si la escritura inicial no confirma se rechaza con
+    `no_disponible` y no se inicia la unidad. Si el start falla se intenta el
+    terminal `fallida` por la guarda de monotonía (`publicar_transicion` con
+    fase `fin` y código cerrado), que no pisa un terminal escrito por el
+    finalizador y no deja un estado parcial si la publicación es incierta.
     """
-    if transicionar is None:
-        transicionar = escribir
     if type(clave) is not bytes or len(clave) != 32:
         return rechazo("no_disponible")
     if type(ahora) is not int or not 0 <= ahora < 2**63:
@@ -129,10 +143,10 @@ def procesar(
         return rechazo("no_disponible", id_)
     if resultado is not CodigoAutorizacion.ACEPTADA:
         return rechazo("autorizacion_invalida", id_)
-    inicial = {
-        "schema": 1, "id": id_, "estado": "aceptada",
-        "inicio_epoch": ahora, "actualizado_epoch": ahora,
-    }
+    try:
+        inicial = estado_inicial(id_, ahora)
+    except ValueError:
+        return rechazo("no_disponible", id_)
     if escribir is not None and escribir(inicial) != ResultadoEscritura.OK:
         return rechazo("no_disponible", id_)
     try:
@@ -141,7 +155,18 @@ def procesar(
         return rechazo("no_disponible", id_)
     if iniciada is not True:
         if transicionar is not None:
-            transicionar({**inicial, "estado": "fallida", "actualizado_epoch": ahora})
+            marca = transicionar(
+                "fallida",
+                ahora=ahora,
+                id_=id_,
+                inicio_epoch=inicial["inicio_epoch"],
+                fase=FASES[-1],
+                codigo=CODIGO_OTRO,
+            )
+            if marca is ResultadoEscritura.INCIERTO:
+                # La publicación durable no se pudo confirmar: no se anuncia
+                # aceptación ni se deja un estado parcial.
+                return rechazo("no_disponible", id_)
         return rechazo("no_disponible", id_)
     # T-17: no se escribe `en_curso` después del start. El finalizador cierra;
     # una instantánea posterior podría pisar un terminal si la unidad acaba antes.
@@ -235,17 +260,25 @@ def main() -> int:
         )
         reclamar = crear_reclamador_durable(fd_dir)
         propietario = propietario_servicio(ruta_estado)
+
+        def transicionar(
+            estado: str, *, ahora: int, id_: str, inicio_epoch: int,
+            fase: str, codigo: str,
+        ) -> ResultadoEscritura:
+            """Publica una transición del mismo intento bajo el cerrojo B1."""
+            return publicar_transicion(
+                ruta_estado, estado, ahora=ahora, id_=id_,
+                inicio_epoch=inicio_epoch, fase=fase, codigo=codigo,
+                propietario=propietario,
+            )
+
         respuesta = procesar(
             linea, clave=clave or b"", ahora=int(time.time()),
             reclamar_uso=reclamar, iniciar=_iniciar, cerrojo_ocupado=_cerrojo_ocupado,
             escribir=lambda datos: escribir_estado(
                 ruta_estado, datos, propietario=propietario,
             ),
-            transicionar=lambda datos: publicar_transicion(
-                ruta_estado, datos["estado"],
-                ahora=datos["actualizado_epoch"], id_=datos["id"],
-                inicio_epoch=datos["inicio_epoch"], propietario=propietario,
-            ),
+            transicionar=transicionar,
         )
     except Exception:  # noqa: BLE001 — nunca se devuelve un éxito dudoso
         respuesta = rechazo("no_disponible")

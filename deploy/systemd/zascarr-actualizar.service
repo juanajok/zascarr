@@ -15,7 +15,7 @@ ExecStart=/bin/bash @REPO@/scripts/update.sh --rama main
 # Solo `success:exited:0` es `hecha`; el 75 es el cerrojo ocupado, que por
 # contrato ocurre antes de efectos; el resto (código 1, timeout, señal, parada
 # manual) es `incierta` porque no se puede distinguir pre de post-efecto (H-13).
-ExecStopPost=-/bin/sh -c 'case "$SERVICE_RESULT:$EXIT_CODE:$EXIT_STATUS" in success:exited:0) r=hecha;; exit-code:exited:75) r=fallida;; *) r=incierta;; esac; exec /usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-estado-actualizar-ops4 --ruta @ZASCARR_DATA_DIR@/ops/actualizar-status.json --resultado "$r"'
+ExecStopPost=-/bin/sh -c 'case "$SERVICE_RESULT:$EXIT_CODE:$EXIT_STATUS" in success:exited:0) r=hecha; c=success:exited:0;; exit-code:exited:75) r=fallida; c=exit-code:exited:75;; *) r=incierta; c=otro;; esac; exec /usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-estado-actualizar-ops4 --ruta @ZASCARR_DATA_DIR@/ops/actualizar-status.json --resultado "$r" --codigo "$c"'
 RuntimeMaxSec=5400
 TimeoutStopSec=60
 KillMode=control-group
