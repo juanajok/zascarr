@@ -33,6 +33,8 @@ En un directorio de pruebas separado, con Node `v24.22.3`, npm `11.19.1` y OpenS
 
 Conclusión: el ciclo requiere completar y revisar `Purpose` antes de afirmar que la spec consolidada valida; no es una consolidación sin intervención. Se usaron `DO_NOT_TRACK=1` y `OPENSPEC_TELEMETRY=0` y directorios de configuración aislados. Hubo acceso al registro npm; no se verificó la ausencia de otras conexiones. Desactivar scripts de instalación no evita ejecutar después la CLI y sus dependencias. No se han verificado aún obligaciones de licencias transitivas, reproducibilidad completa ni compatibilidad efectiva de harnesses.
 
+En el código instalado de OpenSpec 2.2.0, `DO_NOT_TRACK=1`, `OPENSPEC_TELEMETRY=0` y `CI=true` desactivan cada uno la telemetría y la comprobación automática de versiones; una consulta explícita de versión tiene reglas propias. En una ejecución adicional de `validate --all --json` con `DO_NOT_TRACK=1`, interceptando en memoria `fetch`, `http(s)` y `net.Socket.connect`, no se observaron intentos en esas superficies y se validaron dos elementos. Este resultado es específico de esa ejecución y no demuestra ausencia universal de red ni cubre `init` o `archive`.
+
 La reinstalación desde el lock local con `npm ci --offline --ignore-scripts --no-audit --no-fund` terminó con código 0 y 66 paquetes, usando una caché previamente poblada. El SHA-256 del lock antes y después fue `ebcc1e4ff2c56aa22ff1952f380a052b13f9491b6937db2d69b82cf7d6905fd0`. Esto solo acredita esta instalación en Node 24.22.3/npm 11.19.1 con esa caché y ese lock, no una instalación con caché vacía ni en otras plataformas. El primer intento falló por configuración npm de usuario/global duplicada; se corrigió antes de repetir.
 
 ## Autoverificación del propio cambio
