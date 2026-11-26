@@ -1,8 +1,8 @@
 # OPS4 · B1 — Contrato del estado durable de actualización (v2) (#443)
 
-> **Estado:** propuesta de contrato para el incremento B1 del [benchmark de cierre](benchmark-ops4-cierre-2026-11-21.md) (§12.2). La función sigue **deshabilitada por defecto** (`OPS4_ACTUALIZACION_HABILITADA=false`): este contrato no enciende la UI, no arma el socket y no ejecuta nada.
+> **Estado:** implementado en la rama `feat/ops4-b1-443` (2026-11-26) y verificado en local; la función sigue **deshabilitada por defecto** (`OPS4_ACTUALIZACION_HABILITADA=false`): este contrato no enciende la UI, no arma el socket y no ejecuta nada. Evidencia: oráculo `ops4-b1-check.py` (contrato, monotonía y reconciliación), 403 pruebas OPS4/instalador, prueba de concurrencia de dos procesos reales sobre el estado y `ruff` limpio. **NOT RUN:** `update.sh`, VM/Pi, y la vista `/estado` (B7).
 >
-> **Fuera de este incremento:** `scripts/update.sh` (ejecutable, lo integra el operador a mano llamando al CLI de abajo), las pruebas existentes (`tests/`, las actualiza el operador), la vista `/estado` y su plantilla (es B7) y la reserva atómica del cerrojo (es B2).
+> **Fuera de este incremento:** la llamada a las fases desde `scripts/update.sh` (el CLI ya está listo; queda añadir las invocaciones), la vista `/estado` y su plantilla (es B7) y la reserva atómica del cerrojo de operaciones (es B2).
 
 ## 1. Fichero de estado v2
 
@@ -64,7 +64,7 @@ La lectura, la decisión y el reemplazo del estado deben ser **una sola sección
 
 `main` conserva su comportamiento y gana un segundo modo, sin shell y con argumentos fijos:
 
-- `--ruta RUTA --resultado hecha|fallida|incierta [--codigo CÓDIGO]`: cierra el intento como hoy (tabla `SERVICE_RESULT` de `resultado_final`), ahora escribiendo v2 con `fase="fin"`, `resultado` y `codigo`.
+- `--ruta RUTA --resultado hecha|fallida|incierta [--codigo CÓDIGO]`: cierra el intento como hoy (tabla `SERVICE_RESULT` de `resultado_final`), ahora escribiendo v2 con `fase="fin"`, `resultado` y `codigo`. El código es opcional y, si falta, vale `otro`: así una invocación manual no deja el cierre a medias. La unidad `ExecStopPost` mapea `SERVICE_RESULT` y pasa el código explícito (`success:exited:0`, `exit-code:exited:75` u `otro`); el cierre de la unidad y el modo manual usan el mismo contrato.
 - `--ruta RUTA --fase preparacion|copia|git|build|migracion|arranque [--head0 SHA] [--sha-destino SHA] [--sha-actual SHA]`: publica una fase intermedia del mismo intento (estado `en_curso`), conservando `id`/`inicio_epoch` y los hashes ya fijados. Valida que cada SHA sea 40 hex.
 - Sigue devolviendo 2 ante argumentos inválidos, 0 si no hay estado válido o ya es terminal, y 1 solo si la escritura durable quedó incierta.
 - Orden de claves y códigos cerrados; nunca imprime estado, rutas ni secretos.
@@ -79,4 +79,13 @@ La lectura, la decisión y el reemplazo del estado deben ser **una sola sección
 
 ## 6. Verificación
 
-`docs/design/ops4-b1-check.py` es el oráculo determinista del operador (no se edita en este incremento): `contrato`, `monotonia` y `reconciliacion`, sobre una imagen Python 3.11 sin red y **sin escrituras** (el contenedor es de raíz y montaje de solo lectura y no tiene tmpfs). Por eso verifica el núcleo puro del contrato —`estado_inicial`, `validar_estado`, `calcular_transicion` e `interpretar_ultimo_intento`— y no repite la atomicidad, el `fsync` ni los wrappers de fichero, que cubren la suite del proyecto y la VM. Fuera de él quedan `update.sh`, las pruebas del proyecto, `/estado` y la validación en VM: **NOT RUN** aquí y se declaran al integrar.
+`docs/design/ops4-b1-check.py` es el oráculo determinista del operador: `contrato`, `monotonia` y `reconciliacion`, sobre una imagen Python 3.11 sin red y **sin escrituras** (el contenedor de verificación del pipeline es de raíz y montaje de solo lectura y no tiene tmpfs). Por eso verifica el núcleo puro del contrato —`estado_inicial`, `validar_estado`, `calcular_transicion` e `interpretar_ultimo_intento`—.
+
+La parte con E/S la cubre la suite del proyecto, que se ejecuta en un sistema de ficheros real:
+
+- `tests/test_ops4_escritor_estado.py` añade el contrato v2, la monotonía y una **prueba de concurrencia con dos procesos reales** (`test_publicacion_concurrente_no_pierde_terminal`): uno publica fases y otro el terminal, y el terminal no se pierde.
+- `tests/test_ops4_estado_actualizacion.py` cubre el último intento v2, la compatibilidad v1 y el límite de 7200 s.
+- `tests/test_ops4_estado_final_unidad.py` ejecuta la cadena real de `ExecStopPost` y comprueba el código cerrado.
+- `tests/test_ops4_auxiliar.py` adapta los dobles a la transición cerrada.
+
+Fuera quedan `update.sh` (la llamada a las fases), `/estado` (B7), la VM, la Pi y la revisión de SecOps del SHA final: **NOT RUN** y así se declara.
