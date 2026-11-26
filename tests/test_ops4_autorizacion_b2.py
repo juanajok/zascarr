@@ -1,12 +1,12 @@
 """B2a: la verificación del testigo no consume; el consumo es un paso aparte."""
 from __future__ import annotations
 
-from zascarr.services.autorizacion_actualizacion import crear_autorizacion
 from deploy.ops.verificador_autorizacion_ops4 import (
     CodigoAutorizacion,
     verificar_autorizacion,
     verificar_testigo_sin_consumo,
 )
+from zascarr.services.autorizacion_actualizacion import crear_autorizacion
 
 CLAVE = bytes(range(32))
 ID = "a" * 32
