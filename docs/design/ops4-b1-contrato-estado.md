@@ -36,11 +36,11 @@ El lector estricto del host y el lector de la app **siguen aceptando el esquema 
 
 - `FASES`: tupla con las 8 fases en orden.
 - `estado_inicial(id_: str, ahora: int) -> dict`: instantánea v2 canónica con `estado="aceptada"`, `fase="aceptada"`, `unidad="zascarr-actualizar.service"`, ambas épocas `ahora`, y `head0`/`sha_destino`/`sha_actual`/`resultado`/`codigo` a `None`. Rechaza (lanza `ValueError`) un `id_` o `ahora` inválidos.
-- `escribir_estado(ruta, datos, *, fsync=os.fsync, replace=_reemplazar, propietario=None)`: sin cambios de firma ni de atomicidad. Publica tanto v1 como v2; para v2 aplica las reglas de la tabla.
+- `escribir_estado(ruta, datos, *, fsync=os.fsync, replace=_reemplazar, propietario=None)`: sin cambios de firma ni de atomicidad. Publica tanto v1 como v2; para v2 aplica las reglas de la tabla. **Adquiere el cerrojo de publicación** (ver §3.1) antes de leer el directorio y lo libera al terminar, también en los caminos de error.
 - `validar_estado(datos) -> bool`: acepta un v1 válido o un v2 válido y rechaza cualquier otra cosa (claves, tipos, `unidad`, hashes, épocas, fase, resultado o código). Es el único punto de validación: lo usan `escribir_estado`, `leer_estado_estricto` y `calcular_transicion`.
 - `leer_estado_estricto(ruta)`: acepta v1 y v2 con las mismas garantías actuales (sin seguir enlaces, sin abrir FIFO, sin aceptar escritura de grupo u otros, tamaño doble comprobado). Devuelve `OK` y el objeto validado.
 - `calcular_transicion(actual, estado, *, ahora, id_=None, inicio_epoch=None, fase=None, head0=_NO_CAMBIA, sha_destino=_NO_CAMBIA, sha_actual=_NO_CAMBIA, codigo=None) -> dict | None`: **núcleo puro** que decide la siguiente instantánea sin tocar disco ni mutar `actual`; devuelve `None` cuando la transición es inválida (reglas de abajo). Es la única fuente de la decisión; `publicar_transicion` solo lee, delega en él y escribe.
-- `publicar_transicion(ruta, estado, *, ahora, id_=None, inicio_epoch=None, fase=None, head0=_NO_CAMBIA, sha_destino=_NO_CAMBIA, sha_actual=_NO_CAMBIA, codigo=None, propietario=None, fsync=..., replace=...)`:
+- `publicar_transicion(ruta, estado, *, ahora, id_=None, inicio_epoch=None, fase=None, head0=_NO_CAMBIA, sha_destino=_NO_CAMBIA, sha_actual=_NO_CAMBIA, codigo=None, propietario=None, fsync=..., replace=...)`: mantiene el cerrojo de publicación tomado mientras lee, decide y escribe, y delega la publicación en el **publicador interno sin cerrojo** (nunca vuelve a llamar a `escribir_estado`, que lo volvería a tomar y se autobloquearía):
   - Exige estado válido, `ahora` entero, fichero previo válido y mismo `id`/`inicio_epoch` si se pasan; si no, `INVALIDO` sin escribir.
   - Si el previo es terminal, `INVALIDO` sin escribir (nunca se pisa un terminal).
   - No baja `actualizado_epoch`; un `ahora` anterior es `INVALIDO`.
@@ -48,6 +48,17 @@ El lector estricto del host y el lector de la app **siguen aceptando el esquema 
   - `head0` y `sha_destino` no se pueden cambiar una vez fijados (un valor distinto es `INVALIDO`); `sha_actual` puede cambiar pero no volver a `None`. Un `_NO_CAMBIA` conserva el valor previo.
   - En terminal exige `fase="fin"`, fija `resultado=estado` y `codigo` (solo `None`, `success:exited:0`, `exit-code:exited:75` u `otro`); en no terminal deja `resultado=None` y `codigo=None`.
   - Publica con la misma atomicidad y monotonía actuales y solo devuelve `OK` si todas las fases durables confirman.
+
+### 3.1 Cerrojo de publicación (B1, obligatorio)
+
+La lectura, la decisión y el reemplazo del estado deben ser **una sola sección crítica** frente a otro escritor del host (auxiliar, finalizador o CLI invocado por `update.sh`). El cerrojo:
+
+- es un `flock` exclusivo sobre el **descriptor del directorio del estado** (el mismo que ya se abre con `O_DIRECTORY|O_NOFOLLOW`), sin ficheros de cerrojo nuevos;
+- lo toman **todas** las rutas de publicación: la inicial del auxiliar (a través de `escribir_estado`) y cada transición (a través de `publicar_transicion`);
+- se mantiene durante lectura, decisión y `replace`, y se libera en **todas** las salidas (incluidos los rechazos);
+- **no se anida**: quien ya lo tiene usa el publicador interno sin cerrojo; `escribir_estado` es solo para llamadores que no lo tienen;
+- si no se puede abrir el directorio, no hay dónde publicar (`INVALIDO`); si no se puede tomar el cerrojo, se falla cerrado (`INCIERTO`) y no se escribe;
+- no sustituye al cerrojo único de operaciones (es B2) ni coordina entre hosts.
 
 ## 4. Cierre de la unidad (`deploy/ops/estado_actualizar_ops4.py`)
 
