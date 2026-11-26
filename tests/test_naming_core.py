@@ -368,6 +368,11 @@ def make_session_mock(series_hits: list[SeriesHit],
         # de find_issue hace "FROM issues WHERE series_id = ...", así que
         # "series" (de "series_id") también aparecería ahí y esta rama
         # nunca se alcanzaría. Hay que mirar la tabla real (FROM issues).
+        if "SELECT DISTINCT series_id FROM issues" in str(query):
+            # BL-PARSE2 `series_con_numero`: estos tests no modelan qué serie tiene el número;
+            # ninguna lo tiene, así que el empate sigue siendo ambiguo como antes.
+            result_mock.fetchall = MagicMock(return_value=[])
+            return result_mock
         if "FROM issues" in str(query):
             issue_rows.clear()
             if issue_formats is None:
@@ -1969,7 +1974,7 @@ class TestDesempatePorNumero:
 
     @pytest.mark.asyncio
     async def test_empate_por_numero_lo_frena_el_anio_de_la_carpeta(self):
-        """C4: caso real de Lemire: la carpeta dice 2012 y la única con el número empieza en 1989."""
+        """C4 (caso de Lemire): la carpeta dice 2012 y la única con el número es de 1989."""
         matcher = _matcher_empate([_ZINCO, _DC], {_ZINCO.series_id})
         r = await matcher.decide(_triage_en("Animal Man - Saga de Jeff Lemire (2012)"),
                                  extractor=lambda _n: ("Animal Man", "5", None))
