@@ -55,6 +55,19 @@ Resultado: `Runner` con `scratch: true` ejecutó `python -B -m pytest -q -p no:c
 
 Límite: esto acredita que `scratch` funciona con una suite de producto **pura** y acotada. No acredita la suite completa: el runner solo materializa los archivos autorizados del manifiesto (hasta 64 rutas y 512 KB), así que un árbol de pruebas grande o con dependencias no encaja sin montar el repo, que no está implementado. Las pruebas con PostgreSQL, red o varios servicios siguen fuera del gate. La imagen de pytest no está fijada por digest propio ni se construye en CI.
 
+## Repetición de B1 con procesos reales (2026-11-26)
+
+Se repitió el candidato B1 (`feat/ops4-b1-443`) sobre el motor, con el oráculo puro y una prueba de procesos real dentro del gate. Base `b32ce410^`; candidato `f6d86257` (el código fuente es idéntico al fusionado en `c4a34203`; `690b77b9` añade las pruebas finales). La prueba está versionada en [`.agentic/evals/b1/`](<../../.agentic/evals/b1/README.md>).
+
+- Resultado: `COMPLETED` con perfil `HIGH_ASSURANCE`, 6 llamadas, 2 aprobaciones humanas, una ronda y ningún bloqueo. RED `42` con `contrato-v2`; GREEN `0` en `contrato-v2`, `monotonia`, `reconciliacion` y `procesos`. Entrega `3eb1de49ad5f1529338736f1fff275c7689c53d6`.
+- `procesos_b1.py` lanza cuatro procesos que publican a la vez, fuerza un fallo de `fsync`, comprueba que el terminal no se pisa y que no quedan temporales. Pasó en 1,77 s con `scratch: true` y la imagen fijada por digest.
+- Suite del proyecto fuera del gate, en un contenedor Python 3.11 con dependencias: **80 pruebas pasan**, incluida `test_publicacion_concurrente_no_pierde_terminal` (5/5 estable). Esa suite no cabe en el manifiesto actual (64 rutas, 512 KB), así que no se presenta como acreditada por el gate.
+- Las respuestas de los roles del replay fueron fixtures del operador, no dictámenes independientes de modelos. La prueba de procesos es del operador; no sustituye la suite del proyecto.
+
+### Intermitencia de la prueba de concurrencia
+
+La misma prueba del proyecto falló **8 de 30 veces** en el host con Python 3.14, aunque pasaba de forma estable en 3.11. La causa no es la publicación: el lector estricto invalida una lectura si el inodo cambia durante el `rename` atómico, como defensa deliberada. El test trataba ese `INVALIDO` como motivo para rendirse. Se corrigió `_cerrar_terminal` para reintentar la lectura dentro de su límite; después pasó **0/40 fallos** en 3.14 y **0/10** en 3.11. Es una corrección de robustez del test, no un cambio del contrato ni del escritor. Antes de prometer Python 3.14 como entorno de estas pruebas, conviene repetir la suite completa en ese intérprete; el gate fija 3.11.
+
 ## Límites de la evidencia y próximos criterios
 
 Las pruebas de gate modelan un hallazgo defensivo HIGH y verifican que no se compensa con otros PASS; no reproducen ataques. El conjunto cubre fallos de control, violaciones de contrato, presupuesto, interrupción/rehidratación, evidencia alterada, concurrencia, revisión inválida y aprobación obsoleta. El ejemplo no certifica que una aplicación web esté lista para producción. Pendientes: matriz de proyectos real, pruebas independientes de navegador y de escáneres, aislamiento fuerte/credenciales por adaptador, conectores automáticos para otros harnesses, comparación coste/latencia y requisitos cubiertos frente a un agente y ejecución de CI remota. No se han desplegado cambios.
