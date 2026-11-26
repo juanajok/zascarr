@@ -109,7 +109,9 @@ edición de Zinco, y 8 de la carpeta `Superman Vol. 3` enlazados a la edición d
 
 **Aceptación en datos reales** (tras desplegar, con tu autorización para la tanda en la Pi): repetir el
 embudo de solo lectura frente a la foto de BL-PARSE1:
-- ≥ 196 coincidencias más con el vínculo;
+- ≥ 194 coincidencias más con el vínculo (corregido el 2026-11-26 con el PO: el 196 del prototipo de §5
+  no simulaba la guarda BL-INF11 de `_resolve`, que R1 conserva a propósito; en el embudo frena 2
+  Superman #1 cuyo número ya mezcla colecciones);
 - **0** que dejan de coincidir;
 - **0** enlaces nuevos a otra serie o a otro número;
 - los 3 archivos de Lemire siguen sin enlazar.
