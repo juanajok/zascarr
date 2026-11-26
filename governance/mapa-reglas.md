@@ -179,3 +179,11 @@ Quedan 35 reglas sin destino. Las de contratos de dominio no pueden migrarse a u
 | `governance/contrato-biblioteca.md` | PRE-04, PRE-31, PRE-32, PRE-36-1, PRE-37 (portadas, caché, lectura de archivos, cifras del Inicio, sistema de diseño) |
 
 Cada uno se escribe leyendo el código vigente para confirmar el comportamiento, no copiando la guía. Sin tu decisión sobre esta agrupación no los creo: hacerlo por mi cuenta sería inventar autoridad nueva.
+
+## Decisión sobre la duplicación (2026-11-26)
+
+Las 43 reglas están migradas **y** siguen en `CLAUDE.md`. El mantenedor decidió mantener la duplicación por ahora, no retirar las copias.
+
+Motivo: la retirada es un cambio normativo de riesgo alto y conviene hacerla cuando exista más evidencia de que los destinos bastan, incluida la comprobación pendiente de carga de instrucciones (T0.4). Mientras dure, si una regla cambia, se actualizan **los dos** sitios el mismo día; una divergencia entre ellos se trata como defecto, no como interpretación.
+
+La retirada se hará en un lote único, con inventario de qué se elimina y aprobación expresa; hasta entonces, la autoridad sigue siendo la guía.
