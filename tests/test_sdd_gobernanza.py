@@ -23,6 +23,11 @@ RULE_ROW = re.compile(r"^\|\s*(PRE-[A-Z0-9]+)\s*\|", re.MULTILINE)
 SECTION = re.compile(r"^## (\d+)\.", re.MULTILINE)
 CONCEPTS_BLOCK = re.compile(r"^### 14\.1.*?$(.*?)^### 14\.2", re.MULTILINE | re.DOTALL)
 CONCEPT_ROW = re.compile(r"^\| \*\*(.+?)\*\* \|", re.MULTILINE)
+SPEC = ROOT / "docs" / "design" / "especificacion-SDD-T1.1-gobierno.md"
+EVIDENCIA = ROOT / "docs" / "design" / "t1.1-evidencia.md"
+CRITERION = re.compile(r"T1\.1-C\d{2}")
+EVIDENCE_STATES = ("HECHO", "PARCIAL", "PENDIENTE", "NOT RUN")
+EVIDENCE_ROW = re.compile(r"^\|\s*(T1\.1-C\d{2})\s*\|\s*([A-Z ]+?)\s*\|", re.MULTILINE)
 # Afirmaciones que solo serían válidas con una prueba de carga efectiva (T0.4).
 FORBIDDEN = re.compile(
     r"carga efectiva verificada|instrucciones cargadas correctamente|"
@@ -115,6 +120,23 @@ class GobernanzaTest(unittest.TestCase):
         self.assertEqual(
             set(indexados), esperados, "el índice del glosario no coincide con la guía"
         )
+
+    def test_evidencia_cubre_todos_los_criterios(self) -> None:
+        # La evidencia no puede omitir un criterio ni inventar estados.
+        criterios = sorted(set(CRITERION.findall(read(SPEC))))
+        self.assertTrue(criterios, "la especificación no declara criterios T1.1-Cxx")
+        self.assertTrue(EVIDENCIA.is_file(), "falta el registro de evidencia de T1.1")
+        evidencia = read(EVIDENCIA)
+        filas = {
+            match.group(1): match.group(2).strip()
+            for match in EVIDENCE_ROW.finditer(evidencia)
+        }
+        self.assertEqual(
+            sorted(filas), criterios, "la evidencia y la especificación no coinciden"
+        )
+        for criterio, estado in filas.items():
+            with self.subTest(criterio=criterio):
+                self.assertIn(estado, EVIDENCE_STATES, f"estado no admitido: {estado}")
 
     def test_ningun_documento_afirma_carga_no_verificada(self) -> None:
         for path in markdown_files():
