@@ -18,7 +18,7 @@
 
 ### Inventario cuantitativo y límites
 
-Sobre `git ls-tree -r --name-only ea9bc603`, contando archivos del nivel directo y no funcionalidades: 2.067 rutas rastreadas, 27 archivos ADR, 132 módulos Python en `services`, 10 en `api`, 45 en `web`, 552 archivos `tests/test_*.py` y 52 archivos de migración. Estas cifras no son números de endpoints, pruebas ejecutadas ni capacidades verificadas. El menú se documenta en `src/zascarr/web/menu.py`; el montaje de routers y bucles, en `src/zascarr/main.py`; las capacidades declaradas, en `README.md`.
+Sobre `git ls-tree -r --name-only ea9bc603`, contando archivos del nivel directo y no funcionalidades: 2.067 rutas rastreadas, 27 archivos ADR, 132 módulos Python en el nivel directo de `services` (147 contando sus dos subpaquetes), 10 en `api`, 45 en `web`, 552 archivos `tests/test_*.py` y 52 archivos de migración. Estas cifras no son números de endpoints, pruebas ejecutadas ni capacidades verificadas. El menú se documenta en `src/zascarr/web/menu.py`; el montaje de routers y bucles, en `src/zascarr/main.py`; las capacidades declaradas, en `README.md`.
 
 La CI de `main` define suite, Postgres real, lint y builds, además de un workflow de contratos UXLab condicionado por rutas. Son definiciones, no evidencia de una ejecución concreta ni de protección de rama. El benchmark histórico `docs/design/ficha-propuestas-desde-carpetas.md` menciona Redis, mientras `docs/adr/0011-retirar-redis.md` registra su retirada; `docs/adr/0004-exposicion-de-red.md` también conserva una referencia a Redis. No se reescriben documentos históricos ni se infiere que sigan vigentes sus descripciones de infraestructura.
 
