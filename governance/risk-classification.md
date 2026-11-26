@@ -29,3 +29,9 @@ Una excepción urgente registra causa, alcance, riesgo, mitigaciones, responsabl
 
 - Esta clasificación no crea gates ni cambia CI: la activación de checks obligatorios es una decisión aparte.
 - Los niveles son los propuestos y aprobados con la especificación T1.3; si el mantenedor los cambia, este fichero se actualiza primero.
+
+## Reglas migradas
+
+### PRE-15 — Cambio sensible de contraseña espera seguridad del SHA final
+
+Una fusión que toque «qué exige la contraseña actual» espera la pasada final de seguridad: una PR que modifique `services/seguridad.py`, `web/ajustes.py` o `services/reautenticacion.py` no se fusiona hasta que SecOps haya dictaminado **el SHA final** (el que se fusiona), aunque ya hubiera dictaminado uno anterior. Aplica también a los commits añadidos después de la revisión. Las pruebas estáticas de esa regla (quién llama a qué) son una red contra descuidos; no sustituyen a la pasada.

@@ -24,3 +24,9 @@ Un trabajo se cierra cuando se cumple lo que exige su nivel de riesgo y existe e
 ## Límites
 
 El DoD no sustituye la aprobación de fusión ni la decisión de despliegue, que son actos separados y humanos.
+
+## Reglas migradas
+
+### PRE-18 — Regresión nombrada y sin dependencias por probar
+
+Ninguna dependencia nueva se añade «por testing»: lo que se pueda comprobar con la infraestructura existente se comprueba con ella. Cada bug real se cierra con una **prueba de regresión explícita**, nombrada con el mecanismo del bug, no con una prueba genérica.

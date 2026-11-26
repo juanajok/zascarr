@@ -25,3 +25,11 @@ Un trabajo no entra en curso hasta cumplir lo que exige su nivel de riesgo. El n
 ## Límites
 
 Cumplir el DoR **no** autoaprueba nada: es condición para empezar, no permiso de fusión.
+
+## Reglas migradas
+
+### PRE-26 — Benchmark proporcional antes de implementar
+
+Antes de implementar una feature P0/P1 de comportamiento nuevo —o cualquier historia que toque modelo de datos, ficheros, seguridad o el ciclo de búsqueda y descarga— hay que fijar el problema local (historia, caso real, comportamiento actual en el código vigente y resultado deseado), consultar las referencias pertinentes y registrar por idea la decisión adoptar, adaptar, mejorar, construir sobre lo propio o descartar, con versión, commit y pruebas.
+
+No se infiere soporte de una función por su interfaz ni ausencia por no encontrarla. La ficha de benchmark es insumo para la especificación, **no aprobación**: decide el PO. El esfuerzo es proporcional al riesgo; un arreglo evidente de texto o CSS no requiere investigación.

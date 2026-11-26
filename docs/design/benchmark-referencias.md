@@ -162,3 +162,7 @@ reutilizar una implementación hay que revisar la licencia y los avisos del **fi
 origen** concreto, no asumir que «todas tienen la misma licencia». La licencia del propio
 ZascArr está en `LICENSE`; `src/zascarr/LEGAL.md` trata aparte el uso de contenido y las
 fuentes, no la reutilización de código de terceros.
+
+## Barrera legal de reutilización (regla migrada PRE-27)
+
+Inspirarse en un patrón no es copiar código. Kapowarr y Mylar3 son GPL-3.0; Suwayomi declara MPL-2.0 con componentes de terceros Apache-2.0. Antes de reutilizar una implementación, revisar el fichero concreto, sus avisos y obligaciones; no asumir que todas las referencias tienen la misma licencia.

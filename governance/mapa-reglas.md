@@ -18,10 +18,10 @@
 | PRE-12 | §5 | Cero telemetría, logs sin datos sensibles y campos de formulario explícitos | Seguridad y privacidad | sin migrar |
 | PRE-13 | §5 | Interfaz en localhost por defecto; abrir exige decisión explícita y contraseña | ADR de exposición de red | sin migrar |
 | PRE-14 | §5 | Toda URL variable pasa por la validación SSRF central | Contrato de red | sin migrar |
-| PRE-15 | §5 | Un cambio sensible de contraseña espera dictamen de seguridad del SHA final | Política de revisión | sin migrar |
+| PRE-15 | §5 | Un cambio sensible de contraseña espera dictamen de seguridad del SHA final | [Clasificación de riesgo](risk-classification.md#pre-15--cambio-sensible-de-contraseña-espera-seguridad-del-sha-final) | migrada |
 | PRE-16 | §8 | Patrón de pruebas con sesión simulada es la referencia | Guía técnica de pruebas | sin migrar |
 | PRE-17 | §8 | La suite se ejecuta también con temporal en el dispositivo raíz | Guía de pruebas y CI | sin migrar |
-| PRE-18 | §8 | Sin dependencias nuevas por probar; cada bug real cierra con regresión nombrada | Definición de hecho | sin migrar |
+| PRE-18 | §8 | Sin dependencias nuevas por probar; cada bug real cierra con regresión nombrada | [Definición de hecho](definition-of-done.md#pre-18--regresión-nombrada-y-sin-dependencias-por-probar) | migrada |
 | PRE-19 | §8 | Pruebas con Postgres real: base cuyo nombre lleve test, migrada a head una vez; estado alternativo en base efímera y subprocesos de Alembic sin sombra del paquete | Guía de Postgres | sin migrar |
 | PRE-20 | §9 | Commits atómicos en español; el histórico explica el mecanismo de cada cierre | Guía de contribución | sin migrar |
 | PRE-21 | §9 | Flujo Scrumban con límites de trabajo en curso | Planificación | sin migrar |
@@ -29,8 +29,8 @@
 | PRE-23 | §10 | Antipatrones explícitos del proyecto, con sus excepciones | Arquitectura y seguridad | sin migrar |
 | PRE-24 | §11 | Documentos vivos: consultar antes de tocar cada área | Índice de fuentes | sin migrar |
 | PRE-25 | §12 | Principios de modelo y datos ya validados por comparación | ADR y contratos | sin migrar |
-| PRE-26 | §13 | Benchmark proporcional antes de cambios grandes; la ficha informa, no aprueba | Procedimiento de benchmark | sin migrar |
-| PRE-27 | §13 | Barrera legal por archivo antes de reutilizar una implementación | Procedimiento de licencias | sin migrar |
+| PRE-26 | §13 | Benchmark proporcional antes de cambios grandes; la ficha informa, no aprueba | [Preparación](definition-of-ready.md#pre-26--benchmark-proporcional-antes-de-implementar) | migrada |
+| PRE-27 | §13 | Barrera legal por archivo antes de reutilizar una implementación | [Benchmark de referencias](../docs/design/benchmark-referencias.md#barrera-legal-de-reutilización-regla-migrada-pre-27) | migrada |
 | PRE-28 | §14 | El glosario fija superficie y no renombra datos persistidos | Glosario | sin migrar |
 | PRE-29 | §4 | Nada bloqueante en handlers asíncronos; descargas externas con semáforo | NFR de rendimiento | sin migrar |
 | PRE-30 | §4 | Cortesía compartida por fuente y por host efectivo, también en redirecciones | Contrato de red | sin migrar |
@@ -167,3 +167,15 @@ Los destinos que faltaban ya existen, pero **en otra rama sin fusionar**: [#1320
 | Piloto `.agentic` | Ya vive en ADR 0027 | PRE-22: no se duplica aquí |
 
 Consecuencia: **4 reglas migradas** (PRE-05, PRE-10, PRE-40, PRE-41) y 39 pendientes. El siguiente lote se hace cuando ambas ramas estén integradas; hacerlo antes produciría enlaces rotos, que la propia guarda del repositorio rechaza.
+
+## Propuesta: destinos para los contratos de dominio
+
+Quedan 35 reglas sin destino. Las de contratos de dominio no pueden migrarse a un documento que no existe, y crearlos exige decidir su granularidad. Propongo **tres** documentos, no once:
+
+| Documento propuesto | Reglas que cubriría |
+|---|---|
+| `governance/contrato-datos.md` | PRE-01, PRE-02, PRE-38 (servicios, movimiento y sesión, migraciones) |
+| `governance/contrato-seguridad.md` | PRE-03, PRE-06, PRE-11, PRE-12, PRE-14, PRE-30 (API, credenciales, legal, red) |
+| `governance/contrato-biblioteca.md` | PRE-04, PRE-31, PRE-32, PRE-36-1, PRE-37 (portadas, caché, lectura de archivos, cifras del Inicio, sistema de diseño) |
+
+Cada uno se escribe leyendo el código vigente para confirmar el comportamiento, no copiando la guía. Sin tu decisión sobre esta agrupación no los creo: hacerlo por mi cuenta sería inventar autoridad nueva.
