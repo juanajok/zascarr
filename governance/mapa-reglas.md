@@ -25,21 +25,21 @@
 | PRE-19 | §8 | Pruebas con Postgres real: base cuyo nombre lleve test, migrada a head una vez; estado alternativo en base efímera y subprocesos de Alembic sin sombra del paquete | [Definición de hecho](definition-of-done.md#pre-19--pruebas-con-postgres-real) | migrada |
 | PRE-20 | §9 | Commits atómicos en español; el histórico explica el mecanismo de cada cierre | [Definición de hecho](definition-of-done.md#pre-20--git-como-documentación) | migrada |
 | PRE-21 | §9 | Flujo Scrumban con límites de trabajo en curso | [Preparación](definition-of-ready.md#pre-21--flujo-de-trabajo-y-límite-de-trabajo-en-curso) | migrada |
-| PRE-22 | §9.1 | El piloto de ingeniería local queda fuera del runtime y no sustituye CI ni aprobaciones | Índice y ADR del piloto | sin migrar |
-| PRE-23 | §10 | Antipatrones explícitos del proyecto, con sus excepciones | Arquitectura y seguridad | sin migrar |
+| PRE-22 | §9.1 | El piloto de ingeniería local queda fuera del runtime y no sustituye CI ni aprobaciones | [ADR 0027](../docs/adr/0027-pipeline-ingenieria-local.md) | migrada |
+| PRE-23 | §10 | Antipatrones explícitos del proyecto, con sus excepciones | [Antipatrones](antipatrones.md#antipatrones-del-proyecto) | migrada |
 | PRE-24 | §11 | Documentos vivos: consultar antes de tocar cada área | Índice de fuentes | sin migrar |
 | PRE-25 | §12 | Principios de modelo y datos ya validados por comparación | ADR y contratos | sin migrar |
 | PRE-26 | §13 | Benchmark proporcional antes de cambios grandes; la ficha informa, no aprueba | [Preparación](definition-of-ready.md#pre-26--benchmark-proporcional-antes-de-implementar) | migrada |
 | PRE-27 | §13 | Barrera legal por archivo antes de reutilizar una implementación | [Benchmark de referencias](../docs/design/benchmark-referencias.md#barrera-legal-de-reutilización-regla-migrada-pre-27) | migrada |
-| PRE-28 | §14 | El glosario fija superficie y no renombra datos persistidos | Glosario | sin migrar |
+| PRE-28 | §14 | El glosario fija superficie y no renombra datos persistidos | [Glosario](glossary.md#regla-de-fuente-migrada-de-pre-28) | migrada |
 | PRE-29 | §4 | Nada bloqueante en handlers asíncronos; descargas externas con semáforo | NFR de rendimiento | sin migrar |
 | PRE-30 | §4 | Cortesía compartida por fuente y por host efectivo, también en redirecciones | [Contrato de seguridad](contrato-seguridad.md#pre-30--cortesía-compartida-por-fuente-y-por-host-efectivo) | migrada |
 | PRE-31 | §4 | Caché local-first y reglas de revalidación de estáticos | [Contrato de biblioteca](contrato-biblioteca.md#pre-31--caché-local-first-y-revalidación) | migrada |
 | PRE-32 | §4 | Portadas locales y externas separadas; lectura RAR acotada y recordada | [Contrato de biblioteca](contrato-biblioteca.md#pre-32--portadas-de-archivo-de-fuente-externa-y-lectura-de-rar) | migrada |
-| PRE-33 | §6 | Lenguaje llano, estados visibles y tarjetas tolerantes al fallo | Diseño y accesibilidad | sin migrar |
-| PRE-34 | §6 | Fuentes y marca locales, con licencias y variantes por tamaño | Sistema de diseño | sin migrar |
-| PRE-35 | §6 | Tramas, contraste, botones, avisos y títulos con sus excepciones | Sistema de diseño | sin migrar |
-| PRE-36 | §6 | Cifras coherentes y presupuesto textual con umbrales provisionales | Contratos de interfaz | sin migrar |
+| PRE-33 | §6 | Lenguaje llano, estados visibles y tarjetas tolerantes al fallo | [Reglas de interfaz](reglas-interfaz.md#pre-33--lenguaje-estado-y-tolerancia-al-fallo) | migrada |
+| PRE-34 | §6 | Fuentes y marca locales, con licencias y variantes por tamaño | [Reglas de interfaz](reglas-interfaz.md#pre-34--tipografía-cifras-iconos-y-marca) | migrada |
+| PRE-35 | §6 | Tramas, contraste, botones, avisos y títulos con sus excepciones | [Reglas de interfaz](reglas-interfaz.md#pre-35--tramas-botones-y-títulos) | migrada |
+| PRE-36 | §6 | Cifras coherentes y presupuesto textual con umbrales provisionales | [Reglas de interfaz](reglas-interfaz.md#pre-36--presupuesto-de-texto) | migrada |
 | PRE-37 | §6 | El sistema de diseño se consulta antes de cambiar una pantalla | [Contrato de biblioteca](contrato-biblioteca.md#pre-37--el-sistema-de-diseño-se-consulta-y-su-deuda-no-se-copia) | migrada |
 | PRE-38 | §7 | Migraciones aplicadas inmutables y reglas de tipos Postgres | [Contrato de datos](contrato-datos.md#pre-38--migraciones-aplicadas-inmutables-y-tipos-postgres-explícitos) | migrada |
 | PRE-39 | §14 | Conceptos de superficie y reglas de contexto entre términos | [Glosario](glossary.md#reglas-de-contexto-migradas-de-pre-39) | migrada |
@@ -53,42 +53,42 @@
 
 | Sub-regla | Regla a conservar | Destino propuesto | Estado |
 |---|---|---|---|
-| PRE-33-1 | Español llano; los errores técnicos se traducen a causa y acción | Diseño y textos | sin migrar |
-| PRE-33-2 | Semáforos visibles con texto concreto; un servicio apagado en Ajustes no es fallo | Contratos de interfaz | sin migrar |
-| PRE-33-3 | Sin diálogos nativos ni balas invisibles; la limitación de automatización se documenta, no se oculta | Guía de pruebas de interfaz | sin migrar |
-| PRE-33-4 | Tarjetas tolerantes al fallo: marcador de portada y campo ausente con icono | Diseño de componentes | sin migrar |
-| PRE-33-5 | Texto informativo de 14 px como mínimo, con la única excepción declarada y su prueba | Accesibilidad | sin migrar |
+| PRE-33-1 | Español llano; los errores técnicos se traducen a causa y acción | Diseño y textos | [Reglas de interfaz](reglas-interfaz.md#pre-33-1--español-llano-y-errores-con-causa-y-acción) | migrada |
+| PRE-33-2 | Semáforos visibles con texto concreto; un servicio apagado en Ajustes no es fallo | Contratos de interfaz | [Reglas de interfaz](reglas-interfaz.md#pre-33-2--semáforos-con-texto-y-servicio-desactivado) | migrada |
+| PRE-33-3 | Sin diálogos nativos ni balas invisibles; la limitación de automatización se documenta, no se oculta | Guía de pruebas de interfaz | [Reglas de interfaz](reglas-interfaz.md#pre-33-3--sin-diálogos-nativos-ni-confirmaciones-invisibles) | migrada |
+| PRE-33-4 | Tarjetas tolerantes al fallo: marcador de portada y campo ausente con icono | Diseño de componentes | [Reglas de interfaz](reglas-interfaz.md#pre-33-4--tarjetas-tolerantes-al-fallo) | migrada |
+| PRE-33-5 | Texto informativo de 14 px como mínimo, con la única excepción declarada y su prueba | Accesibilidad | [Reglas de interfaz](reglas-interfaz.md#pre-33-5--texto-informativo-de-14-px-con-su-única-excepción) | migrada |
 
 ### Desglose de PRE-34
 
 | Sub-regla | Regla a conservar | Destino propuesto | Estado |
 |---|---|---|---|
-| PRE-34-1 | Dos familias libres servidas por la app, nunca desde CDN; ni comerciales ni de rotulación | Sistema de diseño | sin migrar |
-| PRE-34-2 | Anton solo en mayúsculas; frases en Archivo; los chips fijan su fuente | Sistema de diseño | sin migrar |
-| PRE-34-3 | Cifras comparables con cifras tabulares | Sistema de diseño | sin migrar |
-| PRE-34-4 | Iconos SVG de trazo con su aviso de licencia; nunca caracteres de texto | Iconografía | sin migrar |
-| PRE-34-5 | Marca y variantes por tamaño, con reglas en su README | Marca | sin migrar |
+| PRE-34-1 | Dos familias libres servidas por la app, nunca desde CDN; ni comerciales ni de rotulación | Sistema de diseño | [Reglas de interfaz](reglas-interfaz.md#pre-34-1--dos-familias-libres-servidas-por-la-aplicación) | migrada |
+| PRE-34-2 | Anton solo en mayúsculas; frases en Archivo; los chips fijan su fuente | Sistema de diseño | [Reglas de interfaz](reglas-interfaz.md#pre-34-2--anton-para-titulares-archivo-para-leer) | migrada |
+| PRE-34-3 | Cifras comparables con cifras tabulares | Sistema de diseño | [Reglas de interfaz](reglas-interfaz.md#pre-34-3--cifras-comparables-en-tabular) | migrada |
+| PRE-34-4 | Iconos SVG de trazo con su aviso de licencia; nunca caracteres de texto | Iconografía | [Reglas de interfaz](reglas-interfaz.md#pre-34-4--iconos-svg-nunca-caracteres) | migrada |
+| PRE-34-5 | Marca y variantes por tamaño, con reglas en su README | Marca | [Reglas de interfaz](reglas-interfaz.md#pre-34-5--marca-con-variantes-por-tamaño) | migrada |
 
 ### Desglose de PRE-35
 
 | Sub-regla | Regla a conservar | Destino propuesto | Estado |
 |---|---|---|---|
-| PRE-35-1 | Trama donde no hay texto que leer, con porcentajes máximos y apagado por preferencias; una prueba exige que cada trama nueva esté en ese bloque | Accesibilidad y diseño | sin migrar |
-| PRE-35-2 | Desalineamiento de planchas solo en el rótulo de la página de error | Sistema de diseño | sin migrar |
-| PRE-35-3 | Un único botón principal por pantalla, con la excepción del verde de aceptación | Componentes | sin migrar |
-| PRE-35-4 | Un aviso no se representa como botón | Componentes | sin migrar |
-| PRE-35-5 | Títulos de frase o ruta en Archivo; los h1 de pantalla siguen en Anton | Sistema de diseño | sin migrar |
+| PRE-35-1 | Trama donde no hay texto que leer, con porcentajes máximos y apagado por preferencias; una prueba exige que cada trama nueva esté en ese bloque | Accesibilidad y diseño | [Reglas de interfaz](reglas-interfaz.md#pre-35-1--trama-donde-no-hay-texto-y-apagado-por-preferencias) | migrada |
+| PRE-35-2 | Desalineamiento de planchas solo en el rótulo de la página de error | Sistema de diseño | [Reglas de interfaz](reglas-interfaz.md#pre-35-2--desalineamiento-solo-en-el-rótulo-de-error) | migrada |
+| PRE-35-3 | Un único botón principal por pantalla, con la excepción del verde de aceptación | Componentes | [Reglas de interfaz](reglas-interfaz.md#pre-35-3--un-único-botón-principal-por-pantalla) | migrada |
+| PRE-35-4 | Un aviso no se representa como botón | Componentes | [Reglas de interfaz](reglas-interfaz.md#pre-35-4--un-aviso-no-parece-un-botón) | migrada |
+| PRE-35-5 | Títulos de frase o ruta en Archivo; los h1 de pantalla siguen en Anton | Sistema de diseño | [Reglas de interfaz](reglas-interfaz.md#pre-35-5--títulos-que-son-frases-en-archivo) | migrada |
 
 ### Desglose de PRE-36
 
 | Sub-regla | Regla a conservar | Destino propuesto | Estado |
 |---|---|---|---|
 | PRE-36-1 | Las cifras del Inicio cuadran; lo del disco va aparte con su fecha y motivo | Contratos de Inicio | [Contrato de biblioteca](contrato-biblioteca.md#pre-36-1--las-cifras-del-inicio-cuadran) | migrada |
-| PRE-36-2 | Frase de entrada de 20 palabras como máximo y 50 palabras visibles antes de la primera acción | Presupuesto de texto | sin migrar |
-| PRE-36-3 | La garantía va junto a la acción con efecto y en su confirmación | Presupuesto de texto | sin migrar |
-| PRE-36-4 | Resumen antes que listado; mayúsculas solo en rótulos de tres palabras o menos | Presupuesto de texto | sin migrar |
-| PRE-36-5 | Los textos explican la tarea, no el contrato | Presupuesto de texto | sin migrar |
-| PRE-36-6 | Umbrales provisionales hasta validarlos con uso real | Presupuesto de texto | sin migrar |
+| PRE-36-2 | Frase de entrada de 20 palabras como máximo y 50 palabras visibles antes de la primera acción | Presupuesto de texto | [Reglas de interfaz](reglas-interfaz.md#pre-36-2--frase-de-entrada-y-palabras-antes-de-la-primera-acción) | migrada |
+| PRE-36-3 | La garantía va junto a la acción con efecto y en su confirmación | Presupuesto de texto | [Reglas de interfaz](reglas-interfaz.md#pre-36-3--la-garantía-va-junto-a-la-acción) | migrada |
+| PRE-36-4 | Resumen antes que listado; mayúsculas solo en rótulos de tres palabras o menos | Presupuesto de texto | [Reglas de interfaz](reglas-interfaz.md#pre-36-4--resumen-antes-que-listado) | migrada |
+| PRE-36-5 | Los textos explican la tarea, no el contrato | Presupuesto de texto | [Reglas de interfaz](reglas-interfaz.md#pre-36-5--los-textos-explican-la-tarea-no-el-contrato) | migrada |
+| PRE-36-6 | Umbrales provisionales hasta validarlos con uso real | Presupuesto de texto | [Reglas de interfaz](reglas-interfaz.md#pre-36-6--umbrales-provisionales) | migrada |
 
 ### Desglose de PRE-37
 
@@ -120,13 +120,13 @@
 
 | Sub-regla | Antipatrón a conservar | Destino propuesto | Estado |
 |---|---|---|---|
-| PRE-23-1 | SPA, build de Node o framework reactivo en la interfaz; excepción única del lector con un script sin build | Arquitectura de interfaz | sin migrar |
-| PRE-23-2 | `create_type=False` esperando que funcione sin `postgresql.ENUM` explícito | Guía de migraciones | sin migrar |
-| PRE-23-3 | `Wishlist(**data)` desde el cuerpo crudo; cerrado con esquemas Pydantic | Seguridad de API | sin migrar |
-| PRE-23-4 | Hotlinking en la interfaz | Seguridad de interfaz | sin migrar |
-| PRE-23-5 | Copiar scrapers de referencia sin verificar en vivo; el caso Tebeosfera y sus redirecciones | Contrato de clientes externos | sin migrar |
-| PRE-23-6 | Credenciales o fuentes por defecto en configuración o bootstrap | Configuración y credenciales | sin migrar |
-| PRE-23-7 | Middleware global de aceptación legal; debe ser dependencia, no middleware | Contrato legal | sin migrar |
+| PRE-23-1 | SPA, build de Node o framework reactivo en la interfaz; excepción única del lector con un script sin build | Arquitectura de interfaz | [Antipatrones](antipatrones.md#pre-23-1--interfaz-sin-spa-ni-build-de-node) | migrada |
+| PRE-23-2 | `create_type=False` esperando que funcione sin `postgresql.ENUM` explícito | Guía de migraciones | [Antipatrones](antipatrones.md#pre-23-2--no-esperar-que-el-enum-postgres-se-cree-solo) | migrada |
+| PRE-23-3 | `Wishlist(**data)` desde el cuerpo crudo; cerrado con esquemas Pydantic | Seguridad de API | [Antipatrones](antipatrones.md#pre-23-3--nada-de-wishlistdata-desde-el-cuerpo-crudo) | migrada |
+| PRE-23-4 | Hotlinking en la interfaz | Seguridad de interfaz | [Antipatrones](antipatrones.md#pre-23-4--sin-hotlinking-en-la-interfaz) | migrada |
+| PRE-23-5 | Copiar scrapers de referencia sin verificar en vivo; el caso Tebeosfera y sus redirecciones | Contrato de clientes externos | [Antipatrones](antipatrones.md#pre-23-5--no-copiar-scrapers-sin-verificar-en-vivo) | migrada |
+| PRE-23-6 | Credenciales o fuentes por defecto en configuración o bootstrap | Configuración y credenciales | [Antipatrones](antipatrones.md#pre-23-6--sin-credenciales-ni-fuentes-por-defecto) | migrada |
+| PRE-23-7 | Middleware global de aceptación legal; debe ser dependencia, no middleware | Contrato legal | [Antipatrones](antipatrones.md#pre-23-7--la-aceptación-legal-no-es-middleware) | migrada |
 
 Hoy hay 39 sub-reglas repartidas en ocho bloques. Cada sub-regla necesita su propia decisión de traslado: desglosar la fila no la migra.
 

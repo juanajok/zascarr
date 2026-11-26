@@ -66,3 +66,7 @@ Nombres y ubicación canónica únicamente: **no** se copian definiciones mientr
 - **Revisión (Duplicados) no es «Por revisar».** Por revisar es la cola de pendientes; Duplicados es la revisión del disco y su acción es «Revisar mi biblioteca».
 - **Número, tebeo, edición y publicación.** Número es la unidad bibliográfica; tebeo es el objeto o archivo; edición es una línea editorial (para el coleccionista, otra serie); formato es grapa, tomo u ómnibus; copia u origen distinto es un archivo del mismo número; publicación es la unidad de destino en una declaración de carpeta.
 - **Saga, arco, editorial y sello.** En superficie, «Saga»; «arco» y `StoryArc` son código. Editorial es `Publisher`; sello es `Imprint` y solo se usa cuando el dato distingue el sello.
+
+## Regla de fuente (migrada de PRE-28)
+
+El glosario fija el **texto visible** y no renombra entidades, estados, operaciones, URLs ni valores persistidos. Una pantalla nueva que necesite un término lo añade aquí antes de usarlo; el código y los datos siguen usando sus nombres técnicos.
