@@ -1,0 +1,41 @@
+schema: spec-driven
+
+# Contexto del proyecto: solo restricciones que un agente no puede inferir del código.
+context: |
+  ZascArr es un gestor self-hosted de tebeoteca para Raspberry Pi, con FastAPI,
+  SQLAlchemy async, PostgreSQL, Jinja2 y HTMX. Los artefactos SDD se escriben en
+  español. La herramienta OpenSpec se fija en tooling/sdd con versión exacta y se
+  ejecuta desde el binario local, sin npx y sin telemetría. La guía vigente es
+  CLAUDE.md: este andamiaje no la sustituye ni activa gates obligatorios.
+  La carga efectiva de instrucciones en harnesses no está verificada (T0.4).
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

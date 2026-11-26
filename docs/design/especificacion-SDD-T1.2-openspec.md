@@ -1,6 +1,6 @@
 # Especificación SDD-T1.2: inicializar OpenSpec sin pisar el cambio
 
-**Estado:** propuesta para aprobación; **no aprobada** y no iniciada. No se ha publicado ni ejecutado. Depende de que exista una versión de OpenSpec utilizable: el pin de #1293 sigue **candidato** (falta instalación limpia del lock exacto y revisión de suministro/licencias). Esta especificación no adopta ese pin.
+**Estado:** aprobada por el mantenedor el 2026-11-26. La aprobación del contrato no autoriza fusión ni despliegue. No se ha publicado ni ejecutado. Depende de que exista una versión de OpenSpec utilizable: el pin de #1293 sigue **candidato** (falta instalación limpia del lock exacto y revisión de suministro/licencias). Esta especificación no adopta ese pin.
 
 ## Problema
 
