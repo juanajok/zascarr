@@ -49,6 +49,54 @@
 | PRE-43 | §2 | Justificar dependencias y centralizar enums del dominio | Guía técnica | sin migrar |
 
 
+### Desglose de PRE-33
+
+| Sub-regla | Regla a conservar | Destino propuesto | Estado |
+|---|---|---|---|
+| PRE-33-1 | Español llano; los errores técnicos se traducen a causa y acción | Diseño y textos | sin migrar |
+| PRE-33-2 | Semáforos visibles con texto concreto; un servicio apagado en Ajustes no es fallo | Contratos de interfaz | sin migrar |
+| PRE-33-3 | Sin diálogos nativos ni balas invisibles; la limitación de automatización se documenta, no se oculta | Guía de pruebas de interfaz | sin migrar |
+| PRE-33-4 | Tarjetas tolerantes al fallo: marcador de portada y campo ausente con icono | Diseño de componentes | sin migrar |
+| PRE-33-5 | Texto informativo de 14 px como mínimo, con la única excepción declarada y su prueba | Accesibilidad | sin migrar |
+
+### Desglose de PRE-34
+
+| Sub-regla | Regla a conservar | Destino propuesto | Estado |
+|---|---|---|---|
+| PRE-34-1 | Dos familias libres servidas por la app, nunca desde CDN; ni comerciales ni de rotulación | Sistema de diseño | sin migrar |
+| PRE-34-2 | Anton solo en mayúsculas; frases en Archivo; los chips fijan su fuente | Sistema de diseño | sin migrar |
+| PRE-34-3 | Cifras comparables con cifras tabulares | Sistema de diseño | sin migrar |
+| PRE-34-4 | Iconos SVG de trazo con su aviso de licencia; nunca caracteres de texto | Iconografía | sin migrar |
+| PRE-34-5 | Marca y variantes por tamaño, con reglas en su README | Marca | sin migrar |
+
+### Desglose de PRE-35
+
+| Sub-regla | Regla a conservar | Destino propuesto | Estado |
+|---|---|---|---|
+| PRE-35-1 | Trama donde no hay texto que leer, con porcentajes máximos y apagado por preferencias; una prueba exige que cada trama nueva esté en ese bloque | Accesibilidad y diseño | sin migrar |
+| PRE-35-2 | Desalineamiento de planchas solo en el rótulo de la página de error | Sistema de diseño | sin migrar |
+| PRE-35-3 | Un único botón principal por pantalla, con la excepción del verde de aceptación | Componentes | sin migrar |
+| PRE-35-4 | Un aviso no se representa como botón | Componentes | sin migrar |
+| PRE-35-5 | Títulos de frase o ruta en Archivo; los h1 de pantalla siguen en Anton | Sistema de diseño | sin migrar |
+
+### Desglose de PRE-36
+
+| Sub-regla | Regla a conservar | Destino propuesto | Estado |
+|---|---|---|---|
+| PRE-36-1 | Las cifras del Inicio cuadran; lo del disco va aparte con su fecha y motivo | Contratos de Inicio | sin migrar |
+| PRE-36-2 | Frase de entrada de 20 palabras como máximo y 50 palabras visibles antes de la primera acción | Presupuesto de texto | sin migrar |
+| PRE-36-3 | La garantía va junto a la acción con efecto y en su confirmación | Presupuesto de texto | sin migrar |
+| PRE-36-4 | Resumen antes que listado; mayúsculas solo en rótulos de tres palabras o menos | Presupuesto de texto | sin migrar |
+| PRE-36-5 | Los textos explican la tarea, no el contrato | Presupuesto de texto | sin migrar |
+| PRE-36-6 | Umbrales provisionales hasta validarlos con uso real | Presupuesto de texto | sin migrar |
+
+### Desglose de PRE-37
+
+| Sub-regla | Regla a conservar | Destino propuesto | Estado |
+|---|---|---|---|
+| PRE-37-1 | El sistema de diseño se consulta antes de pintar una pantalla o tocar el CSS | Índice de fuentes | sin migrar |
+| PRE-37-2 | La deuda declarada de la última revisión no se copia en pantallas nuevas | Diseño y accesibilidad | sin migrar |
+
 ### Desglose de PRE-06
 
 | Sub-regla | Regla a conservar | Destino propuesto | Estado |
@@ -87,7 +135,7 @@ Cada sub-regla necesita su propia decisión de traslado: desglosar la fila no la
 Una fila puede resumir varias sub-reglas, y eso **no** cuenta como traslado completo. Hoy agrupan como mínimo:
 
 - **PRE-23**: desglosada arriba en siete sub-reglas (PRE-23-1 a PRE-23-7), cada una con su excepción y pendiente de traslado propio.
-- **PRE-33 a PRE-36**: viñetas de interfaz, tipografía, tramas y presupuesto textual, con excepciones por tamaño y contraste.
+- **PRE-33 a PRE-37**: desglosadas arriba (interfaz, tipografía, tramas, presupuesto textual y referencia de diseño), con sus excepciones por tamaño y contraste.
 - **PRE-06 y PRE-12**: desglosadas arriba en cinco y cuatro sub-reglas respectivamente; cada una necesita su propio traslado.
 
 Antes de marcar «migrada» una de estas filas hay que desglosarla en sub-reglas con su propia decisión. Mientras tanto, C01 sigue en PARCIAL.
