@@ -49,6 +49,25 @@
 | PRE-43 | §2 | Justificar dependencias y centralizar enums del dominio | Guía técnica | sin migrar |
 
 
+### Desglose de PRE-06
+
+| Sub-regla | Regla a conservar | Destino propuesto | Estado |
+|---|---|---|---|
+| PRE-06-1 | Ninguna ruta de arranque soportada sirve con credencial obligatoria ausente, vacía o conocida por defecto | Contrato de credenciales | sin migrar |
+| PRE-06-2 | `DB_PASSWORD` la genera el instalador y la rechazan el servicio de credenciales y la app; nunca un valor real por defecto en Compose | Contrato de credenciales | sin migrar |
+| PRE-06-3 | El entorno se escribe solo de forma atómica, sin copias, y es de root con permisos 600 | Contrato de credenciales | sin migrar |
+| PRE-06-4 | El usuario de servicio no es dueño del código ni de la carpeta del entorno | Contrato de credenciales | sin migrar |
+| PRE-06-5 | Los scripts de operación no imprimen credenciales | Guía de operación | sin migrar |
+
+### Desglose de PRE-12
+
+| Sub-regla | Regla a conservar | Destino propuesto | Estado |
+|---|---|---|---|
+| PRE-12-1 | Datos cacheados son uso privado y la telemetría es cero | Seguridad y privacidad | sin migrar |
+| PRE-12-2 | No se redistribuye contenido; obligaciones de la tabla de fuentes | Marco legal | sin migrar |
+| PRE-12-3 | Los registros no llevan datos sensibles; si un error los lleva, se sanea antes | Contrato de logs | sin migrar |
+| PRE-12-4 | Los endpoints mutables usan campos explícitos y su caché está documentada; el rechazo de la puerta legal redirige | Contrato legal y de API | sin migrar |
+
 ### Desglose de PRE-23
 
 | Sub-regla | Antipatrón a conservar | Destino propuesto | Estado |
@@ -69,7 +88,7 @@ Una fila puede resumir varias sub-reglas, y eso **no** cuenta como traslado comp
 
 - **PRE-23**: desglosada arriba en siete sub-reglas (PRE-23-1 a PRE-23-7), cada una con su excepción y pendiente de traslado propio.
 - **PRE-33 a PRE-36**: viñetas de interfaz, tipografía, tramas y presupuesto textual, con excepciones por tamaño y contraste.
-- **PRE-06 y PRE-12**: reglas de credenciales, privacidad y campos de formulario que se verifican por separado.
+- **PRE-06 y PRE-12**: desglosadas arriba en cinco y cuatro sub-reglas respectivamente; cada una necesita su propio traslado.
 
 Antes de marcar «migrada» una de estas filas hay que desglosarla en sub-reglas con su propia decisión. Mientras tanto, C01 sigue en PARCIAL.
 
