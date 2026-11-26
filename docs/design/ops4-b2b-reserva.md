@@ -34,8 +34,9 @@ contrato de referencia es §B2 de
   nada.
 - **Reconciliación**: una reserva `aceptada` con más de 300 s sin avanzar (o un
   `en_curso` con más de 7200 s) se marca `incierta` antes de admitir otra
-  petición; deja de bloquear para siempre. La salida 2 de la entrada (reserva
-  no vigente) la cierra el `ExecStopPost` como `fallida`, no como `incierta`.
+  petición; deja de bloquear para siempre. La salida 76 de la entrada (reserva
+  no vigente) la cierra el `ExecStopPost` como `fallida`; un 2 de `update.sh`
+  sigue siendo `incierta` (puede ocurrir después de efectos).
 
 ## Evidencia VM (2026-11-26)
 

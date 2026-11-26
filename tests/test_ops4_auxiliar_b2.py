@@ -24,7 +24,8 @@ def peticion(id_: str = ID) -> bytes:
 class Dobles:
     def __init__(self, *, admision=True, cerrojo=False, intento=True,
                  escribir=ResultadoEscritura.OK, inicio=True,
-                 confirmada="confirmada", consumo=True, estado=None) -> None:
+                 confirmada="confirmada", consumo=True, estado=None,
+                 existe=False) -> None:
         self.admision = admision
         self.cerrojo = cerrojo
         self.intento = intento
@@ -33,6 +34,7 @@ class Dobles:
         self.confirmada = confirmada
         self.consumo = consumo
         self.estado = estado
+        self.existe = existe
         self.llamadas: list[tuple[str, object]] = []
 
     def admitir(self):
@@ -45,6 +47,10 @@ class Dobles:
     def leer_estado(self):
         self.llamadas.append(("leer", ""))
         return self.estado
+
+    def existe_intento(self, id_: str) -> bool:
+        self.llamadas.append(("existe_intento", id_))
+        return self.existe
 
     def crear_intento(self, id_: str) -> bool:
         self.llamadas.append(("intento", id_))
@@ -88,6 +94,7 @@ def ejecutar(dobles: Dobles, *, token: bytes | None = None):
         leer_estado=dobles.leer_estado, crear_intento=dobles.crear_intento,
         borrar_intento=dobles.borrar_intento,
         reclamar_consumo=dobles.consumir, esperar=dobles.esperar,
+        existe_intento=dobles.existe_intento,
     )
 
 
@@ -155,6 +162,15 @@ def test_reserva_aceptada_reciente_sigue_ocupada() -> None:
     respuesta = ejecutar(dobles)
     assert respuesta.codigo == "operacion_en_curso"
     assert ("iniciar", UNIDAD) not in dobles.llamadas
+
+
+def test_intento_preexistente_se_rechaza_antes_de_verificar() -> None:
+    dobles = Dobles(existe=True)
+    respuesta = ejecutar(dobles)
+    assert respuesta.codigo == "repetida"
+    assert ("existe_intento", ID) in dobles.llamadas
+    assert ("iniciar", UNIDAD) not in dobles.llamadas
+    assert not any(n == "consumo" for n, _ in dobles.llamadas)
 
 
 def test_intento_existente_no_arranca_ni_consume() -> None:

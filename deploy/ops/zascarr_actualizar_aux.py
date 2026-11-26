@@ -117,6 +117,7 @@ def procesar(
     reclamar_uso, iniciar, cerrojo_ocupado, escribir=None, transicionar=None,
     admitir=None, liberar=None, leer_estado=None, crear_intento=None,
     borrar_intento=None, reclamar_consumo=None, esperar=None,
+    existe_intento=None,
 ) -> Respuesta:
     """Admite una petición; con `admitir` usa el flujo B2, sin él el legado.
 
@@ -133,7 +134,7 @@ def procesar(
             transicionar=transicionar, admitir=admitir, liberar=liberar,
             leer_estado=leer_estado, crear_intento=crear_intento,
             borrar_intento=borrar_intento, reclamar_consumo=reclamar_consumo,
-            esperar=esperar,
+            esperar=esperar, existe_intento=existe_intento,
         )
     if type(clave) is not bytes or len(clave) != 32:
         return rechazo("no_disponible")
@@ -209,7 +210,7 @@ def _marcar_incierta(transicionar, id_: str, inicio: int, ahora: int) -> None:
 def _procesar_b2(
     linea: bytes, *, clave: bytes, ahora: int, iniciar, cerrojo_ocupado,
     escribir, transicionar, admitir, liberar, leer_estado, crear_intento,
-    borrar_intento, reclamar_consumo, esperar,
+    borrar_intento, reclamar_consumo, esperar, existe_intento,
 ) -> Respuesta:
     """Flujo P2–P12 de B2: validar, admitir, reservar, arrancar y consumir.
 
@@ -272,6 +273,12 @@ def _procesar_b2(
                         "incierta", ahora=ahora, id_=datos["id"],
                         inicio_epoch=inicio, fase=FASES[-1], codigo=CODIGO_OTRO,
                     )
+        if existe_intento is not None:
+            try:
+                if existe_intento(id_):
+                    return rechazo("repetida", id_)
+            except Exception:  # noqa: BLE001
+                return rechazo("no_disponible", id_)
         testigo = decodificar_autorizacion(objeto["autorizacion"])
         if testigo is None:
             return rechazo("autorizacion_invalida", id_)
@@ -500,6 +507,14 @@ def main() -> int:
                 time.sleep(0.1)
             return "sin"
 
+        def existe_intento(id_: str) -> bool:
+            if not (
+                isinstance(id_, str) and len(id_) == 32
+                and all(c in "0123456789abcdef" for c in id_)
+            ):
+                raise ValueError("identificador no válido")
+            return os.path.lexists(os.path.join(dir_ops4, "intentos", id_))
+
         def crear_intento(id_: str) -> bool:
             return reclamar_intento(id_, directorio_fd=fd_intentos)
 
@@ -525,6 +540,7 @@ def main() -> int:
             borrar_intento=borrar_intento,
             reclamar_consumo=reclamar,
             esperar=esperar,
+            existe_intento=existe_intento,
         )
     except Exception:  # noqa: BLE001 — nunca se devuelve un éxito dudoso
         respuesta = rechazo("no_disponible")

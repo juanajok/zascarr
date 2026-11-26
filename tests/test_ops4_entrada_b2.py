@@ -30,6 +30,7 @@ def _repo(tmp_path: Path) -> Path:
         "tomar_cerrojo_operaciones\n"
         "echo \"fd9=$(test -e /proc/self/fd/9 && echo si || echo no)\" > \"$MARCA\"\n"
         "flock -n 9 && echo \"flock9=si\" >> \"$MARCA\"\n"
+        "echo \"lock_fds=$(ls -l /proc/self/fd | grep -c ops.lock)\" >> \"$MARCA\"\n"
         "echo \"rama=$2\" >> \"$MARCA\"\n",
         encoding="utf-8",
     )
@@ -81,6 +82,7 @@ def test_toma_cerrojo_y_reserva_antes_de_update(tmp_path) -> None:
     assert "fd9=si" in marca
     assert "flock9=si" in marca
     assert "rama=main" in marca
+    assert "lock_fds=1" in marca
     datos = json.loads(estado.read_text(encoding="utf-8"))
     assert (datos["estado"], datos["fase"]) == ("en_curso", "reservada")
     head = subprocess.check_output(
@@ -119,7 +121,7 @@ def test_reserva_caducada_sale_2_sin_efectos(tmp_path) -> None:
     estado, entorno = _entorno(tmp_path, repo, inicio=int(time.time()) - 301)
     antes = estado.read_bytes()
     r = _ejecutar(entorno)
-    assert r.returncode == 2, r.stderr
+    assert r.returncode == 76, r.stderr
     assert estado.read_bytes() == antes
     assert not (tmp_path / "marca").exists()
 
@@ -171,5 +173,5 @@ def test_sin_estado_sale_2(tmp_path) -> None:
         "ZASCARR_PRUEBAS": "1", "OPS_LOCK_FILE": str(tmp_path / "ops.lock"),
         "MARCA": str(tmp_path / "marca"),
     })
-    assert _ejecutar(entorno).returncode == 2
+    assert _ejecutar(entorno).returncode == 76
     assert stat.S_IMODE((tmp_path / "ops.lock").stat().st_mode) == 0o600

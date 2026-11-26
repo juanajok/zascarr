@@ -43,7 +43,7 @@ RUTA_CERROJO = "/run/zascarr-ops.lock"
 RESERVA_VIGENCIA_S = 300
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _CODIGO_BUSY = 75
-_CODIGO_INVALIDO = 2
+_CODIGO_INVALIDO = 76
 
 
 def _fallo(motivo: str) -> int:
@@ -66,6 +66,8 @@ def _tomar_cerrojo() -> int | None:
         os.set_inheritable(fd, True)
         os.dup2(fd, 9)
         os.set_inheritable(9, True)
+        if fd != 9:
+            os.close(fd)
         try:
             fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:

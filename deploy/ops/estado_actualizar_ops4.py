@@ -72,7 +72,7 @@ _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _EXITO_LIMPIO = ("success", "exited", "0")
 _PRE_EFECTO_CONTRATO = ("exit-code", "exited", "75")
 #: La entrada B2 sale 2 si la reserva no es válida, antes de cualquier efecto.
-_PRE_EFECTO_RESERVA = ("exit-code", "exited", "2")
+_PRE_EFECTO_RESERVA = ("exit-code", "exited", "76")
 
 
 def resultado_final(
@@ -81,7 +81,7 @@ def resultado_final(
     """Tabla pura de A1; `None` si los valores no son cadenas de systemd.
 
     Es la referencia normativa de la cadena de `ExecStopPost`: solo el éxito
-    limpio es `hecha`; el 75 del cerrojo y el 2 de una reserva no vigente son
+    limpio es `hecha`; el 75 del cerrojo y el 76 de una reserva no vigente son
     `fallida` (ocurren antes de cualquier efecto); el resto es `incierta`
     (H-13: `update.sh` usa 1 antes y después de tocar código/BD, así que no se
     puede distinguir pre de post).

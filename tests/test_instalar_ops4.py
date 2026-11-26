@@ -133,6 +133,16 @@ def test_grupo_por_defecto_desde_env_pgid(tmp_path: Path) -> None:
     assert f"SocketGroup={grupo}" in unit.read_text(encoding="utf-8")
 
 
+def test_ruta_con_espacios_aborta_sin_instalar(tmp_path: Path) -> None:
+    r = ejecutar(
+        tmp_path, "--yes", "--sin-systemd",
+        extra_env={"OPS4_DATA_DIR": str(tmp_path / "con espacio")},
+    )
+    assert r.returncode == 1
+    assert "no pueden contener espacios" in r.stderr
+    assert not (tmp_path / "con espacio").exists()
+
+
 def test_grupo_no_resuelto_aborta(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()

@@ -62,12 +62,23 @@ async def test_aceptada_y_rechazada() -> None:
 
 
 @pytest.mark.asyncio
+async def test_incierta_del_auxiliar_es_incierta() -> None:
+    from deploy.ops.zascarr_actualizar_aux import Respuesta
+
+    linea = Respuesta("incierta", "incierta", ID).linea()
+    assert await pedir_actualizacion_v4(
+        SETTINGS, b"peticion\n", id_=ID, conversar=conversar(linea),
+    ) is CodigoTransporteV4.INCIERTA
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("valor", [
     b"", b"x" * 4097, bytearray(b"x"), b"{}\n", b"x\n",
     respuesta(v=3), respuesta(id="b" * 32), respuesta(resultado="otra"),
     respuesta(codigo="codigo_inventado"),
     respuesta(resultado="aceptada", codigo="repetida"),
     respuesta(resultado="rechazada", codigo="aceptada"),
+    respuesta(resultado="incierta", codigo="no_disponible"),
     respuesta()[:-1] + b"\r\n", respuesta() + b"\n",
     b'{"v":4,"v":4,"id":"' + ID.encode() + b'","resultado":"aceptada","codigo":"aceptada"}\n',
 ])
