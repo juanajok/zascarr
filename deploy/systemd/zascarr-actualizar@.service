@@ -9,7 +9,6 @@ Type=simple
 StandardInput=socket
 StandardOutput=socket
 StandardError=journal
-EnvironmentFile=-/etc/default/zascarr
 Environment=ZASCARR_OPS_DIR=@ZASCARR_DATA_DIR@/ops
 Environment=ZASCARR_OPS4_DIR=@ZASCARR_DATA_DIR@/ops4
 ExecStart=/usr/bin/python3 -I /usr/local/lib/zascarr/zascarr-actualizar-aux

@@ -25,6 +25,7 @@ _ID = re.compile(r"[0-9a-f]{32}\Z")
 _CODIGOS = frozenset({
     "aceptada", "esquema_invalido", "firma_invalida", "caducada",
     "autorizacion_invalida", "repetida", "operacion_en_curso", "no_disponible",
+    "incierta",
 })
 
 
@@ -35,6 +36,7 @@ class CodigoTransporteV4(StrEnum):
     NO_DISPONIBLE = "no_disponible"
     RESPUESTA_INVALIDA = "respuesta_invalida"
     INCIERTO = "incierto"
+    INCIERTA = "incierta"
 
 
 class IntercambioInciertoError(Exception):
@@ -114,7 +116,7 @@ def _interpretar(respuesta: object, id_: object) -> CodigoTransporteV4:
     if not isinstance(id_, str) or not _ID.fullmatch(id_) or cuerpo["id"] != id_:
         return CodigoTransporteV4.RESPUESTA_INVALIDA
     resultado = cuerpo["resultado"]
-    if not isinstance(resultado, str) or resultado not in ("aceptada", "rechazada"):
+    if not isinstance(resultado, str) or resultado not in ("aceptada", "rechazada", "incierta"):
         return CodigoTransporteV4.RESPUESTA_INVALIDA
     if not isinstance(cuerpo["codigo"], str) or cuerpo["codigo"] not in _CODIGOS:
         return CodigoTransporteV4.RESPUESTA_INVALIDA
@@ -124,4 +126,6 @@ def _interpretar(respuesta: object, id_: object) -> CodigoTransporteV4:
         return CodigoTransporteV4.OCUPADA
     if resultado == "rechazada" and cuerpo["codigo"] != "aceptada":
         return CodigoTransporteV4.RECHAZADA
+    if resultado == "incierta" and cuerpo["codigo"] == "incierta":
+        return CodigoTransporteV4.INCIERTA
     return CodigoTransporteV4.RESPUESTA_INVALIDA

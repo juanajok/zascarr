@@ -321,3 +321,85 @@ async def test_especial_no_enlaza_con_la_grapa_del_mismo_numero():
                 "el número «E2»: no se enlaza a la grapa 2"]
     finally:
         await engine.dispose()
+
+
+# ─── BL-PARSE2: desempate por el número que existe ───────────────────────────
+
+
+async def _matcher_dos_ediciones(session, numeros_a, numeros_b, fmt_a="single_issue"):
+    """Dos series empatadas («Monstress» A y B) con esos números en Postgres real."""
+    await session.execute(text(_CREATE_TEMP_ISSUES))
+    await session.execute(text(_CREATE_TEMP_FILES))
+    a = SeriesHit(uuid4(), "Monstress", 2015, 1.0)
+    b = SeriesHit(uuid4(), "Monstress", 2016, 1.0)
+    ids = {}
+    for hit, numeros, fmt in ((a, numeros_a, fmt_a), (b, numeros_b, "single_issue")):
+        for numero in numeros:
+            ids[(hit.series_id, numero)] = uuid4()
+            await session.execute(text(_INSERT_ISSUE), {
+                "id": str(ids[(hit.series_id, numero)]), "sid": str(hit.series_id),
+                "num": numero, "fmt": fmt})
+    matcher = SeriesMatcher(session)
+    matcher.find_series = AsyncMock(return_value=[a, b])
+    matcher.find_alias = AsyncMock(return_value=None)
+    return matcher, a, b, ids
+
+
+@pytest.mark.asyncio
+async def test_empate_de_especial_busca_su_numero_e():
+    """C7 (BL-PARSE2): un especial desempata por «E{N}», nunca por la grapa #N."""
+    engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            matcher, _a, b, ids = await _matcher_dos_ediciones(session, ["2"], ["E2"])
+            r = await matcher.decide(
+                TriageResult(path=Path("Monstress/Monstress Especial 2.cbz")),
+                extractor=lambda _n: ("Monstress", "2", None), especial=True)
+            assert r.series_id == b.series_id
+            assert r.issue_id == ids[(b.series_id, "E2")]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_desempate_por_numero_semantica_real():
+    """C8: una sola consulta, `ltrim` de ceros y sin contar números vacíos."""
+    engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            matcher, a, b, _ids = await _matcher_dos_ediciones(session, ["007"], [""])
+            llamadas = []
+            real = session.execute
+
+            async def contar(*args, **kwargs):
+                llamadas.append(args[0])
+                return await real(*args, **kwargs)
+
+            session.execute = contar
+            assert await matcher.series_con_numero([a.series_id, b.series_id], "7") == {
+                a.series_id}
+            assert len(llamadas) == 1
+            # La novela gráfica sin número no cuenta como número «0».
+            assert await matcher.series_con_numero([a.series_id, b.series_id], "0") == set()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_desempate_por_numero_no_salta_la_guarda_de_formato():
+    """C9: tras desempatar, la guarda B15 de `_resolve` sigue actuando."""
+    engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            matcher, _a, _b, _ids = await _matcher_dos_ediciones(
+                session, ["12"], [], fmt_a="omnibus")
+            r = await matcher.decide(
+                TriageResult(path=Path("Monstress/Monstress 12.cbz")),
+                extractor=lambda _n: ("Monstress", "12", None))
+            assert r.status is MatchStatus.UNSORTED
+            assert r.issue_id is None
+            assert r.notes == [
+                "número '12' compartido entre ediciones en 'Monstress': "
+                "no se enlaza sin poder verificar el formato"]
+    finally:
+        await engine.dispose()
