@@ -41,11 +41,14 @@ def test_instala_clave_dirs_modulos_y_unidades_sin_activar(tmp_path: Path) -> No
     assert key.exists() and key.stat().st_size == 65
     assert key.stat().st_mode & 0o777 == 0o440
     assert (tmp_path / "data" / "ops4" / "consumidos").is_dir()
+    assert (tmp_path / "data" / "ops4" / "intentos").is_dir()
+    assert stat.S_IMODE((tmp_path / "data" / "ops4" / "intentos").stat().st_mode) == 0o700
     assert (tmp_path / "bin" / "actualizar-aux").is_file()
     assert (tmp_path / "lib" / "zascarr-estado-actualizar-ops4").is_file()
     for modulo in ("protocolo_actualizar_v4_ops4.py",
                    "verificador_autorizacion_ops4.py",
-                   "registro_repeticiones_ops4.py"):
+                   "registro_repeticiones_ops4.py",
+                   "admision_ops4.py"):
         assert (tmp_path / "lib" / modulo).is_file()
     for unidad in ("zascarr-actualizar.socket", "zascarr-actualizar@.service",
                    "zascarr-actualizar.service"):
