@@ -147,3 +147,32 @@ class TestQuitarPrefijoDeCohorte:
         original = "069.- Flash v2 62 By Spiderman2099.cbr"
 
         assert quitar_prefijo_de_cohorte(original, pista) == original
+
+
+class TestCohorteNoQuitaElUnicoNumero:
+    """BL-PARSE1 R1: la cohorte no quita el prefijo si es el único número del
+    nombre (embudo 2026-11-26: 83 archivos perdían así su número)."""
+
+    @staticmethod
+    def _pista(prefijo: str):
+        from zascarr.core.cohort import PistaDeCohorte
+
+        return PistaDeCohorte(prefijo=prefijo, cohorte="x", evidencia=3, explicacion="x")
+
+    def test_cohorte_no_quita_el_unico_numero_del_nombre(self):
+        """C2."""
+        original = "05 Catwoman Vol 02.cbr"
+        assert quitar_prefijo_de_cohorte(original, self._pista("05")) == original
+
+    def test_cohorte_no_cuenta_numeros_de_la_carpeta(self):
+        """C3: el «52» de la carpeta es título; sin carpeta, sí cuenta."""
+        original = "01 Catwoman The New 52!.cbr"
+        carpeta = "2011 - 2014 Catwoman The New 52! Vol 04"
+        assert quitar_prefijo_de_cohorte(original, self._pista("01"), carpeta=carpeta) == original
+        assert quitar_prefijo_de_cohorte(original, self._pista("01")) == "Catwoman The New 52!.cbr"
+
+    def test_cohorte_sigue_quitando_el_prefijo_si_queda_otro_numero(self):
+        """C4: Dreadstar (decisión de 2026-09-26) no cambia."""
+        resultado = quitar_prefijo_de_cohorte(
+            "42 Dreadstar (First Comics) 30 USA.cbr", self._pista("42"), carpeta="Dreadstar")
+        assert resultado == "Dreadstar (First Comics) 30 USA.cbr"

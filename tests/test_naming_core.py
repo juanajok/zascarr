@@ -1834,3 +1834,74 @@ def test_el_volumen_de_la_carpeta_desempata_sin_inventar():
     assert not _volume_matches(SeriesHit(uuid4(), "Catwoman Vol. 5", None, 1.0, 5), 4)
     # Si no hay dato persistido, el título sigue siendo el fallback.
     assert _volume_matches(SeriesHit(uuid4(), "Batman Vol. 2", None, 1.0), 2)
+
+
+# ── BL-PARSE1: números que el parser pierde o inventa (F3 + F4) ──────────────
+# Especificación: docs/design/especificacion-BL-PARSE1.md. Casos sacados del
+# embudo sobre la biblioteca real (2026-11-26).
+
+from zascarr.utils.naming import parse_comic_filename  # noqa: E402
+
+
+def test_otros_numeros_ignora_volumen_anio_corchetes_creditos_y_carpeta():
+    """C1: la definición única de «otro número candidato» (§3)."""
+    from zascarr.utils.naming import otros_numeros_candidatos
+
+    assert otros_numeros_candidatos("Catwoman Vol 02.cbr") == []
+    assert otros_numeros_candidatos("Flash v2 Tomo 3 Volume 4 Volumen 5 Vol. 6 7.cbr") == ["7"]
+    assert otros_numeros_candidatos("Serie (1987) [CRG 2] por Fulano 3.cbr") == []
+    assert otros_numeros_candidatos("Dreadstar (First Comics) 30 USA.cbr") == ["30"]
+    # El «52» de «The New 52» es parte del título: lo dice la carpeta.
+    assert otros_numeros_candidatos("Catwoman The New 52!.cbr") == ["52"]
+    assert otros_numeros_candidatos(
+        "Catwoman The New 52!.cbr", carpeta="2011 - 2014 Catwoman The New 52! Vol 04") == []
+    # Sin ceros a la izquierda al comparar con la carpeta.
+    assert otros_numeros_candidatos("Serie 007.cbr", carpeta="Serie 7") == []
+
+
+def test_prefijo_con_volumen_detras_es_el_numero():
+    """C5 (R2): en «NN Serie Vol MM» el volumen no es «otro número»."""
+    p = parse_comic_filename("05 Catwoman Vol 02.cbr")
+    assert (p.series, p.issue_number, p.volume, p.edition_kind) == ("Catwoman", "5", 2, None)
+
+    p = parse_comic_filename("72 Catwoman Vol 02 No Man_s Land.cbr")
+    assert (p.issue_number, p.volume) == ("72", 2)
+
+
+def test_volumen_no_se_convierte_en_numero_si_habia_prefijo():
+    """C6 (F4): perder el prefijo convertía el volumen en el número (#2)."""
+    p = parse_comic_filename("33 Catwoman Vol 02 Legacy.cbr")
+    assert p.issue_number == "33"
+    assert p.edition_kind is None
+
+
+@pytest.mark.parametrize("nombre, serie, numero", [
+    ("13. Nightwing #73.cbr", "Nightwing", "73"),      # prefijo con punto: orden de lectura
+    ("22.1 Catwoman.cbr", "Catwoman", "22.1"),         # decimal: número del tebeo
+    ("12 Monkeys.cbr", "12 Monkeys", ""),              # sin evidencia: no se inventa
+    ("14 JLD #11.cbr", "JLD", "11"),                   # otro número explícito
+    ("Nancy in Hell Tomo 1.cbr", "Nancy in Hell", "1"),  # el tomo es el identificador
+])
+def test_prefijos_que_no_cambian_con_bl_parse1(nombre, serie, numero):
+    """C7: lo que R1–R3 no deben tocar."""
+    p = parse_comic_filename(nombre)
+    assert (p.series, p.issue_number) == (serie, numero)
+
+
+def test_parentesis_huerfano_no_esconde_el_numero():
+    """C8 (R3): «206)» con el «(» perdido no es un año entre paréntesis."""
+    p = parse_comic_filename("235.- Flash v2 206) por DrMediaNoche(CRG).cbr")
+    assert (p.series, p.issue_number, p.volume, p.edition_kind) == ("Flash", "206", 2, None)
+
+
+@pytest.mark.parametrize("nombre, carpeta, numero", [
+    ("05 Catwoman Vol 02.cbr", "1993 - 2001 Catwoman Vol 02 (Incompleto)", "5"),
+    ("72 Catwoman Vol 02 No Man_s Land.cbr", "1993 - 2001 Catwoman Vol 02 (Incompleto)", "72"),
+    ("14 Catwoman Vol 02 Hora Cero.cbr", "1993 - 2001 Catwoman Vol 02 (Incompleto)", "14"),
+    ("01 Catwoman The New 52!.cbr", "2011 - 2014 Catwoman The New 52! Vol 04", "1"),
+    ("235.- Flash v2 206) por DrMediaNoche(CRG).cbr", "Flash (1987)", "206"),
+])
+def test_bl_parse1_nombres_reales(nombre, carpeta, numero):
+    """C14: nombres reales de la biblioteca, con su carpeta."""
+    p = parse_comic_filename(nombre, carpeta=carpeta, contexto=f"Tebeos / {carpeta}")
+    assert p.issue_number == numero
