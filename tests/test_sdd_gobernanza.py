@@ -34,6 +34,14 @@ FORBIDDEN = re.compile(
     r"verificado en claude code|verificado en codex|verificado en opencode",
     re.IGNORECASE,
 )
+RULE_STATUS = re.compile(r"^\|\s*PRE-[A-Z0-9]+\s*\|.*\|\s*([^|]+?)\s*\|\s*$", re.MULTILINE)
+ALLOWED_STATUS = ("sin migrar", "migrada")
+# Frases que declararían una autoridad nueva sin aprobación del traslado.
+FORBIDDEN_AUTHORITY = re.compile(
+    r"(sustituye|deroga|reemplaza)\s+(a\s+)?(la\s+)?gu[ií]a|"
+    r"CLAUDE\.md\s+(ya\s+)?no\s+(es|est[aá])\s+vigente",
+    re.IGNORECASE,
+)
 
 
 def read(path: Path) -> str:
@@ -137,6 +145,22 @@ class GobernanzaTest(unittest.TestCase):
         for criterio, estado in filas.items():
             with self.subTest(criterio=criterio):
                 self.assertIn(estado, EVIDENCE_STATES, f"estado no admitido: {estado}")
+
+    def test_estados_del_mapa_son_de_lista_cerrada(self) -> None:
+        text = read(GOVERNANCE / "mapa-reglas.md")
+        estados = [estado for estado in RULE_STATUS.findall(text)]
+        self.assertTrue(estados, "el mapa no declara estados")
+        for estado in estados:
+            with self.subTest(estado=estado):
+                self.assertIn(estado, ALLOWED_STATUS, f"estado no admitido: {estado}")
+
+    def test_ningun_documento_deroga_la_guia(self) -> None:
+        for path in markdown_files():
+            with self.subTest(documento=path.name):
+                self.assertIsNone(
+                    FORBIDDEN_AUTHORITY.search(read(path)),
+                    f"{path.name} declara una autoridad no aprobada",
+                )
 
     def test_ningun_documento_afirma_carga_no_verificada(self) -> None:
         for path in markdown_files():
