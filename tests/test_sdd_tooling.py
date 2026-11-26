@@ -35,6 +35,11 @@ class SddToolingTest(unittest.TestCase):
 
     def test_docker_allowlist_does_not_include_tooling(self) -> None:
         lines = (ROOT / ".dockerignore").read_text().splitlines()
+        # Docker recorta espacios en los patrones: una línea con espacio
+        # periférico podría abrir un patrón fuera de la lista de permitidos.
+        # Sin subTest: dentro de él la aserción no propagaría a quien llama.
+        for line in lines:
+            self.assertEqual(line, line.strip(), f"espacio periférico en {line!r}")
         self.assertIn("**", lines)
         # Solo se permite una lista conocida: un comodín nuevo podría reabrir tooling.
         allowed = {"Dockerfile", "pyproject.toml", "uv.lock", "src/", "src/**",
