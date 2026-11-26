@@ -7,8 +7,9 @@ provisiona OPS4 **sin habilitar la UI ni activar el socket por defecto**.
 
 - Crea `ops/actualizar.key` (32 bytes hex + LF, `0440 root:<grupo>`) solo si
   no existe; no la imprime ni la rota.
-- Crea `ops4/consumidos` `0700` y copia el auxiliar, protocolo, verificador y
-  registro durable a `/usr/local/lib/zascarr`.
+- Crea `ops4/consumidos` e `ops4/intentos` en `0700` y copia el auxiliar,
+  protocolo, verificador, registro durable, admisión y la entrada de la
+  unidad a `/usr/local/lib/zascarr`.
 - Sustituye `@ZASCARR_DATA_DIR@`/`@GRUPO@` e instala el socket y las unidades.
 - **Sin `--activar` no habilita nada**: las unidades quedan en disco, sin
   `[Install]`, y la UI sigue con `OPS4_ACTUALIZACION_HABILITADA=false`.
@@ -21,7 +22,7 @@ provisiona OPS4 **sin habilitar la UI ni activar el socket por defecto**.
 
 ## Pruebas
 
-[test_instalar_ops4.py](../../tests/test_instalar_ops4.py): **11 casos** con
+[test_instalar_ops4.py](../../tests/test_instalar_ops4.py): casos con
 directorios temporales y `--sin-systemd`, sin tocar systemd, la Pi ni
 producción. Verifican clave/modo, directorios, módulos, unidades sustituidas,
 idempotencia, dry-run, retirada y argumentos inválidos.
@@ -53,3 +54,7 @@ no se usó la Pi y no se activó la bandera de UI.
 - La unidad de actualización ejecuta `update.sh` real si se activa; instalar
   y activar requieren la revisión SecOps y una ventana autorizada.
 - Sin despliegue.
+
+La reserva B2 está cableada y validada en VM con `update.sh` inofensivo; ver
+[`ops4-b2b-reserva.md`](ops4-b2b-reserva.md). Sigue sin autorizar la
+habilitación ni el despliegue.

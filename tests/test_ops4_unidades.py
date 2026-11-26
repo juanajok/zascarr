@@ -22,14 +22,16 @@ def test_unidad_de_actualizacion_tiene_accion_fija_y_limites() -> None:
     config = _leer("zascarr-actualizar.service")
     servicio = config["Service"]
     assert servicio["Type"] == "exec"
-    assert servicio["ExecStart"] == (
-        "/bin/bash @REPO@/scripts/update.sh --rama main"
-    )
+    assert servicio["ExecStart"] == "/usr/local/lib/zascarr/zascarr-actualizar-entrada"
+    texto = _texto("zascarr-actualizar.service")
+    assert "ZASCARR_ACTUALIZAR_UNIDAD=1" in texto
+    assert "ZASCARR_REPO=@REPO@" in texto
     assert servicio["RuntimeMaxSec"] == "5400"
     assert servicio["KillMode"] == "control-group"
     assert servicio["SendSIGKILL"] == "yes"
     assert servicio["Restart"] == "no"
-    assert "/opt/zascarr" in servicio["ReadWritePaths"]
+    assert "@REPO@" in servicio["ReadWritePaths"]
+    assert "@BACKUP_DIR@" in servicio["ReadWritePaths"]
     assert "/usr/local/lib/zascarr" in servicio["ReadWritePaths"]
     assert "/etc/systemd/system" in servicio["ReadWritePaths"]
     assert servicio["WorkingDirectory"] == "@REPO@"
@@ -57,6 +59,7 @@ def test_unico_execstoppost_con_prefijo_y_mapeo_de_systemd() -> None:
     # es pre-efecto por contrato; todo lo demás es incierta (H-13).
     assert 'success:exited:0) r=hecha' in valor
     assert 'exit-code:exited:75) r=fallida' in valor
+    assert 'exit-code:exited:76) r=fallida' in valor
     assert '*) r=incierta' in valor
     assert '--resultado "$r"' in valor
 
@@ -67,9 +70,9 @@ def test_readwritepaths_incluye_el_cerrojo_con_prefijo() -> None:
     # H-7: un host sin OPS1 puede no tener /run/zascarr-ops.lock; el `-` evita
     # que el sandbox falle al arrancar la unidad.
     assert "-/run/zascarr-ops.lock" in rutas
-    assert "/opt/zascarr" in rutas
-    assert "/var/lib/zascarr" in rutas
-    assert "/var/backups/zascarr" in rutas
+    assert "@REPO@" in rutas
+    assert "@ZASCARR_DATA_DIR@" in rutas
+    assert "@BACKUP_DIR@" in rutas
 
 
 def test_unidad_auxiliar_no_tiene_red_ni_capacidades() -> None:

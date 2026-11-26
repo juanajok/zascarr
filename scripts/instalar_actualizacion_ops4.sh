@@ -12,6 +12,7 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ZASCARR_ROOT="${ZASCARR_ROOT:-$(cd "${REPO_DIR}/.." && pwd)}"
 ENV_FILE="${ENV_FILE:-${ZASCARR_ROOT}/.env}"
 DATA_DIR="${OPS4_DATA_DIR:-${ZASCARR_DATA_DIR:-/var/lib/zascarr}}"
+BACKUP_DIR="${ZASCARR_BACKUP_DIR:-/var/backups/zascarr}"
 OPS_DIR="${DATA_DIR}/ops"
 OPS4_DIR="${DATA_DIR}/ops4"
 DEST_AUX="/usr/local/lib/zascarr/zascarr-actualizar-aux"
@@ -25,6 +26,10 @@ if [[ -z "${GRUPO}" ]]; then
 fi
 if [[ -z "${GRUPO}" ]] || ! getent group "${GRUPO}" >/dev/null 2>&1; then
     echo "No se pudo resolver el grupo de servicio (PGID/.env u OPS4_GROUP); no se instala nada." >&2
+    exit 1
+fi
+if [[ "${DATA_DIR}${REPO_DIR}${BACKUP_DIR}" == *[[:space:]]* ]]; then
+    echo "Las rutas de datos, repo y copias no pueden contener espacios ni saltos de línea." >&2
     exit 1
 fi
 if [[ "${ZASCARR_PRUEBAS:-}" == "1" ]]; then
@@ -72,6 +77,7 @@ sustituir() {
     texto="${texto//@ZASCARR_DATA_DIR@/${DATA_DIR}}"
     texto="${texto//@GRUPO@/${GRUPO}}"
     texto="${texto//@REPO@/${REPO_DIR}}"
+    texto="${texto//@BACKUP_DIR@/${BACKUP_DIR}}"
     if [[ "${texto}" =~ @[A-Z_]+@ ]]; then
         echo "Marcadores sin sustituir en $1" >&2; return 1
     fi
@@ -125,6 +131,7 @@ if (( QUITAR )); then
         "${DEST_LIB}/verificador_autorizacion_ops4.py" \
         "${DEST_LIB}/registro_repeticiones_ops4.py" \
         "${DEST_LIB}/admision_ops4.py" \
+        "${DEST_LIB}/zascarr-actualizar-entrada" \
         "${DEST_LIB}/escritor_estado_actualizar_ops4.py" \
         "${DEST_LIB}/zascarr-estado-actualizar-ops4"
     if (( ! SIN_SYSTEMD )); then run systemctl daemon-reload || true; fi
@@ -147,6 +154,8 @@ crear_clave
 copiar "${REPO_DIR}/deploy/ops/zascarr_actualizar_aux.py" "${DEST_AUX}" 0755
 copiar "${REPO_DIR}/deploy/ops/estado_actualizar_ops4.py" \
     "${DEST_LIB}/zascarr-estado-actualizar-ops4" 0755
+copiar "${REPO_DIR}/deploy/ops/zascarr_actualizar_entrada.py" \
+    "${DEST_LIB}/zascarr-actualizar-entrada" 0755
 for modulo in protocolo_actualizar_v4_ops4.py verificador_autorizacion_ops4.py \
               registro_repeticiones_ops4.py admision_ops4.py \
               escritor_estado_actualizar_ops4.py; do

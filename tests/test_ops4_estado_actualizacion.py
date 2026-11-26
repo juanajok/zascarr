@@ -216,6 +216,25 @@ def test_ultimo_intento_reconcilia_activo_a_los_7200(tmp_path) -> None:
     assert justo.estado is EstadoActualizacion.INCIERTA and justo.sin_noticias is True
 
 
+def test_ultimo_intento_acepta_fase_reservada(tmp_path) -> None:
+    from deploy.ops.escritor_estado_actualizar_ops4 import calcular_transicion
+    from zascarr.services.estado_actualizacion import (
+        EstadoActualizacion,
+        leer_ultimo_intento,
+    )
+    ini = _inicial_v2()
+    reservada = calcular_transicion(
+        ini, "en_curso", ahora=1_700_000_010, fase="reservada",
+        head0="a" * 40,
+    )
+    assert reservada is not None and reservada["fase"] == "reservada"
+    ruta = _escribir_v2(tmp_path, reservada)
+    intento = leer_ultimo_intento(ruta, ahora_epoch=1_700_000_011)
+    assert intento is not None
+    assert intento.estado is EstadoActualizacion.EN_CURSO
+    assert intento.fase == "reservada" and intento.head0 == "a" * 40
+
+
 def test_ultimo_intento_v1_compatible(tmp_path) -> None:
     from zascarr.services.estado_actualizacion import (
         EstadoActualizacion,

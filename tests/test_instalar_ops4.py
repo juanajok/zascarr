@@ -45,6 +45,7 @@ def test_instala_clave_dirs_modulos_y_unidades_sin_activar(tmp_path: Path) -> No
     assert stat.S_IMODE((tmp_path / "data" / "ops4" / "intentos").stat().st_mode) == 0o700
     assert (tmp_path / "bin" / "actualizar-aux").is_file()
     assert (tmp_path / "lib" / "zascarr-estado-actualizar-ops4").is_file()
+    assert (tmp_path / "lib" / "zascarr-actualizar-entrada").is_file()
     for modulo in ("protocolo_actualizar_v4_ops4.py",
                    "verificador_autorizacion_ops4.py",
                    "registro_repeticiones_ops4.py",
@@ -130,6 +131,16 @@ def test_grupo_por_defecto_desde_env_pgid(tmp_path: Path) -> None:
     assert r.returncode == 0, r.stderr
     unit = tmp_path / "units" / "zascarr-actualizar.socket"
     assert f"SocketGroup={grupo}" in unit.read_text(encoding="utf-8")
+
+
+def test_ruta_con_espacios_aborta_sin_instalar(tmp_path: Path) -> None:
+    r = ejecutar(
+        tmp_path, "--yes", "--sin-systemd",
+        extra_env={"OPS4_DATA_DIR": str(tmp_path / "con espacio")},
+    )
+    assert r.returncode == 1
+    assert "no pueden contener espacios" in r.stderr
+    assert not (tmp_path / "con espacio").exists()
 
 
 def test_grupo_no_resuelto_aborta(tmp_path: Path) -> None:

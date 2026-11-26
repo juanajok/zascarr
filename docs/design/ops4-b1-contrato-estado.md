@@ -14,7 +14,7 @@ Un objeto JSON UTF-8 de **como máximo 4096 bytes**, canónico (`sort_keys`, sin
 | `id` | texto | 32 hexadecimales minúsculas |
 | `unidad` | texto | siempre `zascarr-actualizar.service` |
 | `estado` | texto | `aceptada`, `en_curso`, `hecha`, `fallida` o `incierta` |
-| `fase` | texto | `aceptada`, `preparacion`, `copia`, `git`, `build`, `migracion`, `arranque` o `fin` |
+| `fase` | texto | `aceptada`, `reservada`, `preparacion`, `copia`, `git`, `build`, `migracion`, `arranque` o `fin` |
 | `inicio_epoch` | entero | segundos Unix, `0 <= inicio <= actualizado < 2**63` |
 | `actualizado_epoch` | entero | nunca retrocede |
 | `head0` | texto o `null` | SHA-1 completo (40 hex) del HEAD antes de actualizar; una vez fijado no cambia |
@@ -24,7 +24,7 @@ Un objeto JSON UTF-8 de **como máximo 4096 bytes**, canónico (`sort_keys`, sin
 | `codigo` | texto o `null` | `null` mientras no hay terminal; en terminal, `success:exited:0`, `exit-code:exited:75` u `otro` |
 
 Estados terminales: `hecha`, `fallida`, `incierta`. Orden de fases (monótono, nunca retrocede):
-`aceptada` < `preparacion` < `copia` < `git` < `build` < `migracion` < `arranque` < `fin`.
+`aceptada` < `reservada` < `preparacion` < `copia` < `git` < `build` < `migracion` < `arranque` < `fin`.
 
 Un fichero con claves de más o de menos, tipos cambiados, `schema` distinto de 1 o 2, hash mal formado, época invertida o fase desconocida es **inválido** y se falla cerrado.
 

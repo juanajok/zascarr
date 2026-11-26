@@ -138,4 +138,5 @@ _MAPA_TRANSPORTE = {
     CodigoTransporteV4.RESPUESTA_INVALIDA:
         SolicitudV4(ResultadoSolicitudV4.RESPUESTA_INVALIDA),
     CodigoTransporteV4.INCIERTO: SolicitudV4(ResultadoSolicitudV4.INCIERTA),
+    CodigoTransporteV4.INCIERTA: SolicitudV4(ResultadoSolicitudV4.INCIERTA),
 }

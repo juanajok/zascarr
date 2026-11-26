@@ -538,7 +538,7 @@ contenedores o datos del coleccionista. Todo lo que no sea un campo de la tabla 
 
 | Escritor | Fase que puede escribir | Condición |
 |---|---|---|
-| Auxiliar (pre-start) | `aceptada`/`preparando` | Tras verificar firma, frescura, admisión y cerrojo; antes de `systemctl start`. |
+| Auxiliar (pre-start) | `aceptada` | Tras verificar firma, frescura, admisión y cerrojo; antes de `systemctl start`. |
 | Auxiliar (start fallido) | `fallida`/`fallida`, `codigo=inicio_fallido` | Solo si `systemctl start` devuelve fallo y no hay evidencia de unidad. |
 | Entrada de la unidad (wrapper, B2) | `en_curso`/`reservada` | primera acción tras tomar el `flock` fd 9; antes de `exec update.sh`; solo si la reserva es vigente y del mismo `id`. |
 | `update.sh` (helper de fases) | `en_curso`/{`copiando`,`avanzando`,`construyendo`,`migrando`,`arrancando`,`verificando`} | Solo con `ZASCARR_ACTUALIZAR_UNIDAD=1`; escritura best-effort; no aborta la actualización por no poder anotar una fase (anota aviso `estado_degradado`). |
@@ -708,7 +708,7 @@ Reglas:
    fase `reservada` con el estado vigente y hace `exec bash @REPO@/scripts/update.sh
    --rama main` conservando fd 9 (el `exec` de bash no cierra el descriptor; `_cerrojo.sh`
    lo reconoce por dispositivo:inodo y re-`flock`ea idempotente).
-4. **Reserva** = la instantánea durable `aceptada`/`preparando` con `id`, escrita por el
+4. **Reserva** = la instantánea durable `aceptada` (fase `aceptada`) con `id`, escrita por el
    auxiliar **antes** del `start`, más la confirmación de la fase `reservada` escrita por
    la entrada. La reserva no es el `flock` (no se puede transferir a systemd) ni un
    descriptor en memoria: es el estado durable + el cerrojo tomado por el trabajador.
@@ -741,9 +741,9 @@ Reglas:
 | P4 | Auxiliar | comprueba el **cerrojo de operaciones** sin tomarlo. Si ocupado ⇒ responde ocupada. | — | `operacion_en_curso`; sin estado, sin consumo |
 | P5 | Auxiliar | lee el estado con lector estricto: si hay un intento activo (mismo u otro `id`) o un no-terminal ilegible ⇒ rechaza. Si el `id` de la petición ya aparece en el estado o en la marca de intento `intentos/<id>` ⇒ `repetida`. | — | `no_disponible`/`repetida`; sin consumo |
 | P6 | Auxiliar | verifica el testigo con `verificar_testigo_sin_consumo` (formato, firma, dominio, `id`, ventana); los directorios `intentos` y `consumidos` se abren al inicio del proceso (como hoy `consumidos`). | — | `autorizacion_invalida`/`caducada`/`no_disponible`; sin consumo |
-| P7 | Auxiliar | crea la **marca de intento** `ops4/intentos/<id>` y escribe la **reserva** `aceptada`/`preparando` con `id`, `inicio` y `unidad`. `head0` aún es `null`. | Sí (`fsync` de ambos) | `no_disponible`; no arranca, no consume, no queda intento |
+| P7 | Auxiliar | crea la **marca de intento** `ops4/intentos/<id>` y escribe la **reserva** `aceptada` (fase `aceptada`) con `id`, `inicio` y `unidad`. `head0` aún es `null`. | Sí (`fsync` de ambos) | `no_disponible`; no arranca, no consume, no queda intento |
 | P8 | Auxiliar | `systemctl start --no-block zascarr-actualizar.service` (fijo, plazo 5 s). | — | si el `start` falla: escribe `fallida`/`inicio_fallido`; no consume; `no_disponible` |
-| P9 | Entrada | toma el `flock` fd 9. Si ocupado ⇒ sale 75 **sin efectos** (el `ExecStopPost` dejará `fallida`/`ocupada`). Si lo toma: valida reserva vigente (`id` presente, estado `aceptada`/`preparando`, `inicio` dentro de `RESERVA_VIGENCIA_S=300`); calcula `head0` con `git rev-parse HEAD` y escribe `en_curso`/`reservada` con `head0`; `exec update.sh`. | Sí | sale 75/2 antes de efectos |
+| P9 | Entrada | toma el `flock` fd 9. Si ocupado ⇒ sale 75 **sin efectos** (el `ExecStopPost` dejará `fallida`/`ocupada`). Si lo toma: valida reserva vigente (`id` presente, estado `aceptada`, fase `aceptada`, `inicio` dentro de `RESERVA_VIGENCIA_S=300`); calcula `head0` con `git rev-parse HEAD` y escribe `en_curso`/`reservada` con `head0`; `exec update.sh`. | Sí | sale 75 (ocupado) o 76 (reserva no vigente) antes de efectos |
 | P10 | Auxiliar | espera hasta 5 s (medido en B4; el auxiliar tiene `RuntimeMaxSec=45 s`) a ver el `id` + `en_curso`/`reservada` (o un terminal) en el estado. | — | sin confirmación ⇒ P12 |
 | P11 | Auxiliar | confirmado: **consume** la autorización con `reclamar_consumo(id)` y responde `aceptada`. | Sí | si el consumo falla: escribe `incierta`/`consumo_no_confirmado` si puede; responde `incierta` (nunca `rechazada`); la marca de intento de P7 sigue bloqueando el replay |
 | P12 | Auxiliar | no confirmado: si hay evidencia de unidad/terminal ⇒ consume y responde `ocupada`/`incierta` según el terminal; si es ambiguo ⇒ escribe `incierta`/`arranque_ambiguo`, consume si puede y responde `incierta`. | Sí | siempre falla cerrado; nunca "rechazada" si pudo arrancar algo; la marca de intento bloquea el replay |
