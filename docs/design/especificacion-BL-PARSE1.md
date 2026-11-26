@@ -1,6 +1,6 @@
 # Especificación BL-PARSE1 — números que el parser pierde o inventa (F3 + F4)
 
-> **Estado:** borrador para aprobación del PO. No se programa nada hasta que esté aprobada (SDD + TDD).
+> **Estado:** **aprobada por el PO el 2026-11-26**, con D1 = convención `E{N}` (propuesta de R4).
 > **ID provisional:** `BL-PARSE1`, pendiente de tarjeta en el Project 1.
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familias F3 y F4.
 > **Código de referencia:** `main` en `4b5f9d7b` (el mismo que corre en la Pi).
@@ -123,9 +123,9 @@ Ejemplo: `235.- Flash v2 206) por DrMediaNoche(CRG).cbr` → número `206`, volu
 Hoy los 8 archivos `Superman Vol2 Especial N` solo se libran del enlace erróneo por el empate de
 F1. Esta regla tiene que estar en `main` **antes** de arreglar los datos de F1.
 
-## 5. Decisión pendiente del PO
+## 5. Decisión del PO
 
-**D1. Convención de número de los especiales.** Los 8 especiales que asignaste a mano usan `E1…E8`.
+**D1 (decidida el 2026-11-26: se adopta `E{N}` para buscar).** Convención de número de los especiales. Los 8 especiales que asignaste a mano usan `E1…E8`.
 La propuesta (R4) adopta `E{N}` para **buscar**, nunca para crear. La alternativa es no buscar nunca:
 todo especial con número iría a «Por revisar».
 - La propuesta enlaza solos los especiales que ya existan como `E{N}`.
