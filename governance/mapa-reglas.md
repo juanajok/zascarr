@@ -7,7 +7,7 @@
 | PRE-01 | §3.1 | La capa de servicios concentra el negocio; routers finos | [Contrato de datos](contrato-datos.md#pre-01--la-capa-de-servicios-es-la-única-fuente-de-verdad-del-negocio) | migrada |
 | PRE-02 | §3.1 | No mover archivos con la sesión ORM viva; conservar la deuda declarada del código heredado | [Contrato de datos](contrato-datos.md#pre-02--el-orm-nunca-cruza-un-movimiento-de-ficheros-con-la-sesión-viva) | migrada |
 | PRE-03 | §3.1 | Escritura con esquemas explícitos; prohibido el mass assignment | [Contrato de seguridad](contrato-seguridad.md#pre-03--mass-assignment-prohibido-en-endpoints) | migrada |
-| PRE-04 | §3.1 | Sin hotlinking en la interfaz | Seguridad de interfaz | sin migrar |
+| PRE-04 | §3.1 | Sin hotlinking en la interfaz | [Contrato de biblioteca](contrato-biblioteca.md#pre-04--sin-hotlinking-en-la-interfaz) | migrada |
 | PRE-05 | §3.1 | Toda decisión de arquitectura nueva requiere ADR | [Constitución](constitution.md#pre-05--decisión-de-arquitectura-requiere-adr) | migrada |
 | PRE-06 | §3.2 | Configuración centralizada; ninguna credencial utilizable por defecto; escritura atómica del entorno | [Contrato de seguridad](contrato-seguridad.md#pre-06--credenciales-del-entorno-adr-0012) | migrada |
 | PRE-07 | §3.2 | Integraciones P2P y fuentes de metadatos apagadas por defecto; una actualización no las apaga en silencio | Configuración | sin migrar |
@@ -34,13 +34,13 @@
 | PRE-28 | §14 | El glosario fija superficie y no renombra datos persistidos | Glosario | sin migrar |
 | PRE-29 | §4 | Nada bloqueante en handlers asíncronos; descargas externas con semáforo | NFR de rendimiento | sin migrar |
 | PRE-30 | §4 | Cortesía compartida por fuente y por host efectivo, también en redirecciones | [Contrato de seguridad](contrato-seguridad.md#pre-30--cortesía-compartida-por-fuente-y-por-host-efectivo) | migrada |
-| PRE-31 | §4 | Caché local-first y reglas de revalidación de estáticos | Contrato HTTP | sin migrar |
-| PRE-32 | §4 | Portadas locales y externas separadas; lectura RAR acotada y recordada | Contrato de portadas | sin migrar |
+| PRE-31 | §4 | Caché local-first y reglas de revalidación de estáticos | [Contrato de biblioteca](contrato-biblioteca.md#pre-31--caché-local-first-y-revalidación) | migrada |
+| PRE-32 | §4 | Portadas locales y externas separadas; lectura RAR acotada y recordada | [Contrato de biblioteca](contrato-biblioteca.md#pre-32--portadas-de-archivo-de-fuente-externa-y-lectura-de-rar) | migrada |
 | PRE-33 | §6 | Lenguaje llano, estados visibles y tarjetas tolerantes al fallo | Diseño y accesibilidad | sin migrar |
 | PRE-34 | §6 | Fuentes y marca locales, con licencias y variantes por tamaño | Sistema de diseño | sin migrar |
 | PRE-35 | §6 | Tramas, contraste, botones, avisos y títulos con sus excepciones | Sistema de diseño | sin migrar |
 | PRE-36 | §6 | Cifras coherentes y presupuesto textual con umbrales provisionales | Contratos de interfaz | sin migrar |
-| PRE-37 | §6 | El sistema de diseño se consulta antes de cambiar una pantalla | Índice de fuentes | sin migrar |
+| PRE-37 | §6 | El sistema de diseño se consulta antes de cambiar una pantalla | [Contrato de biblioteca](contrato-biblioteca.md#pre-37--el-sistema-de-diseño-se-consulta-y-su-deuda-no-se-copia) | migrada |
 | PRE-38 | §7 | Migraciones aplicadas inmutables y reglas de tipos Postgres | [Contrato de datos](contrato-datos.md#pre-38--migraciones-aplicadas-inmutables-y-tipos-postgres-explícitos) | migrada |
 | PRE-39 | §14 | Conceptos de superficie y reglas de contexto entre términos | Glosario | sin migrar |
 | PRE-40 | Cabecera | Toda decisión nueva sobre cómo se trabaja se registra el día que se decide | [Constitución](constitution.md#pre-40--registrar-las-decisiones-del-modo-de-trabajo) | migrada |
@@ -83,7 +83,7 @@
 
 | Sub-regla | Regla a conservar | Destino propuesto | Estado |
 |---|---|---|---|
-| PRE-36-1 | Las cifras del Inicio cuadran; lo del disco va aparte con su fecha y motivo | Contratos de Inicio | sin migrar |
+| PRE-36-1 | Las cifras del Inicio cuadran; lo del disco va aparte con su fecha y motivo | Contratos de Inicio | [Contrato de biblioteca](contrato-biblioteca.md#pre-36-1--las-cifras-del-inicio-cuadran) | migrada |
 | PRE-36-2 | Frase de entrada de 20 palabras como máximo y 50 palabras visibles antes de la primera acción | Presupuesto de texto | sin migrar |
 | PRE-36-3 | La garantía va junto a la acción con efecto y en su confirmación | Presupuesto de texto | sin migrar |
 | PRE-36-4 | Resumen antes que listado; mayúsculas solo en rótulos de tres palabras o menos | Presupuesto de texto | sin migrar |
@@ -94,8 +94,8 @@
 
 | Sub-regla | Regla a conservar | Destino propuesto | Estado |
 |---|---|---|---|
-| PRE-37-1 | El sistema de diseño se consulta antes de pintar una pantalla o tocar el CSS | Índice de fuentes | sin migrar |
-| PRE-37-2 | La deuda declarada de la última revisión no se copia en pantallas nuevas | Diseño y accesibilidad | sin migrar |
+| PRE-37-1 | El sistema de diseño se consulta antes de pintar una pantalla o tocar el CSS | Índice de fuentes | [Contrato de biblioteca](contrato-biblioteca.md#pre-37-1--consultar-antes-de-pintar-o-tocar-estilos) | migrada |
+| PRE-37-2 | La deuda declarada de la última revisión no se copia en pantallas nuevas | Diseño y accesibilidad | [Contrato de biblioteca](contrato-biblioteca.md#pre-37-2--la-deuda-declarada-no-se-replica) | migrada |
 
 ### Desglose de PRE-06
 
