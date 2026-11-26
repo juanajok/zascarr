@@ -87,8 +87,8 @@ con esas condiciones y no como efecto colateral de UXA-12b.
 
 **El glosario queda actualizado** a B/C: «edición» es la serie/línea (ADR 0020), el `IssueFormat`
 es el formato de publicación y la copia/calidad es el `File` (`CLAUDE.md` §14.1 y §14.2). Los
-rótulos históricos «Otras ediciones de este número» (ficha) y «Mejores ediciones» (Mejoras) quedan
-anotados como pendientes de renombrar; no se cambian en esta rebanada.
+rótulos históricos se cambian en la PR de etiquetas: «Otros volúmenes de este número» (ficha) y
+«Mejores copias» (Mejoras).
 
 ## 6. Decisiones del PO (resueltas)
 
@@ -117,8 +117,8 @@ anotados como pendientes de renombrar; no se cambian en esta rebanada.
 - Sin cambios en `Issue`, la clave única, `vinculacion_previa.py` ni la base de datos.
 - `tests/test_vinculacion_ocupado_uxa12_pg.py` actualizado: copia ≠ edición y enlace a la serie en
   la colisión; el CI lo ejecuta con Postgres real.
-- Glosario actualizado (B/C); los rótulos «Otras ediciones»/«Mejores ediciones» quedan anotados como
-  pendientes. No se cierra #1250 hasta el despliegue.
+- Glosario actualizado (B/C); los rótulos de ficha/Mejoras se cambian en la PR de etiquetas. No se
+  cierra #1250 hasta el despliegue.
 
 ## 8. Si el PO elige A: lo que habría que hacer (no ahora)
 
@@ -131,8 +131,8 @@ anotados como pendientes de renombrar; no se cambian en esta rebanada.
 ## 9. Límites de esta ficha
 
 - Implementa B/C en el panel; no migra ni cambia el modelo. La tarjeta pasa a «En revisión».
-- Los rótulos «Otras ediciones de este número» (ficha) y «Mejores ediciones» (Mejoras) siguen como
-  estaban: anotados en el glosario, pendientes de renombrar en otra rebanada.
+- Los rótulos se cambian en la PR de etiquetas: «Otros volúmenes de este número» (ficha) y «Mejores
+  copias» (Mejoras).
 - El benchmark es lectura estática de las fichas ya cerradas (Kapowarr/Mylar3); no se ejecutaron
   ni se abrió su UI. No hay caso real en la biblioteca de la Pi (0 medidos).
 - No hay navegador, lector de pantalla ni prueba con personas: la decisión es de producto y de

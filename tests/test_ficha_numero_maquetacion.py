@@ -1,7 +1,7 @@
 """Regresión: maquetación de la ficha de número (revisión del 2026-11-20).
 
 1. Las acciones de la cabecera iban en tres filas: «Añadir a una lista» en otra y «Buscar una
-   edición mejor» en una tercera, corrida 6 px (`.inline-desbloquear`), y «Leer», sin `.sm`, quedaba
+   copia mejor» en una tercera, corrida 6 px (`.inline-desbloquear`), y «Leer», sin `.sm`, quedaba
    1 px más baja. Ahora son una sola fila, con el aspecto de las de Biblioteca.
 2. El título bajaba 21 px respecto a la portada (margen del `h1`) y la portada llevaba un pie que
    no decía nada («Portada del número»).
@@ -34,7 +34,7 @@ def acciones() -> str:
 
 def test_todas_las_acciones_van_en_una_fila():
     bloque = acciones()
-    for texto in ("Leer", "Editar el número", "Completar datos", "Buscar una edición mejor",
+    for texto in ("Leer", "Editar el número", "Completar datos", "Buscar una copia mejor",
                   "Añadir a una lista"):
         assert texto in bloque, texto
     assert "display: flex" in regla(".issue-acciones")
