@@ -67,6 +67,9 @@ def test_por_revisar_usa_pendientes_y_no_archivos(monkeypatch):
                    file_format=FileFormat.CBZ, metadata_={"match_status": "unsorted"})
     monkeypatch.setattr(modulo_pendientes.ReviewService, "pagina_de_pendientes",
                         lambda _self, **_kw: _async(_pagina_pendientes([archivo])))
+    # BL-PARSE3: sin BD, tampoco hay hermanos de carpeta que consultar.
+    monkeypatch.setattr(modulo_pendientes, "sugerencias_por_carpeta",
+                        lambda _db, _archivos: _async({}))
     html = _get("/ui/pendientes")
     t = visible(html)
     assert "Pendientes que el sistema no supo clasificar solo." in t

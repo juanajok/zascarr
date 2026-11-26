@@ -46,6 +46,7 @@ from zascarr.services.revision_carpetas import (
     Suelto,
 )
 from zascarr.services.runtime_settings import RuntimeSettingsService
+from zascarr.services.sugerencia_carpeta import SugerenciaCarpeta, sugerencias_por_carpeta
 from zascarr.services.vinculacion_en_sitio import vincular_en_sitio
 from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail, puede_tener_portada
 from zascarr.utils.naming import parse_comic_filename
@@ -72,18 +73,28 @@ def _detected_label(filename: str) -> str:
     return f"{parsed.series} #{parsed.issue_number}" if parsed.issue_number else parsed.series
 
 
-def _suggestion(file: File) -> dict | None:
+def _suggestion(file: File, por_carpeta: SugerenciaCarpeta | None = None) -> dict | None:
     """B12: mejor candidato guardado por el matcher (naming.py SÍ extrajo
     título+número pero no hubo serie que igualara con confianza) — se
     ofrece como sugerencia de un clic, nunca como autoasignación. El
     número de issue se prefilla del propio nombre de archivo cuando el
     parser lo detectó; si no, el coleccionista lo escribe a mano igual
     que en una búsqueda manual."""
+    parsed = parse_comic_filename(file.file_name)
+    if por_carpeta is not None:
+        # BL-PARSE3 R3: la carpeta manda sobre el candidato del matcher, con su motivo.
+        return {
+            "series_id": str(por_carpeta.series_id),
+            "title": por_carpeta.title,
+            "start_year": por_carpeta.start_year,
+            "score_pct": None,
+            "por_carpeta": por_carpeta.hermanos,
+            "issue_number": parsed.issue_number or "",
+        }
     candidatos = (file.metadata_ or {}).get("candidates") or []
     if not candidatos:
         return None
     mejor = candidatos[0]
-    parsed = parse_comic_filename(file.file_name)
     return {
         "series_id": mejor["series_id"],
         "title": mejor["title"],
@@ -102,14 +113,25 @@ def _puede_vincular(f: File) -> bool:
         return False
 
 
-def _card(f: File) -> dict:
+async def _cards(db: AsyncSession, archivos: list[File]) -> list[dict]:
+    """Las tarjetas de una página, con la sugerencia por la carpeta (una consulta, BL-PARSE3)."""
+    por_carpeta = await sugerencias_por_carpeta(db, archivos)
+    return [_card(f, por_carpeta.get(f.id)) for f in archivos]
+
+
+async def _card_sola(db: AsyncSession, f: File) -> dict:
+    """La tarjeta que se repinta sola (tras un error) conserva su sugerencia por la carpeta."""
+    return (await _cards(db, [f]))[0]
+
+
+def _card(f: File, por_carpeta: SugerenciaCarpeta | None = None) -> dict:
     return {
         "file": f,
         "detected": _detected_label(f.file_name),
         "formato": ((f.file_format.value.upper()
                      if getattr(f, "file_format", None) is not None else
                      Path(f.file_name).suffix.lstrip(".").upper()) or "?"),
-        "suggestion": _suggestion(f),
+        "suggestion": _suggestion(f, por_carpeta),
         "puede_vincular": _puede_vincular(f),
         # U12: ausencia CONOCIDA (por la extensión, sin I/O): ni `<img>` ni petición ni bloque.
         "con_portada": puede_tener_portada(f.file_path,
@@ -189,7 +211,7 @@ async def index(
         despues=k_despues, antes=k_antes, limite=limite,
         solo_sugerencia=solo_sugerencia)
     contexto: dict = {
-        "cards": [_card(f) for f in pagina.archivos],
+        "cards": await _cards(db, pagina.archivos),
         "rango": _rango(pagina.desde, pagina.hasta, pagina.total),
         "solo_sugerencia": solo_sugerencia,
         "tamano": limite,
@@ -750,7 +772,7 @@ async def asignar(request: Request, file_id: UUID, series_id: UUID = Form(...),
         return templates.TemplateResponse(
             request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=resp.status)
     return templates.TemplateResponse(
-        request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
+        request, "_tarjeta_pendiente.html", {"c": await _card_sola(db, file), "aviso": aviso},
         status_code=resp.status)
 
 
@@ -777,7 +799,8 @@ async def vincular(
         return templates.TemplateResponse(
             request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=409)
     return templates.TemplateResponse(
-        request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso}, status_code=409)
+        request, "_tarjeta_pendiente.html", {"c": await _card_sola(db, file), "aviso": aviso},
+        status_code=409)
 
 
 @router.post("/{file_id}/especial", response_class=HTMLResponse)
@@ -808,7 +831,7 @@ async def vincular_especial(
             return templates.TemplateResponse(
                 request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=400)
         return templates.TemplateResponse(
-            request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
+            request, "_tarjeta_pendiente.html", {"c": await _card_sola(db, file), "aviso": aviso},
             status_code=400)
     return templates.TemplateResponse(request, "_accion_ok.html", {
         "titulo": "Guardado como especial.",
@@ -846,7 +869,7 @@ async def crear_one_shot(
             return templates.TemplateResponse(
                 request, "_asignacion_aviso.html", {"aviso": aviso}, status_code=400)
         return templates.TemplateResponse(
-            request, "_tarjeta_pendiente.html", {"c": _card(file), "aviso": aviso},
+            request, "_tarjeta_pendiente.html", {"c": await _card_sola(db, file), "aviso": aviso},
             status_code=400)
     return templates.TemplateResponse(request, "_accion_ok.html", {
         "titulo": "Creado como tomo único.",

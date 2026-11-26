@@ -24,13 +24,20 @@
 
     {% if c.suggestion %}
     {% set pct = c.suggestion.score_pct %}
-    {% set nivel = "ok" if pct >= 90 else ("amber" if pct >= 70 else "warn") %}
+    {% set nivel = "ok" if c.suggestion.por_carpeta or pct >= 90 else ("amber" if pct >= 70 else "warn") %}
     <div class="suggestion suggestion-{{ nivel }}">
       <div class="suggestion-cabecera">
         <span class="suggestion-label">¿Es esta serie?</span>
         <span class="series-name">{{ c.suggestion.title }}{% if c.suggestion.start_year %} ({{ c.suggestion.start_year }}){% endif %}</span>
+        {% if c.suggestion.por_carpeta %}
+        {{ ui.chip("ok", "Por la carpeta") }}
+        {% else %}
         {{ ui.chip(nivel, pct ~ "% de coincidencia") }}
+        {% endif %}
       </div>
+      {% if c.suggestion.por_carpeta %}
+      <p class="detected">Otros {{ c.suggestion.por_carpeta }} archivos de esta carpeta ya están en esta serie.</p>
+      {% endif %}
 
       <form class="assign-form" method="get"
             action="/ui/pendientes/{{ c.file.id }}/asignar/previa"
