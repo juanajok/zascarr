@@ -43,6 +43,7 @@ except ImportError:  # instalado como script en /usr/local/lib/zascarr
 RUTA_CERROJO = "/run/zascarr-ops.lock"
 RESERVA_VIGENCIA_S = 300
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
+_INVOCACION = re.compile(r"[0-9a-f]{32}\Z")
 _CODIGO_BUSY = 75
 _CODIGO_INVALIDO = 76
 
@@ -77,6 +78,23 @@ def _tomar_cerrojo() -> int | None:
         os.close(fd)
         raise
     return 9
+
+
+def _marcar_intento(id_: str) -> None:
+    """Liga esta invocación de la unidad al id de la reserva (N2)."""
+    invocacion = os.environ.get("INVOCATION_ID", "")
+    if not _INVOCACION.fullmatch(invocacion):
+        raise ValueError("invocación no válida")
+    ops4 = os.environ.get("ZASCARR_OPS4_DIR", "/var/lib/zascarr/ops4")
+    ruta = os.path.join(ops4, "intentos", invocacion)
+    fd = os.open(
+        ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600,
+    )
+    try:
+        os.write(fd, (id_ + "\n").encode("ascii"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _head0(repo: str) -> str | None:
@@ -118,6 +136,10 @@ def main() -> int:
         or ahora - inicio > RESERVA_VIGENCIA_S
     ):
         return _fallo("reserva: inicio fuera de plazo")
+    try:
+        _marcar_intento(datos["id"])
+    except (OSError, ValueError):
+        return _fallo("intento: no se pudo marcar")
     head0 = _head0(repo)
     if head0 is None:
         return _fallo("head0: git")
