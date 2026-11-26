@@ -1,0 +1,31 @@
+name: Pipeline agentic (offline)
+
+on:
+  pull_request:
+    paths: ['.agentic/**', '.github/workflows/agentic.yml']
+  push:
+    branches: [main]
+    paths: ['.agentic/**', '.github/workflows/agentic.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PYTHONPATH: .agentic
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s .agentic/tests -v
+      - run: |
+          run=$(mktemp -d)/demo
+          python .agentic/examples/example.py "$run"
+          python -m pipeline --run "$run" delivery
