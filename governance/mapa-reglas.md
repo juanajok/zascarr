@@ -10,13 +10,13 @@
 | PRE-04 | §3.1 | Sin hotlinking en la interfaz | [Contrato de biblioteca](contrato-biblioteca.md#pre-04--sin-hotlinking-en-la-interfaz) | migrada |
 | PRE-05 | §3.1 | Toda decisión de arquitectura nueva requiere ADR | [Constitución](constitution.md#pre-05--decisión-de-arquitectura-requiere-adr) | migrada |
 | PRE-06 | §3.2 | Configuración centralizada; ninguna credencial utilizable por defecto; escritura atómica del entorno | [Contrato de seguridad](contrato-seguridad.md#pre-06--credenciales-del-entorno-adr-0012) | migrada |
-| PRE-07 | §3.2 | Integraciones P2P y fuentes de metadatos apagadas por defecto; una actualización no las apaga en silencio | Configuración | sin migrar |
-| PRE-08 | §3.2 | Healthcheck observacional y aviso de versión de solo lectura | Contratos de estado | sin migrar |
-| PRE-09 | §3.2 | Actualización manual: decisión de confianza no habilita la función ni su despliegue | ADR de actualización | sin migrar |
+| PRE-07 | §3.2 | Integraciones P2P y fuentes de metadatos apagadas por defecto; una actualización no las apaga en silencio | [Contrato de configuración](contrato-configuracion.md#pre-07--integraciones-y-fuentes-apagadas-por-defecto) | migrada |
+| PRE-08 | §3.2 | Healthcheck observacional y aviso de versión de solo lectura | [Contrato de configuración](contrato-configuracion.md#pre-08--estado-observacional-y-aviso-de-versión-de-solo-lectura) | migrada |
+| PRE-09 | §3.2 | Actualización manual: decisión de confianza no habilita la función ni su despliegue | [Contrato de configuración](contrato-configuracion.md#pre-09--la-actualización-manual-no-está-habilitada-por-la-decisión) | migrada |
 | PRE-10 | §5 | El software gestiona, no facilita fuentes de contenido | [Visión](product-vision.md#pre-10--el-software-gestiona-nunca-facilita) | migrada |
 | PRE-11 | §5 | La aceptación legal bloquea solo acciones de riesgo; nunca un middleware global | [Contrato de seguridad](contrato-seguridad.md#pre-11--la-aceptación-legal-bloquea-solo-acciones-de-riesgo) | migrada |
 | PRE-12 | §5 | Cero telemetría, logs sin datos sensibles y campos de formulario explícitos | [Contrato de seguridad](contrato-seguridad.md#pre-12--privacidad-registros-y-superficie-de-api) | migrada |
-| PRE-13 | §5 | Interfaz en localhost por defecto; abrir exige decisión explícita y contraseña | ADR de exposición de red | sin migrar |
+| PRE-13 | §5 | Interfaz en localhost por defecto; abrir exige decisión explícita y contraseña | [Contrato de configuración](contrato-configuracion.md#pre-13--exposición-de-red-adr-0004) | migrada |
 | PRE-14 | §5 | Toda URL variable pasa por la validación SSRF central | [Contrato de seguridad](contrato-seguridad.md#pre-14--toda-url-variable-pasa-por-la-validación-ssrf-central) | migrada |
 | PRE-15 | §5 | Un cambio sensible de contraseña espera dictamen de seguridad del SHA final | [Clasificación de riesgo](risk-classification.md#pre-15--cambio-sensible-de-contraseña-espera-seguridad-del-sha-final) | migrada |
 | PRE-16 | §8 | Patrón de pruebas con sesión simulada es la referencia | [Definición de hecho](definition-of-done.md#pre-16--patrón-de-pruebas-con-sesión-simulada) | migrada |
@@ -32,7 +32,7 @@
 | PRE-26 | §13 | Benchmark proporcional antes de cambios grandes; la ficha informa, no aprueba | [Preparación](definition-of-ready.md#pre-26--benchmark-proporcional-antes-de-implementar) | migrada |
 | PRE-27 | §13 | Barrera legal por archivo antes de reutilizar una implementación | [Benchmark de referencias](../docs/design/benchmark-referencias.md#barrera-legal-de-reutilización-regla-migrada-pre-27) | migrada |
 | PRE-28 | §14 | El glosario fija superficie y no renombra datos persistidos | [Glosario](glossary.md#regla-de-fuente-migrada-de-pre-28) | migrada |
-| PRE-29 | §4 | Nada bloqueante en handlers asíncronos; descargas externas con semáforo | NFR de rendimiento | sin migrar |
+| PRE-29 | §4 | Nada bloqueante en handlers asíncronos; descargas externas con semáforo | [Guía técnica](guia-tecnica.md#pre-29--nada-bloqueante-en-handlers-asíncronos) | migrada |
 | PRE-30 | §4 | Cortesía compartida por fuente y por host efectivo, también en redirecciones | [Contrato de seguridad](contrato-seguridad.md#pre-30--cortesía-compartida-por-fuente-y-por-host-efectivo) | migrada |
 | PRE-31 | §4 | Caché local-first y reglas de revalidación de estáticos | [Contrato de biblioteca](contrato-biblioteca.md#pre-31--caché-local-first-y-revalidación) | migrada |
 | PRE-32 | §4 | Portadas locales y externas separadas; lectura RAR acotada y recordada | [Contrato de biblioteca](contrato-biblioteca.md#pre-32--portadas-de-archivo-de-fuente-externa-y-lectura-de-rar) | migrada |
@@ -45,8 +45,8 @@
 | PRE-39 | §14 | Conceptos de superficie y reglas de contexto entre términos | [Glosario](glossary.md#reglas-de-contexto-migradas-de-pre-39) | migrada |
 | PRE-40 | Cabecera | Toda decisión nueva sobre cómo se trabaja se registra el día que se decide | [Constitución](constitution.md#pre-40--registrar-las-decisiones-del-modo-de-trabajo) | migrada |
 | PRE-41 | §1 | Producto para el coleccionista y presupuesto de Raspberry Pi | [Visión](product-vision.md#pre-41--producto-persona-y-restricción-de-plataforma) | migrada |
-| PRE-42 | §2 | Convenciones de lenguaje, tipos e imports; aclarar la tensión del ejemplo de nombres | Guía técnica | sin migrar |
-| PRE-43 | §2 | Justificar dependencias y centralizar enums del dominio | Guía técnica | sin migrar |
+| PRE-42 | §2 | Convenciones de lenguaje, tipos e imports; aclarar la tensión del ejemplo de nombres | [Guía técnica](guia-tecnica.md#pre-42--convenciones-de-código) | migrada |
+| PRE-43 | §2 | Justificar dependencias y centralizar enums del dominio | [Guía técnica](guia-tecnica.md#pre-43--dependencias-y-constantes-del-dominio) | migrada |
 
 
 ### Desglose de PRE-33
