@@ -90,3 +90,19 @@ async def test_sin_pendientes_no_consulta():
     db = _db()
     assert await sugerencias_por_carpeta(db, []) == {}
     db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nombre, sugiere", [
+    ("Flash 12.cbz", True),                                   # con número: sí
+    ("Flash Volumen 88 (880-890).cbz", True),                 # tomo con rango de capítulos: sí
+    ("Flash - Dossier Negro.cbz", False),                     # sin número
+    ("Flash Especial Verano.cbz", False),                     # especial
+    ("Flash Century 1910.cbz", False),                        # el «número» es un año
+    ("Flash - Free Comic Book Day.cbz", False),               # promocional sin número
+])
+async def test_solo_sugiere_con_numero_y_sin_especial(nombre, sugiere):
+    """C10 (R2b): en una carpeta homogénea, lo que queda pendiente suele ser lo que no encaja."""
+    f = _pendiente(nombre)
+    s = await sugerencias_por_carpeta(_db(_fila(FLASH, "Flash", 5)), [f])
+    assert (f.id in s) is sugiere
