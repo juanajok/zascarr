@@ -211,6 +211,64 @@ async def test_ruta_hasta_socket_real_con_consumo_durable(tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_respuesta_incoherente_por_socket_advierte_en_html(tmp_path, monkeypatch) -> None:
+    import asyncio
+    import json
+
+    from starlette.requests import Request
+
+    from zascarr.config import get_settings
+    from zascarr.services.auth import hash_password
+    from zascarr.services.reautenticacion import reiniciar_estado
+
+    ruta = tmp_path / "actualizar.sock"
+    settings = get_settings().model_copy(update={
+        "auth_mode": "password", "auth_username": "ana",
+        "auth_password_hash": hash_password("secreta"),
+        "ops4_actualizacion_habilitada": True,
+        "ops4_socket_file": str(ruta),
+    })
+    monkeypatch.setattr(actualizacion, "get_settings", lambda: settings)
+    monkeypatch.setattr(actualizacion, "leer_clave_autorizacion", lambda *a, **k: b"k" * 32)
+    recibidas = []
+
+    async def handler(reader, writer):
+        try:
+            solicitud = json.loads(await reader.readline())
+            recibidas.append(solicitud["id"])
+            writer.write((json.dumps({
+                "v": 4, "id": solicitud["id"],
+                "resultado": "rechazada", "codigo": "incierta",
+            }) + "\n").encode())
+            await writer.drain()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    request = Request({
+        "type": "http", "http_version": "1.1", "method": "POST",
+        "path": "/ui/actualizar", "raw_path": b"/ui/actualizar",
+        "query_string": b"", "headers": [], "client": ("test", 1),
+        "server": ("test", 80), "scheme": "http", "root_path": "",
+    })
+    server = await asyncio.start_unix_server(handler, path=str(ruta))
+    reiniciar_estado()
+    try:
+        async with server:
+            respuesta = await actualizacion.actualizar(request, "secreta", "si")
+        texto = respuesta.body.decode("utf-8")
+        assert len(recibidas) == 1
+        assert respuesta.status_code == 200
+        assert "<html" in texto
+        assert "podría haber empezado" in texto
+        assert "No vuelvas a intentarlo" in texto
+        assert "revisa el estado del host" in texto
+        assert "Solicitud aceptada" not in texto
+    finally:
+        reiniciar_estado()
+
+
+@pytest.mark.asyncio
 async def test_resultado_se_pinta_en_el_layout_normal(monkeypatch) -> None:
     from starlette.requests import Request
 
