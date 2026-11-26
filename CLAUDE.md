@@ -326,7 +326,7 @@ CI, UX Lab ni las aprobaciones de fusión. El operador fija ámbito y pruebas; e
 puede escribir las políticas, activar Docker ni entregar a producción. Los dictámenes se
 ligan al SHA candidato, no a una rama. La integración DSH se ha probado con datos sintéticos:
 no pasarle código privado hasta verificar restricciones y autorizar la transferencia.
-Decisión: [ADR 0026](docs/adr/0026-pipeline-ingenieria-local.md).
+Decisión: [ADR 0027](docs/adr/0027-pipeline-ingenieria-local.md).
 
 ## 10. Lo que NO se hace (anti-patrones del proyecto)
 
