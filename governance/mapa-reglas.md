@@ -48,11 +48,26 @@
 | PRE-42 | §2 | Convenciones de lenguaje, tipos e imports; aclarar la tensión del ejemplo de nombres | Guía técnica | sin migrar |
 | PRE-43 | §2 | Justificar dependencias y centralizar enums del dominio | Guía técnica | sin migrar |
 
+
+### Desglose de PRE-23
+
+| Sub-regla | Antipatrón a conservar | Destino propuesto | Estado |
+|---|---|---|---|
+| PRE-23-1 | SPA, build de Node o framework reactivo en la interfaz; excepción única del lector con un script sin build | Arquitectura de interfaz | sin migrar |
+| PRE-23-2 | `create_type=False` esperando que funcione sin `postgresql.ENUM` explícito | Guía de migraciones | sin migrar |
+| PRE-23-3 | `Wishlist(**data)` desde el cuerpo crudo; cerrado con esquemas Pydantic | Seguridad de API | sin migrar |
+| PRE-23-4 | Hotlinking en la interfaz | Seguridad de interfaz | sin migrar |
+| PRE-23-5 | Copiar scrapers de referencia sin verificar en vivo; el caso Tebeosfera y sus redirecciones | Contrato de clientes externos | sin migrar |
+| PRE-23-6 | Credenciales o fuentes por defecto en configuración o bootstrap | Configuración y credenciales | sin migrar |
+| PRE-23-7 | Middleware global de aceptación legal; debe ser dependencia, no middleware | Contrato legal | sin migrar |
+
+Cada sub-regla necesita su propia decisión de traslado: desglosar la fila no la migra.
+
 ## Cobertura incompleta: filas que agrupan sub-reglas
 
 Una fila puede resumir varias sub-reglas, y eso **no** cuenta como traslado completo. Hoy agrupan como mínimo:
 
-- **PRE-23**: los siete antipatrones de la sección 10, cada uno con su excepción.
+- **PRE-23**: desglosada arriba en siete sub-reglas (PRE-23-1 a PRE-23-7), cada una con su excepción y pendiente de traslado propio.
 - **PRE-33 a PRE-36**: viñetas de interfaz, tipografía, tramas y presupuesto textual, con excepciones por tamaño y contraste.
 - **PRE-06 y PRE-12**: reglas de credenciales, privacidad y campos de formulario que se verifican por separado.
 
