@@ -285,7 +285,8 @@ class TestTrasIntercambiosHtmx:
         """`asignar` con error devuelve la TARJETA entera: hx-target="#card-<id>" outerHTML."""
         archivo = _archivo("Paracuellos 05.cbz", con_sugerencia=True)
         pagina = _por_revisar([archivo, _archivo("Otro 01.cbz")])
-        sesion = FakeSession(get_map={(File, archivo.id): archivo})
+        # BL-PARSE3: la tarjeta repintada consulta los hermanos de carpeta (aquí, ninguno).
+        sesion = FakeSession(get_map={(File, archivo.id): archivo}, exec_queue=[FakeExecResult([])])
         with use_fake_session(sesion) as client:
             r = client.post(f"/ui/pendientes/{archivo.id}/asignar",
                             data={"series_id": str(uuid4()), "issue_number": " "},
