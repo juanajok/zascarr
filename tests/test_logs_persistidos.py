@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -21,7 +22,13 @@ def _ajustes(tmp_path):
                            log_backups=2, log_retention_days=7)
 
 
-def test_escribe_por_dia_y_filtra_por_fecha_hora_y_evento(tmp_path):
+def test_escribe_por_dia_y_filtra_por_fecha_hora_y_evento(tmp_path, monkeypatch):
+    class FechaFija(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 17, tzinfo=tz)
+
+    monkeypatch.setattr("zascarr.utils.registro_archivo.datetime", FechaFija)
     escritor = EscritorJsonl(tmp_path / "logs", max_bytes=10_000, backups=2,
                              retencion_dias=7)
     escritor.escribir(_evento("2026-11-17", "10:01", "importer.cycle_done"))
