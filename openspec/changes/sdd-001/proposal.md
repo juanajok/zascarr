@@ -1,8 +1,8 @@
 # SDD-001 — Transformación de ZascArr a Spec-Driven Development
 
 - Issue: [#1291](https://github.com/juanajok/zascarr/issues/1291)
-- Estado: dirección de revisión aprobada; propuesta normativa pendiente de aprobación del mantenedor. No activa todavía reglas nuevas.
-- Línea base histórica de auditoría: main @ ea9bc603eb2aa86265abd5b0697b3e03ef87e732; contraste posterior: main @ c4a3420349153f2ac3185df3da46b37c8211aa3d.
+- Estado: dirección y propuesta aprobadas por el mantenedor el 2026-11-26 como base para preparar H1. Los requisitos del delta no están aprobados ni activados, y la aprobación no autoriza fusiones, despliegues ni gates obligatorios. H0 se cerró con la excepción de `T0.4` (ver `h0-evidencia.md`).
+- Línea base histórica de auditoría: main @ ea9bc603eb2aa86265abd5b0697b3e03ef87e732; contrastes posteriores: main @ c4a3420349153f2ac3185df3da46b37c8211aa3d y main @ 13ea92c734e2722122a650e988917df1df467444 (en este último el ADR del pipeline pasa a `0027`).
 - Fecha: 2026-11-26
 
 ## Why
