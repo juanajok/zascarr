@@ -52,7 +52,10 @@ _MENSAJES = {
         "No se pudo confirmar el resultado. No vuelvas a intentarlo: "
         "revisa el estado del host antes de actuar."
     ),
-    ResultadoSolicitudV4.RESPUESTA_INVALIDA: "El host devolvió una respuesta no válida.",
+    ResultadoSolicitudV4.RESPUESTA_INVALIDA: (
+        "No se pudo confirmar el resultado. La actualización podría haber empezado. "
+        "No vuelvas a intentarlo: revisa el estado del host antes de actuar."
+    ),
 }
 
 
