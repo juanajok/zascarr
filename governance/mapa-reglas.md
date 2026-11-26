@@ -27,8 +27,8 @@
 | PRE-21 | §9 | Flujo Scrumban con límites de trabajo en curso | [Preparación](definition-of-ready.md#pre-21--flujo-de-trabajo-y-límite-de-trabajo-en-curso) | migrada |
 | PRE-22 | §9.1 | El piloto de ingeniería local queda fuera del runtime y no sustituye CI ni aprobaciones | [ADR 0027](../docs/adr/0027-pipeline-ingenieria-local.md) | migrada |
 | PRE-23 | §10 | Antipatrones explícitos del proyecto, con sus excepciones | [Antipatrones](antipatrones.md#antipatrones-del-proyecto) | migrada |
-| PRE-24 | §11 | Documentos vivos: consultar antes de tocar cada área | Índice de fuentes | sin migrar |
-| PRE-25 | §12 | Principios de modelo y datos ya validados por comparación | ADR y contratos | sin migrar |
+| PRE-24 | §11 | Documentos vivos: consultar antes de tocar cada área | [Índice AGENTS](../AGENTS.md#consultar-antes-de-tocar-un-área-pre-24) | migrada |
+| PRE-25 | §12 | Principios de modelo y datos ya validados por comparación | [Constitución](constitution.md#pre-25--principios-de-modelo-y-datos-ya-validados) | migrada |
 | PRE-26 | §13 | Benchmark proporcional antes de cambios grandes; la ficha informa, no aprueba | [Preparación](definition-of-ready.md#pre-26--benchmark-proporcional-antes-de-implementar) | migrada |
 | PRE-27 | §13 | Barrera legal por archivo antes de reutilizar una implementación | [Benchmark de referencias](../docs/design/benchmark-referencias.md#barrera-legal-de-reutilización-regla-migrada-pre-27) | migrada |
 | PRE-28 | §14 | El glosario fija superficie y no renombra datos persistidos | [Glosario](glossary.md#regla-de-fuente-migrada-de-pre-28) | migrada |

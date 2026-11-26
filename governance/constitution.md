@@ -21,6 +21,16 @@
 
 Texto trasladado desde la guía vigente. La copia de la guía se conserva hasta la aprobación de la retirada; mientras exista, es duplicación declarada.
 
+### PRE-25 — Principios de modelo y datos ya validados
+
+Estas decisiones están confirmadas por comparación con otras implementaciones y **no se tocan** sin decisión expresa:
+
+- JSONB para metadatos sueltos.
+- Identificadores de proveedor en columnas paralelas, nunca una clave global acoplada a una fuente.
+- `issue_number` como texto más un orden de presentación en coma flotante, que resuelve cruces, anuales y numeración decimal sin inventar un módulo entero.
+- Orden de lectura propio para sagas que cruzan series.
+- Calidad en tres estados legibles para el coleccionista, mapeada internamente a una clave técnica.
+
 ### PRE-05 — Decisión de arquitectura requiere ADR
 
 Toda decisión de arquitectura nueva se registra como ADR en `docs/adr/`; existe desde el principio `0001-ui-stack.md`. Las decisiones anteriores a esa práctica —Postgres y el enrutado del enricher— quedaron sin ADR retroactivo y no se reconstruyen por conveniencia: las nuevas sí lo llevan.

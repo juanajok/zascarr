@@ -27,3 +27,21 @@ Este fichero es un **índice de navegación**, no una norma nueva. La autoridad 
 4. `refactor:` con todo en verde.
 
 Un enlace no acredita ejecución ni cobertura semántica. La revisión de seguridad de un cambio sensible se ata al SHA final que se fusiona.
+
+## Consultar antes de tocar un área (PRE-24)
+
+Los documentos vivos no son decoración: antes de modificar un área hay que leer el documento que la gobierna.
+
+| Área a tocar | Consultar primero |
+|---|---|
+| Plantillas, rutas o contratos `hx-*` | [inventario de la UI](docs/design/ui-migracion.md) |
+| Estilos o componentes | [sistema de diseño](docs/design/sistema-de-diseno-zascarr.md) |
+| Formato por contenido, triage o auditoría de formatos | [contrato 307](docs/design/contrato-307-formato-por-contenido.md) |
+| Registro incremental de biblioteca | [registro incremental](docs/design/registro-incremental-326.md) |
+| Rescan de la biblioteca | [especificación BL-R9](docs/design/especificacion-BL-R9-rescan-biblioteca.md) |
+| Copias de seguridad y auxiliar del host | [BL-OPS1](docs/design/especificacion-BL-OPS1.md) |
+| Estado durable de la actualización | [contrato B1](docs/design/ops4-b1-contrato-estado.md) |
+| Disponibilidad de archivos | [disponibilidad 231](docs/design/disponibilidad-231.md) |
+| Marco legal | [LEGAL.md](src/zascarr/LEGAL.md) |
+
+Si se actualiza el marco legal, ese mismo día se rehace el hash de versión legal en `services/legal.py`.
