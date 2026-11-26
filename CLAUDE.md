@@ -307,6 +307,15 @@ como marco permanente.
   de ciclo cuando haya 8 historias terminadas o el 2026-11-12, lo que llegue
   antes (umbrales provisionales).
 
+### 9.1 Pipeline multiagente (piloto de desarrollo)
+
+La herramienta de [`.agentic/`](.agentic/README.md) queda fuera del runtime y no sustituye
+CI, UX Lab ni las aprobaciones de fusión. El operador fija ámbito y pruebas; el agente no
+puede escribir las políticas, activar Docker ni entregar a producción. Los dictámenes se
+ligan al SHA candidato, no a una rama. La integración DSH se ha probado con datos sintéticos:
+no pasarle código privado hasta verificar restricciones y autorizar la transferencia.
+Decisión: [ADR 0026](docs/adr/0026-pipeline-ingenieria-local.md).
+
 ## 10. Lo que NO se hace (anti-patrones del proyecto)
 
 - ❌ SPA / Node build / Alpine/Vue/React: ADR-0001, definitivo. **Única excepción:** el lector propio puede usar un único `static/lector.js` sin dependencias ni build, solo en su pantalla (ADR 0021); nada de Alpine/Vue/React.
