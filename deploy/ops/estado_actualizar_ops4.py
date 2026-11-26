@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import stat
 import sys
 import time
 
@@ -69,6 +70,7 @@ _CODIGOS = CODIGOS
 _FASE_FINAL = FASES[-1]
 _FASES_INTERMEDIAS = tuple(fase for fase in FASES if fase not in (FASES[0], FASES[-1]))
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
+_ID = re.compile(r"[0-9a-f]{32}\Z")
 _EXITO_LIMPIO = ("success", "exited", "0")
 _PRE_EFECTO_CONTRATO = ("exit-code", "exited", "75")
 #: La entrada B2 sale 76 si la reserva no es válida, antes de cualquier efecto.
@@ -98,6 +100,36 @@ def resultado_final(
     return "incierta"
 
 
+def _leer_intento(ruta: object) -> str | None:
+    """Lee el id de la reserva ligado a esta invocación; `None` si no es válido."""
+    try:
+        fd = os.open(
+            os.fspath(ruta),
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
+        )
+    except (OSError, TypeError):
+        return None
+    try:
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or info.st_size > 33
+        ):
+            return None
+        datos = os.read(fd, 33)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    if len(datos) == 33 and datos.endswith(b"\n"):
+        datos = datos[:-1]
+    if len(datos) != 32:
+        return None
+    texto = datos.decode("ascii", "ignore")
+    return texto if _ID.fullmatch(texto) else None
+
+
 def _aviso(mensaje: str) -> int:
     """Devuelve 2 sin escribir el estado; nunca imprime estado, rutas ni datos."""
     print(f"zascarr-estado-actualizar-ops4: {mensaje}", file=sys.stderr)
@@ -118,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--head0")
     parser.add_argument("--sha-destino")
     parser.add_argument("--sha-actual")
+    parser.add_argument("--intento")
     try:
         args = parser.parse_args(argv)
     except SystemExit:
@@ -135,6 +168,8 @@ def main(argv: list[str] | None = None) -> int:
             return _aviso("--codigo debe ser success:exited:0, exit-code:exited:75 u otro")
         if args.head0 is not None or args.sha_destino is not None or args.sha_actual is not None:
             return _aviso("el cierre terminal no acepta --head0, --sha-destino ni --sha-actual")
+        if args.intento is None:
+            return _aviso("el cierre terminal exige --intento")
     else:
         if args.fase not in _FASES_INTERMEDIAS:
             return _aviso(
@@ -146,6 +181,9 @@ def main(argv: list[str] | None = None) -> int:
         for sha in (args.head0, args.sha_destino, args.sha_actual):
             if not _sha_valido(sha):
                 return _aviso("cada SHA debe ser 40 hexadecimales minúsculas")
+    id_intento = _leer_intento(args.intento) if args.intento is not None else None
+    if args.fase is None and id_intento is None:
+        return 0
     lectura, datos = leer_estado_estricto(args.ruta)
     if lectura is not ResultadoLectura.OK or datos is None:
         return 0
@@ -186,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
             args.ruta,
             args.resultado,
             ahora=ahora,
-            id_=datos["id"],
+            id_=id_intento,
             inicio_epoch=datos["inicio_epoch"],
             fase=_FASE_FINAL,
             codigo=args.codigo,

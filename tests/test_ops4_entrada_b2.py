@@ -51,6 +51,9 @@ def _repo(tmp_path: Path) -> Path:
 def _entorno(tmp_path: Path, repo: Path, *, inicio: int | None = None):
     ops = tmp_path / "ops"
     ops.mkdir()
+    ops4 = tmp_path / "ops4"
+    (ops4 / "intentos").mkdir(parents=True, mode=0o700)
+    (ops4 / "intentos").chmod(0o700)
     estado = ops / "actualizar-status.json"
     assert escribir_estado(
         estado, estado_inicial(ID, int(time.time()) if inicio is None else inicio),
@@ -59,6 +62,8 @@ def _entorno(tmp_path: Path, repo: Path, *, inicio: int | None = None):
     entorno.update({
         "ZASCARR_REPO": str(repo),
         "ZASCARR_OPS_DIR": str(ops),
+        "ZASCARR_OPS4_DIR": str(ops4),
+        "INVOCATION_ID": "b" * 32,
         "ZASCARR_PRUEBAS": "1",
         "OPS_LOCK_FILE": str(tmp_path / "ops.lock"),
         "MARCA": str(tmp_path / "marca"),
@@ -83,6 +88,7 @@ def test_toma_cerrojo_y_reserva_antes_de_update(tmp_path) -> None:
     assert "flock9=si" in marca
     assert "rama=main" in marca
     assert "lock_fds=1" in marca
+    assert (tmp_path / "ops4" / "intentos" / ("b" * 32)).read_text() == ID + "\n"
     datos = json.loads(estado.read_text(encoding="utf-8"))
     assert (datos["estado"], datos["fase"]) == ("en_curso", "reservada")
     head = subprocess.check_output(

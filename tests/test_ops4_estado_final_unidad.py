@@ -64,12 +64,19 @@ def _comando_stoppost(tmp_path: Path) -> str:
 
 
 def _ejecutar_stoppost(tmp_path: Path, resultado: str, exit_code: str,
-                       exit_status: str) -> subprocess.CompletedProcess:
+                       exit_status: str, *, id_marca: str = "") -> subprocess.CompletedProcess:
     entorno = os.environ.copy()
+    invocacion = "b" * 32
+    marca = tmp_path / "ops4" / "intentos"
+    marca.mkdir(parents=True, exist_ok=True)
+    estado = tmp_path / "ops" / "actualizar-status.json"
+    id_ = json.loads(estado.read_text(encoding="utf-8")).get("id", ID) if estado.exists() else ID
+    (marca / invocacion).write_text((id_marca or id_) + "\n", encoding="utf-8")
     entorno.update({
         "SERVICE_RESULT": resultado,
         "EXIT_CODE": exit_code,
         "EXIT_STATUS": exit_status,
+        "INVOCATION_ID": invocacion,
     })
     return subprocess.run(
         ["/bin/sh", "-c", _comando_stoppost(tmp_path)],
@@ -108,6 +115,15 @@ def test_resultado_final_mapea_sin_inventar_exito(resultado, exit_code,
 def test_resultado_final_solo_acepta_el_contrato_de_systemd(resultado, exit_code,
                                                            exit_status) -> None:
     assert estado.resultado_final(resultado, exit_code, exit_status) is None
+
+
+def test_una_marca_de_otro_intento_no_cierra_el_estado(tmp_path) -> None:
+    ruta = _estado(tmp_path, "en_curso")
+    antes = _leer(ruta)
+    _ejecutar_stoppost(
+        tmp_path, "success", "exited", "0", id_marca="b" * 32,
+    )
+    assert _leer(ruta) == antes
 
 
 # ── Cadena real de ExecStopPost ─────────────────────────────────────────────
@@ -196,6 +212,12 @@ def test_cadena_real_json_ajeno_no_se_toca(tmp_path) -> None:
 # ── CLI y fallos de escritura ───────────────────────────────────────────────
 
 
+def _intento(tmp_path: Path, id_: str = ID) -> list[str]:
+    ruta = tmp_path / "intento"
+    ruta.write_text(id_ + "\n", encoding="utf-8")
+    return ["--intento", str(ruta)]
+
+
 @pytest.mark.parametrize("resultado", ["", "ok", "en_curso", "hecha\n"])
 def test_resultado_cerrado(tmp_path, resultado) -> None:
     ruta = _estado(tmp_path)
@@ -205,6 +227,7 @@ def test_resultado_cerrado(tmp_path, resultado) -> None:
 def test_sin_estado_no_inventa_ni_falla(tmp_path) -> None:
     assert estado.main([
         "--ruta", str(tmp_path / "no-existe.json"), "--resultado", "hecha",
+        *_intento(tmp_path),
     ]) == 0
 
 
@@ -213,7 +236,9 @@ def test_fallo_durable_devuelve_1_pero_la_unidad_lo_ignora(tmp_path, monkeypatch
     monkeypatch.setattr(
         estado, "publicar_transicion", lambda *a, **k: ResultadoEscritura.INCIERTO,
     )
-    assert estado.main(["--ruta", str(ruta), "--resultado", "hecha"]) == 1
+    assert estado.main([
+        "--ruta", str(ruta), "--resultado", "hecha", *_intento(tmp_path),
+    ]) == 1
     assert _leer(ruta)["estado"] == "en_curso"
     # El prefijo - de la unidad ya está cubierto por _comando_stoppost (T-10).
 
@@ -222,7 +247,9 @@ def test_fichero_de_estado_no_sigue_enlaces(tmp_path) -> None:
     real = _estado(tmp_path)
     enlace = tmp_path / "ops" / "enlace.json"
     enlace.symlink_to(real)
-    assert estado.main(["--ruta", str(enlace), "--resultado", "hecha"]) == 0
+    assert estado.main([
+        "--ruta", str(enlace), "--resultado", "hecha", *_intento(tmp_path),
+    ]) == 0
     assert _leer(real)["estado"] == "en_curso"
 
 
@@ -244,6 +271,15 @@ def test_cadena_real_escribe_codigo_cerrado(tmp_path, service_result, exit_code,
 
 def test_modo_terminal_sin_codigo_usa_otro(tmp_path) -> None:
     ruta = _estado(tmp_path)
-    assert estado.main(["--ruta", str(ruta), "--resultado", "hecha"]) == 0
+    assert estado.main([
+        "--ruta", str(ruta), "--resultado", "hecha", *_intento(tmp_path),
+    ]) == 0
     datos = _leer(ruta)
     assert (datos["estado"], datos["resultado"], datos["codigo"]) == ("hecha", "hecha", "otro")
+
+
+def test_modo_terminal_sin_intento_se_rechaza(tmp_path) -> None:
+    ruta = _estado(tmp_path)
+    antes = _leer(ruta)
+    assert estado.main(["--ruta", str(ruta), "--resultado", "hecha"]) == 2
+    assert _leer(ruta) == antes
