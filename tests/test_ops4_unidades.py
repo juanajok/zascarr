@@ -66,7 +66,7 @@ def test_unico_execstoppost_con_prefijo_y_mapeo_de_systemd() -> None:
     assert 'exit-code:exited:76) r=fallida' in valor
     assert '*) r=incierta' in valor
     assert '--resultado "$r"' in valor
-    assert "--intento @ZASCARR_DATA_DIR@/ops4/intentos/$INVOCATION_ID" in valor
+    assert "--intento @ZASCARR_DATA_DIR@/ops4/intentos/inv-$INVOCATION_ID" in valor
 
 
 def test_readwritepaths_incluye_el_cerrojo_con_prefijo() -> None:

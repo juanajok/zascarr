@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Marca la fase o el resultado final de la unidad; no ejecuta nada.
 
-Uso fijo desde la unidad, modo terminal (como hasta ahora):
+Uso fijo desde la unidad, modo terminal:
   zascarr-estado-actualizar-ops4 --ruta ... --resultado hecha|fallida|incierta
-                                [--codigo success:exited:0|exit-code:exited:75|otro]
+                                --intento MARCA [--codigo CODIGO]
 
-La unidad pasa el código mapeado de `SERVICE_RESULT`; sin `--codigo`, una
-invocación manual cierra con el código cerrado «otro».
+La marca es obligatoria y liga el cierre a la invocación. Si falta o no es
+válida, no se escribe. La unidad pasa el código mapeado de `SERVICE_RESULT`;
+sin `--codigo` se usa el código cerrado «otro».
 
 Modo de fase intermedia (contrato B1, §4), para el mismo intento en curso:
   zascarr-estado-actualizar-ops4 --ruta ... --fase preparacion|copia|git|build|migracion|arranque
