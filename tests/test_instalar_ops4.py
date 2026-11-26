@@ -63,6 +63,20 @@ def test_instala_clave_dirs_modulos_y_unidades_sin_activar(tmp_path: Path) -> No
     assert "OPS4_ACTUALIZACION_HABILITADA (por defecto false)" in r.stdout
 
 
+def test_unidad_instalada_sustituye_grupo_sin_activar(tmp_path: Path) -> None:
+    resultado = ejecutar(tmp_path, "--yes", "--sin-systemd")
+    assert resultado.returncode == 0, resultado.stderr
+    grupo = subprocess.check_output(["id", "-gn"], text=True).strip()
+    unidad = (tmp_path / "units" / "zascarr-actualizar@.service").read_text(
+        encoding="utf-8"
+    )
+    assert "User=root\n" in unidad
+    assert f"Group={grupo}\n" in unidad
+    assert "@GRUPO@" not in unidad
+    assert "CapabilityBoundingSet=\n" in unidad
+    assert "[Install]" not in unidad
+
+
 def test_idempotente_conserva_la_clave(tmp_path: Path) -> None:
     assert ejecutar(tmp_path, "--yes", "--sin-systemd").returncode == 0
     key = tmp_path / "data" / "ops" / "actualizar.key"

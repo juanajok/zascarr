@@ -246,6 +246,14 @@ def _leer_linea() -> bytes:
     return datos
 
 
+def _propietario_auxiliar(ruta_estado: str) -> tuple[int, int]:
+    """Exige que el grupo efectivo coincida con el directorio de estado."""
+    propietario = propietario_servicio(ruta_estado)
+    if os.geteuid() != 0 or propietario is None or propietario != (0, os.getegid()):
+        raise ValueError("El grupo del directorio de estado no coincide")
+    return propietario
+
+
 def main() -> int:
     dir_ops = os.environ.get("ZASCARR_OPS_DIR", "/var/lib/zascarr/ops")
     dir_ops4 = os.environ.get("ZASCARR_OPS4_DIR", "/var/lib/zascarr/ops4")
@@ -255,11 +263,11 @@ def main() -> int:
     reclamar = None
     fd_dir = None
     try:
+        propietario = _propietario_auxiliar(ruta_estado)
         fd_dir = abrir_directorio_autorizaciones(
             os.path.join(dir_ops4, "consumidos"), uid_esperado=0, modo_esperado=0o700,
         )
         reclamar = crear_reclamador_durable(fd_dir)
-        propietario = propietario_servicio(ruta_estado)
 
         def transicionar(
             estado: str, *, ahora: int, id_: str, inicio_epoch: int,

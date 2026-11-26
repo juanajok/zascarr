@@ -135,6 +135,22 @@ def test_fichero_queda_0640_para_que_la_app_pueda_leerlo(tmp_path) -> None:
     assert not destino.stat().st_mode & stat.S_IWOTH
 
 
+def test_fchown_eperm_no_sustituye_estado_ni_deja_temporal(tmp_path, monkeypatch) -> None:
+    destino = tmp_path / "estado.json"
+    original = estado_inicial(ID, AHORA)
+    assert escribir_estado(destino, original) is ResultadoEscritura.OK
+    antes = destino.read_bytes()
+
+    def denegar(_fd: int, _uid: int, _gid: int) -> None:
+        raise PermissionError("EPERM simulado")
+
+    monkeypatch.setattr(os, "fchown", denegar)
+    resultado = escribir_estado(destino, original, propietario=(0, 12345))
+    assert resultado is ResultadoEscritura.INCIERTO
+    assert destino.read_bytes() == antes
+    assert not list(tmp_path.glob(".estado.json.tmp-*"))
+
+
 def test_propietario_explicito_se_aplica(tmp_path) -> None:
     destino = tmp_path / "estado.json"
     resultado = escribir_estado(
