@@ -9,13 +9,13 @@
 | PRE-03 | §3.1 | Escritura con esquemas explícitos; prohibido el mass assignment | [Contrato de seguridad](contrato-seguridad.md#pre-03--mass-assignment-prohibido-en-endpoints) | migrada |
 | PRE-04 | §3.1 | Sin hotlinking en la interfaz | Seguridad de interfaz | sin migrar |
 | PRE-05 | §3.1 | Toda decisión de arquitectura nueva requiere ADR | [Constitución](constitution.md#pre-05--decisión-de-arquitectura-requiere-adr) | migrada |
-| PRE-06 | §3.2 | Configuración centralizada; ninguna credencial utilizable por defecto; escritura atómica del entorno | Configuración y credenciales | sin migrar |
+| PRE-06 | §3.2 | Configuración centralizada; ninguna credencial utilizable por defecto; escritura atómica del entorno | [Contrato de seguridad](contrato-seguridad.md#pre-06--credenciales-del-entorno-adr-0012) | migrada |
 | PRE-07 | §3.2 | Integraciones P2P y fuentes de metadatos apagadas por defecto; una actualización no las apaga en silencio | Configuración | sin migrar |
 | PRE-08 | §3.2 | Healthcheck observacional y aviso de versión de solo lectura | Contratos de estado | sin migrar |
 | PRE-09 | §3.2 | Actualización manual: decisión de confianza no habilita la función ni su despliegue | ADR de actualización | sin migrar |
 | PRE-10 | §5 | El software gestiona, no facilita fuentes de contenido | [Visión](product-vision.md#pre-10--el-software-gestiona-nunca-facilita) | migrada |
 | PRE-11 | §5 | La aceptación legal bloquea solo acciones de riesgo; nunca un middleware global | [Contrato de seguridad](contrato-seguridad.md#pre-11--la-aceptación-legal-bloquea-solo-acciones-de-riesgo) | migrada |
-| PRE-12 | §5 | Cero telemetría, logs sin datos sensibles y campos de formulario explícitos | Seguridad y privacidad | sin migrar |
+| PRE-12 | §5 | Cero telemetría, logs sin datos sensibles y campos de formulario explícitos | [Contrato de seguridad](contrato-seguridad.md#pre-12--privacidad-registros-y-superficie-de-api) | migrada |
 | PRE-13 | §5 | Interfaz en localhost por defecto; abrir exige decisión explícita y contraseña | ADR de exposición de red | sin migrar |
 | PRE-14 | §5 | Toda URL variable pasa por la validación SSRF central | [Contrato de seguridad](contrato-seguridad.md#pre-14--toda-url-variable-pasa-por-la-validación-ssrf-central) | migrada |
 | PRE-15 | §5 | Un cambio sensible de contraseña espera dictamen de seguridad del SHA final | [Clasificación de riesgo](risk-classification.md#pre-15--cambio-sensible-de-contraseña-espera-seguridad-del-sha-final) | migrada |
@@ -101,20 +101,20 @@
 
 | Sub-regla | Regla a conservar | Destino propuesto | Estado |
 |---|---|---|---|
-| PRE-06-1 | Ninguna ruta de arranque soportada sirve con credencial obligatoria ausente, vacía o conocida por defecto | Contrato de credenciales | sin migrar |
-| PRE-06-2 | `DB_PASSWORD` la genera el instalador y la rechazan el servicio de credenciales y la app; nunca un valor real por defecto en Compose | Contrato de credenciales | sin migrar |
-| PRE-06-3 | El entorno se escribe solo de forma atómica, sin copias, y es de root con permisos 600 | Contrato de credenciales | sin migrar |
-| PRE-06-4 | El usuario de servicio no es dueño del código ni de la carpeta del entorno | Contrato de credenciales | sin migrar |
-| PRE-06-5 | Los scripts de operación no imprimen credenciales | Guía de operación | sin migrar |
+| PRE-06-1 | Ninguna ruta de arranque soportada sirve con credencial obligatoria ausente, vacía o conocida por defecto | Contrato de credenciales | [Contrato de seguridad](contrato-seguridad.md#pre-06-1--ninguna-credencial-utilizable-por-defecto) | migrada |
+| PRE-06-2 | `DB_PASSWORD` la genera el instalador y la rechazan el servicio de credenciales y la app; nunca un valor real por defecto en Compose | Contrato de credenciales | [Contrato de seguridad](contrato-seguridad.md#pre-06-2--db_password-la-genera-el-instalador-y-se-verifica) | migrada |
+| PRE-06-3 | El entorno se escribe solo de forma atómica, sin copias, y es de root con permisos 600 | Contrato de credenciales | [Contrato de seguridad](contrato-seguridad.md#pre-06-3--el-entorno-se-escribe-de-forma-atómica) | migrada |
+| PRE-06-4 | El usuario de servicio no es dueño del código ni de la carpeta del entorno | Contrato de credenciales | [Contrato de seguridad](contrato-seguridad.md#pre-06-4--el-usuario-de-servicio-no-posee-el-entorno-ni-el-código) | migrada |
+| PRE-06-5 | Los scripts de operación no imprimen credenciales | Guía de operación | [Contrato de seguridad](contrato-seguridad.md#pre-06-5--los-scripts-de-operación-no-imprimen-credenciales) | migrada |
 
 ### Desglose de PRE-12
 
 | Sub-regla | Regla a conservar | Destino propuesto | Estado |
 |---|---|---|---|
-| PRE-12-1 | Datos cacheados son uso privado y la telemetría es cero | Seguridad y privacidad | sin migrar |
-| PRE-12-2 | No se redistribuye contenido; obligaciones de la tabla de fuentes | Marco legal | sin migrar |
-| PRE-12-3 | Los registros no llevan datos sensibles; si un error los lleva, se sanea antes | Contrato de logs | sin migrar |
-| PRE-12-4 | Los endpoints mutables usan campos explícitos y su caché está documentada; el rechazo de la puerta legal redirige | Contrato legal y de API | sin migrar |
+| PRE-12-1 | Datos cacheados son uso privado y la telemetría es cero | Seguridad y privacidad | [Contrato de seguridad](contrato-seguridad.md#pre-12-1--datos-cacheados-son-uso-privado-telemetría-cero) | migrada |
+| PRE-12-2 | No se redistribuye contenido; obligaciones de la tabla de fuentes | Marco legal | [Contrato de seguridad](contrato-seguridad.md#pre-12-2--no-se-redistribuye-contenido) | migrada |
+| PRE-12-3 | Los registros no llevan datos sensibles; si un error los lleva, se sanea antes | Contrato de logs | [Contrato de seguridad](contrato-seguridad.md#pre-12-3--registros-sin-datos-sensibles) | migrada |
+| PRE-12-4 | Los endpoints mutables usan campos explícitos y su caché está documentada; el rechazo de la puerta legal redirige | Contrato legal y de API | [Contrato de seguridad](contrato-seguridad.md#pre-12-4--endpoints-mutables-explícitos-y-caché-documentada) | migrada |
 
 ### Desglose de PRE-23
 
