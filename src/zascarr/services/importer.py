@@ -461,7 +461,7 @@ async def _triage_and_match(
     aplicada = False
     nombre = tr.path.name
     if pista is not None:
-        nombre = quitar_prefijo_de_cohorte(tr.path.name, pista)
+        nombre = quitar_prefijo_de_cohorte(tr.path.name, pista, carpeta=tr.path.parent.name)
         aplicada = nombre != tr.path.name
     carpetas = [tr.path.parent.parent.name, tr.path.parent.name]
     contexto = " / ".join(c for c in carpetas if c and c not in (".", ".."))
@@ -487,6 +487,9 @@ async def _triage_and_match(
     kwargs = {}
     if parsed.series_alternativa:
         kwargs["series_alternativa"] = parsed.series_alternativa
+    if parsed.is_special:
+        # BL-PARSE1 R4: un especial busca su número «E{N}», nunca la grapa #N.
+        kwargs["especial"] = True
     result = await matcher.decide(
         tr, extractor=extractor, formato_esperado=formato_esperado,
         annual=parsed.is_annual, **kwargs,

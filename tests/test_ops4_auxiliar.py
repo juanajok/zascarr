@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
 from deploy.ops import protocolo_actualizar_v4_ops4 as protocolo
+from deploy.ops import zascarr_actualizar_aux as auxiliar
 from deploy.ops.escritor_estado_actualizar_ops4 import (
     ResultadoEscritura,
     escribir_estado,
@@ -199,6 +201,41 @@ def test_si_no_puede_escribir_estado_no_inicia() -> None:
     respuesta = ejecutar(peticion(), dobles)
     assert respuesta.codigo == "no_disponible"
     assert [x for x in dobles.llamadas if x[0] == "iniciar"] == []
+
+
+def test_auxiliar_rechaza_grupo_directorio_distinto_a_gid_efectivo(monkeypatch) -> None:
+    monkeypatch.setattr(auxiliar, "propietario_servicio", lambda _ruta: (0, 12345))
+    monkeypatch.setattr(auxiliar.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(auxiliar.os, "getegid", lambda: 12346)
+    with pytest.raises(ValueError):
+        auxiliar._propietario_auxiliar("/ruta/no/usada")
+
+
+def test_auxiliar_acepta_propietario_y_gid_coincidentes(monkeypatch) -> None:
+    monkeypatch.setattr(auxiliar, "propietario_servicio", lambda _ruta: (0, 12345))
+    monkeypatch.setattr(auxiliar.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(auxiliar.os, "getegid", lambda: 12345)
+    assert auxiliar._propietario_auxiliar("/ruta/no/usada") == (0, 12345)
+
+
+def test_fchown_eperm_rechaza_sin_iniciar_unidad(tmp_path, monkeypatch) -> None:
+    dobles = Dobles()
+    ruta = tmp_path / "estado.json"
+
+    def denegar(_fd: int, _uid: int, _gid: int) -> None:
+        raise PermissionError("EPERM simulado")
+
+    monkeypatch.setattr(os, "fchown", denegar)
+    respuesta = procesar(
+        peticion(), clave=CLAVE, ahora=AHORA, reclamar_uso=dobles.reclamar,
+        iniciar=dobles.iniciar, cerrojo_ocupado=dobles.ocupado,
+        escribir=lambda datos: escribir_estado(ruta, datos, propietario=(0, 12345)),
+    )
+    assert respuesta.codigo == "no_disponible"
+    assert ID in dobles.usados
+    assert not any(llamada[0] == "iniciar" for llamada in dobles.llamadas)
+    assert not ruta.exists()
+    assert not list(tmp_path.glob(".estado.json.tmp-*"))
 
 
 def test_inicio_fallido_deja_estado_fallida() -> None:

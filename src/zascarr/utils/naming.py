@@ -25,6 +25,11 @@ NOISE_PATTERNS = [
                                 # (antes solo "20xx"; perdía años como 1989)
 ]
 
+# Número de 3-4 cifras sin marcador. Seguido de «)» era un año entre paréntesis
+# («(1987)»), pero eso solo vale si el «(» está delante: ver `_cerrado_por_parentesis`
+# (BL-PARSE1 R3, «Flash v2 206)» perdía el 206 y acababa con el 2 del volumen).
+_NUMERO_LARGO = r"\b(\d{3,4}[a-zA-Z]?)\b"
+
 # Cada entrada es (patrón, cortar_en_el_numero). El corte marca dónde
 # termina el título una vez encontrado el número:
 #   False → se corta al principio de la coincidencia (lo normal: "AIDP 05
@@ -58,7 +63,7 @@ ISSUE_PATTERNS = [
     ),
     # El sufijo de letra es real y frecuente ("Superman Vol2 123a" son las
     # entregas partidas de Zinco); sin él, esos números se perdían enteros.
-    (r"\b(\d{3,4}[a-zA-Z]?)\b(?!\s*\))", False),
+    (_NUMERO_LARGO, False),
     # "Serie NN - MM": los dos son números y el de la IZQUIERDA es parte
     # del título ("Delta 99 - 04" es el 4 de la serie "Delta 99"). Va
     # antes que el patrón de subtítulo de abajo, que si no se quedaría
@@ -350,6 +355,33 @@ class ParsedComicName:
     edition_kind: str | None = None
 
 
+#: Marcador de volumen con su número («Vol 02», «Vol. 2», «Volumen 2», «Volume 2», «v2»,
+#: «Tomo 2»): es el volumen de la serie, no el número de la grapa.
+_MARCADOR_DE_VOLUMEN = re.compile(r"\b(?:vol(?:umen|ume)?\.?|v|tomo)\s*\d+\b", re.IGNORECASE)
+_ANIO_SUELTO = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
+def _sin_ceros(numero: str) -> str:
+    return numero.lstrip("0") or "0"
+
+
+def otros_numeros_candidatos(resto: str, carpeta: str | None = None) -> list[str]:
+    """Números del resto del nombre (ya sin el prefijo) que podrían ser el de la grapa.
+
+    BL-PARSE1 §3, definición única que comparten la cohorte y el parser. No cuentan la
+    extensión, los corchetes, los créditos, los marcadores de volumen, los años 19xx/20xx
+    ni los números que también lleva el nombre de la carpeta («52» en «The New 52! Vol 04»).
+    Lista vacía: el prefijo es el único número del nombre.
+    """
+    texto = FILE_EXT_PATTERN.sub("", resto)
+    texto = re.sub(r"\[[^\]]*\]", " ", texto)
+    texto = CREDITS_PATTERN.sub("", texto)
+    texto = _MARCADOR_DE_VOLUMEN.sub(" ", texto)
+    texto = _ANIO_SUELTO.sub(" ", texto)
+    en_carpeta = {_sin_ceros(n) for n in re.findall(r"\d+", carpeta or "")}
+    return [n for n in re.findall(r"\d+", texto) if _sin_ceros(n) not in en_carpeta]
+
+
 def _separar_prefijo_numerico(working: str) -> tuple[str, str | None]:
     """Separa un prefijo numérico inicial de serie/número.
 
@@ -375,9 +407,15 @@ def _separar_prefijo_numerico(working: str) -> tuple[str, str | None]:
     if sep.strip() in (".", ")"):
         # "13. Nightwing": prefijo de orden de lectura, no de grapa.
         return resto, None
-    if re.search(r"#\s*\d", resto) or re.search(r"(?<!New )\b\d{1,3}\b", resto):
+    sin_volumen = _MARCADOR_DE_VOLUMEN.sub(" ", resto)
+    if re.search(r"#\s*\d", sin_volumen) or re.search(r"(?<!New )\b\d{1,3}\b", sin_volumen):
         # "14 JLD #11" / "73 Dreadstar ... 61": hay otro número en el resto.
         return resto, None
+    if sin_volumen != resto:
+        # BL-PARSE1 R2: "05 Catwoman Vol 02": el único otro número es el volumen de la
+        # serie, así que el prefijo es el número de la grapa. Antes se tomaba por orden de
+        # lectura y el volumen acababa haciendo de número (#2).
+        return resto, _sin_ceros(num)
     # Prefijo suelto sin más evidencia: no se inventa si es número o parte del
     # título ("12 Monkeys"). Se deja como estaba.
     return working, None
@@ -554,9 +592,23 @@ def _buscar_numero(working: str) -> tuple[re.Match, bool] | None:
     sea el principio del título. Devuelve (coincidencia, cortar_en_numero)."""
     for pattern, cortar_en_numero in ISSUE_PATTERNS:
         for m in re.finditer(pattern, working):
+            if pattern == _NUMERO_LARGO and _cerrado_por_parentesis(working, m):
+                continue
             if not _abre_el_titulo(working, m):
                 return m, cortar_en_numero
     return None
+
+
+def _cerrado_por_parentesis(working: str, m: re.Match) -> bool:
+    """¿El número va dentro de un paréntesis sin cerrar («(1987)» a medias)?
+
+    Solo entonces es un año entre paréntesis. Un «)» huérfano detrás («Flash v2 206)»,
+    el «(» se perdió en el nombre) no esconde el número (BL-PARSE1 R3).
+    """
+    if not working[m.end(1):].lstrip().startswith(")"):
+        return False
+    antes = working[:m.start(1)]
+    return antes.count("(") > antes.count(")")
 
 
 def _limpiar_titulo_serie(texto: str) -> str:

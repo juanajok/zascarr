@@ -44,7 +44,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from zascarr.utils.naming import CREDITS_PATTERN
+from zascarr.utils.naming import CREDITS_PATTERN, otros_numeros_candidatos
 
 # Con 1-2 archivos no hay evidencia de nada — podría ser coincidencia.
 # 3 es el mínimo real observado en la biblioteca (packs de la escena
@@ -135,7 +135,9 @@ def detectar_ordenes_de_lectura(nombres: list[str]) -> dict[str, PistaDeCohorte]
     return resultado
 
 
-def quitar_prefijo_de_cohorte(nombre: str, pista: PistaDeCohorte) -> str:
+def quitar_prefijo_de_cohorte(
+    nombre: str, pista: PistaDeCohorte, carpeta: str | None = None
+) -> str:
     """Aplica la pista sobre el nombre ORIGINAL (sin normalizar): quita
     el prefijo bare inicial y deja el resto intacto para que naming.py
     lo parsee con normalidad. Si el nombre ya no empieza por ese
@@ -143,5 +145,10 @@ def quitar_prefijo_de_cohorte(nombre: str, pista: PistaDeCohorte) -> str:
     nunca corta a ciegas."""
     m = _PREFIJO_BARE.match(nombre)
     if not m or m.group(1).lower() != pista.prefijo:
+        return nombre
+    if not otros_numeros_candidatos(nombre[m.end():], carpeta):
+        # BL-PARSE1 R1: si el prefijo es el único número del nombre, es el de la grapa
+        # («05 Catwoman Vol 02»): quitarlo dejaba el archivo sin número. `carpeta` aporta
+        # los números que son título («The New 52!»).
         return nombre
     return nombre[m.end():]

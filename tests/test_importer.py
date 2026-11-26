@@ -593,3 +593,56 @@ class TestBuildLibraryPathSanitizado:
 
         assert dest.is_relative_to(library)
         assert "/" not in dest.name  # "1/2" ya no es un separador de ruta
+
+
+class TestBLParse1EnElImporter:
+    """BL-PARSE1: el importer pasa la carpeta a la cohorte (R1) y marca los
+    especiales para el matcher (R4)."""
+
+    @pytest.mark.asyncio
+    async def test_triage_and_match_pasa_la_carpeta_a_la_cohorte(self, tmp_path, monkeypatch):
+        """C10: el «52» de la carpeta es título; sin la carpeta, la cohorte
+        quitaría el «01», que es el único número de la grapa."""
+        from zascarr.core.cohort import PistaDeCohorte
+
+        capturado: dict = {}
+
+        async def decide_falso(self, triage, extractor=None, formato_esperado=None,
+                               annual=False, **_kwargs):
+            capturado["extraido"] = extractor(triage.path.name) if extractor else None
+            return MatchResult(MatchStatus.UNSORTED, notes=[])
+
+        monkeypatch.setattr("zascarr.core.matcher.SeriesMatcher.decide", decide_falso)
+
+        carpeta = tmp_path / "2011 - 2014 Catwoman The New 52! Vol 04"
+        carpeta.mkdir()
+        src = carpeta / "01 Catwoman The New 52!.cbz"
+        make_cbz(src)
+        pista = PistaDeCohorte(prefijo="01", cohorte="x", evidencia=3, explicacion="x")
+        await _triage_and_match(FakeDedupeSession(None), src, pista)
+
+        assert capturado["extraido"] is not None
+        assert capturado["extraido"][1] == "1"
+
+    @pytest.mark.asyncio
+    async def test_triage_and_match_marca_los_especiales(self, tmp_path, monkeypatch):
+        """C13: sin la marca, el matcher buscaría la grapa #2."""
+        capturado: dict = {}
+
+        async def decide_falso(self, triage, extractor=None, formato_esperado=None,
+                               annual=False, **kwargs):
+            capturado.update(kwargs)
+            return MatchResult(MatchStatus.UNSORTED, notes=[])
+
+        monkeypatch.setattr("zascarr.core.matcher.SeriesMatcher.decide", decide_falso)
+
+        src = tmp_path / "Superman Vol2 Especial 2 [SC][CRG].cbz"
+        make_cbz(src)
+        await _triage_and_match(FakeDedupeSession(None), src)
+        assert capturado.get("especial") is True
+
+        capturado.clear()
+        grapa = tmp_path / "Superman Vol2 002.cbz"
+        make_cbz(grapa)
+        await _triage_and_match(FakeDedupeSession(None), grapa)
+        assert not capturado.get("especial", False)

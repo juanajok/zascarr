@@ -115,6 +115,26 @@ def reclamar_autorizacion(
     )
 
 
+def reclamar_intento(
+    id_: object,
+    *,
+    directorio_fd: int,
+    sincronizar: Callable[[int], None] = os.fsync,
+) -> bool:
+    """Crea la marca de intento `<id>` en el directorio dedicado `intentos`.
+
+    Es exclusiva (`O_EXCL` + dos `fsync`) y no contiene secretos: solo su
+    existencia acredita que la petición llegó a reserva. No sustituye al
+    consumo de la autorización; un fallo de sincronización eleva
+    `RegistroNoDisponibleError` sin acreditar el intento.
+    """
+    return _reclamar_marca(
+        _nombre(id_, ""),
+        directorio_fd=directorio_fd,
+        sincronizar=sincronizar,
+    )
+
+
 def reclamar_id(
     id_: object,
     *,
@@ -133,19 +153,13 @@ def reclamar_id(
     )
 
 
-def abrir_directorio_autorizaciones(
+def _abrir_directorio(
     ruta: object,
     *,
     uid_esperado: int,
     modo_esperado: int = 0o700,
 ) -> int:
-    """Abre el directorio durable dedicado y acredita propietario y modo.
-
-    No lo crea ni lo repara. Exige `0700`, sin escritura de grupo/otros, y un
-    `uid` explícito; no sigue enlaces. El llamador debe usar el descriptor para
-    `reclamar_autorizacion`/`crear_reclamador_durable` y cerrarlo al terminar.
-    Este módulo no demuestra que la ruta sea la provista por el instalador.
-    """
+    """Abre un directorio durable dedicado y acredita propietario y modo."""
     if type(uid_esperado) is not int or not 0 <= uid_esperado < 2**32:
         raise RegistroNoDisponibleError("propietario no acreditado")
     if type(modo_esperado) is not int or modo_esperado != 0o700:
@@ -169,6 +183,36 @@ def abrir_directorio_autorizaciones(
     except BaseException:
         os.close(fd)
         raise
+
+
+def abrir_directorio_autorizaciones(
+    ruta: object,
+    *,
+    uid_esperado: int,
+    modo_esperado: int = 0o700,
+) -> int:
+    """Abre el directorio durable de autorizaciones y acredita su identidad.
+
+    No lo crea ni lo repara. Exige `0700`, sin escritura de grupo/otros, y un
+    `uid` explícito; no sigue enlaces. El llamador debe usar el descriptor para
+    `reclamar_autorizacion`/`crear_reclamador_durable` y cerrarlo al terminar.
+    Este módulo no demuestra que la ruta sea la provista por el instalador.
+    """
+    return _abrir_directorio(
+        ruta, uid_esperado=uid_esperado, modo_esperado=modo_esperado,
+    )
+
+
+def abrir_directorio_intentos(
+    ruta: object,
+    *,
+    uid_esperado: int,
+    modo_esperado: int = 0o700,
+) -> int:
+    """Abre el directorio dedicado `intentos` con las mismas garantías."""
+    return _abrir_directorio(
+        ruta, uid_esperado=uid_esperado, modo_esperado=modo_esperado,
+    )
 
 
 def crear_reclamador_durable(

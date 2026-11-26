@@ -427,7 +427,8 @@ class SeriesMatcher:
     async def decide(self, triage, extractor=None,
                      formato_esperado: str | None = None,
                      annual: bool = False,
-                     series_alternativa: str | None = None) -> MatchResult:
+                     series_alternativa: str | None = None,
+                     especial: bool = False) -> MatchResult:
         """Punto de entrada.
 
         `extractor` es la inyección de naming.py:
@@ -439,6 +440,10 @@ class SeriesMatcher:
         «Titans 2025 Annual»): la serie madre no es candidata y, si no hay
         serie anual en el catálogo, el archivo va a Pendientes. Nunca se
         busca el nº N de la madre a partir de un anual.
+
+        `especial=True` (BL-PARSE1 R4, D1): el nombre es un «Especial N». Se busca el
+        número «E{N}» de la serie; si no existe, el archivo va a revisión. Nunca se enlaza
+        con la grapa #N.
         """
         title = number = year = None
         volume = None
@@ -481,6 +486,9 @@ class SeriesMatcher:
                 notes=["sin número en el nombre: la serie se reconoce, elige el número"],
             )
 
+        if especial:
+            number = "E" + (number.lstrip("0") or "0")
+
         # B13: alias local (corrección manual previa en Pendientes) manda
         # sobre el fuzzy — se salta capa 2 por completo si hay uno.
         alias_hit = await self.find_alias(title)
@@ -492,7 +500,8 @@ class SeriesMatcher:
         if alias_hit:
             return await self._resolve(alias_hit, number, [alias_hit],
                                         MatchStatus.DIRECT, ["alias local aprendido"],
-                                        formato_esperado, nombre=triage.path.name)
+                                        formato_esperado, nombre=triage.path.name,
+                                        especial=especial)
 
         hits = await self.find_series(title, year, volume)
         if annual:
@@ -517,7 +526,7 @@ class SeriesMatcher:
                 return await self._resolve(
                     exactos[0], number, alt_hits, MatchStatus.DIRECT,
                     [f"serie alternativa exacta: {exactos[0].title}"],
-                    formato_esperado, nombre=triage.path.name)
+                    formato_esperado, nombre=triage.path.name, especial=especial)
 
         good = [h for h in hits if h.score >= FUZZY_THRESHOLD]
 
@@ -549,12 +558,13 @@ class SeriesMatcher:
         if volumen_carpeta is not None and volumen_carpeta == volume:
             notas.append(f"desempatado por la carpeta: {hit.title}")
         return await self._resolve(hit, number, good, status, notas, formato_esperado,
-                                   nombre=triage.path.name)
+                                   nombre=triage.path.name, especial=especial)
 
     async def _resolve(self, hit: SeriesHit, number: str, candidates: list[SeriesHit],
                         status: MatchStatus, extra_notes: list[str],
                         formato_esperado: str | None = None, *,
-                        nombre: str | None = None) -> MatchResult:
+                        nombre: str | None = None,
+                        especial: bool = False) -> MatchResult:
         """Cola común de decide(): buscar el issue exacto y componer el MatchResult.
 
         B15: si el número está compartido entre ediciones y el formato no permite
@@ -597,6 +607,15 @@ class SeriesMatcher:
                            "otro título: no se enlaza sin revisarlo (¿otra colección?)"],
                 )
         issue_id = candidata.issue_id if candidata is not None else None
+        if especial and issue_id is None:
+            # BL-PARSE1 R4: un especial sin su número «E{N}» va a revisión; ni se enlaza ni
+            # deja un hueco que rellenar con la grapa #N.
+            return MatchResult(
+                MatchStatus.UNSORTED,
+                candidates=candidates,
+                notes=[f"parece un especial y la serie «{hit.title}» no tiene el número "
+                       f"«{number}»: no se enlaza a la grapa {number[1:]}"],
+            )
         notes = list(extra_notes)
         if not issue_id:
             notes.append(
