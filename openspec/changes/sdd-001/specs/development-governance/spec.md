@@ -104,10 +104,10 @@ El proceso SHALL preservar los checks existentes y la autorización humana de me
 
 ### Requirement: SDD-R010 Migración gradual y piloto
 
-La implantación SHALL establecer en H0 matriz de autoridad y bootstrap que evalúe licencia, telemetría y smoke de OpenSpec antes de fijar su pin; si falla o no se verifica se escala sin activar H1. También deberá registrar deuda histórica sin bloquear indiscriminadamente contribuciones, exigir conformidad a cambios nuevos tras la activación aprobada y completar un piloto de riesgo medio con métricas y evidencias.
+La implantación SHALL evaluar en H0 autoridad, licencia, telemetría y smoke de OpenSpec antes de fijar su pin. La carga efectiva de harnesses puede aplazarse con autorización, pero SHALL verificarse antes de activar gates obligatorios. La migración deberá registrar deuda histórica sin bloquear indiscriminadamente, exigir conformidad a cambios nuevos tras la activación aprobada y completar un piloto de riesgo medio con evidencias.
 
 #### Scenario: SDD-R010-S01 Activación de gates
 
 - **GIVEN** los dominios críticos inventariados y un piloto terminado
 - **WHEN** se solicita hacer obligatorio el check SDD
-- **THEN** se presentan evidencias, fallos controlados, coste y deuda pendiente al mantenedor para su aprobación
+- **THEN** se presentan evidencias, fallos controlados, coste y deuda pendiente al mantenedor para su aprobación, y no se activa el gate si sigue sin verificarse la carga efectiva de los harnesses seleccionados

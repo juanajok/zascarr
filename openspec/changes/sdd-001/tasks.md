@@ -4,7 +4,8 @@ Todas pendientes; no representan ejecución real. Una PR por historia, no cerrar
 
 ## 0. Inventario y decisión
 - [ ] T0.1 Fijar baseline, inventariar capacidades/documentos y evidencias; detectar contradicciones e IDs duplicados; proponer matriz de autoridad y mapa de migración sin retirar normas vigentes. (R001,R002)
-- [ ] T0.2 Bootstrap aislado: evaluar licencia y versión candidata de OpenSpec; smoke init, validate, sync/archive, negativos y harnesses; verificar tráfico/telemetría y desactivación efectiva, sin red cuando sea posible. Registrar resultados y fijar pin solo tras éxito; si falla o no es verificable, escalar sin iniciar H1. (R007,R008,R010)
+- [ ] T0.2 Bootstrap aislado: evaluar licencia y versión candidata de OpenSpec; smoke init, validate, sync/archive y negativos; verificar tráfico/telemetría y desactivación efectiva, sin red cuando sea posible. Fijar pin solo tras las comprobaciones correspondientes; si fallan o no son verificables, escalar. La carga efectiva de harnesses queda como deuda autorizada que no impide H1, pero bloquea la activación de gates obligatorios. (R007,R008,R010)
+- [ ] T0.4 Verificar carga efectiva de instrucciones en Claude Code, Codex y OpenCode en entorno autorizado, con datos sintéticos y suscripciones; registrar versiones, resultados y limitaciones antes de activar gates obligatorios. (R008,R010)
 - [ ] T0.3 Aprobar propuesta y resolver alcance con mantenedor. (R001,R009)
 
 ## 1. Infraestructura y gobierno (depende de H0)

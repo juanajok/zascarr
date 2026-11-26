@@ -1,6 +1,6 @@
 # Diseño técnico de SDD-001
 
-Estado: propuesta. La estructura de este cambio es un borrador compatible con el modelo de deltas; OpenSpec aún no se ha inicializado ni validado en el repositorio. H0 prueba licencia, telemetría y versión candidata antes de fijar pin; H1 no comienza sin smoke satisfactorio y autorización.
+Estado: propuesta. La estructura de este cambio es un borrador compatible con el modelo de deltas; OpenSpec aún no se ha inicializado en el repositorio. H0 prueba licencia, telemetría y versión candidata antes de fijar pin. La carga efectiva de los harnesses puede quedar como deuda explícita para iniciar H1, por autorización del mantenedor; no puede considerarse validada ni omitirse antes de activar gates obligatorios.
 
 ## Contexto y arquitectura objetivo
 
@@ -58,4 +58,4 @@ Orquestación reutilizable mediante contratos comunes y adaptadores portables, s
 
 ## Rollout y rollback
 
-PR de diseño no cambia la política efectiva. H0 es bootstrap aislado, sin presuponer OpenSpec inicializado ni gates ya existentes; comprobar licencia, telemetría y smoke antes de pin. Si falla o no puede verificarse, escalar sin iniciar H1. H1–H5 se realizan en PR pequeñas con aprobación. Gate inicialmente en modo report, medir falsos positivos, luego requerido para cambios nuevos tras aprobación. Rollback de infraestructura SDD: revertir workflow/config afectado con autorización, preservar specs y evidencias; no alterar datos de producto ni deshabilitar CI existente. Riesgos: burocracia, duplicación, falso verde, dependencia de CLI, drift, carreras de cambios; mitigar con flujo proporcional, fuente única, pruebas adversativas y comparación base/head.
+PR de diseño no cambia la política efectiva. H0 es bootstrap aislado, sin presuponer OpenSpec inicializado ni gates ya existentes; comprobar licencia, telemetría y smoke antes de pin. Si fallan o no se verifican la licencia, telemetría, instalación o smoke de la CLI, escalar antes de fijar el pin; la carga efectiva de harnesses es una excepción autorizada y queda como deuda para H1, sin activar gates obligatorios hasta verificarla. H1–H5 se realizan en PR pequeñas con aprobación. Gate inicialmente en modo report, medir falsos positivos, luego requerido para cambios nuevos tras aprobación. Rollback de infraestructura SDD: revertir workflow/config afectado con autorización, preservar specs y evidencias; no alterar datos de producto ni deshabilitar CI existente. Riesgos: burocracia, duplicación, falso verde, dependencia de CLI, drift, carreras de cambios; mitigar con flujo proporcional, fuente única, pruebas adversativas y comparación base/head.

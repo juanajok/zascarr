@@ -3,6 +3,7 @@
 - Baseline de producto: `ea9bc603eb2aa86265abd5b0697b3e03ef87e732`.
 - Propuesta revisada inicialmente: `f3170771aebd3c001315420fdbf2a84ea46cf881`; actualización documental `49ebbb60`.
 - Estado: **en curso**. Esta evidencia no activa reglas ni aprueba el pin.
+- Decisión del mantenedor: la verificación efectiva de carga de instrucciones en harnesses queda como deuda T0.4 para permitir avanzar a H1; deberá completarse antes de activar gates obligatorios. No equivale a PASS ni autoriza fusión o despliegue.
 
 ## Inventario y discrepancias
 
