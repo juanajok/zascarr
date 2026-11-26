@@ -1,0 +1,91 @@
+"""Comprueba la estructura y los enlaces de la gobernanza SDD (T1.1).
+
+Verifica lo que la especificación T1.1-C05 y T1.1-C06 pueden comprobar sin
+juicio semántico: que existan los documentos, que sus enlaces relativos
+resuelvan, que el mapa de reglas no repita orígenes y que ningún documento
+afirme una carga efectiva de instrucciones que no se ha verificado.
+"""
+
+from __future__ import annotations
+
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+GOVERNANCE = ROOT / "governance"
+AGENTS = ROOT / "AGENTS.md"
+GUIDE = ROOT / "CLAUDE.md"
+
+REQUIRED = ("constitution.md", "product-vision.md", "glossary.md", "mapa-reglas.md")
+LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+RULE_ROW = re.compile(r"^\|\s*(PRE-[A-Z0-9]+)\s*\|", re.MULTILINE)
+# Afirmaciones que solo serían válidas con una prueba de carga efectiva (T0.4).
+FORBIDDEN = re.compile(
+    r"carga efectiva verificada|instrucciones cargadas correctamente|"
+    r"verificado en claude code|verificado en codex|verificado en opencode",
+    re.IGNORECASE,
+)
+
+
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+def markdown_files() -> list[Path]:
+    paths = [AGENTS, *(GOVERNANCE / name for name in REQUIRED)]
+    return [path for path in paths if path.is_file()]
+
+
+def relative_links(text: str) -> list[str]:
+    targets = []
+    for target in LINK.findall(text):
+        if target.startswith(("http://", "https://", "mailto:", "#")):
+            continue
+        targets.append(target.split("#", 1)[0])
+    return [target for target in targets if target]
+
+
+class GobernanzaTest(unittest.TestCase):
+    def test_documentos_requeridos_existen_y_no_estan_vacios(self) -> None:
+        self.assertTrue(GUIDE.is_file(), "falta la guía vigente")
+        self.assertTrue(AGENTS.is_file(), "falta el índice AGENTS.md")
+        for name in REQUIRED:
+            with self.subTest(documento=name):
+                path = GOVERNANCE / name
+                self.assertTrue(path.is_file(), f"falta governance/{name}")
+                self.assertTrue(read(path).strip(), f"governance/{name} está vacío")
+
+    def test_indice_declara_la_autoridad_vigente(self) -> None:
+        text = read(AGENTS)
+        self.assertIn("CLAUDE.md", text)
+        self.assertRegex(text, r"(?i)vigente")
+
+    def test_enlaces_relativos_resuelven(self) -> None:
+        for path in markdown_files():
+            for target in relative_links(read(path)):
+                with self.subTest(origen=path.name, destino=target):
+                    self.assertTrue(
+                        (path.parent / target).resolve().exists(),
+                        f"{path.name} enlaza a {target}, que no existe",
+                    )
+
+    def test_mapa_de_reglas_no_repite_origenes(self) -> None:
+        text = read(GOVERNANCE / "mapa-reglas.md")
+        origins = RULE_ROW.findall(text)
+        self.assertTrue(origins, "el mapa de reglas no tiene filas PRE-*")
+        self.assertEqual(
+            len(origins), len(set(origins)), "hay orígenes repetidos en el mapa"
+        )
+
+    def test_ningun_documento_afirma_carga_no_verificada(self) -> None:
+        for path in markdown_files():
+            with self.subTest(documento=path.name):
+                self.assertIsNone(
+                    FORBIDDEN.search(read(path)),
+                    f"{path.name} afirma una carga efectiva de instrucciones no verificada",
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()
