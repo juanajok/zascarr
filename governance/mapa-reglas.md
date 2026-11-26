@@ -4,8 +4,8 @@
 
 | ID | Origen | Regla o decisión a conservar | Destino propuesto | Estado |
 |---|---|---|---|---|
-| PRE-01 | §3.1 | La capa de servicios concentra el negocio; routers finos | Arquitectura de dominio | sin migrar |
-| PRE-02 | §3.1 | No mover archivos con la sesión ORM viva; conservar la deuda declarada del código heredado | Arquitectura de dominio | sin migrar |
+| PRE-01 | §3.1 | La capa de servicios concentra el negocio; routers finos | [Contrato de datos](contrato-datos.md#pre-01--la-capa-de-servicios-es-la-única-fuente-de-verdad-del-negocio) | migrada |
+| PRE-02 | §3.1 | No mover archivos con la sesión ORM viva; conservar la deuda declarada del código heredado | [Contrato de datos](contrato-datos.md#pre-02--el-orm-nunca-cruza-un-movimiento-de-ficheros-con-la-sesión-viva) | migrada |
 | PRE-03 | §3.1 | Escritura con esquemas explícitos; prohibido el mass assignment | Arquitectura y seguridad | sin migrar |
 | PRE-04 | §3.1 | Sin hotlinking en la interfaz | Seguridad de interfaz | sin migrar |
 | PRE-05 | §3.1 | Toda decisión de arquitectura nueva requiere ADR | [Constitución](constitution.md#pre-05--decisión-de-arquitectura-requiere-adr) | migrada |
@@ -41,7 +41,7 @@
 | PRE-35 | §6 | Tramas, contraste, botones, avisos y títulos con sus excepciones | Sistema de diseño | sin migrar |
 | PRE-36 | §6 | Cifras coherentes y presupuesto textual con umbrales provisionales | Contratos de interfaz | sin migrar |
 | PRE-37 | §6 | El sistema de diseño se consulta antes de cambiar una pantalla | Índice de fuentes | sin migrar |
-| PRE-38 | §7 | Migraciones aplicadas inmutables y reglas de tipos Postgres | Guía de migraciones | sin migrar |
+| PRE-38 | §7 | Migraciones aplicadas inmutables y reglas de tipos Postgres | [Contrato de datos](contrato-datos.md#pre-38--migraciones-aplicadas-inmutables-y-tipos-postgres-explícitos) | migrada |
 | PRE-39 | §14 | Conceptos de superficie y reglas de contexto entre términos | Glosario | sin migrar |
 | PRE-40 | Cabecera | Toda decisión nueva sobre cómo se trabaja se registra el día que se decide | [Constitución](constitution.md#pre-40--registrar-las-decisiones-del-modo-de-trabajo) | migrada |
 | PRE-41 | §1 | Producto para el coleccionista y presupuesto de Raspberry Pi | [Visión](product-vision.md#pre-41--producto-persona-y-restricción-de-plataforma) | migrada |
