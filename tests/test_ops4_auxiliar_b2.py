@@ -5,6 +5,7 @@ import os
 
 import pytest
 
+from deploy.ops import zascarr_actualizar_aux as auxiliar
 from deploy.ops.escritor_estado_actualizar_ops4 import (
     UNIDAD,
     ResultadoEscritura,
@@ -100,6 +101,54 @@ def ejecutar(dobles: Dobles, *, token: bytes | None = None):
         reclamar_consumo=dobles.consumir, esperar=dobles.esperar,
         existe_intento=dobles.existe_intento,
     )
+
+
+def test_sin_b2_no_se_activa_el_camino_legado(monkeypatch) -> None:
+    llamadas = []
+
+    def llamada(*_args, **_kwargs):
+        llamadas.append("llamada")
+        return True
+
+    monkeypatch.setattr(auxiliar, "verificar_testigo_sin_consumo", llamada)
+    monkeypatch.setattr(auxiliar, "decodificar_autorizacion", llamada)
+    respuesta = procesar(
+        peticion(), clave=CLAVE, ahora=AHORA, reclamar_uso=llamada,
+        iniciar=llamada, cerrojo_ocupado=llamada, escribir=llamada,
+    )
+    assert (respuesta.resultado, respuesta.codigo, respuesta.id) == (
+        "rechazada", "no_disponible", None,
+    )
+    assert llamadas == []
+
+
+@pytest.mark.parametrize("ausente", [
+    "admitir", "liberar", "leer_estado", "crear_intento", "escribir",
+    "iniciar", "cerrojo_ocupado", "reclamar_consumo", "esperar",
+])
+def test_sin_dependencia_b2_peticion_valida_no_verifica_consume_ni_inicia(
+    ausente, monkeypatch,
+) -> None:
+    llamadas = []
+
+    def llamada(*_args, **_kwargs):
+        llamadas.append("llamada")
+        return True
+
+    monkeypatch.setattr(auxiliar, "verificar_testigo_sin_consumo", llamada)
+    monkeypatch.setattr(auxiliar, "decodificar_autorizacion", llamada)
+    dependencias = dict.fromkeys(
+        ("admitir", "liberar", "leer_estado", "crear_intento", "escribir",
+         "iniciar", "cerrojo_ocupado", "reclamar_consumo", "esperar"), llamada,
+    )
+    dependencias[ausente] = None
+    respuesta = procesar(
+        peticion(), clave=CLAVE, ahora=AHORA, reclamar_uso=llamada, **dependencias,
+    )
+    assert (respuesta.resultado, respuesta.codigo, respuesta.id) == (
+        "rechazada", "no_disponible", None,
+    )
+    assert llamadas == []
 
 
 def _pos(dobles: Dobles, nombre: str) -> int:

@@ -16,7 +16,9 @@ from deploy.ops.escritor_estado_actualizar_ops4 import (
 from deploy.ops.zascarr_actualizar_aux import (
     UNIDAD,
     Respuesta,
-    procesar,
+)
+from deploy.ops.zascarr_actualizar_aux import (
+    procesar as procesar_real,
 )
 from zascarr.services.autorizacion_actualizacion import crear_autorizacion
 from zascarr.services.ops_actualizacion_v4 import construir_peticion_v4
@@ -47,6 +49,7 @@ class Dobles:
         self.cerrojo = cerrojo
         self.inicio = inicio
         self.usados: set[str] = set()
+        self.intentos: set[str] = set()
         self.llamadas: list[tuple[str, str]] = []
 
     def reclamar(self, id_: str) -> bool:
@@ -79,6 +82,26 @@ class Dobles:
         return self.cerrojo
 
 
+def procesar(linea: bytes, **kwargs) -> Respuesta:
+    """Ejercita las pruebas históricas con dependencias B2 completas."""
+    reclamador = kwargs["reclamar_uso"]
+    doble = getattr(reclamador, "__self__", None)
+    intentos = doble.intentos if isinstance(doble, Dobles) else set()
+
+    def crear_intento(id_: str) -> bool:
+        if id_ in intentos:
+            return False
+        intentos.add(id_)
+        return True
+
+    return procesar_real(
+        linea, **kwargs, admitir=lambda: object(), liberar=lambda _token: None,
+        leer_estado=lambda: None, crear_intento=crear_intento,
+        existe_intento=lambda id_: id_ in intentos,
+        reclamar_consumo=reclamador, esperar=lambda _id: "confirmada",
+    )
+
+
 def ejecutar(linea: bytes, dobles: Dobles) -> Respuesta:
     return procesar(
         linea, clave=CLAVE, ahora=AHORA, reclamar_uso=dobles.reclamar,
@@ -92,7 +115,7 @@ def test_acepta_una_vez_y_usa_unidad_fija() -> None:
     respuesta = ejecutar(peticion(), dobles)
     assert respuesta.resultado == "aceptada"
     assert respuesta.id == ID
-    assert dobles.llamadas[-1] == ("iniciar", UNIDAD)
+    assert ("iniciar", UNIDAD) in dobles.llamadas
     assert UNIDAD == "zascarr-actualizar.service"
     cuerpo = json.loads(respuesta.linea())
     assert cuerpo == {"v": 4, "id": ID, "resultado": "aceptada", "codigo": "aceptada"}
@@ -232,7 +255,8 @@ def test_fchown_eperm_rechaza_sin_iniciar_unidad(tmp_path, monkeypatch) -> None:
         escribir=lambda datos: escribir_estado(ruta, datos, propietario=(0, 12345)),
     )
     assert respuesta.codigo == "no_disponible"
-    assert ID in dobles.usados
+    assert ID not in dobles.usados
+    assert ID in dobles.intentos
     assert not any(llamada[0] == "iniciar" for llamada in dobles.llamadas)
     assert not ruta.exists()
     assert not list(tmp_path.glob(".estado.json.tmp-*"))

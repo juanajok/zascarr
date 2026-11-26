@@ -51,7 +51,6 @@ try:  # importado como paquete (pruebas): una sola identidad de módulo
     )
     from .verificador_autorizacion_ops4 import (  # noqa: E402
         CodigoAutorizacion,
-        verificar_autorizacion,
         verificar_testigo_sin_consumo,
     )
 except ImportError:  # instalado como script suelto en /usr/local/lib/zascarr
@@ -81,7 +80,6 @@ except ImportError:  # instalado como script suelto en /usr/local/lib/zascarr
     )
     from verificador_autorizacion_ops4 import (  # noqa: E402
         CodigoAutorizacion,
-        verificar_autorizacion,
         verificar_testigo_sin_consumo,
     )
 
@@ -116,70 +114,24 @@ def procesar(
     borrar_intento=None, reclamar_consumo=None, esperar=None,
     existe_intento=None,
 ) -> Respuesta:
-    """Admite una petición; con `admitir` usa el flujo B2, sin él el legado.
+    """Admite solo con las dependencias necesarias del flujo B2.
 
-    El flujo B2 (P3–P12) toma el cerrojo de admisión, comprueba el de
-    operaciones, lee el estado, verifica el testigo **sin consumir**, crea la
-    marca de intento, escribe la reserva, arranca y espera la confirmación del
-    trabajador. Ante incertidumbre intenta consumir de forma conservadora. El
-    flujo legado se conserva para pruebas; el auxiliar usa siempre B2.
+    Una configuración incompleta falla cerrada antes de verificar el testigo,
+    reclamar su consumo o iniciar la unidad.
     """
-    if admitir is not None:
-        return _procesar_b2(
-            linea, clave=clave, ahora=ahora, iniciar=iniciar,
-            cerrojo_ocupado=cerrojo_ocupado, escribir=escribir,
-            transicionar=transicionar, admitir=admitir, liberar=liberar,
-            leer_estado=leer_estado, crear_intento=crear_intento,
-            borrar_intento=borrar_intento, reclamar_consumo=reclamar_consumo,
-            esperar=esperar, existe_intento=existe_intento,
-        )
-    if type(clave) is not bytes or len(clave) != 32:
+    if not all(callable(dep) for dep in (
+        admitir, liberar, leer_estado, crear_intento, escribir,
+        iniciar, cerrojo_ocupado, reclamar_consumo, esperar,
+    )):
         return rechazo("no_disponible")
-    if type(ahora) is not int or not 0 <= ahora < 2**63:
-        return rechazo("no_disponible")
-    objeto = parsear(linea)
-    if objeto is None:
-        return rechazo("esquema_invalido")
-    id_ = objeto["id"]
-    if not verificar_firma(clave, objeto):
-        return rechazo("firma_invalida", id_)
-    if abs(objeto["creada"] - ahora) > TOLERANCIA_S:
-        return rechazo("caducada", id_)
-    try:
-        if cerrojo_ocupado():
-            return rechazo("operacion_en_curso", id_)
-    except Exception:  # noqa: BLE001
-        return rechazo("no_disponible", id_)
-    testigo = decodificar_autorizacion(objeto["autorizacion"])
-    if testigo is None:
-        return rechazo("autorizacion_invalida", id_)
-    resultado = verificar_autorizacion(
-        testigo, clave=clave, ahora=ahora, reclamar_uso=reclamar_uso, id_esperado=id_,
+    return _procesar_b2(
+        linea, clave=clave, ahora=ahora, iniciar=iniciar,
+        cerrojo_ocupado=cerrojo_ocupado, escribir=escribir,
+        transicionar=transicionar, admitir=admitir, liberar=liberar,
+        leer_estado=leer_estado, crear_intento=crear_intento,
+        borrar_intento=borrar_intento, reclamar_consumo=reclamar_consumo,
+        esperar=esperar, existe_intento=existe_intento,
     )
-    if resultado is CodigoAutorizacion.CADUCADA:
-        return rechazo("caducada", id_)
-    if resultado is CodigoAutorizacion.REPETIDA:
-        return rechazo("repetida", id_)
-    if resultado is CodigoAutorizacion.NO_DISPONIBLE:
-        return rechazo("no_disponible", id_)
-    if resultado is not CodigoAutorizacion.ACEPTADA:
-        return rechazo("autorizacion_invalida", id_)
-    try:
-        inicial = estado_inicial(id_, ahora)
-    except ValueError:
-        return rechazo("no_disponible", id_)
-    if escribir is not None and escribir(inicial) != ResultadoEscritura.OK:
-        return rechazo("no_disponible", id_)
-    try:
-        iniciada = iniciar(UNIDAD)
-    except Exception:  # noqa: BLE001
-        iniciada = False
-    if iniciada is not True:
-        # El testigo ya se consumió, pero el arranque puede haber llegado al host.
-        return Respuesta("incierta", "incierta", id_)
-    # T-17: no se escribe `en_curso` después del start. El finalizador cierra;
-    # una instantánea posterior podría pisar un terminal si la unidad acaba antes.
-    return Respuesta("aceptada", "aceptada", id_)
 
 
 def _procesar_b2(
