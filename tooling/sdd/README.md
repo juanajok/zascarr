@@ -14,4 +14,14 @@ Tras revisar el lock propuesto, instalar desde este directorio con
 `node_modules/.bin/openspec`, no `npx`. Usar `DO_NOT_TRACK=1` y
 `OPENSPEC_TELEMETRY=0` no garantiza ausencia universal de tráfico. La
 instalación puede acceder al registro npm y desactivar scripts de instalación
-no impide que la CLI ejecute código después.
+no impide que la CLI ejecute código después. `--no-audit` omite la auditoría
+npm automática: revisar suministro, vulnerabilidades y licencias por el proceso
+aprobado antes de adoptar el lock; no se declara una auditoría superada.
+
+`engines` documenta las versiones probadas, pero npm puede limitarse a avisar;
+comprueba explícitamente `node --version` y `npm --version` antes de instalar.
+Al procesar una PR o contenido no confiable, usa un entorno desechable sin
+credenciales ni acceso al directorio personal y, cuando deba trabajar sin red,
+con aislamiento de red aplicado por el sistema operativo. Las variables de
+telemetría no son un cortafuegos. No ejecutar dependencias de terceros con
+secretos de CI o despliegue.
