@@ -357,7 +357,9 @@ def _cerrar_terminal(ruta) -> None:
     for _ in range(2000):
         lectura, actual = leer_estado_estricto(ruta)
         if lectura is not ResultadoLectura.OK or actual is None:
-            return
+            # El lector estricto devuelve INVALIDO si el inodo cambia mientras
+            # lo lee (reemplazo atómico); un lector que sondea debe reintentar.
+            continue
         if actual["estado"] == "hecha":
             return
         if publicar_transicion(
