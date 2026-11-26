@@ -9,7 +9,7 @@ Estado: propuesta. La estructura de este cambio es un borrador compatible con el
 - `openspec/config.yaml`, `openspec/specs/<capability>/spec.md`, `openspec/changes/<id>/{proposal,design,tasks}.md`, deltas bajo specs/, archivo de cambios; benchmark y trazabilidad como artefactos locales adicionales.
 - `docs/adr/`: decisiones técnicas; `docs/design/`: evidencia y diseños; `docs/BACKLOG.md`: planificación, no catálogo de requisitos vigentes. Inventario de documentos con vigente/histórico/sustituido y enlaces.
 - `scripts/sdd/`: validación, impacto, trazabilidad, consolidación, informes; pruebas de los propios validadores. `contracts/` solo para contratos no duplicados; generar OpenAPI desde FastAPI y comparar con baseline aprobada.
-- Adoptar el flujo del pipeline piloto versionado `.agentic/` (#1307, ADR `0026-pipeline-ingenieria-local`) para trabajos dentro de su alcance y bajo control del operador; reutilizar también `tests/`, `uxlab/` y CI. No duplicar componentes ya suficientes ni tratar el piloto como gate de fusión o sustituto de las verificaciones externas que no cubre.
+- Adoptar el flujo del pipeline piloto versionado `.agentic/` (#1307, ADR `0027-pipeline-ingenieria-local`) para trabajos dentro de su alcance y bajo control del operador; reutilizar también `tests/`, `uxlab/` y CI. No duplicar componentes ya suficientes ni tratar el piloto como gate de fusión o sustituto de las verificaciones externas que no cubre.
 
 ## Flujo y autoridad
 
