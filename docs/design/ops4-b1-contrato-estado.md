@@ -37,7 +37,9 @@ El lector estricto del host y el lector de la app **siguen aceptando el esquema 
 - `FASES`: tupla con las 8 fases en orden.
 - `estado_inicial(id_: str, ahora: int) -> dict`: instantánea v2 canónica con `estado="aceptada"`, `fase="aceptada"`, `unidad="zascarr-actualizar.service"`, ambas épocas `ahora`, y `head0`/`sha_destino`/`sha_actual`/`resultado`/`codigo` a `None`. Rechaza (lanza `ValueError`) un `id_` o `ahora` inválidos.
 - `escribir_estado(ruta, datos, *, fsync=os.fsync, replace=_reemplazar, propietario=None)`: sin cambios de firma ni de atomicidad. Publica tanto v1 como v2; para v2 aplica las reglas de la tabla.
+- `validar_estado(datos) -> bool`: acepta un v1 válido o un v2 válido y rechaza cualquier otra cosa (claves, tipos, `unidad`, hashes, épocas, fase, resultado o código). Es el único punto de validación: lo usan `escribir_estado`, `leer_estado_estricto` y `calcular_transicion`.
 - `leer_estado_estricto(ruta)`: acepta v1 y v2 con las mismas garantías actuales (sin seguir enlaces, sin abrir FIFO, sin aceptar escritura de grupo u otros, tamaño doble comprobado). Devuelve `OK` y el objeto validado.
+- `calcular_transicion(actual, estado, *, ahora, id_=None, inicio_epoch=None, fase=None, head0=_NO_CAMBIA, sha_destino=_NO_CAMBIA, sha_actual=_NO_CAMBIA, codigo=None) -> dict | None`: **núcleo puro** que decide la siguiente instantánea sin tocar disco ni mutar `actual`; devuelve `None` cuando la transición es inválida (reglas de abajo). Es la única fuente de la decisión; `publicar_transicion` solo lee, delega en él y escribe.
 - `publicar_transicion(ruta, estado, *, ahora, id_=None, inicio_epoch=None, fase=None, head0=_NO_CAMBIA, sha_destino=_NO_CAMBIA, sha_actual=_NO_CAMBIA, codigo=None, propietario=None, fsync=..., replace=...)`:
   - Exige estado válido, `ahora` entero, fichero previo válido y mismo `id`/`inicio_epoch` si se pasan; si no, `INVALIDO` sin escribir.
   - Si el previo es terminal, `INVALIDO` sin escribir (nunca se pisa un terminal).
@@ -60,9 +62,10 @@ El lector estricto del host y el lector de la app **siguen aceptando el esquema 
 
 - `leer_estado_actualizacion(path, *, id_esperado, ahora_epoch=None)` conserva su contrato y acepta v1 y v2; un id distinto o un fichero inválido sigue siendo `INCIERTA`.
 - `IntentoActualizacion`: `dataclass` congelado con `estado: EstadoActualizacion`, `fase: str`, `inicio_epoch: int`, `actualizado_epoch: int`, `head0: str | None`, `sha_destino: str | None`, `sha_actual: str | None`, `resultado: str | None`, `codigo: str | None`, `sin_noticias: bool`.
+- `interpretar_ultimo_intento(datos, *, ahora_epoch) -> IntentoActualizacion | None`: **núcleo puro** que decide sobre un objeto ya leído, sin E/S ni mutarlo; aplica la validación v1/v2, el reloj y la reconciliación. Devuelve `None` si no es un estado válido.
 - `leer_ultimo_intento(path, *, ahora_epoch=None) -> IntentoActualizacion | None`: lee el último intento **sin id de petición**. Devuelve `None` si el fichero falta o es inválido (incluido `schema` desconocido, épocas futuras, hash mal formado o claves de más). Si el estado es `aceptada`/`en_curso` y `ahora - actualizado_epoch >= 7200`, devuelve `estado=INCIERTA` y `sin_noticias=True`; nunca lo convierte en `fallida`. Un terminal es terminal aunque sea antiguo.
 - Sin cadenas libres, rutas ni errores del sistema en la salida; solo categorías cerradas.
 
 ## 6. Verificación
 
-`docs/design/ops4-b1-check.py` es el oráculo determinista del operador (no se edita en este incremento): `contrato`, `monotonia` y `reconciliacion`, sobre una imagen Python 3.11 sin red. Fuera de él quedan `update.sh`, las pruebas del proyecto, `/estado` y la validación en VM: **NOT RUN** aquí y se declaran al integrar.
+`docs/design/ops4-b1-check.py` es el oráculo determinista del operador (no se edita en este incremento): `contrato`, `monotonia` y `reconciliacion`, sobre una imagen Python 3.11 sin red y **sin escrituras** (el contenedor es de raíz y montaje de solo lectura y no tiene tmpfs). Por eso verifica el núcleo puro del contrato —`estado_inicial`, `validar_estado`, `calcular_transicion` e `interpretar_ultimo_intento`— y no repite la atomicidad, el `fsync` ni los wrappers de fichero, que cubren la suite del proyecto y la VM. Fuera de él quedan `update.sh`, las pruebas del proyecto, `/estado` y la validación en VM: **NOT RUN** aquí y se declaran al integrar.
