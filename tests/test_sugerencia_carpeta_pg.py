@@ -1,3 +1,4 @@
+# ruff: noqa: E501, F811
 """BL-PARSE3 C6: semántica real de los hermanos de carpeta, sobre Postgres.
 
 La carpeta es la ruta completa (dos «Vol 1» de series distintas no se mezclan); los archivos
@@ -5,6 +6,7 @@ ausentes y los pendientes no cuentan como hermanos. Se salta sin `TEST_DATABASE_
 """
 from __future__ import annotations
 
+import itertools
 import os
 from uuid import uuid4
 
@@ -27,11 +29,15 @@ pytestmark = [
 ]
 
 
+_NUMEROS = itertools.count(1)
+
+
 async def _vincular(entorno, sid, ids: dict, **campos) -> None:
     async with entorno.banco.fabrica() as s:
-        for i, fid in enumerate(ids.values(), 1):
+        for fid in ids.values():
             iid = uuid4()
-            s.add(Issue(id=iid, series_id=sid, issue_number=str(i), format=IssueFormat.SINGLE_ISSUE))
+            s.add(Issue(id=iid, series_id=sid, issue_number=str(next(_NUMEROS)),
+                        format=IssueFormat.SINGLE_ISSUE))
             await s.flush()
             await s.execute(update(File).where(File.id == fid).values(issue_id=iid, **campos))
         await s.commit()
