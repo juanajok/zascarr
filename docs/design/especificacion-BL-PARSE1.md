@@ -81,8 +81,10 @@ En cualquier otro caso se comporta como hoy.
 ### R2. El volumen no cuenta como «otro número» del prefijo (F3)
 
 En `_separar_prefijo_numerico`, la comprobación «hay otro número en el resto» (`#N` o un número suelto
-de 1–3 cifras) se hace sobre el resto **sin marcadores de volumen** (§3, paso 4). Si sin ellos no queda
-ningún número, el prefijo de 1–2 cifras es el número de la grapa y el resto es la serie.
+de 1–3 cifras) se hace sobre el resto **sin marcadores de volumen** (§3, paso 4). Si el resto **tenía**
+un marcador de volumen y sin él no queda ningún otro número, el prefijo de 1–2 cifras es el número de la
+grapa y el resto es la serie. El marcador es la evidencia: sin él (`12 Monkeys`), el prefijo se queda
+como hoy, sin decidir. *(Precisión añadida el 2026-11-26 al implementar; es lo que medía el prototipo.)*
 
 No cambian:
 - los prefijos con punto o paréntesis (`13. Nightwing`), que siguen siendo orden de lectura;
