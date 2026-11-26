@@ -77,7 +77,7 @@ Decisión del mantenedor en sesión: H0 se cierra para permitir el trabajo docum
 | T0.1 baseline e inventario | Completada como registro: baseline fijada, capacidades y documentos inventariados, contradicciones y IDs duplicados detectados sin renumerar | El inventario cuantitativo no mide capacidades verificadas; los ADR `0020`/`0021` duplicados siguen sin resolver |
 | T0.2 bootstrap de OpenSpec | Evaluada: instalación, `init`, `validate` estricto, `archive`, negativos, telemetría instrumentada, inventario de licencias y suministro con límites declarados | El lock exacto de #1293 no tiene aún instalación limpia acreditada; no hay dictamen de licencias ni de suministro; no se acreditó ausencia universal de tráfico ni reproducibilidad en otras plataformas |
 | T0.3 aprobación de propuesta | Registrada la aprobación del mantenedor en la conversación, ligada al SHA de la propuesta revisada | No es una revisión de GitHub ni una aprobación de fusión; no cubre commits posteriores |
-| T0.4 carga efectiva de instructions | **NOT RUN**: Claude y Codex no llegaron a cargar instrucciones y OpenCode no arrancó en este entorno | Bloquea la activación de gates obligatorios; no es un PASS ni una validación de aislamiento |
+| T0.4 carga efectiva de instrucciones | **NOT RUN**: Claude y Codex no llegaron a cargar instrucciones y OpenCode no arrancó en este entorno | Bloquea la activación de gates obligatorios; no es un PASS ni una validación de aislamiento |
 
 Consecuencias del cierre:
 
