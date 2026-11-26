@@ -3,7 +3,8 @@
 
 La revisión de la vinculación sigue siendo solo lectura: ahora dice QUÉ archivo ocupa el número, enlaza a ese
 número, explica las salidas (corregir el número, dejarlo en Pendientes, comparar) y, si no hay nada marcable,
-dice por qué los botones masivos están deshabilitados. Registrar «otra edición» queda fuera (#1250)."""
+dice por qué los botones masivos están deshabilitados. UXA-12b (#1250): otra edición es otra serie (B);
+una copia o calidad distinta es otro archivo del mismo número (C)."""
 from __future__ import annotations
 
 import asyncio
@@ -66,14 +67,15 @@ class TestOcupado:
         assert "Ya está en este número" in bloque and "Otro 02.cbz" in bloque
         assert f'href="/ui/series/{serie}/numero/{iid}"' in bloque and "Ver ese número" in bloque
 
-    async def test_el_numero_ocupado_explica_las_salidas_sin_prometer_otra_edicion(self, entorno):
+    async def test_el_numero_ocupado_dice_que_una_copia_no_es_otra_edicion(self, entorno):
         serie = await serie_de_prueba(entorno)
         await archivos(entorno, "Flash 02 (1987).cbz")
         await _numero_ocupado(entorno, serie)
         bloque = _bloque(await abrir(serie), "Flash 02 (1987).cbz")
         assert "corregir el número" in bloque and "dejarlo en Pendientes" in bloque
         assert "comparar los dos archivos" in bloque
-        assert "Registrarlo como otra edición todavía no se puede hacer desde aquí" in bloque
+        assert "otra copia o una calidad distinta" in bloque and "no es una edición nueva" in bloque
+        assert "Registrarlo como otra edición todavía no se puede hacer desde aquí" not in bloque
         assert 'name="numero:' in bloque                      # el campo para corregir el número sigue ahí
 
     async def test_con_varios_archivos_en_el_numero_dice_cuantos_mas(self, entorno):
@@ -92,6 +94,8 @@ class TestOcupado:
         assert p.fila("Flash Omnigold 03.cbz").estado == "colision_de_edicion"
         bloque = _bloque(p, "Flash Omnigold 03.cbz")
         assert "Otro 03.cbz" in bloque and f'/numero/{iid}"' in bloque
+        assert "su serie es otra" in bloque and "elige o crea la serie de esa edición" in bloque
+        assert "/ui/pendientes/carpetas/asistente?clave=" in bloque
 
 
 class TestLibreYMixto:
