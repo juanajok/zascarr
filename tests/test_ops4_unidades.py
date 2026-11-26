@@ -69,7 +69,7 @@ def test_readwritepaths_incluye_el_cerrojo_con_prefijo() -> None:
     # que el sandbox falle al arrancar la unidad.
     assert "-/run/zascarr-ops.lock" in rutas
     assert "/opt/zascarr" in rutas
-    assert "/var/lib/zascarr" in rutas
+    assert "@ZASCARR_DATA_DIR@" in rutas
     assert "/var/backups/zascarr" in rutas
 
 

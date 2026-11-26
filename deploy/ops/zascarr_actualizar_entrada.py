@@ -46,6 +46,11 @@ _CODIGO_BUSY = 75
 _CODIGO_INVALIDO = 2
 
 
+def _fallo(motivo: str) -> int:
+    print(f"entrada: {motivo}", file=sys.stderr)
+    return _CODIGO_INVALIDO
+
+
 def ruta_cerrojo() -> str:
     if os.environ.get("ZASCARR_PRUEBAS") == "1" and os.environ.get("OPS_LOCK_FILE"):
         return os.environ["OPS_LOCK_FILE"]
@@ -90,18 +95,18 @@ def main() -> int:
     try:
         if _tomar_cerrojo() is None:
             return _CODIGO_BUSY
-    except OSError:
-        return _CODIGO_INVALIDO
+    except OSError as exc:
+        return _fallo(f"cerrojo: {exc}")
     lectura, datos = leer_estado_estricto(ruta_estado)
     if lectura is not ResultadoLectura.OK or datos is None:
-        return _CODIGO_INVALIDO
+        return _fallo(f"estado: {lectura}")
     if (
         datos.get("schema") != 2
         or datos.get("estado") != "aceptada"
         or datos.get("fase") != "aceptada"
         or not isinstance(datos.get("id"), str)
     ):
-        return _CODIGO_INVALIDO
+        return _fallo("reserva: no vigente")
     ahora = int(time.time())
     inicio = datos.get("inicio_epoch")
     if (
@@ -109,10 +114,10 @@ def main() -> int:
         or inicio > ahora
         or ahora - inicio > RESERVA_VIGENCIA_S
     ):
-        return _CODIGO_INVALIDO
+        return _fallo("reserva: inicio fuera de plazo")
     head0 = _head0(repo)
     if head0 is None:
-        return _CODIGO_INVALIDO
+        return _fallo("head0: git")
     resultado = publicar_transicion(
         ruta_estado,
         "en_curso",
@@ -124,7 +129,7 @@ def main() -> int:
         propietario=propietario_servicio(ruta_estado),
     )
     if resultado is not ResultadoEscritura.OK:
-        return _CODIGO_INVALIDO
+        return _fallo(f"transicion: {resultado}")
     os.execv(
         "/bin/bash",
         ["bash", os.path.join(repo, "scripts", "update.sh"), "--rama", "main"],

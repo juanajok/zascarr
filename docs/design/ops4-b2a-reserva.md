@@ -1,7 +1,8 @@
 # OPS4 — B2a: primitivas de reserva y admisión (#443)
 
-**Estado:** especificación de la primera mitad de B2; no cambia el
-comportamiento del auxiliar ni habilita la función.
+**Estado:** primera mitad de B2, fusionada en `220d8b40`; el cableado
+del auxiliar y de la unidad está en
+[`ops4-b2b-reserva.md`](ops4-b2b-reserva.md). No habilita la función.
 **Base:** `f9409155ea34dcadca11b449fb9c49843b1d0a40`.
 
 B2 completo (`docs/design/especificacion-ops4-cierre.md`, §B2) exige el
