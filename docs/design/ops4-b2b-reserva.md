@@ -1,7 +1,7 @@
 # OPS4 — B2b: reserva atómica cableada (#443)
 
-**Estado:** implementado y validado en VM con un `update.sh` inofensivo; la
-función sigue **deshabilitada** y no se ha desplegado.
+**Estado:** implementado y validado en VM sobre `8412f2af` con un `update.sh`
+inofensivo; la función sigue **deshabilitada** y no se ha desplegado.
 **Base:** `220d8b40` (B2a fusionado).
 
 B2a añadió las primitivas; B2b las conecta al auxiliar y a la unidad. El

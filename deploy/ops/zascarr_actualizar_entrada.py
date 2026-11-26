@@ -10,7 +10,8 @@ dispositivo:inodo y no cree otro.
 
 No recibe rama, rutas ni comandos del solicitante: la acción es fija. No
 ejecuta nada si la reserva no es válida. No es el auxiliar ni el cerrojo de
-admisión; no se instala ni se habilita en producción desde este cambio.
+admisión; el instalador la copia sin activarla y no se habilita en producción.
+
 """
 from __future__ import annotations
 

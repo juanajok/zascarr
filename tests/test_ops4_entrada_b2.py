@@ -116,7 +116,7 @@ def test_cerrojo_ocupado_sale_75_sin_efectos(tmp_path) -> None:
         poseedor.wait()
 
 
-def test_reserva_caducada_sale_2_sin_efectos(tmp_path) -> None:
+def test_reserva_caducada_sale_76_sin_efectos(tmp_path) -> None:
     repo = _repo(tmp_path)
     estado, entorno = _entorno(tmp_path, repo, inicio=int(time.time()) - 301)
     antes = estado.read_bytes()
@@ -163,7 +163,7 @@ def test_segundo_update_sh_sale_75(tmp_path) -> None:
         primero.wait(timeout=10)
 
 
-def test_sin_estado_sale_2(tmp_path) -> None:
+def test_sin_estado_sale_76(tmp_path) -> None:
     repo = _repo(tmp_path)
     ops = tmp_path / "ops"
     ops.mkdir()

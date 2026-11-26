@@ -236,7 +236,7 @@ def _procesar_b2(
     except Exception:  # noqa: BLE001
         return rechazo("no_disponible")
     if admision is None:
-        return rechazo("operacion_en_curso")
+        return rechazo("operacion_en_curso", id_)
     try:
         try:
             if cerrojo_ocupado():

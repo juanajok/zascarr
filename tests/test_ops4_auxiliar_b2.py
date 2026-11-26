@@ -117,6 +117,7 @@ def test_admision_ocupada_no_toca_nada() -> None:
     dobles = Dobles(admision=False)
     respuesta = ejecutar(dobles)
     assert respuesta.codigo == "operacion_en_curso"
+    assert respuesta.id == ID
     assert dobles.llamadas == [("admitir", "")]
 
 

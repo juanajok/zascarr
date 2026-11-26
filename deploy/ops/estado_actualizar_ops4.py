@@ -71,7 +71,7 @@ _FASES_INTERMEDIAS = tuple(fase for fase in FASES if fase not in (FASES[0], FASE
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _EXITO_LIMPIO = ("success", "exited", "0")
 _PRE_EFECTO_CONTRATO = ("exit-code", "exited", "75")
-#: La entrada B2 sale 2 si la reserva no es válida, antes de cualquier efecto.
+#: La entrada B2 sale 76 si la reserva no es válida, antes de cualquier efecto.
 _PRE_EFECTO_RESERVA = ("exit-code", "exited", "76")
 
 
