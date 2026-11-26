@@ -1,6 +1,6 @@
 # Diseño técnico de SDD-001
 
-Estado: propuesta. La estructura de este cambio es un borrador compatible con el modelo de deltas; OpenSpec aún no se ha inicializado en el repositorio. H0 prueba licencia, telemetría y versión candidata antes de fijar pin. La carga efectiva de los harnesses puede quedar como deuda explícita para iniciar H1, por autorización del mantenedor; no puede considerarse validada ni omitirse antes de activar gates obligatorios.
+Estado: propuesta. La estructura de este cambio es un borrador compatible con el modelo de deltas; OpenSpec aún no se ha inicializado en el repositorio. H0 prueba licencia, telemetría y versión candidata antes de fijar pin. La carga efectiva de los harnesses puede quedar como deuda explícita para iniciar H1, por autorización del mantenedor; no puede considerarse validada ni omitirse antes de activar gates obligatorios. Estado a 2026-11-26: H0 se cerró con la excepción de `T0.4` y el pin en estado candidato (#1293); el cierre no autoriza fusiones, despliegues ni gates obligatorios y está registrado en `h0-evidencia.md`.
 
 ## Contexto y arquitectura objetivo
 
