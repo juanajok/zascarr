@@ -5,6 +5,12 @@
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familia F5 («el parser mete
 > créditos y subtítulos en la serie»), medida aquí por primera vez.
 > **Código de referencia:** `main` en `74429ec6`.
+> **Revisión (2026-11-27):** R1 redactada de nuevo tras la revisión: la regla se ancla al número de tomo
+> o recopilación, no al primer guion; se añade la regresión C8 y la aceptación compara archivo por
+> archivo.
+> **Qué no es:** esto corrige el parser de tomos y recopilaciones. **No** arregla los vínculos erróneos
+> de la biblioteca (Green Lantern Corps, Animal Man, Superman, Batman Vol. 2…): es otro fallo, con su
+> propia especificación («Vínculos dudosos»).
 
 ## 1. Problema
 
@@ -24,32 +30,34 @@ del tomo o los créditos.
 
 ## 2. Alcance
 
-- Dentro: la serie alternativa y la serie que sale de `parse_comic_filename` cuando el número aparece
-  en el nombre antes del primer ` - `.
+- Dentro: la serie alternativa y la serie que sale de `parse_comic_filename` cuando el número sale de
+  un marcador de tomo o recopilación y le sigue un ` - `.
 - Fuera: el matcher, el importer y la BD; las palabras de recopilación que el parser deja a propósito en
   el título (`Serie Integral`); el texto que sigue a `Vol NN` sin guion (D1); `INT1` y otras
   abreviaturas.
 
 ## 3. Reglas
 
-### R1. Con el número antes del guion, lo de detrás no forma parte de la serie
+### R1. El título o la autoría detrás de un tomo no entra en la serie
 
-Si el número que se queda el parser aparece en el nombre **antes** del primer separador ` - ` (con la
-misma definición de separador que hoy: espacio delante, espacio detrás opcional), el texto de detrás es
-el título del número o sus créditos:
+Si el parser ha sacado el número de un **marcador de tomo o recopilación** (`Tomo N`, `Vol N`/`Vol.N`,
+`Integral N`, `Omnigold N`) y **detrás de ese marcador** viene un separador ` - ` (la misma definición de
+hoy: espacio delante, espacio detrás opcional), lo que sigue a ese separador es el título del tomo o su
+autoría:
 
-- `series_alternativa` queda vacía;
-- `series` es la parte de delante del guion, como ya es hoy antes de que la carpeta la cambie;
-- `subtitulo` no cambia: sigue guardando ese texto.
+- se conserva el título de serie que el parser ya extrajo de lo que hay **delante** del marcador, con
+  sus propios guiones si los tiene (`Serie - Subserie TOMO 08 - Título` → `Serie Subserie`);
+- no se genera ninguna alternativa que incorpore ese texto: la alternativa, si queda, se forma solo con
+  lo de delante de ese separador;
+- `subtitulo` no cambia.
 
-Un número que solo es un prefijo de orden al principio del nombre (`00 - Evento - Prólogo #0`) **no**
-cuenta como «antes del guion»: ahí el primer guion separa ese prefijo y el comportamiento de hoy se
-mantiene.
+La clave es **suprimir la alternativa incorrecta**, no recortar el título por el primer guion.
 
 ### R2. Lo demás no cambia
 
-Con el número detrás del guion (`Serie - Línea 01`) o sin guion, la serie, la alternativa y la carpeta
-funcionan como hoy.
+Un número que no sale de un marcador de tomo o recopilación (`Serie - Línea 01`, un prefijo de orden
+como `00 - Evento - Prólogo #0`) no activa R1: la serie, la alternativa y la carpeta funcionan como hoy.
+Lo mismo si no hay separador detrás del marcador.
 
 ## 4. Decisión para el PO
 
@@ -65,6 +73,9 @@ funcionan como hoy.
   `Injustice: Gods Among Us`.
 - **Reconocer los créditos por `&` o `VVAA`:** cubre 15 de los 19 casos y ninguno más. R1 cubre los 19
   con una sola regla de posición y sin una lista de palabras.
+- **Cortar por el primer guion** (primera redacción de R1): da los mismos 19 en esta foto, pero no ve
+  `Serie - Subserie TOMO 08 - Título` (el número va detrás del primer guion) y, sin ancla en el
+  marcador, podía crecer a «cualquier número antes del primer guion».
 - **Quitar `Integral` del título:** el parser la deja a propósito (comentario de
   `EDITION_NUMBER_PATTERN`); cambiarlo es otra historia y ninguna serie del catálogo la necesita hoy.
 
@@ -75,27 +86,29 @@ contexto y la cohorte calculada por carpeta: da la **misma serie que el embudo e
 
 Adopciones de una alternativa con subtítulo (la serie final es «serie + subtítulo»):
 
-| | Número antes del guion (**R1**) | Número detrás o prefijo de orden |
+| | Número de tomo o recopilación con ` - ` detrás (**R1**) | Resto |
 |---|---:|---:|
 | Vinculados, la serie adoptada coincide con el vínculo | **0** | 307 |
 | Vinculados, no coincide | **7** | 57 |
 | Sin vínculo | **12** | 74 |
 
 Es decir, R1 cambia **19** archivos y en ninguno de los 307 aciertos de hoy se aplica. Comprobado
-aparte: de los 322 archivos con el número antes del guion, solo esos 19 tienen alternativa; en los
-otros 303 vaciarla no cambia nada (ya no la tienen).
+volviendo a parsear cada nombre sin lo que sigue al separador de detrás del marcador: cambian la serie
+o la alternativa de esos 19 y de ningún otro de los 5.096. La lista de los 19 (por identificador, fuera
+del repo) es la referencia de la aceptación.
 
 - Los **7** vinculados son una misma serie en tomos (`Serie..Tomo.N.-.Autora.&.Autor`). Con R1 la serie
-  es la del vínculo; el matcher hoy se abstiene (candidato por debajo del umbral).
-- De los **12** sin vínculo, 2 son tomos cuya serie está en el catálogo (la carpeta de BL-PARSE3 ya los
-  sugiere). Los otros 10 son series que no están en el catálogo (F6): R1 les deja un título limpio para
-  cuando se creen, pero no los enlaza.
+  del parser es la del vínculo. **Mejoran la coincidencia del diagnóstico; no son 7 reparaciones**: el
+  vínculo ya estaba bien.
+- De los **12** sin vínculo, **2** son tomos cuya serie tiene ficha en el catálogo: candidatos a enlace
+  (la carpeta de BL-PARSE3 ya los sugiere). Los otros **10** no tienen ficha (F6): **deben quedar sin
+  enlazar**; R1 solo les deja un título limpio para cuando se cree la serie.
 - Los 57 vinculados que no coinciden, con el número detrás, son sobre todo tie-ins de eventos asignados
   a la serie del evento (orden de lectura, §2.1 del embudo). No son de F5 y R1 no los toca.
 
-**Ganancia esperada:** hasta **+7** coincidencias con el vínculo y hasta 2 enlaces nuevos entre los
-pendientes. Si se enlazan depende de que el número esté en el catálogo y de los empates de F1: se
-cuenta en la Pi.
+**Efecto esperado:** hasta **+7** coincidencias del diagnóstico con el vínculo y hasta **2** candidatos
+a enlace entre los pendientes. Que esos 2 se enlacen depende de que el número esté en el catálogo y de
+los empates de F1: se cuenta en la Pi.
 
 ## 7. Criterios de aceptación y pruebas
 
@@ -104,25 +117,32 @@ biblioteca).
 
 | CA | Criterio | Prueba |
 |---|---|---|
-| C1 | `Serie..Tomo.2.-.Autora.&.Autor.[grupo].cbr` en la carpeta `Serie (2015)` → serie `Serie`, número `2`, sin alternativa, subtítulo `Autora & Autor` | `tests/test_naming_core.py::test_numero_antes_del_guion_no_pega_el_subtitulo` (parametrizada, C1–C4) |
+| C1 | `Serie..Tomo.2.-.Autora.&.Autor.[grupo].cbr` en la carpeta `Serie (2015)` → serie `Serie`, número `2`, sin alternativa, subtítulo `Autora & Autor` | `tests/test_naming_core.py::test_titulo_tras_el_tomo_no_entra_en_la_serie` (parametrizada, C1–C4) |
 | C2 | `Serie TOMO 08 - Título del tomo (x) [Digital].cbr` en `Serie (2004)` → `Serie`, `8` | ídem |
 | C3 | `Serie Vol.1 - Autora Nombre [x].cbr` en `Serie` → `Serie`, `1` | ídem |
 | C4 | `Serie. Integral 01 - Autor & Autor [x].cbr` en `Serie` → `Serie Integral`, `1` (la palabra se queda, como hoy) | ídem |
-| C5 | `Forever Evil - Rogues Rebellion 01.cbr` en `Forever Evil Vol. 1` → `Forever Evil Rogues Rebellion` (sin cambio) | `…::test_numero_detras_del_guion_conserva_la_linea` (parametrizada, C5–C6) |
+| C5 | `Forever Evil - Rogues Rebellion 01.cbr` en `Forever Evil Vol. 1` → `Forever Evil Rogues Rebellion` (sin cambio) | `…::test_numero_sin_marcador_de_tomo_conserva_la_linea` (parametrizada, C5–C6) |
 | C6 | `Batman - Odyssey 03.cbr` en `Batman - Odyssey` → `Batman Odyssey` (sin cambio) | ídem |
-| C7 | `00 - Evento - Prólogo #0.cbz` en `Evento` → como hoy (el prefijo de orden no cuenta) | `…::test_prefijo_de_orden_no_cuenta_como_numero_antes_del_guion` |
+| C7 | `00 - Evento - Prólogo #0.cbz` en `Evento` → como hoy (el prefijo de orden no activa R1) | `…::test_prefijo_de_orden_no_activa_la_regla` |
+| C8 | `Serie - Subserie TOMO 08 - Título del tomo.cbr` en `Serie` → serie `Serie Subserie`, número `8`, sin alternativa con `Título del tomo` (hoy da `Serie Subserie Título del tomo`): el primer guion sí es del nombre de la serie | `…::test_guion_de_la_serie_delante_del_tomo_se_conserva` |
 
 **Aceptación en datos reales** (tras desplegar, con tu autorización para la tanda en la Pi): volver a
-ejecutar el embudo de solo lectura y compararlo con la foto tras BL-PARSE2:
+ejecutar el embudo **en solo lectura, sin reasignar nada**, y compararlo **archivo por archivo** con la
+misma foto tras BL-PARSE2:
 
-- la serie del parser cambia en **19** archivos, los de §6, y en ninguno más;
-- **0** coincidencias perdidas con el vínculo y **0** enlaces a otra serie;
-- las ganancias se cuentan y se anotan (esperadas: hasta +7 y hasta 2 enlaces nuevos).
+- la serie o la alternativa del parser cambia en **los mismos 19 archivos** de §6 (por identificador, no
+  solo el mismo total) y en ninguno más;
+- **ningún cambio de destino** (serie o número que decide el matcher) en los 307 aciertos ni en ningún
+  otro archivo fuera de los 19;
+- **ninguna propuesta a una serie incorrecta**: entre los 19, ningún candidato ni enlace a una serie
+  distinta de la del vínculo (los 7) o de la ficha existente (los 2); los 10 sin ficha, sin enlazar;
+- se anotan, por separado, las coincidencias del diagnóstico (esperadas: hasta +7) y los candidatos a
+  enlace (esperados: hasta 2).
 
 ## 8. Orden de los commits (SDD + TDD)
 
 1. `spec:` este documento, aprobado.
-2. `test:` C1–C7 en rojo (C1–C4) y en verde (C5–C7, que fijan lo que no cambia), con el motivo del rojo
+2. `test:` C1–C8: en rojo C1–C4 y C8; en verde C5–C7, que fijan lo que no cambia. El motivo del rojo,
    en la PR.
 3. Implementación mínima de R1 en `utils/naming.py` hasta el verde de la suite completa (`--basetemp`
    en el disco raíz).
