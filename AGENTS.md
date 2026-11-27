@@ -16,7 +16,7 @@ Este fichero es un **índice de navegación**, no una norma nueva. La autoridad 
 ## Estado real de la migración
 
 - Autoridad actual: `CLAUDE.md`. Los documentos de `governance/` son destinos propuestos y figuran como «sin migrar».
-- Carga efectiva de instrucciones en Claude Code, Codex y OpenCode: **NOT RUN** (T0.4). No se afirma que esas herramientas lean este fichero, ni que compartan restricciones de herramientas o de contexto.
+- Carga efectiva de instrucciones (T0.4): **evidencia parcial**. Claude Code 2.1.332 lee `CLAUDE.md` y **no** este fichero; Codex CLI y OpenCode no pudieron ejecutarse (errores de entorno). Conclusión operativa: este índice sirve para navegar, **no** es un canal garantizado de instrucciones. Ver [evidencia T0.4](docs/design/t04-evidencia.md).
 - Gates obligatorios: no activados. El pin de OpenSpec sigue candidato.
 
 ## Cómo se trabaja una historia con código
