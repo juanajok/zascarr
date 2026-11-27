@@ -49,7 +49,10 @@ autoría:
   sus propios guiones si los tiene (`Serie - Subserie TOMO 08 - Título` → `Serie Subserie`);
 - no se genera ninguna alternativa que incorpore ese texto: la alternativa, si queda, se forma solo con
   lo de delante de ese separador;
-- `subtitulo` no cambia.
+- `subtitulo` no cambia;
+- **no cambia ninguna señal de identidad**: número, volumen (`Vol. 2` sigue siendo el volumen 2 que el
+  matcher usa para separar `Vol. 1` de `Vol. 2`), formato de edición, año ni las marcas de anual,
+  especial o pack. Suprimir un subtítulo no borra evidencia de identidad.
 
 La clave es **suprimir la alternativa incorrecta**, no recortar el título por el primer guion.
 
@@ -94,8 +97,11 @@ Adopciones de una alternativa con subtítulo (la serie final es «serie + subtí
 
 Es decir, R1 cambia **19** archivos y en ninguno de los 307 aciertos de hoy se aplica. Comprobado
 volviendo a parsear cada nombre sin lo que sigue al separador de detrás del marcador: cambian la serie
-o la alternativa de esos 19 y de ningún otro de los 5.096. La lista de los 19 (por identificador, fuera
-del repo) es la referencia de la aceptación.
+o la alternativa de esos 19 y de ningún otro de los 5.096, y en **ninguno** cambian el número, el
+volumen, el formato ni las marcas de anual, especial o pack. La foto y la lista de los 19 identificadores
+son la referencia de la aceptación: se guardan **fuera del repo**, en una carpeta privada y persistente
+del operador (no en un directorio temporal), junto con los scripts de medición, para poder repetir la
+comparación archivo por archivo.
 
 - Los **7** vinculados son una misma serie en tomos (`Serie..Tomo.N.-.Autora.&.Autor`). Con R1 la serie
   del parser es la del vínculo. **Mejoran la coincidencia del diagnóstico; no son 7 reparaciones**: el
@@ -119,19 +125,21 @@ biblioteca).
 |---|---|---|
 | C1 | `Serie..Tomo.2.-.Autora.&.Autor.[grupo].cbr` en la carpeta `Serie (2015)` → serie `Serie`, número `2`, sin alternativa, subtítulo `Autora & Autor` | `tests/test_naming_core.py::test_titulo_tras_el_tomo_no_entra_en_la_serie` (parametrizada, C1–C4) |
 | C2 | `Serie TOMO 08 - Título del tomo (x) [Digital].cbr` en `Serie (2004)` → `Serie`, `8` | ídem |
-| C3 | `Serie Vol.1 - Autora Nombre [x].cbr` en `Serie` → `Serie`, `1` | ídem |
+| C3 | `Serie Vol.1 - Autora Nombre [x].cbr` en `Serie` → `Serie`, `1`, **volumen `1`** (se conserva) | ídem |
 | C4 | `Serie. Integral 01 - Autor & Autor [x].cbr` en `Serie` → `Serie Integral`, `1` (la palabra se queda, como hoy) | ídem |
 | C5 | `Forever Evil - Rogues Rebellion 01.cbr` en `Forever Evil Vol. 1` → `Forever Evil Rogues Rebellion` (sin cambio) | `…::test_numero_sin_marcador_de_tomo_conserva_la_linea` (parametrizada, C5–C6) |
 | C6 | `Batman - Odyssey 03.cbr` en `Batman - Odyssey` → `Batman Odyssey` (sin cambio) | ídem |
 | C7 | `00 - Evento - Prólogo #0.cbz` en `Evento` → como hoy (el prefijo de orden no activa R1) | `…::test_prefijo_de_orden_no_activa_la_regla` |
 | C8 | `Serie - Subserie TOMO 08 - Título del tomo.cbr` en `Serie` → serie `Serie Subserie`, número `8`, sin alternativa con `Título del tomo` (hoy da `Serie Subserie Título del tomo`): el primer guion sí es del nombre de la serie | `…::test_guion_de_la_serie_delante_del_tomo_se_conserva` |
+| C9 | `Batman Vol. 2 #01 - Título del número.cbr`, en `Batman Vol. 2` y en `Batman` → serie `Batman`, número `1`, **volumen `2`**, como hoy: el número no sale del marcador, R1 no se activa y la señal `Vol. 2` se conserva | `…::test_volumen_de_la_serie_se_conserva` |
 
 **Aceptación en datos reales** (tras desplegar, con tu autorización para la tanda en la Pi): volver a
 ejecutar el embudo **en solo lectura, sin reasignar nada**, y compararlo **archivo por archivo** con la
-misma foto tras BL-PARSE2:
+misma foto tras BL-PARSE2 (la guardada fuera del repo):
 
 - la serie o la alternativa del parser cambia en **los mismos 19 archivos** de §6 (por identificador, no
   solo el mismo total) y en ninguno más;
+- en ningún archivo cambian el número, el volumen, el formato ni las marcas que da el parser;
 - **ningún cambio de destino** (serie o número que decide el matcher) en los 307 aciertos ni en ningún
   otro archivo fuera de los 19;
 - **ninguna propuesta a una serie incorrecta**: entre los 19, ningún candidato ni enlace a una serie
@@ -142,7 +150,7 @@ misma foto tras BL-PARSE2:
 ## 8. Orden de los commits (SDD + TDD)
 
 1. `spec:` este documento, aprobado.
-2. `test:` C1–C8: en rojo C1–C4 y C8; en verde C5–C7, que fijan lo que no cambia. El motivo del rojo,
+2. `test:` C1–C9: en rojo C1–C4 y C8; en verde C5–C7 y C9, que fijan lo que no cambia. El motivo del rojo,
    en la PR.
 3. Implementación mínima de R1 en `utils/naming.py` hasta el verde de la suite completa (`--basetemp`
    en el disco raíz).
