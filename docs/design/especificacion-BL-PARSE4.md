@@ -131,7 +131,7 @@ biblioteca).
 | C6 | `Batman - Odyssey 03.cbr` en `Batman - Odyssey` → `Batman Odyssey` (sin cambio) | ídem |
 | C7 | `00 - Evento - Prólogo #0.cbz` en `Evento` → como hoy (el prefijo de orden no activa R1) | `…::test_prefijo_de_orden_no_activa_la_regla` |
 | C8 | `Serie - Subserie TOMO 08 - Título del tomo.cbr` en `Serie` → serie `Serie Subserie`, número `8`, sin alternativa con `Título del tomo` (hoy da `Serie Subserie Título del tomo`): el primer guion sí es del nombre de la serie | `…::test_guion_de_la_serie_delante_del_tomo_se_conserva` |
-| C9 | `Batman Vol. 2 #01 - Título del número.cbr`, en `Batman Vol. 2` y en `Batman` → serie `Batman`, número `1`, **volumen `2`**, como hoy: el número no sale del marcador, R1 no se activa y la señal `Vol. 2` se conserva | `…::test_volumen_de_la_serie_se_conserva` |
+| C9 | `Batman Vol. 2 #01 - Título del número.cbr`, en `Batman Vol. 2` y en `Batman` → serie `Batman`, número `1`, **volumen `2`**, como hoy: el número no sale del marcador, R1 no se activa y la señal `Vol. 2` se conserva. Igual con el volumen detrás del número: `Serie 01 Vol3 [x].cbr` en `Serie` → `Serie`, `1`, volumen `3` | `…::test_volumen_de_la_serie_se_conserva` |
 
 **Aceptación en datos reales** (tras desplegar, con tu autorización para la tanda en la Pi): volver a
 ejecutar el embudo **en solo lectura, sin reasignar nada**, y compararlo **archivo por archivo** con la
