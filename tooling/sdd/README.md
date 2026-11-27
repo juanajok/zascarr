@@ -44,3 +44,22 @@ Resultado observado:
 - Licencias declaradas: 54 MIT, 7 ISC, 4 BlueOak-1.0.0, 1 BSD-3-Clause.
 
 Límites: la auditoría consulta la base pública de npm en el momento de la prueba y no autentica al proveedor ni inspecciona el contenido de los tarballs; no se ha revisado el aviso de terceros empaquetado dentro de `skills`. Una instalación limpia no demuestra reproducibilidad en otras plataformas ni ausencia de tráfico adicional.
+
+## Estado del pin: adoptado como dependencia de desarrollo (2026-11-27)
+
+Decisión del mantenedor: OpenSpec `2.2.0` **se adopta** como dependencia de desarrollo del proyecto, con las condiciones siguientes. No es una dependencia de runtime y no entra en la imagen.
+
+Condiciones que forman parte de la decisión:
+
+1. Versión exacta y lock con integridad; se instala con `npm ci --ignore-scripts` y se ejecuta el binario local, sin `npx`.
+2. `tooling/sdd/node_modules/` no se versiona (regla en `.gitignore`).
+3. Auditoría separada de la instalación: `--no-audit` es una comodidad, no una revisión. Se ejecuta `npm audit` al actualizar el pin y al menos cada trimestre, registrando el resultado.
+4. Cualquier actualización de versión requiere repetir la verificación completa: instalación limpia, hash del lock, integridad, scripts de instalación y auditoría.
+5. Si la auditoría devuelve una vulnerabilidad alta o crítica, el pin no se usa hasta revisarla y decidir la actualización.
+
+Límites conocidos y aceptados en esta decisión:
+
+- La auditoría consulta la base pública de npm en el momento de ejecutarse; no autentica al proveedor ni inspecciona el contenido de los tarballs.
+- El aviso de terceros empaquetado dentro de `skills` (Apache-2.0, ISC y MIT de terceros) **no** se ha revisado en detalle; no se presenta el inventario de licencias como resuelto.
+- La instalación limpia se acreditó en Linux x86_64 con Node 24.22.3 y npm 11.19.1; no hay evidencia de reproducibilidad en otras plataformas.
+- Adoptar el pin no activa gates, no habilita CI bloqueante y no modifica el runtime.
