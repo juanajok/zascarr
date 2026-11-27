@@ -2011,3 +2011,66 @@ class TestDesempatePorNumero:
                                  extractor=lambda _n: ("Batman", "12", None))
         assert r.series_id == v1.series_id
         matcher.series_con_numero.assert_not_awaited()
+
+
+class TestTituloTrasElTomo:
+    """BL-PARSE4 (F5): el título o la autoría tras un tomo no se pega a la serie.
+
+    Ver `docs/design/especificacion-BL-PARSE4.md`. Con el número sacado de un marcador de tomo o
+    recopilación y un ` - ` detrás de ese marcador, lo que sigue no entra en la serie ni en la
+    alternativa, y no cambia ninguna señal de identidad."""
+
+    @staticmethod
+    def _parse(nombre: str, carpeta: str):
+        return parse_comic_filename(nombre, carpeta=carpeta, contexto=f"Comics / {carpeta}")
+
+    @pytest.mark.parametrize("nombre, carpeta, serie, numero, volumen, subtitulo", [
+        # C1: separador de puntos y autoría con «&».
+        ("Serie..Tomo.2.-.Autora.&.Autor.[grupo].cbr", "Serie (2015)", "Serie", "2", 2,
+         "Autora & Autor"),
+        # C2: título del tomo detrás de TOMO NN.
+        ("Serie TOMO 08 - Título del tomo (x) [Digital].cbr", "Serie (2004)", "Serie", "8", 8,
+         "Título del tomo"),
+        # C3: Vol.N como número; el volumen se conserva.
+        ("Serie Vol.1 - Autora Nombre [x].cbr", "Serie", "Serie", "1", 1, "Autora Nombre"),
+        # C4: «Integral» se queda en el título, como hoy.
+        ("Serie. Integral 01 - Autor & Autor [x].cbr", "Serie", "Serie Integral", "1", None,
+         "Autor & Autor"),
+    ])
+    def test_titulo_tras_el_tomo_no_entra_en_la_serie(
+            self, nombre, carpeta, serie, numero, volumen, subtitulo):
+        r = self._parse(nombre, carpeta)
+        assert r.series == serie
+        assert r.issue_number == numero
+        assert r.volume == volumen
+        assert subtitulo not in (r.series_alternativa or "")
+        assert r.subtitulo == subtitulo
+
+    @pytest.mark.parametrize("nombre, carpeta, serie", [
+        # C5: el número va detrás del guion y sin marcador: la línea es parte de la serie.
+        ("Forever Evil - Rogues Rebellion 01.cbr", "Forever Evil Vol. 1",
+         "Forever Evil Rogues Rebellion"),
+        # C6
+        ("Batman - Odyssey 03.cbr", "Batman - Odyssey", "Batman Odyssey"),
+    ])
+    def test_numero_sin_marcador_de_tomo_conserva_la_linea(self, nombre, carpeta, serie):
+        assert self._parse(nombre, carpeta).series == serie
+
+    def test_prefijo_de_orden_no_activa_la_regla(self):
+        """C7: un prefijo de orden al principio no es un marcador de tomo: todo como hoy."""
+        r = self._parse("00 - Evento - Prólogo #0.cbz", "Evento")
+        assert (r.series, r.issue_number, r.series_alternativa) == (
+            "Evento Prólogo", "0", "Evento Prólogo")
+
+    def test_guion_de_la_serie_delante_del_tomo_se_conserva(self):
+        """C8: el primer guion es del nombre de la serie; el que sigue al tomo, no."""
+        r = self._parse("Serie - Subserie TOMO 08 - Título del tomo.cbr", "Serie")
+        assert r.series == "Serie Subserie"
+        assert r.issue_number == "8"
+        assert "Título del tomo" not in (r.series_alternativa or "")
+
+    @pytest.mark.parametrize("carpeta", ["Batman Vol. 2", "Batman"])
+    def test_volumen_de_la_serie_se_conserva(self, carpeta):
+        """C9: el número no sale del marcador: R1 no se activa y `Vol. 2` sigue ahí."""
+        r = self._parse("Batman Vol. 2 #01 - Título del número.cbr", carpeta)
+        assert (r.series, r.issue_number, r.volume) == ("Batman", "1", 2)
