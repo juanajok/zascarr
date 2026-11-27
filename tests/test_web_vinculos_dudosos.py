@@ -78,6 +78,7 @@ def cliente() -> httpx.AsyncClient:
 
 def _texto(html: str) -> str:
     sin = re.sub(r"<(script|style)\b.*?</\1>", " ", html, flags=re.S)
+    sin = re.sub(r"</?(?:a|strong|em|span)\b[^>]*>", "", sin)      # en línea: no separan palabras
     sin = re.sub(r"<[^>]+>", " ", sin)
     return re.sub(r"\s+", " ", sin)
 

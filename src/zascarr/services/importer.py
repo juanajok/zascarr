@@ -66,7 +66,7 @@ from zascarr.services.raices import (
 from zascarr.services.upgrades import reconciliar_mejora_importada
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
 from zascarr.utils.fs import listar_comics, safe_move_en_raiz_async, sanitize_segment
-from zascarr.utils.naming import parse_comic_filename
+from zascarr.utils.naming import ParsedComicName, parse_comic_filename
 from zascarr.utils.nombres_biblioteca import construir_nombre, es_pack
 
 logger = structlog.get_logger()
@@ -407,6 +407,60 @@ async def _triage_sin_bloquear(path: Path) -> TriageResult:
     return await asyncio.to_thread(triage, path)
 
 
+def parsear_nombre(
+    path: Path, pista: PistaDeCohorte | None = None,
+) -> tuple[ParsedComicName, bool]:
+    """El nombre del archivo como lo lee el importer (sin pista de cohorte, con carpeta y contexto).
+
+    Devuelve el nombre parseado y si la pista se aplicó de verdad. Lo comparten el triaje y la
+    revisión de vínculos dudosos (BL-VINC1), que tiene que leer el nombre exactamente igual.
+    """
+    # El nombre se limpia de la pista de cohorte y se parsea UNA vez, antes de
+    # decide(): de ahí salen tanto (serie, número, año) como el marcador de
+    # edición. B15 necesita ese marcador ANTES de decidir — el matcher no debe
+    # enlazar un Tomo/Omnigold a una grapa que ocupe el mismo número.
+    nombre = path.name
+    aplicada = False
+    if pista is not None:
+        nombre = quitar_prefijo_de_cohorte(path.name, pista, carpeta=path.parent.name)
+        aplicada = nombre != path.name
+    carpetas = [path.parent.parent.name, path.parent.name]
+    contexto = " / ".join(c for c in carpetas if c and c not in (".", ".."))
+    return parse_comic_filename(nombre, carpeta=path.parent.name, contexto=contexto), aplicada
+
+
+async def decidir_por_nombre(matcher: SeriesMatcher, tr, parsed: ParsedComicName) -> MatchResult:
+    """`SeriesMatcher.decide` con los argumentos que salen del nombre parseado (formato, anual,
+    serie alternativa, especial). Un solo sitio para el importer y para BL-VINC1."""
+    # B15: `None` significa "el nombre NO trae marcador de edición" — el matcher
+    # entonces no tiene evidencia del formato y solo enlazará si no hay nada que
+    # desambiguar (una única candidata). Un marcador explícito (Omnigold/Tomo…)
+    # sí es evidencia y permite elegir entre varias ediciones del mismo número.
+    formato_esperado = (
+        EDITION_KIND_A_FORMAT.get(parsed.edition_kind, IssueFormat.SINGLE_ISSUE).value
+        if parsed.edition_kind is not None
+        else None
+    )
+
+    def extractor(filename: str):
+        if parsed.series and parsed.issue_number:
+            return parsed.series, parsed.issue_number, parsed.year
+        return None
+
+    # Un anual solo puede enlazar con una serie anual: `parsed.series` conserva
+    # «Annual» y `annual=True` impide que el matcher acepte la serie madre.
+    kwargs = {}
+    if parsed.series_alternativa:
+        kwargs["series_alternativa"] = parsed.series_alternativa
+    if parsed.is_special:
+        # BL-PARSE1 R4: un especial busca su número «E{N}», nunca la grapa #N.
+        kwargs["especial"] = True
+    return await matcher.decide(
+        tr, extractor=extractor, formato_esperado=formato_esperado,
+        annual=parsed.is_annual, **kwargs,
+    )
+
+
 async def _triage_and_match(
     db: AsyncSession, path: Path, pista: PistaDeCohorte | None = None,
     excluir_fila: File | None = None,
@@ -451,49 +505,9 @@ async def _triage_and_match(
                 tr=tr, result=None, recuperar=coincidencias[0], n_recuperables=len(coincidencias))
 
     matcher = SeriesMatcher(db)
-
-    # El nombre se limpia de la pista de cohorte y se parsea UNA vez, antes de
-    # decide(): de ahí salen tanto (serie, número, año) como el marcador de
-    # edición. B15 necesita ese marcador ANTES de decidir — el matcher no debe
-    # enlazar un Tomo/Omnigold a una grapa que ocupe el mismo número. Antes se
-    # parseaba dentro del extractor y edition_kind solo se conocía al terminar
-    # decide(), demasiado tarde para influir en la decisión.
-    aplicada = False
-    nombre = tr.path.name
-    if pista is not None:
-        nombre = quitar_prefijo_de_cohorte(tr.path.name, pista, carpeta=tr.path.parent.name)
-        aplicada = nombre != tr.path.name
-    carpetas = [tr.path.parent.parent.name, tr.path.parent.name]
-    contexto = " / ".join(c for c in carpetas if c and c not in (".", ".."))
-    parsed = parse_comic_filename(nombre, carpeta=tr.path.parent.name, contexto=contexto)
+    parsed, aplicada = parsear_nombre(tr.path, pista)
     edition_kind = parsed.edition_kind
-    # B15: `None` significa "el nombre NO trae marcador de edición" — el matcher
-    # entonces no tiene evidencia del formato y solo enlazará si no hay nada que
-    # desambiguar (una única candidata). Un marcador explícito (Omnigold/Tomo…)
-    # sí es evidencia y permite elegir entre varias ediciones del mismo número.
-    formato_esperado = (
-        EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE).value
-        if edition_kind is not None
-        else None
-    )
-
-    def extractor(filename: str):
-        if parsed.series and parsed.issue_number:
-            return parsed.series, parsed.issue_number, parsed.year
-        return None
-
-    # Un anual solo puede enlazar con una serie anual: `parsed.series` conserva
-    # «Annual» y `annual=True` impide que el matcher acepte la serie madre.
-    kwargs = {}
-    if parsed.series_alternativa:
-        kwargs["series_alternativa"] = parsed.series_alternativa
-    if parsed.is_special:
-        # BL-PARSE1 R4: un especial busca su número «E{N}», nunca la grapa #N.
-        kwargs["especial"] = True
-    result = await matcher.decide(
-        tr, extractor=extractor, formato_esperado=formato_esperado,
-        annual=parsed.is_annual, **kwargs,
-    )
+    result = await decidir_por_nombre(matcher, tr, parsed)
     outcome = _Outcome(tr=tr, result=result, edition_kind=edition_kind)
     if aplicada:
         outcome.cohorte_explicacion = pista.explicacion

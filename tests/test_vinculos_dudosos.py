@@ -257,7 +257,7 @@ def test_orden_por_motivos_y_tamano_del_grupo():
     uno = archivo("/b/Zeta (2020)/Zeta 001.cbz", zeta, "1", p_serie="Zeta")
     mezcla = [archivo(f"/b/Peacemaker Vol. {v}/Peacemaker 001.cbz", peace, "1", p_serie="Peacemaker", issue="i-p") for v in (1, 2)]
     inf = evaluar([uno, *tres, doble, *mezcla], catalogo(flash, otra, zeta, peace))
-    orden = [(l.carpeta.rsplit("/", 1)[-1], len(l.archivos)) for l in inf.lotes]
+    orden = [(x.carpeta.rsplit("/", 1)[-1], len(x.archivos)) for x in inf.lotes]
     assert orden == [("Flash Vol. 2", 1), ("Flash Vol. 3", 3), ("Zeta (2020)", 1)]
     assert [s.serie_id for s in inf.series_mezcladas] == [peace.id]    # va aparte, detrás
 

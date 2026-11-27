@@ -523,9 +523,11 @@ async def lifespan(app: FastAPI):
         app.state.db_degraded = False
         from zascarr.services.comprobacion_disco import detener as detener_comprobacion
         from zascarr.services.rescan_biblioteca import detener as detener_rescan
+        from zascarr.services.vinculos_dudosos import detener as detener_vinculos
 
         await detener_comprobacion()
         await detener_rescan()
+        await detener_vinculos()
         # Seguridad: apaga el ejecutor propio de PBKDF2 (no deja hilos ni tareas
         # encoladas colgando al parar la app).
         from zascarr.services.auth import apagar_ejecutor_pbkdf2

@@ -1,0 +1,95 @@
+{#- BL-VINC1: vínculos dudosos. Solo informa: ninguna acción cambia vínculos (D5). La plantilla pinta lo que recibe. -#}
+{%- macro cifra(n, singular, plural) -%}<strong>{{ n }}</strong> {{ singular if n == 1 else plural }}{%- endmacro -%}
+<section id="vinculos-dudosos" aria-labelledby="vinculos-titulo"
+         {% if estado_busqueda.en_curso %}hx-get="/ui/auditoria/vinculos-dudosos" hx-trigger="every 5s"
+         hx-target="#vinculos-dudosos" hx-swap="outerHTML"{% endif %}>
+  <h2 id="vinculos-titulo" class="seccion">Vínculos dudosos</h2>
+  <p class="subtitle">Archivos que están en una serie, pero cuyo nombre o carpeta apuntan a otra.</p>
+
+  <form class="audit-lanzar" hx-post="/ui/auditoria/vinculos-dudosos"
+        hx-target="#vinculos-dudosos" hx-swap="outerHTML" hx-disable="find button">
+    <button type="submit" {% if estado_busqueda.en_curso %}disabled{% endif %}>
+      {{- "Buscando vínculos dudosos…" if estado_busqueda.en_curso else "Buscar vínculos dudosos" -}}
+    </button>
+  </form>
+
+  {% if estado_busqueda.en_curso %}
+  <p role="status">
+    {% if ya_en_curso %}Ya se están buscando los vínculos dudosos. No se ha lanzado otra búsqueda.
+    {% else %}Buscando vínculos dudosos. Esta sección se actualiza sola.{% endif %}
+  </p>
+  {% elif estado_busqueda.fase.value == "error" %}
+  <p role="alert"><strong>No se ha podido buscar.</strong> Vuelve a intentarlo. Si sigue fallando, revisa <a href="/estado">Estado</a>.</p>
+  {% endif %}
+
+  {% if informe is none %}
+  {% if not estado_busqueda.en_curso %}<p class="muted">Aún no se ha buscado.</p>{% endif %}
+  {% elif not informe.lotes and not informe.series_mezcladas %}
+  <p>No hay vínculos dudosos.</p>
+  <p class="muted">Última búsqueda: {{ cuando | fecha_con_antiguedad }}, {{ cuando | hora }}.</p>
+  {% else %}
+  <p>
+    {{ cifra(informe.archivos_en_lotes, "archivo", "archivos") }} en {{ cifra(informe.lotes | length, "grupo", "grupos") }}.
+    Primero, los que tienen más motivos.
+    {% if informe.series_mezcladas %}Además, {{ cifra(informe.series_mezcladas | length, "serie mezcla", "series mezclan") }} volúmenes.{% endif %}
+  </p>
+  <p class="muted">Última búsqueda: {{ cuando | fecha_con_antiguedad }}, {{ cuando | hora }}.</p>
+  {% call ui.aviso("info") %}Esto es solo un informe. Corregir estos archivos llegará más adelante, por grupos.{% endcall %}
+
+  {% for lote in informe.lotes %}
+  <article class="vinculo-grupo">
+    <h3 class="titulo-frase">
+      {{ lote.archivos | length }} {{ "archivo" if lote.archivos | length == 1 else "archivos" }} de «{{ lote.carpeta | ruta_visible }}»
+      {{ "está" if lote.archivos | length == 1 else "están" }} en «<a href="/ui/series/{{ lote.serie_id }}">{{ lote.serie_titulo }}</a>»
+    </h3>
+    <p>
+      {% if lote.destino_id and lote.destino_sin_numeros %}Podría ser «<a href="/ui/series/{{ lote.destino_id }}">{{ lote.destino_titulo }}</a>», que aún no tiene números en tu biblioteca.
+      {% elif lote.destino_id %}Podría ser «<a href="/ui/series/{{ lote.destino_id }}">{{ lote.destino_titulo }}</a>».
+      {% else %}Destino por verificar.{% endif %}
+    </p>
+    <ul class="audit-resumen">
+      {% for m in lote.archivos %}
+      <li>
+        {{ m.nombre }} <strong>#{{ m.numero }}</strong>
+        {% for motivo in m.motivos %}{{ ui.chip("amber", motivo.texto) }} {% endfor %}
+        {% if m.serie_mezcla %}{{ ui.chip("neutro", "Su serie mezcla volúmenes") }}{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </article>
+  {% endfor %}
+
+  {% if informe.series_mezcladas %}
+  <h3 class="titulo-frase">Series que mezclan volúmenes</h3>
+  <p>Tienen archivos de varios volúmenes. Puede sobrar uno de ellos, o ninguno.</p>
+  {% for s in informe.series_mezcladas %}
+  <article class="vinculo-grupo">
+    <h4 class="titulo-frase">«<a href="/ui/series/{{ s.serie_id }}">{{ s.titulo }}</a>»: archivos {{ s.texto_volumenes }}</h4>
+    <ul class="audit-resumen">
+      {% for vol, carpeta, n in s.desglose %}
+      <li>vol. {{ vol }} · {{ n }} {{ "archivo" if n == 1 else "archivos" }} · «{{ carpeta | ruta_visible }}»</li>
+      {% endfor %}
+    </ul>
+    <details>
+      <summary>Ver los {{ s.archivos | length }} archivos</summary>
+      <ul class="audit-resumen">
+        {% for e in s.archivos %}<li>{{ e.nombre }} <strong>#{{ e.numero }}</strong> · vol. {{ e.volumen }}</li>{% endfor %}
+      </ul>
+    </details>
+  </article>
+  {% endfor %}
+  {% endif %}
+
+  <details>
+    <summary>¿Por qué sale aquí?</summary>
+    <ul>
+      <li>El nombre del archivo encaja mejor con otra serie.</li>
+      <li>El año de la carpeta no cuadra con el de la serie.</li>
+      <li>El volumen del nombre o de la carpeta no es el de la serie.</li>
+      <li>Otro tebeo con otro título ocupa el mismo número.</li>
+      <li>La serie tiene archivos de varios volúmenes: eso dice que la serie mezcla volúmenes, no qué archivos están mal.</li>
+    </ul>
+    <p>Ninguna cambia nada: decides tú. Desvincular un archivo no lo pasa a la serie buena: lo devuelve a «Por revisar».</p>
+  </details>
+  {% endif %}
+</section>
