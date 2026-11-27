@@ -56,3 +56,21 @@ jobs:
           echo "Imagen de canarios: $image_id"
       - name: Canarios Docker aislados
         run: python -m unittest discover -s .agentic/tests -p 'test_runner.py' -v
+
+  producto-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: .agentic
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Construir la imagen de la suite pura
+        run: docker build -t agentic-product-tests:ci .agentic/evals/product
+      - name: Ejecutar la suite pura con scratch
+        run: python .agentic/evals/product/run.py
