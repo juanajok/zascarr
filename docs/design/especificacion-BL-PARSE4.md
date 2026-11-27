@@ -2,6 +2,8 @@
 
 > **Estado:** **aprobada por el PO el 2026-11-27**, con D1 fuera (el texto tras `Vol NN` sin guion no se toca).
 > **ID:** `BL-PARSE4`, tarjeta [#1339](https://github.com/juanajok/zascarr/issues/1339).
+> **Hecha:** fusionada en #1338 (`829ec79f`) y **aceptada en la Pi el 2026-11-27** (resultado al final
+> de §7). Al aceptar se corrigió la premisa de §6 sobre las fichas (eran 4 con ficha y 8 sin ella).
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familia F5 («el parser mete
 > créditos y subtítulos en la serie»), medida aquí por primera vez.
 > **Código de referencia:** `main` en `74429ec6`.
@@ -109,6 +111,9 @@ comparación archivo por archivo.
 - De los **12** sin vínculo, **2** son tomos cuya serie tiene ficha en el catálogo: candidatos a enlace
   (la carpeta de BL-PARSE3 ya los sugiere). Los otros **10** no tienen ficha (F6): **deben quedar sin
   enlazar**; R1 solo les deja un título limpio para cuando se cree la serie.
+  **Corrección al aceptar (2026-11-27):** «sin ficha» se dedujo de que ningún archivo estuviera
+  vinculado a esa serie, no del catálogo. En la Pi, 2 de esos 10 (un mismo título en dos tomos) **sí**
+  tienen ficha, sin esos números: son **4 con ficha y 8 sin ella**.
 - Los 57 vinculados que no coinciden, con el número detrás, son sobre todo tie-ins de eventos asignados
   a la serie del evento (orden de lectura, §2.1 del embudo). No son de F5 y R1 no los toca.
 
@@ -143,9 +148,32 @@ misma foto tras BL-PARSE2 (la guardada fuera del repo):
 - **ningún cambio de destino** (serie o número que decide el matcher) en los 307 aciertos ni en ningún
   otro archivo fuera de los 19;
 - **ninguna propuesta a una serie incorrecta**: entre los 19, ningún candidato ni enlace a una serie
-  distinta de la del vínculo (los 7) o de la ficha existente (los 2); los 10 sin ficha, sin enlazar;
+  distinta de la del vínculo (los 7) o de la ficha existente (los 2); los 10 sin ficha, sin enlazar
+  (corregido al aceptar: 4 con ficha y 8 sin ella, ver §6);
 - se anotan, por separado, las coincidencias del diagnóstico (esperadas: hasta +7) y los candidatos a
   enlace (esperados: hasta 2).
+
+**Resultado (2026-11-27, código `829ec79f` desplegado en la Pi).** Parser desplegado frente al de antes
+de #1338, los dos en la **misma** transacción `READ ONLY` terminada en `ROLLBACK`, sobre los 5.096
+archivos y el mismo catálogo:
+
+| Criterio | Resultado |
+|---|---|
+| Cambian los mismos 19 identificadores de §6 y ninguno más | **PASS**: 19 de 19, idénticos |
+| Ningún cambio de número, volumen, formato ni marcas | **PASS**: 0 |
+| Ningún cambio de destino fuera de los 19 | **PASS**: fuera de ellos el parser da lo mismo y el matcher recibe lo mismo |
+| Ninguna propuesta a una serie incorrecta | **PASS**: los candidatos son la serie del vínculo (7), la ficha existente (2) o la ficha del mismo título (2) |
+| Los 10 sin ficha, sin enlazar | **Corregido**: 8 sin ficha, sin candidato; 2 con ficha encuentran su serie, pero no su número, y no se enlazan |
+
+**Efecto hoy: 0 coincidencias del diagnóstico recuperadas y 0 enlaces nuevos.** El parser da el título
+bueno en los 19; lo que frena el paso siguiente es el catálogo, no el parser:
+- los 7 vinculados empatan entre dos fichas duplicadas de la misma serie (F1): hasta que se consoliden,
+  el matcher se abstiene;
+- los 2 tomos con ficha tienen su serie como candidata al 100 % y el matcher se abstiene; la causa no se
+  registró en la tanda (probablemente la guarda de formato B15, sin comprobar);
+- los 2 con ficha sin esos números encuentran la serie y se quedan sin número, así que no se enlazan.
+
+El PO aceptó con este resultado. Nada se enlazó ni se reasignó: los pendientes siguen en «Por revisar».
 
 ## 8. Orden de los commits (SDD + TDD)
 
