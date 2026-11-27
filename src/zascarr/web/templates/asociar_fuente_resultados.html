@@ -7,7 +7,7 @@
 {% if estado == "ok" and comparacion.candidatas %}
 <h2 class="titulo-frase">Fichas encontradas en {{ nombre_fuente }}</h2>
 <p>Estas fichas podrían ser tu serie, pero no se sabe seguro. Compáralas antes de elegir.</p>
-<p class="muted">Tu serie: {{ comparacion.titulo_local }}{% if comparacion.anio_local %} ({{ comparacion.anio_local }}){% endif %}</p>
+<p class="muted">Tu serie: {{ comparacion.titulo_local }}{% if comparacion.anio_local %} ({{ comparacion.anio_local }}){% endif %}{% if serie.kind and serie.kind != "regular" %} · {{ "Obra única" if serie.kind == "one_shot" else ("Especial" if serie.kind == "special" else serie.kind) }}{% endif %}</p>
 {% if comparacion.candidatas|length == 1 %}
 <p class="caption">Solo hay una ficha. Compruébala antes de asociarla.</p>
 {% endif %}
@@ -15,7 +15,7 @@
 {% for c in comparacion.candidatas %}
 <article class="asociar-candidata">
   <h3>{{ c.titulo }}</h3>
-  <p class="caption">Ficha {{ c.id_externo }}</p>
+  <p class="caption">Ficha {{ c.id_externo }}{% if c.kind %} · {{ "Saga/evento" if c.kind == "saga" else ("One-shot" if c.kind == "one_shot" else "Colección") }}{% endif %}</p>
   {% if c.sitio_url %}<a href="{{ c.sitio_url }}" target="_blank" rel="noopener noreferrer">Ver la ficha en {{ nombre_fuente }}<span class="sr"> (se abre en otra pestaña)</span> ↗</a>{% endif %}
   <table>
     <caption>Comparación de datos de «{{ c.titulo }}»</caption>
@@ -32,13 +32,16 @@
   {% if comparacion.numeros_local and c.numeros_fuente and comparacion.numeros_local > c.numeros_fuente %}
   <p class="caption">Tu serie declara {{ comparacion.numeros_local }} números y esta ficha {{ c.numeros_fuente }}: revisa si es el volumen correcto o si tienes números de más.</p>
   {% endif %}
+  {% if serie.kind in ("one_shot", "special") and c.kind != "saga" %}
+  <p class="caption">Tu serie es una obra única o especial. Si esta ficha es la serie principal del evento, no es la misma ficha: busca su mini o su one-shot.</p>
+  {% endif %}
   {% if c.seleccionable and c.token %}
   <form method="post" action="/ui/series/{{ serie.id }}/asociar/previsualizar">
     <input type="hidden" name="token" value="{{ c.token }}">
     <button class="btn primary" type="submit">Elegir esta ficha</button>
   </form>
-  {% elif c.seleccionable %}
-  <p class="caption">Obra, no serie: {{ c.motivo_no_seleccionable }}</p>
+  {% elif not c.seleccionable %}
+  <p class="caption">No asociable: {{ c.motivo_no_seleccionable or "ficha sin datos suficientes" }}</p>
   {% endif %}
 </article>
 {% endfor %}
