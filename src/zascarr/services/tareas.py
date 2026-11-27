@@ -28,6 +28,7 @@ TITULOS = {
     "paquete": "Preparando un paquete",
     "descarga": "Descargando de Deseados",
     "copia": "Copiando y verificando",
+    "vinculos": "Buscando vínculos dudosos",
 }
 
 
@@ -40,6 +41,7 @@ class TipoTarea(StrEnum):
     PAQUETE = "paquete"
     DESCARGA = "descarga"
     COPIA = "copia"
+    VINCULOS = "vinculos"
 
 
 class EstadoTarea(StrEnum):
@@ -116,7 +118,7 @@ def iniciar(tipo: TipoTarea | str, *, total: int | None = None, fase: str | None
         unidades = {"importar": "archivos", "registrar": "archivos",
                     "rescanear": "archivos", "descarga": "deseos",
                     "copia": "elementos", "convertir": "tebeos", "deshacer": "tebeos",
-                    "paquete": "tebeos"}
+                    "paquete": "tebeos", "vinculos": "archivos"}
         t = Tarea(id=secrets.token_hex(4), tipo=tipo, titulo=TITULOS[tipo.value],
                   fase=fase, total=total, enlace=enlace, run_id=run_id,
                   unidad=unidades.get(tipo.value),

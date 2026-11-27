@@ -44,7 +44,7 @@ from zascarr.models import (
     PaqueteOperacion,
     Series,
 )
-from zascarr.services import registro_biblioteca, rescan_biblioteca, tareas
+from zascarr.services import registro_biblioteca, rescan_biblioteca, tareas, vinculos_dudosos
 from zascarr.services.aceptacion_adopcion import MAX_ILEGIBLES, aceptar, evaluar
 from zascarr.services.apartado_duplicados import (
     ApartadoDuplicadosService,
@@ -307,6 +307,31 @@ async def rescanear(request: Request, db: AsyncSession = Depends(get_db)):
     respuesta = templates.TemplateResponse(request, "_rescan_biblioteca.html", contexto)
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
+
+# ── BL-VINC1: vínculos dudosos (a demanda; solo informa, no cambia nada) ──
+
+async def _contexto_vinculos(db: AsyncSession, *, ya_en_curso: bool = False) -> dict:
+    vigente = await vinculos_dudosos.informe_vigente(db)
+    return {"estado_busqueda": vinculos_dudosos.estado_actual(), "ya_en_curso": ya_en_curso,
+            "informe": vigente[0] if vigente else None, "cuando": vigente[1] if vigente else None}
+
+
+@router.get("/vinculos-dudosos", response_class=HTMLResponse)
+async def vinculos_dudosos_estado(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento del bloque. GET no lanza nada ni escribe: solo lee memoria y el último informe."""
+    return _no_store(templates.TemplateResponse(
+        request, "_vinculos_dudosos.html", await _contexto_vinculos(db)))
+
+
+@router.post("/vinculos-dudosos", response_class=HTMLResponse)
+async def vinculos_dudosos_buscar(request: Request, db: AsyncSession = Depends(get_db)):
+    """Lanza la búsqueda en segundo plano y responde ya."""
+    lanzada = vinculos_dudosos.iniciar(database.async_session_factory)
+    if request.headers.get("HX-Request") != "true":
+        return RedirectResponse("/ui/auditoria", status_code=303)
+    return _no_store(templates.TemplateResponse(
+        request, "_vinculos_dudosos.html", await _contexto_vinculos(db, ya_en_curso=not lanzada)))
+
 
 # ── BL-DUP1 (#264 B): apartar duplicados idénticos, con vista previa y deshacer ──
 
