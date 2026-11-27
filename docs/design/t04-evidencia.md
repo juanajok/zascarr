@@ -33,3 +33,24 @@ Criterio: se pide al harness `Responde solo con OK` desde ese directorio; si la 
 - No se verificó qué herramientas tenía disponibles el agente ni si leyó ficheros distintos de los de instrucciones.
 - Codex y OpenCode quedan **NOT RUN** por limitaciones de entorno; repetir el mismo intento no aportaría evidencia.
 - No se ejecutaron pruebas de producto, CI ni gates: esto no habilita ninguno.
+
+## Investigación: por qué no se carga `AGENTS.md` en Claude Code
+
+Búsqueda de cadenas en el binario instalado (`~/.local/share/claude/versions/2.1.332`):
+
+- Existe una lista de nombres reconocidos: `["AGENTS.md", ".claude/AGENTS.md"]` junto a `["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"]`.
+- Existen cuatro modos de instrucciones de proyecto: `claude-md`, `claude-md-or-agents-md` (constante de modo por defecto declarada en el código), `claude-md-and-agents-md` y `managed-only`, con alias `none`, `claude`, `agents-fallback` y `both`.
+- El propio binario describe: «AGENTS.md as project instructions: by default loaded where the project has no CLAUDE.md».
+- Hay telemetría específica del camino (`agents_md_mode`, `agents_md_load`, `agents_md_nested`, `instruction_files_not_loaded`) y opciones de configuración `projectInstructions` (leída como `instructionFiles`) y `instructionFiles`.
+
+Configuraciones probadas, todas con `AGENTS.md` que contiene una marca verificable y `CLAUDE.md` de control:
+
+| Configuración | Resultado |
+|---|---|
+| `AGENTS.md` + `CLAUDE.md` en la raíz | Solo se cargó `CLAUDE.md` |
+| Solo `AGENTS.md`, sin `CLAUDE.md` | No se cargó |
+| `.claude/AGENTS.md` | No se cargó |
+| `--settings` con `projectInstructions: "both"` y con el nombre del modo completo | Solo se cargó `CLAUDE.md` |
+| `AGENTS.md` anidado en un subdirectorio | No se cargó |
+
+Conclusión acotada: **el soporte existe en el código de esta versión, pero con esta cuenta y configuración no se activó por ninguna de las vías probadas.** No se puede afirmar desde fuera si depende de un flag de despliegue, de la cuenta o de una versión posterior. Lo que sí queda acreditado: `CLAUDE.md` es el canal que funciona, y no hay que contar con `AGENTS.md` como entrada garantizada.
