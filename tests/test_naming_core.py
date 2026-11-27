@@ -2069,8 +2069,13 @@ class TestTituloTrasElTomo:
         assert r.issue_number == "8"
         assert "Título del tomo" not in (r.series_alternativa or "")
 
-    @pytest.mark.parametrize("carpeta", ["Batman Vol. 2", "Batman"])
-    def test_volumen_de_la_serie_se_conserva(self, carpeta):
-        """C9: el número no sale del marcador: R1 no se activa y `Vol. 2` sigue ahí."""
-        r = self._parse("Batman Vol. 2 #01 - Título del número.cbr", carpeta)
-        assert (r.series, r.issue_number, r.volume) == ("Batman", "1", 2)
+    @pytest.mark.parametrize("nombre, carpeta, esperado", [
+        ("Batman Vol. 2 #01 - Título del número.cbr", "Batman Vol. 2", ("Batman", "1", 2)),
+        ("Batman Vol. 2 #01 - Título del número.cbr", "Batman", ("Batman", "1", 2)),
+        # Volumen detrás del número: el número sigue siendo el de delante.
+        ("Serie 01 Vol3 [x].cbr", "Serie", ("Serie", "1", 3)),
+    ])
+    def test_volumen_de_la_serie_se_conserva(self, nombre, carpeta, esperado):
+        """C9: el número no sale del marcador: R1 no se activa y el volumen sigue ahí."""
+        r = self._parse(nombre, carpeta)
+        assert (r.series, r.issue_number, r.volume) == esperado
