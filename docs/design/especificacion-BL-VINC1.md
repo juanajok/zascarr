@@ -1,6 +1,7 @@
 # Especificación BL-VINC1 — Vínculos dudosos
 
-> **Estado:** **borrador**, pendiente de aprobación del PO. No se programa nada hasta entonces (SDD + TDD).
+> **Estado:** **aprobada por el PO el 2026-11-27** (versión `2e6c22a0`), con D1–D5 según la propuesta de §7.
+> Siguen SDD + TDD: pruebas en rojo, implementación mínima y refactor.
 > **Origen:** el [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md) destapó vínculos guardados que
 > parecen mal hechos (§2.1: 22 grapas de Green Lantern Corps en Green Lantern) y BL-PARSE2 dejó otros dos
 > grupos «a revisar por el PO» ([§5](especificacion-BL-PARSE2.md)). El PO preguntó si un algoritmo
@@ -450,6 +451,11 @@ del archivo y con R4b por separado: la proporción que merece revisión de las s
 merecen revisión) y no tiene umbral por archivo: es una pista sobre la serie.
 
 ## 7. Decisiones para el PO y seguimiento
+
+> **Fijadas el 2026-11-27:** el PO aprobó la especificación sin corregir ninguna propuesta. D1: en
+> Duplicados. D2: «Vínculos dudosos», con «vínculo» en el glosario de CLAUDE.md §14 antes de usarlo. D3:
+> como `ImportRun`. D4: fuera de esta historia. D5: sin acciones en el informe. Las historias de
+> seguimiento siguen siendo propuestas.
 
 - **D1. Dónde se ve.** Propuesta: en **Duplicados** (`/ui/auditoria`), con las otras revisiones de la
   biblioteca. Alternativa: un aviso en la ficha de cada serie («N archivos de esta serie quizá sean de
