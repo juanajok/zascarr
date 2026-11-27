@@ -141,6 +141,11 @@ _ABREV_DOTS = re.compile(r"(?<=\b[A-Za-z])\.(?=[A-Za-z]\b)")
 # Original 1.cbr") — al revés que "Serie - Subtítulo". Sin esto, el split
 # de subtítulo de más abajo se queda con el nombre de la línea editorial
 # en vez de con la serie.
+# BL-PARSE4: señal interna de dónde estaba el marcador de tomo o recopilación que dio el número
+# (`Tomo 08`, `Integral 01`). No es texto: se quita siempre antes de separar el subtítulo.
+_MARCA_DE_TOMO = "\x00"
+_SEPARADOR_DE_SUBTITULO = re.compile(r"\s+-\s*")
+
 IMPRINT_PREFIX_PATTERN = re.compile(
     r"^(?:Marvel\s+Gold|Marvel\s+Deluxe|Biblioteca\s+Marvel|Panini\s+Cl[aá]sicos|EVENTOS)"
     r"\s*-\s*",
@@ -779,12 +784,14 @@ def parse_comic_filename(
     # "Omnigold 5" → captura issue_number="5" + edition_kind="omnigold",
     # y el título se queda solo con "Omnigold" (el número no forma parte
     # del nombre de la serie) — ver docstring de EDITION_NUMBER_PATTERN.
+    numero_de_marcador = False
     edicion_match = EDITION_NUMBER_PATTERN.search(working)
     if edicion_match:
         palabra, numero = edicion_match.groups()
         result.issue_number = numero.lstrip("0") or "0"
         result.edition_kind = "omnigold" if palabra.lower() == "omnigold" else "integral"
-        working = EDITION_NUMBER_PATTERN.sub(r"\1", working, count=1)
+        working = EDITION_NUMBER_PATTERN.sub(r"\1" + _MARCA_DE_TOMO, working, count=1)
+        numero_de_marcador = True
     elif not tuvo_aniversario:
         marcador_edicion = EDITION_MARKER_PATTERN.search(working)
         if marcador_edicion:
@@ -822,12 +829,14 @@ def parse_comic_filename(
         working = SPECIAL_PATTERN.sub(" ", working)
 
     marcador_volumen: str | None = None
+    posicion_volumen = 0
     if result.volume is None:
         for pattern, etiqueta in VOLUME_PATTERNS:
             vol_match = re.search(pattern, working, re.IGNORECASE)
             if vol_match:
                 result.volume = int(vol_match.group(1))
                 marcador_volumen = etiqueta
+                posicion_volumen = vol_match.start()
                 working = re.sub(pattern, "", working, flags=re.IGNORECASE)
                 break
 
@@ -882,6 +891,9 @@ def parse_comic_filename(
         # el "2" del volumen ahí habría sido fabricar una identidad falsa
         # para tapar el hueco, exactamente lo que este proyecto evita.
         result.issue_number = str(result.volume)
+        # Desde que se quitó el volumen `working` no ha cambiado (no se encontró otro número).
+        working = working[:posicion_volumen] + _MARCA_DE_TOMO + working[posicion_volumen:]
+        numero_de_marcador = True
         if result.edition_kind is None:
             result.edition_kind = marcador_volumen
 
@@ -902,11 +914,25 @@ def parse_comic_filename(
     # "Serie - Subtítulo" como "Serie -Subtítulo" ("La liga de los hombres
     # extraordinarios -La Tempestad"). El espacio DELANTE sí se exige, que
     # es lo que distingue el separador de un guion interno ("Spider-Man").
-    serie_completa = working
-    partes_subtitulo = re.split(r"\s+-\s*", working, maxsplit=1)
-    working = partes_subtitulo[0]
+    #
+    # BL-PARSE4: si el número salió de un tomo o recopilación («Serie - Subserie Tomo 08 - Título»),
+    # lo que sigue al separador de DETRÁS de ese marcador es el título del tomo o su autoría: ni la
+    # serie ni la alternativa lo llevan. Los guiones de delante son de la serie.
+    # El subtítulo se sigue leyendo del nombre entero, como antes.
+    corte_de_tomo = None
+    if numero_de_marcador and _MARCA_DE_TOMO in working:
+        separador = _SEPARADOR_DE_SUBTITULO.search(working, working.index(_MARCA_DE_TOMO))
+        if separador:
+            corte_de_tomo = len(working[:separador.start()].replace(_MARCA_DE_TOMO, ""))
+    working = working.replace(_MARCA_DE_TOMO, "")
+    partes_subtitulo = _SEPARADOR_DE_SUBTITULO.split(working, maxsplit=1)
     if len(partes_subtitulo) > 1:
         result.subtitulo = partes_subtitulo[1].strip()
+    if corte_de_tomo is not None:
+        working = working[:corte_de_tomo]
+        partes_subtitulo = _SEPARADOR_DE_SUBTITULO.split(working, maxsplit=1)
+    serie_completa = working
+    working = partes_subtitulo[0]
 
     series = _limpiar_titulo_serie(working)
     if len(partes_subtitulo) > 1:
