@@ -10,6 +10,9 @@
 > por buena la dirección y pidió cuatro cambios: destino del lote solo si es compatible con todo el lote (R7);
 > R4 separada en volumen explícito (R4) y mezcla de volúmenes (R4b), solo para revisar; la guarda preventiva
 > como historia nueva sin especificar (§7); y una aceptación por archivo y por par archivo → número (§6).
+> Una **tercera revisión** (mismo día) la da por lista para implementar con dos cambios: R4b se enseña como
+> «Series que mezclan volúmenes», un grupo por serie con su desglose, y no como 263 vínculos dudosos sueltos;
+> y el destino de R7 exige una señal positiva de identidad editorial, no solo que no haya contradicción.
 > **Código de referencia:** `main` en `74429ec6`; la medición se hizo en la Pi con `0bfebfb7`, idéntico a
 > `main` en `src/`.
 > **Principio:** el sistema informa, la persona decide. Esta revisión **no cambia ningún vínculo**.
@@ -41,9 +44,12 @@ Encajan con un orden de lectura, en el que el número es la posición en la saga
 - **Dentro:**
   - Una búsqueda a demanda, de solo lectura sobre los vínculos, que marca los archivos ya vinculados cuyo
     vínculo contradice alguna de las señales deterministas de §3.
-  - Los marcados se agrupan en **lotes** (carpeta y serie) y se ordenan por cuántas señales cumplen.
-  - Cada lote indica un **destino posible** solo si es compatible con todos sus archivos y no hay otro igual
-    de plausible; si no, dice «Destino por verificar» (R7).
+  - Los marcados por una señal **del archivo** (R2–R5) se agrupan en **lotes** (carpeta y serie) y se
+    ordenan por cuántas señales cumplen.
+  - Cada lote indica un **destino posible** solo si una única candidata es compatible con todos sus
+    archivos **y** tiene una señal positiva de identidad editorial; si no, dice «Destino por verificar» (R7).
+  - Las series que mezclan volúmenes (R4b) salen aparte, **una por serie**, con el desglose por carpeta y
+    volumen y los archivos plegados como evidencia.
   - Un bloque en la pantalla **Duplicados** (`/ui/auditoria`) enseña el resultado. Es un informe: no tiene
     ninguna acción que cambie vínculos (D5).
 - **Fuera:**
@@ -63,6 +69,8 @@ Encajan con un orden de lectura, en el que el número es la posición en la saga
 | Si el volumen o la edición del archivo contradicen la ficha de destino, no basta con que coincida el título para enlazar (regla preventiva) | Fuera de esta historia, que no enlaza nada: es una **historia nueva** que se propone al PO, sin ID ni especificación (§7). No es BL-PARSE4 (#1338), que evita que el subtítulo de un tomo se pegue al título de la serie. Aquí, R4 detecta los vínculos que ya contradicen el volumen explícito de su ficha, y BL-VINC1 aporta los casos para probar esa guarda |
 | La carpeta es una pista, no un veto por sí sola: anuales y cruces conviven con la serie principal | Ninguna señal sale solo de la carpeta: la de «minoría en la carpeta» se descarta (§5.3); el año y el volumen de la carpeta cuentan solo si la carpeta habla de esa serie (R6); un anual en la carpeta de su serie madre no se marca (C21) |
 | Los vínculos existentes se corrigen por lotes, con el destino verificado, nunca solos | Esta historia no corrige nada. Enseña lotes y, solo cuando es seguro, un destino posible (R7), para que la corrección de BL-VINC2 se haga por lotes. Hasta entonces, el bloque no tiene acciones (D5) |
+| R4b señala la **serie**, no cada archivo: cuando sale sola, la mayoría de sus archivos están bien (tercera revisión) | Un grupo por serie, «Series que mezclan volúmenes», con desglose por carpeta y volumen y los archivos plegados (R4b, §4). Detectar la serie mezclada no equivale a saber qué archivos sobran (§6) |
+| «No hay contradicción» no es «hay evidencia a favor» (tercera revisión) | El destino exige, además de la compatibilidad, título y volumen o título y año que coincidan explícitamente (R7). Una homónima sin año, volumen ni números no se propone (C14d) |
 
 ### R1. Qué se revisa
 
@@ -102,21 +110,29 @@ una contradicción. Motivo visible: `La carpeta dice {AAAA}; la serie empieza en
 
 Motivo visible: `Dice vol. {N}; la serie es vol. {M}`.
 
-### R4b. Señal «la ficha mezcla volúmenes»: solo para revisar
+### R4b. Señal «la ficha mezcla volúmenes»: una señal de la serie, solo para revisar
 
-Se marcan **todos** los archivos con volumen declarado (R4) de una serie que cumple estas condiciones:
+La señal es de la **serie**, no de cada archivo. Se señala la serie, y sus archivos con volumen declarado
+(R4) van con ella como evidencia, cuando cumple estas condiciones:
 
 1. no tiene volumen explícito (R4);
 2. sus archivos declaran al menos dos volúmenes distintos;
 3. **o** algún número tiene archivos de dos volúmenes distintos, **o** los volúmenes vienen de al menos
    dos carpetas que hablan de esa serie (R6), una por volumen.
 
-Esta señal **no dice qué lado sobra**: se marcan los dos, y la persona decide con la ficha delante. Tampoco
-sirve para vetar un enlace futuro ni para elegir destino (R7). La condición 3 deja fuera los volúmenes que
+Esta señal **no dice qué lado sobra**: la evidencia lleva los dos lados, y la persona decide con la ficha
+delante. Tampoco sirve para vetar un enlace futuro ni para elegir destino (R7).
+
+**Presentación:** cada serie señalada es **un grupo** de «Series que mezclan volúmenes», no un lote de
+vínculos dudosos. El grupo lleva el desglose por **(carpeta, volumen)** con su número de archivos, y los
+archivos en un desplegable. Un archivo de esa serie que además tiene una señal propia (R2–R5) sale **también**
+en su lote, con el chip de R4b como contexto; los que solo tienen R4b no forman lotes. R4b no cuenta para el
+orden de los lotes (R7). La condición 3 deja fuera los volúmenes que
 son tomos de una numeración continua, declarados solo en el nombre y dentro de una misma carpeta (un vol. 1
 con los #1–12 y un vol. 2 con los #13–32), y las series de manga con un volumen distinto en cada archivo.
 
-Motivo visible: `Esta serie tiene archivos del vol. {N} ({a}) y del vol. {M} ({b})`.
+Texto visible: `Esta serie tiene archivos del vol. {N} ({a}) y del vol. {M} ({b})` en la cabecera del grupo;
+una línea por carpeta y volumen en el desglose.
 
 ### R5. Señal «otro título en el número»: guarda de colecciones mezcladas (BL-INF11)
 
@@ -140,7 +156,7 @@ habla de «Justice League of America».
 
 ### R7. Lotes, destino posible y orden
 
-- **Lote:** los archivos marcados con la misma **(carpeta, serie)**.
+- **Lote:** los archivos con alguna señal **del archivo** (R2–R5) y la misma **(carpeta, serie)**.
 - **Destino posible del lote.** Las candidatas son las series distintas de la vinculada que el matcher
   propone (como elegida o como candidata por encima del umbral) para **todos** los archivos del lote. Una
   candidata es **compatible** con un archivo si no contradice nada de lo que se sabe de él:
@@ -149,13 +165,26 @@ habla de «Justice League of America».
   - es una serie anual si y solo si el archivo es un anual;
   - tiene el número del archivo, o todavía no tiene ningún número.
 
-  Se enseña un destino solo si **exactamente una** candidata es compatible con **todos** los archivos del lote.
-  Si hay cero o más de una, el lote dice **«Destino por verificar»**. Nunca dice que la serie no existe: el
-  catálogo puede tenerla con otro título.
+  Las guardas solo descartan: una candidata sin año, sin volumen y sin números las pasa todas por falta de
+  datos. Por eso, además, la candidata necesita una **señal positiva de identidad editorial**, las dos cosas:
+  - su título, sin el volumen, es **igual** al del lote (normalizado como en R6; el del nombre o el de la
+    carpeta), y no solo uno prefijo del otro;
+  - y coincide explícitamente **al menos uno** de estos datos, en todos los archivos del lote que lo
+    declaran (y al menos uno lo declara):
+    - su volumen explícito es el volumen declarado del archivo (R4);
+    - su `start_year` está a un año o menos del año de la carpeta (R3).
+
+  Tener el número del archivo no es identidad: cualquier serie tiene un #1. Coincidir solo en el título
+  tampoco.
+
+  Se enseña un destino solo si **exactamente una** candidata es compatible con **todos** los archivos del lote
+  y tiene identidad positiva. Si hay cero o más de una, el lote dice **«Destino por verificar»**. Nunca dice
+  que la serie no existe: el catálogo puede tenerla con otro título.
 - La señal R4b no aporta destino, y el destino es una pista para verificar, no una corrección.
 - **Orden de los lotes:** primero por el mayor número de señales **del archivo** (R2, R3, R4 y R5) de sus
-  archivos, después por el total contando R4b, después por número de archivos (de más a menos) y por último
-  por el título de la serie. Así, un lote que solo tiene R4b va detrás de los que tienen evidencia propia.
+  archivos, después por número de archivos (de más a menos) y por último por el título de la serie.
+- **Orden de las series que mezclan volúmenes:** por número de archivos (de más a menos) y por título. Van
+  detrás de los lotes.
 - **Orden dentro del lote:** por el orden del número (`Issue.sort_order`).
 
 ### R8. Solo lectura, coste y frescura
@@ -166,7 +195,8 @@ habla de «Justice League of America».
 - El cálculo va en una transacción `READ ONLY`.
 - Al terminar, se guarda el **informe** como un `ImportRun` con `details.kind = "vinculos_dudosos"`, el
   mismo patrón que el informe de «Revisar mi biblioteca». El informe lleva los ids de archivo, serie y
-  número, las señales con sus datos y el destino posible, si lo hay. No se escribe nada más.
+  número, las señales con sus datos y el destino posible, si lo hay, y las series de R4b con su desglose.
+  No se escribe nada más.
 - Al pintar el bloque, una consulta comprueba que cada archivo del informe sigue vinculado al mismo número.
   El que ya no lo está no se enseña: el coleccionista lo acaba de arreglar.
 
@@ -189,15 +219,19 @@ pantalla. No va en «Por revisar», que es la cola de pendientes, porque aquí n
 | Frase de entrada (≤ 20 palabras) | `Archivos que están en una serie, pero cuyo nombre o carpeta apuntan a otra.` |
 | Botón (neutro, no `.primary`: el principal de la pantalla es «Registrar…») | `Buscar vínculos dudosos` |
 | En curso (botón y chip del indicador de tareas) | `Buscando vínculos dudosos…` |
-| Resumen | `{N} archivos en {G} grupos. Primero, los que tienen más motivos.` · `Última búsqueda: {fecha}` |
+| Resumen | `{N} archivos en {G} grupos. Primero, los que tienen más motivos.` · si hay R4b: `Además, {S} series mezclan volúmenes.` · `Última búsqueda: {fecha}` |
 | Aviso junto al resumen (`ui.aviso`, informativo) | `Esto es solo un informe. Corregir estos archivos llegará más adelante, por grupos.` |
 | Sin resultados | `No hay vínculos dudosos.` · `Última búsqueda: {fecha}` |
 | Sin búsqueda aún | `Aún no se ha buscado.` |
 | Cabecera de grupo (`.titulo-frase`) | `{n} archivos de «{carpeta visible}» están en «{serie}»` (ruta con `utils/ruta_visible`) |
 | Destino posible (R7) | `Podría ser «{serie}».` · si aún no tiene números: `Podría ser «{serie}», que aún no tiene números en tu biblioteca.` · en otro caso: `Destino por verificar.` |
-| Motivos (chips, uno por señal) | los de R2–R5; el de R4b, con el chip `Para revisar` |
+| Motivos (chips, uno por señal) | los de R2–R5; si el archivo es de una serie de R4b, además el chip `Su serie mezcla volúmenes` como contexto |
+| Subapartado de R4b (`h3`, en Archivo: es una frase) | `Series que mezclan volúmenes` · frase: `Tienen archivos de varios volúmenes. Puede sobrar uno de ellos, o ninguno.` |
+| Cabecera de cada serie (`.titulo-frase`) | `«{serie}»: archivos del vol. {N} ({a}) y del vol. {M} ({b})`; el nombre enlaza a su ficha |
+| Desglose (una línea por carpeta y volumen) | `vol. {N} · {n} archivos · «{carpeta visible}»` |
+| Archivos de la serie (`<details>`, plegado) | `Ver los {n} archivos`: nombre, `#{N}` y volumen; sin acciones |
 | Fila de archivo | nombre del archivo, `#{N}` y motivos; el nombre de la serie enlaza a su ficha (`/ui/series/{serie}`). Sin botón ni enlace de desvinculación (D5) |
-| Desplegable (`<details>`) | `¿Por qué sale aquí?`: las cinco señales, en una frase cada una, y «Ninguna cambia nada: decides tú. Desvincular un archivo no lo pasa a la serie buena: lo devuelve a «Por revisar».» |
+| Desplegable (`<details>`) | `¿Por qué sale aquí?`: las cinco señales (la de R4b, «esto dice que la serie mezcla volúmenes, no qué archivos están mal»), en una frase cada una, y «Ninguna cambia nada: decides tú. Desvincular un archivo no lo pasa a la serie buena: lo devuelve a «Por revisar».» |
 
 Términos: **archivo** (el fichero), **serie**, **número** (`#{N}`), **carpeta** y **tebeo** (en R5, el
 objeto). No se usan «colección» (en §14 es otra cosa), «registro», «token», «lote», «matcher», «ficha» ni
@@ -216,8 +250,8 @@ Dos tandas de solo lectura, cada una autorizada por el usuario:
    de números y de archivos.
 
 Aquí solo van cifras agregadas. La tanda revisó 4.506 archivos vinculados: 1.457 manuales y 68 por ComicInfo.
-Las cifras de esta sección están calculadas otra vez con las reglas de la segunda revisión, sobre los mismos datos
-(sin otra tanda en la Pi).
+Las cifras de esta sección están calculadas otra vez con las reglas de la segunda y la tercera revisión, sobre
+los mismos datos (sin otra tanda en la Pi).
 
 **No hay verdad de referencia.** Cada lote marcado se miró a mano por su carpeta, su nombre y su ficha, y se
 clasificó de forma provisional:
@@ -245,11 +279,20 @@ confirma el PO en el bloque.
 | R5 otro título en el número | 60 | 22 | 51 | 3 | 6 | 85,0 % | 90,0 % |
 | **Señales del archivo (R2, R3, R4, R5)** | **116** | **76** | **105** | **5** | **6** | **90,5 %** | **94,8 %** |
 | R4b la ficha mezcla volúmenes (solo para revisar) | 263 | 74 | 78 | 27 | 158 | 29,7 % | 39,9 % |
-| **Unión** | **357** | **128** | **161** | **32** | **164** | **45,1 %** | **54,1 %** |
+| Unión por archivo (referencia; no es lo que se enseña) | 357 | 128 | 161 | 32 | 164 | 45,1 % | 54,1 % |
 
-Los 357 archivos marcados forman **26 lotes**; los 128 conocidos salen todos (51 por R4; Green Lantern
-Corps por R2, R4b y R5; Lemire por R3; y Superman vol. 3, los 4 anuales de Batman, Green Lantern vol. 5 y
-Peacemaker solo por R4b).
+**Lo que se enseña** (tercera revisión):
+
+| Apartado | Grupos | Archivos | Conocidos (de 128) |
+|---|---:|---:|---:|
+| Vínculos dudosos (lotes por señales del archivo) | 16 lotes | 116 | 76 |
+| Series que mezclan volúmenes (R4b) | 6 series, 14 líneas de desglose | 263 (241 sin señal propia) | 74 (52 solo aquí) |
+
+Los 128 conocidos salen todos: 76 en un lote (51 por R4; Green Lantern Corps por R2 y R5, con el chip de
+R4b; Lemire por R3) y 52 solo como evidencia de una serie que mezcla volúmenes (Superman vol. 3, los 4
+anuales de Batman, Green Lantern vol. 5 y Peacemaker). Antes se enseñaban 357 filas en 26 lotes; ahora, 116
+filas en 16 lotes y 6 series con el resto plegado. Solo en Superman, el coleccionista ya no criba 144 filas
+para un problema de 8: ve una serie con dos líneas (vol. 2 y vol. 3).
 
 - **R2:** la guarda de orden de lectura quita 10 grapas de una saga asignadas en su orden. Ninguna de las 22
   diferencias de número de §1 queda marcada solo por eso. Quedan 2 discutibles: una grapa de la misma saga
@@ -257,9 +300,11 @@ Peacemaker solo por R4b).
   carpeta de una edición cuyo catálogo no tiene ese número.
 - **R4:** solo `Batman Vol 1` tiene un volumen explícito contradicho (`volume = 1` y 51 archivos de una
   carpeta del vol. 2).
-- **R4b** marca seis fichas. En cinco, al menos un lado es erróneo; la sexta es discutible. Marca los dos
-  lados a propósito, y por eso su proporción de erróneos es baja: es una pista para abrir la ficha, no un
-  dictamen.
+- **R4b** señala seis series. **Por serie**, las seis merecen revisión: en cinco al menos un lado es
+  erróneo y la sexta es discutible. **Por archivo**, su proporción de erróneos es baja (29,7 %) porque la
+  evidencia lleva los dos lados a propósito: cuando sale sola, 158 de sus archivos son correctos (136 solo en
+  Superman, frente a 8 erróneos). Por eso se enseña por serie: es una pista para abrir la ficha, no un
+  dictamen sobre cada archivo.
 
   | Ficha | Archivos | Erróneo | Discutible | Correcto |
   |---|---:|---:|---:|---:|
@@ -286,17 +331,23 @@ Peacemaker solo por R4b).
 |---|---:|---:|---:|
 | R2 + R4b + R5 | 22 | 22 | 22 (Green Lantern Corps) |
 | una señal del archivo | 94 | 83 | 54 |
-| solo R4b | 241 | 56 | 52 |
+| solo R4b (en su serie, sin lote) | 241 | 56 | 52 |
 
 Con el orden de R7, el lote de Green Lantern Corps sale el primero; es el más seguro.
 
-**Destino (R7):** 6 de los 26 lotes tienen alguna candidata común. Con las cuatro condiciones de
-compatibilidad, solo el de Green Lantern Corps tiene destino: `Green Lantern Corps Vol. 3`, que aún no tiene
-números. Los demás dicen «Destino por verificar»:
+**Destino (R7):** 5 de los 16 lotes tienen alguna candidata común. Con las cuatro condiciones de
+compatibilidad y la identidad positiva, solo el de Green Lantern Corps tiene destino:
+`Green Lantern Corps Vol. 3`. Aún no tiene números, así que las guardas no le dicen nada; la identidad sí:
+el título coincide y su volumen explícito (3) es el que declara la carpeta de las 22 grapas. Su anual
+(`Green Lantern Corps Annual`) queda fuera por no ser un anual el archivo. Los demás dicen «Destino por
+verificar»:
 
-- Superman vol. 3: su única candidata es una novela gráfica sin número titulada `SUPERMAN`.
-- Lemire y el `#0`: las ediciones candidatas no tienen esos números.
-- Batman vol. 2: tiene dos candidatas, y ninguna tiene sus números.
+- Superman vol. 3 ya no es un lote: solo tiene R4b y va en su serie, que no propone destino. Con la regla de
+  la segunda revisión, su única candidata era una novela gráfica sin número titulada `SUPERMAN`.
+- Lemire y el `#0`: las ediciones candidatas no tienen esos números. Animal Man (2011) tendría identidad por
+  año (carpeta 2012), pero no es compatible.
+- Batman vol. 2: tiene dos candidatas, ninguna tiene sus números y ninguna tiene identidad positiva (otro
+  título, sin año ni volumen).
 - El lote de una sola grapa de orden de lectura tiene dos candidatas. Si las dos tienen su número, dice
   «Destino por verificar»; se comprobará en la aceptación.
 
@@ -317,6 +368,8 @@ la captura.
 | R4 con el volumen **dominante** (≥ 2/3) de los archivos como volumen de la ficha (primera versión) | 63 | la mayoría no demuestra la identidad editorial de la ficha (segunda revisión): pasa a R4b, que no decide qué lado sobra |
 | R4b solo con el número repetido | 243 | pierde los 4 anuales de Batman vol. 2, que no comparten número con los del vol. 1 |
 | R4b sin la condición 3 | 311 | añade 48 archivos de cuatro series bien vinculadas: tomos con numeración continua (32) y manga con un volumen por archivo (16) |
+| Destino con una única candidata compatible, sin exigir identidad positiva (segunda versión) | — | una homónima sin año, volumen ni números pasa todas las guardas por falta de datos (tercera revisión). En la captura no cambia el resultado, pero no es una regla segura |
+| R4b como lote de vínculos dudosos, archivo por archivo (segunda versión) | 263 filas | 158 correctos entre los que solo tienen R4b; el problema de una serie se reparte en varias filas (tercera revisión) |
 | Destino si coinciden en él los archivos con R2 (primera versión) | — | no exigía que fuera compatible con los demás archivos del lote ni que no hubiera otra candidata (segunda revisión); con solo volumen, año y anual, el lote de Superman vol. 3 recibiría la novela gráfica `SUPERMAN` |
 | R5 tal cual BL-INF11 (el número mezcla títulos) | 109 | marca los dos lados del número, también los buenos |
 
@@ -350,19 +403,23 @@ los correctos» salen del embudo.
 | C6 | R4: volumen declarado distinto de `Series.volume` o del título de la serie → marca | `…::test_volumen_distinto_del_explicito_de_la_ficha_marca` |
 | C7 | R4: una ficha sin volumen explícito no se evalúa en R4, aunque la mayoría de sus archivos diga otro volumen | `…::test_ficha_sin_volumen_explicito_no_usa_la_mayoria` |
 | C8 | R4 + R6: el volumen de una carpeta de otro título no cuenta | `…::test_volumen_de_carpeta_de_otro_titulo_no_cuenta` |
-| C9 | R4b: una ficha sin volumen explícito, con vol. 1 y vol. 2 en el mismo número o en dos carpetas propias, marca **los dos** lados | `…::test_ficha_que_mezcla_volumenes_marca_los_dos_lados` (parametrizada) |
+| C9 | R4b: una ficha sin volumen explícito, con vol. 1 y vol. 2 en el mismo número o en dos carpetas propias, señala la serie con **los dos** lados como evidencia | `…::test_ficha_que_mezcla_volumenes_marca_los_dos_lados` (parametrizada) |
+| C9b | R4b: la serie sale como **un** grupo con su desglose por (carpeta, volumen) y sus archivos; los que solo tienen R4b no forman lote, y el que además tiene una señal propia sale en su lote con el chip de contexto | `…::test_mezcla_de_volumenes_es_un_grupo_por_serie` |
 | C10 | R4b: tomos con numeración continua en una carpeta, o un volumen por archivo, no marcan | `…::test_volumenes_que_son_tomos_no_marcan` (parametrizada) |
 | C11 | R5: en un número con dos títulos se marca el que no es el dominante de la serie, no el otro | `…::test_otro_titulo_en_el_numero_marca_solo_el_que_sobra` |
-| C12 | Los siete casos conocidos de §1 salen marcados y las 22 de orden de lectura no, todo reproducido con nombres y catálogo sintéticos; el de Green Lantern Corps, con tres motivos | `…::test_casos_conocidos_salen_marcados` (parametrizada) |
-| C13 | R7: lotes por (carpeta, serie), ordenados por señales del archivo, total, tamaño y título; un lote solo con R4b va detrás | `…::test_orden_por_motivos_y_tamano_del_grupo` |
+| C12 | Los siete casos conocidos de §1 salen (en un lote o como evidencia de su serie de R4b) y las 22 de orden de lectura no, todo reproducido con nombres y catálogo sintéticos; el de Green Lantern Corps, en un lote con dos motivos propios y el chip de R4b | `…::test_casos_conocidos_salen_marcados` (parametrizada) |
+| C13 | R7: lotes por (carpeta, serie), ordenados por señales del archivo, tamaño y título; R4b no cuenta para el orden y las series de R4b van detrás | `…::test_orden_por_motivos_y_tamano_del_grupo` |
 | C14 | R7: hay destino solo con una única candidata compatible con todos los archivos; con cero o dos, «Destino por verificar» | `…::test_destino_solo_si_es_compatible_con_todo_el_grupo` (parametrizada) |
 | C14b | R7: una candidata que contradice el volumen, el año, el anual o el número de un solo archivo del lote no es destino (el caso de la novela gráfica `SUPERMAN`) | `…::test_candidata_incompatible_con_un_archivo_no_es_destino` (parametrizada) |
 | C14c | R7: R4b no aporta destino | `…::test_mezcla_de_volumenes_no_propone_destino` |
+| C14d | R7: una homónima **vacía** (mismo título, sin año, sin volumen y sin números), única candidata compatible, **no** se propone: «Destino por verificar» | `…::test_homonima_vacia_no_es_destino` |
+| C14e | R7: `Green Lantern Corps Vol. 3`, sin números, **sí** se propone para el lote de sus grapas, porque coincide explícitamente en título y volumen (sintético) | `…::test_titulo_y_volumen_explicitos_bastan_sin_numeros` |
+| C14f | R7: coincidir solo en el título, o solo en el número, no es identidad; coincidir en título y año (±1) sí | `…::test_identidad_editorial_positiva` (parametrizada) |
 | C15 | R1: ausentes y pendientes no se revisan | `tests/test_vinculos_dudosos_pg.py::test_ausentes_y_pendientes_no_se_revisan` (pg) |
 | C16 | R8: la búsqueda no cambia `files`, `issues` ni `series`: el **conjunto de pares (archivo, número)** y las filas de `issues` y `series` son idénticos antes y después, y solo se añade su informe | `tests/test_vinculos_dudosos_pg.py::test_la_busqueda_no_cambia_vinculos` (pg) |
 | C17 | R8: un archivo desvinculado o reasignado después de la búsqueda no se enseña | `tests/test_vinculos_dudosos_pg.py::test_vinculo_cambiado_desde_la_busqueda_no_sale` (pg) |
 | C18 | R8: corre en segundo plano con el indicador de tareas; una segunda petición mientras corre no lanza otra | `tests/test_web_vinculos_dudosos.py::test_busqueda_en_segundo_plano_una_a_la_vez` |
-| C19 | §4: el bloque en Duplicados lleva rótulo, frase, botón neutro (sin `.primary`), resumen, grupos y destino posible | `tests/test_web_vinculos_dudosos.py::test_bloque_en_duplicados` |
+| C19 | §4: el bloque en Duplicados lleva rótulo, frase, botón neutro (sin `.primary`), resumen, grupos, destino posible y el subapartado «Series que mezclan volúmenes» con el desglose y los archivos plegados | `tests/test_web_vinculos_dudosos.py::test_bloque_en_duplicados` |
 | C20 | §4 y D5: el bloque no tiene formularios ni enlaces de desvinculación; la serie enlaza a su ficha; el desplegable dice que desvincular no reasigna | `…::test_el_informe_no_tiene_acciones_sobre_vinculos` |
 | C21 | R0: un anual vinculado a su serie anual dentro de la carpeta de la serie madre no se marca (la carpeta no es un veto) | `tests/test_vinculos_dudosos.py::test_anual_en_la_carpeta_de_su_serie_madre_no_marca` |
 | C22 | §4: textos sin búsqueda y sin resultados | `tests/test_web_vinculos_dudosos.py::test_sin_busqueda_y_sin_resultados` (parametrizada) |
@@ -376,8 +433,12 @@ solo lectura llama al servicio y comprueba:
   Cada uno tiene que salir marcado. Si alguno ya no está vinculado como en la captura, se informa aparte y no
   cuenta como fallo;
 - **ninguna** de las 22 grapas de orden de lectura de §1 marcada solo por R2;
-- el lote de Green Lantern Corps, el primero, con tres motivos y destino `Green Lantern Corps Vol. 3`; ningún
-  otro lote con destino que el PO no dé por bueno;
+- de ellos, los **76** de §5.1 en un lote y los **52** restantes como evidencia de su serie en «Series que
+  mezclan volúmenes». Que un archivo salga como evidencia de R4b **no** cuenta como identificarlo como mal
+  vinculado: R4b encuentra la serie, y qué archivos sobran lo decide el PO con ella delante;
+- las **6** series de R4b, cada una una sola vez, con su desglose;
+- el lote de Green Lantern Corps, el primero, con sus motivos y destino `Green Lantern Corps Vol. 3`; ningún
+  otro lote con destino que el PO no dé por bueno, y ninguno cuya candidata solo coincida en el título;
 - **0** cambios en vínculos: el conjunto de pares (archivo, número) de todos los archivos, tomado antes y
   después de la búsqueda, es idéntico. Se compara el conjunto, no el recuento, porque una reasignación
   indebida deja el recuento igual;
@@ -385,7 +446,8 @@ solo lectura llama al servicio y comprueba:
 
 Además, revisas los lotes en el bloque, en el navegador. Se anotan las dos proporciones de §5, con las señales
 del archivo y con R4b por separado: la proporción que merece revisión de las señales del archivo tiene que ser
-**≥ 90 %** (hoy, 94,8 % según la clasificación provisional). R4b no tiene umbral: es una pista.
+**≥ 90 %** (hoy, 94,8 % según la clasificación provisional). R4b se anota **por serie** (hoy, 6 de 6
+merecen revisión) y no tiene umbral por archivo: es una pista sobre la serie.
 
 ## 7. Decisiones para el PO y seguimiento
 
@@ -419,7 +481,7 @@ del archivo y con R4b por separado: la proporción que merece revisión de las s
 ## 8. Orden de los commits (SDD + TDD)
 
 1. `spec:` este documento, aprobado.
-2. `test:` C1–C23 (con C14b y C14c) en rojo, con el motivo de cada rojo en la PR.
+2. `test:` C1–C23 (con C9b y C14b–C14f) en rojo, con el motivo de cada rojo en la PR.
 3. Implementación mínima de R1–R9 hasta el verde de la suite completa (`--basetemp` en el disco raíz).
 4. `refactor:` si hace falta, con todo en verde.
 5. Comprobación del bloque en el navegador y tanda de aceptación en la Pi.
