@@ -22,6 +22,7 @@ Nombres y ubicación canónica únicamente: **no** se copian definiciones mientr
 | **serie** | [CLAUDE.md](../CLAUDE.md), sección 14.1 |
 | **número** | [CLAUDE.md](../CLAUDE.md), sección 14.1 |
 | **archivo** | [CLAUDE.md](../CLAUDE.md), sección 14.1 |
+| **vínculo** | [CLAUDE.md](../CLAUDE.md), sección 14.1 |
 | **tebeo** | [CLAUDE.md](../CLAUDE.md), sección 14.1 |
 | **registro** | [CLAUDE.md](../CLAUDE.md), sección 14.1 |
 | **pendiente** | [CLAUDE.md](../CLAUDE.md), sección 14.1 |
