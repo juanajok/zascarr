@@ -782,6 +782,16 @@ TEST_DATABASE_URL=... pytest -q tests/test_censo_calidad_pg.py
   `backup_20261123_1650.sql.gz` (C2b), SHA-256 `bd1c5d64…`.
 - **Después:** B5a 0, C2a/C3a 0, C2b 0, C2c 38 (dato); total estimado **45**.
 
+## 19. ID de fuente para series sin fuente (2026-11-23)
+
+- **206** series sin fuente: búsqueda por título en Comic Vine y score título/año/números.
+  **76 fuertes (≥ 0,80)** aplicadas + las 7 del piloto = **83**; evidencia CCM recolectada.
+- **140 series con fuente**; **B9 1** (Monstress: «Cross Cult» local frente a «Image» de la
+  fuente; es la edición, no el ID).
+- **50 medias, 65 débiles, 15 sin candidato, 11 con error de fuente**: no se aplican; el
+  detalle y el método corregido, en `docs/design/asociacion-automatica-fuentes.md`.
+- Copias: `backup_20261123_1712.sql.gz` (7) y `backup_20261123_1725.sql.gz` (76).
+
 *Informe de las fases 2–6. Las issues de prevención están creadas (#1185–#1190).
 L6, L1, L2, L3 y L4 están aplicados; L7/L8 revisados (I1 aplicado); H1 con
 backfill estricto (243 restantes); F1d/H2/F2a se dejan como dato. **B9 añadida
