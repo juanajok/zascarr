@@ -1,7 +1,7 @@
 # Especificación BL-PARSE4 — el título del tomo no se pega a la serie (F5)
 
-> **Estado:** **borrador para el PO** (2026-11-27). No se programa hasta que esté aprobada.
-> **ID provisional:** `BL-PARSE4`, sin tarjeta todavía.
+> **Estado:** **aprobada por el PO el 2026-11-27**, con D1 fuera (el texto tras `Vol NN` sin guion no se toca).
+> **ID:** `BL-PARSE4`, tarjeta [#1339](https://github.com/juanajok/zascarr/issues/1339).
 > **Origen:** [embudo del 2026-11-26](embudo-parser-matcher-2026-11-26.md), familia F5 («el parser mete
 > créditos y subtítulos en la serie»), medida aquí por primera vez.
 > **Código de referencia:** `main` en `74429ec6`.
